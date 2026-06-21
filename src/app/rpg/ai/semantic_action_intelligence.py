@@ -15,33 +15,9 @@ _ALLOWED_STAKES = {0, 1, 2, 3}
 _ALLOWED_EFFECT_AXES = {"camaraderie", "respect", "trust", "fear", "tension", "curiosity", "suspicion", "morale"}
 _ALLOWED_OBSERVER_HOOKS = {"spectacle", "conversation_seed", "crowd_attention", "authority_notice", "relationship_shift", "rumor_seed"}
 _ALLOWED_SCENE_IMPACTS = {"none", "minor_focus_shift", "gathers_attention", "disrupts_flow", "changes_mood"}
-_ALLOWED_UTTERANCE_MODES = {
-    "action_request",
-    "casual_conversation",
-    "clarification",
-    "emotional_expression",
-    "greeting",
-    "identity_inquiry",
-    "local_knowledge",
-    "lore_question",
-    "opinion_question",
-    "wellbeing_inquiry",
-}
-_ALLOWED_RISK_DOMAINS = {
-    "none",
-    "combat",
-    "commerce",
-    "inventory",
-    "item",
-    "persuasion_outcome",
-    "quest",
-    "relationship_change",
-    "reward",
-    "service",
-    "threat",
-    "travel",
-    "unknown",
-}
+_ALLOWED_UTTERANCE_MODES = {"action_request", "casual_conversation", "clarification", "emotional_expression", "greeting", "identity_inquiry", "local_knowledge", "lore_question", "opinion_question", "wellbeing_inquiry"}
+_ALLOWED_RISK_DOMAINS = {"none", "combat", "commerce", "inventory", "item", "persuasion_outcome", "quest", "relationship_change", "reward", "service", "threat", "travel", "unknown"}
+_ALLOWED_SEMANTIC_ROUTES = {"dialogue", "flavor_action", "supported_action", "unsupported_consequential_action", "mixed"}
 _SEMANTIC_FAST_PATH_SOURCE = "phase14_18_semantic_reused_action_fast_path_v1"
 
 
@@ -129,27 +105,16 @@ def _semantic_family_for_action(action_type: str) -> str:
     return "observation"
 
 
-def _attach_first_call_diagnostics(
-    advisory: Dict[str, Any],
-    *,
-    prompt: str = "",
-    raw_result: Any,
-    raw_text: str = "",
-    source: str,
-    provider_called: bool = False,
-    provider_error: str = "",
-    parse_ok: bool | None = None,
-) -> Dict[str, Any]:
+def _attach_first_call_diagnostics(advisory: Dict[str, Any], *, prompt: str = "", raw_result: Any, raw_text: str = "", source: str, provider_called: bool = False, provider_error: str = "", parse_ok: bool | None = None) -> Dict[str, Any]:
     advisory = _safe_dict(advisory)
     prompt = _safe_str(prompt)
     payload = _prompt_payload(prompt) if prompt else {}
     raw_text = _safe_str(raw_text)
-    parsed_visible_response = bool(_safe_dict(advisory.get("visible_response")))
     if parse_ok is None:
         parse_ok = bool(_safe_dict(raw_result)) if isinstance(raw_result, dict) else bool(_extract_json_object(raw_text))
+    semantic_fast_path = source == _SEMANTIC_FAST_PATH_SOURCE
     provider_response_empty = provider_called and not raw_text.strip() and not parse_ok
     provider_malformed_json = provider_called and bool(raw_text.strip()) and not parse_ok
-    semantic_fast_path = source == _SEMANTIC_FAST_PATH_SOURCE
     if semantic_fast_path:
         provider_status = "semantic_reused_action_fast_path"
     elif provider_error:
@@ -164,16 +129,15 @@ def _attach_first_call_diagnostics(
         provider_status = "called_without_parseable_json"
     else:
         provider_status = "not_called"
-    prompt_built = bool(prompt)
     action_fast_path_reason = _safe_str(advisory.get("pre_runtime_intent_fast_path_reason"))
-    diagnostics = {
+    advisory["first_call_grounding_diagnostics"] = {
         "source": source,
         "prompt": prompt,
         "prompt_preview": prompt[:4000],
         "prompt_truncated": len(prompt) > 4000,
-        "prompt_built": prompt_built,
-        "prompt_available": prompt_built,
-        "semantic_prompt_built": prompt_built,
+        "prompt_built": bool(prompt),
+        "prompt_available": bool(prompt),
+        "semantic_prompt_built": bool(prompt),
         "turn_grounding_packet": _safe_dict(payload.get("turn_grounding_packet")),
         "normalized_result": {k: v for k, v in advisory.items() if k != "first_call_grounding_diagnostics"},
         "raw_text": _clip_text(raw_text, 4000),
@@ -186,7 +150,7 @@ def _attach_first_call_diagnostics(
         "provider_response_empty": provider_response_empty,
         "provider_parse_ok": bool(parse_ok),
         "provider_malformed_json": provider_malformed_json,
-        "provider_visible_response_present": parsed_visible_response,
+        "provider_visible_response_present": bool(_safe_dict(advisory.get("visible_response"))),
         "provider_non_stateful": not _safe_bool(advisory.get("stateful"), True),
         "provider_needs_runtime_resolution": _safe_bool(advisory.get("needs_runtime_resolution"), True),
         "intent_fast_path_used": semantic_fast_path,
@@ -198,19 +162,15 @@ def _attach_first_call_diagnostics(
         "semantic_reused_action_fast_path": semantic_fast_path,
         "semantic_fast_path_reason": action_fast_path_reason or "action_fast_path_reused",
         "semantic_fast_path_source": _SEMANTIC_FAST_PATH_SOURCE if semantic_fast_path else "",
-        "format_version": "first_call_grounding_diagnostics_v4",
+        "format_version": "first_call_grounding_diagnostics_v5_hybrid_route",
     }
-    advisory["first_call_grounding_diagnostics"] = diagnostics
     return advisory
 
 
 def _complete_raw_text(llm_gateway: Any, prompt: str) -> tuple[Any, str, str]:
     if hasattr(llm_gateway, "complete"):
         result = llm_gateway.complete(prompt)
-        if isinstance(result, dict):
-            raw_text = _safe_str(result.get("text") or result.get("content") or "")
-        else:
-            raw_text = _safe_str(result)
+        raw_text = _safe_str(result.get("text") or result.get("content") or "") if isinstance(result, dict) else _safe_str(result)
         return result, raw_text, "semantic_action_intelligence.complete"
     if hasattr(llm_gateway, "complete_json"):
         result = llm_gateway.complete_json(prompt)
@@ -234,6 +194,7 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
         "allowed_effect_axes": sorted(_ALLOWED_EFFECT_AXES),
         "allowed_observer_hooks": sorted(_ALLOWED_OBSERVER_HOOKS),
         "allowed_scene_impacts": sorted(_ALLOWED_SCENE_IMPACTS),
+        "allowed_semantic_routes": sorted(_ALLOWED_SEMANTIC_ROUTES),
     }
     instructions = (
         "You are the RPG first-call semantic intent router.\n"
@@ -244,16 +205,25 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
         "Convert freeform player intent into a bounded semantic action object.\n"
         "Do not decide success, failure, damage, XP, prices, stock, inventory mutation, quest completion, travel success, rewards, or final state.\n"
         "Do not invent absent actors. Prefer a nearby/addressed NPC id when the target role or name strongly implies one.\n"
-        "For non-stateful interpretive NPC dialogue/opinion questions, set stateful false, needs_runtime_resolution false, and provide visible_response.\n"
-        "For commerce, combat, travel, inventory, quests, persuasion with consequences, threats, or anything that may mutate state, set stateful true and needs_runtime_resolution true.\n"
+        "Classify semantic_route as one of: dialogue, flavor_action, supported_action, unsupported_consequential_action, mixed.\n"
+        "Use flavor_action for expressive, cosmetic, emotional, or casual physical/social acts such as hugs, smiles, waves, jokes, nods, comfort, casual touch, posture, or gestures. Do not force these into predefined action variables. For flavor_action set stateful false, needs_runtime_resolution false, state_mutation_requested false, risk_domain none, and direct_response_gate.safe_to_display_now true.\n"
+        "For non-stateful interpretive NPC dialogue/opinion questions, set semantic_route dialogue, stateful false, needs_runtime_resolution false, and provide visible_response.\n"
+        "For commerce, combat, travel, inventory, quests, persuasion with consequences, threats, or anything that may mutate authoritative state, set semantic_route supported_action when the requested action maps to supported mechanics, stateful true, and needs_runtime_resolution true.\n"
+        "For unsupported consequential requests that would require a missing mechanic or hard state mutation, set semantic_route unsupported_consequential_action, stateful true, needs_runtime_resolution true, unsupported_consequential_action true, unsupported_reason, graceful_failure_required true, and direct_response_gate.safe_to_display_now false.\n"
+        "For mixed inputs, set semantic_route mixed and add route_components. Flavor components may be narrated; consequential unsupported components must fail gracefully without state mutation.\n"
         "Classify semantic risk by meaning, not keywords. For example, 'I feel attacked' is emotional_expression with literal_action_requested false and risk_domain none; 'I attack Bran' is action_request with literal_action_requested true and risk_domain combat.\n"
         "Use evidence_spans to cite the smallest player-input phrases supporting your classification.\n"
-        "Always include direct_response_gate. It is your self-check for whether visible_response can be shown immediately before runtime. Set safe_to_display_now true only for non-mutating dialogue such as greeting, opinion, wellbeing, identity, local lore, small talk, emotional support, or clarification.\n"
+        "Always include direct_response_gate. It is your self-check for whether visible_response can be shown immediately before runtime. Set safe_to_display_now true only for non-mutating dialogue or flavor_action.\n"
         "Set direct_response_gate.safe_to_display_now false for commerce, prices, discounts, purchases, inventory, combat, travel, quest progress, persuasion with outcomes, threats, rewards, relationship changes, or any requested state mutation.\n"
         "Never reveal private_context or private NPC biography/inventory in visible_response.\n"
         "Use open-ended activity_label values, but only bounded enums for family/mode/visibility/observer hooks.\n"
         "Schema:\n"
         "{\n"
+        '  "semantic_route": string,\n'
+        '  "route_components": [{"semantic_route": string, "summary": string, "supported": true}],\n'
+        '  "unsupported_consequential_action": false,\n'
+        '  "unsupported_reason": string,\n'
+        '  "graceful_failure_required": false,\n'
         '  "action_type": string,\n'
         '  "semantic_family": string,\n'
         '  "interaction_mode": string,\n'
@@ -280,12 +250,35 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
         '  "reason": string\n'
         "}\n"
         "Examples:\n"
-        "- 'I challenge Bran to darts' => stateful true, action_type social_competition, semantic_family social, activity_label darts\n"
-        "- 'I hug Elara' => stateful true, action_type social_affection, semantic_family social, activity_label hug\n"
-        "- 'I buy everyone a round' => stateful true, action_type trade or social_activity, semantic_family social, activity_label buying_drinks\n"
-        "- 'Bran, what do you think about sword combat styles?' => stateful false, action_type social_activity, semantic_family social, visible_response as Bran\n"
+        "- 'I challenge Bran to darts' => semantic_route unsupported_consequential_action if darts mechanics are unsupported; graceful_failure_required true\n"
+        "- 'I hug Elara' => semantic_route flavor_action, stateful false, needs_runtime_resolution false, action_type social_affection, semantic_family social, activity_label hug, visible_response as Elara\n"
+        "- 'I hug Bran and steal his coin purse' => semantic_route mixed with a flavor_action component and an unsupported_consequential_action theft component; graceful_failure_required true\n"
+        "- 'I buy everyone a round' => semantic_route supported_action, stateful true, action_type trade or social_activity, semantic_family social, activity_label buying_drinks\n"
+        "- 'Bran, what do you think about sword combat styles?' => semantic_route dialogue, stateful false, action_type social_activity, semantic_family social, visible_response as Bran\n"
     )
     return instructions + "\nINPUT:\n" + json.dumps(payload, sort_keys=True)
+
+
+def _normalize_route(value: Any, *, stateful: bool, needs_runtime_resolution: bool, risk_domain: str) -> str:
+    route = _safe_str(value).strip().lower()
+    if route in _ALLOWED_SEMANTIC_ROUTES:
+        return route
+    if not stateful and not needs_runtime_resolution and risk_domain == "none":
+        return "dialogue"
+    if risk_domain == "unknown":
+        return "unsupported_consequential_action"
+    return "supported_action"
+
+
+def _normalize_route_components(value: Any) -> list[dict[str, Any]]:
+    components: list[dict[str, Any]] = []
+    for item in _safe_list(value)[:6]:
+        raw = _safe_dict(item)
+        route = _safe_str(raw.get("semantic_route") or raw.get("route")).strip().lower()
+        if route not in _ALLOWED_SEMANTIC_ROUTES:
+            route = "unsupported_consequential_action" if _safe_bool(raw.get("supported"), True) is False else "flavor_action"
+        components.append({"semantic_route": route, "summary": _clip_text(raw.get("summary") or raw.get("intent_summary"), 180), "supported": _safe_bool(raw.get("supported"), route not in {"unsupported_consequential_action"})})
+    return components
 
 
 def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_action: Dict[str, Any]) -> Dict[str, Any]:
@@ -348,35 +341,36 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
     risk_domain = _safe_str(advisory.get("risk_domain")).strip().lower()
     if risk_domain not in _ALLOWED_RISK_DOMAINS:
         risk_domain = "unknown" if _safe_bool(advisory.get("state_mutation_requested"), False) else "none"
-    evidence_spans: list[str] = []
-    for value in _safe_list(advisory.get("evidence_spans"))[:6]:
-        span = _clip_text(value, 120)
-        if span and span not in evidence_spans:
-            evidence_spans.append(span)
+    evidence_spans = [_clip_text(value, 120) for value in _safe_list(advisory.get("evidence_spans"))[:6] if _clip_text(value, 120)]
     visible_response = _safe_dict(advisory.get("visible_response"))
-    normalized_visible_response = {}
+    normalized_visible_response: dict[str, Any] = {}
     if visible_response:
         npc = _safe_dict(visible_response.get("npc"))
         normalized_visible_response = {"narration": _clip_text(visible_response.get("narration"), 500), "npc": {"speaker": _clip_text(npc.get("speaker"), 80), "line": _clip_text(npc.get("line"), 900)}}
-    direct_gate = _safe_dict(advisory.get("direct_response_gate"))
-    normalized_direct_gate = {
-        "safe_to_display_now": _safe_bool(direct_gate.get("safe_to_display_now"), False),
-        "reason": _clip_text(direct_gate.get("reason"), 160),
-        "risk_flags": [
-            _clip_text(flag, 48).lower().replace(" ", "_")
-            for flag in _safe_list(direct_gate.get("risk_flags"))[:8]
-            if _clip_text(flag, 48)
-        ],
-    }
     stateful = _safe_bool(advisory.get("stateful"), True)
     needs_runtime_resolution = _safe_bool(advisory.get("needs_runtime_resolution"), stateful)
-    if not direct_gate and normalized_visible_response and not stateful and not needs_runtime_resolution:
-        normalized_direct_gate = {
-            "safe_to_display_now": True,
-            "reason": "legacy_non_stateful_visible_response",
-            "risk_flags": [],
-        }
+    semantic_route = _normalize_route(advisory.get("semantic_route"), stateful=stateful, needs_runtime_resolution=needs_runtime_resolution, risk_domain=risk_domain)
+    route_components = _normalize_route_components(advisory.get("route_components"))
+    unsupported_component = any(c.get("semantic_route") == "unsupported_consequential_action" or c.get("supported") is False for c in route_components)
+    unsupported_consequential_action = _safe_bool(advisory.get("unsupported_consequential_action"), semantic_route == "unsupported_consequential_action" or (semantic_route == "mixed" and unsupported_component))
+    graceful_failure_required = _safe_bool(advisory.get("graceful_failure_required"), unsupported_consequential_action)
+    if semantic_route == "flavor_action":
+        stateful = False
+        needs_runtime_resolution = False
+        risk_domain = "none"
+        utterance_mode = utterance_mode if utterance_mode != "action_request" else "emotional_expression"
+    direct_gate = _safe_dict(advisory.get("direct_response_gate"))
+    normalized_direct_gate = {"safe_to_display_now": _safe_bool(direct_gate.get("safe_to_display_now"), False), "reason": _clip_text(direct_gate.get("reason"), 160), "risk_flags": [_clip_text(flag, 48).lower().replace(" ", "_") for flag in _safe_list(direct_gate.get("risk_flags"))[:8] if _clip_text(flag, 48)]}
+    if semantic_route == "flavor_action" and normalized_visible_response:
+        normalized_direct_gate = {"safe_to_display_now": True, "reason": "hybrid_flavor_action_visible_response", "risk_flags": []}
+    elif not direct_gate and normalized_visible_response and not stateful and not needs_runtime_resolution:
+        normalized_direct_gate = {"safe_to_display_now": True, "reason": "legacy_non_stateful_visible_response", "risk_flags": []}
     normalized = {
+        "semantic_route": semantic_route,
+        "route_components": route_components,
+        "unsupported_consequential_action": unsupported_consequential_action,
+        "unsupported_reason": _clip_text(advisory.get("unsupported_reason"), 180),
+        "graceful_failure_required": graceful_failure_required,
         "action_type": action_type,
         "semantic_family": semantic_family,
         "interaction_mode": interaction_mode,
@@ -392,7 +386,7 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
         "scene_impact": scene_impact,
         "utterance_mode": utterance_mode,
         "literal_action_requested": _safe_bool(advisory.get("literal_action_requested"), False),
-        "state_mutation_requested": _safe_bool(advisory.get("state_mutation_requested"), False),
+        "state_mutation_requested": False if semantic_route == "flavor_action" else _safe_bool(advisory.get("state_mutation_requested"), False),
         "risk_domain": risk_domain,
         "intent_summary": _clip_text(advisory.get("intent_summary"), 220),
         "evidence_spans": evidence_spans,
@@ -403,13 +397,7 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
         "grounding_packet_version": "turn_grounding_packet_v1",
         "reason": _clip_text(advisory.get("reason"), 200),
     }
-    for key in (
-        "pre_runtime_intent_fast_path",
-        "pre_runtime_intent_fast_path_reason",
-        "pre_runtime_intent_fast_path_source",
-        "semantic_fast_path_used",
-        "semantic_reused_action_fast_path",
-    ):
+    for key in ("pre_runtime_intent_fast_path", "pre_runtime_intent_fast_path_reason", "pre_runtime_intent_fast_path_source", "semantic_fast_path_used", "semantic_reused_action_fast_path"):
         if key in advisory:
             normalized[key] = advisory[key]
     return normalized
@@ -418,37 +406,25 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
 def _is_action_fast_path_advisory(candidate_action: Dict[str, Any]) -> bool:
     candidate_action = _safe_dict(candidate_action)
     diagnostics = _safe_dict(candidate_action.get("first_call_grounding_diagnostics"))
-    return bool(
-        candidate_action.get("pre_runtime_intent_fast_path")
-        or diagnostics.get("intent_fast_path_used")
-        or diagnostics.get("source") == FAST_PATH_SOURCE
-        or diagnostics.get("provider_status") == "fast_path"
-    )
+    return bool(candidate_action.get("pre_runtime_intent_fast_path") or diagnostics.get("intent_fast_path_used") or diagnostics.get("source") == FAST_PATH_SOURCE or diagnostics.get("provider_status") == "fast_path")
 
 
 def _semantic_action_from_action_fast_path(candidate_action: Dict[str, Any]) -> Dict[str, Any]:
     candidate_action = _safe_dict(candidate_action)
     diagnostics = _safe_dict(candidate_action.get("first_call_grounding_diagnostics"))
-    reason = _safe_str(
-        candidate_action.get("pre_runtime_intent_fast_path_reason")
-        or diagnostics.get("intent_fast_path_reason")
-        or "action_fast_path_reused"
-    )
+    reason = _safe_str(candidate_action.get("pre_runtime_intent_fast_path_reason") or diagnostics.get("intent_fast_path_reason") or "action_fast_path_reused")
     action_type = _safe_str(candidate_action.get("action_type")).strip().lower()
     raw = {
+        "semantic_route": "supported_action",
         "action_type": action_type,
         "semantic_family": _semantic_family_for_action(action_type),
         "interaction_mode": "direct" if _safe_str(candidate_action.get("target_id")) else "solo",
         "activity_label": "fast_path_" + (reason or action_type or "intent"),
         "target_id": _safe_str(candidate_action.get("target_id")),
         "target_name": _safe_str(candidate_action.get("target_name")),
-        "secondary_actor_ids": [],
         "visibility": "local",
         "intensity": 1,
         "stakes": 1,
-        "social_axes": [],
-        "observer_hooks": [],
-        "scene_impact": "none",
         "utterance_mode": _safe_str(candidate_action.get("utterance_mode")),
         "literal_action_requested": _safe_bool(candidate_action.get("literal_action_requested"), False),
         "state_mutation_requested": _safe_bool(candidate_action.get("state_mutation_requested"), True),
@@ -473,15 +449,7 @@ def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation
     candidate_action = _safe_dict(candidate_action)
     if _is_action_fast_path_advisory(candidate_action):
         advisory = _semantic_action_from_action_fast_path(candidate_action)
-        return _attach_first_call_diagnostics(
-            advisory,
-            raw_result=advisory,
-            raw_text=json.dumps(advisory, ensure_ascii=False, sort_keys=True),
-            source=_SEMANTIC_FAST_PATH_SOURCE,
-            provider_called=False,
-            provider_error="",
-            parse_ok=True,
-        )
+        return _attach_first_call_diagnostics(advisory, raw_result=advisory, raw_text=json.dumps(advisory, ensure_ascii=False, sort_keys=True), source=_SEMANTIC_FAST_PATH_SOURCE, provider_called=False, provider_error="", parse_ok=True)
     if llm_gateway is None:
         return {}
     prompt = build_semantic_action_prompt(player_input, simulation_state, runtime_state, candidate_action)
@@ -496,13 +464,4 @@ def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation
     except Exception as exc:
         provider_error = f"{type(exc).__name__}: {exc}"
     advisory = normalize_semantic_action_advisory(parsed, candidate_action)
-    return _attach_first_call_diagnostics(
-        advisory,
-        prompt=prompt,
-        raw_result=raw_result,
-        raw_text=raw_text,
-        source=source,
-        provider_called=not source.endswith("no_provider_method"),
-        provider_error=provider_error,
-        parse_ok=bool(parsed),
-    )
+    return _attach_first_call_diagnostics(advisory, prompt=prompt, raw_result=raw_result, raw_text=raw_text, source=source, provider_called=not source.endswith("no_provider_method"), provider_error=provider_error, parse_ok=bool(parsed))
