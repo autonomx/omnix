@@ -48,7 +48,7 @@ def environment_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
         _scenario(
             "environment_snapshot_probe",
             "Environment: inspect current snapshot",
-            ("I check the current weather, season, light, terrain, and travel conditions.",),
+            ("I check the current weather, season, light, terrain, and surface conditions.",),
             (_expect(1, ("weather", "season", "terrain", "light", "temperature", "wind")),),
         ),
         _scenario(
@@ -240,9 +240,11 @@ def _turn_narration_contract(turn: Mapping[str, Any]) -> Dict[str, Any]:
         return _derived_read_only_contract()
     return {}
 
+
 def _turn_session_state(raw: Mapping[str, Any]) -> Dict[str, Any]:
     state = _find_mapping_with_keys(raw, {"world", "scene"}, max_depth=12)
     return state or _find_mapping_with_keys(raw, {"world"}, max_depth=12)
+
 
 def _environment_from_world(world: Mapping[str, Any]) -> Dict[str, Any]:
     env = matrix._safe_dict(world.get("environment"))
@@ -255,6 +257,7 @@ def _environment_from_world(world: Mapping[str, Any]) -> Dict[str, Any]:
             return region_env
     return env
 
+
 def _derived_read_only_contract() -> Dict[str, Any]:
     return {
         "authority": "read_only_environment_snapshot",
@@ -262,6 +265,7 @@ def _derived_read_only_contract() -> Dict[str, Any]:
         "forbidden": ["advance_time", "invent_temperature"],
         "instruction": "Describe the current environment without mutating environment state.",
     }
+
 
 def _find_mapping_with_keys(value: Any, required_keys: set[str], *, max_depth: int = 10) -> Dict[str, Any]:
     if max_depth < 0:
@@ -280,6 +284,7 @@ def _find_mapping_with_keys(value: Any, required_keys: set[str], *, max_depth: i
                 return found
     return {}
 
+
 def _environment_visible_blob(result: Mapping[str, Any]) -> str:
     blobs: List[str] = []
     for turn in list(result.get("turns") or []):
@@ -287,6 +292,7 @@ def _environment_visible_blob(result: Mapping[str, Any]) -> str:
         blobs.append(matrix._visible_turn_blob(turn_dict))
         blobs.append(json.dumps(turn_dict, sort_keys=True, default=str))
     return "\n".join(blobs).lower()
+
 
 def _safe_int(value: Any, default: int = 0) -> int:
     try:
