@@ -55,9 +55,36 @@ const emptyWorkspaceResponses = {
   },
 };
 
+function stubEmptyWorkspaceFetch() {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = requestPath(input);
+
+    if (path === '/api/replay/persistence/inventory') {
+      return Response.json(emptyWorkspaceResponses.inventory);
+    }
+
+    if (path === '/api/jobs') {
+      return Response.json(emptyWorkspaceResponses.jobs);
+    }
+
+    if (path === '/api/assets') {
+      return Response.json(emptyWorkspaceResponses.assets);
+    }
+
+    if (path === '/api/reports') {
+      return Response.json(emptyWorkspaceResponses.reports);
+    }
+
+    return new Response(init?.method ?? 'not found', { status: 404 });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  document.documentElement.classList.remove('rpg-play-focus-mode');
 });
 
 describe('RpgWorkspace', () => {
@@ -251,28 +278,7 @@ describe('RpgWorkspace', () => {
   });
 
   it('preserves accessible controls when the player and world rails are collapsed', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = requestPath(input);
-
-      if (path === '/api/replay/persistence/inventory') {
-        return Response.json(emptyWorkspaceResponses.inventory);
-      }
-
-      if (path === '/api/jobs') {
-        return Response.json(emptyWorkspaceResponses.jobs);
-      }
-
-      if (path === '/api/assets') {
-        return Response.json(emptyWorkspaceResponses.assets);
-      }
-
-      if (path === '/api/reports') {
-        return Response.json(emptyWorkspaceResponses.reports);
-      }
-
-      return new Response(init?.method ?? 'not found', { status: 404 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    stubEmptyWorkspaceFetch();
 
     renderRpg();
 
@@ -305,6 +311,35 @@ describe('RpgWorkspace', () => {
 
     expect(screen.getByRole('complementary', { name: 'Player, party, and quests' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
+  });
+
+  it('switches Hide header into full RPG play focus chrome mode', async () => {
+    stubEmptyWorkspaceFetch();
+
+    renderRpg();
+
+    expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
+    expect(document.documentElement).not.toHaveClass('rpg-play-focus-mode');
+    expect(screen.getByRole('button', { name: 'New Campaign' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide header' }));
+
+    await waitFor(() => {
+      expect(document.documentElement).toHaveClass('rpg-play-focus-mode');
+    });
+    expect(screen.getByRole('button', { name: 'Show RPG headers' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Expand header' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show RPG headers' }));
+
+    await waitFor(() => {
+      expect(document.documentElement).not.toHaveClass('rpg-play-focus-mode');
+    });
+    expect(screen.getByRole('button', { name: 'Expand header' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'Hide header' })).toBeInTheDocument();
   });
 
   it('surfaces live data empty and error states while keeping preview fallback usable', async () => {
