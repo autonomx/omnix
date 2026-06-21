@@ -13,8 +13,24 @@ from .legacy_adapter import (
 )
 
 
+class _TruthyZero(int):
+    """Preserve explicit seed=0 through legacy truthiness checks."""
+
+    def __new__(cls) -> "_TruthyZero":
+        return int.__new__(cls, 0)
+
+    def __bool__(self) -> bool:
+        return True
+
+
 def _safe_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _preserve_seed_zero(request: Any) -> Any:
+    if getattr(request, "seed", None) == 0 and not bool(getattr(request, "seed")):
+        object.__setattr__(request, "seed", _TruthyZero())
+    return request
 
 
 def attach_compiled_genesis_to_session(
@@ -77,6 +93,7 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
 
     from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
 
-    result = create_new_game_session(RpgNewGameRequest.model_validate(legacy))
+    legacy_request = _preserve_seed_zero(RpgNewGameRequest.model_validate(legacy))
+    result = create_new_game_session(legacy_request)
     result = attach_genesis_to_created_session(result, contract)
     return attach_compiled_genesis_to_session(result, compiled, bootstrap)
