@@ -302,6 +302,7 @@ def _wrap_turn_call_context(namespace: MutableMapping[str, Any]) -> bool:
 
     @functools.wraps(original)
     def wrapper(*args: Any, __original: Callable[..., Any] = original, **kwargs: Any) -> Any:
+        applied_text: str | None = None
         try:
             from tests.rpg.autoplay.priority_context import autoplay_action_text
 
@@ -312,11 +313,17 @@ def _wrap_turn_call_context(namespace: MutableMapping[str, Any]) -> bool:
                 default_text = f"continue turn {turn_index}"
                 current_text = str(kwargs.get("player_action") or "")
                 if not current_text or current_text == default_text:
+                    applied_text = autoplay_action_text(turn_index, raw_state)
                     kwargs = dict(kwargs)
-                    kwargs["player_action"] = autoplay_action_text(turn_index, raw_state)
+                    kwargs["player_action"] = applied_text
         except Exception:
             pass
-        return __original(*args, **kwargs)
+        result = __original(*args, **kwargs)
+        if applied_text and isinstance(result, dict):
+            result = dict(result)
+            result["autoplay_action_text"] = applied_text
+            result["autoplay_action_context_applied"] = True
+        return result
 
     wrapper.__autoplay_action_context_wrapped__ = True  # type: ignore[attr-defined]
     namespace["_call_turn_runtime"] = wrapper
