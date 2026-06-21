@@ -55,6 +55,11 @@ describe('RpgWorkspace campaign handoff', () => {
                     summary: 'A new campaign is ready at the tavern.',
                     turn_count: 0,
                     updated_at: '2026-06-20T00:00:00Z',
+                    state: {
+                      player: { name: 'Alyndra', renown: 'Unknown (0)' },
+                      world: { time_label: 'Day 1 • 08:00', weather: 'Rainy' },
+                      party: [],
+                    },
                   },
                 ]
               : [],
@@ -104,6 +109,15 @@ describe('RpgWorkspace campaign handoff', () => {
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: 'Created Campaign — rpg-created-1' })).toBeInTheDocument();
     expect(await screen.findByText('Created Campaign')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Thorin Ironfist')).not.toBeInTheDocument());
+    expect(screen.getByText('0 / 4')).toBeInTheDocument();
+    expect(screen.getByText('No companions have joined this campaign yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /companion/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('+ Add companion')).not.toBeInTheDocument();
+    expect(screen.getByText('Day 1 • 08:00')).toBeInTheDocument();
+    expect(screen.getByText('Rainy')).toBeInTheDocument();
+    expect(screen.getByText('Not tracked yet')).toBeInTheDocument();
+    expect(screen.getAllByText('Unknown (0)').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 

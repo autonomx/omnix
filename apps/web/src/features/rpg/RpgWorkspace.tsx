@@ -16,7 +16,7 @@ import { RpgStoryScene } from './RpgStoryScene';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { RpgWorldRail } from './RpgWorldRail';
 import { createRpgCombatSurfaceState } from './rpgCombatState';
-import { createRpgWorkspaceState } from './rpgUiState';
+import { createRpgWorkspaceState, type RpgHeroSummaryPreview, type RpgPartyMemberPreview } from './rpgUiState';
 import './RpgWorkspace.css';
 import './RpgResponsivePolish.css';
 
@@ -27,6 +27,7 @@ interface RpgFormValues {
 
 const ACTIVE_JOB_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
 const RPG_TURN_QUEUE_TIMEOUT_MS = 10_000;
+const PREVIEW_PARTY_MEMBER_NAMES = new Set(['Thorin Ironfist', 'Elandra', 'Kael']);
 
 function formatQueryError(error: unknown) {
   if (error instanceof Error) {
@@ -34,6 +35,14 @@ function formatQueryError(error: unknown) {
   }
 
   return 'Request failed before the RPG workspace could read this source.';
+}
+
+function isPreviewPartyFallback(partyMembers: RpgPartyMemberPreview[]) {
+  return partyMembers.length === PREVIEW_PARTY_MEMBER_NAMES.size && partyMembers.every((member) => PREVIEW_PARTY_MEMBER_NAMES.has(member.name));
+}
+
+function hidePreviewPartyForLiveSession(heroSummary: RpgHeroSummaryPreview, partyMembers: RpgPartyMemberPreview[]) {
+  return heroSummary.source === 'live' && isPreviewPartyFallback(partyMembers) ? [] : partyMembers;
 }
 
 export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
@@ -75,7 +84,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     heroSummary,
     heroStats,
     equippedGear,
-    partyMembers,
+    partyMembers: rawPartyMembers,
     activeQuests,
     quickActions,
     recentEvents,
@@ -100,6 +109,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     reports: reportsQuery.data,
     selectedSessionId,
   });
+  const partyMembers = hidePreviewPartyForLiveSession(heroSummary, rawPartyMembers);
   const combatSurface = createRpgCombatSurfaceState({ encounter, heroSummary, partyMembers });
   const selectedLiveSessionId = selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : null;
   const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && ACTIVE_JOB_STATUSES.has(job.status));

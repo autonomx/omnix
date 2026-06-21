@@ -7,9 +7,6 @@ import type {
   RpgSessionSummaryPreview,
   RpgWorldStateRowPreview,
 } from './rpgUiState';
-import './RpgVisualAssets.css';
-
-const MAP_ART_SRC = '/rpg/glimmerdeep-pass-map.svg';
 
 interface RpgReportAssetPreview {
   id: unknown;
@@ -64,30 +61,28 @@ export function RpgWorldRail({
   worldStateRows,
 }: RpgWorldRailProps) {
   const railClassName = className ? `rpg-right-rail ${className}` : 'rpg-right-rail';
+  const displayedWorldStateRows = worldStateRows.map((row) => ({
+    ...row,
+    value: displayWorldStateValue(row, selectedSessionSummary),
+  }));
 
   return (
     <aside className={railClassName} aria-label="World, jobs, and reports">
       <section className="rpg-card rpg-map-card">
         <div className="rpg-section-heading">
           <p className="eyebrow">World & location</p>
-          <button type="button">Change location</button>
         </div>
-        <div className="rpg-map-preview rpg-map-preview-has-image" aria-label={`${selectedSessionSummary.location} travel map`}>
-          <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
-          <span className="rpg-map-pin" aria-hidden="true" />
-          <div className="rpg-map-controls" aria-hidden="true">
-            <span>+</span>
-            <span>−</span>
-            <span>◎</span>
-          </div>
+        <div className="rpg-location-summary" aria-label={`${selectedSessionSummary.location} current location`}>
+          <strong>{selectedSessionSummary.location}</strong>
+          <span>{selectedSessionSummary.turnLabel}</span>
+          <small>Travel and location changes happen through story commands and resolved turns.</small>
         </div>
-        <strong>{selectedSessionSummary.location}</strong>
       </section>
 
       <section className="rpg-card rpg-world-grid-card">
         <div className="rpg-world-state">
           <p className="eyebrow">World state</p>
-          {worldStateRows.map((row) => (
+          {displayedWorldStateRows.map((row) => (
             <div className="rpg-world-state-row" key={row.label}>
               <span aria-hidden="true">{row.icon}</span>
               <span>{row.label}</span>
@@ -204,4 +199,27 @@ export function RpgWorldRail({
       </section>
     </aside>
   );
+}
+
+function displayWorldStateValue(row: RpgWorldStateRowPreview, selectedSessionSummary: RpgSessionSummaryPreview): string {
+  const value = row.value.trim();
+
+  if (row.label === 'Time' && isMissingWorldValue(value)) {
+    return selectedSessionSummary.turnLabel;
+  }
+
+  if ((row.label === 'Weather' || row.label === 'Temperature' || row.label === 'Reputation') && isMissingWorldValue(value)) {
+    return 'Not tracked yet';
+  }
+
+  return value || 'Not tracked yet';
+}
+
+function isMissingWorldValue(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (/\(\s*0\s*\)/.test(normalized)) {
+    return false;
+  }
+
+  return !normalized || normalized === 'unknown' || normalized.includes('unknown') || normalized.includes('not tracked');
 }
