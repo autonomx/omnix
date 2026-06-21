@@ -69,7 +69,7 @@ describe('RpgCreateCampaignWizard', () => {
     expect(screen.getByLabelText('Derived stat preview')).toHaveTextContent('Strength: 10');
   });
 
-  it('uses backend progress and fills an enter-world command after API completion', async () => {
+  it('uses pending and backend progress and fills an enter-world command after API completion', async () => {
     vi.useFakeTimers();
     const onSelectCommand = vi.fn();
     let resolveLaunch!: (value: {
@@ -112,7 +112,8 @@ describe('RpgCreateCampaignWizard', () => {
       vi.advanceTimersByTime(1200);
     });
 
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '0');
+    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '31');
+    expect(screen.getByText(/Created player profile:/)).toBeInTheDocument();
 
     await act(async () => {
       resolveLaunch({

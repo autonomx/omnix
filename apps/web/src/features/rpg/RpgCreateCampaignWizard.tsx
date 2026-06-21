@@ -56,6 +56,7 @@ type LaunchResponseWithProgress = RpgLaunchResponse & {
 };
 
 const FALLBACK_PROGRESS_STEPS = [8, 18, 31, 44, 56, 68, 78, 88, 96, 100];
+const PENDING_PROGRESS_STEPS = FALLBACK_PROGRESS_STEPS.slice(0, -1);
 const MOTIVATION_OPTIONS = ['survival', 'knowledge', 'freedom', 'family', 'justice', 'renown'];
 const PROFILE_CHALLENGE_OPTIONS = ['cautious', 'restless', 'proud', 'guarded', 'naive', 'impulsive'];
 
@@ -241,7 +242,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
       return;
     }
 
-    clearProgressTimers();
+    scheduleProgress(PENDING_PROGRESS_STEPS);
     try {
       const result = await onCreateCampaign(campaignRequest);
       const progressAwareResult = result as LaunchResponseWithProgress;
