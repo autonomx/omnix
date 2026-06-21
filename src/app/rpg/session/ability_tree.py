@@ -35,15 +35,50 @@ def normalize_power_source(value: Any, fallback: PowerSource = "mundane") -> Pow
     return cast(PowerSource, raw) if raw in ALLOWED_POWER_SOURCES else fallback
 
 
+def _template_capability(value: Capability, fallback: Capability = "recon") -> Capability:
+    if value in ABILITY_TEMPLATES:
+        return value
+    return fallback if fallback in ABILITY_TEMPLATES else "recon"
+
+
+def _unique_template_capabilities(
+    values: list[Capability],
+    *,
+    primary: Capability | None = None,
+    limit: int = 3,
+) -> list[Capability]:
+    """Return unique secondary capabilities that have distinct ability templates.
+
+    ``custom`` is a valid schema capability, but it currently reuses the recon
+    template fallback. Treating repeated custom/unknown capability labels as real
+    tree categories can duplicate every recon ability ID and make session creation
+    fail validation. Keep identity inputs deterministic by retaining only concrete,
+    template-backed capabilities once.
+    """
+
+    seen: set[Capability] = set()
+    if primary is not None:
+        seen.add(primary)
+    unique: list[Capability] = []
+    for value in values:
+        if value in seen or value not in ABILITY_TEMPLATES:
+            continue
+        unique.append(value)
+        seen.add(value)
+        if len(unique) >= limit:
+            break
+    return unique
+
+
 def infer_character_identity(request_payload: dict[str, Any], build_id: str = "balanced_adventurer") -> dict[str, Any]:
     player = _safe_dict(request_payload.get("player"))
     defaults = BUILD_IDENTITY_DEFAULTS.get(build_id, BUILD_IDENTITY_DEFAULTS["balanced_adventurer"])
     genre = normalize_genre(request_payload.get("genre") or request_payload.get("campaign_template"))
-    primary = normalize_capability(request_payload.get("primary_capability"), defaults["primary_capability"])
+    primary = _template_capability(normalize_capability(request_payload.get("primary_capability"), defaults["primary_capability"]))
     secondary = [normalize_capability(value, "custom") for value in _safe_list(request_payload.get("secondary_capabilities"))]
     if not secondary:
         secondary = list(defaults.get("secondary_capabilities", []))
-    secondary = [value for value in secondary if value != primary and value in ALLOWED_CAPABILITIES][:3]
+    secondary = _unique_template_capabilities(secondary, primary=primary, limit=3)
     power_source = normalize_power_source(request_payload.get("power_source"), defaults["power_source"])
     class_name = str(request_payload.get("generated_class_name") or "").strip() or GENRE_CLASS_NAMES.get((genre, primary, power_source)) or defaults.get("class_name") or primary.title()
     summary = str(request_payload.get("generated_class_summary") or "").strip() or f"A {class_name} whose abilities alter deterministic gameplay dimensions."
@@ -92,12 +127,16 @@ def _family_bonus_abilities(family: dict[str, Any], *, capability: str, power_so
 
 
 def build_ability_tree(identity: dict[str, Any], *, seed: int | None = None) -> dict[str, Any]:
-    primary = normalize_capability(identity.get("primary_capability"), "recon")
-    secondary = [normalize_capability(value, "custom") for value in _safe_list(identity.get("secondary_capabilities"))]
+    primary = _template_capability(normalize_capability(identity.get("primary_capability"), "recon"))
+    secondary = _unique_template_capabilities(
+        [normalize_capability(value, "custom") for value in _safe_list(identity.get("secondary_capabilities"))],
+        primary=primary,
+        limit=2,
+    )
     power_source = normalize_power_source(identity.get("power_source"), "mundane")
     genre = normalize_genre(identity.get("genre"))
     family = TEMPLATE_FAMILIES.get((genre, primary, power_source))
-    capabilities = [primary, *[capability for capability in secondary if capability != primary]][:3]
+    capabilities = [primary, *secondary]
     categories: list[dict[str, Any]] = []
     all_abilities: list[dict[str, Any]] = []
     for capability in capabilities:
