@@ -15,25 +15,76 @@ SIGNAL_DEFAULTS = {
 }
 
 SEASON_SIGNAL_MODIFIERS = {
-    "early_spring": {"soil_moisture": 6, "vegetation": 4, "forage_availability": 3, "snowpack": 6},
-    "spring": {"water_availability": 5, "soil_moisture": 8, "vegetation": 8, "forage_availability": 6},
-    "summer": {"water_availability": -8, "soil_moisture": -7, "drought_pressure": 8, "vegetation": 4},
+    "early_spring": {
+        "soil_moisture": 6,
+        "vegetation": 4,
+        "forage_availability": 3,
+        "snowpack": 6,
+    },
+    "spring": {
+        "water_availability": 5,
+        "soil_moisture": 8,
+        "vegetation": 8,
+        "forage_availability": 6,
+    },
+    "summer": {
+        "water_availability": -8,
+        "soil_moisture": -7,
+        "drought_pressure": 8,
+        "vegetation": 4,
+    },
     "early_autumn": {"vegetation": -2, "forage_availability": -3, "soil_moisture": 2},
-    "late_autumn": {"vegetation": -8, "forage_availability": -8, "soil_moisture": 5, "frost_pressure": 5},
-    "winter": {"vegetation": -18, "forage_availability": -18, "snowpack": 16, "frost_pressure": 18},
+    "late_autumn": {
+        "vegetation": -8,
+        "forage_availability": -8,
+        "soil_moisture": 5,
+        "frost_pressure": 5,
+    },
+    "winter": {
+        "vegetation": -18,
+        "forage_availability": -18,
+        "snowpack": 16,
+        "frost_pressure": 18,
+    },
 }
 
 EVENT_SIGNAL_MODIFIERS = {
-    "rain": {"water_availability": 6, "soil_moisture": 12, "flood_pressure": 4, "drought_pressure": -8},
-    "storm": {"water_availability": 8, "soil_moisture": 16, "flood_pressure": 14, "drought_pressure": -12},
-    "snow": {"snowpack": 18, "frost_pressure": 10, "soil_moisture": 4, "forage_availability": -8},
+    "rain": {
+        "water_availability": 6,
+        "soil_moisture": 12,
+        "flood_pressure": 4,
+        "drought_pressure": -8,
+    },
+    "storm": {
+        "water_availability": 8,
+        "soil_moisture": 16,
+        "flood_pressure": 14,
+        "drought_pressure": -12,
+    },
+    "snow": {
+        "snowpack": 18,
+        "frost_pressure": 10,
+        "soil_moisture": 4,
+        "forage_availability": -8,
+    },
     "blizzard": {"snowpack": 28, "frost_pressure": 18, "forage_availability": -14},
     "clear": {"drought_pressure": 2},
     "windy": {"soil_moisture": -3, "drought_pressure": 3},
-    "dust": {"soil_moisture": -8, "vegetation": -6, "forage_availability": -6, "drought_pressure": 14},
+    "dust": {
+        "soil_moisture": -8,
+        "vegetation": -6,
+        "forage_availability": -6,
+        "drought_pressure": 14,
+    },
 }
 
-INTENSITY_MULTIPLIERS = {"trace": 0.5, "light": 0.75, "moderate": 1.0, "heavy": 1.25, "severe": 1.5}
+INTENSITY_MULTIPLIERS = {
+    "trace": 0.5,
+    "light": 0.75,
+    "moderate": 1.0,
+    "heavy": 1.25,
+    "severe": 1.5,
+}
 
 
 def derive_environment_signals(
@@ -49,7 +100,11 @@ def derive_environment_signals(
     event = active_weather if isinstance(active_weather, dict) else {}
     intensity = str(event.get("intensity") or "moderate")
     scale = INTENSITY_MULTIPLIERS.get(intensity, 1.0)
-    _apply_modifiers(signals, EVENT_SIGNAL_MODIFIERS.get(str(event.get("condition") or "clear"), {}), scale=scale)
+    _apply_modifiers(
+        signals,
+        EVENT_SIGNAL_MODIFIERS.get(str(event.get("condition") or "clear"), {}),
+        scale=scale,
+    )
     _apply_memory(signals, recent_conditions if isinstance(recent_conditions, dict) else {})
     return {key: _clamp(value) for key, value in signals.items()}
 
@@ -58,7 +113,8 @@ def _baseline_signals(profile: dict[str, Any]) -> dict[str, int]:
     baselines = profile.get("resource_baselines") if isinstance(profile.get("resource_baselines"), dict) else {}
     signals = {key: _coerce_int(baselines.get(key), fallback) for key, fallback in SIGNAL_DEFAULTS.items()}
     weights = profile.get("hazard_weights") if isinstance(profile.get("hazard_weights"), dict) else {}
-    signals["flood_pressure"] += _scaled_weight(weights, "flash_flood_risk") + _scaled_weight(weights, "flooded_road_risk")
+    signals["flood_pressure"] += _scaled_weight(weights, "flash_flood_risk")
+    signals["flood_pressure"] += _scaled_weight(weights, "flooded_road_risk")
     signals["frost_pressure"] += _scaled_weight(weights, "frost_risk")
     signals["drought_pressure"] += _scaled_weight(weights, "dust_risk")
     return signals
