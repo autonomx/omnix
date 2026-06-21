@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from app.rpg.session.ability_coverage import summarize_ability_coverage
 from app.rpg.session.environment_narration import build_environment_narration_contract
-from app.rpg.session.environment_snapshot import derive_environment_snapshot
+from app.rpg.session.environment_regions import derive_active_region_snapshot
 from app.rpg.session.genesis.pipeline_adapter import create_new_game_from_genesis_payload
 from app.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
 from app.rpg.session.new_game import (
@@ -87,11 +87,12 @@ def _ability_coverage_payload(state: dict[str, Any]) -> dict[str, Any]:
 def _environment_snapshot_from_state(state: dict[str, Any]) -> dict[str, Any] | None:
     world = state.get("world") if isinstance(state.get("world"), dict) else {}
     environment = world.get("environment") if isinstance(world.get("environment"), dict) else None
-    if environment is None:
+    regions = world.get("regions") if isinstance(world.get("regions"), dict) else None
+    if environment is None and regions is None:
         return None
     scene = state.get("scene") if isinstance(state.get("scene"), dict) else {}
     context = scene.get("environment_context") if isinstance(scene.get("environment_context"), dict) else {}
-    return derive_environment_snapshot(environment, context)
+    return derive_active_region_snapshot(world, context)
 
 
 def _attach_environment_snapshot_to_session(session: dict[str, Any]) -> dict[str, Any]:
