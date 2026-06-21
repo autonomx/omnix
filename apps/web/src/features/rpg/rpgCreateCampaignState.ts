@@ -37,8 +37,12 @@ export interface CampaignCreationSelections {
   combatLethality: string;
   difficulty: string;
   economyPressure: string;
+  flaw?: string;
+  motivationPrimary?: string;
+  motivationTarget?: string;
   openingHook?: string;
   openingPace?: string;
+  origin?: string;
   powerSource: string;
   primaryCapability: string;
   pronouns: string;
@@ -57,6 +61,7 @@ export interface CampaignCreationSelections {
     stt: boolean;
     tts: boolean;
   };
+  values?: string;
   worldActivity: string;
 }
 
@@ -237,6 +242,12 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     opening_hook: mapOpeningHook(openingHook),
     opening_pace: mapOpeningPace(openingPace),
     relationship_preset: mapRelationshipPreset(relationshipPreset),
+    origin: selections.origin?.trim() || selections.background,
+    motivation_primary: selections.motivationPrimary?.trim() || mapOpeningHook(openingHook),
+    motivation_target: selections.motivationTarget?.trim() || null,
+    flaw: selections.flaw?.trim() || null,
+    values: parseValueList(selections.values),
+    talents: buildGenesisTalents(primary, secondary),
     story_options: {
       opening_hook: mapOpeningHook(openingHook),
       opening_hook_label: selectedHook.label,
@@ -266,6 +277,38 @@ function parseSeed(value: string): number | null {
   }
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseValueList(value?: string): string[] {
+  const values = (value ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return values.length > 0 ? values : ['agency'];
+}
+
+function buildGenesisTalents(primary: RpgCapability, secondary: RpgCapability[]): Array<{ id: string; rank: number }> {
+  const talentIds: Partial<Record<RpgCapability, string>> = {
+    combat: 'action_readiness',
+    influence: 'social_leverage',
+    knowledge: 'field_knowledge',
+    recon: 'reconnaissance',
+    support: 'party_support',
+    survival: 'survival_sense',
+    technical: 'technical_handling',
+  };
+  const rows: Array<{ id: string; rank: number }> = [];
+  const seen = new Set<string>();
+  const add = (capability: RpgCapability, rank: number) => {
+    const id = talentIds[capability] ?? capability;
+    if (!seen.has(id)) {
+      seen.add(id);
+      rows.push({ id, rank });
+    }
+  };
+  add(primary, 2);
+  secondary.forEach((capability) => add(capability, 1));
+  return rows;
 }
 
 function mapBuildKey(value: BuildKey): NonNullable<RpgNewGameRequest['player']>['build'] {

@@ -56,6 +56,8 @@ type LaunchResponseWithProgress = RpgLaunchResponse & {
 };
 
 const FALLBACK_PROGRESS_STEPS = [8, 18, 31, 44, 56, 68, 78, 88, 96, 100];
+const MOTIVATION_OPTIONS = ['survival', 'knowledge', 'freedom', 'family', 'justice', 'renown'];
+const PROFILE_CHALLENGE_OPTIONS = ['cautious', 'restless', 'proud', 'guarded', 'naive', 'impulsive'];
 
 export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: RpgCreateCampaignWizardProps) {
   const progressTimers = useRef<Array<ReturnType<typeof window.setTimeout>>>([]);
@@ -66,6 +68,11 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
   const [buildKey, setBuildKey] = useState<BuildKey>('balanced');
   const [primaryCapability, setPrimaryCapability] = useState('recon');
   const [powerSource, setPowerSource] = useState('mundane');
+  const [origin, setOrigin] = useState('frontier_village');
+  const [motivationPrimary, setMotivationPrimary] = useState('survival');
+  const [motivationTarget, setMotivationTarget] = useState('');
+  const [flaw, setFlaw] = useState('cautious');
+  const [values, setValues] = useState('agency, loyalty');
   const [startingLocation, setStartingLocation] = useState('rusty-flagons');
   const [difficulty, setDifficulty] = useState('normal');
   const [worldActivity, setWorldActivity] = useState('standard');
@@ -136,8 +143,12 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
         combatLethality,
         difficulty,
         economyPressure,
+        flaw,
+        motivationPrimary,
+        motivationTarget,
         openingHook,
         openingPace,
+        origin,
         powerSource,
         primaryCapability,
         pronouns,
@@ -146,6 +157,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
         startingLocation,
         stats,
         systems,
+        values,
         worldActivity,
       }),
     [
@@ -156,8 +168,12 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
       combatLethality,
       difficulty,
       economyPressure,
+      flaw,
+      motivationPrimary,
+      motivationTarget,
       openingHook,
       openingPace,
+      origin,
       powerSource,
       primaryCapability,
       pronouns,
@@ -166,6 +182,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
       startingLocation,
       stats,
       systems,
+      values,
       worldActivity,
     ],
   );
@@ -322,16 +339,21 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
               <span>Pronouns</span>
               <input value={pronouns} onChange={(event) => setPronouns(event.target.value)} />
             </label>
+            <label>
+              <span>Origin</span>
+              <input value={origin} onChange={(event) => setOrigin(event.target.value)} placeholder="frontier_village" />
+              <small>Where the character came from; different from the starting scene.</small>
+            </label>
             <OptionSelect label="Background" value={background} onChange={setBackground} options={backgrounds} detail={selectedBackground.detail} />
             <OptionSelect label="Power source" value={powerSource} onChange={setPowerSource} options={powerSources} detail={selectedPower.detail} />
           </div>
         </div>
 
         <div className="rpg-create-section rpg-create-section-build">
-          <h4>Build and capabilities</h4>
+          <h4>Archetype and talents</h4>
           <div className="rpg-create-field-grid">
             <label>
-              <span>Starting build</span>
+              <span>Starting archetype</span>
               <select value={buildKey} onChange={(event) => setBuildKey(event.target.value as BuildKey)}>
                 {buildTemplates.map((template) => (
                   <option key={template.key} value={template.key}>
@@ -341,7 +363,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
               </select>
               <small>{selectedBuild.detail}</small>
             </label>
-            <OptionSelect label="Primary capability" value={primaryCapability} onChange={setPrimaryCapability} options={primaryCapabilities} detail={selectedPrimary.detail} />
+            <OptionSelect label="Primary talent" value={primaryCapability} onChange={setPrimaryCapability} options={primaryCapabilities} detail={selectedPrimary.detail} />
           </div>
           <div className="rpg-capability-grid" aria-label="Secondary capabilities">
             {(Object.keys(capabilityLabels) as Capability[]).map((capability) => (
@@ -350,6 +372,23 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
                 <span>{capabilityLabels[capability]}</span>
               </label>
             ))}
+          </div>
+        </div>
+
+        <div className="rpg-create-section rpg-create-section-build">
+          <h4>Character drivers</h4>
+          <div className="rpg-create-field-grid">
+            <BasicSelect label="Motivation" value={motivationPrimary} onChange={setMotivationPrimary} options={MOTIVATION_OPTIONS} />
+            <label>
+              <span>Motivation target</span>
+              <input value={motivationTarget} onChange={(event) => setMotivationTarget(event.target.value)} placeholder="person, place, faction, or mystery" />
+            </label>
+            <BasicSelect label="Profile challenge" value={flaw} onChange={setFlaw} options={PROFILE_CHALLENGE_OPTIONS} />
+            <label>
+              <span>Values</span>
+              <input value={values} onChange={(event) => setValues(event.target.value)} placeholder="agency, loyalty" />
+              <small>Comma-separated values that guide long-term choices.</small>
+            </label>
           </div>
         </div>
 
@@ -434,6 +473,9 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
             <p>{pronouns} · {selectedBackground.label} · {selectedPower.label}</p>
           </div>
           <dl>
+            <SummaryRow label="Origin" value={origin || selectedBackground.label} />
+            <SummaryRow label="Driver" value={`${motivationPrimary}${motivationTarget ? ` → ${motivationTarget}` : ''} · ${flaw}`} />
+            <SummaryRow label="Values" value={values || 'agency'} />
             <SummaryRow label="Location" value={selectedLocation.label} />
             <SummaryRow label="Opening" value={`${selectedOpeningHook.label} · ${selectedOpeningPace.label}`} />
             <SummaryRow label="Relationship" value={selectedRelationship.label} />
