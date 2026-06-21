@@ -35,6 +35,16 @@ def _summary_path(output_dir: str | Path) -> Path:
     return Path(output_dir) / "autoplay-summary.json"
 
 
+def _turn_count(summary: Mapping[str, object], provided: int | None) -> int | None:
+    if provided is not None:
+        return provided
+    value = summary.get("turns_executed")
+    try:
+        return int(value) if value is not None else None
+    except Exception:
+        return None
+
+
 def attach_summary_artifact_status(output_dir: str | Path, *, turns_requested: int | None = None) -> dict[str, Any]:
     path = _summary_path(output_dir)
     try:
@@ -44,7 +54,7 @@ def attach_summary_artifact_status(output_dir: str | Path, *, turns_requested: i
     state = _last_state(summary)
     status = build_wizard_new_game_validation(
         {"simulation_state": state},
-        turns_requested=turns_requested,
+        turns_requested=_turn_count(summary, turns_requested),
     )
     summary["setup_validation"] = status
     attach_setup_summary(summary, status)
