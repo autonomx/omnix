@@ -16,6 +16,7 @@ RUNTIME_CHAIN_ARTIFACT_NAME = "autoplay-runtime-apply-chain-probe.json"
 _OUTPUT_DIR: Optional[Path] = None
 _WRAPPED_NAMES: set[str] = set()
 _RUNTIME_CHAIN_WRAPPED: set[str] = set()
+_TURN_CALL_CONTEXT_WRAPPED = False
 
 _STAGE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("pre_runtime_intent_llm_ms", ("intent", "classif", "player_agent", "pre_runtime")),
@@ -290,6 +291,39 @@ def wrap_runtime_apply_chain() -> Dict[str, Any]:
     return {"ok": True, "source": RUNTIME_CHAIN_SOURCE, "wrapped_count": len(wrapped), "wrapped_names": wrapped}
 
 
+def _wrap_turn_call_context(namespace: MutableMapping[str, Any]) -> bool:
+    global _TURN_CALL_CONTEXT_WRAPPED
+    original = namespace.get("_call_turn_runtime")
+    if _TURN_CALL_CONTEXT_WRAPPED or not callable(original):
+        return False
+    if getattr(original, "__autoplay_action_context_wrapped__", False):
+        _TURN_CALL_CONTEXT_WRAPPED = True
+        return False
+
+    @functools.wraps(original)
+    def wrapper(*args: Any, __original: Callable[..., Any] = original, **kwargs: Any) -> Any:
+        try:
+            from tests.rpg.autoplay.priority_context import autoplay_action_text
+
+            raw_turn = kwargs.get("turn_index")
+            raw_state = kwargs.get("simulation_state")
+            turn_index = int(raw_turn) if raw_turn is not None else None
+            if turn_index is not None and isinstance(raw_state, Mapping):
+                default_text = f"continue turn {turn_index}"
+                current_text = str(kwargs.get("player_action") or "")
+                if not current_text or current_text == default_text:
+                    kwargs = dict(kwargs)
+                    kwargs["player_action"] = autoplay_action_text(turn_index, raw_state)
+        except Exception:
+            pass
+        return __original(*args, **kwargs)
+
+    wrapper.__autoplay_action_context_wrapped__ = True  # type: ignore[attr-defined]
+    namespace["_call_turn_runtime"] = wrapper
+    _TURN_CALL_CONTEXT_WRAPPED = True
+    return True
+
+
 def wrap_live_manual_turn_timing_functions(namespace: MutableMapping[str, Any]) -> Dict[str, Any]:
     wrapped: List[str] = []
     for name, value in list(namespace.items()):
@@ -317,10 +351,12 @@ def wrap_live_manual_turn_timing_functions(namespace: MutableMapping[str, Any]) 
         except Exception:
             continue
     chain = wrap_runtime_apply_chain()
+    turn_context_wrapped = _wrap_turn_call_context(namespace)
     return {
         "ok": True,
         "source": SOURCE,
         "wrapped_count": len(wrapped),
         "wrapped_names": wrapped,
         "runtime_apply_chain": chain,
+        "turn_call_context_wrapped": turn_context_wrapped,
     }
