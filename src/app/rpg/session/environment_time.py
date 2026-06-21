@@ -15,7 +15,6 @@ DEFAULT_HISTORY_LIMIT = 12
 RAIN_CONDITIONS = {"rain", "storm"}
 SNOW_CONDITIONS = {"snow", "blizzard"}
 DRY_CONDITIONS = {"clear", "cloudy", "overcast", "windy"}
-FREEZING_CONDITIONS = {"snow", "blizzard"}
 INTENSITIES = ("trace", "light", "moderate", "heavy", "severe")
 WEATHER_ROTATION = ("clear", "cloudy", "rain", "fog", "windy", "snow", "storm")
 
