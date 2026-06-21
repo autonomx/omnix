@@ -190,6 +190,12 @@ def test_new_game_route_preserves_full_wizard_genesis_payload(monkeypatch, tmp_p
     assert state["features"]["companions_enabled"] is True
     assert state["features"]["permadeath"] is False
 
+    ability_tree = state["ability_tree"]
+    ability_ids = [ability["ability_id"] for ability in ability_tree["abilities"]]
+    assert len(ability_ids) == len(set(ability_ids))
+    assert ability_tree["primary_capability"] == "recon"
+    assert ability_tree["secondary_capabilities"] == ["combat", "survival"]
+
     inventory_names = {item["name"] for item in state["player"]["inventory"]}
     assert {"Travel cloak", "Iron dagger", "Trail rations", "Torch"}.issubset(inventory_names)
     assert state["player"]["currency"]["silver"] == 10
