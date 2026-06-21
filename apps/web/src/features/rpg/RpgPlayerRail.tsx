@@ -20,6 +20,8 @@ interface RpgPlayerRailProps {
 
 export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats, heroSummary, partyMembers }: RpgPlayerRailProps) {
   const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
+  const isLiveSession = heroSummary.source === 'live';
+  const companionActionLabel = isLiveSession ? 'Companion recruitment is available through story choices.' : 'Preview companions only';
 
   return (
     <aside className={railClassName} aria-label="Player, party, and quests">
@@ -89,26 +91,30 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
           <p className="eyebrow">Party</p>
           <span>{partyMembers.length} / 4</span>
         </div>
-        <div className="rpg-list-stack">
-          {partyMembers.map((member) => (
-            <article className="rpg-party-row" key={member.name}>
-              <span className="rpg-avatar rpg-avatar-small" aria-hidden="true">
-                {member.avatar}
-              </span>
-              <div className="rpg-party-member-copy">
-                <strong>{member.name}</strong>
-                <span>{member.role}</span>
-              </div>
-              <div className="rpg-party-member-status">
-                <span className="rpg-party-health">
-                  <span style={{ width: `${member.percent}%` }} />
+        {partyMembers.length ? (
+          <div className="rpg-list-stack">
+            {partyMembers.map((member) => (
+              <article className="rpg-party-row" key={member.name}>
+                <span className="rpg-avatar rpg-avatar-small" aria-hidden="true">
+                  {member.avatar}
                 </span>
-                <small>{member.hp}</small>
-              </div>
-            </article>
-          ))}
-        </div>
-        <button className="rpg-secondary-button" type="button">
+                <div className="rpg-party-member-copy">
+                  <strong>{member.name}</strong>
+                  <span>{member.role}</span>
+                </div>
+                <div className="rpg-party-member-status">
+                  <span className="rpg-party-health">
+                    <span style={{ width: `${member.percent}%` }} />
+                  </span>
+                  <small>{member.hp}</small>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="rpg-empty-copy">No companions have joined this campaign yet.</p>
+        )}
+        <button className="rpg-secondary-button" type="button" disabled aria-label={companionActionLabel} title={companionActionLabel}>
           + Add companion
         </button>
       </section>
