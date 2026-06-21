@@ -72,9 +72,9 @@ def _plant_score(
         "winter": -25,
     }
     rain_bonus = 8 if condition in {"rain", "storm"} else 0
-    return _clamp(
-        vegetation + water // 5 + seasonal.get(season_id, 0) + rain_bonus - drought // 3 - frost // 3
-    )
+    score = vegetation + water // 5 + seasonal.get(season_id, 0) + rain_bonus
+    score -= drought // 3 + frost // 3
+    return _clamp(score)
 
 
 def _fish_score(season_id: str, water: int, condition: str, intensity: str, temperature: int) -> int:
