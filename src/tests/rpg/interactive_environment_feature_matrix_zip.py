@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Mapping, Sequence
 
@@ -17,6 +18,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
         sys.path.insert(0, path)
 
 from app.rpg.interactive_cli_response_quality import apply_response_quality_to_matrix_result  # noqa: E402
+from app.rpg.session.environment_time import advance_environment_time  # noqa: E402
 from tests.rpg import interactive_feature_matrix_environment as env_matrix  # noqa: E402
 from tests.rpg import interactive_intent_matrix as matrix  # noqa: E402
 from tests.rpg import interactive_intent_matrix_zip as matrix_zip  # noqa: E402
@@ -83,13 +85,148 @@ def _write_environment_summary_artifacts(result: Mapping[str, Any], output_root:
         encoding="utf-8",
     )
     performance_path.write_text(
-        json.dumps(matrix._safe_dict(summary.get("performance")), indent=2, ensure_ascii=False, sort_keys=True, default=str),
+        json.dumps(
+            matrix._safe_dict(summary.get("performance")),
+            indent=2,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        ),
         encoding="utf-8",
     )
     report_path.write_text(
-        matrix.render_matrix_html(summary, list(result.get("results") or []), matrix._safe_dict(summary.get("details"))),
+        matrix.render_matrix_html(
+            summary,
+            list(result.get("results") or []),
+            matrix._safe_dict(summary.get("details")),
+        ),
         encoding="utf-8",
     )
+
+
+def _load_environment_session(session_id: str) -> Dict[str, Any]:
+    try:
+        from app.rpg.session.runtime import load_runtime_session
+    except Exception:
+        return {}
+    session = load_runtime_session(session_id)
+    return matrix._safe_dict(session)
+
+
+def _save_environment_session(session: Mapping[str, Any]) -> None:
+    try:
+        from app.rpg.session.runtime import save_runtime_session
+    except Exception:
+        return
+    save_runtime_session(dict(session))
+
+
+def _turn_action_type(turn_summary: Mapping[str, Any]) -> str:
+    diagnostics = matrix._safe_dict(turn_summary.get("interactive_cli_intent_diagnostics"))
+    final = matrix._safe_dict(diagnostics.get("final_classification"))
+    action_type = matrix._safe_str(final.get("action_type"))
+    if action_type:
+        return action_type
+    raw = matrix._safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+    advisory = matrix._safe_dict(raw.get("first_call_action_advisory"))
+    if advisory.get("action_type"):
+        return matrix._safe_str(advisory.get("action_type"))
+    contract = matrix._safe_dict(raw.get("turn_contract"))
+    action = matrix._safe_dict(contract.get("action"))
+    return matrix._safe_str(action.get("action_type"))
+
+
+def _session_environment(session: Mapping[str, Any]) -> Dict[str, Any]:
+    state = matrix._safe_dict(session.get("state"))
+    world = matrix._safe_dict(state.get("world"))
+    env = matrix._safe_dict(world.get("environment"))
+    if env:
+        return env
+    return matrix._safe_dict(env_matrix._environment_from_world(world))
+
+
+def _set_session_environment(session: Dict[str, Any], env: Mapping[str, Any]) -> Dict[str, Any]:
+    state = matrix._safe_dict(session.get("state"))
+    world = matrix._safe_dict(state.get("world"))
+    world["environment"] = deepcopy(dict(env))
+    state["world"] = world
+    session["state"] = state
+    return session
+
+
+def _replace_environment_payloads(value: Any, env: Mapping[str, Any]) -> None:
+    if isinstance(value, dict):
+        for key, nested in list(value.items()):
+            if key == "environment" and isinstance(nested, dict) and "absolute_minutes" in nested:
+                value[key] = deepcopy(dict(env))
+            else:
+                _replace_environment_payloads(nested, env)
+    elif isinstance(value, list):
+        for nested in value:
+            _replace_environment_payloads(nested, env)
+
+
+def _advance_environment_after_travel_turn(
+    *,
+    session_id: str,
+    turn_summary: Mapping[str, Any],
+    turn_index: int,
+    player_input: str,
+) -> None:
+    if _turn_action_type(turn_summary) != "travel" and "travel" not in player_input.lower():
+        return
+    raw = matrix._safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+    session = _load_environment_session(session_id) or matrix._safe_dict(raw.get("session"))
+    env = _session_environment(session)
+    if not env:
+        return
+    advanced = advance_environment_time(env)
+    session = _set_session_environment(dict(session), advanced)
+    _save_environment_session(session)
+    _replace_environment_payloads(raw, advanced)
+    raw["environment_elapsed_handoff"] = {
+        "source": "interactive_environment_feature_matrix_zip",
+        "turn_index": turn_index,
+        "absolute_minutes_before": env.get("absolute_minutes"),
+        "absolute_minutes_after": advanced.get("absolute_minutes"),
+    }
+    if "raw_result" in turn_summary:
+        turn_summary["raw_result"] = raw  # type: ignore[index]
+    else:
+        turn_summary["result"] = raw  # type: ignore[index]
+
+
+def _environment_after_turn_hook_for_scenario(scenario: Any):
+    scenario_id = matrix._safe_str(getattr(scenario, "scenario_id", ""))
+    if scenario_id not in env_matrix.ENVIRONMENT_MATRIX_SCENARIO_IDS:
+        return None
+    return _advance_environment_after_travel_turn
+
+
+def _compose_hooks(first: Any, second: Any):
+    if first is None:
+        return second
+    if second is None:
+        return first
+
+    def _combined(**kwargs: Any) -> None:
+        first(**kwargs)
+        second(**kwargs)
+
+    return _combined
+
+
+def _run_intent_matrix_with_environment_hooks(**kwargs: Any) -> Dict[str, Any]:
+    original_hook = matrix._after_turn_hook_for_scenario
+
+    def _hook_for_scenario(scenario: Any):
+        return _compose_hooks(original_hook(scenario), _environment_after_turn_hook_for_scenario(scenario))
+
+    matrix._after_turn_hook_for_scenario = _hook_for_scenario  # type: ignore[assignment]
+    try:
+        return matrix.run_intent_matrix(**kwargs)
+    finally:
+        matrix._after_turn_hook_for_scenario = original_hook  # type: ignore[assignment]
 
 
 def run_environment_feature_matrix(
@@ -101,7 +238,7 @@ def run_environment_feature_matrix(
 ) -> Dict[str, Any]:
     output_root = output_root or DEFAULT_OUTPUT_ROOT
     selected = list(scenarios or env_matrix.environment_feature_matrix_scenarios())
-    result = matrix.run_intent_matrix(
+    result = _run_intent_matrix_with_environment_hooks(
         scenarios=selected,
         output_root=output_root,
         live_provider=live_provider,
