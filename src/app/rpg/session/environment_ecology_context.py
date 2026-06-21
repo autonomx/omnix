@@ -55,21 +55,47 @@ def derive_ecology_context(snapshot: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _plant_score(season_id: str, vegetation: int, water: int, drought: int, frost: int, condition: str) -> int:
-    seasonal = {"spring": 18, "summer": 10, "early_spring": 8, "early_autumn": 2, "late_autumn": -12, "winter": -25}
+def _plant_score(
+    season_id: str,
+    vegetation: int,
+    water: int,
+    drought: int,
+    frost: int,
+    condition: str,
+) -> int:
+    seasonal = {
+        "spring": 18,
+        "summer": 10,
+        "early_spring": 8,
+        "early_autumn": 2,
+        "late_autumn": -12,
+        "winter": -25,
+    }
     rain_bonus = 8 if condition in {"rain", "storm"} else 0
-    return _clamp(vegetation + water // 5 + seasonal.get(season_id, 0) + rain_bonus - drought // 3 - frost // 3)
+    return _clamp(
+        vegetation + water // 5 + seasonal.get(season_id, 0) + rain_bonus - drought // 3 - frost // 3
+    )
 
 
 def _fish_score(season_id: str, water: int, condition: str, intensity: str, temperature: int) -> int:
-    seasonal = 10 if season_id in {"spring", "early_spring"} else -8 if season_id == "winter" else 0
+    if season_id in {"spring", "early_spring"}:
+        seasonal = 10
+    elif season_id == "winter":
+        seasonal = -8
+    else:
+        seasonal = 0
     rain_bonus = 10 if condition in {"rain", "storm"} and intensity != "severe" else 0
     temperature_penalty = 10 if temperature <= -8 or temperature >= 34 else 0
     return _clamp(water + seasonal + rain_bonus - temperature_penalty)
 
 
 def _wildlife_score(season_id: str, forage: int, water: int, snowpack: int, drought: int) -> int:
-    seasonal = 8 if season_id in {"spring", "summer", "early_autumn"} else -10 if season_id == "winter" else 0
+    if season_id in {"spring", "summer", "early_autumn"}:
+        seasonal = 8
+    elif season_id == "winter":
+        seasonal = -10
+    else:
+        seasonal = 0
     return _clamp((forage + water) // 2 + seasonal - snowpack // 3 - drought // 4)
 
 
