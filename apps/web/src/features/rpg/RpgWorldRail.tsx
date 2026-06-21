@@ -207,7 +207,6 @@ function displayWorldStateValue(
   selectedSessionSummary: RpgSessionSummaryPreview,
 ): string {
   const value = row.value.trim();
-  const lowerValue = value.toLowerCase();
   if (row.label === 'Temperature' && isMissingWorldValue(value)) {
     const weather = rows.find((candidate) => candidate.label === 'Weather')?.value;
     return inferTemperatureLabel(weather, selectedSessionSummary.location) ?? 'Not tracked yet';
@@ -226,6 +225,10 @@ function displayWorldStateValue(
 
 function isMissingWorldValue(value: string): boolean {
   const normalized = value.trim().toLowerCase();
+  if (/\(\s*0\s*\)/.test(normalized)) {
+    return false;
+  }
+
   return !normalized || normalized === 'unknown' || normalized.includes('unknown') || normalized.includes('not tracked');
 }
 
