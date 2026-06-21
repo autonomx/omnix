@@ -52,3 +52,9 @@ def apply_priority_context(base_text: str, state: Mapping[str, object]) -> str:
     context = primary_priority_context(state)
     suffix = str(context.get("suffix") or "")
     return f"{base_text}{suffix}" if suffix else base_text
+
+
+def autoplay_action_text(turn_index: int, state: Mapping[str, object]) -> str:
+    """Return the standard autoplay turn action with priority context applied."""
+
+    return apply_priority_context(f"continue turn {int(turn_index)}", state)
