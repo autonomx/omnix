@@ -4,7 +4,7 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any, Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import ValidationError
 
 from app.rpg.session.ability_coverage import summarize_ability_coverage
@@ -65,11 +65,12 @@ def _preserve_seed_zero(request: RpgNewGameRequest) -> RpgNewGameRequest:
     return request
 
 
-def _create_new_game_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def _create_new_game_from_payload(payload: dict[str, Any], legacy_request: RpgNewGameRequest | None = None) -> dict[str, Any]:
     try:
         if _has_genesis_contract(payload):
             return create_new_game_from_genesis_payload(payload)
-        return create_new_game_session(_preserve_seed_zero(RpgNewGameRequest.model_validate(payload)))
+        request = legacy_request or RpgNewGameRequest.model_validate(payload)
+        return create_new_game_session(_preserve_seed_zero(request))
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
@@ -145,8 +146,9 @@ def register_rpg_session_routes(app: FastAPI) -> None:
         return {"ok": True, "session_id": session_id, "ability_coverage": _ability_coverage_payload(state)}
 
     @app.post("/api/rpg/new-game", tags=["rpg-session"])
-    async def rpg_new_game(request: dict[str, Any]) -> dict[str, Any]:
-        return _with_world_scale_abilities(_create_new_game_from_payload(request))
+    async def rpg_new_game(http_request: Request, request: RpgNewGameRequest) -> dict[str, Any]:
+        raw_payload = await http_request.json()
+        return _with_world_scale_abilities(_create_new_game_from_payload(raw_payload, request))
 
     @app.post("/api/rpg/sessions/{session_id}/continue", tags=["rpg-session"])
     async def rpg_continue_session(session_id: str) -> dict[str, Any]:
