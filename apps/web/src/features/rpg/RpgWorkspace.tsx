@@ -16,7 +16,7 @@ import { RpgStoryScene } from './RpgStoryScene';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { RpgWorldRail } from './RpgWorldRail';
 import { createRpgCombatSurfaceState } from './rpgCombatState';
-import { createRpgWorkspaceState } from './rpgUiState';
+import { createRpgWorkspaceState, type RpgHeroSummaryPreview, type RpgPartyMemberPreview } from './rpgUiState';
 import './RpgWorkspace.css';
 import './RpgResponsivePolish.css';
 
@@ -27,6 +27,7 @@ interface RpgFormValues {
 
 const ACTIVE_JOB_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
 const RPG_TURN_QUEUE_TIMEOUT_MS = 10_000;
+const PREVIEW_PARTY_MEMBER_NAMES = new Set(['Thorin Ironfist', 'Elandra', 'Kael']);
 
 function formatQueryError(error: unknown) {
   if (error instanceof Error) {
@@ -34,6 +35,14 @@ function formatQueryError(error: unknown) {
   }
 
   return 'Request failed before the RPG workspace could read this source.';
+}
+
+function isPreviewPartyFallback(partyMembers: RpgPartyMemberPreview[]) {
+  return partyMembers.length === PREVIEW_PARTY_MEMBER_NAMES.size && partyMembers.every((member) => PREVIEW_PARTY_MEMBER_NAMES.has(member.name));
+}
+
+function hidePreviewPartyForLiveSession(heroSummary: RpgHeroSummaryPreview, partyMembers: RpgPartyMemberPreview[]) {
+  return heroSummary.source === 'live' && isPreviewPartyFallback(partyMembers) ? [] : partyMembers;
 }
 
 export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
@@ -75,7 +84,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     heroSummary,
     heroStats,
     equippedGear,
-    partyMembers,
+    partyMembers: rawPartyMembers,
     activeQuests,
     quickActions,
     recentEvents,
@@ -100,6 +109,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     reports: reportsQuery.data,
     selectedSessionId,
   });
+  const partyMembers = hidePreviewPartyForLiveSession(heroSummary, rawPartyMembers);
   const combatSurface = createRpgCombatSurfaceState({ encounter, heroSummary, partyMembers });
   const selectedLiveSessionId = selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : null;
   const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && ACTIVE_JOB_STATUSES.has(job.status));
@@ -259,226 +269,104 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           checkpoint_label: selectedSessionSummary.checkpointLabel,
         },
       }),
-    onSuccess: async () => {
-      await invalidateRpgWorkspaceQueries();
-    },
+    onSuccess: invalidateRpgWorkspaceQueries,
   });
-  const loadoutActionMutation = useMutation({
-    mutationFn: ({ sessionId, request }: { sessionId: string; request: RpgLoadoutActionRequest }) => omnixApiClient.applyRpgLoadoutAction(sessionId, request),
-    onSuccess: async () => {
-      await invalidateRpgWorkspaceQueries();
-    },
-  });
-  const createCampaignMutation = useMutation({
-    mutationFn: (request: RpgNewGameRequest) => omnixApiClient.createRpgNewGame(request),
-    onSuccess: async (result) => {
-      if (result.ok && result.session_id) {
-        setValue('sessionId', result.session_id, { shouldDirty: true, shouldValidate: true });
-      }
-      await invalidateRpgWorkspaceQueries();
-    },
-  });
-  const autoplayMutation = useMutation({
-    mutationFn: () => {
-      if (activeAutoplayJob) {
-        return omnixApiClient.cancelJob(activeAutoplayJob.id, 'Stopped from the RPG workspace autoplay control.');
-      }
-
-      return omnixApiClient.createJob({
-        module: 'rpg',
-        type: 'rpg.autoplay',
-        resource_class: 'gpu:llm',
-        priority: 0,
-        input_ref: selectedLiveSessionId ? { session_id: selectedLiveSessionId } : null,
-        input_payload: {
-          determinism_policy: 'replay_preserving',
-          source: 'rpg-workspace',
-          turn_budget: 10,
-        },
-        stages: [
-          { id: 'load-session', label: 'Load RPG session', resource_class: 'cpu', status: 'queued' },
-          { id: 'plan-turns', label: 'Plan deterministic turns', resource_class: 'gpu:llm', status: 'queued' },
-          { id: 'run-turns', label: 'Run autoplay turns', resource_class: 'cpu', status: 'queued' },
-          { id: 'write-report', label: 'Write autoplay report', resource_class: 'cpu', status: 'queued' },
-        ],
-      });
-    },
-    onSuccess: async () => {
-      await invalidateRpgWorkspaceQueries();
-    },
-  });
-  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
-  const checkpointControlStatus = createCheckpointMutation.isPending
-    ? 'Creating checkpoint…'
-    : createCheckpointMutation.isError
-      ? 'Checkpoint request failed.'
-      : createCheckpointMutation.data?.checkpoint_id
-        ? `Checkpoint created: ${createCheckpointMutation.data.checkpoint_id}`
-        : undefined;
-  const autoplayStatusLabel = autoplayMutation.isPending
-    ? 'Updating autoplay…'
-    : autoplayMutation.isError
-      ? 'Autoplay control failed.'
-      : activeAutoplayJob
-        ? `${activeAutoplayJob.status} • ${activeAutoplayJob.id}`
-        : 'Off';
-  const isRefreshingRpgQueries = inventoryQuery.isFetching || jobsQuery.isFetching || assetsQuery.isFetching || reportsQuery.isFetching;
-  const selectCommand = (command: string) => setValue('command', command, { shouldDirty: true, shouldValidate: true });
-  const applyLoadoutAction = (request: RpgLoadoutActionRequest) => {
-    if (!selectedLiveSessionId) {
-      selectCommand('Select or create a live RPG session before using inventory or abilities.');
-      return;
-    }
-    loadoutActionMutation.mutate({ sessionId: selectedLiveSessionId, request });
+  const queueCommand = (command: string) => setValue('command', command, { shouldDirty: true, shouldTouch: true });
+  const handleCreatedCampaign = async () => {
+    await invalidateRpgWorkspaceQueries();
   };
+  const submitTurn = (values: RpgFormValues) => createJobMutation.mutate(values);
+  const playerRailClassName = isPlayerRailFullSize ? 'rpg-left-rail-full' : isPlayerRailCollapsed ? 'rpg-left-rail-collapsed' : undefined;
+  const worldRailClassName = isWorldRailFullSize ? 'rpg-right-rail-full' : isWorldRailCollapsed ? 'rpg-right-rail-collapsed' : undefined;
 
   return (
-    <WorkspacePanel className="rpg-workstation">
-      <RpgWorkspaceHeader module={module} selectedSessionSummary={selectedSessionSummary} submitStatus={submitStatus} />
-
-      {isCampaignSetupVisible ? (
-        <RpgCreateCampaignWizard
-          onCreateCampaign={(request) => createCampaignMutation.mutateAsync(request)}
-          onSelectCommand={(command) => {
-            selectCommand(command);
-            setIsCampaignSetupVisible(false);
-          }}
-        />
-      ) : (
-        <section className="rpg-create-campaign-card rpg-create-campaign-card-collapsed" aria-label="Create Campaign">
-          <div>
-            <p className="eyebrow">Campaign setup</p>
-            <h3>Create Campaign</h3>
-            <p>Open the deeper RPG setup flow with point-buy stats, starter gear, story hooks, world rules, and creation progress.</p>
-          </div>
-          <button className="rpg-primary-button" type="button" onClick={() => setIsCampaignSetupVisible(true)}>
-            New Campaign
-          </button>
-        </section>
-      )}
-
-      <div className="rpg-layout-controls" aria-label="Workspace layout controls">
-        <button
-          className="rpg-secondary-button"
-          type="button"
-          aria-pressed={isPlayerRailCollapsed}
-          onClick={() => setIsPlayerRailCollapsed((value) => !value)}
-        >
+    <WorkspacePanel module={module}>
+      <RpgWorkspaceHeader sessionTitle={selectedSessionSummary.title} />
+      <RpgCreateCampaignWizard
+        compact={!isCampaignSetupVisible}
+        onOpenSetup={() => setIsCampaignSetupVisible(true)}
+        onCollapseSetup={() => setIsCampaignSetupVisible(false)}
+        onCreateCampaign={omnixApiClient.createRpgNewGame.bind(omnixApiClient) as (request: RpgNewGameRequest) => Promise<unknown>}
+        onCreatedCampaign={handleCreatedCampaign}
+        onSelectCommand={queueCommand}
+      />
+      <div className="rpg-layout-controls" aria-label="RPG layout controls">
+        <button className="rpg-secondary-button" type="button" onClick={() => setIsPlayerRailCollapsed((value) => !value)}>
           {isPlayerRailCollapsed ? 'Show player rail' : 'Hide player rail'}
         </button>
-        <button
-          className="rpg-secondary-button"
-          type="button"
-          aria-pressed={isPlayerRailFullSize}
-          disabled={isPlayerRailCollapsed}
-          onClick={() => setIsPlayerRailFullSize((value) => !value)}
-        >
-          {isPlayerRailFullSize ? 'Contain player rail' : 'Full-size player rail'}
+        <button className="rpg-secondary-button" type="button" onClick={() => setIsPlayerRailFullSize((value) => !value)}>
+          {isPlayerRailFullSize ? 'Restore player rail' : 'Full-size player rail'}
         </button>
-        <button
-          className="rpg-secondary-button"
-          type="button"
-          aria-pressed={isWorldRailCollapsed}
-          onClick={() => setIsWorldRailCollapsed((value) => !value)}
-        >
+        <button className="rpg-secondary-button" type="button" onClick={() => setIsWorldRailCollapsed((value) => !value)}>
           {isWorldRailCollapsed ? 'Show world rail' : 'Hide world rail'}
         </button>
-        <button
-          className="rpg-secondary-button"
-          type="button"
-          aria-pressed={isWorldRailFullSize}
-          disabled={isWorldRailCollapsed}
-          onClick={() => setIsWorldRailFullSize((value) => !value)}
-        >
-          {isWorldRailFullSize ? 'Contain world rail' : 'Full-size world rail'}
+        <button className="rpg-secondary-button" type="button" onClick={() => setIsWorldRailFullSize((value) => !value)}>
+          {isWorldRailFullSize ? 'Restore world rail' : 'Full-size world rail'}
         </button>
       </div>
-
       <RpgLiveDataStatus cards={liveDataStatusCards} />
-
-      <div className={dashboardClassName}>
-        {isPlayerRailCollapsed ? null : (
-          <RpgPlayerRail
-            activeQuests={activeQuests}
-            className={isPlayerRailFullSize ? 'rpg-rail-full-size' : undefined}
-            equippedGear={equippedGear}
-            heroStats={heroStats}
+      <section className={dashboardClassName}>
+        <RpgPlayerRail
+          activeQuests={activeQuests}
+          className={playerRailClassName}
+          equippedGear={equippedGear}
+          heroStats={heroStats}
+          heroSummary={heroSummary}
+          partyMembers={partyMembers}
+        />
+        <main className="rpg-center-stage">
+          <RpgStoryScene
             heroSummary={heroSummary}
-            partyMembers={partyMembers}
+            recentEvents={recentEvents}
+            selectedSession={selectedSessionSummary}
+            onSelectCommand={queueCommand}
           />
-        )}
-
-        <main className="rpg-center-stage" aria-label="Story scene and actions">
-          <RpgStoryScene heroSummary={heroSummary} recentEvents={recentEvents} selectedSessionSummary={selectedSessionSummary}>
-            <RpgActionComposer
-              commandRegistration={register('command', { required: true })}
-              hasCommandError={Boolean(errors.command)}
-              isPending={createJobMutation.isPending}
-              onQuickAction={selectCommand}
-              onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}
-              quickActions={quickActions}
-              sessionRegistration={register('sessionId')}
-              sessionSummaries={sessionSummaries}
-            />
-            <FeatureValidationMessage show={Boolean(errors.command)} message="Enter a command before queueing an RPG turn." />
-            <FeatureSubmitFeedback
-              error={createJobMutation.error}
-              errorPrefix="RPG turn request"
-              isError={createJobMutation.isError}
-              isPending={createJobMutation.isPending}
-              jobId={createJobMutation.data?.id}
-              pendingMessage="Queueing RPG turn job…"
-              successPrefix="RPG turn job queued"
-            />
-          </RpgStoryScene>
-
-          <RpgCombatSurface combat={combatSurface} onSelectCommand={selectCommand} />
-
-          <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} recentEvents={recentEvents} />
-
+          <RpgCombatSurface combatSurface={combatSurface} />
+          <RpgNarrativeTabs
+            journalDetail={journalDetail}
+            journalEntries={journalEntries}
+            recentEvents={recentEvents}
+            sessionSummary={selectedSessionSummary}
+          />
           <RpgLoadoutTabs
+            activeAutoplayJob={activeAutoplayJob}
+            checkpointSummary={checkpointSummary}
+            createCheckpointMutation={createCheckpointMutation}
+            equippedGear={equippedGear}
             hotbarAbilities={hotbarAbilities}
             inventoryItems={inventoryItems}
-            isApplyingLoadoutAction={loadoutActionMutation.isPending}
-            onApplyLoadoutAction={applyLoadoutAction}
-            onSelectCommand={selectCommand}
-            selectedSessionId={selectedLiveSessionId}
-          />
-          <FeatureSubmitFeedback
-            error={loadoutActionMutation.error}
-            errorPrefix="RPG loadout action"
-            isError={loadoutActionMutation.isError}
-            isPending={loadoutActionMutation.isPending}
-            pendingMessage="Applying deterministic loadout action…"
-            successPrefix="RPG loadout action applied"
-          />
-        </main>
-
-        {isWorldRailCollapsed ? null : (
-          <RpgWorldRail
-            autoplayRunning={Boolean(activeAutoplayJob)}
-            autoplayStatusLabel={autoplayStatusLabel}
-            className={isWorldRailFullSize ? 'rpg-rail-full-size' : undefined}
-            checkpointControlStatus={checkpointControlStatus}
-            checkpointSummary={checkpointSummary}
-            encounter={encounter}
-            isAutoplayPending={autoplayMutation.isPending}
-            isCreatingCheckpoint={createCheckpointMutation.isPending}
-            isRefreshingJobs={isRefreshingRpgQueries}
             jobCards={jobCards}
-            npcRelationships={npcRelationships}
-            onCreateCheckpoint={() => createCheckpointMutation.mutate()}
-            onRefreshJobs={() => void invalidateRpgWorkspaceQueries()}
-            onToggleAutoplay={() => autoplayMutation.mutate()}
-            reportsHref="/api/reports"
-            rpgAssets={rpgAssets}
-            rpgJobCount={rpgJobs.length}
-            rpgReportCount={rpgReports.length}
-            selectedSessionSummary={selectedSessionSummary}
-            worldStateRows={worldStateRows}
+            selectedLiveSessionId={selectedLiveSessionId}
+            onSelectCommand={queueCommand}
+            onUseItem={(request: RpgLoadoutActionRequest) => omnixApiClient.useRpgLoadoutItem(request)}
+            onActivateAbility={(request: RpgLoadoutActionRequest) => omnixApiClient.activateRpgAbility(request)}
           />
-        )}
-      </div>
+          <RpgActionComposer
+            errors={errors}
+            formRegister={register}
+            handleSubmit={handleSubmit(submitTurn)}
+            isSubmitting={createJobMutation.isPending}
+            quickActions={quickActions}
+            selectedSessionId={selectedSessionId}
+            selectedSessionSummary={selectedSessionSummary}
+            sessionSummaries={sessionSummaries}
+            onQuickAction={queueCommand}
+          />
+          {createJobMutation.isError ? <FeatureValidationMessage message={formatQueryError(createJobMutation.error)} /> : null}
+          {createJobMutation.isSuccess ? (
+            <FeatureSubmitFeedback title="Turn queued" detail="RPG turn job created. Watch the job rail for narration and checkpoint stages." />
+          ) : null}
+        </main>
+        <RpgWorldRail
+          className={worldRailClassName}
+          encounter={encounter}
+          npcRelationships={npcRelationships}
+          quickActions={quickActions}
+          sessionSummaries={sessionSummaries}
+          worldStateRows={worldStateRows}
+          onSelectCommand={queueCommand}
+        />
+      </section>
     </WorkspacePanel>
   );
 }
