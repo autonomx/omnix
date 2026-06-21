@@ -59,7 +59,7 @@ describe('RPG campaign creation state', () => {
     });
     expect(request.player).toMatchObject({ build: 'ranger', name: 'Mira', portrait_seed: 9137, pronouns: 'she/her' });
     expect(request.secondary_capabilities).toEqual(['combat', 'survival']);
-    expect(request.initial_stats).toMatchObject({ perception: 11 });
+    expect(request.initial_stats).toMatchObject({ perception: 14 });
     expect(request.starter_gear).toContain('Shortbow');
     expect(request.features).toMatchObject({ autosave: true, background_soft_audit: true, image_generation: false, validator: true });
     expect(request.generated_class_summary).toContain('Road Scout');

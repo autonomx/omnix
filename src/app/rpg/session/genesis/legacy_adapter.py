@@ -21,6 +21,7 @@ _ARCHETYPE_TO_BUILD = {
     "face": "silver_tongue",
 }
 _GEAR_TAG_LABELS = {
+    "close_weapon": "Iron dagger",
     "melee_weapon": "Iron dagger",
     "ranged_weapon": "Shortbow",
     "survival_tool": "Rope coil",
@@ -29,6 +30,15 @@ _GEAR_TAG_LABELS = {
     "field_notes": "Field journal",
     "starting_coin": "10 gold",
 }
+_GENESIS_CORE_STAT_MAP = {
+    "strength": "strength",
+    "agility": "dexterity",
+    "endurance": "constitution",
+    "intellect": "intelligence",
+    "charisma": "charisma",
+    "perception": "wisdom",
+}
+_GENESIS_RPG_ONLY_STATS = ("archery", "survival")
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -48,9 +58,12 @@ def _title_from_key(value: object, fallback: str = "Adventurer") -> str:
 def _gear_labels(tags: list[str]) -> list[str]:
     labels: list[str] = []
     for tag in tags:
-        key = _normal_key(tag, "")
+        raw_label = str(tag or "").strip()
+        key = _normal_key(raw_label, "")
         if key in _GEAR_TAG_LABELS:
             labels.append(_GEAR_TAG_LABELS[key])
+        elif raw_label:
+            labels.append(raw_label)
     return labels or ["Iron dagger", "Trail rations x2", "10 gold"]
 
 
@@ -145,6 +158,57 @@ def _talent_snapshots(contract: CampaignGenesisContract) -> list[dict[str, Any]]
     return [talent.model_dump(mode="json") for talent in contract.drivers.talents]
 
 
+def _genesis_stat_profile(contract: CampaignGenesisContract) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
+    initial_stats = {key: int(value) for key, value in contract.initial_stats.model_dump(mode="json").items()}
+    core_stats = {
+        core_key: initial_stats[genesis_key]
+        for genesis_key, core_key in _GENESIS_CORE_STAT_MAP.items()
+        if genesis_key in initial_stats
+    }
+    rpg_only_stats = {
+        key: initial_stats[key]
+        for key in _GENESIS_RPG_ONLY_STATS
+        if key in initial_stats
+    }
+    return initial_stats, core_stats, rpg_only_stats
+
+
+def _sync_session_stats_from_genesis(state: dict[str, Any], contract: CampaignGenesisContract) -> None:
+    initial_stats, core_stats, rpg_only_stats = _genesis_stat_profile(contract)
+
+    metadata = _safe_dict(state.get("metadata"))
+    metadata["initial_stats"] = initial_stats
+    metadata["stat_source"] = "genesis_contract"
+    state["metadata"] = metadata
+
+    player = _safe_dict(state.get("player"))
+    player_stats = _safe_dict(player.get("stats"))
+    player_stats.update(core_stats)
+    player["stats"] = player_stats
+    state["player"] = player
+
+    skill_progression = _safe_dict(state.get("skill_progression"))
+    if rpg_only_stats:
+        skill_progression["starting_stats"] = {
+            key: {"value": value, "source": "genesis_contract"}
+            for key, value in rpg_only_stats.items()
+        }
+    state["skill_progression"] = skill_progression
+
+    affordances = _safe_dict(state.get("narrative_affordances"))
+    stat_profile = _safe_dict(affordances.get("stat_profile"))
+    stat_profile.update(
+        {
+            "initial_stats": initial_stats,
+            "core_stats": dict(player_stats),
+            "rpg_only_stats": rpg_only_stats,
+            "source": "genesis_contract",
+        }
+    )
+    affordances["stat_profile"] = stat_profile
+    state["narrative_affordances"] = affordances
+
+
 def attach_genesis_to_created_session(
     result: dict[str, Any],
     contract: CampaignGenesisContract,
@@ -162,6 +226,7 @@ def attach_genesis_to_created_session(
     genesis = canonical_genesis_payload(contract)
     provenance = _provenance(contract)
     state = _safe_dict(session.get("state"))
+    _sync_session_stats_from_genesis(state, contract)
     metadata = _safe_dict(state.get("metadata"))
     runtime_state = _safe_dict(session.get("runtime_state"))
     setup_payload = _safe_dict(session.get("setup_payload"))
