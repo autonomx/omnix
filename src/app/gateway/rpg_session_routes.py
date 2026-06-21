@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import ValidationError
 
 from app.rpg.session.ability_coverage import summarize_ability_coverage
+from app.rpg.session.environment_narration import build_environment_narration_contract
 from app.rpg.session.environment_snapshot import derive_environment_snapshot
 from app.rpg.session.genesis.pipeline_adapter import create_new_game_from_genesis_payload
 from app.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
@@ -100,6 +101,7 @@ def _attach_environment_snapshot_to_session(session: dict[str, Any]) -> dict[str
     snapshot = _environment_snapshot_from_state(state)
     if snapshot is not None:
         state["environment_snapshot"] = snapshot
+        state["environment_narration_contract"] = build_environment_narration_contract(snapshot)
     return session
 
 
@@ -113,8 +115,11 @@ def _with_environment_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
     snapshot = _environment_snapshot_from_state(state)
     if snapshot is None:
         return payload
+    contract = build_environment_narration_contract(snapshot)
     state["environment_snapshot"] = snapshot
+    state["environment_narration_contract"] = contract
     payload["environment_snapshot"] = snapshot
+    payload["environment_narration_contract"] = contract
     payload["game"] = state
     return payload
 
