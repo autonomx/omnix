@@ -9,6 +9,12 @@
         "player_agent_prompt_budget_summary": _summarize_player_agent_prompt_budget(player_agent_prompt_rows),
         "player_agent_cache_summary": player_agent_cache.summary(),
     }
+    setup_validation = build_wizard_new_game_validation(
+        {"session_id": session_id, "simulation_state": last_committed_state},
+        turns_requested=int(args.turns),
+    )
+    summary["setup_validation"] = setup_validation
+    attach_setup_summary(summary, setup_validation)
     latest_evolution_summary = {}
     for row in reversed(transcript):
         latest_evolution_summary = _safe_dict(row.get("npc_evolution_summary"))

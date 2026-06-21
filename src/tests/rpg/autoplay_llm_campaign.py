@@ -408,6 +408,10 @@ def run_autoplay_campaign(args):
     from copy import deepcopy
     import zipfile
 
+    from tests.rpg.autoplay.priority_context import autoplay_action_text
+    from tests.rpg.autoplay.setup_summary import attach_setup_summary
+    from tests.rpg.autoplay.wizard_new_game_validation import build_wizard_new_game_validation
+
     turns = int(getattr(args, "turns", 0) or 0)
     session_id = str(getattr(args, "session_id", "autoplay_test_session") or "autoplay_test_session")
     output_dir = Path(str(getattr(args, "output_dir", "") or "."))
@@ -436,7 +440,7 @@ def run_autoplay_campaign(args):
     for turn_index in range(1, turns + 1):
         expected_baseline_state = deepcopy(last_committed_state)
         before_state = deepcopy(expected_baseline_state)
-        player_action = f"continue turn {turn_index}"
+        player_action = autoplay_action_text(turn_index, before_state)
         if callable(call_turn):
             turn_result = call_turn(
                 session_id=session_id,
@@ -449,6 +453,7 @@ def run_autoplay_campaign(args):
             turn_result = {"ok": True, "simulation_state": before_state}
 
         if isinstance(turn_result, dict):
+            turn_result = dict(turn_result)
             final_turn_state = dict(turn_result.get("simulation_state") or before_state)
             runtime = turn_result.get("turn_runtime") or turn_result.get("runtime") or {}
             if isinstance(runtime, dict) and runtime.get("compatibility"):
@@ -459,6 +464,8 @@ def run_autoplay_campaign(args):
             turn_result = {"ok": True, "simulation_state": before_state}
             final_turn_state = before_state
             real_turn_runtime_count += 1
+        turn_result["autoplay_action_text"] = player_action
+        turn_result["autoplay_action_context_applied"] = True
         last_committed_state = deepcopy(final_turn_state)
 
         if callable(checkpoint):
@@ -466,7 +473,10 @@ def run_autoplay_campaign(args):
 
         row = {
             "turn_index": turn_index,
-            "player_action": player_action,
+            "player_action": turn_result.get("autoplay_action_text") or player_action,
+            "autoplay_action_context_applied": bool(
+                turn_result.get("autoplay_action_context_applied")
+            ),
             "ok": bool(turn_result.get("ok", True)),
             "turn_result": turn_result,
             "narration": str(turn_result.get("narration") or ""),
@@ -493,6 +503,12 @@ def run_autoplay_campaign(args):
         "transcript_rows": transcript_rows,
         "artifact_paths": {},
     }
+    setup_validation = build_wizard_new_game_validation(
+        {"session_id": session_id, "simulation_state": last_committed_state},
+        turns_requested=turns,
+    )
+    summary["setup_validation"] = setup_validation
+    attach_setup_summary(summary, setup_validation)
 
     transcript_path = output_dir / "autoplay-transcript.json"
     transcript_path.write_text(json.dumps(transcript_rows, sort_keys=True), encoding="utf-8")

@@ -60,7 +60,18 @@ def test_phase9_2_run_autoplay_campaign_writes_summary_transcript_and_zip(
     def fake_prepare_autoplay_manual_session(**kwargs):
         return {
             "session_id": kwargs["session_id"],
-            "simulation_state": {"turns": []},
+            "simulation_state": {
+                "turns": [],
+                "compiled_genesis_snapshot": {
+                    "compiled_goals": [
+                        {
+                            "id": "north_road",
+                            "priority": 100,
+                            "status": "active",
+                        }
+                    ]
+                },
+            },
         }
 
     def fake_call_turn_runtime(
@@ -80,9 +91,11 @@ def test_phase9_2_run_autoplay_campaign_writes_summary_transcript_and_zip(
                 "session_id": session_id,
             }
         )
+        next_state = dict(simulation_state)
+        next_state["turns"] = turns
         return {
             "ok": True,
-            "simulation_state": {"turns": turns},
+            "simulation_state": next_state,
             "turn_runtime": {"phase9_2_fixture": True},
             "narration": f"deterministic turn {turn_index}",
         }
@@ -128,6 +141,15 @@ def test_phase9_2_run_autoplay_campaign_writes_summary_transcript_and_zip(
     assert isinstance(disk_summary["transcript_rows"], list)
     assert len(disk_summary["transcript_rows"]) == 3
     assert transcript_rows == disk_summary["transcript_rows"]
+    assert all("while focusing on north road" in row["player_action"] for row in transcript_rows)
+    assert all(row["autoplay_action_context_applied"] is True for row in transcript_rows)
+    assert all(
+        row["turn_result"]["autoplay_action_text"] == row["player_action"]
+        for row in transcript_rows
+    )
+    assert disk_summary["setup_validation"]["genesis_detected"] is True
+    assert disk_summary["setup_summary"]["source"] == "campaign_genesis_validation_v2"
+    assert disk_summary["health"]["setup_summary"]["required"] is False
     assert REQUIRED_ARTIFACT_PATH_KEYS <= set(disk_summary["artifact_paths"])
     assert disk_summary["artifact_paths"]["summary"] == str(summary_path)
     assert disk_summary["artifact_paths"]["transcript"] == str(transcript_path)
@@ -144,6 +166,50 @@ def test_phase9_2_run_autoplay_campaign_writes_summary_transcript_and_zip(
     assert REQUIRED_SUMMARY_FIELDS <= set(zipped_summary)
     assert zipped_summary["artifact_paths"] == {}
     assert zipped_transcript == transcript_rows
+
+
+def test_phase9_2_long_run_summary_requires_genesis_before_write(tmp_path, monkeypatch):
+    import tests.rpg.autoplay_llm_campaign as campaign
+
+    monkeypatch.setattr(
+        campaign,
+        "prepare_autoplay_manual_session",
+        lambda **kwargs: {"session_id": kwargs["session_id"], "simulation_state": {}},
+    )
+    monkeypatch.setattr(
+        campaign,
+        "_call_turn_runtime",
+        lambda **kwargs: {
+            "ok": True,
+            "simulation_state": kwargs["simulation_state"],
+            "turn_runtime": {"phase9_2_fixture": True},
+        },
+    )
+    monkeypatch.setattr(campaign, "validate_save_load_checkpoint", lambda **kwargs: None)
+    monkeypatch.setattr(
+        campaign,
+        "post_objective_false_progress_warnings",
+        lambda transcript_rows: [],
+    )
+
+    summary = campaign.run_autoplay_campaign(
+        SimpleNamespace(
+            turns=100,
+            session_id="phase9_2_genesis_required",
+            output_dir=str(tmp_path),
+            narration_mode="blocking",
+        )
+    )
+
+    disk_summary = json.loads(
+        (tmp_path / "autoplay-summary.json").read_text(encoding="utf-8")
+    )
+    assert disk_summary == summary
+    assert disk_summary["setup_validation"]["required"] is True
+    assert disk_summary["setup_validation"]["status"] == "failed"
+    assert disk_summary["setup_validation"]["ok"] is False
+    assert disk_summary["setup_summary"]["status"] == "failed"
+    assert disk_summary["health"]["setup_summary"]["ok"] is False
 
 
 def test_phase9_2_contract_guard_is_provider_free_source_backed():

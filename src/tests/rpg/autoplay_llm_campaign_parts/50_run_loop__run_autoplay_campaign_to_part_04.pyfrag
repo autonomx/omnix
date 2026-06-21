@@ -70,6 +70,7 @@
             completed_mechanics=scenario_progression_completed_mechanics,
             turn_index=turn_index,
         )
+        row_player_action = _safe_str(turn_result.get("autoplay_action_text")) or actual_sent_action
 
         record = {
             "turn_index": turn_index,
@@ -95,7 +96,10 @@
             "original_player_action": actual_sent_action,
             "visible_player_action": actual_sent_action,
             "canonical_turn_action": actual_sent_action,
-            "player_action": actual_sent_action,
+            "player_action": row_player_action,
+            "autoplay_action_context_applied": bool(
+                turn_result.get("autoplay_action_context_applied")
+            ),
             "player_agent_selection_source": player_agent_selection_source,
             "scenario_progression_summary": (
                 _safe_dict(authoritative_state.get("scenario_progression_current_turn_summary"))
@@ -145,6 +149,10 @@
                 "warning": turn_result.get("warning"),
                 "compatibility_turn_runtime": turn_result.get("compatibility_turn_runtime"),
                 "runtime_name": turn_result.get("runtime_name"),
+                "autoplay_action_text": turn_result.get("autoplay_action_text"),
+                "autoplay_action_context_applied": bool(
+                    turn_result.get("autoplay_action_context_applied")
+                ),
             },
             "narration_trace": turn_result.get("narration_trace") if args.debug_provider_shape else [],
             "provider_trace": turn_result.get("provider_trace") if args.debug_provider_shape else [],

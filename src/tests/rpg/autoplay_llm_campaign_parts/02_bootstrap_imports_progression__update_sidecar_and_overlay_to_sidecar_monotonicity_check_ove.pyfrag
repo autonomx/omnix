@@ -398,6 +398,7 @@ from tests.rpg.autoplay.progress_quality import (
     compute_progress_quality_metrics,
     post_objective_false_progress_warnings,
 )
+from tests.rpg.autoplay.priority_context import autoplay_action_text
 from tests.rpg.autoplay.provider_adapter import (
     call_provider_text,
     describe_provider_shape,
@@ -407,6 +408,8 @@ from tests.rpg.autoplay.seeding import (
     resolve_campaign_seed_name,
     seed_campaign,
 )
+from tests.rpg.autoplay.setup_summary import attach_setup_summary
+from tests.rpg.autoplay.wizard_new_game_validation import build_wizard_new_game_validation
 from tests.rpg.autoplay.story_hooks import (
     apply_autoplay_story_hooks,
     autoplay_story_hook_player_hints,
