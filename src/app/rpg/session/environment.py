@@ -11,6 +11,8 @@ import hashlib
 import re
 from typing import Any
 
+from app.rpg.session.environment_weather import generate_weather_event
+
 ENVIRONMENT_VERSION = 1
 DAYS_PER_YEAR = 360
 DEFAULT_REGION_ID = "starting_region"
@@ -68,8 +70,6 @@ _CONDITION_ALIASES: dict[str, str] = {
     "gray and still": "overcast",
 }
 
-_INTENSITIES = ("trace", "light", "moderate", "heavy", "severe")
-
 
 def build_initial_environment_seed_state(
     *,
@@ -94,21 +94,26 @@ def build_initial_environment_seed_state(
     absolute_minutes = _parse_absolute_minutes(time_label)
     environment_seed = _environment_seed(campaign_seed, campaign_contract or {}, normalized_location_id, climate_profile_id)
     weather_condition = _initial_weather_condition(location_defaults, location)
-    weather_event = _initial_weather_event(
+    recent_conditions = dict(_RECENT_CONDITION_DEFAULTS)
+    calendar = _calendar_from_absolute_minutes(absolute_minutes)
+    weather_event = generate_weather_event(
         environment_seed=environment_seed,
         region_id=region_id,
-        condition=weather_condition,
-        started_at_minute=absolute_minutes,
+        climate_profile_id=climate_profile_id,
+        absolute_minutes=absolute_minutes,
+        calendar=calendar,
+        recent_conditions=recent_conditions,
+        condition_override=weather_condition,
     )
     environment = {
         "environment_version": ENVIRONMENT_VERSION,
         "region_id": region_id,
         "climate_profile_id": climate_profile_id,
         "environment_seed": environment_seed,
-        "calendar": _calendar_from_absolute_minutes(absolute_minutes),
+        "calendar": calendar,
         "absolute_minutes": absolute_minutes,
         "active_events": [weather_event],
-        "recent_conditions": dict(_RECENT_CONDITION_DEFAULTS),
+        "recent_conditions": recent_conditions,
         "event_history": [],
         "event_history_limit": EVENT_HISTORY_LIMIT,
     }
@@ -251,21 +256,6 @@ def _initial_weather_condition(location_defaults: dict[str, Any], location: dict
         return str(explicit)
     weather = str((location or {}).get("weather") or "clear").strip().lower()
     return _CONDITION_ALIASES.get(weather, _normalize_identifier(weather, "clear"))
-
-
-def _initial_weather_event(*, environment_seed: int, region_id: str, condition: str, started_at_minute: int) -> dict[str, Any]:
-    intensity = _INTENSITIES[environment_seed % len(_INTENSITIES)]
-    duration_steps = 6 + ((environment_seed // 17) % 18)
-    remaining_minutes = duration_steps * 60
-    return {
-        "id": f"weather_{environment_seed % 1_000_000:06d}",
-        "type": "weather",
-        "condition": condition,
-        "intensity": intensity,
-        "remaining_minutes": remaining_minutes,
-        "started_at_minute": started_at_minute,
-        "region_id": region_id,
-    }
 
 
 def _scene_environment_context(
