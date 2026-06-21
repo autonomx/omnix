@@ -55,6 +55,11 @@ describe('RpgWorkspace campaign handoff', () => {
                     summary: 'A new campaign is ready at the tavern.',
                     turn_count: 0,
                     updated_at: '2026-06-20T00:00:00Z',
+                    state: {
+                      player: { name: 'Alyndra', renown: 'Unknown (0)' },
+                      world: { time_label: 'Day 1 • 08:00', weather: 'Rainy' },
+                      party: [],
+                    },
                   },
                 ]
               : [],
@@ -109,6 +114,10 @@ describe('RpgWorkspace campaign handoff', () => {
     expect(screen.getByText('No companions have joined this campaign yet.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /companion/i })).not.toBeInTheDocument();
     expect(screen.queryByText('+ Add companion')).not.toBeInTheDocument();
+    expect(screen.getByText('Day 1 • 08:00')).toBeInTheDocument();
+    expect(screen.getByText('Rainy')).toBeInTheDocument();
+    expect(screen.getByText('Cool (inferred from weather)')).toBeInTheDocument();
+    expect(screen.getByText('Unknown (0)')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 
