@@ -194,10 +194,6 @@ export const capabilityLabels: Record<Capability, string> = {
 
 export const initialStats = Object.fromEntries(statDefinitions.map((stat) => [stat.key, BASE_STAT])) as Record<string, number>;
 
-function buildStatSummary(stats: Record<string, number>): string {
-  return statDefinitions.map((stat) => `${stat.label} ${stats[stat.key] ?? BASE_STAT}`).join(', ');
-}
-
 export function buildRpgNewGameRequest(selections: CampaignCreationSelections): RpgNewGameRequest {
   const selectedBuild = buildTemplates.find((template) => template.key === selections.buildKey) ?? buildTemplates[0];
   const openingHook = selections.openingHook ?? 'tavern-rumor';
@@ -228,7 +224,7 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     secondary_capabilities: secondary,
     power_source: mapPowerSource(selections.powerSource),
     generated_class_name: selectedBuild.label,
-    generated_class_summary: `${selectedBuild.detail} Starter gear: ${selectedBuild.starterGear.join(', ')}. Stats: ${buildStatSummary(selections.stats)}. Opening: ${selectedHook.label}. Pace: ${selectedPace.label}. Relationship: ${selectedRelationship.label}.`,
+    generated_class_summary: `${selectedBuild.label}: ${selectedBuild.detail} Opens with ${selectedHook.label} at ${selectedPace.label} pace and ${selectedRelationship.label.toLowerCase()}.`,
     difficulty: mapDifficulty(selections.difficulty),
     world_activity: mapWorldActivity(selections.worldActivity),
     economy_pressure: mapEconomyPressure(selections.economyPressure),
