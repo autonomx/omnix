@@ -288,7 +288,7 @@ function parseValueList(value?: string): string[] {
 }
 
 function buildGenesisTalents(primary: RpgCapability, secondary: RpgCapability[]): Array<{ id: string; rank: number }> {
-  const talentIds: Record<RpgCapability, string> = {
+  const talentIds: Partial<Record<RpgCapability, string>> = {
     combat: 'action_readiness',
     influence: 'social_leverage',
     knowledge: 'field_knowledge',
