@@ -34,13 +34,18 @@ def test_new_game_response_includes_non_persisted_environment_snapshot(monkeypat
     result = response.json()
     assert result["ok"] is True
     snapshot = result["environment_snapshot"]
+    contract = result["environment_narration_contract"]
     assert snapshot == result["game"]["environment_snapshot"]
+    assert contract == result["game"]["environment_narration_contract"]
+    assert contract["authority"] == "read_only_environment_snapshot"
+    assert "create_new_weather" in contract["forbidden"]
     assert snapshot["region_id"] == "market_road"
     assert snapshot["weather"]["condition"] == "rain"
     assert snapshot["context"]["exposure"] == "indoor"
 
     persisted = load_session(result["session_id"])
     assert "environment_snapshot" not in persisted["state"]
+    assert "environment_narration_contract" not in persisted["state"]
     assert persisted["state"]["world"]["environment"]["region_id"] == "market_road"
 
 
@@ -53,6 +58,7 @@ def test_read_session_response_includes_environment_snapshot_for_existing_sessio
     assert response.status_code == 200
     result = response.json()
     assert result["environment_snapshot"]["display"]["day_time"] == "Day 1 • 08:00"
+    assert result["environment_narration_contract"]["environment_snapshot"] == result["environment_snapshot"]
     assert result["game"]["environment_snapshot"]["light_level"] == "tavern_lit"
     assert result["session"]["state"]["environment_snapshot"]["terrain_condition"] == "interior_floor"
 
@@ -67,5 +73,7 @@ def test_list_sessions_decorates_session_state_with_environment_snapshot(monkeyp
     sessions = response.json()["sessions"]
     assert sessions
     snapshot = sessions[0]["state"]["environment_snapshot"]
+    contract = sessions[0]["state"]["environment_narration_contract"]
     assert snapshot["climate_profile_id"] == "temperate_hills"
     assert snapshot["visibility"] == "interior"
+    assert contract["environment_snapshot"] == snapshot
