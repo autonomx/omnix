@@ -1,11 +1,11 @@
 """Deterministic time advancement for RPG Environment 2.0."""
 from __future__ import annotations
 
-import hashlib
 from copy import deepcopy
 from typing import Any
 
 from app.rpg.session.environment_calendar import derive_calendar_state
+from app.rpg.session.environment_weather import generate_weather_event
 
 DEFAULT_TURN_MINUTES = 10
 RECENT_24H_MINUTES = 24 * 60
@@ -15,8 +15,6 @@ DEFAULT_HISTORY_LIMIT = 12
 RAIN_CONDITIONS = {"rain", "storm"}
 SNOW_CONDITIONS = {"snow", "blizzard"}
 DRY_CONDITIONS = {"clear", "cloudy", "overcast", "windy"}
-INTENSITIES = ("trace", "light", "moderate", "heavy", "severe")
-WEATHER_ROTATION = ("clear", "cloudy", "rain", "fog", "windy", "snow", "storm")
 
 
 def advance_environment_time(environment: dict[str, Any], *, elapsed_minutes: int = DEFAULT_TURN_MINUTES) -> dict[str, Any]:
@@ -53,12 +51,12 @@ def advance_environment_time(environment: dict[str, Any], *, elapsed_minutes: in
             expired_events.append(expired)
 
     weather_expired = any(event.get("type") == "weather" for event in expired_events)
-    if weather_expired and not any(event.get("type") == "weather" for event in kept_events):
-        kept_events.append(_next_weather_event(env, previous_minutes=previous_minutes, started_at_minute=next_minutes))
-
-    env["active_events"] = kept_events
     env["event_history"] = _bounded_history(env.get("event_history"), expired_events, _history_limit(env))
     env["recent_conditions"] = _advance_recent_conditions(env.get("recent_conditions"), active_weather_condition, elapsed)
+    if weather_expired and not any(event.get("type") == "weather" for event in kept_events):
+        kept_events.append(_next_weather_event(env, started_at_minute=next_minutes))
+
+    env["active_events"] = kept_events
     return env
 
 
@@ -78,23 +76,16 @@ def _current_weather_condition(events: list[dict[str, Any]]) -> str:
     return "clear"
 
 
-def _next_weather_event(environment: dict[str, Any], *, previous_minutes: int, started_at_minute: int) -> dict[str, Any]:
-    seed = _coerce_int(environment.get("environment_seed"), 0)
-    region_id = str(environment.get("region_id") or "starting_region")
-    climate_profile_id = str(environment.get("climate_profile_id") or "temperate_hills")
-    roll = _stable_int("next_weather", seed, region_id, climate_profile_id, previous_minutes, started_at_minute)
-    condition = WEATHER_ROTATION[roll % len(WEATHER_ROTATION)]
-    intensity = INTENSITIES[(roll // 17) % len(INTENSITIES)]
-    duration = (6 + ((roll // 31) % 18)) * 60
-    return {
-        "id": f"weather_{roll % 1_000_000:06d}",
-        "type": "weather",
-        "condition": condition,
-        "intensity": intensity,
-        "remaining_minutes": duration,
-        "started_at_minute": started_at_minute,
-        "region_id": region_id,
-    }
+def _next_weather_event(environment: dict[str, Any], *, started_at_minute: int) -> dict[str, Any]:
+    return generate_weather_event(
+        environment_seed=_coerce_int(environment.get("environment_seed"), 0),
+        region_id=str(environment.get("region_id") or "starting_region"),
+        climate_profile_id=str(environment.get("climate_profile_id") or "temperate_hills"),
+        absolute_minutes=started_at_minute,
+        calendar=environment.get("calendar") if isinstance(environment.get("calendar"), dict) else None,
+        recent_conditions=environment.get("recent_conditions") if isinstance(environment.get("recent_conditions"), dict) else None,
+        sequence=len(environment.get("event_history", [])) if isinstance(environment.get("event_history"), list) else 0,
+    )
 
 
 def _bounded_history(history: Any, expired_events: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
@@ -143,9 +134,3 @@ def _coerce_int(value: Any, fallback: int) -> int:
     if isinstance(value, str) and value.strip().lstrip("-").isdigit():
         return int(value.strip())
     return fallback
-
-
-def _stable_int(*parts: Any) -> int:
-    text = "|".join(str(part) for part in parts)
-    digest = hashlib.blake2b(text.encode("utf-8"), digest_size=8).digest()
-    return int.from_bytes(digest, "big") & 0x7FFF_FFFF
