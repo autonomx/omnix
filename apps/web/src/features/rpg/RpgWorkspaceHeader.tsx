@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill } from '../../design/primitives';
 import type { RpgSessionSummaryPreview } from './rpgUiState';
@@ -9,17 +9,27 @@ interface RpgWorkspaceHeaderProps {
   submitStatus: string;
 }
 
+const RPG_PLAY_FOCUS_CLASS = 'rpg-play-focus-mode';
+
 export function RpgWorkspaceHeader({ module, selectedSessionSummary, submitStatus }: RpgWorkspaceHeaderProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const headerDetailsId = 'rpg-workstation-header-details';
   const headerClassName = isExpanded ? 'rpg-workstation-header' : 'rpg-workstation-header rpg-workstation-header-collapsed';
 
+  useEffect(() => {
+    document.documentElement.classList.toggle(RPG_PLAY_FOCUS_CLASS, isHidden);
+
+    return () => {
+      document.documentElement.classList.remove(RPG_PLAY_FOCUS_CLASS);
+    };
+  }, [isHidden]);
+
   if (isHidden) {
     return (
-      <div className="rpg-layout-controls" aria-label="RPG header visibility controls">
+      <div className="rpg-layout-controls rpg-header-visibility-controls" aria-label="RPG header visibility controls">
         <button className="rpg-secondary-button rpg-header-toggle" type="button" onClick={() => setIsHidden(false)}>
-          Show RPG header
+          Show RPG headers
         </button>
       </div>
     );
