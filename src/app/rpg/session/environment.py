@@ -11,6 +11,7 @@ import hashlib
 import re
 from typing import Any
 
+from app.rpg.session.environment_memory import RECENT_CONDITION_KEYS
 from app.rpg.session.environment_weather import generate_weather_event
 
 ENVIRONMENT_VERSION = 1
@@ -21,12 +22,7 @@ EVENT_HISTORY_LIMIT = 12
 
 EnvironmentSeedState = dict[str, Any]
 
-_RECENT_CONDITION_DEFAULTS: dict[str, int] = {
-    "rain_minutes_24h": 0,
-    "snow_minutes_24h": 0,
-    "dry_minutes_72h": 0,
-    "freezing_minutes_24h": 0,
-}
+_RECENT_CONDITION_DEFAULTS: dict[str, int] = dict(RECENT_CONDITION_KEYS)
 
 _LOCATION_ENVIRONMENT_DEFAULTS: dict[str, dict[str, Any]] = {
     "rusty_flagon_tavern": {
