@@ -61,6 +61,10 @@ export function RpgWorldRail({
   worldStateRows,
 }: RpgWorldRailProps) {
   const railClassName = className ? `rpg-right-rail ${className}` : 'rpg-right-rail';
+  const displayedWorldStateRows = worldStateRows.map((row) => ({
+    ...row,
+    value: displayWorldStateValue(row, worldStateRows, selectedSessionSummary),
+  }));
 
   return (
     <aside className={railClassName} aria-label="World, jobs, and reports">
@@ -78,7 +82,7 @@ export function RpgWorldRail({
       <section className="rpg-card rpg-world-grid-card">
         <div className="rpg-world-state">
           <p className="eyebrow">World state</p>
-          {worldStateRows.map((row) => (
+          {displayedWorldStateRows.map((row) => (
             <div className="rpg-world-state-row" key={row.label}>
               <span aria-hidden="true">{row.icon}</span>
               <span>{row.label}</span>
@@ -195,4 +199,53 @@ export function RpgWorldRail({
       </section>
     </aside>
   );
+}
+
+function displayWorldStateValue(
+  row: RpgWorldStateRowPreview,
+  rows: RpgWorldStateRowPreview[],
+  selectedSessionSummary: RpgSessionSummaryPreview,
+): string {
+  const value = row.value.trim();
+  const lowerValue = value.toLowerCase();
+  if (row.label === 'Temperature' && isMissingWorldValue(value)) {
+    const weather = rows.find((candidate) => candidate.label === 'Weather')?.value;
+    return inferTemperatureLabel(weather, selectedSessionSummary.location) ?? 'Not tracked yet';
+  }
+
+  if (row.label === 'Time' && isMissingWorldValue(value)) {
+    return selectedSessionSummary.turnLabel;
+  }
+
+  if ((row.label === 'Weather' || row.label === 'Reputation') && isMissingWorldValue(value)) {
+    return 'Not tracked yet';
+  }
+
+  return value || 'Not tracked yet';
+}
+
+function isMissingWorldValue(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return !normalized || normalized === 'unknown' || normalized.includes('unknown') || normalized.includes('not tracked');
+}
+
+function inferTemperatureLabel(weather: string | undefined, location: string): string | undefined {
+  const normalizedWeather = String(weather ?? '').toLowerCase();
+  const normalizedLocation = location.toLowerCase();
+  const source = normalizedWeather && !isMissingWorldValue(normalizedWeather) ? 'weather' : 'location';
+  const text = `${normalizedWeather} ${normalizedLocation}`;
+
+  if (/(frost|ice|snow|freez|cold|glimmerdeep|mountain)/.test(text)) {
+    return `Cold (inferred from ${source})`;
+  }
+
+  if (/(rain|cloud|overcast|grey|wind|wet|tavern|market|road|quarry)/.test(text)) {
+    return `Cool (inferred from ${source})`;
+  }
+
+  if (/(sun|warm|desert|heat|summer)/.test(text)) {
+    return `Warm (inferred from ${source})`;
+  }
+
+  return undefined;
 }
