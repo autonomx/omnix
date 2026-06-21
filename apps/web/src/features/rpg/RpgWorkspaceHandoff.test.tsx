@@ -116,7 +116,7 @@ describe('RpgWorkspace campaign handoff', () => {
     expect(screen.queryByText('+ Add companion')).not.toBeInTheDocument();
     expect(screen.getByText('Day 1 • 08:00')).toBeInTheDocument();
     expect(screen.getByText('Rainy')).toBeInTheDocument();
-    expect(screen.getByText('Cool (inferred from weather)')).toBeInTheDocument();
+    expect(screen.getByText('Not tracked yet')).toBeInTheDocument();
     expect(screen.getAllByText('Unknown (0)').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
