@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from app.rpg.session.environment import build_initial_environment_seed_state
 from app.rpg.session.environment_time import DEFAULT_TURN_MINUTES, advance_environment_time
 
@@ -35,5 +37,34 @@ def test_same_elapsed_sequence_replays_same_clock_state() -> None:
     for elapsed_minutes in (10, 10, 20, 5, 45):
         first = advance_environment_time(first, elapsed_minutes=elapsed_minutes)
         second = advance_environment_time(second, elapsed_minutes=elapsed_minutes)
+
+    assert first == second
+
+
+def test_completed_weather_timer_gets_replacement_and_history() -> None:
+    environment = _seed_environment()
+    original_event = dict(environment["active_events"][0])
+    environment["active_events"][0]["remaining_minutes"] = 10
+    environment["event_history_limit"] = 2
+    environment["event_history"] = [{"id": "old_weather", "type": "weather"}]
+
+    advanced = advance_environment_time(environment, elapsed_minutes=10)
+
+    assert advanced["absolute_minutes"] == 490
+    assert len(advanced["event_history"]) == 2
+    assert advanced["event_history"][-1]["id"] == original_event["id"]
+    assert advanced["event_history"][-1]["ended_at_minute"] == 490
+    assert advanced["active_events"][0]["type"] == "weather"
+    assert advanced["active_events"][0]["started_at_minute"] == 490
+    assert advanced["active_events"][0]["id"] != original_event["id"]
+    assert advanced["active_events"][0]["remaining_minutes"] > 0
+
+
+def test_completed_weather_timer_replacement_is_deterministic() -> None:
+    environment = _seed_environment()
+    environment["active_events"][0]["remaining_minutes"] = 10
+
+    first = advance_environment_time(deepcopy(environment), elapsed_minutes=10)
+    second = advance_environment_time(deepcopy(environment), elapsed_minutes=10)
 
     assert first == second
