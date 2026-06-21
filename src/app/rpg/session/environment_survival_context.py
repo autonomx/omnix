@@ -23,17 +23,20 @@ def derive_survival_exposure_context(snapshot: dict[str, Any]) -> dict[str, Any]
     cold_score = _temperature_cold_score(temperature)
     heat_score = _temperature_heat_score(temperature)
     wet_score = _weather_wet_score(condition, intensity, exposure)
-    wind_score = 1 if wind in {"moderate", "strong"} and cold_score > 0 and exposure != "indoor" else 0
-    terrain_score = 1 if terrain in {"deep_snow", "slush", "muddy"} and exposure != "indoor" else 0
+    wind_score = _wind_score(wind, cold_score, exposure)
+    terrain_score = _terrain_score(terrain, exposure)
     mitigation = _shelter_mitigation(exposure, shelter)
-    exposure_score = max(0, cold_score + heat_score + wet_score + wind_score + terrain_score - mitigation)
+    exposure_score = max(
+        0,
+        cold_score + heat_score + wet_score + wind_score + terrain_score - mitigation,
+    )
 
     return {
-        "cold_risk": RISK_LABELS[max(0, min(len(RISK_LABELS) - 1, cold_score + wind_score - mitigation))],
-        "heat_risk": RISK_LABELS[max(0, min(len(RISK_LABELS) - 1, heat_score - mitigation))],
-        "wet_exposure": RISK_LABELS[max(0, min(len(RISK_LABELS) - 1, wet_score - mitigation))],
-        "terrain_exposure": RISK_LABELS[max(0, min(len(RISK_LABELS) - 1, terrain_score))],
-        "overall_exposure": RISK_LABELS[max(0, min(len(RISK_LABELS) - 1, exposure_score))],
+        "cold_risk": _risk_label(cold_score + wind_score - mitigation),
+        "heat_risk": _risk_label(heat_score - mitigation),
+        "wet_exposure": _risk_label(wet_score - mitigation),
+        "terrain_exposure": _risk_label(terrain_score),
+        "overall_exposure": _risk_label(exposure_score),
         "shelter_quality": _shelter_quality(exposure, shelter),
         "rest_context": _rest_context(exposure, shelter, exposure_score),
         "inputs": {
@@ -82,6 +85,14 @@ def _weather_wet_score(condition: str, intensity: str, exposure: str) -> int:
     return 1
 
 
+def _wind_score(wind: str, cold_score: int, exposure: str) -> int:
+    return 1 if wind in {"moderate", "strong"} and cold_score > 0 and exposure != "indoor" else 0
+
+
+def _terrain_score(terrain: str, exposure: str) -> int:
+    return 1 if terrain in {"deep_snow", "slush", "muddy"} and exposure != "indoor" else 0
+
+
 def _shelter_mitigation(exposure: str, shelter: str) -> int:
     if exposure == "indoor":
         return 4
@@ -108,6 +119,10 @@ def _rest_context(exposure: str, shelter: str, exposure_score: int) -> str:
     if exposure_score > 0:
         return "rest_watchful"
     return "rest_neutral"
+
+
+def _risk_label(score: int) -> str:
+    return RISK_LABELS[max(0, min(len(RISK_LABELS) - 1, score))]
 
 
 def _coerce_int(value: Any, fallback: int) -> int:
