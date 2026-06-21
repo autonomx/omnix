@@ -60,6 +60,32 @@ def advance_environment_memory(recent_conditions: dict[str, Any] | None, *, cond
     return _bounded_memory(memory)
 
 
+def derive_terrain_condition(*, condition: str, recent_conditions: dict[str, Any] | None, scene_context: dict[str, Any] | None = None) -> str:
+    scene = scene_context if isinstance(scene_context, dict) else {}
+    exposure = str(scene.get("exposure") or "outdoor")
+    if exposure == "indoor":
+        return "interior_floor"
+    if exposure == "underground":
+        return "underground_floor"
+    if exposure in {"vehicle", "vehicle_like"}:
+        return "vehicle_deck"
+    memory = normalize_recent_conditions(recent_conditions)
+    condition = str(condition or "clear")
+    if condition in RAIN_CONDITIONS and memory["snowpack_minutes_72h"] >= 60:
+        return "slush"
+    if condition in SNOW_CONDITIONS and memory["freezing_minutes_24h"] >= 60:
+        return "deep_snow"
+    if condition in SNOW_CONDITIONS:
+        return "snow_covered"
+    if condition in RAIN_CONDITIONS or memory["mud_minutes_72h"] >= 60:
+        return "muddy"
+    if memory["dust_minutes_72h"] >= 60:
+        return "dusty"
+    if memory["drought_minutes_7d"] >= 60:
+        return "drought_hardened"
+    return "dry"
+
+
 def _bounded_memory(memory: dict[str, int]) -> dict[str, int]:
     memory["rain_minutes_24h"] = min(RECENT_24H_MINUTES, memory["rain_minutes_24h"])
     memory["snow_minutes_24h"] = min(RECENT_24H_MINUTES, memory["snow_minutes_24h"])
