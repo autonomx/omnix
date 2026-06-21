@@ -1,4 +1,4 @@
-"""Helpers for adding setup status to autoplay summary artifacts."""
+"""Compatibility backfill for setup status and action text in old artifacts."""
 
 from __future__ import annotations
 
@@ -56,9 +56,15 @@ def _promote_action_context(summary: dict[str, Any]) -> bool:
         result = _safe_dict(row.get("turn_result"))
         applied = result.get("autoplay_action_text")
         if applied:
-            row["player_action"] = str(applied)
-            row["autoplay_action_context_applied"] = bool(result.get("autoplay_action_context_applied", True))
-            changed = True
+            applied_text = str(applied)
+            context_applied = bool(result.get("autoplay_action_context_applied", True))
+            if (
+                row.get("player_action") != applied_text
+                or row.get("autoplay_action_context_applied") != context_applied
+            ):
+                row["player_action"] = applied_text
+                row["autoplay_action_context_applied"] = context_applied
+                changed = True
         updated.append(row)
     if changed:
         summary["transcript_rows"] = updated

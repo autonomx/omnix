@@ -469,6 +469,12 @@
                 )
                 selected["action"] = player_action
 
+        autoplay_action_context_applied = False
+        default_autoplay_action = f"continue turn {turn_index}"
+        if not _safe_str(player_action) or _safe_str(player_action) == default_autoplay_action:
+            player_action = autoplay_action_text(turn_index, authoritative_state)
+            autoplay_action_context_applied = True
+
         actual_sent_action = _safe_str(player_action)
         canonical_turn_action = actual_sent_action
 

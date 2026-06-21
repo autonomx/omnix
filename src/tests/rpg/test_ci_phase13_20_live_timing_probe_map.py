@@ -72,6 +72,17 @@ def test_phase13_20_timing_wrapper_does_not_wrap_runner_or_manifest():
     assert not should_wrap_timing_function("runtime_facade_manifest_gate", runtime_facade_manifest_gate)
 
 
+def test_phase13_20_timing_wrapper_does_not_mutate_turn_runtime_calls():
+    def _call_turn_runtime(**kwargs):
+        return kwargs
+
+    namespace = {"_call_turn_runtime": _call_turn_runtime}
+    result = wrap_live_manual_turn_timing_functions(namespace)
+
+    assert namespace["_call_turn_runtime"] is _call_turn_runtime
+    assert "turn_call_context_wrapped" not in result
+
+
 def test_phase13_20_live_timing_rows_bridge_missing_fields(tmp_path: Path):
     configure_live_manual_turn_timing(output_dir=tmp_path)
     record_substage_timing("pre_runtime_intent_llm_ms", "call_pre_runtime_intent_llm", 10.0, turn_index=1)

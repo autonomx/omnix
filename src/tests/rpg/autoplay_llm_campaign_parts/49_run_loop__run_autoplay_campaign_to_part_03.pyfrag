@@ -215,6 +215,11 @@
             }
             story_hook_result = {}
 
+        if autoplay_action_context_applied:
+            turn_result = dict(turn_result)
+            turn_result["autoplay_action_text"] = player_action
+            turn_result["autoplay_action_context_applied"] = True
+
         _probe_log(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
             "runtime_turn_execution.result",
