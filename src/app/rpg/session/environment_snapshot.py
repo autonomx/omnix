@@ -6,6 +6,7 @@ from typing import Any
 
 from app.rpg.session.climate_profiles import resolve_climate_profile
 from app.rpg.session.environment_calendar import derive_calendar_state
+from app.rpg.session.environment_memory import derive_terrain_condition
 
 EnvironmentSnapshot = dict[str, Any]
 
@@ -35,7 +36,7 @@ def derive_environment_snapshot(environment: dict[str, Any], scene_context: dict
     temperature_c = _derive_temperature_c(profile, calendar, condition, intensity, _coerce_int(env.get("environment_seed"), 0))
     wind = _derive_wind(profile, condition, intensity)
     visibility = _derive_visibility(exposure, condition, intensity, light_level)
-    terrain = _derive_terrain(exposure, condition, env.get("recent_conditions"))
+    terrain = derive_terrain_condition(condition=condition, recent_conditions=env.get("recent_conditions"), scene_context=scene)
     resources = _derive_resources(profile)
 
     return {
@@ -139,21 +140,6 @@ def _derive_light_level(calendar: dict[str, Any], profile: dict[str, Any], scene
     if sunrise - 45 <= minute < sunrise + 45 or sunset - 45 < minute <= sunset + 45:
         return "dim"
     return "daylight"
-
-
-def _derive_terrain(exposure: str, condition: str, recent_conditions: Any) -> str:
-    recent = recent_conditions if isinstance(recent_conditions, dict) else {}
-    if exposure == "indoor":
-        return "interior_floor"
-    if condition == "snow":
-        return "snow_covered"
-    if condition in {"rain", "storm"}:
-        return "wet"
-    if _coerce_int(recent.get("rain_minutes_24h"), 0) > 60:
-        return "muddy"
-    if _coerce_int(recent.get("snow_minutes_24h"), 0) > 60:
-        return "patchy_snow"
-    return "dry"
 
 
 def _derive_resources(profile: dict[str, Any]) -> dict[str, int]:
