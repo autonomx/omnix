@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any, Dict, List, Mapping
 
 from app.rpg.session.environment_ecology_context import derive_ecology_context
 from tests.rpg import interactive_intent_matrix as matrix
