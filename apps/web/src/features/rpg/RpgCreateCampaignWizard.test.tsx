@@ -95,12 +95,14 @@ describe('RpgCreateCampaignWizard', () => {
     expect(onCreateCampaign).toHaveBeenCalledWith(
       expect.objectContaining({
         companions_enabled: true,
-        initial_stats: expect.objectContaining({ strength: 8, perception: 8 }),
+        initial_stats: expect.objectContaining({ strength: 9, perception: 9 }),
         opening_hook: 'merchant_job',
         opening_pace: 'balanced',
         player: expect.objectContaining({ build: 'balanced_adventurer', name: 'Elara', pronouns: 'she/her' }),
         primary_capability: 'recon',
         relationship_preset: 'known_contact_nearby',
+        seed: 482193,
+        starter_gear_tags: expect.arrayContaining(['Travel cloak', 'Iron dagger']),
         starting_location: 'rusty_flagon_tavern',
         story_options: expect.objectContaining({ opening_hook_label: 'Merchant Job', relationship_label: 'Known contact nearby' }),
       }),
