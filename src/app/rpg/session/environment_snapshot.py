@@ -7,6 +7,7 @@ from typing import Any
 from app.rpg.session.climate_profiles import resolve_climate_profile
 from app.rpg.session.environment_calendar import derive_calendar_state
 from app.rpg.session.environment_memory import derive_terrain_condition
+from app.rpg.session.environment_signals import derive_environment_signals
 
 EnvironmentSnapshot = dict[str, Any]
 
@@ -16,12 +17,6 @@ WIND_ORDER = ("calm", "light", "moderate", "strong")
 
 
 def derive_environment_snapshot(environment: dict[str, Any], scene_context: dict[str, Any] | None = None) -> EnvironmentSnapshot:
-    """Return a deterministic read model from authoritative environment state.
-
-    The snapshot is safe for UI, narration, and future mechanics consumers. It is
-    not source-of-truth and should be regenerated from persisted state.
-    """
-
     env = environment if isinstance(environment, dict) else {}
     scene = scene_context if isinstance(scene_context, dict) else {}
     region_id = str(env.get("region_id") or scene.get("region_id") or "starting_region")
@@ -37,8 +32,7 @@ def derive_environment_snapshot(environment: dict[str, Any], scene_context: dict
     wind = _derive_wind(profile, condition, intensity)
     visibility = _derive_visibility(exposure, condition, intensity, light_level)
     terrain = derive_terrain_condition(condition=condition, recent_conditions=env.get("recent_conditions"), scene_context=scene)
-    resources = _derive_resources(profile)
-
+    resources = derive_environment_signals(profile, calendar, event, env.get("recent_conditions"))
     return {
         "environment_version": env.get("environment_version"),
         "region_id": region_id,
@@ -140,11 +134,6 @@ def _derive_light_level(calendar: dict[str, Any], profile: dict[str, Any], scene
     if sunrise - 45 <= minute < sunrise + 45 or sunset - 45 < minute <= sunset + 45:
         return "dim"
     return "daylight"
-
-
-def _derive_resources(profile: dict[str, Any]) -> dict[str, int]:
-    baselines = profile.get("resource_baselines") if isinstance(profile.get("resource_baselines"), dict) else {}
-    return {str(key): _coerce_int(value, 0) for key, value in baselines.items()}
 
 
 def _weather_label(condition: str, intensity: str) -> str:
