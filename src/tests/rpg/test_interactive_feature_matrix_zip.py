@@ -9,13 +9,42 @@ from tests.rpg import interactive_feature_matrix_zip as fmzip
 
 def _patch_cleanups(monkeypatch: Any, changed_turns: int = 0) -> None:
     cleanup_result = {"changed_turns": changed_turns}
-    monkeypatch.setattr(fmzip, "apply_response_quality_to_matrix_result", lambda result: cleanup_result)
-    monkeypatch.setattr(fmzip, "apply_commerce_sell_state_to_matrix_result", lambda result: {"changed_turns": 0})
-    monkeypatch.setattr(fmzip, "apply_travel_state_to_matrix_result", lambda result: {"changed_turns": 0})
-    monkeypatch.setattr(fmzip, "apply_short_session_memory_recall_to_matrix_result", lambda result: {"changed_turns": 0})
-    monkeypatch.setattr(fmzip, "apply_equipment_inventory_to_matrix_result", lambda result: {"changed_turns": 0})
-    monkeypatch.setattr(fmzip, "apply_interactive_cli_state_bundle_to_matrix_result", lambda result: {"changed_turns": 0})
-    monkeypatch.setattr(fmzip, "apply_interactive_cli_state_checkpoints_to_matrix_result", lambda result: {"changed_turns": 0})
+    zero_result = {"changed_turns": 0}
+    monkeypatch.setattr(
+        fmzip,
+        "apply_response_quality_to_matrix_result",
+        lambda result: cleanup_result,
+    )
+    monkeypatch.setattr(
+        fmzip,
+        "apply_commerce_sell_state_to_matrix_result",
+        lambda result: zero_result,
+    )
+    monkeypatch.setattr(
+        fmzip,
+        "apply_travel_state_to_matrix_result",
+        lambda result: zero_result,
+    )
+    monkeypatch.setattr(
+        fmzip,
+        "apply_short_session_memory_recall_to_matrix_result",
+        lambda result: zero_result,
+    )
+    monkeypatch.setattr(
+        fmzip,
+        "apply_equipment_inventory_to_matrix_result",
+        lambda result: zero_result,
+    )
+    monkeypatch.setattr(
+        fmzip,
+        "apply_interactive_cli_state_bundle_to_matrix_result",
+        lambda result: zero_result,
+    )
+    monkeypatch.setattr(
+        fmzip,
+        "apply_interactive_cli_state_checkpoints_to_matrix_result",
+        lambda result: zero_result,
+    )
 
 
 def test_live_provider_flag_is_required(monkeypatch: Any, capsys: Any) -> None:
@@ -37,7 +66,11 @@ def test_live_provider_run_uses_seed_cleanup_and_zip(monkeypatch: Any, tmp_path:
     output_root = tmp_path / "matrix"
     zip_path = tmp_path / "matrix.zip"
 
-    monkeypatch.setattr(fmzip.feature_matrix, "_select_feature_scenarios", lambda scenario_ids: ["shop_buy"])
+    monkeypatch.setattr(
+        fmzip.feature_matrix,
+        "_select_feature_scenarios",
+        lambda scenario_ids: ["shop_buy"],
+    )
 
     def fake_run_feature_matrix(**kwargs: Any) -> dict[str, Any]:
         calls["run"] = kwargs
