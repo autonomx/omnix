@@ -70,7 +70,6 @@ export function RpgWorldRail({
       <section className="rpg-card rpg-map-card">
         <div className="rpg-section-heading">
           <p className="eyebrow">World & location</p>
-          <button type="button">Change location</button>
         </div>
         <div className="rpg-map-preview rpg-map-preview-has-image" aria-label={`${selectedSessionSummary.location} travel map`}>
           <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
