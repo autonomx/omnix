@@ -20,10 +20,44 @@ RECENT_CONDITION_KEYS = {
     "thaw_minutes_24h": 0,
 }
 
+RAIN_CONDITIONS = {"rain", "storm"}
+SNOW_CONDITIONS = {"snow", "blizzard"}
+DRY_CONDITIONS = {"clear", "cloudy", "overcast", "windy"}
+STORM_CONDITIONS = {"storm", "blizzard"}
+
 
 def normalize_recent_conditions(recent_conditions: dict[str, Any] | None) -> dict[str, int]:
     recent = recent_conditions if isinstance(recent_conditions, dict) else {}
     return {key: max(0, _coerce_int(recent.get(key), default)) for key, default in RECENT_CONDITION_KEYS.items()}
+
+
+def advance_environment_memory(recent_conditions: dict[str, Any] | None, *, condition: str, elapsed_minutes: int) -> dict[str, int]:
+    elapsed = max(0, int(elapsed_minutes))
+    memory = normalize_recent_conditions(recent_conditions)
+    condition = str(condition or "clear")
+    if condition in RAIN_CONDITIONS:
+        memory["rain_minutes_24h"] += elapsed
+        memory["dry_minutes_72h"] = max(0, memory["dry_minutes_72h"] - elapsed)
+        if memory["rain_minutes_24h"] >= 120 or condition == "storm":
+            memory["mud_minutes_72h"] += elapsed
+        if memory["snowpack_minutes_72h"] > 0:
+            memory["thaw_minutes_24h"] += elapsed
+    elif condition in SNOW_CONDITIONS:
+        memory["snow_minutes_24h"] += elapsed
+        memory["freezing_minutes_24h"] += elapsed
+        memory["snowpack_minutes_72h"] += elapsed
+        memory["dry_minutes_72h"] = max(0, memory["dry_minutes_72h"] - elapsed)
+    elif condition in DRY_CONDITIONS:
+        memory["dry_minutes_72h"] += elapsed
+        if memory["dry_minutes_72h"] >= 360:
+            memory["dust_minutes_72h"] += elapsed
+        if memory["dry_minutes_72h"] >= 720:
+            memory["drought_minutes_7d"] += elapsed
+        memory["mud_minutes_72h"] = max(0, memory["mud_minutes_72h"] - elapsed)
+        memory["thaw_minutes_24h"] = max(0, memory["thaw_minutes_24h"] - elapsed)
+    if condition in STORM_CONDITIONS:
+        memory["storm_minutes_24h"] += elapsed
+    return _bounded_memory(memory)
 
 
 def _bounded_memory(memory: dict[str, int]) -> dict[str, int]:
