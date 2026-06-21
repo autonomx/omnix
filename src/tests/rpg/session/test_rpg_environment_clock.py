@@ -70,3 +70,22 @@ def test_completed_weather_timer_replacement_is_deterministic() -> None:
     second = advance_environment_time(deepcopy(environment), elapsed_minutes=10)
 
     assert first == second
+
+
+def test_clock_state_survives_session_save_load(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(durable_store, "_SESSION_DIR", tmp_path)
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    environment = _seed_environment()
+    advanced = advance_environment_time(environment, elapsed_minutes=10)
+    session = {
+        "session_id": "environment-clock-save-load",
+        "state": {"world": {"environment": advanced}, "scene": {"environment_context": {"region_id": "market_road"}}},
+        "manifest": {},
+        "installed_packs": [],
+        "simulation_state": {},
+    }
+
+    save_session(session)
+    loaded = load_session("environment-clock-save-load")
+
+    assert loaded["state"]["world"]["environment"] == advanced
