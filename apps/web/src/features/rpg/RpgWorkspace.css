@@ -201,7 +201,6 @@
 }
 
 .rpg-stat-row strong,
-.rpg-xp-row strong,
 .rpg-resource-grid strong,
 .rpg-list-row strong,
 .rpg-party-row strong,
@@ -222,7 +221,6 @@
 }
 
 .rpg-stat-row > span:first-child,
-.rpg-xp-row > span:first-child,
 .rpg-resource-grid span {
   color: #c9c1e8;
   font-size: 0.78rem;
@@ -264,12 +262,6 @@
 
 .rpg-meter-xp > span {
   background: linear-gradient(90deg, #8b5cf6, #c084fc);
-}
-
-.rpg-xp-row {
-  display: grid;
-  gap: 0.4rem;
-  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
 .rpg-resource-grid {

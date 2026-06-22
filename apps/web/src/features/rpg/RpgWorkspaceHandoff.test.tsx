@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
@@ -39,6 +39,7 @@ afterEach(() => {
 describe('RpgWorkspace campaign handoff', () => {
   it('surfaces a created campaign and queues the first turn for it', async () => {
     let inventoryReads = 0;
+    let turnQueued = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
@@ -63,10 +64,51 @@ describe('RpgWorkspace campaign handoff', () => {
       }
 
       if (path === '/api/rpg/new-game' && init?.method === 'POST') {
-        return Response.json({ ok: true, session_id: 'rpg-created-1', status: 'ready' });
+        return Response.json({
+          ok: true,
+          session_id: 'rpg-created-1',
+          status: 'ready',
+          session: {
+            manifest: { session_id: 'rpg-created-1', title: 'Created Campaign' },
+            state: {
+              ability_tree: {
+                abilities: [{ ability_id: 'recon_aimed_shot', icon: '✦', name: 'Aimed Shot' }],
+              },
+              encounter: { status: 'inactive', title: 'No active combat', summary: 'All quiet for now.' },
+              environment_snapshot: {
+                display: { day_time: 'Day 1', weather: 'Clear' },
+                context: { location_label: 'Rusty Flagon Tavern' },
+                region_id: 'market_road',
+              },
+              hotbar: { 1: 'recon_aimed_shot' },
+              party: [],
+              player: {
+                name: 'Elara',
+                level: 1,
+                class: 'Frontier Scout',
+                background: 'Wanderer',
+                currency: { gold: 0 },
+                equipment: [{ name: 'Travel cloak', slot: 'clothing' }],
+                inventory: [{ name: 'Trail rations', quantity: 3 }],
+                renown: 'Unknown (0)',
+                resources: {
+                  hp: { current: 92, max: 92 },
+                  stamina: { current: 91, max: 91 },
+                  mana: { current: 30, max: 30 },
+                },
+                xp: { current: 0, max: 100 },
+              },
+              quests: [{ title: 'Rumor at the Rusty Flagon', status: 'active', objective: 'Ask Bran which rumor is true.' }],
+              quick_actions: ['Talk to Bran'],
+              relationships: [],
+              timeline: [{ title: 'Campaign begins', detail: 'Elara enters the Rusty Flagon Tavern.', turn: 0 }],
+            },
+          },
+        });
       }
 
       if (path === '/api/jobs' && init?.method === 'POST') {
+        turnQueued = true;
         return Response.json({
           id: 'job:rpg-created-turn',
           module: 'rpg',
@@ -80,7 +122,27 @@ describe('RpgWorkspace campaign handoff', () => {
       }
 
       if (path === '/api/jobs') {
-        return Response.json({ jobs: [] });
+        return Response.json({
+          jobs: turnQueued
+            ? [
+                {
+                  id: 'job:rpg-created-turn',
+                  module: 'rpg',
+                  type: 'rpg.turn',
+                  status: 'completed',
+                  resource_class: 'gpu:llm',
+                  priority: 0,
+                  stages: [],
+                  input_ref: { session_id: 'rpg-created-1' },
+                  input_payload: { command: 'I ask Bran how he is.' },
+                  output_refs: [{ type: 'rpg_turn_response', content: 'Bran smiles and says he is well.' }],
+                  created_at: '2026-06-20T00:00:01Z',
+                  updated_at: '2026-06-20T00:00:04Z',
+                  completed_at: '2026-06-20T00:00:04Z',
+                },
+              ]
+            : [],
+        });
       }
 
       if (path === '/api/assets') {
@@ -104,6 +166,23 @@ describe('RpgWorkspace campaign handoff', () => {
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: 'Created Campaign — rpg-created-1' })).toBeInTheDocument();
     expect(await screen.findByText('Created Campaign')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Elara' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Alyndra' })).not.toBeInTheDocument();
+    expect(screen.getByText('0 / 4')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Thorin Ironfist' })).not.toBeInTheDocument();
+    const playerRail = screen.getByRole('complementary', { name: 'Player, party, and quests' });
+    expect(within(playerRail).getByText('Travel cloak')).toBeInTheDocument();
+    expect(within(playerRail).getByText('Rumor at the Rusty Flagon')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Trail rations' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Talk' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Aimed Shot' }).length).toBeGreaterThan(0);
+    expect(screen.getByText('No NPC relationships recorded.')).toBeInTheDocument();
+    expect(screen.getByText('No active RPG jobs')).toBeInTheDocument();
+    expect(screen.getByText('market_road')).toBeInTheDocument();
+    expect(screen.getAllByText('Elara enters the Rusty Flagon Tavern.').length).toBeGreaterThan(0);
+    expect(document.querySelector('img[src="/rpg/hero-alyndra.svg"]')).not.toBeInTheDocument();
+    expect(document.querySelector('img[src="/rpg/glimmerdeep-pass-scene.svg"]')).not.toBeInTheDocument();
+    expect(document.querySelector('img[src="/rpg/glimmerdeep-pass-map.svg"]')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 
@@ -112,6 +191,7 @@ describe('RpgWorkspace campaign handoff', () => {
       expect(commandInput.value).toContain('Session rpg-created-1 is ready');
     });
 
+    fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'I ask Bran how he is.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
 
     await waitFor(() => {
@@ -122,6 +202,12 @@ describe('RpgWorkspace campaign handoff', () => {
           String(init.body).includes('"type":"rpg.turn"'),
       );
       expect(String(turnCall?.[1]?.body)).toContain('"session_id":"rpg-created-1"');
+      expect(String(turnCall?.[1]?.body)).toContain('"command":"I ask Bran how he is."');
     });
+    expect(screen.getByText('Elara (You)')).toBeInTheDocument();
+    expect(screen.getByText('Bran')).toBeInTheDocument();
+    const storyScene = screen.getByRole('region', { name: /Rusty Flagon Tavern/ });
+    expect(within(storyScene).getByText('I ask Bran how he is.')).toBeInTheDocument();
+    expect(within(storyScene).getByText('Bran smiles and says he is well.')).toBeInTheDocument();
   });
 });

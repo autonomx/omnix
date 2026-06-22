@@ -20,14 +20,15 @@ interface RpgPlayerRailProps {
 
 export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats, heroSummary, partyMembers }: RpgPlayerRailProps) {
   const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
+  const heroAvatarClassName = heroSummary.source === 'preview' ? 'rpg-avatar rpg-hero-avatar rpg-hero-avatar-art' : 'rpg-avatar rpg-hero-avatar';
 
   return (
     <aside className={railClassName} aria-label="Player, party, and quests">
       <section className="rpg-card rpg-hero-card">
         <p className="eyebrow">Your hero</p>
         <div className="rpg-hero-summary">
-          <div className="rpg-avatar rpg-hero-avatar rpg-hero-avatar-art" aria-hidden="true">
-            <img src={HERO_ART_SRC} alt="" loading="lazy" />
+          <div className={heroAvatarClassName} aria-hidden="true">
+            {heroSummary.source === 'preview' ? <img src={HERO_ART_SRC} alt="" loading="lazy" /> : heroSummary.avatar}
           </div>
           <div>
             <h3>{heroSummary.name}</h3>
@@ -45,13 +46,13 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
               </span>
             </div>
           ))}
-        </div>
-        <div className="rpg-xp-row">
-          <span>XP</span>
-          <span className="rpg-meter rpg-meter-xp" aria-label={`XP ${heroSummary.xpLabel}`}>
-            <span style={{ width: `${heroSummary.xpPercent}%` }} />
-          </span>
-          <strong>{heroSummary.xpLabel}</strong>
+          <div className="rpg-stat-row">
+            <span>XP</span>
+            <strong>{heroSummary.xpLabel}</strong>
+            <span className="rpg-meter rpg-meter-xp" aria-label={`XP ${heroSummary.xpLabel}`}>
+              <span style={{ width: `${heroSummary.xpPercent}%` }} />
+            </span>
+          </div>
         </div>
         <div className="rpg-resource-grid">
           <div>
@@ -70,17 +71,21 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
           <p className="eyebrow">Equipped gear</p>
         </div>
         <div className="rpg-list-stack">
-          {equippedGear.map((item) => (
-            <article className="rpg-list-row" key={item.name}>
-              <span className="rpg-icon-tile" aria-hidden="true">
-                {item.icon}
-              </span>
-              <div>
-                <strong>{item.name}</strong>
-                <span>{item.slot}</span>
-              </div>
-            </article>
-          ))}
+          {equippedGear.length ? (
+            equippedGear.map((item) => (
+              <article className="rpg-list-row" key={item.name}>
+                <span className="rpg-icon-tile" aria-hidden="true">
+                  {item.icon}
+                </span>
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>{item.slot}</span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <p className="rpg-empty-state">No equipped gear.</p>
+          )}
         </div>
       </section>
 
@@ -90,23 +95,27 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
           <span>{partyMembers.length} / 4</span>
         </div>
         <div className="rpg-list-stack">
-          {partyMembers.map((member) => (
-            <article className="rpg-party-row" key={member.name}>
-              <span className="rpg-avatar rpg-avatar-small" aria-hidden="true">
-                {member.avatar}
-              </span>
-              <div className="rpg-party-member-copy">
-                <strong>{member.name}</strong>
-                <span>{member.role}</span>
-              </div>
-              <div className="rpg-party-member-status">
-                <span className="rpg-party-health">
-                  <span style={{ width: `${member.percent}%` }} />
+          {partyMembers.length ? (
+            partyMembers.map((member) => (
+              <article className="rpg-party-row" key={member.name}>
+                <span className="rpg-avatar rpg-avatar-small" aria-hidden="true">
+                  {member.avatar}
                 </span>
-                <small>{member.hp}</small>
-              </div>
-            </article>
-          ))}
+                <div className="rpg-party-member-copy">
+                  <strong>{member.name}</strong>
+                  <span>{member.role}</span>
+                </div>
+                <div className="rpg-party-member-status">
+                  <span className="rpg-party-health">
+                    <span style={{ width: `${member.percent}%` }} />
+                  </span>
+                  <small>{member.hp}</small>
+                </div>
+              </article>
+            ))
+          ) : (
+            <p className="rpg-empty-state">No companions have joined this campaign.</p>
+          )}
         </div>
         <button className="rpg-secondary-button" type="button">
           + Add companion
@@ -116,18 +125,22 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
       <section className="rpg-card">
         <p className="eyebrow">Active quests</p>
         <div className="rpg-list-stack">
-          {activeQuests.map((quest) => (
-            <article className="rpg-quest-row" key={quest.title}>
-              <span className="rpg-quest-icon" aria-hidden="true">
-                {quest.icon}
-              </span>
-              <div>
-                <strong>{quest.title}</strong>
-                <span>{quest.detail}</span>
-              </div>
-              <span aria-hidden="true">›</span>
-            </article>
-          ))}
+          {activeQuests.length ? (
+            activeQuests.map((quest) => (
+              <article className="rpg-quest-row" key={quest.title}>
+                <span className="rpg-quest-icon" aria-hidden="true">
+                  {quest.icon}
+                </span>
+                <div>
+                  <strong>{quest.title}</strong>
+                  <span>{quest.detail}</span>
+                </div>
+                <span aria-hidden="true">›</span>
+              </article>
+            ))
+          ) : (
+            <p className="rpg-empty-state">No active quests.</p>
+          )}
         </div>
       </section>
     </aside>

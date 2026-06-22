@@ -14,7 +14,7 @@ const RPG_PLAY_FOCUS_CLASS = 'rpg-play-focus-mode';
 
 export function RpgWorkspaceHeader({ module, selectedSessionSummary, submitStatus }: RpgWorkspaceHeaderProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isHidden, setIsHidden] = useState(false);
+  const [isHidden, setIsHidden] = useState(true);
   const headerDetailsId = 'rpg-workstation-header-details';
   const headerClassName = isExpanded ? 'rpg-workstation-header' : 'rpg-workstation-header rpg-workstation-header-collapsed';
 

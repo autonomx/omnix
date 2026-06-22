@@ -1,6 +1,7 @@
 """Clean RPG session launch and save-management gateway routes."""
 from __future__ import annotations
 
+import asyncio
 from functools import wraps
 from typing import Any, Callable
 
@@ -85,13 +86,18 @@ def _ability_coverage_payload(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def _environment_snapshot_from_state(state: dict[str, Any]) -> dict[str, Any] | None:
-    world = state.get("world") if isinstance(state.get("world"), dict) else {}
-    environment = world.get("environment") if isinstance(world.get("environment"), dict) else None
-    regions = world.get("regions") if isinstance(world.get("regions"), dict) else None
+    world_value = state.get("world")
+    world = world_value if isinstance(world_value, dict) else {}
+    environment_value = world.get("environment")
+    regions_value = world.get("regions")
+    environment = environment_value if isinstance(environment_value, dict) else None
+    regions = regions_value if isinstance(regions_value, dict) else None
     if environment is None and regions is None:
         return None
-    scene = state.get("scene") if isinstance(state.get("scene"), dict) else {}
-    context = scene.get("environment_context") if isinstance(scene.get("environment_context"), dict) else {}
+    scene_value = state.get("scene")
+    scene = scene_value if isinstance(scene_value, dict) else {}
+    context_value = scene.get("environment_context")
+    context = context_value if isinstance(context_value, dict) else {}
     return derive_active_region_snapshot(world, context)
 
 
@@ -165,15 +171,15 @@ def register_rpg_session_routes(app: FastAPI) -> None:
     setattr(app.state, _ROUTE_SENTINEL, True)
 
     @app.get("/api/rpg/presets", tags=["rpg-session"])
-    async def rpg_presets() -> dict[str, Any]:
+    def rpg_presets() -> dict[str, Any]:
         return list_rpg_presets()
 
     @app.post("/api/rpg/presets/{preset_id}/start", tags=["rpg-session"])
-    async def rpg_start_preset(preset_id: str) -> dict[str, Any]:
+    def rpg_start_preset(preset_id: str) -> dict[str, Any]:
         return _with_rpg_response_surface(_raise_for_error(start_rpg_preset(preset_id), not_found_errors={"unknown_rpg_preset"}))
 
     @app.get("/api/rpg/sessions", tags=["rpg-session"])
-    async def rpg_sessions() -> dict[str, Any]:
+    def rpg_sessions() -> dict[str, Any]:
         sessions = [
             _attach_environment_snapshot_to_session(session)
             for session in (list_session_summaries() or [])
@@ -181,14 +187,14 @@ def register_rpg_session_routes(app: FastAPI) -> None:
         return {"ok": True, "sessions": sessions}
 
     @app.get("/api/rpg/sessions/{session_id}", tags=["rpg-session"])
-    async def rpg_read_session(session_id: str) -> dict[str, Any]:
+    def rpg_read_session(session_id: str) -> dict[str, Any]:
         session = load_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "session_not_found", "session_id": session_id})
         return _with_rpg_response_surface({"ok": True, "session_id": session_id, "session": session, "game": session.get("state", {})})
 
     @app.get("/api/rpg/sessions/{session_id}/ability-coverage", tags=["rpg-session"])
-    async def rpg_ability_coverage(session_id: str) -> dict[str, Any]:
+    def rpg_ability_coverage(session_id: str) -> dict[str, Any]:
         session = load_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "session_not_found", "session_id": session_id})
@@ -199,25 +205,25 @@ def register_rpg_session_routes(app: FastAPI) -> None:
     @app.post("/api/rpg/new-game", tags=["rpg-session"])
     async def rpg_new_game(http_request: Request, request: RpgNewGameRequest) -> dict[str, Any]:
         raw_payload = await http_request.json()
-        return _with_rpg_response_surface(_create_new_game_from_payload(raw_payload, request))
+        return await asyncio.to_thread(lambda: _with_rpg_response_surface(_create_new_game_from_payload(raw_payload, request)))
 
     @app.post("/api/rpg/sessions/{session_id}/continue", tags=["rpg-session"])
-    async def rpg_continue_session(session_id: str) -> dict[str, Any]:
+    def rpg_continue_session(session_id: str) -> dict[str, Any]:
         return _with_rpg_response_surface(_raise_for_error(continue_rpg_session(session_id), not_found_errors={"session_not_found"}))
 
     @app.post("/api/rpg/sessions/{session_id}/rename", tags=["rpg-session"])
-    async def rpg_rename_session(session_id: str, request: RpgRenameSessionRequest) -> dict[str, Any]:
+    def rpg_rename_session(session_id: str, request: RpgRenameSessionRequest) -> dict[str, Any]:
         name = request.name.strip()
         if not name:
             raise HTTPException(status_code=400, detail={"ok": False, "error": "missing_session_name", "session_id": session_id})
         return _raise_for_error(rename_rpg_session(session_id, name), not_found_errors={"session_not_found"})
 
     @app.post("/api/rpg/sessions/{session_id}/delete", tags=["rpg-session"])
-    async def rpg_delete_session(session_id: str) -> dict[str, Any]:
+    def rpg_delete_session(session_id: str) -> dict[str, Any]:
         return _raise_for_error(delete_rpg_session(session_id), not_found_errors={"session_not_found"})
 
     @app.post("/api/rpg/sessions/{session_id}/loadout-action", tags=["rpg-session"])
-    async def rpg_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> dict[str, Any]:
+    def rpg_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> dict[str, Any]:
         return _with_environment_snapshot(_raise_for_error(apply_loadout_action(session_id, request), not_found_errors={"session_not_found"}))
 
 

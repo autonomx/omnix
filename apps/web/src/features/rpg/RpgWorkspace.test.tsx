@@ -89,6 +89,7 @@ afterEach(() => {
 
 describe('RpgWorkspace', () => {
   it('uses replay inventory and queues RPG turns through shared jobs', async () => {
+    let turnQueued = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
@@ -97,6 +98,7 @@ describe('RpgWorkspace', () => {
       }
 
       if (path === '/api/jobs' && init?.method === 'POST') {
+        turnQueued = true;
         return Response.json({
           id: 'job:rpg',
           module: 'rpg',
@@ -110,6 +112,9 @@ describe('RpgWorkspace', () => {
       }
 
       if (path === '/api/jobs') {
+        if (turnQueued) {
+          return new Promise<Response>(() => undefined);
+        }
         return Response.json(emptyWorkspaceResponses.jobs);
       }
 
@@ -130,12 +135,13 @@ describe('RpgWorkspace', () => {
     expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: 'rpg-session-1' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'rpg_checkpoint / rpg' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
 
-    fireEvent.change(screen.getByLabelText('Session'), { target: { value: 'rpg-session-1' } });
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Look around the tavern.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
 
     expect(await screen.findByText('RPG turn job queued: job:rpg')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Queue RPG turn' })).toBeEnabled();
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
@@ -282,16 +288,10 @@ describe('RpgWorkspace', () => {
 
     renderRpg();
 
-    expect(screen.getByRole('button', { name: 'Expand header' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'Show RPG headers' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
     expect(await screen.findByRole('complementary', { name: 'Player, party, and quests' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Full-size player rail' })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: 'Full-size world rail' })).toHaveAttribute('aria-pressed', 'false');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Full-size player rail' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Full-size world rail' }));
-
     expect(screen.getByRole('button', { name: 'Contain player rail' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Contain world rail' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('complementary', { name: 'Player, party, and quests' })).toHaveClass('rpg-rail-full-size');
@@ -313,25 +313,20 @@ describe('RpgWorkspace', () => {
     expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
   });
 
-  it('switches Hide header into full RPG play focus chrome mode', async () => {
+  it('starts in RPG play focus chrome mode and can show or hide the header', async () => {
     stubEmptyWorkspaceFetch();
 
     renderRpg();
 
     expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
-    expect(document.documentElement).not.toHaveClass('rpg-play-focus-mode');
-    expect(screen.getByRole('button', { name: 'New Campaign' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Hide header' }));
-
     await waitFor(() => {
       expect(document.documentElement).toHaveClass('rpg-play-focus-mode');
     });
+    expect(screen.getByRole('button', { name: 'New Campaign' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show RPG headers' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Expand header' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Show RPG headers' }));
 
@@ -340,6 +335,14 @@ describe('RpgWorkspace', () => {
     });
     expect(screen.getByRole('button', { name: 'Expand header' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('button', { name: 'Hide header' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide header' }));
+
+    await waitFor(() => {
+      expect(document.documentElement).toHaveClass('rpg-play-focus-mode');
+    });
+    expect(screen.getByRole('button', { name: 'Show RPG headers' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
   });
 
   it('surfaces live data empty and error states while keeping preview fallback usable', async () => {

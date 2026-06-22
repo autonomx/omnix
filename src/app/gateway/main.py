@@ -433,7 +433,7 @@ def create_gateway_app(
         return list_rpg_sessions_payload()
 
     @gateway.post("/api/rpg/session/get", tags=["rpg-session-compat"])
-    async def rpg_session_get(request: dict[str, Any]) -> dict[str, Any]:
+    def rpg_session_get(request: dict[str, Any]) -> dict[str, Any]:
         return get_rpg_session_payload(request)
 
     @gateway.post("/api/rpg/inspect/timeline", tags=["rpg-inspection-compat"])
@@ -555,11 +555,11 @@ def create_gateway_app(
         return get_replay_adapter().list_sessions()
 
     @gateway.post("/api/jobs", response_model=JobRecord, tags=["jobs"])
-    async def create_job(request: CreateJobRequest) -> JobRecord:
+    def create_job(request: CreateJobRequest) -> JobRecord:
         return get_job_store().create_job(request)
 
     @gateway.get("/api/jobs", response_model=JobListResponse, tags=["jobs"])
-    async def list_jobs() -> JobListResponse:
+    def list_jobs() -> JobListResponse:
         return JobListResponse(jobs=get_job_store().list_jobs())
 
     @gateway.get("/events", include_in_schema=False)

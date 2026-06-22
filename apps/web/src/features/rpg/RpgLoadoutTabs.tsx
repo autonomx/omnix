@@ -140,7 +140,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
   const sessionQuery = useQuery({
     enabled: Boolean(selectedSessionId),
     queryKey: ['feature', 'rpg', 'ability-tree-session', selectedSessionId],
-    queryFn: () => omnixApiClient.continueRpgSession(selectedSessionId ?? ''),
+    queryFn: () => omnixApiClient.getRpgSession(selectedSessionId ?? ''),
     staleTime: 0,
   });
   const itemObjectivesQuery = useQuery({
@@ -162,7 +162,10 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
     staleTime: 0,
   });
 
-  const abilityOverview = useMemo(() => buildAbilityOverview(sessionQuery.data, hotbarAbilities), [hotbarAbilities, sessionQuery.data]);
+  const abilityOverview = useMemo(
+    () => buildAbilityOverview(sessionQuery.data, hotbarAbilities, Boolean(selectedSessionId)),
+    [hotbarAbilities, selectedSessionId, sessionQuery.data],
+  );
   const displayedHotbarAbilities = abilityOverview.hotbarAbilities.length ? abilityOverview.hotbarAbilities : hotbarAbilities;
   const activeItem = inventoryItems[Math.min(activeInventoryIndex, Math.max(inventoryItems.length - 1, 0))];
   const activeAbility = abilityOverview.allAbilities[Math.min(activeAbilityIndex, Math.max(abilityOverview.allAbilities.length - 1, 0))];
@@ -371,7 +374,7 @@ function InventoryPanel({
         >
           +
         </button>
-        <div className="rpg-hotbar" aria-label="Ability hotbar preview">
+        <div className="rpg-hotbar" aria-label="Ability hotbar">
           {hotbarAbilities.map((ability) => (
             <button
               type="button"
@@ -802,7 +805,11 @@ function LoadoutDetailCard({ actions, detail, disabled, eyebrow, onSelectCommand
   );
 }
 
-function buildAbilityOverview(payload: RpgLaunchResponse | undefined, fallbackHotbar: RpgHotbarAbilityPreview[]): AbilityOverview {
+function buildAbilityOverview(
+  payload: RpgLaunchResponse | undefined,
+  fallbackHotbar: RpgHotbarAbilityPreview[],
+  hasLiveSession = false,
+): AbilityOverview {
   const payloadRecord = recordValue(payload);
   const session = recordValue(payloadRecord?.session);
   const game = recordValue(payloadRecord?.game);
@@ -813,13 +820,25 @@ function buildAbilityOverview(payload: RpgLaunchResponse | undefined, fallbackHo
   const rawAbilities = firstArray(tree?.abilities);
   const coverage = buildCoveragePreview(payloadRecord, state);
   if (!state || !tree || !rawAbilities.length) {
-    const previewAbilities = fallbackHotbar.map((ability) => previewAbilityFromHotbar(ability));
+    const previewAbilities = fallbackHotbar.map((ability) => ({
+      ...previewAbilityFromHotbar(ability),
+      capability: hasLiveSession ? 'session' : 'preview',
+      powerSource: hasLiveSession ? 'session' : 'preview',
+    }));
     return {
-      className: 'Preview ability kit',
-      treeId: 'preview-hotbar',
+      className: hasLiveSession ? 'Session hotbar' : 'Preview ability kit',
+      treeId: hasLiveSession ? 'session-hotbar' : 'preview-hotbar',
       abilityPoints: 0,
       playerLevel: 1,
-      categories: [{ id: 'preview', name: 'Preview Hotbar', capability: 'preview', dimensions: ['resources', 'position'], abilities: previewAbilities }],
+      categories: [
+        {
+          id: hasLiveSession ? 'session' : 'preview',
+          name: hasLiveSession ? 'Session Hotbar' : 'Preview Hotbar',
+          capability: hasLiveSession ? 'session' : 'preview',
+          dimensions: ['resources', 'position'],
+          abilities: previewAbilities,
+        },
+      ],
       allAbilities: previewAbilities,
       hotbarSlots: fallbackHotbar.map((ability) => ({ slot: ability.key, ability: previewAbilities.find((candidate) => candidate.name === ability.label) })),
       hotbarAbilities: fallbackHotbar,
@@ -827,7 +846,7 @@ function buildAbilityOverview(payload: RpgLaunchResponse | undefined, fallbackHo
       traits: [],
       activeEffects: [],
       coverage,
-      source: 'preview',
+      source: hasLiveSession ? 'live' : 'preview',
     };
   }
 

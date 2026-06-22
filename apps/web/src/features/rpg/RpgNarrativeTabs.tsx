@@ -164,7 +164,7 @@ function buildTurnRows(journalEntries: RpgJournalEntryPreview[]): RpgJournalEntr
 
 function isDialogueLike(value: string): boolean {
   const normalized = value.toLowerCase();
-  return normalized.includes('dialogue') || normalized.includes('speaks') || normalized.includes('says') || value.includes(':');
+  return normalized.includes('dialogue') || normalized.includes('message') || normalized.includes('replied') || normalized.includes('speaks') || normalized.includes('says') || value.includes(':');
 }
 
 function speakerFromEvent(event: string): string | undefined {

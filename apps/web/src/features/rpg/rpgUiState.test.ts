@@ -161,6 +161,142 @@ describe('rpg UI state', () => {
     expect(state.inventoryItems[0]).toMatchObject({ label: 'Ration', count: '3' });
   });
 
+  it('hydrates a bounded session summary from the selected session detail', () => {
+    const state = createRpgWorkspaceState({
+      inventory: {
+        sessions: [
+          {
+            manifest: { session_id: 'created-live', title: 'Elara - Rusty Flagon' },
+            state: { world: {}, scene: {} },
+          },
+        ],
+      },
+      jobs: { jobs: [] },
+      selectedSessionId: 'created-live',
+      selectedSession: {
+        manifest: { session_id: 'created-live', title: 'Elara - Rusty Flagon' },
+        state: {
+          ability_tree: {
+            abilities: [{ ability_id: 'recon_aimed_shot', icon: '✦', name: 'Aimed Shot' }],
+          },
+          encounter: { status: 'inactive', title: 'No active combat', summary: 'All quiet for now.' },
+          hotbar: { 1: 'recon_aimed_shot' },
+          party: [],
+          player: {
+            name: 'Elara',
+            level: 1,
+            class: 'Frontier Scout',
+            background: 'Wanderer',
+            currency: { gold: 0 },
+            equipment: [{ name: 'Travel cloak', slot: 'clothing' }],
+            inventory: [{ name: 'Trail rations', quantity: 3 }],
+            renown: 'Unknown (0)',
+            resources: {
+              hp: { current: 92, max: 92 },
+              stamina: { current: 91, max: 91 },
+              mana: { current: 30, max: 30 },
+            },
+            xp: { current: 0, max: 100 },
+          },
+          quests: [{ id: 'tavern_rumor', title: 'Rumor at the Rusty Flagon', status: 'active', objective: 'Ask Bran which rumor is true.' }],
+          quick_actions: ['Talk to Bran'],
+          relationships: [],
+        },
+      },
+    });
+
+    expect(state.heroSummary).toMatchObject({ source: 'live', name: 'Elara', subtitle: 'Level 1 • Frontier Scout', xpLabel: '0 / 100', gold: '0g' });
+    expect(state.heroStats.map((stat) => stat.value)).toEqual(['92 / 92', '91 / 91', '30 / 30']);
+    expect(state.equippedGear[0]).toMatchObject({ name: 'Travel cloak', slot: 'Clothing' });
+    expect(state.partyMembers).toEqual([]);
+    expect(state.activeQuests[0]).toMatchObject({ title: 'Rumor at the Rusty Flagon', detail: 'Ask Bran which rumor is true.' });
+    expect(state.quickActions).toEqual([{ command: 'Talk to Bran', icon: '☯', label: 'Talk' }]);
+    expect(state.inventoryItems).toEqual([{ count: '3', icon: '🥩', label: 'Trail rations' }]);
+    expect(state.hotbarAbilities).toEqual([{ icon: '✦', key: '1', label: 'Aimed Shot' }]);
+    expect(state.npcRelationships).toEqual([]);
+    expect(state.encounter).toMatchObject({ source: 'live', title: 'No active combat', detail: 'All quiet for now.' });
+    expect(state.jobCards).toEqual([]);
+  });
+
+  it('projects selected-session RPG turn commands and responses into the live timeline', () => {
+    const state = createRpgWorkspaceState({
+      inventory: {
+        sessions: [{ session_id: 'session-live', title: 'Live campaign', updated_at: '2026-06-22T01:00:00Z' }],
+      },
+      jobs: {
+        jobs: [
+          {
+            id: 'job:turn-live',
+            module: 'rpg',
+            type: 'rpg.turn',
+            status: 'completed',
+            resource_class: 'gpu:llm',
+            priority: 0,
+            stages: [],
+            input_ref: { session_id: 'session-live' },
+            input_payload: { command: 'I ask Bran how he is.' },
+            output_refs: [{ type: 'rpg_turn_response', content: 'Bran smiles and says he is well.' }],
+            created_at: '2026-06-22T01:19:36Z',
+            updated_at: '2026-06-22T01:19:39Z',
+            completed_at: '2026-06-22T01:19:39Z',
+          },
+          {
+            id: 'job:other-session',
+            module: 'rpg',
+            type: 'rpg.turn',
+            status: 'completed',
+            resource_class: 'gpu:llm',
+            priority: 0,
+            stages: [],
+            input_ref: { session_id: 'session-other' },
+            input_payload: { command: 'This belongs elsewhere.' },
+            output_refs: [{ type: 'rpg_turn_response', content: 'Wrong session response.' }],
+            created_at: '2026-06-22T01:18:00Z',
+            updated_at: '2026-06-22T01:18:01Z',
+            completed_at: '2026-06-22T01:18:01Z',
+          },
+          {
+            id: 'job:turn-older',
+            module: 'rpg',
+            type: 'rpg.turn',
+            status: 'completed',
+            resource_class: 'gpu:llm',
+            priority: 0,
+            stages: [],
+            input_ref: { session_id: 'session-live' },
+            input_payload: { command: 'I greet Bran.' },
+            output_refs: [{ type: 'rpg_turn_response', content: 'Bran nods in greeting.' }],
+            created_at: '2026-06-22T01:17:00Z',
+            updated_at: '2026-06-22T01:17:01Z',
+            completed_at: '2026-06-22T01:17:01Z',
+          },
+        ],
+      } as JobListResponse,
+      selectedSessionId: 'session-live',
+      selectedSession: {
+        manifest: { session_id: 'session-live', title: 'Live campaign' },
+        state: {
+          player: { name: 'Elara' },
+          timeline: [{ title: 'Conversation continues', detail: 'Elara and Bran catch up beside the bar.', turn: 2 }],
+        },
+      },
+    });
+
+    expect(state.recentEvents).toEqual(['Elara and Bran catch up beside the bar.']);
+    expect(state.storyMessages).toEqual([
+      { avatar: 'E', speaker: 'Elara (You)', text: 'I greet Bran.', tone: 'player' },
+      { avatar: 'B', speaker: 'Bran', text: 'Bran nods in greeting.', tone: 'npc' },
+      { avatar: 'E', speaker: 'Elara (You)', text: 'I ask Bran how he is.', tone: 'player' },
+      { avatar: 'B', speaker: 'Bran', text: 'Bran smiles and says he is well.', tone: 'npc' },
+    ]);
+    expect(state.journalEntries.slice(0, 2)).toEqual([
+      { detail: 'I ask Bran how he is.', time: '2026-06-22 01:19 UTC', title: 'Player message' },
+      { detail: 'Bran smiles and says he is well.', time: '2026-06-22 01:19 UTC', title: 'Bran response' },
+    ]);
+    expect(state.recentEvents).not.toContain('This belongs elsewhere.');
+    expect(state.recentEvents).not.toContain('Wrong session response.');
+  });
+
   it('derives safe session labels and bounded progress percentages', () => {
     expect(safeSessionId({ name: 'named-session' }, 0)).toBe('named-session');
     expect(safeSessionId({}, 1)).toBe('session:2');

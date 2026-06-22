@@ -27,7 +27,7 @@ function renderLoadoutTabs(props: LoadoutTabsProps) {
 }
 
 function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }, options: MockLiveItemApiOptions = {}) {
-  const continueRpgSession = vi.spyOn(omnixApiClient, 'continueRpgSession').mockResolvedValue(sessionPayload as never);
+  const getRpgSession = vi.spyOn(omnixApiClient, 'getRpgSession').mockResolvedValue(sessionPayload as never);
   const applyRpgLoadoutAction = vi.spyOn(omnixApiClient, 'applyRpgLoadoutAction').mockResolvedValue({ ok: true } as never);
   const includeMerchantEntries = options.merchantEntries ?? true;
   const post = vi.spyOn(omnixApiClient, 'post').mockImplementation(async (_path: `/api/${string}`, body: unknown) => {
@@ -68,7 +68,7 @@ function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }
     }
     return { ok: true } as never;
   });
-  return { applyRpgLoadoutAction, continueRpgSession, post };
+  return { applyRpgLoadoutAction, getRpgSession, post };
 }
 
 function liveAbilitySession() {
@@ -236,7 +236,7 @@ describe('RpgLoadoutTabs', () => {
 
   it('wires skills, traits, effects, and coverage panels to commands or live refresh', async () => {
     const onSelectCommand = vi.fn();
-    const { continueRpgSession } = mockLiveItemApis(liveAbilitySession());
+    const { getRpgSession } = mockLiveItemApis(liveAbilitySession());
 
     renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand, selectedSessionId: 'session-live' });
 
@@ -259,10 +259,10 @@ describe('RpgLoadoutTabs', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Practice missing dimension' }));
     expect(onSelectCommand).toHaveBeenLastCalledWith('Practice or use an ability that covers the Resources dimension.');
 
-    const previousRefreshCalls = continueRpgSession.mock.calls.length;
+    const previousRefreshCalls = getRpgSession.mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: 'Refresh coverage' }));
     await waitFor(() => {
-      expect(continueRpgSession.mock.calls.length).toBeGreaterThan(previousRefreshCalls);
+      expect(getRpgSession.mock.calls.length).toBeGreaterThan(previousRefreshCalls);
     });
   });
 });

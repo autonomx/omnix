@@ -1,9 +1,12 @@
 """Contract tests for the shared gateway job API."""
 from __future__ import annotations
 
+import asyncio
 import sys
+import threading
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -59,6 +62,47 @@ def test_gateway_jobs_are_durable_across_clients(tmp_path: Path) -> None:
     assert payload["status"] == "queued"
     assert payload["resource_class"] == "gpu:image"
     assert payload["stages"][0]["id"] == "run"
+
+
+@pytest.mark.asyncio
+async def test_slow_rpg_compat_request_does_not_block_job_acknowledgement(monkeypatch, tmp_path: Path) -> None:
+    from app.gateway import main as gateway_main
+    from app.jobs import SQLiteJobStore
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_rpg_request(_request: dict) -> dict:
+        started.set()
+        release.wait(timeout=2)
+        return {"ok": True}
+
+    monkeypatch.setattr(gateway_main, "get_rpg_session_payload", slow_rpg_request)
+    app = gateway_main.create_gateway_app(job_store_factory=lambda: SQLiteJobStore(tmp_path / "jobs.sqlite"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        slow_request = asyncio.create_task(client.post("/api/rpg/session/get", json={"session_id": "rpg-test"}))
+        assert await asyncio.to_thread(started.wait, 1)
+        try:
+            response = await asyncio.wait_for(
+                client.post(
+                    "/api/jobs",
+                    json={
+                        "module": "diagnostics",
+                        "type": "diagnostics.echo",
+                        "resource_class": "cpu",
+                        "input_payload": {"message": "ack"},
+                    },
+                ),
+                timeout=0.5,
+            )
+        finally:
+            release.set()
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "queued"
+        assert (await slow_request).status_code == 200
 
 
 def test_scheduler_enforces_single_gpu_lock_and_network_bypass(tmp_path: Path) -> None:

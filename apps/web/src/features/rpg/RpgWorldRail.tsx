@@ -64,6 +64,7 @@ export function RpgWorldRail({
   worldStateRows,
 }: RpgWorldRailProps) {
   const railClassName = className ? `rpg-right-rail ${className}` : 'rpg-right-rail';
+  const isPreview = selectedSessionSummary.source === 'preview';
 
   return (
     <aside className={railClassName} aria-label="World, jobs, and reports">
@@ -71,8 +72,12 @@ export function RpgWorldRail({
         <div className="rpg-section-heading">
           <p className="eyebrow">World & location</p>
         </div>
-        <div className="rpg-map-preview rpg-map-preview-has-image" aria-label={`${selectedSessionSummary.location} travel map`}>
-          <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
+        <div className={isPreview ? 'rpg-map-preview rpg-map-preview-has-image' : 'rpg-map-preview'} aria-label={`${selectedSessionSummary.location} travel map`}>
+          {isPreview ? (
+            <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
+          ) : (
+            <span className="rpg-live-visual-label">Live location</span>
+          )}
           <span className="rpg-map-pin" aria-hidden="true" />
         </div>
         <strong>{selectedSessionSummary.location}</strong>
@@ -101,19 +106,23 @@ export function RpgWorldRail({
       <section className="rpg-card">
         <p className="eyebrow">NPC relationships</p>
         <div className="rpg-list-stack">
-          {npcRelationships.map((npc) => (
-            <article className="rpg-relationship-row" key={npc.name}>
-              <span className="rpg-avatar rpg-avatar-small" aria-hidden="true">
-                {npc.name[0]}
-              </span>
-              <strong>{npc.name}</strong>
-              <small>{npc.stance}</small>
-              <span className="rpg-party-health">
-                <span style={{ width: `${npc.score}%` }} />
-              </span>
-              <small>{npc.score}</small>
-            </article>
-          ))}
+          {npcRelationships.length ? (
+            npcRelationships.map((npc) => (
+              <article className="rpg-relationship-row" key={npc.name}>
+                <span className="rpg-avatar rpg-avatar-small" aria-hidden="true">
+                  {npc.name[0]}
+                </span>
+                <strong>{npc.name}</strong>
+                <small>{npc.stance}</small>
+                <span className="rpg-party-health">
+                  <span style={{ width: `${npc.score}%` }} />
+                </span>
+                <small>{npc.score}</small>
+              </article>
+            ))
+          ) : (
+            <p className="rpg-empty-state">No NPC relationships recorded.</p>
+          )}
         </div>
       </section>
 
@@ -124,18 +133,22 @@ export function RpgWorldRail({
             {isRefreshingJobs ? 'Refreshing…' : 'Refresh RPG jobs'}
           </button>
         </div>
-        <span>{rpgJobCount ? `${rpgJobCount} live` : 'Preview'}</span>
+        <span>{rpgJobCount ? `${rpgJobCount} live` : isPreview ? 'Preview' : 'No active RPG jobs'}</span>
         <div className="rpg-list-stack">
-          {jobCards.map((job) => (
-            <article className="rpg-job-row" key={job.id}>
-              <div>
-                <strong>{job.title}</strong>
-                <small>{job.source === 'live' ? job.status : `${job.status} preview`}</small>
-              </div>
-              <Progress value={job.progress} aria-label={`${job.title} progress`} />
-              <Text size="xs">{job.detail}</Text>
-            </article>
-          ))}
+          {jobCards.length ? (
+            jobCards.map((job) => (
+              <article className="rpg-job-row" key={job.id}>
+                <div>
+                  <strong>{job.title}</strong>
+                  <small>{job.source === 'live' ? job.status : `${job.status} preview`}</small>
+                </div>
+                <Progress value={job.progress} aria-label={`${job.title} progress`} />
+                <Text size="xs">{job.detail}</Text>
+              </article>
+            ))
+          ) : (
+            <p className="rpg-empty-state">No RPG jobs are currently queued or running.</p>
+          )}
         </div>
       </section>
 

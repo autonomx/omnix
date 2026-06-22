@@ -52,6 +52,7 @@ describe('RpgActionComposer', () => {
         onQuickAction={onQuickAction}
         onSubmit={onSubmit}
         quickActions={quickActions}
+        selectedSessionId=""
         sessionRegistration={registration('sessionId')}
         sessionSummaries={[previewSessionSummary]}
       />
@@ -76,6 +77,7 @@ describe('RpgActionComposer', () => {
         onQuickAction={vi.fn()}
         onSubmit={vi.fn()}
         quickActions={quickActions}
+        selectedSessionId=""
         sessionRegistration={registration('sessionId')}
         sessionSummaries={[]}
       />
@@ -102,6 +104,7 @@ describe('RpgActionComposer', () => {
         onQuickAction={vi.fn()}
         onSubmit={vi.fn()}
         quickActions={quickActions}
+        selectedSessionId=""
         sessionRegistration={registration('sessionId')}
         sessionSummaries={[]}
       />

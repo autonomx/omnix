@@ -15,7 +15,7 @@ function renderWithTheme(element: ReactElement) {
 }
 
 describe('RpgWorkspaceHeader', () => {
-  it('collapses module context by default while keeping runtime anchors visible', () => {
+  it('hides by default and restores collapsed runtime context on request', () => {
     renderWithTheme(
       <RpgWorkspaceHeader
         module={{
@@ -28,6 +28,11 @@ describe('RpgWorkspaceHeader', () => {
         submitStatus="ready"
       />
     );
+
+    expect(screen.getByRole('button', { name: 'Show RPG headers' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'RPG mode' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show RPG headers' }));
 
     expect(screen.getByRole('heading', { name: 'RPG mode' })).toBeInTheDocument();
     expect(screen.getByText('Run deterministic RPG campaigns.')).not.toBeVisible();

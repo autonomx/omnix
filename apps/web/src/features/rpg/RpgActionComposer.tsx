@@ -20,6 +20,7 @@ interface RpgActionComposerProps {
   onQuickAction: (command: string) => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
   quickActions: RpgQuickActionPreview[];
+  selectedSessionId: string;
   sessionRegistration: UseFormRegisterReturn<'sessionId'>;
   sessionSummaries: RpgSessionSummaryPreview[];
 }
@@ -148,6 +149,7 @@ export function RpgActionComposer({
   onQuickAction,
   onSubmit,
   quickActions,
+  selectedSessionId,
   sessionRegistration,
   sessionSummaries,
 }: RpgActionComposerProps) {
@@ -155,7 +157,6 @@ export function RpgActionComposer({
   const [launchStatus, setLaunchStatus] = useState<string>();
   const [launchError, setLaunchError] = useState<string>();
   const [isLaunching, setIsLaunching] = useState(false);
-  const [selectedSessionId, setSelectedSessionId] = useState('');
   const [launcherView, setLauncherView] = useState<LauncherView>('closed');
   const [campaignTemplate, setCampaignTemplate] = useState('classic_fantasy');
   const [genre, setGenre] = useState<RpgGenre>('classic_fantasy');
@@ -199,7 +200,6 @@ export function RpgActionComposer({
   };
 
   const applySelectedSessionId = (sessionId: string) => {
-    setSelectedSessionId(sessionId);
     void sessionRegistration.onChange({
       target: { name: sessionRegistration.name, value: sessionId },
       type: 'change',
@@ -207,7 +207,6 @@ export function RpgActionComposer({
   };
 
   const handleSessionSelectChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    setSelectedSessionId(event.currentTarget.value);
     void sessionRegistration.onChange(event);
   };
 
@@ -685,7 +684,7 @@ export function RpgActionComposer({
       </form>
       <div className="rpg-quick-actions" aria-label="Quick RPG actions">
         {quickActions.map((action) => (
-          <button key={action.label} type="button" onClick={() => onQuickAction(action.command)}>
+          <button key={`${action.label}:${action.command}`} type="button" onClick={() => onQuickAction(action.command)}>
             <span aria-hidden="true">{action.icon}</span>
             {action.label}
           </button>

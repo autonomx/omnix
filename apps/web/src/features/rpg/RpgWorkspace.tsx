@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { omnixApiClient, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
@@ -41,8 +41,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [isCampaignSetupVisible, setIsCampaignSetupVisible] = useState(false);
   const [isPlayerRailCollapsed, setIsPlayerRailCollapsed] = useState(false);
   const [isWorldRailCollapsed, setIsWorldRailCollapsed] = useState(false);
-  const [isPlayerRailFullSize, setIsPlayerRailFullSize] = useState(false);
-  const [isWorldRailFullSize, setIsWorldRailFullSize] = useState(false);
+  const [isPlayerRailFullSize, setIsPlayerRailFullSize] = useState(true);
+  const [isWorldRailFullSize, setIsWorldRailFullSize] = useState(true);
   const inventoryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'replay-inventory'],
     queryFn: () => omnixApiClient.getReplayPersistenceInventory(),
@@ -71,6 +71,24 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     defaultValues: { sessionId: '', command: '' },
   });
   const selectedSessionId = watch('sessionId');
+  const summaryState = createRpgWorkspaceState({
+    inventory: inventoryQuery.data,
+    jobs: jobsQuery.data,
+    assets: assetsQuery.data,
+    reports: reportsQuery.data,
+    selectedSessionId,
+  });
+  const selectedSummarySessionId = summaryState.selectedSessionSummary.source === 'live' ? summaryState.selectedSessionSummary.id : null;
+  useEffect(() => {
+    if (!selectedSessionId && selectedSummarySessionId) {
+      setValue('sessionId', selectedSummarySessionId, { shouldValidate: true });
+    }
+  }, [selectedSessionId, selectedSummarySessionId, setValue]);
+  const selectedSessionQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'session', selectedSummarySessionId],
+    queryFn: () => omnixApiClient.getRpgSession(selectedSummarySessionId ?? ''),
+    enabled: Boolean(selectedSummarySessionId),
+  });
   const {
     heroSummary,
     heroStats,
@@ -78,6 +96,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     partyMembers,
     activeQuests,
     quickActions,
+    storyMessages,
     recentEvents,
     journalEntries,
     journalDetail,
@@ -99,6 +118,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     assets: assetsQuery.data,
     reports: reportsQuery.data,
     selectedSessionId,
+    selectedSession: selectedSessionQuery.data?.session,
   });
   const combatSurface = createRpgCombatSurfaceState({ encounter, heroSummary, partyMembers });
   const selectedLiveSessionId = selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : null;
@@ -210,14 +230,15 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     ]);
   };
   const createJobMutation = useMutation({
-    mutationFn: (values: RpgFormValues) =>
-      omnixApiClient.createJob(
+    mutationFn: (values: RpgFormValues) => {
+      const sessionId = values.sessionId || selectedLiveSessionId;
+      return omnixApiClient.createJob(
         {
           module: 'rpg',
           type: 'rpg.turn',
           resource_class: 'gpu:llm',
           priority: 0,
-          input_ref: values.sessionId ? { session_id: values.sessionId } : null,
+          input_ref: sessionId ? { session_id: sessionId } : null,
           input_payload: {
             command: values.command,
             determinism_policy: 'replay_preserving',
@@ -234,10 +255,11 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           timeoutMessage:
             'Gateway did not acknowledge the RPG turn queue request within 10s. The turn may still be running; refresh RPG jobs or restart the gateway if this repeats.',
         },
-      ),
-    onSuccess: async (_job, values) => {
-      reset({ sessionId: values.sessionId, command: '' });
-      await invalidateRpgWorkspaceQueries();
+      );
+    },
+    onSuccess: (_job, values) => {
+      reset({ sessionId: values.sessionId || selectedLiveSessionId || '', command: '' });
+      void invalidateRpgWorkspaceQueries();
     },
   });
   const createCheckpointMutation = useMutation({
@@ -271,11 +293,14 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   });
   const createCampaignMutation = useMutation({
     mutationFn: (request: RpgNewGameRequest) => omnixApiClient.createRpgNewGame(request),
-    onSuccess: async (result) => {
+    onSuccess: (result) => {
       if (result.ok && result.session_id) {
+        if (result.session) {
+          queryClient.setQueryData(['feature', 'rpg', 'session', result.session_id], result);
+        }
         setValue('sessionId', result.session_id, { shouldDirty: true, shouldValidate: true });
       }
-      await invalidateRpgWorkspaceQueries();
+      void invalidateRpgWorkspaceQueries();
     },
   });
   const autoplayMutation = useMutation({
@@ -409,7 +434,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         )}
 
         <main className="rpg-center-stage" aria-label="Story scene and actions">
-          <RpgStoryScene heroSummary={heroSummary} recentEvents={recentEvents} selectedSessionSummary={selectedSessionSummary}>
+          <RpgStoryScene
+            heroSummary={heroSummary}
+            recentEvents={recentEvents}
+            selectedSessionSummary={selectedSessionSummary}
+            storyMessages={storyMessages}
+          >
             <RpgActionComposer
               commandRegistration={register('command', { required: true })}
               hasCommandError={Boolean(errors.command)}
@@ -417,6 +447,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               onQuickAction={selectCommand}
               onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}
               quickActions={quickActions}
+              selectedSessionId={selectedSessionId}
               sessionRegistration={register('sessionId')}
               sessionSummaries={sessionSummaries}
             />

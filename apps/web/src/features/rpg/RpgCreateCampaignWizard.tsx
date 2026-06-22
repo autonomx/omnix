@@ -56,6 +56,7 @@ type LaunchResponseWithProgress = RpgLaunchResponse & {
 };
 
 const FALLBACK_PROGRESS_STEPS = [8, 18, 31, 44, 56, 68, 78, 88, 96, 100];
+const PENDING_PROGRESS_STEPS = FALLBACK_PROGRESS_STEPS.slice(1, -1);
 const MOTIVATION_OPTIONS = ['survival', 'knowledge', 'freedom', 'family', 'justice', 'renown'];
 const PROFILE_CHALLENGE_OPTIONS = ['cautious', 'restless', 'proud', 'guarded', 'naive', 'impulsive'];
 
@@ -234,14 +235,14 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
     setIsCreated(false);
     setCreationError(null);
     setLaunchResponse(null);
-    setProgress(0);
+    setProgress(FALLBACK_PROGRESS_STEPS[0]);
 
     if (!onCreateCampaign) {
-      scheduleProgress(FALLBACK_PROGRESS_STEPS, true);
+      scheduleProgress(FALLBACK_PROGRESS_STEPS.slice(1), true);
       return;
     }
 
-    clearProgressTimers();
+    scheduleProgress(PENDING_PROGRESS_STEPS);
     try {
       const result = await onCreateCampaign(campaignRequest);
       const progressAwareResult = result as LaunchResponseWithProgress;
@@ -261,7 +262,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
     } catch (error) {
       clearProgressTimers();
       setCreationError(error instanceof Error ? error.message : 'Campaign creation failed before a session was returned.');
-      setProgress((current) => Math.max(current, 68));
+      setProgress(68);
       setIsCreated(false);
     }
   };
@@ -551,7 +552,8 @@ function normalizeStageIndex(value: unknown, progressPercent: number): number {
   if (typeof value === 'number' && Number.isInteger(value)) {
     return Math.max(0, Math.min(creationStages.length - 1, value));
   }
-  return Math.min(creationStages.length - 1, Math.floor((progressPercent / 100) * creationStages.length));
+  const nextStageIndex = FALLBACK_PROGRESS_STEPS.findIndex((stageProgress) => stageProgress > progressPercent);
+  return nextStageIndex < 0 ? creationStages.length - 1 : Math.min(creationStages.length - 1, nextStageIndex);
 }
 
 interface OptionSelectProps {

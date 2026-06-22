@@ -30,6 +30,7 @@ describe('RpgPlayerRail', () => {
     expect(screen.getByText('Alyndra')).toBeInTheDocument();
     expect(screen.getByLabelText('HP 86 / 110')).toBeInTheDocument();
     expect(screen.getByLabelText('XP 7,450 / 12,000')).toBeInTheDocument();
+    expect(screen.getByLabelText('XP 7,450 / 12,000').closest('.rpg-stat-row')).toHaveTextContent('XP7,450 / 12,000');
     expect(screen.getByText('Longbow of the Boreal Wind')).toBeInTheDocument();
     expect(screen.getByText('Thorin Ironfist')).toBeInTheDocument();
     expect(screen.getByText('3 / 4')).toBeInTheDocument();

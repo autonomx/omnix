@@ -314,6 +314,10 @@ export class OmnixApiClient {
     }
   }
 
+  async getRpgSession(sessionId: string): Promise<RpgLaunchResponse> {
+    return this.get<RpgLaunchResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}`);
+  }
+
   async createRpgNewGame(request: RpgNewGameRequest = {}): Promise<RpgLaunchResponse> {
     const genesisRequest = withRpgGenesisContract(request);
     try {

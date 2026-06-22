@@ -90,7 +90,9 @@ describe('RpgCreateCampaignWizard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
 
     expect(screen.getByRole('dialog', { name: 'Creating Campaign' })).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '0');
+    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '8');
+    expect(screen.getByText('Validated setup').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-done');
+    expect(screen.getByText('Resolved seed').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-active');
     expect(screen.getByRole('button', { name: 'Enter World' })).toBeDisabled();
     expect(onCreateCampaign).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -109,10 +111,21 @@ describe('RpgCreateCampaignWizard', () => {
     );
 
     act(() => {
-      vi.advanceTimersByTime(1200);
+      vi.advanceTimersByTime(260);
     });
+    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '18');
+    expect(screen.getByText('Resolved seed').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-done');
+    expect(screen.getByText('Created player profile').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-active');
 
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '0');
+    act(() => {
+      vi.advanceTimersByTime(360);
+    });
+    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '31');
+
+    act(() => {
+      vi.advanceTimersByTime(360);
+    });
+    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '44');
 
     await act(async () => {
       resolveLaunch({
