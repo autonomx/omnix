@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgItemPanel } from './RpgItemPanel';
 import type { RpgItemObjectivePreview, RpgItemUiAction, RpgMerchantEntryPreview } from './rpgItemUiState';
@@ -32,7 +33,7 @@ const merchantEntry: RpgMerchantEntryPreview = {
   payload: { action: 'buy', item_name: 'Torch' },
 };
 
-function renderItemPanel(element: React.ReactElement) {
+function renderItemPanel(element: ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
