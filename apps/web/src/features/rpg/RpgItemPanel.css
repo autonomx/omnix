@@ -26,6 +26,91 @@
   font-size: 0.78rem;
 }
 
+.rpg-item-detail-card {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 1rem;
+  padding: 0.85rem;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(88, 28, 135, 0.18));
+}
+
+.rpg-item-detail-card header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.rpg-item-detail-card h4,
+.rpg-item-detail-card p,
+.rpg-item-detail-card dl {
+  margin: 0;
+}
+
+.rpg-item-detail-card header small,
+.rpg-item-detail-card dd,
+.rpg-item-detail-card p {
+  color: var(--omnix-muted-text, #94a3b8);
+}
+
+.rpg-item-detail-icon {
+  display: inline-grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 0.8rem;
+  background: rgba(2, 6, 23, 0.5);
+  font-size: 1.15rem;
+}
+
+.rpg-item-detail-card dl {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.rpg-item-detail-card dl > div {
+  display: grid;
+  grid-template-columns: minmax(3.2rem, 0.25fr) 1fr;
+  gap: 0.65rem;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.6rem;
+  background: rgba(2, 6, 23, 0.2);
+}
+
+.rpg-item-detail-card dt {
+  font-weight: 700;
+}
+
+.rpg-item-detail-card dd {
+  margin: 0;
+}
+
+.rpg-item-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rpg-item-detail-tags span {
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+  color: var(--omnix-muted-text, #94a3b8);
+  background: rgba(88, 28, 135, 0.18);
+  font-size: 0.72rem;
+}
+
+.rpg-item-detail-llm {
+  border-color: rgba(125, 211, 252, 0.34);
+}
+
+.rpg-item-detail-unavailable {
+  border-color: rgba(251, 191, 36, 0.32);
+}
+
 .rpg-item-status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));

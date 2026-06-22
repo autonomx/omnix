@@ -17,6 +17,25 @@ export type RpgItemUiActionKind =
 
 export type RpgItemUiActionMode = 'loadout' | 'item_resolve' | 'merchant' | 'status';
 
+export interface RpgSelectedItemPreview {
+  label: string;
+  icon: string;
+  count: string | number;
+  sessionId?: string | null;
+}
+
+export interface RpgItemDetailPreview {
+  itemName: string;
+  icon: string;
+  countLabel: string;
+  summary: string;
+  usage: string;
+  trade: string;
+  risk: string;
+  tags: string[];
+  source: 'llm' | 'preview' | 'pending' | 'unavailable';
+}
+
 export interface RpgItemUiAction {
   id: string;
   kind: RpgItemUiActionKind;
@@ -26,6 +45,7 @@ export interface RpgItemUiAction {
   command: string;
   payload: Record<string, unknown>;
   disabled?: boolean;
+  item?: RpgSelectedItemPreview;
 }
 
 export interface RpgItemObjectivePreview {
@@ -74,6 +94,12 @@ export function buildSelectedItemActions({ item, selectedSessionId }: BuildSelec
   }
 
   const itemName = item.label;
+  const selectedItem: RpgSelectedItemPreview = {
+    label: itemName,
+    icon: item.icon,
+    count: item.count || DEFAULT_ITEM_COUNT,
+    sessionId: selectedSessionId ?? null,
+  };
   const disabled = !selectedSessionId;
   const baseDetail = disabled ? 'Select a live session before applying item actions.' : `${item.count || DEFAULT_ITEM_COUNT} carried.`;
   const loadout = (kind: RpgItemUiActionKind, label: string, detail: string, action: string): RpgItemUiAction => ({
@@ -85,6 +111,7 @@ export function buildSelectedItemActions({ item, selectedSessionId }: BuildSelec
     command: `${label} ${itemName}`,
     payload: { action, item_name: itemName },
     disabled,
+    item: selectedItem,
   });
   const resolve = (kind: RpgItemUiActionKind, label: string, detail: string, command: string): RpgItemUiAction => ({
     id: `${kind}:${itemName}`,
@@ -95,16 +122,65 @@ export function buildSelectedItemActions({ item, selectedSessionId }: BuildSelec
     command,
     payload: kind === 'sell' ? { command, item_name: itemName } : { command },
     disabled,
+    item: selectedItem,
   });
 
   return [
-    loadout('inspect', 'Inspect', 'Review deterministic item details.', 'inspect'),
+    loadout('inspect', 'Inspect', 'Review LLM-generated item details and deterministic item state.', 'inspect'),
     loadout('use', 'Use', 'Apply item effects through deterministic item handling.', 'use'),
     loadout('equip', 'Equip', 'Equip the item if it belongs in a gear slot.', 'equip'),
     loadout('drop', 'Drop', 'Remove one carried instance when safe.', 'drop'),
     loadout('salvage', 'Salvage', 'Recover deterministic materials from the item.', 'salvage'),
     resolve('sell', 'Sell', 'Offer the item to the active merchant service.', `sell ${itemName}`),
   ];
+}
+
+export function buildItemDetailPreview(payload: Record<string, unknown> | null | undefined, item?: RpgSelectedItemPreview): RpgItemDetailPreview | undefined {
+  if (!item) {
+    return undefined;
+  }
+
+  const itemName = item.label;
+  const countLabel = `${item.count || DEFAULT_ITEM_COUNT} carried`;
+  const detailPayload = firstRecord(
+    payload?.item_detail,
+    payload?.item_details,
+    payload?.detail,
+    payload?.details,
+    asRecord(payload?.llm)?.item_detail,
+    asRecord(payload?.llm)?.details,
+  );
+  const source = detailPayload ? 'llm' : item.sessionId ? 'pending' : 'preview';
+  const summary =
+    firstString(
+      detailPayload?.summary,
+      detailPayload?.description,
+      detailPayload?.text,
+      detailPayload?.narration,
+      payload?.summary,
+      payload?.description,
+    ) ??
+    (item.sessionId
+      ? 'Generating LLM item details for the selected inventory item.'
+      : 'Preview item details. Select or create a live session to generate LLM item details.');
+  const usage =
+    firstString(detailPayload?.usage, detailPayload?.use, detailPayload?.effect, detailPayload?.mechanical_effect) ??
+    'Use, equip, drop, salvage, or sell through the action icons below.';
+  const trade = firstString(detailPayload?.trade, detailPayload?.value, detailPayload?.economy) ?? 'Trade value depends on the active merchant context.';
+  const risk = firstString(detailPayload?.risk, detailPayload?.warning, detailPayload?.constraint) ?? 'No special handling risk is indexed yet.';
+  const tags = firstArray(detailPayload?.tags, detailPayload?.traits, payload?.tags).map(String).slice(0, 5);
+
+  return {
+    itemName,
+    icon: item.icon,
+    countLabel,
+    summary,
+    usage,
+    trade,
+    risk,
+    tags,
+    source,
+  };
 }
 
 export function buildItemObjectivePreviews(payload: Record<string, unknown> | null | undefined): RpgItemObjectivePreview[] {
@@ -198,6 +274,35 @@ function readRecord(value: unknown): Record<string, unknown> | undefined {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const text = readString(value);
+    if (text) {
+      return text;
+    }
+  }
+  return undefined;
+}
+
+function firstRecord(...values: unknown[]): Record<string, unknown> | undefined {
+  for (const value of values) {
+    const record = readRecord(value);
+    if (record) {
+      return record;
+    }
+  }
+  return undefined;
+}
+
+function firstArray(...values: unknown[]): unknown[] {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return [];
 }
 
 function readNumber(value: unknown): number | undefined {
