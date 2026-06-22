@@ -46,6 +46,13 @@ export interface RpgMerchantCommandOptions {
   source?: string;
 }
 
+export interface RpgItemDetailOptions {
+  itemName: string;
+  itemCount?: string | number;
+  source?: string;
+  context?: Record<string, unknown>;
+}
+
 export function applyRpgItemResolve(
   sessionId: string,
   options: RpgItemResolveOptions,
@@ -81,6 +88,24 @@ export function applyRpgStructuredItemAction(
   client: RpgItemApiClient = omnixApiClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet({ action: 'item_action', session_id: sessionId, item_action: itemAction }, client);
+}
+
+export function fetchRpgItemDetails(
+  sessionId: string,
+  options: RpgItemDetailOptions,
+  client: RpgItemApiClient = omnixApiClient,
+): Promise<RpgItemCompatResponse> {
+  return postRpgSessionGet(
+    {
+      action: 'item_detail',
+      session_id: sessionId,
+      item_name: options.itemName,
+      item_count: options.itemCount,
+      source: options.source ?? 'rpg-item-panel',
+      context: options.context,
+    },
+    client,
+  );
 }
 
 export function fetchRpgItemObjectives(
