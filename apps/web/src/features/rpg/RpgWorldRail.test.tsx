@@ -86,4 +86,40 @@ describe('RpgWorldRail', () => {
     expect(onToggleAutoplay).toHaveBeenCalledTimes(1);
     expect(onCreateCheckpoint).toHaveBeenCalledTimes(1);
   });
+
+  it('caps the RPG jobs rail to three visible jobs', () => {
+    renderWithTheme(
+      <RpgWorldRail
+        autoplayRunning={false}
+        autoplayStatusLabel="Off"
+        checkpointSummary={{ label: 'Latest checkpoint', detail: 'checkpoint-001.json', source: 'live' }}
+        encounter={previewEncounter}
+        isAutoplayPending={false}
+        isCreatingCheckpoint={false}
+        isRefreshingJobs={false}
+        jobCards={[
+          { id: 'job-1', title: 'rpg.turn', status: 'completed', progress: 100, detail: 'First job', source: 'live' },
+          { id: 'job-2', title: 'rpg.turn', status: 'completed', progress: 100, detail: 'Second job', source: 'live' },
+          { id: 'job-3', title: 'rpg.turn', status: 'completed', progress: 100, detail: 'Third job', source: 'live' },
+          { id: 'job-4', title: 'rpg.turn', status: 'completed', progress: 100, detail: 'Fourth job', source: 'live' },
+        ]}
+        npcRelationships={npcRelationships}
+        onCreateCheckpoint={vi.fn()}
+        onRefreshJobs={vi.fn()}
+        onToggleAutoplay={vi.fn()}
+        reportsHref="/api/reports"
+        rpgAssets={[]}
+        rpgJobCount={4}
+        rpgReportCount={1}
+        selectedSessionSummary={{ ...previewSessionSummary, id: 'live-session', source: 'live' }}
+        worldStateRows={previewWorldStateRows}
+      />
+    );
+
+    expect(screen.getByText('3 live')).toBeInTheDocument();
+    expect(screen.getByText('First job')).toBeInTheDocument();
+    expect(screen.getByText('Second job')).toBeInTheDocument();
+    expect(screen.getByText('Third job')).toBeInTheDocument();
+    expect(screen.queryByText('Fourth job')).not.toBeInTheDocument();
+  });
 });
