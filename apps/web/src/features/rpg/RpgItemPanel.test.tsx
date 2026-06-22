@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgItemPanel } from './RpgItemPanel';
@@ -11,6 +12,7 @@ const action: RpgItemUiAction = {
   mode: 'loadout',
   command: 'Use Field Kit',
   payload: { action: 'use', item_name: 'Field Kit' },
+  item: { label: 'Field Kit', icon: '🧰', count: 1, sessionId: null },
 };
 
 const objective: RpgItemObjectivePreview = {
@@ -30,18 +32,36 @@ const merchantEntry: RpgMerchantEntryPreview = {
   payload: { action: 'buy', item_name: 'Torch' },
 };
 
+function renderItemPanel(element: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  });
+  return render(<QueryClientProvider client={queryClient}>{element}</QueryClientProvider>);
+}
+
 describe('RpgItemPanel', () => {
   it('renders an empty state when no selected item actions are available', () => {
-    render(<RpgItemPanel actions={[]} />);
+    renderItemPanel(<RpgItemPanel actions={[]} />);
 
     expect(screen.getByText('Inventory, crafting, and trade')).toBeInTheDocument();
     expect(screen.getByText('No item selected')).toBeInTheDocument();
     expect(screen.getByText('Select an inventory item to reveal deterministic actions.')).toBeInTheDocument();
   });
 
+  it('renders preview details for the selected item', () => {
+    renderItemPanel(<RpgItemPanel actions={[action]} />);
+
+    const detailCard = screen.getByLabelText('Selected item details: Field Kit');
+    expect(detailCard).toHaveTextContent('Preview item details');
+    expect(detailCard).toHaveTextContent('Field Kit');
+    expect(detailCard).toHaveTextContent('1 carried');
+  });
+
   it('applies selected item actions through callbacks', () => {
     const onApplyAction = vi.fn();
-    render(<RpgItemPanel actions={[action]} onApplyAction={onApplyAction} />);
+    renderItemPanel(<RpgItemPanel actions={[action]} onApplyAction={onApplyAction} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Use' }));
 
@@ -50,7 +70,7 @@ describe('RpgItemPanel', () => {
 
   it('falls back to command selection when no action callback is present', () => {
     const onSelectCommand = vi.fn();
-    render(<RpgItemPanel actions={[action]} onSelectCommand={onSelectCommand} />);
+    renderItemPanel(<RpgItemPanel actions={[action]} onSelectCommand={onSelectCommand} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Use' }));
 
@@ -60,7 +80,7 @@ describe('RpgItemPanel', () => {
   it('renders status cards, objectives, and merchant entries', () => {
     const onApplyObjective = vi.fn();
     const onApplyMerchantEntry = vi.fn();
-    render(
+    renderItemPanel(
       <RpgItemPanel
         actions={[action]}
         merchantEntries={[merchantEntry]}
@@ -83,7 +103,7 @@ describe('RpgItemPanel', () => {
   });
 
   it('disables actionable rows while pending', () => {
-    render(<RpgItemPanel actions={[action]} isPending />);
+    renderItemPanel(<RpgItemPanel actions={[action]} isPending />);
 
     expect(screen.getByRole('button', { name: 'Use' })).toBeDisabled();
   });
