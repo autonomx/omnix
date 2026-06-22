@@ -322,7 +322,8 @@ describe('RpgWorkspace', () => {
     await waitFor(() => {
       expect(document.documentElement).toHaveClass('rpg-play-focus-mode');
     });
-    expect(screen.getByRole('button', { name: 'New Campaign' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New Campaign' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Campaign Menu' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show RPG headers' })).toBeInTheDocument();

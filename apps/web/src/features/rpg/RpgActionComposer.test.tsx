@@ -1,10 +1,9 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { FormEvent, ReactElement } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { omnixApiClient } from '../../api/client';
 import { omnixTheme } from '../../design/theme';
 import { RpgActionComposer } from './RpgActionComposer';
 import { previewSessionSummary, quickActions } from './rpgUiState';
@@ -46,12 +45,15 @@ describe('RpgActionComposer', () => {
 
     renderWithTheme(
       <RpgActionComposer
+        canSaveGame={false}
         commandRegistration={registration('command')}
         hasCommandError={false}
         isPending={false}
         onQuickAction={onQuickAction}
+        onSaveGame={async () => 'checkpoint:test'}
         onSubmit={onSubmit}
         quickActions={quickActions}
+        renderNewCampaign={() => null}
         selectedSessionId=""
         sessionRegistration={registration('sessionId')}
         sessionSummaries={[previewSessionSummary]}
@@ -71,12 +73,15 @@ describe('RpgActionComposer', () => {
   it('renders pending and invalid states for queued turn submission', () => {
     renderWithTheme(
       <RpgActionComposer
+        canSaveGame={false}
         commandRegistration={registration('command')}
         hasCommandError
         isPending
         onQuickAction={vi.fn()}
+        onSaveGame={async () => 'checkpoint:test'}
         onSubmit={vi.fn()}
         quickActions={quickActions}
+        renderNewCampaign={() => null}
         selectedSessionId=""
         sessionRegistration={registration('sessionId')}
         sessionSummaries={[]}
@@ -87,23 +92,18 @@ describe('RpgActionComposer', () => {
     expect(screen.getByRole('textbox', { name: 'Command' })).toHaveAttribute('aria-invalid', 'true');
   });
 
-  it('sends selected capability identity when starting a new game', async () => {
-    const createNewGame = vi.spyOn(omnixApiClient, 'createRpgNewGame').mockResolvedValue({
-      ok: true,
-      session_id: 'rpg_new_identity',
-      status: 'ready',
-      session: {},
-      game: { session_id: 'rpg_new_identity' },
-    });
-
+  it('routes New Campaign from the launcher into the full campaign wizard', () => {
     renderWithTheme(
       <RpgActionComposer
+        canSaveGame={false}
         commandRegistration={registration('command')}
         hasCommandError={false}
         isPending={false}
         onQuickAction={vi.fn()}
+        onSaveGame={async () => 'checkpoint:test'}
         onSubmit={vi.fn()}
         quickActions={quickActions}
+        renderNewCampaign={() => <div>Full campaign options</div>}
         selectedSessionId=""
         sessionRegistration={registration('sessionId')}
         sessionSummaries={[]}
@@ -111,31 +111,36 @@ describe('RpgActionComposer', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Campaign Menu' }));
-    fireEvent.click(screen.getByRole('button', { name: /^New Game/ }));
-    fireEvent.change(screen.getByRole('combobox', { name: 'Genre' }), { target: { value: 'cyberpunk' } });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Tone' }), { target: { value: 'street-level neon noir' } });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Background' }), { target: { value: 'corporate defector' } });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Primary capability' }), { target: { value: 'technical' } });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Power source' }), { target: { value: 'technology' } });
+    expect(screen.queryByRole('button', { name: /^New Game/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^New Campaign/ }));
 
-    const secondaryCapabilities = screen.getByRole('group', { name: 'Secondary capabilities' });
-    fireEvent.click(within(secondaryCapabilities).getByLabelText('Survival'));
-    fireEvent.click(within(secondaryCapabilities).getByLabelText('Combat'));
-    fireEvent.click(within(secondaryCapabilities).getByLabelText('Knowledge'));
-    fireEvent.click(within(secondaryCapabilities).getByLabelText('Recon'));
-    fireEvent.click(screen.getByRole('button', { name: 'Start New Game' }));
+    expect(screen.getByRole('dialog', { name: 'New Campaign' })).toBeInTheDocument();
+    expect(screen.getByText('Full campaign options')).toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(createNewGame).toHaveBeenCalledTimes(1));
-    expect(createNewGame).toHaveBeenCalledWith(
-      expect.objectContaining({
-        genre: 'cyberpunk',
-        tone: 'street-level neon noir',
-        background: 'corporate defector',
-        player: expect.objectContaining({ background: 'corporate defector' }),
-        primary_capability: 'technical',
-        secondary_capabilities: ['knowledge', 'recon'],
-        power_source: 'technology',
-      })
+  it('saves the selected campaign from the Campaign Menu', async () => {
+    const onSaveGame = vi.fn().mockResolvedValue('checkpoint:manual-save');
+    renderWithTheme(
+      <RpgActionComposer
+        canSaveGame
+        commandRegistration={registration('command')}
+        hasCommandError={false}
+        isPending={false}
+        onQuickAction={vi.fn()}
+        onSaveGame={onSaveGame}
+        onSubmit={vi.fn()}
+        quickActions={quickActions}
+        renderNewCampaign={() => null}
+        selectedSessionId="session-live"
+        sessionRegistration={registration('sessionId')}
+        sessionSummaries={[]}
+      />
     );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Campaign Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Save Game/ }));
+
+    await vi.waitFor(() => expect(onSaveGame).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Game saved: checkpoint:manual-save')).toBeInTheDocument();
   });
 });

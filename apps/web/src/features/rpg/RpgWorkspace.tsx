@@ -38,7 +38,6 @@ function formatQueryError(error: unknown) {
 
 export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
-  const [isCampaignSetupVisible, setIsCampaignSetupVisible] = useState(false);
   const [isPlayerRailCollapsed, setIsPlayerRailCollapsed] = useState(false);
   const [isWorldRailCollapsed, setIsWorldRailCollapsed] = useState(false);
   const [isPlayerRailFullSize, setIsPlayerRailFullSize] = useState(true);
@@ -281,8 +280,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           checkpoint_label: selectedSessionSummary.checkpointLabel,
         },
       }),
-    onSuccess: async () => {
-      await invalidateRpgWorkspaceQueries();
+    onSuccess: () => {
+      void invalidateRpgWorkspaceQueries();
     },
   });
   const loadoutActionMutation = useMutation({
@@ -361,27 +360,6 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     <WorkspacePanel className="rpg-workstation">
       <RpgWorkspaceHeader module={module} selectedSessionSummary={selectedSessionSummary} submitStatus={submitStatus} />
 
-      {isCampaignSetupVisible ? (
-        <RpgCreateCampaignWizard
-          onCreateCampaign={(request) => createCampaignMutation.mutateAsync(request)}
-          onSelectCommand={(command) => {
-            selectCommand(command);
-            setIsCampaignSetupVisible(false);
-          }}
-        />
-      ) : (
-        <section className="rpg-create-campaign-card rpg-create-campaign-card-collapsed" aria-label="Create Campaign">
-          <div>
-            <p className="eyebrow">Campaign setup</p>
-            <h3>Create Campaign</h3>
-            <p>Open the deeper RPG setup flow with point-buy stats, starter gear, story hooks, world rules, and creation progress.</p>
-          </div>
-          <button className="rpg-primary-button" type="button" onClick={() => setIsCampaignSetupVisible(true)}>
-            New Campaign
-          </button>
-        </section>
-      )}
-
       <div className="rpg-layout-controls" aria-label="Workspace layout controls">
         <button
           className="rpg-secondary-button"
@@ -441,12 +419,26 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             storyMessages={storyMessages}
           >
             <RpgActionComposer
+              canSaveGame={Boolean(selectedLiveSessionId)}
               commandRegistration={register('command', { required: true })}
               hasCommandError={Boolean(errors.command)}
               isPending={createJobMutation.isPending}
               onQuickAction={selectCommand}
+              onSaveGame={async () => {
+                const checkpoint = await createCheckpointMutation.mutateAsync();
+                return checkpoint.checkpoint_id;
+              }}
               onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}
               quickActions={quickActions}
+              renderNewCampaign={(closeLauncher) => (
+                <RpgCreateCampaignWizard
+                  onCreateCampaign={(request) => createCampaignMutation.mutateAsync(request)}
+                  onSelectCommand={(command) => {
+                    selectCommand(command);
+                    closeLauncher();
+                  }}
+                />
+              )}
               selectedSessionId={selectedSessionId}
               sessionRegistration={register('sessionId')}
               sessionSummaries={sessionSummaries}

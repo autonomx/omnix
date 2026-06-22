@@ -1,6 +1,6 @@
 import { Button } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
-import type { ChangeEvent, FormEventHandler } from 'react';
+import type { ChangeEvent, FormEventHandler, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import {
@@ -15,17 +15,20 @@ import './RpgSessionLauncher.css';
 
 interface RpgActionComposerProps {
   commandRegistration: UseFormRegisterReturn<'command'>;
+  canSaveGame: boolean;
   hasCommandError: boolean;
   isPending: boolean;
   onQuickAction: (command: string) => void;
+  onSaveGame: () => Promise<string>;
   onSubmit: FormEventHandler<HTMLFormElement>;
   quickActions: RpgQuickActionPreview[];
+  renderNewCampaign: (closeLauncher: () => void) => ReactNode;
   selectedSessionId: string;
   sessionRegistration: UseFormRegisterReturn<'sessionId'>;
   sessionSummaries: RpgSessionSummaryPreview[];
 }
 
-type LauncherView = 'closed' | 'home' | 'new_game' | 'load_game' | 'settings';
+type LauncherView = 'closed' | 'home' | 'campaign_wizard' | 'new_game' | 'load_game' | 'settings';
 type RpgPlayerBuild = 'balanced_adventurer' | 'warrior' | 'ranger' | 'silver_tongue';
 type RpgDifficulty = 'story' | 'normal' | 'harsh';
 type RpgWorldActivity = 'quiet' | 'standard' | 'living_world';
@@ -143,12 +146,15 @@ function parseSeed(seed: string): number | null {
 }
 
 export function RpgActionComposer({
+  canSaveGame,
   commandRegistration,
   hasCommandError,
   isPending,
   onQuickAction,
+  onSaveGame,
   onSubmit,
   quickActions,
+  renderNewCampaign,
   selectedSessionId,
   sessionRegistration,
   sessionSummaries,
@@ -227,6 +233,24 @@ export function RpgActionComposer({
   };
 
   const closeLauncher = () => setLauncherView('closed');
+
+  const openNewCampaign = () => {
+    setLauncherView('campaign_wizard');
+  };
+
+  const saveGame = async () => {
+    setIsLaunching(true);
+    setLaunchError(undefined);
+    setLaunchStatus('Saving current campaignâ€¦');
+    try {
+      const checkpointId = await onSaveGame();
+      setLaunchStatus(`Game saved: ${checkpointId}`);
+    } catch (error) {
+      setLaunchError(error instanceof Error ? error.message : 'RPG save failed.');
+    } finally {
+      setIsLaunching(false);
+    }
+  };
 
   const finishLaunch = async (response: RpgLaunchResponse, fallbackSessionId: string | undefined, readyLabel: string) => {
     if (!response.ok) {
@@ -373,7 +397,9 @@ export function RpgActionComposer({
 
   const selectedSessionHasOption = !selectedSessionId || sessionSummaries.some((session) => session.id === selectedSessionId);
   const launcherTitle =
-    launcherView === 'new_game'
+    launcherView === 'campaign_wizard'
+      ? 'New Campaign'
+      : launcherView === 'new_game'
       ? 'New Game setup'
       : launcherView === 'load_game'
         ? 'Load Game'
@@ -397,7 +423,7 @@ export function RpgActionComposer({
       {launcherView !== 'closed' ? (
         <div className="rpg-launcher-modal" role="dialog" aria-modal="true" aria-label={launcherTitle}>
           <button className="rpg-launcher-backdrop" type="button" aria-label="Close RPG launcher" onClick={closeLauncher} />
-          <section className="rpg-launcher-dialog">
+          <section className={launcherView === 'campaign_wizard' ? 'rpg-launcher-dialog rpg-launcher-dialog-wide' : 'rpg-launcher-dialog'}>
             <div className="rpg-launcher-panel-heading">
               <div>
                 <p className="eyebrow">Campaign launcher</p>
@@ -414,9 +440,13 @@ export function RpgActionComposer({
                   <strong>Continue</strong>
                   <span>{mostRecentLiveSession ? mostRecentLiveSession.title : 'No saved run yet'}</span>
                 </button>
-                <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('new_game')}>
-                  <strong>New Game</strong>
-                  <span>Configure a fresh Level 1 campaign.</span>
+                <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending} onClick={openNewCampaign}>
+                  <strong>New Campaign</strong>
+                  <span>Open the full deterministic campaign setup.</span>
+                </button>
+                <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending || !canSaveGame} onClick={() => void saveGame()}>
+                  <strong>Save Game</strong>
+                  <span>{canSaveGame ? 'Write a replay-preserving checkpoint for the current campaign.' : 'Select or create a campaign before saving.'}</span>
                 </button>
                 <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending} onClick={() => void launchDemoSession()}>
                   <strong>Demo Session</strong>
@@ -428,10 +458,12 @@ export function RpgActionComposer({
                 </button>
                 <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('settings')}>
                   <strong>Settings</strong>
-                  <span>Set defaults for New Game sessions.</span>
+                  <span>Set defaults for New Campaign sessions.</span>
                 </button>
               </div>
             ) : null}
+
+            {launcherView === 'campaign_wizard' ? renderNewCampaign(closeLauncher) : null}
 
             {launcherView === 'new_game' ? (
               <div className="rpg-launcher-panel" aria-label="New Game setup">
@@ -592,14 +624,14 @@ export function RpgActionComposer({
                 <div className="rpg-launcher-section-heading">
                   <div>
                     <p className="eyebrow">RPG settings</p>
-                    <h4>New Game defaults</h4>
+                    <h4>New Campaign defaults</h4>
                   </div>
                   <Button variant="subtle" type="button" disabled={isLaunching} onClick={() => setLauncherView('home')}>
                     Back
                   </Button>
                 </div>
                 <p className="rpg-settings-note">
-                  These defaults are copied into the next New Game setup. Demo Session keeps its curated showcase defaults.
+                  These defaults are copied into the next New Campaign setup. Demo Session keeps its curated showcase defaults.
                 </p>
                 <div className="rpg-launcher-toggle-grid" aria-label="RPG feature toggles">
                   <label><input type="checkbox" checked={autosaveEnabled} onChange={(event) => setAutosaveEnabled(event.currentTarget.checked)} /><span>Autosave</span></label>

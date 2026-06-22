@@ -160,7 +160,8 @@ describe('RpgWorkspace campaign handoff', () => {
     renderRpg();
 
     expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'New Campaign' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Campaign Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: /^New Campaign/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Create Campaign' }));
 
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
