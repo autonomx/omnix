@@ -14,6 +14,7 @@ from app.rpg.session.durable_store import (
     save_session_to_disk,
 )
 from app.rpg.session.environment import ensure_session_environment_seed_state
+from app.rpg.session.list_summaries import list_session_summaries_from_disk
 from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.package_bridge import package_to_session, session_to_package
 from app.rpg.session.survival_persistence import normalize_session_survival_for_persistence
@@ -67,6 +68,17 @@ def list_sessions() -> List[Dict[str, Any]]:
     for item in sessions:
         item = create_or_normalize_session(item)
         # Fix #3: attach integrity info instead of hiding invalid sessions
+        integrity = validate_session_integrity(item)
+        item["_integrity"] = integrity
+        out.append(item)
+    return out
+
+
+def list_session_summaries() -> List[Dict[str, Any]]:
+    """Return bounded session list rows without normalizing full payloads."""
+
+    out = []
+    for item in list_session_summaries_from_disk():
         integrity = validate_session_integrity(item)
         item["_integrity"] = integrity
         out.append(item)
