@@ -1,4 +1,8 @@
-import type { RpgItemObjectivePreview, RpgItemStatusCard, RpgItemUiAction, RpgMerchantEntryPreview } from './rpgItemUiState';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchRpgItemDetails } from './rpgItemApi';
+import type { RpgItemDetailPreview, RpgItemObjectivePreview, RpgItemStatusCard, RpgItemUiAction, RpgMerchantEntryPreview } from './rpgItemUiState';
+import { buildItemDetailPreview } from './rpgItemUiState';
 import './RpgItemPanel.css';
 
 interface RpgItemPanelProps {
@@ -44,6 +48,26 @@ export function RpgItemPanel({
   const hasObjectives = objectives.length > 0;
   const hasStatus = statusCards.length > 0;
   const hasMerchantEntries = merchantEntries.length > 0;
+  const selectedItem = actions.find((action) => action.item)?.item;
+  const selectedItemSessionId = selectedItem?.sessionId ?? null;
+  const itemDetailQuery = useQuery({
+    enabled: Boolean(selectedItemSessionId && selectedItem?.label),
+    queryKey: ['feature', 'rpg', 'item-detail', selectedItemSessionId, selectedItem?.label, selectedItem?.count],
+    queryFn: () => fetchRpgItemDetails(selectedItemSessionId ?? '', { itemName: selectedItem?.label ?? '', itemCount: selectedItem?.count, source: 'rpg-item-panel' }),
+    retry: false,
+    staleTime: 30_000,
+  });
+  const itemDetail = useMemo(() => buildItemDetailPreview(itemDetailQuery.data, selectedItem), [itemDetailQuery.data, selectedItem]);
+  const displayedItemDetail = itemDetail
+    ? {
+        ...itemDetail,
+        source: itemDetailQuery.isError && itemDetail.source === 'pending' ? 'unavailable' : itemDetail.source,
+        summary:
+          itemDetailQuery.isError && itemDetail.source === 'pending'
+            ? 'LLM item details are unavailable right now; the action icons still execute deterministic item actions.'
+            : itemDetail.summary,
+      }
+    : undefined;
 
   return (
     <section className="rpg-item-panel" aria-label="Item actions and coverage">
@@ -54,6 +78,8 @@ export function RpgItemPanel({
         </div>
         <span>{hasActions ? `${actions.length} action${actions.length === 1 ? '' : 's'}` : 'No item selected'}</span>
       </header>
+
+      {displayedItemDetail ? <ItemDetailCard detail={displayedItemDetail} isPending={itemDetailQuery.isFetching} /> : null}
 
       {hasStatus ? (
         <div className="rpg-item-status-grid" aria-label="Item status cards">
@@ -122,6 +148,52 @@ export function RpgItemPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function ItemDetailCard({ detail, isPending }: { detail: RpgItemDetailPreview; isPending: boolean }) {
+  const sourceLabel =
+    detail.source === 'llm'
+      ? 'LLM item details'
+      : detail.source === 'unavailable'
+        ? 'Item details unavailable'
+        : detail.source === 'pending' || isPending
+          ? 'Generating item details'
+          : 'Preview item details';
+
+  return (
+    <article className={`rpg-item-detail-card rpg-item-detail-${detail.source}`} aria-label={`Selected item details: ${detail.itemName}`}>
+      <header>
+        <span className="rpg-item-detail-icon" aria-hidden="true">{detail.icon}</span>
+        <div>
+          <p className="eyebrow">{sourceLabel}</p>
+          <h4>{detail.itemName}</h4>
+        </div>
+        <small>{detail.countLabel}</small>
+      </header>
+      <p>{isPending && detail.source === 'pending' ? 'Generating LLM item details for the selected inventory item…' : detail.summary}</p>
+      <dl>
+        <div>
+          <dt>Use</dt>
+          <dd>{detail.usage}</dd>
+        </div>
+        <div>
+          <dt>Trade</dt>
+          <dd>{detail.trade}</dd>
+        </div>
+        <div>
+          <dt>Risk</dt>
+          <dd>{detail.risk}</dd>
+        </div>
+      </dl>
+      {detail.tags.length ? (
+        <div className="rpg-item-detail-tags" aria-label="Item detail tags">
+          {detail.tags.map((tag) => (
+            <span key={tag}>{tag}</span>
+          ))}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
