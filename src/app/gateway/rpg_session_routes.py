@@ -22,7 +22,7 @@ from app.rpg.session.new_game import (
     rename_rpg_session,
     start_rpg_preset,
 )
-from app.rpg.session.service import list_sessions, load_session
+from app.rpg.session.service import list_session_summaries, load_session
 from app.rpg.session.world_ability_integration import ensure_world_scale_abilities
 
 _ROUTE_SENTINEL = "_omnix_rpg_session_routes_registered"
@@ -174,7 +174,10 @@ def register_rpg_session_routes(app: FastAPI) -> None:
 
     @app.get("/api/rpg/sessions", tags=["rpg-session"])
     async def rpg_sessions() -> dict[str, Any]:
-        sessions = [_attach_environment_snapshot_to_session(session) for session in (list_sessions() or [])]
+        sessions = [
+            _attach_environment_snapshot_to_session(session)
+            for session in (list_session_summaries() or [])
+        ]
         return {"ok": True, "sessions": sessions}
 
     @app.get("/api/rpg/sessions/{session_id}", tags=["rpg-session"])
