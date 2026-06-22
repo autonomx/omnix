@@ -192,8 +192,9 @@ describe('RpgLoadoutTabs', () => {
 
     renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
 
-    const itemDetails = await screen.findByLabelText('Selected item details: Healing potion');
-    expect(itemDetails).toHaveTextContent('LLM detail: Healing potion restores stamina without advancing the turn.');
+    await screen.findByText('LLM detail: Healing potion restores stamina without advancing the turn.');
+    const itemDetails = screen.getByLabelText('Selected item details: Healing potion');
+    expect(itemDetails).toHaveTextContent('LLM item details');
     expect(screen.getByRole('button', { name: 'Use' })).toHaveAttribute('title', expect.stringContaining('Apply item effects'));
     expect(await screen.findByText('Craft torch')).toBeInTheDocument();
     expect(screen.getByText('Item diagnostics')).toBeInTheDocument();
