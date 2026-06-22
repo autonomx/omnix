@@ -32,6 +32,19 @@ function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }
   const includeMerchantEntries = options.merchantEntries ?? true;
   const post = vi.spyOn(omnixApiClient, 'post').mockImplementation(async (_path: `/api/${string}`, body: unknown) => {
     const payload = body as Record<string, unknown>;
+    if (payload.action === 'item_detail') {
+      return {
+        ok: true,
+        item_detail: {
+          item_name: payload.item_name,
+          summary: `LLM detail: ${payload.item_name} restores stamina without advancing the turn.`,
+          usage: 'Use when combat or travel has created immediate pressure.',
+          trade: 'Worth keeping unless a merchant offers a premium.',
+          risk: 'No spoilage or attunement risk indexed.',
+          tags: ['consumable', 'recovery'],
+        },
+      } as never;
+    }
     if (payload.action === 'item_objectives') {
       return {
         ok: true,
@@ -132,6 +145,7 @@ describe('RpgLoadoutTabs', () => {
     expect(screen.getByRole('tab', { name: 'Inventory' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Inventory' })).toHaveTextContent('12');
     expect(screen.getByRole('button', { name: 'Healing potion' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Selected item details: Healing potion')).toHaveTextContent('Preview item details');
     expect(screen.getByRole('region', { name: 'Item actions and coverage' })).toHaveTextContent('Inventory, crafting, and trade');
     expect(screen.getByRole('button', { name: 'Use' })).toBeDisabled();
 
@@ -173,11 +187,14 @@ describe('RpgLoadoutTabs', () => {
     expect(onSelectCommand).toHaveBeenLastCalledWith('Search the area for useful supplies I can pick up and add to my inventory.');
   });
 
-  it('shows item objectives, status cards, and merchant entries for a live session', async () => {
+  it('shows item details, objectives, status cards, and merchant entries for a live session', async () => {
     mockLiveItemApis();
 
     renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
 
+    const itemDetails = await screen.findByLabelText('Selected item details: Healing potion');
+    expect(itemDetails).toHaveTextContent('LLM detail: Healing potion restores stamina without advancing the turn.');
+    expect(screen.getByRole('button', { name: 'Use' })).toHaveAttribute('title', expect.stringContaining('Apply item effects'));
     expect(await screen.findByText('Craft torch')).toBeInTheDocument();
     expect(screen.getByText('Item diagnostics')).toBeInTheDocument();
     expect(screen.getByText('Item coverage')).toBeInTheDocument();
