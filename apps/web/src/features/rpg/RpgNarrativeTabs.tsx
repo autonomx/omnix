@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { RpgJournalDetailPreview, RpgJournalEntryPreview } from './rpgUiState';
 
 type RpgNarrativeTab = 'journal' | 'dialogue' | 'turns';
@@ -15,10 +15,27 @@ const tabs: Array<{ id: RpgNarrativeTab; label: string }> = [
   { id: 'turns', label: 'Turn history' },
 ];
 
+const emptyDialogueRow: RpgJournalEntryPreview = {
+  time: 'Dialogue',
+  title: 'No dialogue captured yet',
+  detail: 'Dialogue appears here after NPC, narrator, or player messages are recorded for this campaign.',
+};
+
+const emptyTurnRow: RpgJournalEntryPreview = {
+  time: 'Turn history',
+  title: 'No replayed turns yet',
+  detail: 'Submit a command to start recording replay-safe turn history for this campaign.',
+};
+
 export function RpgNarrativeTabs({ journalEntries, journalDetail, recentEvents }: RpgNarrativeTabsProps) {
   const [activeTab, setActiveTab] = useState<RpgNarrativeTab>('journal');
+  const [selectedJournalIndex, setSelectedJournalIndex] = useState(0);
   const dialogueRows = useMemo(() => buildDialogueRows(journalEntries, recentEvents), [journalEntries, recentEvents]);
   const turnRows = useMemo(() => buildTurnRows(journalEntries), [journalEntries]);
+
+  useEffect(() => {
+    setSelectedJournalIndex(0);
+  }, [journalEntries]);
 
   return (
     <section className="rpg-card rpg-journal-card">
@@ -38,19 +55,52 @@ export function RpgNarrativeTabs({ journalEntries, journalDetail, recentEvents }
           </button>
         ))}
       </div>
-      {activeTab === 'journal' ? <JournalPanel journalDetail={journalDetail} journalEntries={journalEntries} /> : null}
+      {activeTab === 'journal' ? (
+        <JournalPanel
+          journalDetail={journalDetail}
+          journalEntries={journalEntries}
+          onSelectedIndexChange={setSelectedJournalIndex}
+          selectedIndex={selectedJournalIndex}
+        />
+      ) : null}
       {activeTab === 'dialogue' ? <DialoguePanel dialogueRows={dialogueRows} /> : null}
       {activeTab === 'turns' ? <TurnHistoryPanel turnRows={turnRows} /> : null}
     </section>
   );
 }
 
-function JournalPanel({ journalEntries, journalDetail }: Pick<RpgNarrativeTabsProps, 'journalEntries' | 'journalDetail'>) {
+function JournalPanel({
+  journalEntries,
+  journalDetail,
+  onSelectedIndexChange,
+  selectedIndex,
+}: Pick<RpgNarrativeTabsProps, 'journalEntries' | 'journalDetail'> & {
+  onSelectedIndexChange: (index: number) => void;
+  selectedIndex: number;
+}) {
+  const safeSelectedIndex = journalEntries[selectedIndex] ? selectedIndex : 0;
+  const selectedEntry = journalEntries[safeSelectedIndex];
+  const detailTitle = selectedEntry?.title ?? journalDetail.title;
+  const detailText = selectedEntry?.detail ?? journalDetail.detail;
+
   return (
     <div aria-labelledby="rpg-journal-tab" className="rpg-journal-grid" id="rpg-journal-panel" role="tabpanel">
       <div className="rpg-journal-list">
         {journalEntries.map((entry, index) => (
-          <article className={index === 0 ? 'active' : undefined} key={`${entry.time}:${entry.title}`}>
+          <article
+            aria-pressed={index === safeSelectedIndex}
+            className={index === safeSelectedIndex ? 'active' : undefined}
+            key={`${entry.time}:${entry.title}`}
+            onClick={() => onSelectedIndexChange(index)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onSelectedIndexChange(index);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+          >
             <span aria-hidden="true" />
             <div>
               <strong>{entry.time}</strong>
@@ -60,8 +110,8 @@ function JournalPanel({ journalEntries, journalDetail }: Pick<RpgNarrativeTabsPr
         ))}
       </div>
       <article className="rpg-journal-detail">
-        <h3>{journalDetail.title}</h3>
-        <p>{journalDetail.detail}</p>
+        <h3>{detailTitle}</h3>
+        <p>{detailText}</p>
         <ul>
           {journalDetail.bullets.map((bullet) => (
             <li key={bullet}>{bullet}</li>
@@ -93,7 +143,7 @@ function DialoguePanel({ dialogueRows }: { dialogueRows: RpgJournalEntryPreview[
       </div>
       <article className="rpg-journal-detail">
         <h3>Dialogue log</h3>
-        <p>Conversation-facing timeline entries extracted from the selected RPG session.</p>
+        <p>Conversation-facing messages from the selected RPG session. Setup notes and ambient world events stay in the Journal tab.</p>
         <ul>
           {dialogueRows.map((row) => (
             <li key={`${row.time}:${row.detail}`}>{row.detail}</li>
@@ -101,7 +151,7 @@ function DialoguePanel({ dialogueRows }: { dialogueRows: RpgJournalEntryPreview[
         </ul>
         <div className="rpg-chip-row">
           <span>Conversation</span>
-          <span>Session timeline</span>
+          <span>Messages only</span>
           <span>Replay-safe</span>
         </div>
       </article>
@@ -125,7 +175,7 @@ function TurnHistoryPanel({ turnRows }: { turnRows: RpgJournalEntryPreview[] }) 
       </div>
       <article className="rpg-journal-detail">
         <h3>Turn history</h3>
-        <p>Replay-safe command and event timeline for the selected RPG session.</p>
+        <p>Replay-safe player commands and queued turn requests for the selected RPG session.</p>
         <ul>
           {turnRows.map((row) => (
             <li key={`${row.time}:${row.detail}`}>{row.detail}</li>
@@ -133,7 +183,7 @@ function TurnHistoryPanel({ turnRows }: { turnRows: RpgJournalEntryPreview[] }) 
         </ul>
         <div className="rpg-chip-row">
           <span>Deterministic</span>
-          <span>Turn log</span>
+          <span>Commands only</span>
           <span>Checkpoint aware</span>
         </div>
       </article>
@@ -142,29 +192,51 @@ function TurnHistoryPanel({ turnRows }: { turnRows: RpgJournalEntryPreview[] }) 
 }
 
 function buildDialogueRows(journalEntries: RpgJournalEntryPreview[], recentEvents: string[]): RpgJournalEntryPreview[] {
-  const dialogueLikeEntries = journalEntries.filter((entry) => isDialogueLike(entry.title) || isDialogueLike(entry.detail));
+  const dialogueLikeEntries = journalEntries.filter((entry) => isDialogueEntry(entry));
   if (dialogueLikeEntries.length) {
     return dialogueLikeEntries;
   }
 
-  return recentEvents.slice(0, 6).map((event, index) => ({
-    time: `Event ${index + 1}`,
-    title: speakerFromEvent(event) ?? 'Narration',
-    detail: event,
-  }));
+  const dialogueLikeEvents = recentEvents
+    .map((event, index) => ({
+      time: `Event ${index + 1}`,
+      title: speakerFromEvent(event) ?? 'Narration',
+      detail: event,
+    }))
+    .filter((entry) => isDialogueEntry(entry));
+
+  return dialogueLikeEvents.length ? dialogueLikeEvents.slice(0, 6) : [emptyDialogueRow];
 }
 
 function buildTurnRows(journalEntries: RpgJournalEntryPreview[]): RpgJournalEntryPreview[] {
-  return journalEntries.slice(0, 6).map((entry, index) => ({
+  const turnLikeEntries = journalEntries.filter((entry) => isTurnHistoryEntry(entry));
+  if (!turnLikeEntries.length) {
+    return [emptyTurnRow];
+  }
+
+  return turnLikeEntries.slice(0, 6).map((entry, index) => ({
     time: entry.time || `Turn ${index + 1}`,
-    title: entry.title || `Turn ${index + 1}`,
+    title: normalizeTurnTitle(entry.title, index),
     detail: entry.detail,
   }));
+}
+
+function isDialogueEntry(entry: RpgJournalEntryPreview): boolean {
+  return isDialogueLike(entry.title) || isDialogueLike(entry.detail);
 }
 
 function isDialogueLike(value: string): boolean {
   const normalized = value.toLowerCase();
   return normalized.includes('dialogue') || normalized.includes('message') || normalized.includes('replied') || normalized.includes('speaks') || normalized.includes('says') || value.includes(':');
+}
+
+function isTurnHistoryEntry(entry: RpgJournalEntryPreview): boolean {
+  const normalized = `${entry.title} ${entry.detail}`.toLowerCase();
+  return /\b(?:player message|player command|command|queued turn|completed turn|turn job|rpg\.turn|submitted command)\b/.test(normalized);
+}
+
+function normalizeTurnTitle(title: string, index: number): string {
+  return title.trim() ? title : `Turn ${index + 1}`;
 }
 
 function speakerFromEvent(event: string): string | undefined {
