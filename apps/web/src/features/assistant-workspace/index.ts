@@ -257,6 +257,19 @@ export type {
 } from './capabilities';
 
 export {
+  createToolExecutionRows,
+  getPendingToolExecutionRows,
+  summarizeToolValue,
+} from './tool-execution-view';
+export type {
+  ToolExecutionAction,
+  ToolExecutionRow,
+  ToolExecutionStatus,
+} from './tool-execution-view';
+export { ToolExecutionPanel } from './ToolExecutionPanel';
+export type { ToolExecutionPanelProps } from './ToolExecutionPanel';
+
+export {
   DEFAULT_ASSISTANT_WORKSPACE_PREFERENCES,
   mergeAssistantWorkspacePreferences,
   shouldAnimateWorkspace,
