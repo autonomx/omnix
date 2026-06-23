@@ -1,0 +1,61 @@
+.assistant-chat-side {
+  align-content: initial;
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.assistant-side-panel-toggle,
+.assistant-live-tools-grid,
+.assistant-supporting-panels {
+  flex: 0 0 auto;
+  min-height: 0;
+  min-width: 0;
+  position: static;
+  width: 100%;
+}
+
+.assistant-live-tools-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: visible;
+  position: relative;
+}
+
+.assistant-live-tools-grid[data-active-panel='voice'] .assistant-tool-sidebar-card,
+.assistant-live-tools-grid[data-active-panel='tools'] .assistant-live-card {
+  display: none;
+}
+
+.assistant-live-card,
+.assistant-tool-sidebar-card {
+  grid-column: 1;
+  grid-row: 1;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  position: relative;
+  transform: none;
+  width: 100%;
+}
+
+.assistant-supporting-panels {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  position: relative;
+}
+
+.assistant-supporting-panels section,
+.assistant-supporting-panels div,
+.assistant-supporting-panels .assistant-workspace-dashboard,
+.assistant-supporting-panels .assistant-workspace-activity {
+  max-height: none;
+  min-height: 0;
+  position: static;
+}
