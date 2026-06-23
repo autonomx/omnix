@@ -307,3 +307,6 @@ export type {
 
 export { LiveAssistantSessionPanel } from './LiveAssistantSessionPanel';
 export type { LiveAssistantSessionPanelProps } from './LiveAssistantSessionPanel';
+
+export { createBrowserLiveAssistantController } from './browser-live-controller';
+export type { BrowserLiveAssistantControllerOptions, CapturedAudioReader } from './browser-live-controller';
