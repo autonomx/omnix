@@ -5,7 +5,18 @@ import { useForm } from 'react-hook-form';
 import { ApiError, omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, OmnixTranscriptView, WorkspacePanel } from '../../design/primitives';
-import { AssistantWorkspaceDashboardPanel } from '../assistant-workspace/AssistantWorkspaceDashboard';
+import {
+  AssistantWorkspaceActivityPanel,
+  AssistantWorkspaceDashboardPanel,
+  createInMemoryAssistantWorkspaceEventStore,
+  createStoredAssistantWorkspaceEventStore,
+  type AssistantWorkspaceEvent,
+  type AssistantWorkspaceEventStore,
+  type AssistantWorkspaceEventStoreFilter,
+  type AssistantWorkspaceEventStorage,
+  type AssistantWorkspaceRuntimeConfig,
+} from '../assistant-workspace';
+import { createChatbotActivityEvents } from '../assistant-workspace/chatbot-activity';
 import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
 
 interface ChatbotFormValues {
@@ -18,6 +29,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const runtimeConfig = useMemo(() => createAssistantWorkspaceRuntimeConfig(), []);
+  const eventStore = useMemo(() => createChatbotWorkspaceEventStore(runtimeConfig), [runtimeConfig]);
+  const [activityEvents, setActivityEvents] = useState<AssistantWorkspaceEvent[]>(() =>
+    eventStore.list(createWorkspaceEventFilter(runtimeConfig)),
+  );
   const providerQuery = useQuery({
     queryKey: ['platform', 'providers'],
     queryFn: () => omnixApiClient.listProviders(),
@@ -91,6 +106,25 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const activeMessageCount = activeSession?.messages?.length ?? 0;
   const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
   const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
+
+  useEffect(() => {
+    const filter = createWorkspaceEventFilter(runtimeConfig, activeSession?.id);
+    const currentEvents = eventStore.list(filter);
+    const currentEventIds = new Set(currentEvents.map((event) => event.id));
+    const sessionEvents = createChatbotActivityEvents(activeSession, {
+      workspaceId: runtimeConfig.workspaceId,
+      projectId: runtimeConfig.projectId,
+    });
+
+    for (const event of sessionEvents) {
+      if (!currentEventIds.has(event.id)) {
+        eventStore.append(event);
+        currentEventIds.add(event.id);
+      }
+    }
+
+    setActivityEvents(eventStore.list(filter));
+  }, [activeSession, eventStore, runtimeConfig]);
 
   return (
     <WorkspacePanel>
@@ -222,6 +256,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             }}
           />
 
+          <AssistantWorkspaceActivityPanel events={activityEvents} />
+
           <Title order={4}>Sessions</Title>
           {sessionsQuery.data?.sessions.length ? (
             <div className="feature-list">
@@ -261,30 +297,47 @@ function chatCapableModels(payload: ProviderFacadePayload | undefined, providerI
   );
 }
 
-function selectedProviderLabel(payload: ProviderFacadePayload | undefined, providerId: string): string | undefined {
-  if (!providerId) {
-    return undefined;
-  }
-
+function selectedProviderLabel(payload: ProviderFacadePayload | undefined, providerId: string) {
+  if (!providerId) return 'Default provider';
   return payload?.providers.find((provider) => provider.id === providerId)?.label ?? providerId;
 }
 
-function selectedModelLabel(payload: ProviderFacadePayload | undefined, modelId: string): string | undefined {
-  if (!modelId) {
-    return undefined;
-  }
-
+function selectedModelLabel(payload: ProviderFacadePayload | undefined, modelId: string) {
+  if (!modelId) return 'Default model';
   return payload?.models.find((model) => model.id === modelId)?.label ?? modelId;
 }
 
 function chatbotSubmitErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return `Chat request failed with status ${error.status}. Check that the gateway and selected provider are running.`;
+  if (error instanceof ApiError) return `Chat request failed with status ${error.status}`;
+  if (error instanceof Error) return error.message;
+  return 'Chat request failed';
+}
+
+function createChatbotWorkspaceEventStore(config: AssistantWorkspaceRuntimeConfig): AssistantWorkspaceEventStore {
+  const storage = getAssistantWorkspaceEventStorage();
+
+  if (config.features.persistedEvents && storage) {
+    return createStoredAssistantWorkspaceEventStore(storage, config.eventStorageKey);
   }
 
-  if (error instanceof Error && error.message) {
-    return `Chat request failed: ${error.message}`;
-  }
+  return createInMemoryAssistantWorkspaceEventStore();
+}
 
-  return 'Chat request failed. Check that the gateway and selected provider are running.';
+function getAssistantWorkspaceEventStorage(): AssistantWorkspaceEventStorage | undefined {
+  try {
+    return typeof window === 'undefined' ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+function createWorkspaceEventFilter(
+  config: AssistantWorkspaceRuntimeConfig,
+  sessionId?: string,
+): AssistantWorkspaceEventStoreFilter {
+  return {
+    workspaceId: config.workspaceId,
+    ...(config.projectId ? { projectId: config.projectId } : {}),
+    ...(sessionId ? { sessionId } : {}),
+  };
 }
