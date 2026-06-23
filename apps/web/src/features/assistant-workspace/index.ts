@@ -172,6 +172,7 @@ export {
 export type { AssistantAppLayout, AssistantWorkspaceRegion } from './app-layout';
 
 export {
+  createTimelineItemsFromEvents,
   createTimelineNote,
   filterTimelineItemsByKind,
   sortTimelineItems,
