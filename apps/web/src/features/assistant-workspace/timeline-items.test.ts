@@ -51,6 +51,22 @@ const toolResult: AssistantWorkspaceEvent = {
   createdAt: '2026-06-23T10:00:02.000Z',
 };
 
+const failureEvent: AssistantWorkspaceEvent = {
+  id: 'event:failure',
+  type: 'operation_failed',
+  workspaceId: 'workspace:main',
+  sessionId: 'session:main',
+  payload: {
+    operation: 'chat_request',
+    message: 'Chat request failed with status 503',
+    statusCode: 503,
+    providerId: 'openai',
+    modelId: 'gpt-mini',
+    recoverable: true,
+  },
+  createdAt: '2026-06-23T10:00:03.000Z',
+};
+
 describe('timeline item contracts', () => {
   it('sorts items by time and id', () => {
     const late = { id: 'b', kind: 'turn' as const, label: 'Late', createdAt: '2026-01-02' };
@@ -64,14 +80,15 @@ describe('timeline item contracts', () => {
   });
 
   it('projects workspace events into timeline items', () => {
-    const items = createTimelineItemsFromEvents([toolResult, userMessage, toolCall]);
+    const items = createTimelineItemsFromEvents([toolResult, userMessage, toolCall, failureEvent]);
 
     expect(items.map((item) => item.label)).toEqual([
       'User: Look up Bran records',
       'Tool approval requested: search',
       'Tool denied: tool-call:1',
+      'chat request failed: Chat request failed with status 503',
     ]);
-    expect(items.map((item) => item.sourceEventType)).toEqual(['user_message', 'tool_call', 'tool_result']);
-    expect(items.map((item) => item.status)).toEqual(['user', 'requested', 'denied']);
+    expect(items.map((item) => item.sourceEventType)).toEqual(['user_message', 'tool_call', 'tool_result', 'operation_failed']);
+    expect(items.map((item) => item.status)).toEqual(['user', 'requested', 'denied', 'failed']);
   });
 });
