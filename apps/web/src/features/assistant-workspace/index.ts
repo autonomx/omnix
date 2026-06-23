@@ -73,3 +73,11 @@ export {
   summarizeAssistantResponseAudit,
 } from './audit';
 export type { AssistantResponseAudit, ResponseAuditSummary } from './audit';
+
+export {
+  DEFAULT_ASSISTANT_WORKSPACE_PREFERENCES,
+  mergeAssistantWorkspacePreferences,
+  shouldAnimateWorkspace,
+  shouldShowLiveCaptions,
+} from './preferences';
+export type { AssistantWorkspacePreferences, WorkspaceAppearance, WorkspaceDensity } from './preferences';
