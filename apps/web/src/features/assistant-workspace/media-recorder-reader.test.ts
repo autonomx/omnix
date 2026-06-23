@@ -36,7 +36,7 @@ describe('createMediaRecorderAudioReader', () => {
       clearTimer: vi.fn(),
     });
 
-    const blob = await reader(session());
+    const blob = (await reader(session())) as Blob;
 
     expect(recorder?.start).toHaveBeenCalledOnce();
     expect(recorder?.stop).toHaveBeenCalledOnce();
