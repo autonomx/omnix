@@ -1,11 +1,13 @@
 .assistant-chat-layout {
-  grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) minmax(36rem, 44rem);
+  grid-template-columns: minmax(14rem, 16.5rem) minmax(34rem, 1fr) minmax(39rem, 44rem);
 }
 
 .assistant-chat-side {
+  align-content: start;
   display: grid;
   gap: 0.75rem;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
 }
 
 .assistant-chat-side > .assistant-live-tools-grid,
@@ -14,14 +16,138 @@
 }
 
 .assistant-live-tools-grid {
+  align-items: stretch;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(18rem, 1.1fr) minmax(16rem, 0.9fr);
+  grid-template-columns: minmax(18rem, 1.06fr) minmax(16rem, 0.94fr);
   min-height: 0;
 }
 
+.assistant-live-tools-grid > .assistant-live-card,
+.assistant-live-tools-grid > .assistant-tool-sidebar-card {
+  min-height: 32rem;
+}
+
 .assistant-live-tools-grid > .assistant-live-card {
-  min-height: 0;
+  overflow: hidden;
+}
+
+.assistant-live-card .eyebrow {
+  color: #dce4ff;
+  display: block;
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.assistant-live-state {
+  align-items: center;
+  background: rgba(5, 10, 24, 0.76);
+  border: 1px solid rgba(132, 148, 196, 0.18);
+  border-radius: 0.7rem;
+  color: var(--omnix-cyan);
+  display: inline-flex;
+  gap: 0.6rem;
+  justify-content: center;
+  justify-self: center;
+  min-height: 2.35rem;
+  min-width: 9rem;
+  padding: 0 0.9rem;
+}
+
+.assistant-voice-orb {
+  margin-block: 0.25rem 0;
+  min-height: 9.5rem;
+}
+
+.assistant-voice-orb span {
+  height: 6.5rem;
+  width: 6.5rem;
+}
+
+.assistant-voice-orb span::after {
+  content: "🎙";
+  font-size: 2.35rem;
+  line-height: 1;
+}
+
+.assistant-call-timer {
+  color: #f4f7ff;
+  display: block;
+  font-size: 1.02rem;
+  text-align: center;
+}
+
+.assistant-voice-transcript-header,
+.assistant-audio-devices header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.assistant-voice-transcript-header button,
+.assistant-audio-devices header button {
+  background: transparent;
+  border: 0;
+  color: var(--omnix-muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.assistant-audio-devices {
+  border-top: 1px solid var(--omnix-border);
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.85rem;
+}
+
+.assistant-audio-devices h3 {
+  color: var(--omnix-text);
+  margin: 0;
+}
+
+.assistant-audio-devices > div {
+  align-items: center;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 3rem minmax(0, 1fr) 4.8rem;
+}
+
+.assistant-audio-devices > div > span {
+  color: var(--omnix-muted);
+  font-size: 0.78rem;
+}
+
+.assistant-audio-devices > div > strong {
+  color: #dbe4ff;
+  font-size: 0.78rem;
+  font-weight: 650;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-audio-devices i {
+  background: repeating-linear-gradient(90deg, var(--omnix-success) 0 0.28rem, transparent 0.28rem 0.55rem);
+  display: block;
+  height: 0.8rem;
+  opacity: 0.9;
+}
+
+.assistant-voice-status {
+  align-items: center;
+  background: rgba(12, 18, 34, 0.72);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.75rem;
+  color: var(--omnix-muted);
+  display: flex;
+  justify-content: space-between;
+  min-height: 2.9rem;
+  padding: 0 0.85rem;
+}
+
+.assistant-voice-status strong {
+  color: var(--omnix-cyan);
 }
 
 .assistant-tool-sidebar-card,
@@ -42,6 +168,10 @@
   min-height: 0;
   overflow: auto;
   padding: 1rem;
+}
+
+.assistant-tool-sidebar-card [aria-label='Tool execution panel'] {
+  height: 100%;
 }
 
 .assistant-tool-sidebar-card [aria-label='Tool execution rows'] {
@@ -74,10 +204,13 @@
 
 @media (max-width: 1780px) {
   .assistant-chat-layout {
-    grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) minmax(32rem, 38rem);
+    grid-template-columns: minmax(14rem, 16.5rem) minmax(30rem, 1fr) minmax(36rem, 41rem);
   }
 
-  .assistant-live-tools-grid,
+  .assistant-live-tools-grid {
+    grid-template-columns: minmax(17rem, 1.05fr) minmax(15rem, 0.95fr);
+  }
+
   .assistant-supporting-panels {
     grid-template-columns: 1fr;
   }
