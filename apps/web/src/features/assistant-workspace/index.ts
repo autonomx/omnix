@@ -81,3 +81,11 @@ export {
   shouldShowLiveCaptions,
 } from './preferences';
 export type { AssistantWorkspacePreferences, WorkspaceAppearance, WorkspaceDensity } from './preferences';
+
+export {
+  createWorkspaceAccessibilityProfile,
+  getResponsivePanelCount,
+  isWorkspaceAccessible,
+  shouldUseAccessibleMotion,
+} from './accessibility';
+export type { WorkspaceAccessibilityProfile, WorkspaceBreakpoint } from './accessibility';
