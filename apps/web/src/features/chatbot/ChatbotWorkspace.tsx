@@ -16,7 +16,7 @@ import {
   type AssistantWorkspaceEventStorage,
   type AssistantWorkspaceRuntimeConfig,
 } from '../assistant-workspace';
-import { createChatbotActivityEvents } from '../assistant-workspace/chatbot-activity';
+import { createChatbotActivityEvents, createChatbotFailureEvent } from '../assistant-workspace/chatbot-activity';
 import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
 
 interface ChatbotFormValues {
@@ -97,6 +97,24 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       reset({ content: '', providerId: values.providerId, modelId: values.modelId });
       await queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+    },
+    onError: (error, values) => {
+      const sessionId = selectedSessionId ?? undefined;
+      const filter = createWorkspaceEventFilter(runtimeConfig, sessionId);
+      const failureEvent = createChatbotFailureEvent({
+        workspaceId: runtimeConfig.workspaceId,
+        projectId: runtimeConfig.projectId,
+        sessionId,
+        providerId: values.providerId || runtimeConfig.defaultProviderId,
+        modelId: values.modelId || runtimeConfig.defaultModelId,
+        message: chatbotSubmitErrorMessage(error),
+        ...(error instanceof ApiError ? { statusCode: error.status } : {}),
+        submittedContent: values.content,
+        createdAt: new Date().toISOString(),
+      });
+
+      appendWorkspaceEventIfMissing(eventStore, failureEvent, filter);
+      setActivityEvents(eventStore.list(filter));
     },
   });
 
@@ -321,6 +339,18 @@ function createChatbotWorkspaceEventStore(config: AssistantWorkspaceRuntimeConfi
   }
 
   return createInMemoryAssistantWorkspaceEventStore();
+}
+
+function appendWorkspaceEventIfMissing(
+  eventStore: AssistantWorkspaceEventStore,
+  event: AssistantWorkspaceEvent,
+  filter: AssistantWorkspaceEventStoreFilter,
+): void {
+  const currentEventIds = new Set(eventStore.list(filter).map((currentEvent) => currentEvent.id));
+
+  if (!currentEventIds.has(event.id)) {
+    eventStore.append(event);
+  }
 }
 
 function getAssistantWorkspaceEventStorage(): AssistantWorkspaceEventStorage | undefined {
