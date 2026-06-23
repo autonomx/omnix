@@ -1,7 +1,7 @@
 import type { AssistantWorkspaceEvent } from './events';
 
 export type CapabilityScope = 'global' | 'workspace' | 'project' | 'session';
-export type CapabilityEvent = 'registered' | 'enabled' | 'requested' | 'approved' | 'denied' | 'running' | 'completed';
+export type CapabilityEvent = 'registered' | 'enabled' | 'requested' | 'approved' | 'denied' | 'running' | 'completed' | 'failed';
 export type CapabilityRunStatus = 'approved' | 'denied' | 'running' | 'completed' | 'failed';
 
 export type CapabilityDefinition = {
@@ -109,7 +109,7 @@ export async function executeCapabilityInvocation(
   return {
     invocation: safeInvocation,
     result,
-    status: result.status === 'completed' ? 'completed' : 'failed',
+    status: result.status === 'completed' ? 'completed' : result.status === 'denied' ? 'denied' : 'failed',
   };
 }
 
@@ -141,7 +141,7 @@ export function createCapabilityEvents(record: CapabilityExecutionRecord): Assis
     sessionId: invocation.sessionId,
     payload: {
       toolCallId: invocation.id,
-      status: result.status === 'completed' ? 'completed' : 'failed',
+      status: result.status,
       result: result.result,
       error: result.error,
     },
