@@ -24,7 +24,11 @@ type LiveVoiceDomSession = {
   silenceTimer: ReturnType<typeof setTimeout> | null;
 };
 
+type AssistantUtilityPanel = 'voice' | 'tools';
+
 const enhancedCards = new WeakSet<HTMLElement>();
+const enhancedUtilityGrids = new WeakSet<HTMLElement>();
+const enhancedToolChips = new WeakSet<HTMLButtonElement>();
 let activeSession: LiveVoiceDomSession | null = null;
 
 const SPEECH_RMS_THRESHOLD = 0.015;
@@ -34,8 +38,12 @@ export function initializeLiveVoiceWebSocketEnhancer(root: ParentNode = document
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
   enhanceExistingCards(root);
+  wireExistingToolChips(root);
 
-  const observer = new MutationObserver(() => enhanceExistingCards(root));
+  const observer = new MutationObserver(() => {
+    enhanceExistingCards(root);
+    wireExistingToolChips(root);
+  });
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
@@ -43,6 +51,8 @@ function enhanceExistingCards(root: ParentNode): void {
   const cards = root.querySelectorAll<HTMLElement>('.assistant-live-card');
 
   cards.forEach((card) => {
+    ensureUtilityPanelToggle(card);
+
     if (enhancedCards.has(card)) return;
 
     enhancedCards.add(card);
@@ -50,11 +60,73 @@ function enhanceExistingCards(root: ParentNode): void {
   });
 }
 
+function ensureUtilityPanelToggle(card: HTMLElement): void {
+  const grid = card.closest<HTMLElement>('.assistant-live-tools-grid');
+  if (!grid || enhancedUtilityGrids.has(grid)) return;
+
+  const toggle = document.createElement('div');
+  toggle.className = 'assistant-side-panel-toggle';
+  toggle.setAttribute('role', 'tablist');
+  toggle.setAttribute('aria-label', 'Assistant side panel');
+
+  const voiceButton = createUtilityPanelToggleButton('Live Voice', 'voice');
+  const toolsButton = createUtilityPanelToggleButton('Tools', 'tools');
+  toggle.append(voiceButton, toolsButton);
+  grid.before(toggle);
+
+  enhancedUtilityGrids.add(grid);
+  setActiveUtilityPanel(grid, 'voice');
+}
+
+function createUtilityPanelToggleButton(label: string, panel: AssistantUtilityPanel): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.dataset.panel = panel;
+  button.setAttribute('role', 'tab');
+  button.textContent = label;
+  button.addEventListener('click', () => {
+    const grid = button.closest<HTMLElement>('.assistant-chat-side')?.querySelector<HTMLElement>('.assistant-live-tools-grid');
+    if (grid) setActiveUtilityPanel(grid, panel);
+  });
+  return button;
+}
+
+function setActiveUtilityPanel(grid: HTMLElement, panel: AssistantUtilityPanel): void {
+  grid.dataset.activePanel = panel;
+  const toggle = grid.previousElementSibling instanceof HTMLElement && grid.previousElementSibling.classList.contains('assistant-side-panel-toggle')
+    ? grid.previousElementSibling
+    : null;
+
+  toggle?.querySelectorAll<HTMLButtonElement>('button[data-panel]').forEach((button) => {
+    const isActive = button.dataset.panel === panel;
+    button.classList.toggle('active', isActive);
+    button.setAttribute('aria-selected', String(isActive));
+    button.tabIndex = isActive ? 0 : -1;
+  });
+}
+
+function wireExistingToolChips(root: ParentNode): void {
+  const chips = root.querySelectorAll<HTMLButtonElement>('.assistant-composer-chip');
+
+  chips.forEach((chip) => {
+    if (enhancedToolChips.has(chip) || !chip.textContent?.toLowerCase().includes('tools')) return;
+
+    enhancedToolChips.add(chip);
+    chip.addEventListener('click', () => {
+      const grid = document.querySelector<HTMLElement>('.assistant-live-tools-grid');
+      if (grid) setActiveUtilityPanel(grid, 'tools');
+    });
+  });
+}
+
 function wireLiveVoiceCard(card: HTMLElement): void {
   const stateButton = card.querySelector<HTMLElement>('.assistant-live-state');
   const buttons = Array.from(card.querySelectorAll<HTMLButtonElement>('button'));
   const muteButton = buttons.find((button) => button.textContent?.toLowerCase().includes('mute'));
-  const endButton = buttons.find((button) => button.textContent?.toLowerCase().includes('end call'));
+  const callButton = buttons.find((button) => {
+    const label = button.textContent?.toLowerCase() ?? '';
+    return label.includes('start call') || label.includes('end call');
+  });
   const clearButton = buttons.find((button) => button.textContent?.toLowerCase().includes('clear'));
   const composerMicButton = document.querySelector<HTMLButtonElement>('.assistant-mic-button');
   const liveModeButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.assistant-mode-switch button'))
@@ -71,10 +143,24 @@ function wireLiveVoiceCard(card: HTMLElement): void {
     }
   });
 
-  composerMicButton?.addEventListener('click', () => void startLiveVoice(card));
-  liveModeButton?.addEventListener('click', () => void startLiveVoice(card));
+  composerMicButton?.addEventListener('click', () => {
+    const grid = card.closest<HTMLElement>('.assistant-live-tools-grid');
+    if (grid) setActiveUtilityPanel(grid, 'voice');
+    void startLiveVoice(card);
+  });
+  liveModeButton?.addEventListener('click', () => {
+    const grid = card.closest<HTMLElement>('.assistant-live-tools-grid');
+    if (grid) setActiveUtilityPanel(grid, 'voice');
+  });
   muteButton?.addEventListener('click', () => toggleMute(card));
-  endButton?.addEventListener('click', () => stopLiveVoice('idle'));
+  callButton?.addEventListener('click', () => {
+    if (activeSession?.card === card) {
+      stopLiveVoice('idle');
+      return;
+    }
+
+    void startLiveVoice(card);
+  });
   clearButton?.addEventListener('click', () => clearTranscript(card));
 
   setPanelStatus(card, 'idle');
@@ -219,11 +305,22 @@ function setPanelStatus(card: HTMLElement, status: StreamingSttConnectionStatus)
   const connectedLabel = card.querySelector('header strong');
   const state = card.querySelector('.assistant-live-state span:first-child');
   const statusLabel = card.querySelector('.assistant-voice-status strong');
+  const callButton = Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find((button) => {
+    const label = button.textContent?.toLowerCase() ?? '';
+    return label.includes('start call') || label.includes('end call');
+  });
+  const isCallActive = status === 'connected' || status === 'connecting';
 
   const stateText = status === 'connected' ? 'Listening' : status === 'connecting' ? 'Connecting' : status === 'error' ? 'Error' : 'Idle';
   if (state) state.textContent = stateText;
   if (statusLabel) statusLabel.textContent = stateText;
   if (connectedLabel) connectedLabel.textContent = status === 'connected' ? 'Connected' : status === 'connecting' ? 'Connecting' : 'Disconnected';
+  if (callButton) {
+    callButton.textContent = isCallActive ? 'End Call' : 'Start Call';
+    callButton.classList.toggle('danger', isCallActive);
+    callButton.setAttribute('aria-label', isCallActive ? 'End live voice call' : 'Start live voice call');
+    callButton.disabled = status === 'connecting';
+  }
   card.dataset.liveVoiceStatus = status;
 }
 
