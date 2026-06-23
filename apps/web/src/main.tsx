@@ -7,6 +7,7 @@ import { OmnixApp } from './app/OmnixApp';
 import { omnixTheme } from './design/theme';
 import './styles.css';
 import './legacy-layout.css';
+import './features/chatbot/ChatbotWorkspaceTools.css';
 import './features/storyteller/StorytellerWorkspace.css';
 import './features/storyteller/StorytellerSidebar.css';
 import './features/storyteller/StoryMode.css';

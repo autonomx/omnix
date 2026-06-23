@@ -7,8 +7,10 @@ import { WorkspacePanel } from '../../design/primitives';
 import {
   AssistantWorkspaceActivityPanel,
   AssistantWorkspaceDashboardPanel,
+  ToolExecutionPanel,
   createInMemoryAssistantWorkspaceEventStore,
   createStoredAssistantWorkspaceEventStore,
+  createToolExecutionRows,
   type AssistantWorkspaceEvent,
   type AssistantWorkspaceEventStore,
   type AssistantWorkspaceEventStoreFilter,
@@ -142,6 +144,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
   const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
   const recentMessages = activeSession?.messages?.slice(-4) ?? [];
+  const toolExecutionRows = useMemo(() => createToolExecutionRows(activityEvents), [activityEvents]);
 
   useEffect(() => {
     const messageLog = messageLogRef.current;
@@ -346,68 +349,78 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
         </section>
 
-        <aside className="assistant-chat-side" aria-label="Live voice and workspace activity">
-          <section className="assistant-live-card">
-            <header>
-              <div>
-                <p className="eyebrow">Live Voice</p>
-              </div>
-              <strong>Connected</strong>
-            </header>
-            <div className="assistant-live-state" aria-label="Live voice state">
-              <span>Listening</span>
-              <span aria-hidden="true">v</span>
-            </div>
-            <div className="assistant-voice-orb" aria-hidden="true">
-              <span />
-            </div>
-            <time className="assistant-call-timer">00:01:24</time>
-            <div className="assistant-voice-controls">
-              <button type="button">Mute</button>
-              <button type="button" className="danger">End Call</button>
-            </div>
-            <div className="assistant-voice-transcript">
-              <div className="assistant-voice-transcript-header">
-                <h3>Transcript</h3>
-                <button type="button">Clear</button>
-              </div>
-              {recentMessages.length ? (
-                recentMessages.map((message) => (
-                  <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}>
-                    <span>
-                      <strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong>
-                      <time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time>
-                    </span>
-                    {message.content}
-                  </p>
-                ))
-              ) : (
-                <p className="muted">Voice transcript will appear here.</p>
-              )}
-            </div>
-            <div className="assistant-audio-devices">
+        <aside className="assistant-chat-side" aria-label="Live voice, tools, and workspace activity">
+          <div className="assistant-live-tools-grid">
+            <section className="assistant-live-card">
               <header>
-                <h3>Audio Devices</h3>
-                <button type="button" aria-label="Audio device settings">Settings</button>
+                <div>
+                  <p className="eyebrow">Live Voice</p>
+                </div>
+                <strong>Connected</strong>
               </header>
-              <div>
-                <span>Input</span>
-                <strong>MacBook Pro Microphone</strong>
-                <i aria-hidden="true" />
+              <div className="assistant-live-state" aria-label="Live voice state">
+                <span>Listening</span>
+                <span aria-hidden="true">v</span>
               </div>
-              <div>
-                <span>Output</span>
-                <strong>MacBook Pro Speakers</strong>
-                <i aria-hidden="true" />
+              <div className="assistant-voice-orb" aria-hidden="true">
+                <span />
               </div>
-            </div>
-            <footer className="assistant-voice-status">
-              <span>Voice Status</span>
-              <strong>Listening</strong>
-            </footer>
-          </section>
+              <time className="assistant-call-timer">00:01:24</time>
+              <div className="assistant-voice-controls">
+                <button type="button">Mute</button>
+                <button type="button" className="danger">End Call</button>
+              </div>
+              <div className="assistant-voice-transcript">
+                <div className="assistant-voice-transcript-header">
+                  <h3>Transcript</h3>
+                  <button type="button">Clear</button>
+                </div>
+                {recentMessages.length ? (
+                  recentMessages.map((message) => (
+                    <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}>
+                      <span>
+                        <strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong>
+                        <time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time>
+                      </span>
+                      {message.content}
+                    </p>
+                  ))
+                ) : (
+                  <p className="muted">Voice transcript will appear here.</p>
+                )}
+              </div>
+              <div className="assistant-audio-devices">
+                <header>
+                  <h3>Audio Devices</h3>
+                  <button type="button" aria-label="Audio device settings">Settings</button>
+                </header>
+                <div>
+                  <span>Input</span>
+                  <strong>MacBook Pro Microphone</strong>
+                  <i aria-hidden="true" />
+                </div>
+                <div>
+                  <span>Output</span>
+                  <strong>MacBook Pro Speakers</strong>
+                  <i aria-hidden="true" />
+                </div>
+              </div>
+              <footer className="assistant-voice-status">
+                <span>Voice Status</span>
+                <strong>Listening</strong>
+              </footer>
+            </section>
 
-          <div className="assistant-supporting-panels" aria-hidden="true">
+            <section className="assistant-tool-sidebar-card" aria-labelledby="assistant-tool-execution-heading">
+              <ToolExecutionPanel
+                rows={toolExecutionRows}
+                title="Tool execution"
+                description="Review approvals and monitor tool execution results."
+              />
+            </section>
+          </div>
+
+          <div className="assistant-supporting-panels">
             <AssistantWorkspaceDashboardPanel
               input={{
                 workspaceName: runtimeConfig.workspaceId,
