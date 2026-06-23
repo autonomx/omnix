@@ -50,6 +50,6 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
 
     expect(config.workspaceId).toBe(DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.workspaceId);
     expect(config.defaultProviderId).toBeUndefined();
-    expect(config.features.liveAssistant).toBe(false);
+    expect(config.features.liveAssistant).toBe(DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.features.liveAssistant);
   });
 });
