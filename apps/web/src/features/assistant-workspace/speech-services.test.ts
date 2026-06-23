@@ -3,22 +3,24 @@ import {
   createFetchSpeechServiceTransport,
   createSttServiceClient,
   createTtsServiceClient,
+  type SpeechServiceTransport,
   type SpeechServiceTransportRequest,
 } from './speech-services';
 
 describe('speech service clients', () => {
   it('posts audio to the configured STT service', async () => {
     const requests: SpeechServiceTransportRequest[] = [];
+    const transport: SpeechServiceTransport = async <TResponse>(request: SpeechServiceTransportRequest) => {
+      requests.push(request);
+      return { text: 'hello omnix', confidence: 0.91 } as TResponse;
+    };
     const client = createSttServiceClient({
       baseUrl: 'http://localhost:5201/',
-      transport: async (request) => {
-        requests.push(request);
-        return { text: 'hello omnix', confidence: 0.91 };
-      },
+      transport,
     });
 
     const response = await client.transcribeAudio({
-      audio: new Uint8Array([1, 2, 3]),
+      audio: new ArrayBuffer(3),
       language: 'en',
       prompt: 'short command',
     });
@@ -30,12 +32,13 @@ describe('speech service clients', () => {
 
   it('posts synthesis requests to the configured TTS service', async () => {
     const requests: SpeechServiceTransportRequest[] = [];
+    const transport: SpeechServiceTransport = async <TResponse>(request: SpeechServiceTransportRequest) => {
+      requests.push(request);
+      return { audioUrl: 'blob:voice', mimeType: 'audio/wav', durationSeconds: 1.5 } as TResponse;
+    };
     const client = createTtsServiceClient({
       baseUrl: 'http://localhost:5101',
-      transport: async (request) => {
-        requests.push(request);
-        return { audioUrl: 'blob:voice', mimeType: 'audio/wav', durationSeconds: 1.5 };
-      },
+      transport,
     });
 
     const response = await client.synthesizeSpeech({ text: 'Welcome back.', voice: 'narrator', format: 'wav' });
