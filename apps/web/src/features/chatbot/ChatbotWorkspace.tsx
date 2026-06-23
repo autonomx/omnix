@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { ApiError, omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, OmnixTranscriptView, WorkspacePanel } from '../../design/primitives';
+import { AssistantWorkspaceDashboardPanel } from '../assistant-workspace/AssistantWorkspaceDashboard';
 
 interface ChatbotFormValues {
   content: string;
@@ -38,6 +39,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     defaultValues: { content: '', providerId: '', modelId: '' },
   });
   const selectedProviderId = watch('providerId');
+  const selectedModelId = watch('modelId');
   const providerPayload = providerQuery.data;
   const chatProviders = useMemo(() => chatCapableProviders(providerPayload), [providerPayload]);
   const chatModels = useMemo(() => chatCapableModels(providerPayload, selectedProviderId), [providerPayload, selectedProviderId]);
@@ -80,6 +82,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const activeSession = sendMutation.data?.session ?? sessionQuery.data;
   const generationComplete = Boolean(sendMutation.data?.session.messages?.some((message) => message.role === 'assistant'));
   const submitStatus = sendMutation.isPending ? 'generating' : sendMutation.isError ? 'error' : generationComplete ? 'completed' : sendMutation.data?.generation_status ?? 'ready';
+  const activeMessageCount = activeSession?.messages?.length ?? 0;
+  const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
+  const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
 
   return (
     <WorkspacePanel>
@@ -169,6 +174,42 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         </section>
 
         <section className="feature-panel">
+          <AssistantWorkspaceDashboardPanel
+            input={{
+              workspaceName: 'Default workspace',
+              projectName: 'Chatbot',
+              sessionTitle: activeSession?.title ?? 'New chat',
+              sessionMode: 'text',
+              providerLabel,
+              modelLabel,
+              messageCount: activeMessageCount,
+              contextSourceCount: activeMessageCount > 0 ? 1 : 0,
+              memoryCount: 0,
+              knowledgeChunkCount: 0,
+              enabledToolCount: 0,
+              qualitySignals: [
+                {
+                  id: 'session',
+                  label: 'Conversation session is available',
+                  passed: Boolean(activeSession?.id) || !selectedSessionId,
+                  severity: 'info',
+                },
+                {
+                  id: 'provider',
+                  label: 'At least one chat provider is available',
+                  passed: providerQuery.isLoading || chatProviders.length > 0,
+                  severity: 'warning',
+                },
+                {
+                  id: 'messages',
+                  label: 'Conversation projection can render messages',
+                  passed: Boolean(activeSession?.messages) || !activeSession,
+                  severity: 'info',
+                },
+              ],
+            }}
+          />
+
           <Title order={4}>Sessions</Title>
           {sessionsQuery.data?.sessions.length ? (
             <div className="feature-list">
@@ -206,6 +247,22 @@ function chatCapableModels(payload: ProviderFacadePayload | undefined, providerI
       return providerMatches && model.capabilities.includes('chat');
     }) ?? []
   );
+}
+
+function selectedProviderLabel(payload: ProviderFacadePayload | undefined, providerId: string): string | undefined {
+  if (!providerId) {
+    return undefined;
+  }
+
+  return payload?.providers.find((provider) => provider.id === providerId)?.label ?? providerId;
+}
+
+function selectedModelLabel(payload: ProviderFacadePayload | undefined, modelId: string): string | undefined {
+  if (!modelId) {
+    return undefined;
+  }
+
+  return payload?.models.find((model) => model.id === modelId)?.label ?? modelId;
 }
 
 function chatbotSubmitErrorMessage(error: unknown): string {
