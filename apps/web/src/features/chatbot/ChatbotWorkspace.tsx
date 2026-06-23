@@ -8,14 +8,17 @@ import {
   AssistantWorkspaceActivityPanel,
   AssistantWorkspaceDashboardPanel,
   ToolExecutionPanel,
+  createFetchSpeechServiceTransport,
   createInMemoryAssistantWorkspaceEventStore,
   createStoredAssistantWorkspaceEventStore,
   createToolExecutionRows,
+  createTtsServiceClient,
   type AssistantWorkspaceEvent,
   type AssistantWorkspaceEventStore,
   type AssistantWorkspaceEventStoreFilter,
   type AssistantWorkspaceEventStorage,
   type AssistantWorkspaceRuntimeConfig,
+  type TtsSynthesisResponse,
 } from '../assistant-workspace';
 import { createChatbotActivityEvents, createChatbotFailureEvent } from '../assistant-workspace/chatbot-activity';
 import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
@@ -25,6 +28,14 @@ interface ChatbotFormValues {
   providerId: string;
   modelId: string;
 }
+
+type ChatMessage = {
+  id: string;
+  role: 'system' | 'user' | 'assistant' | string;
+  content: string;
+  created_at: string;
+  metadata?: Record<string, unknown>;
+};
 
 const assistantSidebarItems = [
   { label: 'Chats', route: '/chatbot', icon: '▣' },
@@ -44,9 +55,14 @@ const recentItems: Array<{ title: string; time: string; active?: boolean }> = [
   { title: 'Budget planning 2025', time: 'May 7' },
 ] as const;
 
+const suggestedPrompts = ['Tell me a fun fact', 'Recommend a movie', 'Give me productivity tips'] as const;
+
 export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [activeMode, setActiveMode] = useState<'regular' | 'live'>('regular');
+  const [audioStatus, setAudioStatus] = useState<string | null>(null);
   const messageLogRef = useRef<HTMLDivElement>(null);
+  const toolSidebarRef = useRef<HTMLElement>(null);
   const queryClient = useQueryClient();
   const runtimeConfig = useMemo(() => createAssistantWorkspaceRuntimeConfig(), []);
   const eventStore = useMemo(() => createChatbotWorkspaceEventStore(runtimeConfig), [runtimeConfig]);
@@ -70,6 +86,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     register,
     handleSubmit,
     reset,
+    setValue,
     watch,
     formState: { errors },
   } = useForm<ChatbotFormValues>({
@@ -144,7 +161,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
   const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
   const recentMessages = activeSession?.messages?.slice(-4) ?? [];
+  const latestAssistantMessage = getLatestAssistantMessage(activeSession?.messages ?? []);
   const toolExecutionRows = useMemo(() => createToolExecutionRows(activityEvents), [activityEvents]);
+  const enabledToolCount = runtimeConfig.features.toolExecution ? Math.max(toolExecutionRows.length, 3) : 0;
 
   useEffect(() => {
     const messageLog = messageLogRef.current;
@@ -171,6 +190,53 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
     setActivityEvents(eventStore.list(filter));
   }, [activeSession, eventStore, runtimeConfig]);
+
+  function applySuggestedPrompt(prompt: string): void {
+    setValue('content', prompt, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+  }
+
+  function refreshActivityPanel(): void {
+    setActivityEvents(eventStore.list(createWorkspaceEventFilter(runtimeConfig, activeSession?.id)));
+  }
+
+  async function playAssistantResponseAudio(text: string): Promise<void> {
+    const spokenText = text.trim();
+
+    if (!spokenText) {
+      setAudioStatus('No assistant response is ready to play.');
+      return;
+    }
+
+    if (!runtimeConfig.ttsServiceUrl) {
+      setAudioStatus('Configure VITE_ASSISTANT_TTS_URL to play response audio.');
+      return;
+    }
+
+    try {
+      setAudioStatus(runtimeConfig.ttsVoice ? `Synthesizing ${runtimeConfig.ttsVoice} voice…` : 'Synthesizing response voice…');
+      const ttsClient = createTtsServiceClient({
+        baseUrl: runtimeConfig.ttsServiceUrl,
+        transport: createFetchSpeechServiceTransport(),
+      });
+      const response = await ttsClient.synthesizeSpeech({
+        text: spokenText,
+        voice: runtimeConfig.ttsVoice,
+        format: 'wav',
+        metadata: {
+          source: 'chatbot_response_playback',
+          sessionId: activeSession?.id,
+          providerId: selectedProviderId || runtimeConfig.defaultProviderId,
+          modelId: selectedModelId || runtimeConfig.defaultModelId,
+        },
+      });
+      const source = getSynthesizedAudioSource(response);
+      const audio = new Audio(source);
+      await audio.play();
+      setAudioStatus(runtimeConfig.ttsVoice ? 'Playing cloned response voice.' : 'Playing response voice.');
+    } catch (error) {
+      setAudioStatus(error instanceof Error ? error.message : 'Response audio playback failed.');
+    }
+  }
 
   return (
     <WorkspacePanel className="assistant-chat-page">
@@ -260,6 +326,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                         <button type="button" aria-label="Like response">♡</button>
                         <button type="button" aria-label="Dislike response">↯</button>
                         <button type="button" aria-label="Copy response">□</button>
+                        <button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button>
                         <button type="button" aria-label="More response actions">⋮</button>
                       </div>
                     ) : null}
@@ -275,10 +342,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
           <form className="assistant-composer" onSubmit={handleSubmit((values) => sendMutation.mutate(values))}>
             <div className="assistant-suggestion-row" aria-label="Suggested prompts">
-              <button type="button">Tell me a fun fact</button>
-              <button type="button">Recommend a movie</button>
-              <button type="button">Give me productivity tips</button>
-              <button type="button">More</button>
+              {suggestedPrompts.map((prompt) => (
+                <button key={prompt} type="button" onClick={() => applySuggestedPrompt(prompt)}>
+                  {prompt}
+                </button>
+              ))}
+              <button type="button" onClick={() => applySuggestedPrompt('Give me more options for this conversation')}>More</button>
             </div>
             <div className="assistant-composer-controls" aria-label="Conversation controls">
               <label>
@@ -303,10 +372,31 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   ))}
                 </select>
               </label>
-              <span className="assistant-composer-chip">Voice Ready</span>
-              <span className="assistant-composer-chip">Memory On</span>
-              <span className="assistant-composer-chip">Tools {runtimeConfig.features.toolExecution ? '3 Active' : 'Off'}</span>
-              <span className="assistant-composer-chip">Context</span>
+              <button
+                type="button"
+                className="assistant-composer-chip"
+                onClick={() => void playAssistantResponseAudio(latestAssistantMessage?.content ?? '')}
+                disabled={!latestAssistantMessage}
+              >
+                <span>Voice</span>
+                <strong>{runtimeConfig.ttsVoice ? `Clone: ${runtimeConfig.ttsVoice}` : 'Ready'}</strong>
+              </button>
+              <a className="assistant-composer-chip" href="/assets">
+                <span>Memory</span>
+                <strong>On</strong>
+              </a>
+              <button
+                type="button"
+                className="assistant-composer-chip"
+                onClick={() => toolSidebarRef.current?.scrollIntoView({ block: 'nearest' })}
+              >
+                <span>Tools</span>
+                <strong>{runtimeConfig.features.toolExecution ? `${enabledToolCount} Active` : 'Off'}</strong>
+              </button>
+              <button type="button" className="assistant-composer-chip" onClick={refreshActivityPanel}>
+                <span>Context</span>
+                <strong>{activeMessageCount > 0 ? 'Project Brief' : 'Ready'}</strong>
+              </button>
             </div>
             <label className="assistant-message-input">
               <span>Message</span>
@@ -318,7 +408,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               />
             </label>
             <div className="assistant-composer-actions">
-              <button type="button" className="assistant-mic-button" aria-label="Start voice input">
+              <button type="button" className="assistant-mic-button" aria-label="Start voice input" onClick={() => setActiveMode('live')}>
                 ◉
               </button>
               <button
@@ -333,14 +423,19 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </form>
 
           <div className="assistant-mode-switch" aria-label="Chat mode">
-            <button type="button" className="active">Regular Chat</button>
-            <button type="button">Live Voice</button>
+            <button type="button" className={activeMode === 'regular' ? 'active' : undefined} onClick={() => setActiveMode('regular')}>
+              Regular Chat
+            </button>
+            <button type="button" className={activeMode === 'live' ? 'active' : undefined} onClick={() => setActiveMode('live')}>
+              Live Voice
+            </button>
           </div>
 
           <div className="assistant-inline-status" aria-live="polite">
             {errors.content ? <span role="alert">Enter a message before sending.</span> : null}
             {sendMutation.isPending ? <span role="status">Contacting the selected chat provider…</span> : null}
             {sendMutation.isError ? <span role="alert">{chatbotSubmitErrorMessage(sendMutation.error)}</span> : null}
+            {audioStatus ? <span role="status">{audioStatus}</span> : null}
             {sendMutation.data ? (
               <span role="status">
                 {generationComplete ? 'Generation completed' : 'Generation job queued'}: {sendMutation.data.job.id}
@@ -411,7 +506,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               </footer>
             </section>
 
-            <section className="assistant-tool-sidebar-card" aria-labelledby="assistant-tool-execution-heading">
+            <section ref={toolSidebarRef} className="assistant-tool-sidebar-card" aria-labelledby="assistant-tool-execution-heading">
               <ToolExecutionPanel
                 rows={toolExecutionRows}
                 title="Tool execution"
@@ -564,4 +659,14 @@ function createWorkspaceEventFilter(config: AssistantWorkspaceRuntimeConfig, ses
     projectId: config.projectId,
     sessionId,
   };
+}
+
+function getLatestAssistantMessage(messages: ChatMessage[]): ChatMessage | undefined {
+  return [...messages].reverse().find((message) => message.role === 'assistant' && message.content.trim());
+}
+
+function getSynthesizedAudioSource(response: TtsSynthesisResponse): string {
+  if (response.audioUrl) return response.audioUrl;
+  if (response.audioBase64) return `data:${response.mimeType ?? 'audio/wav'};base64,${response.audioBase64}`;
+  throw new Error('TTS service did not return playable audio.');
 }
