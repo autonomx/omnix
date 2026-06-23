@@ -180,7 +180,7 @@ describe('ChatbotWorkspace', () => {
     });
   });
 
-  it('surfaces gateway failures instead of silently doing nothing', async () => {
+  it('surfaces gateway failures in the replayable activity stream', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
@@ -206,5 +206,23 @@ describe('ChatbotWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Chat request failed with status 503');
+    expect(await screen.findByText('chat request failed: Chat request failed with status 503')).toBeInTheDocument();
+    expect(await screen.findByText('Source: operation_failed')).toBeInTheDocument();
+
+    await waitFor(() => {
+      const persistedEvents = JSON.parse(window.localStorage.getItem('omnix.assistantWorkspace.events') ?? '[]') as Array<{
+        type?: string;
+        payload?: { operation?: string; statusCode?: number; details?: { submittedContent?: string } };
+      }>;
+      expect(persistedEvents).toHaveLength(1);
+      expect(persistedEvents[0]).toMatchObject({
+        type: 'operation_failed',
+        payload: {
+          operation: 'chat_request',
+          statusCode: 503,
+          details: { submittedContent: 'Is this wired?' },
+        },
+      });
+    });
   });
 });
