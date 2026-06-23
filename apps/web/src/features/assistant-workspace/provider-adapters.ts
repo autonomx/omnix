@@ -1,5 +1,13 @@
 import type { MessageContent, TokenUsage } from './conversation';
-import type { ModelRequest, ModelResponse, ProviderMessage, ProviderToolDefinition } from './provider';
+import type {
+  ModelProvider,
+  ModelProviderCapabilities,
+  ModelRequest,
+  ModelResponse,
+  ProviderMessage,
+  ProviderToolDefinition,
+} from './provider';
+import { createStaticModelProvider } from './provider';
 
 export type OpenAiChatMessage = {
   role: ProviderMessage['role'];
@@ -65,6 +73,36 @@ export type AnthropicMessagesResponse = {
   };
 };
 
+export type ProviderHttpRequest = {
+  url: string;
+  method: 'POST';
+  headers: Record<string, string>;
+  body: string;
+};
+
+export type ProviderTransport<TResponse> = (request: ProviderHttpRequest) => Promise<TResponse>;
+
+export type OpenAiCompatibleProviderOptions = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+  capabilities?: Partial<ModelProviderCapabilities>;
+  transport: ProviderTransport<OpenAiChatResponse>;
+};
+
+export type AnthropicProviderOptions = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey?: string;
+  anthropicVersion?: string;
+  headers?: Record<string, string>;
+  capabilities?: Partial<ModelProviderCapabilities>;
+  transport: ProviderTransport<AnthropicMessagesResponse>;
+};
+
 export function flattenMessageContent(content: MessageContent[]): string {
   return content
     .map((part) => part.text.trim())
@@ -74,6 +112,10 @@ export function flattenMessageContent(content: MessageContent[]): string {
 
 function toTextContent(text: string): MessageContent[] {
   return text.trim() ? [{ kind: 'text', text }] : [];
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.endsWith('/') ? value.slice(0, -1) : value;
 }
 
 function toOpenAiTool(tool: ProviderToolDefinition): OpenAiToolDefinition {
@@ -168,4 +210,59 @@ export function fromAnthropicMessagesResponse(response: AnthropicMessagesRespons
     tokenUsage: toAnthropicTokenUsage(response.usage),
     raw: response,
   };
+}
+
+export function createOpenAiCompatibleProvider(options: OpenAiCompatibleProviderOptions): ModelProvider {
+  return createStaticModelProvider(
+    options.id,
+    options.name,
+    {
+      tools: true,
+      streaming: true,
+      jsonMode: true,
+      ...options.capabilities,
+    },
+    async (request) => {
+      const response = await options.transport({
+        url: `${trimTrailingSlash(options.baseUrl)}/chat/completions`,
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+          ...options.headers,
+        },
+        body: JSON.stringify(toOpenAiChatRequest(request)),
+      });
+
+      return fromOpenAiChatResponse(response);
+    },
+  );
+}
+
+export function createAnthropicProvider(options: AnthropicProviderOptions): ModelProvider {
+  return createStaticModelProvider(
+    options.id,
+    options.name,
+    {
+      tools: true,
+      streaming: true,
+      jsonMode: false,
+      ...options.capabilities,
+    },
+    async (request) => {
+      const response = await options.transport({
+        url: `${trimTrailingSlash(options.baseUrl)}/messages`,
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'anthropic-version': options.anthropicVersion ?? '2023-06-01',
+          ...(options.apiKey ? { 'x-api-key': options.apiKey } : {}),
+          ...options.headers,
+        },
+        body: JSON.stringify(toAnthropicMessagesRequest(request)),
+      });
+
+      return fromAnthropicMessagesResponse(response);
+    },
+  );
 }

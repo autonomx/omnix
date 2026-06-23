@@ -78,6 +78,8 @@ export { createProviderCapabilitySet, createStaticModelProvider, providerSupport
 export type { ModelProvider, ModelProviderCapabilities, ModelRequest, ModelResponse } from './provider';
 
 export {
+  createAnthropicProvider,
+  createOpenAiCompatibleProvider,
   flattenMessageContent,
   fromAnthropicMessagesResponse,
   fromOpenAiChatResponse,
@@ -88,10 +90,14 @@ export type {
   AnthropicMessage,
   AnthropicMessagesRequest,
   AnthropicMessagesResponse,
+  AnthropicProviderOptions,
   OpenAiChatMessage,
   OpenAiChatRequest,
   OpenAiChatResponse,
+  OpenAiCompatibleProviderOptions,
   OpenAiToolDefinition,
+  ProviderHttpRequest,
+  ProviderTransport,
 } from './provider-adapters';
 
 export {
