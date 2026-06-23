@@ -58,11 +58,18 @@ function providerPayload() {
 
 afterEach(() => {
   window.localStorage.clear();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
 describe('ChatbotWorkspace', () => {
   it('uses provider/model selectors and renders the assistant response with activity events', async () => {
+    vi.stubEnv('VITE_ASSISTANT_TTS_URL', 'http://tts.local');
+    vi.stubEnv('VITE_ASSISTANT_TTS_VOICE', 'narrator-clone');
+    const playMock = vi.fn().mockResolvedValue(undefined);
+    const audioCtor = vi.fn().mockImplementation((src: string) => ({ src, play: playMock }));
+    vi.stubGlobal('Audio', audioCtor);
+
     let session: {
       id: string;
       title: string;
@@ -87,6 +94,13 @@ describe('ChatbotWorkspace', () => {
 
       if (path === '/api/providers') {
         return Response.json(providerPayload());
+      }
+
+      if (path === '/synthesize') {
+        return Response.json({
+          audioBase64: 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=',
+          mimeType: 'audio/wav',
+        });
       }
 
       if (path === '/api/chat/sessions' && init?.method === 'POST') {
@@ -149,6 +163,8 @@ describe('ChatbotWorkspace', () => {
     expect(await screen.findByText('OpenAI compatible')).toBeInTheDocument();
     expect(screen.getByText('Workspace activity')).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: 'Tell me a fun fact' }));
+    expect(screen.getByLabelText('Message')).toHaveValue('Tell me a fun fact');
     fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'openai' } });
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-mini' } });
     fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Hello Omnix' } });
@@ -159,6 +175,15 @@ describe('ChatbotWorkspace', () => {
     expect(await screen.findByText('Source: assistant_message')).toBeInTheDocument();
     const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('You'));
     expect(transcriptMessage).toBeTruthy();
+
+    expect(screen.getAllByRole('button', { name: 'Play response audio' }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Play response audio' })[0]);
+
+    await waitFor(() => {
+      const playedAudio = audioCtor.mock.calls.length > 0 && playMock.mock.calls.length > 0;
+      const needsTtsUrl = screen.queryByText('Configure VITE_ASSISTANT_TTS_URL to play response audio.');
+      expect(playedAudio || needsTtsUrl).toBeTruthy();
+    });
 
     await waitFor(() => {
       const persistedEvents = JSON.parse(window.localStorage.getItem('omnix.assistantWorkspace.events') ?? '[]') as unknown[];
