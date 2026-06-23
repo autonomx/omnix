@@ -35,7 +35,13 @@ export type {
 } from './conversation';
 
 export { ASSISTANT_WORKSPACE_EVENT_TYPES, isAssistantWorkspaceEventType } from './events';
-export type { AssistantWorkspaceEvent, AssistantWorkspaceEventType } from './events';
+export type {
+  AssistantWorkspaceEvent,
+  AssistantWorkspaceEventBase,
+  AssistantWorkspaceEventPayload,
+  AssistantWorkspaceEventPayloadByType,
+  AssistantWorkspaceEventType,
+} from './events';
 
 export {
   appendProjectionEvent,
@@ -73,6 +79,107 @@ export {
   summarizeAssistantResponseAudit,
 } from './audit';
 export type { AssistantResponseAudit, ResponseAuditSummary } from './audit';
+
+export {
+  DEFAULT_ASSISTANT_IDENTITY_NAMES,
+  createAssistantIdentity,
+  isDefaultAssistantIdentityName,
+  updateAssistantIdentityPrompt,
+} from './identity';
+export type { AssistantIdentity, DefaultAssistantIdentityName } from './identity';
+
+export {
+  createWorkspaceProjectTree,
+  getProjectConversationIds,
+  summarizeWorkspaceProjectTree,
+} from './workspace-system';
+export type { ProjectWorkspaceSummary, WorkspaceProjectTree } from './workspace-system';
+
+export {
+  createMemoryRecord,
+  filterMemoriesByScope,
+  pinMemory,
+  requiresMemoryConfirmation,
+} from './memories';
+export type { MemoryRecord, MemoryScope, MemorySource } from './memories';
+
+export { createMemoryViewRows } from './memory-view';
+export type { MemoryViewAction, MemoryViewFilter, MemoryViewRow } from './memory-view';
+
+export { getReadyLibraryItems, getScopedLibraryItems, getSegmentsForItems } from './library-items';
+export type { LibraryItem, LibraryItemStatus, LibrarySegment } from './library-items';
+
+export {
+  getEnabledInstructionRecords,
+  getScopedInstructionRecords,
+  sortInstructionRecords,
+} from './instructions';
+export type { InstructionRecord, InstructionScope } from './instructions';
+
+export { CONTEXT_PANEL_TABS, createContextPanelSummary, isContextPanelTab } from './context-view';
+export type { ContextPanelSummary, ContextPanelTab } from './context-view';
+
+export {
+  DEFAULT_ASSISTANT_APP_REGIONS,
+  createAssistantAppLayout,
+  getVisibleRegions,
+} from './app-layout';
+export type { AssistantAppLayout, AssistantWorkspaceRegion } from './app-layout';
+
+export {
+  createTimelineNote,
+  filterTimelineItemsByKind,
+  sortTimelineItems,
+} from './timeline-items';
+export type { TimelineItem, TimelineItemKind } from './timeline-items';
+
+export {
+  DEFAULT_COMPOSER_CONTROLS,
+  createComposerState,
+  toggleComposerControl,
+} from './composer';
+export type { ComposerControl, ComposerState } from './composer';
+
+export { canInterruptLivePanel, createLivePanelState, setLivePanelMode } from './live-panel';
+export type { LivePanelMode, LivePanelState } from './live-panel';
+
+export { LIVE_SESSION_MODES, canStartInput, canStartOutput, isLiveSessionMode } from './session-mode';
+export type { LiveSessionMode } from './session-mode';
+
+export {
+  canStartAudioCapture,
+  createAudioCaptureState,
+  selectAudioCaptureDevice,
+} from './audio-capture';
+export type { AudioCaptureDevice, AudioCaptureState, CapturePermission } from './audio-capture';
+
+export {
+  createTextSegment,
+  getCompleteText,
+  replaceDraftTextSegment,
+} from './text-segments';
+export type { TextSegment, TextSegmentKind } from './text-segments';
+
+export {
+  createProcessStep,
+  getCompletedProcessStages,
+  isProcessComplete,
+} from './process-steps';
+export type { ProcessStage, ProcessStep } from './process-steps';
+
+export {
+  createPlaybackQueue,
+  enqueuePlaybackItem,
+  setActivePlaybackItem,
+} from './playback';
+export type { PlaybackItem, PlaybackQueue } from './playback';
+
+export {
+  canUseCapability,
+  createCapabilityDefinition,
+  getEnabledCapabilities,
+} from './capabilities';
+export type { CapabilityDefinition, CapabilityEvent, CapabilityScope } from './capabilities';
 
 export {
   DEFAULT_ASSISTANT_WORKSPACE_PREFERENCES,
