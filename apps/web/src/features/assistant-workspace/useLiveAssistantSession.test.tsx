@@ -1,12 +1,32 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { createAudioCaptureState } from './audio-capture';
+import type { BrowserAudioCaptureSession } from './audio-capture-browser';
+import type { LiveAssistantTurnResult } from './live-orchestrator';
 import { useLiveAssistantSession, type LiveAssistantSessionController } from './useLiveAssistantSession';
 
-function captureSession() {
+function captureSession(): BrowserAudioCaptureSession {
   return {
+    state: createAudioCaptureState({
+      active: true,
+      permission: 'granted',
+      devices: [{ id: 'mic-1', label: 'Microphone' }],
+      selectedDeviceId: 'mic-1',
+    }),
     stream: { getTracks: () => [] },
-    deviceId: 'mic-1',
-    startedAt: '2026-06-23T09:00:00Z',
+  };
+}
+
+function liveTurnResult(): LiveAssistantTurnResult {
+  return {
+    sessionId: 'session:voice',
+    transcript: { text: 'hello' },
+    modelRequest: { provider: 'local', model: 'qwen', messages: [] },
+    modelResponse: { content: [{ kind: 'text', text: 'hi' }] },
+    assistantText: 'hi',
+    synthesis: { audioUrl: 'blob:hi' },
+    playbackItem: { id: 'playback:1', text: 'hi', createdAt: '2026-06-23T09:00:01Z' },
+    stages: ['transcribed', 'responded', 'synthesized', 'queued'],
   };
 }
 
@@ -17,16 +37,7 @@ describe('useLiveAssistantSession', () => {
       startCapture: vi.fn(async () => captureSession()),
       stopCapture,
       readCapturedAudio: vi.fn(async () => new ArrayBuffer(2)),
-      runTurn: vi.fn(async () => ({
-        sessionId: 'session:voice',
-        transcript: { text: 'hello' },
-        modelRequest: { provider: 'local', model: 'qwen', messages: [] },
-        modelResponse: { content: [{ kind: 'text', text: 'hi' }] },
-        assistantText: 'hi',
-        synthesis: { audioUrl: 'blob:hi' },
-        playbackItem: { id: 'playback:1', text: 'hi', createdAt: '2026-06-23T09:00:01Z' },
-        stages: ['transcribed', 'responded', 'synthesized', 'queued'],
-      })),
+      runTurn: vi.fn(async () => liveTurnResult()),
     };
 
     const { result } = renderHook(() => useLiveAssistantSession(controller));
