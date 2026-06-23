@@ -1,5 +1,5 @@
 .assistant-chat-layout {
-  grid-template-columns: minmax(14rem, 16.5rem) minmax(34rem, 1fr) minmax(39rem, 44rem);
+  grid-template-columns: minmax(14rem, 16.5rem) minmax(34rem, 1fr) minmax(23rem, 28rem);
 }
 
 .assistant-chat-side {
@@ -15,12 +15,45 @@
   padding: 0;
 }
 
+.assistant-side-panel-toggle {
+  align-items: center;
+  background: rgba(7, 11, 22, 0.82);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.95rem;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.35rem;
+}
+
+.assistant-side-panel-toggle button {
+  background: transparent;
+  border: 0;
+  border-radius: 0.7rem;
+  color: var(--omnix-muted);
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 2.25rem;
+  text-transform: uppercase;
+}
+
+.assistant-side-panel-toggle button.active {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.8), rgba(34, 211, 238, 0.22));
+  color: #f8fbff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0.85rem 2rem rgba(124, 58, 237, 0.22);
+}
+
 .assistant-live-tools-grid {
   align-items: stretch;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(18rem, 1.06fr) minmax(16rem, 0.94fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
+}
+
+.assistant-live-tools-grid[data-active-panel='voice'] > .assistant-tool-sidebar-card,
+.assistant-live-tools-grid[data-active-panel='tools'] > .assistant-live-card {
+  display: none;
 }
 
 .assistant-live-tools-grid > .assistant-live-card,
@@ -30,6 +63,17 @@
 
 .assistant-live-tools-grid > .assistant-live-card {
   overflow: hidden;
+}
+
+.assistant-live-card[data-live-voice-status='connected'] header strong,
+.assistant-live-card[data-live-voice-status='connecting'] header strong {
+  color: var(--omnix-success);
+}
+
+.assistant-live-card[data-live-voice-status='error'] header strong,
+.assistant-live-card[data-live-voice-status='disconnected'] header strong,
+.assistant-live-card[data-live-voice-status='idle'] header strong {
+  color: var(--omnix-muted);
 }
 
 .assistant-live-card .eyebrow {
@@ -75,6 +119,18 @@
   display: block;
   font-size: 1.02rem;
   text-align: center;
+}
+
+.assistant-voice-controls button:not(.danger):last-child {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.92), rgba(124, 58, 237, 0.8));
+  border-color: rgba(34, 211, 238, 0.42);
+  color: #f9fbff;
+}
+
+.assistant-voice-controls button.danger {
+  background: linear-gradient(135deg, #ef476f, #d93053);
+  border-color: rgba(255, 112, 145, 0.45);
+  color: #fff;
 }
 
 .assistant-voice-transcript-header,
@@ -189,7 +245,7 @@
 .assistant-supporting-panels {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr) minmax(14rem, 0.8fr);
+  grid-template-columns: 1fr;
   min-height: 13rem;
 }
 
@@ -204,15 +260,7 @@
 
 @media (max-width: 1780px) {
   .assistant-chat-layout {
-    grid-template-columns: minmax(14rem, 16.5rem) minmax(30rem, 1fr) minmax(36rem, 41rem);
-  }
-
-  .assistant-live-tools-grid {
-    grid-template-columns: minmax(17rem, 1.05fr) minmax(15rem, 0.95fr);
-  }
-
-  .assistant-supporting-panels {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(14rem, 16.5rem) minmax(30rem, 1fr) minmax(22rem, 26rem);
   }
 
   .assistant-supporting-panels > section,
