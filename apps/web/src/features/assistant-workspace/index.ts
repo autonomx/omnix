@@ -290,6 +290,8 @@ export { getWorkspaceQualityStatus, summarizeWorkspaceQuality } from './quality'
 export type { WorkspaceQualitySignal, WorkspaceQualitySummary } from './quality';
 
 export { AssistantWorkspaceDashboard, AssistantWorkspaceDashboardPanel } from './AssistantWorkspaceDashboard';
+export { AssistantWorkspaceActivityPanel } from './AssistantWorkspaceActivityPanel';
+export type { AssistantWorkspaceActivityPanelProps } from './AssistantWorkspaceActivityPanel';
 export {
   createAssistantWorkspaceDashboard,
 } from './workspace-dashboard';
