@@ -89,3 +89,6 @@ export {
   shouldUseAccessibleMotion,
 } from './accessibility';
 export type { WorkspaceAccessibilityProfile, WorkspaceBreakpoint } from './accessibility';
+
+export { getWorkspaceQualityStatus, summarizeWorkspaceQuality } from './quality';
+export type { WorkspaceQualitySignal, WorkspaceQualitySummary } from './quality';
