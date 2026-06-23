@@ -296,3 +296,11 @@ export type {
 
 export { flattenModelResponseText, runLiveAssistantTurn } from './live-orchestrator';
 export type { LiveAssistantTurnInput, LiveAssistantTurnResult } from './live-orchestrator';
+
+export { useLiveAssistantSession } from './useLiveAssistantSession';
+export type {
+  LiveAssistantSessionApi,
+  LiveAssistantSessionController,
+  LiveAssistantSessionState,
+  LiveAssistantSessionStatus,
+} from './useLiveAssistantSession';
