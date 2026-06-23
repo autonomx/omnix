@@ -1,0 +1,98 @@
+.assistant-chat-layout {
+  grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) minmax(36rem, 44rem);
+}
+
+.assistant-chat-side {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.assistant-live-tools-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(18rem, 1.1fr) minmax(16rem, 0.9fr);
+  min-height: 0;
+}
+
+.assistant-live-tools-grid > .assistant-live-card {
+  min-height: 0;
+}
+
+.assistant-tool-sidebar-card,
+.assistant-supporting-panels > section,
+.assistant-supporting-panels > div,
+.assistant-supporting-panels .assistant-workspace-dashboard,
+.assistant-supporting-panels .assistant-workspace-activity {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(34, 211, 238, 0.1), transparent 18rem),
+    linear-gradient(180deg, rgba(17, 24, 44, 0.94), rgba(7, 11, 22, 0.98));
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.95rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 1.4rem 4rem rgba(0, 0, 0, 0.2);
+  min-width: 0;
+}
+
+.assistant-tool-sidebar-card {
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.assistant-tool-sidebar-card [aria-label='Tool execution rows'] {
+  max-height: 25rem;
+  overflow: auto;
+  padding-right: 0.1rem;
+}
+
+.assistant-tool-sidebar-card .platform-empty {
+  background: rgba(12, 18, 34, 0.72);
+  border-style: solid;
+  margin-top: 0;
+}
+
+.assistant-supporting-panels {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr) minmax(14rem, 0.8fr);
+  min-height: 13rem;
+}
+
+.assistant-supporting-panels > section,
+.assistant-supporting-panels > div,
+.assistant-supporting-panels .assistant-workspace-dashboard,
+.assistant-supporting-panels .assistant-workspace-activity {
+  max-height: 18rem;
+  overflow: auto;
+  padding: 1rem;
+}
+
+@media (max-width: 1780px) {
+  .assistant-chat-layout {
+    grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) minmax(32rem, 38rem);
+  }
+
+  .assistant-live-tools-grid,
+  .assistant-supporting-panels {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-supporting-panels > section,
+  .assistant-supporting-panels > div,
+  .assistant-supporting-panels .assistant-workspace-dashboard,
+  .assistant-supporting-panels .assistant-workspace-activity {
+    max-height: none;
+  }
+}
+
+@media (max-width: 1500px) {
+  .assistant-chat-layout {
+    grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr);
+  }
+
+  .assistant-chat-side,
+  .assistant-live-tools-grid,
+  .assistant-supporting-panels {
+    grid-template-columns: 1fr;
+  }
+}
