@@ -1,10 +1,9 @@
-import { Button, Group, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ApiError, omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { OmnixStatusPill, OmnixTranscriptView, WorkspacePanel } from '../../design/primitives';
+import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import {
   AssistantWorkspaceActivityPanel,
   AssistantWorkspaceDashboardPanel,
@@ -124,6 +123,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const activeMessageCount = activeSession?.messages?.length ?? 0;
   const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
   const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
+  const recentMessages = activeSession?.messages?.slice(-4) ?? [];
 
   useEffect(() => {
     const filter = createWorkspaceEventFilter(runtimeConfig, activeSession?.id);
@@ -145,93 +145,142 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }, [activeSession, eventStore, runtimeConfig]);
 
   return (
-    <WorkspacePanel>
-      <div className="workspace-heading">
-        <div>
-          <p className="eyebrow">Feature module</p>
-          <h2 id="module-title">{module.label}</h2>
-        </div>
-        <code>{module.route}</code>
-      </div>
-
-      <p className="workspace-summary">{module.summary}</p>
-
-      <div className="feature-layout">
-        <section className="feature-panel">
-          <Group justify="space-between" align="start">
+    <WorkspacePanel className="assistant-chat-page">
+      <div className="assistant-chat-layout">
+        <section className="assistant-chat-main" aria-labelledby="module-title">
+          <header className="assistant-chat-header">
             <div>
-              <Title order={4}>Conversation</Title>
-              <Text size="sm">{activeSession?.title ?? 'New chat'}</Text>
+              <p className="eyebrow">Current chat</p>
+              <h2 id="module-title">{activeSession?.title ?? 'Hey! How are you today?'}</h2>
             </div>
-            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
-          </Group>
-
-          {activeSession?.messages?.length ? (
-            <OmnixTranscriptView messages={activeSession.messages.map((message) => ({ role: message.role, content: message.content }))} />
-          ) : (
-            <div className="platform-empty" role="status">
-              No chat messages yet.
+            <div className="assistant-chat-header-actions">
+              <button type="button">Share</button>
+              <button type="button" aria-label="Star conversation">☆</button>
+              <button type="button" aria-label="More actions">⋮</button>
             </div>
-          )}
+          </header>
 
-          <form className="feature-form" onSubmit={handleSubmit((values) => sendMutation.mutate(values))}>
-            <label>
-              Provider
-              <select {...register('providerId')}>
-                <option value="">Default provider</option>
-                {chatProviders.map((provider) => (
-                  <option key={provider.id} value={provider.id}>
-                    {provider.label}
-                  </option>
-                ))}
-              </select>
+          <div className="assistant-chat-messages" role="log" aria-live="polite">
+            {activeSession?.messages?.length ? (
+              activeSession.messages.map((message) => (
+                <article key={message.id} className={`assistant-chat-message ${message.role}`}>
+                  {message.role !== 'user' ? <span className="assistant-chat-avatar" aria-hidden="true" /> : null}
+                  <div className="assistant-chat-bubble">
+                    <header>
+                      <strong>{message.role === 'assistant' ? 'Omnix Assistant' : message.role === 'user' ? 'You' : message.role}</strong>
+                      <time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time>
+                    </header>
+                    <p>{message.content}</p>
+                    {message.role === 'assistant' ? (
+                      <div className="assistant-message-actions" aria-label="Assistant message actions">
+                        <button type="button" aria-label="Like response">♡</button>
+                        <button type="button" aria-label="Dislike response">↯</button>
+                        <button type="button" aria-label="Copy response">□</button>
+                        <button type="button" aria-label="More response actions">⋮</button>
+                      </div>
+                    ) : null}
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="platform-empty" role="status">
+                No chat messages yet.
+              </div>
+            )}
+          </div>
+
+          <form className="assistant-composer" onSubmit={handleSubmit((values) => sendMutation.mutate(values))}>
+            <div className="assistant-composer-controls" aria-label="Conversation controls">
+              <label>
+                <span>Provider</span>
+                <select {...register('providerId')} aria-label="Provider">
+                  <option value="">Default provider</option>
+                  {chatProviders.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Model</span>
+                <select {...register('modelId')} aria-label="Model">
+                  <option value="">Default model</option>
+                  {chatModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="assistant-composer-chip">Voice Ready</span>
+              <span className="assistant-composer-chip">Memory On</span>
+              <span className="assistant-composer-chip">Tools {runtimeConfig.features.toolExecution ? 'Active' : 'Off'}</span>
+              <span className="assistant-composer-chip">Context</span>
+            </div>
+            <label className="assistant-message-input">
+              <span>Message</span>
+              <textarea
+                rows={3}
+                aria-invalid={Boolean(errors.content)}
+                placeholder="Message Omnix Assistant..."
+                {...register('content', { required: true })}
+              />
             </label>
-            <label>
-              Model
-              <select {...register('modelId')}>
-                <option value="">Default model</option>
-                {chatModels.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="feature-form-wide">
-              Message
-              <textarea rows={4} aria-invalid={Boolean(errors.content)} {...register('content', { required: true })} />
-            </label>
-            <Button className="feature-form-action" type="submit" disabled={sendMutation.isPending} loading={sendMutation.isPending}>
-              {sendMutation.isPending ? 'Generating response…' : 'Send message'}
-            </Button>
+            <div className="assistant-composer-actions">
+              <button type="button" className="assistant-mic-button" aria-label="Start voice input">
+                ◉
+              </button>
+              <button className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>
+                {sendMutation.isPending ? 'Generating response…' : 'Send message'}
+              </button>
+            </div>
           </form>
 
-          {errors.content ? (
-            <div className="platform-empty" role="alert">
-              Enter a message before sending.
-            </div>
-          ) : null}
-
-          {sendMutation.isPending ? (
-            <div className="feature-job-link" role="status" aria-live="polite">
-              Contacting the selected chat provider…
-            </div>
-          ) : null}
-
-          {sendMutation.isError ? (
-            <div className="platform-empty" role="alert">
-              {chatbotSubmitErrorMessage(sendMutation.error)}
-            </div>
-          ) : null}
-
-          {sendMutation.data ? (
-            <div className="feature-job-link" role="status">
-              {generationComplete ? 'Generation completed' : 'Generation job queued'}: {sendMutation.data.job.id}
-            </div>
-          ) : null}
+          <div className="assistant-inline-status" aria-live="polite">
+            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
+            {errors.content ? <span role="alert">Enter a message before sending.</span> : null}
+            {sendMutation.isPending ? <span role="status">Contacting the selected chat provider…</span> : null}
+            {sendMutation.isError ? <span role="alert">{chatbotSubmitErrorMessage(sendMutation.error)}</span> : null}
+            {sendMutation.data ? (
+              <span role="status">
+                {generationComplete ? 'Generation completed' : 'Generation job queued'}: {sendMutation.data.job.id}
+              </span>
+            ) : null}
+          </div>
         </section>
 
-        <section className="feature-panel">
+        <aside className="assistant-chat-side" aria-label="Live voice and workspace activity">
+          <section className="assistant-live-card">
+            <header>
+              <div>
+                <p className="eyebrow">Live Voice</p>
+                <strong>Connected</strong>
+              </div>
+              <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
+            </header>
+            <div className="assistant-voice-orb" aria-hidden="true">
+              <span />
+            </div>
+            <div className="assistant-voice-controls">
+              <button type="button">Mute</button>
+              <button type="button" className="danger">End Call</button>
+            </div>
+            <div className="assistant-voice-transcript">
+              <h3>Transcript</h3>
+              {recentMessages.length ? (
+                recentMessages.map((message) => (
+                  <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}>
+                    <strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong>
+                    {message.content}
+                  </p>
+                ))
+              ) : (
+                <p className="muted">Voice transcript will appear here.</p>
+              )}
+            </div>
+          </section>
+
           <AssistantWorkspaceDashboardPanel
             input={{
               workspaceName: runtimeConfig.workspaceId,
@@ -276,27 +325,29 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
           <AssistantWorkspaceActivityPanel events={activityEvents} />
 
-          <Title order={4}>Sessions</Title>
-          {sessionsQuery.data?.sessions.length ? (
-            <div className="feature-list">
-              {sessionsQuery.data.sessions.map((session) => (
-                <button
-                  className={session.id === selectedSessionId ? 'active' : undefined}
-                  key={session.id}
-                  type="button"
-                  onClick={() => setSelectedSessionId(session.id)}
-                >
-                  <span>{session.title}</span>
-                  <small>{session.message_count} messages</small>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="platform-empty" role="status">
-              No chat sessions yet.
-            </div>
-          )}
-        </section>
+          <section className="assistant-sessions-card">
+            <h3>Sessions</h3>
+            {sessionsQuery.data?.sessions.length ? (
+              <div className="feature-list">
+                {sessionsQuery.data.sessions.map((session) => (
+                  <button
+                    className={session.id === selectedSessionId ? 'active' : undefined}
+                    key={session.id}
+                    type="button"
+                    onClick={() => setSelectedSessionId(session.id)}
+                  >
+                    <span>{session.title}</span>
+                    <small>{session.message_count} messages</small>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="platform-empty" role="status">
+                No chat sessions yet.
+              </div>
+            )}
+          </section>
+        </aside>
       </div>
     </WorkspacePanel>
   );
@@ -331,6 +382,11 @@ function chatbotSubmitErrorMessage(error: unknown): string {
   return 'Chat request failed';
 }
 
+function formatMessageTime(value: string): string {
+  if (value.includes('T')) return value.slice(11, 16);
+  return value;
+}
+
 function createChatbotWorkspaceEventStore(config: AssistantWorkspaceRuntimeConfig): AssistantWorkspaceEventStore {
   const storage = getAssistantWorkspaceEventStorage();
 
@@ -361,13 +417,10 @@ function getAssistantWorkspaceEventStorage(): AssistantWorkspaceEventStorage | u
   }
 }
 
-function createWorkspaceEventFilter(
-  config: AssistantWorkspaceRuntimeConfig,
-  sessionId?: string,
-): AssistantWorkspaceEventStoreFilter {
+function createWorkspaceEventFilter(config: AssistantWorkspaceRuntimeConfig, sessionId?: string): AssistantWorkspaceEventStoreFilter {
   return {
     workspaceId: config.workspaceId,
-    ...(config.projectId ? { projectId: config.projectId } : {}),
-    ...(sessionId ? { sessionId } : {}),
+    projectId: config.projectId,
+    sessionId,
   };
 }
