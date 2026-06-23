@@ -6,7 +6,7 @@ const budgetedContext = {
   includedSources: [{ type: 'conversation' as const, sourceId: 's1', reasonIncluded: 'Current session.' }],
   omittedSources: [],
   estimatedTokens: 8,
-} as Parameters<typeof createContextPanelSummary>[0];
+} as unknown as Parameters<typeof createContextPanelSummary>[0];
 
 describe('context visualization contracts', () => {
   it('summarizes context budget state', () => {
