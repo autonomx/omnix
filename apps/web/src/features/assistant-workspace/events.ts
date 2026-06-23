@@ -15,9 +15,19 @@ export const ASSISTANT_WORKSPACE_EVENT_TYPES = [
   'model_changed',
   'assistant_identity_changed',
   'context_assembled',
+  'operation_failed',
 ] as const;
 
 export type AssistantWorkspaceEventType = (typeof ASSISTANT_WORKSPACE_EVENT_TYPES)[number];
+
+export type AssistantWorkspaceFailureOperation =
+  | 'chat_request'
+  | 'provider_request'
+  | 'stt_request'
+  | 'tts_request'
+  | 'tool_execution'
+  | 'audio_capture'
+  | 'unknown';
 
 export type AssistantWorkspaceEventPayloadByType = {
   user_message: {
@@ -81,6 +91,15 @@ export type AssistantWorkspaceEventPayloadByType = {
     estimatedTokens: number;
     assembly?: ContextAssembly;
     tokenUsage?: TokenUsage;
+  };
+  operation_failed: {
+    operation: AssistantWorkspaceFailureOperation;
+    message: string;
+    statusCode?: number;
+    providerId?: string;
+    modelId?: string;
+    recoverable?: boolean;
+    details?: Record<string, unknown>;
   };
 };
 
