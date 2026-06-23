@@ -23,9 +23,9 @@ export const DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG: AssistantWorkspaceRunti
   projectId: 'project:chatbot',
   eventStorageKey: 'omnix.assistantWorkspace.events',
   features: {
-    liveAssistant: false,
+    liveAssistant: true,
     persistedEvents: true,
-    toolExecution: false,
+    toolExecution: true,
   },
 };
 
