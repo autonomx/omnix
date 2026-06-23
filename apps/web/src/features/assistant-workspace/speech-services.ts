@@ -7,7 +7,7 @@ export type SpeechServiceTransportRequest = {
 
 export type SpeechServiceTransport = <TResponse>(request: SpeechServiceTransportRequest) => Promise<TResponse>;
 
-export type SpeechAudioInput = Blob | ArrayBuffer | Uint8Array;
+export type SpeechAudioInput = Blob | ArrayBuffer;
 
 export type SttTranscriptionRequest = {
   audio: SpeechAudioInput;
