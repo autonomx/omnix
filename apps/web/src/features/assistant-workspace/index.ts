@@ -78,6 +78,23 @@ export { createProviderCapabilitySet, createStaticModelProvider, providerSupport
 export type { ModelProvider, ModelProviderCapabilities, ModelRequest, ModelResponse } from './provider';
 
 export {
+  flattenMessageContent,
+  fromAnthropicMessagesResponse,
+  fromOpenAiChatResponse,
+  toAnthropicMessagesRequest,
+  toOpenAiChatRequest,
+} from './provider-adapters';
+export type {
+  AnthropicMessage,
+  AnthropicMessagesRequest,
+  AnthropicMessagesResponse,
+  OpenAiChatMessage,
+  OpenAiChatRequest,
+  OpenAiChatResponse,
+  OpenAiToolDefinition,
+} from './provider-adapters';
+
+export {
   allocateContextBudget,
   createContextBudgetManager,
   createDefaultContextBudget,
