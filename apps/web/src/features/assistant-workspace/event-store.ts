@@ -24,10 +24,7 @@ export type AssistantWorkspaceEventStore = {
 const DEFAULT_STORAGE_KEY = 'omnix.assistantWorkspace.events';
 
 function cloneEvent(event: AssistantWorkspaceEvent): AssistantWorkspaceEvent {
-  return {
-    ...event,
-    payload: { ...event.payload },
-  } as AssistantWorkspaceEvent;
+  return JSON.parse(JSON.stringify(event)) as AssistantWorkspaceEvent;
 }
 
 function matchesFilter(event: AssistantWorkspaceEvent, filter: AssistantWorkspaceEventStoreFilter): boolean {
