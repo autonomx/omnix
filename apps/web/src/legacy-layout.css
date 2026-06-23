@@ -144,9 +144,46 @@
   padding: 0 0.75rem;
 }
 
-.assistant-composer-controls label span {
+.assistant-composer-controls button.assistant-composer-chip,
+.assistant-composer-controls a.assistant-composer-chip {
+  appearance: none;
+  cursor: pointer;
+  justify-content: space-between;
+  min-width: 0;
+  text-align: left;
+  text-decoration: none;
+  width: 100%;
+}
+
+.assistant-composer-controls button.assistant-composer-chip:hover,
+.assistant-composer-controls button.assistant-composer-chip:focus-visible,
+.assistant-composer-controls a.assistant-composer-chip:hover,
+.assistant-composer-controls a.assistant-composer-chip:focus-visible {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.13), rgba(124, 92, 255, 0.18));
+  border-color: rgba(34, 211, 238, 0.28);
+  outline: none;
+}
+
+.assistant-composer-controls button.assistant-composer-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.assistant-composer-controls label span,
+.assistant-composer-chip span {
   color: var(--omnix-muted);
   font-size: 0.78rem;
+  flex: 0 0 auto;
+}
+
+.assistant-composer-chip strong {
+  color: var(--omnix-text);
+  font-size: 0.9rem;
+  font-weight: 800;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .assistant-composer-controls select {
@@ -405,8 +442,6 @@
   border-left: 0;
   border-radius: 0;
   border-right: 0;
-  border-bottom: 0;
-  margin: 0.75rem;
 }
 
 .assistant-chat-main,
@@ -474,6 +509,13 @@
   min-height: 2rem;
   min-width: 2rem;
   padding: 0 0.65rem;
+}
+
+.assistant-message-actions button:hover,
+.assistant-message-actions button:focus-visible {
+  background: rgba(34, 211, 238, 0.12);
+  border-color: rgba(34, 211, 238, 0.34);
+  outline: none;
 }
 
 .assistant-chat-messages {
@@ -594,6 +636,13 @@
   padding: 0 1rem;
 }
 
+.assistant-suggestion-row button:hover,
+.assistant-suggestion-row button:focus-visible {
+  background: rgba(124, 92, 255, 0.22);
+  border-color: rgba(151, 114, 255, 0.35);
+  outline: none;
+}
+
 .assistant-composer {
   background: linear-gradient(180deg, rgba(7, 11, 22, 0.16), rgba(7, 11, 22, 0.55));
   border-top: 0;
@@ -604,7 +653,7 @@
 }
 
 .assistant-composer-controls {
-  grid-template-columns: repeat(auto-fit, minmax(6.4rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(7.4rem, 1fr));
 }
 
 .assistant-composer-controls label,
