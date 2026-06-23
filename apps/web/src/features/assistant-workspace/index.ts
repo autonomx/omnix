@@ -55,3 +55,14 @@ export type {
   ToolContext,
   WorkspaceInstructionContext,
 } from './context';
+
+export { createProviderCapabilitySet, createStaticModelProvider, providerSupportsRequest } from './provider';
+export type { ModelProvider, ModelProviderCapabilities, ModelRequest, ModelResponse } from './provider';
+
+export {
+  allocateContextBudget,
+  createContextBudgetManager,
+  createDefaultContextBudget,
+  estimateContextSourceTokens,
+} from './budget';
+export type { BudgetedContextAssembly, ContextBudget, ContextBudgetManager } from './budget';
