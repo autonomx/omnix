@@ -293,3 +293,6 @@ export type {
   TtsSynthesisRequest,
   TtsSynthesisResponse,
 } from './speech-services';
+
+export { flattenModelResponseText, runLiveAssistantTurn } from './live-orchestrator';
+export type { LiveAssistantTurnInput, LiveAssistantTurnResult } from './live-orchestrator';
