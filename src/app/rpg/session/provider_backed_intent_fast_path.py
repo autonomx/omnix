@@ -59,8 +59,8 @@ def _classify_text(text: str) -> Dict[str, Any]:
         return {"category": "quest_no_backed_state", "action_type": action_type, "target_id": "npc:Bran", "target_name": "Bran", "service_kind": service_kind}
     if any(term in text for term in ("join my party", "join party", "companion", "stay close", "close as my companion")):
         return {"category": "party_companion_recruitment", "action_type": "talk", "target_id": "npc:Bran", "target_name": "Bran", "service_kind": "unknown"}
-    if any(term in text for term in ("food", "stew", "bread", "meal", "price", "how much", "buy", "for sale")):
-        action_type = "service_purchase" if any(term in text for term in ("buy", "i'll buy", "i will buy", "purchase")) else "service_inquiry"
+    if any(term in text for term in ("food", "stew", "bread", "meal", "ration", "rations", "provision", "provisions", "price", "how much", "buy", "for sale")):
+        action_type = "service_purchase" if any(term in text for term in ("buy", "purchase", "i'll take", "ill take", "i will take")) else "service_inquiry"
         return {"category": "commerce_food_purchase", "action_type": action_type, "target_id": "npc:Bran", "target_name": "Bran", "service_kind": "meal"}
     if "bran" in text and any(term in text for term in ("who are you", "what do you know", "this place", "tell me")):
         return {"category": "npc_dialogue_persona", "action_type": "talk", "target_id": "npc:Bran", "target_name": "Bran", "service_kind": "unknown"}

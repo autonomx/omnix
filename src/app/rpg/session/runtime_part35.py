@@ -15,6 +15,15 @@ from . import runtime_part31 as _part31
 
 _PHASE8_PART35_SOURCE = "semantic_classifier_visible_response"
 _PHASE8_PART35_ORIGINAL_COMPILE_SEMANTIC_ACTION_RECORD = _part04._compile_semantic_action_record
+_PHASE8_PART35_NON_NPC_SPEAKERS = {
+    "scene",
+    "narrator",
+    "narration",
+    "gm",
+    "game master",
+    "omnix",
+    "system",
+}
 
 
 
@@ -81,6 +90,11 @@ def _phase8_part35_player_utterance(source: Dict[str, Any]) -> str:
     )
     if explicit:
         return explicit
+    diagnostics = _safe_dict(source.get("first_call_grounding_diagnostics"))
+    packet = _safe_dict(diagnostics.get("turn_grounding_packet"))
+    packet_input = _phase8_part35_clean_text(packet.get("player_input"))
+    if packet_input:
+        return packet_input
     evidence = _phase8_part35_list_text(source.get("evidence_spans"))
     if evidence:
         return evidence
@@ -173,6 +187,8 @@ def _phase8_part35_semantic_visible_candidate(source: Dict[str, Any]) -> Dict[st
     npc_line = _phase8_part35_clean_text(npc.get("line") or npc.get("text"))
     if _phase8_part35_line_is_player_restatement(npc_line, source):
         npc_line = ""
+    if _phase8_part35_line_is_player_restatement(narration, source):
+        narration = ""
     if not narration and not npc_line:
         return {}
 
@@ -182,6 +198,8 @@ def _phase8_part35_semantic_visible_candidate(source: Dict[str, Any]) -> Dict[st
         or source.get("target_name")
         or ""
     )
+    if _phase8_part35_norm(speaker) in _PHASE8_PART35_NON_NPC_SPEAKERS:
+        return {}
     if not npc_line:
         speaker = ""
 

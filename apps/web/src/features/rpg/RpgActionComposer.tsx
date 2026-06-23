@@ -2,6 +2,7 @@ import { Button } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ChangeEvent, FormEventHandler, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import {
   omnixApiClient,
@@ -14,6 +15,7 @@ import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiSta
 import './RpgSessionLauncher.css';
 
 interface RpgActionComposerProps {
+  campaignMenuHost?: HTMLElement | null;
   commandRegistration: UseFormRegisterReturn<'command'>;
   canSaveGame: boolean;
   hasCommandError: boolean;
@@ -146,6 +148,7 @@ function parseSeed(seed: string): number | null {
 }
 
 export function RpgActionComposer({
+  campaignMenuHost,
   canSaveGame,
   commandRegistration,
   hasCommandError,
@@ -406,19 +409,22 @@ export function RpgActionComposer({
         : launcherView === 'settings'
           ? 'RPG Settings'
           : 'Campaign Menu';
+  const campaignMenuBar = (
+    <section className="rpg-session-launcher" aria-label="RPG session launcher">
+      <Button variant="light" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('home')}>
+        Campaign Menu
+      </Button>
+      <span className="rpg-session-launcher-summary">
+        {mostRecentLiveSession ? `Continue: ${mostRecentLiveSession.title}` : 'Start, load, or demo a campaign'}
+      </span>
+      {launchStatus ? <span className="rpg-session-launcher-status" aria-live="polite">{launchStatus}</span> : null}
+      {launchError ? <span className="rpg-session-launcher-error" aria-live="assertive">{launchError}</span> : null}
+    </section>
+  );
 
   return (
     <>
-      <section className="rpg-session-launcher" aria-label="RPG session launcher">
-        <Button variant="light" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('home')}>
-          Campaign Menu
-        </Button>
-        <span className="rpg-session-launcher-summary">
-          {mostRecentLiveSession ? `Continue: ${mostRecentLiveSession.title}` : 'Start, load, or demo a campaign'}
-        </span>
-        {launchStatus ? <span className="rpg-session-launcher-status" aria-live="polite">{launchStatus}</span> : null}
-        {launchError ? <span className="rpg-session-launcher-error" aria-live="assertive">{launchError}</span> : null}
-      </section>
+      {campaignMenuHost ? createPortal(campaignMenuBar, campaignMenuHost) : campaignMenuBar}
 
       {launcherView !== 'closed' ? (
         <div className="rpg-launcher-modal" role="dialog" aria-modal="true" aria-label={launcherTitle}>

@@ -1,18 +1,15 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchRpgItemDetails } from './rpgItemApi';
-import type { RpgItemDetailPreview, RpgItemObjectivePreview, RpgItemStatusCard, RpgItemUiAction, RpgMerchantEntryPreview } from './rpgItemUiState';
+import type { RpgItemDetailPreview, RpgItemUiAction, RpgMerchantEntryPreview } from './rpgItemUiState';
 import { buildItemDetailPreview } from './rpgItemUiState';
 import './RpgItemPanel.css';
 
 interface RpgItemPanelProps {
   actions: RpgItemUiAction[];
-  objectives?: RpgItemObjectivePreview[];
-  statusCards?: RpgItemStatusCard[];
   merchantEntries?: RpgMerchantEntryPreview[];
   isPending?: boolean;
   onApplyAction?: (action: RpgItemUiAction) => void;
-  onApplyObjective?: (objective: RpgItemObjectivePreview) => void;
   onApplyMerchantEntry?: (entry: RpgMerchantEntryPreview) => void;
   onSelectCommand?: (command: string) => void;
 }
@@ -35,24 +32,19 @@ const actionIcons: Record<string, string> = {
 
 export function RpgItemPanel({
   actions,
-  objectives = [],
-  statusCards = [],
   merchantEntries = [],
   isPending = false,
   onApplyAction,
-  onApplyObjective,
   onApplyMerchantEntry,
   onSelectCommand,
 }: RpgItemPanelProps) {
   const hasActions = actions.length > 0;
-  const hasObjectives = objectives.length > 0;
-  const hasStatus = statusCards.length > 0;
   const hasMerchantEntries = merchantEntries.length > 0;
   const selectedItem = actions.find((action) => action.item)?.item;
   const selectedItemSessionId = selectedItem?.sessionId ?? null;
   const itemDetailQuery = useQuery({
     enabled: Boolean(selectedItemSessionId && selectedItem?.label),
-    queryKey: ['feature', 'rpg', 'item-detail', selectedItemSessionId, selectedItem?.label, selectedItem?.count],
+    queryKey: ['feature', 'rpg', 'item-detail-v3', selectedItemSessionId, selectedItem?.label, selectedItem?.count],
     queryFn: () => fetchRpgItemDetails(selectedItemSessionId ?? '', { itemName: selectedItem?.label ?? '', itemCount: selectedItem?.count, source: 'rpg-item-panel' }),
     retry: false,
     staleTime: 30_000,
@@ -66,6 +58,8 @@ export function RpgItemPanel({
           itemDetailQuery.isError && itemDetail.source === 'pending'
             ? 'LLM item details are unavailable right now; the action icons still execute deterministic item actions.'
             : itemDetail.summary,
+        status: itemDetailQuery.isError && itemDetail.source === 'pending' ? 'Carried' : itemDetail.status,
+        condition: itemDetailQuery.isError && itemDetail.source === 'pending' ? 'Not recorded' : itemDetail.condition,
       }
     : undefined;
 
@@ -74,24 +68,12 @@ export function RpgItemPanel({
       <header className="rpg-item-panel-header">
         <div>
           <p className="eyebrow">Item systems</p>
-          <h3>Inventory, crafting, and trade</h3>
+          <h3>Item details and actions</h3>
         </div>
         <span>{hasActions ? `${actions.length} action${actions.length === 1 ? '' : 's'}` : 'No item selected'}</span>
       </header>
 
       {displayedItemDetail ? <ItemDetailCard detail={displayedItemDetail} isPending={itemDetailQuery.isFetching} /> : null}
-
-      {hasStatus ? (
-        <div className="rpg-item-status-grid" aria-label="Item status cards">
-          {statusCards.map((card) => (
-            <article className={`rpg-item-status-card rpg-item-status-${card.tone}`} key={card.id}>
-              <small>{card.label}</small>
-              <strong>{card.value}</strong>
-              <p>{card.detail}</p>
-            </article>
-          ))}
-        </div>
-      ) : null}
 
       <ActionList
         actions={actions}
@@ -101,29 +83,6 @@ export function RpgItemPanel({
         onApplyAction={onApplyAction}
         onSelectCommand={onSelectCommand}
       />
-
-      {hasObjectives ? (
-        <div className="rpg-item-objectives" aria-label="Item objectives">
-          <h4>Suggested next item steps</h4>
-          {objectives.map((objective) => (
-            <button
-              aria-label={objective.label}
-              className="rpg-item-action-row"
-              disabled={isPending || objective.disabled}
-              key={objective.id}
-              onClick={() => onApplyObjective?.(objective)}
-              title={objective.disabled ? 'This objective is not currently available.' : objective.detail}
-              type="button"
-            >
-              <span>
-                <strong>{objective.label}</strong>
-                <small>{objective.detail}</small>
-              </span>
-              <code>{objective.action}</code>
-            </button>
-          ))}
-        </div>
-      ) : null}
 
       {hasMerchantEntries ? (
         <div className="rpg-item-merchant" aria-label="Merchant entries">
@@ -171,19 +130,15 @@ function ItemDetailCard({ detail, isPending }: { detail: RpgItemDetailPreview; i
         </div>
         <small>{detail.countLabel}</small>
       </header>
-      <p>{isPending && detail.source === 'pending' ? 'Generating LLM item details for the selected inventory item…' : detail.summary}</p>
+      <p>{detail.summary}</p>
       <dl>
         <div>
-          <dt>Use</dt>
-          <dd>{detail.usage}</dd>
+          <dt>Status</dt>
+          <dd>{detail.status}</dd>
         </div>
         <div>
-          <dt>Trade</dt>
-          <dd>{detail.trade}</dd>
-        </div>
-        <div>
-          <dt>Risk</dt>
-          <dd>{detail.risk}</dd>
+          <dt>Condition</dt>
+          <dd>{detail.condition}</dd>
         </div>
       </dl>
       {detail.tags.length ? (
@@ -241,17 +196,6 @@ function ActionList({ actions, emptyLabel, hasMerchantContext, isPending, onAppl
           );
         })}
       </div>
-      <ul className="rpg-item-action-context-list" aria-label="Item action context requirements">
-        {actions.map((action) => {
-          const disabledReason = itemActionDisabledReason(action, { hasMerchantContext, isPending });
-          return (
-            <li key={`${action.id}:context`} className={disabledReason ? 'rpg-item-action-context-disabled' : undefined}>
-              <strong>{action.label}</strong>
-              <span>{disabledReason ?? action.detail}</span>
-            </li>
-          );
-        })}
-      </ul>
     </div>
   );
 }

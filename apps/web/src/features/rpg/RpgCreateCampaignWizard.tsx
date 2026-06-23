@@ -25,7 +25,7 @@ import './RpgCreateCampaignWizard.css';
 
 interface RpgCreateCampaignWizardProps {
   onCreateCampaign?: (request: RpgNewGameRequest) => Promise<RpgLaunchResponse>;
-  onSelectCommand?: (command: string) => void;
+  onEnterWorld?: () => void;
 }
 
 interface BackendCreationStage {
@@ -60,7 +60,7 @@ const PENDING_PROGRESS_STEPS = FALLBACK_PROGRESS_STEPS.slice(1, -1);
 const MOTIVATION_OPTIONS = ['survival', 'knowledge', 'freedom', 'family', 'justice', 'renown'];
 const PROFILE_CHALLENGE_OPTIONS = ['cautious', 'restless', 'proud', 'guarded', 'naive', 'impulsive'];
 
-export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: RpgCreateCampaignWizardProps) {
+export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgCreateCampaignWizardProps) {
   const progressTimers = useRef<Array<ReturnType<typeof window.setTimeout>>>([]);
   const [isExpanded, setIsExpanded] = useState(true);
   const [characterName, setCharacterName] = useState('Elara');
@@ -273,12 +273,9 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
   };
 
   const enterWorld = () => {
-    const sessionDetail = launchResponse?.session_id ? ` Session ${launchResponse.session_id} is ready.` : '';
-    onSelectCommand?.(
-      `Enter the newly created ${selectedBuild.label} campaign for ${characterName.trim()} at ${selectedLocation.label}.${sessionDetail} Opening: ${selectedOpeningHook.label}. Pace: ${selectedOpeningPace.label}. Focus: ${activeCapabilities.join(', ')}.`,
-    );
     setIsCreating(false);
     setIsExpanded(false);
+    onEnterWorld?.();
   };
 
   const stageState = (index: number): CreationStageState => {

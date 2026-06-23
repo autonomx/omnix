@@ -17,6 +17,15 @@ _PHASE8_PART38_TEXT_NONE = {"", "[]", "{}", "null", "none", "false", "true"}
 _PHASE8_PART38_ORIGINAL_PART35_SEMANTIC_VISIBLE_RESPONSE_FIELDS = _part35._phase8_part35_semantic_visible_response_fields
 _PHASE8_PART38_ORIGINAL_PART35_EXISTING_COMPLETED_NARRATION = _part35._phase8_part31_existing_completed_narration
 _PHASE8_PART38_ORIGINAL_PART35_PERSIST_SEMANTIC_ARTIFACT = _part35._phase8_part35_persist_semantic_artifact
+_PHASE8_PART38_NON_NPC_SPEAKERS = {
+    "scene",
+    "narrator",
+    "narration",
+    "gm",
+    "game master",
+    "omnix",
+    "system",
+}
 
 
 
@@ -99,6 +108,11 @@ def _phase8_part38_player_utterance(source: Dict[str, Any]) -> str:
     )
     if explicit:
         return explicit
+    diagnostics = _safe_dict(source.get("first_call_grounding_diagnostics"))
+    packet = _safe_dict(diagnostics.get("turn_grounding_packet"))
+    packet_input = _phase8_part38_clean_text(packet.get("player_input"))
+    if packet_input:
+        return packet_input
     evidence = " ".join(_phase8_part38_clean_text(x) for x in _safe_list(source.get("evidence_spans")) if _phase8_part38_clean_text(x))
     return evidence or _phase8_part38_clean_text(source.get("intent_summary"))
 
@@ -147,10 +161,14 @@ def _phase8_part38_candidate_from_source(source: Dict[str, Any]) -> Dict[str, An
     npc_line = _phase8_part38_clean_text(npc.get("line") or npc.get("text"))
     if _phase8_part38_line_is_player_restatement(npc_line, source):
         npc_line = ""
+    if _phase8_part38_line_is_player_restatement(narration, source):
+        narration = ""
     if not narration and not npc_line:
         return {}
 
     speaker = _phase8_part38_clean_text(npc.get("speaker") or npc.get("name") or source.get("target_name"))
+    if _phase8_part38_norm(speaker) in _PHASE8_PART38_NON_NPC_SPEAKERS:
+        return {}
     if not npc_line:
         speaker = ""
 

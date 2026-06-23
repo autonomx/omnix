@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildItemObjectivePreviews,
-  buildItemStatusCards,
+  buildItemDetailPreview,
   buildMerchantEntryPreviews,
   buildSelectedItemActions,
 } from './rpgItemUiState';
@@ -9,6 +9,29 @@ import {
 const selectedItem = { icon: '◇', count: '2', label: 'Field Kit' };
 
 describe('rpg item UI state', () => {
+  it('turns completed item-detail failures into an unavailable state', () => {
+    const detail = buildItemDetailPreview(
+      {
+        ok: false,
+        error: 'item_detail_llm_unavailable',
+        item_detail: {
+          summary: 'An LLM provider is not available to describe this item.',
+          status: 'Carried',
+          condition: 'Worn (40%)',
+          source: 'unavailable',
+        },
+      },
+      { label: 'Field Kit', icon: '◇', count: 2, sessionId: 'session-live' },
+    );
+
+    expect(detail).toMatchObject({
+      source: 'unavailable',
+      status: 'Carried',
+      condition: 'Worn (40%)',
+      summary: 'An LLM provider is not available to describe this item.',
+    });
+  });
+
   it('builds deterministic selected-item actions for live sessions', () => {
     const actions = buildSelectedItemActions({ item: selectedItem, selectedSessionId: 'session-live' });
 
@@ -63,38 +86,6 @@ describe('rpg item UI state', () => {
         action: 'report',
         payload: { record: true },
         disabled: true,
-      },
-    ]);
-  });
-
-  it('builds diagnostic, maintenance, and coverage status cards', () => {
-    const cards = buildItemStatusCards({
-      diagnostics: { severity: 'warning', summary: { issue_count: 0, warning_count: 2 } },
-      maintenance: { summary: { dropped_count: 3 } },
-      report: { summary: { coverage_score: 0.75, detail: '3 of 4 item pillars covered.' } },
-    });
-
-    expect(cards).toEqual([
-      {
-        id: 'diagnostics',
-        label: 'Item diagnostics',
-        value: 'warning',
-        detail: '0 issues • 2 warnings',
-        tone: 'warning',
-      },
-      {
-        id: 'maintenance',
-        label: 'Item maintenance',
-        value: '3 compacted',
-        detail: 'Oversized item traces were compacted.',
-        tone: 'warning',
-      },
-      {
-        id: 'coverage',
-        label: 'Item coverage',
-        value: '75%',
-        detail: '3 of 4 item pillars covered.',
-        tone: 'warning',
       },
     ]);
   });

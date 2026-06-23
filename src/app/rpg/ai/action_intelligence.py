@@ -3,10 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
-from app.rpg.ai.pre_runtime_intent_fast_path import (
-    FAST_PATH_SOURCE,
-    classify_pre_runtime_intent_fast_path,
-)
+from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
 
 _ALLOWED_ACTION_TYPES = {
@@ -301,22 +298,6 @@ def get_action_advisory(
     runtime_state: Dict[str, Any],
     candidate_action: Dict[str, Any],
 ) -> Dict[str, Any]:
-    fast_path = classify_pre_runtime_intent_fast_path(
-        player_input=player_input,
-        candidate_action=candidate_action,
-    )
-    if fast_path:
-        advisory = normalize_action_advisory(fast_path, candidate_action)
-        return _attach_first_call_diagnostics(
-            advisory,
-            raw_result=fast_path,
-            raw_text=json.dumps(fast_path, ensure_ascii=False, sort_keys=True),
-            source=FAST_PATH_SOURCE,
-            provider_called=False,
-            provider_error="",
-            parse_ok=True,
-        )
-
     if llm_gateway is None:
         return {}
     prompt = build_action_intelligence_prompt(player_input, simulation_state, runtime_state, candidate_action)

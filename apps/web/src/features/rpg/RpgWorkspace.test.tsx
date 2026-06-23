@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
@@ -204,6 +204,51 @@ describe('RpgWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Queue RPG turn' })).toBeEnabled();
   });
 
+  it('surfaces a terminal RPG turn job failure', async () => {
+    let turnQueued = false;
+    const failedJob = {
+      id: 'job:rpg-failed',
+      module: 'rpg',
+      type: 'rpg.turn',
+      status: 'failed',
+      resource_class: 'gpu:llm',
+      created_at: '2026-06-14T00:00:01Z',
+      updated_at: '2026-06-14T00:00:02Z',
+      completed_at: '2026-06-14T00:00:02Z',
+      priority: 0,
+      input_ref: { session_id: 'rpg-session-1' },
+      input_payload: { command: 'Ask Bran about business.' },
+      error: {
+        code: 'inline_job_failed',
+        message: 'Progression state is invalid',
+        retryable: false,
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/replay/persistence/inventory') return Response.json(emptyWorkspaceResponses.inventory);
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        turnQueued = true;
+        return Response.json({ ...failedJob, status: 'queued', error: null, completed_at: null });
+      }
+      if (path === '/api/jobs') return Response.json({ jobs: turnQueued ? [failedJob] : [] });
+      if (path === '/api/assets') return Response.json(emptyWorkspaceResponses.assets);
+      if (path === '/api/reports') return Response.json(emptyWorkspaceResponses.reports);
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+    fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran about business.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'RPG turn failed: Progression state is invalid',
+    );
+    expect(screen.queryByText('RPG turn job queued: job:rpg-failed')).not.toBeInTheDocument();
+  });
+
   it('wires checkpoint and autoplay controls through replay-safe APIs', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
@@ -283,19 +328,19 @@ describe('RpgWorkspace', () => {
     });
   });
 
-  it('preserves accessible controls when the player and world rails are collapsed', async () => {
+  it('keeps both rails expanded while preserving accessible hide controls', async () => {
     stubEmptyWorkspaceFetch();
 
     renderRpg();
 
-    expect(screen.getByRole('button', { name: 'Show RPG headers' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide header' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
     expect(await screen.findByRole('complementary', { name: 'Player, party, and quests' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Contain player rail' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Contain world rail' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('complementary', { name: 'Player, party, and quests' })).toHaveClass('rpg-rail-full-size');
-    expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toHaveClass('rpg-rail-full-size');
+    expect(screen.queryByRole('button', { name: 'Contain player rail' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Contain world rail' })).not.toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Player, party, and quests' })).toHaveClass('rpg-rail-expanded');
+    expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toHaveClass('rpg-rail-expanded');
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide player rail' }));
     fireEvent.click(screen.getByRole('button', { name: 'Hide world rail' }));
@@ -313,28 +358,21 @@ describe('RpgWorkspace', () => {
     expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
   });
 
-  it('starts in RPG play focus chrome mode and can show or hide the header', async () => {
+  it('keeps campaign and layout controls in one header while runtime context can be hidden', async () => {
     stubEmptyWorkspaceFetch();
 
     renderRpg();
 
     expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
     await waitFor(() => {
-      expect(document.documentElement).toHaveClass('rpg-play-focus-mode');
+      expect(document.documentElement).not.toHaveClass('rpg-play-focus-mode');
     });
     expect(screen.queryByRole('button', { name: 'New Campaign' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Campaign Menu' })).toBeInTheDocument();
+    expect(within(screen.getByRole('banner', { name: 'Campaign menu header' })).getByRole('button', { name: 'Campaign Menu' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Show RPG headers' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Expand header' })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Show RPG headers' }));
-
-    await waitFor(() => {
-      expect(document.documentElement).not.toHaveClass('rpg-play-focus-mode');
-    });
-    expect(screen.getByRole('button', { name: 'Expand header' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('button', { name: 'Hide header' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide header' }));
@@ -342,7 +380,10 @@ describe('RpgWorkspace', () => {
     await waitFor(() => {
       expect(document.documentElement).toHaveClass('rpg-play-focus-mode');
     });
-    expect(screen.getByRole('button', { name: 'Show RPG headers' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show header' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Campaign Menu' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
   });
 
@@ -372,12 +413,13 @@ describe('RpgWorkspace', () => {
 
     renderRpg();
 
-    expect(await screen.findByRole('region', { name: 'RPG live data status' })).toBeInTheDocument();
-    expect(await screen.findByText('1 source need attention')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand live data' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('region', { name: 'RPG live data status' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand live data' }));
 
+    expect(await screen.findByRole('region', { name: 'RPG live data status' })).toBeInTheDocument();
+    expect(await screen.findByText('1 source need attention')).toBeInTheDocument();
     expect(await screen.findByText('Omnix API request failed with status 500')).toBeInTheDocument();
     expect(screen.getByLabelText('Sessions status')).toHaveTextContent('Empty');
     expect(screen.getByLabelText('Jobs status')).toHaveTextContent('Error');

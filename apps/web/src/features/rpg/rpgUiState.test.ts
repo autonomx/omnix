@@ -143,6 +143,18 @@ describe('rpg UI state', () => {
             party: [{ name: 'Bran', role: 'Innkeeper', level: 2, hp: 18, max_hp: 22 }],
             quests: [{ title: 'Find the Quarry Trail', objective: 'Ask Bran about the old quarry road.', status: 'active' }],
           },
+          simulation_state: {
+            climate_survival: {
+              format_version: 'n1231_climate_survival_state_v1',
+              runtime_enforced: true,
+              survival: {
+                hunger: 72,
+                thirst: 41,
+                fatigue: 86,
+                warnings: ['hunger_high', 'fatigue_high'],
+              },
+            },
+          },
         },
       ],
     };
@@ -159,6 +171,13 @@ describe('rpg UI state', () => {
     expect(state.partyMembers[0]).toMatchObject({ avatar: 'B', name: 'Bran', role: 'Lv. 2 Innkeeper', hp: '18 / 22', percent: 82 });
     expect(state.activeQuests[0]).toMatchObject({ title: 'Find the Quarry Trail', detail: 'Ask Bran about the old quarry road.' });
     expect(state.inventoryItems[0]).toMatchObject({ label: 'Ration', count: '3' });
+    expect(state.survival).toMatchObject({ source: 'live', status: 'Critical', warnings: ['Hunger High', 'Fatigue High'] });
+    expect(state.survival.needs).toEqual([
+      { id: 'hunger', label: 'Hunger', percent: 72, severity: 'warning', value: '72 / 100' },
+      { id: 'thirst', label: 'Thirst', percent: 41, severity: 'stable', value: '41 / 100' },
+      { id: 'fatigue', label: 'Fatigue', percent: 86, severity: 'critical', value: '86 / 100' },
+    ]);
+    expect(state.survival.actions.map((action) => action.command)).toEqual(['I eat rations', 'I drink water', 'I rest']);
   });
 
   it('hydrates a bounded session summary from the selected session detail', () => {
@@ -212,10 +231,75 @@ describe('rpg UI state', () => {
     expect(state.activeQuests[0]).toMatchObject({ title: 'Rumor at the Rusty Flagon', detail: 'Ask Bran which rumor is true.' });
     expect(state.quickActions).toEqual([{ command: 'Talk to Bran', icon: '☯', label: 'Talk' }]);
     expect(state.inventoryItems).toEqual([{ count: '3', icon: '🥩', label: 'Trail rations' }]);
-    expect(state.hotbarAbilities).toEqual([{ icon: '✦', key: '1', label: 'Aimed Shot' }]);
+    expect(state.hotbarAbilities).toEqual([{ abilityId: 'recon_aimed_shot', description: undefined, icon: '✦', key: '1', label: 'Aimed Shot' }]);
     expect(state.npcRelationships).toEqual([]);
     expect(state.encounter).toMatchObject({ source: 'live', title: 'No active combat', detail: 'All quiet for now.' });
     expect(state.jobCards).toEqual([]);
+  });
+
+  it('prefers canonical purchased inventory and currency over stale legacy player fields', () => {
+    const state = createRpgWorkspaceState({
+      inventory: {
+        sessions: [{ manifest: { session_id: 'purchase-live', title: 'Elara - Rusty Flagon' } }],
+      },
+      jobs: { jobs: [] },
+      selectedSessionId: 'purchase-live',
+      selectedSession: {
+        manifest: { session_id: 'purchase-live', title: 'Elara - Rusty Flagon' },
+        state: {
+          player: {
+            name: 'Elara',
+            currency: { gold: 0, silver: 10, copper: 0 },
+            inventory: [{ id: 'ration', name: 'Trail rations', quantity: 3 }],
+          },
+        },
+        simulation_state: {
+          player_state: {
+            name: 'Elara',
+            currency: { gold: 0, silver: 5, copper: 0 },
+            inventory_state: {
+              currency: { gold: 0, silver: 5, copper: 0 },
+              items: [
+                { item_id: 'ration', name: 'Trail rations', qty: 3 },
+                { item_id: 'dried_rations', name: 'Dried rations', qty: 1 },
+              ],
+            },
+          },
+        },
+      },
+    });
+
+    expect(state.heroSummary.gold).toBe('0g 5s 0c');
+    expect(state.inventoryItems.map(({ count, label }) => ({ count, label }))).toEqual([
+      { count: '3', label: 'Trail rations' },
+      { count: '1', label: 'Dried rations' },
+    ]);
+  });
+
+  it('projects registered service offers from the latest turn contract', () => {
+    const state = createRpgWorkspaceState({
+      inventory: { sessions: [{ session_id: 'service-live', title: 'Tavern' }] },
+      jobs: { jobs: [] },
+      selectedSessionId: 'service-live',
+      selectedSession: {
+        manifest: { session_id: 'service-live' },
+        runtime_state: {
+          last_turn_contract: {
+            presentation: {
+              available_actions: [
+                { label: 'Hot stew - 3 silver', command: 'I buy hot stew from Bran' },
+              ],
+            },
+          },
+        },
+      },
+    });
+
+    expect(state.quickActions).toHaveLength(1);
+    expect(state.quickActions[0]).toMatchObject({
+      command: 'I buy hot stew from Bran',
+      label: 'Hot stew - 3 silver',
+    });
   });
 
   it('projects selected-session RPG turn commands and responses into the live timeline', () => {
@@ -235,7 +319,14 @@ describe('rpg UI state', () => {
             stages: [],
             input_ref: { session_id: 'session-live' },
             input_payload: { command: 'I ask Bran how he is.' },
-            output_refs: [{ type: 'rpg_turn_response', content: 'Bran smiles and says he is well.' }],
+            output_refs: [{
+              type: 'rpg_turn_response',
+              content: (
+                'Bran smiles and says he is well.\n\n'
+                + 'Action: You ask Bran how he is.\n\n'
+                + 'Result: You ask Bran how he is.'
+              ),
+            }],
             created_at: '2026-06-22T01:19:36Z',
             updated_at: '2026-06-22T01:19:39Z',
             completed_at: '2026-06-22T01:19:39Z',
@@ -275,6 +366,21 @@ describe('rpg UI state', () => {
       selectedSessionId: 'session-live',
       selectedSession: {
         manifest: { session_id: 'session-live', title: 'Live campaign' },
+        runtime_state: {
+          player_journal: {
+            entries: [
+              {
+                entry_id: 'journal:day:1',
+                day: 1,
+                day_label: 'Day 1',
+                title: "A Cautious Wanderer's Journal",
+                text: 'I kept my eyes open and measured each choice. Bran shared what he knew about the road.',
+                time: { absolute_day: 1, time_label: '08:00' },
+                voice: { label: 'Wanderer', temperament: 'cautious', genre: 'fantasy' },
+              },
+            ],
+          },
+        },
         state: {
           player: { name: 'Elara' },
           timeline: [{ title: 'Conversation continues', detail: 'Elara and Bran catch up beside the bar.', turn: 2 }],
@@ -289,12 +395,58 @@ describe('rpg UI state', () => {
       { avatar: 'E', speaker: 'Elara (You)', text: 'I ask Bran how he is.', tone: 'player' },
       { avatar: 'B', speaker: 'Bran', text: 'Bran smiles and says he is well.', tone: 'npc' },
     ]);
-    expect(state.journalEntries.slice(0, 2)).toEqual([
+    expect(state.journalEntries).toEqual([
+      {
+        detail: 'I kept my eyes open and measured each choice. Bran shared what he knew about the road.',
+        time: 'Day 1 • 08:00',
+        title: "A Cautious Wanderer's Journal",
+      },
+    ]);
+    expect(state.narrativeLogEntries.slice(0, 2)).toEqual([
       { detail: 'I ask Bran how he is.', time: '2026-06-22 01:19 UTC', title: 'Player message' },
       { detail: 'Bran smiles and says he is well.', time: '2026-06-22 01:19 UTC', title: 'Bran response' },
     ]);
     expect(state.recentEvents).not.toContain('This belongs elsewhere.');
     expect(state.recentEvents).not.toContain('Wrong session response.');
+  });
+
+  it('does not leak the previous campaign conversation while a new selection loads', () => {
+    const state = createRpgWorkspaceState({
+      inventory: {
+        sessions: [
+          {
+            session_id: 'session-old',
+            title: 'Old campaign',
+            timeline: [{ title: 'Old conversation', detail: 'Bran remembers the previous campaign.' }],
+          },
+        ],
+      },
+      jobs: {
+        jobs: [
+          {
+            id: 'job:old-turn',
+            module: 'rpg',
+            type: 'rpg.turn',
+            status: 'completed',
+            resource_class: 'gpu:llm',
+            priority: 0,
+            stages: [],
+            input_ref: { session_id: 'session-old' },
+            input_payload: { command: 'Ask Bran about yesterday.' },
+            output_refs: [{ type: 'rpg_turn_response', content: 'Bran answers the old question.' }],
+            created_at: '2026-06-22T01:00:00Z',
+            updated_at: '2026-06-22T01:00:01Z',
+            completed_at: '2026-06-22T01:00:01Z',
+          },
+        ],
+      } as JobListResponse,
+      selectedSessionId: 'session-new',
+    });
+
+    expect(state.selectedSessionSummary).toMatchObject({ id: 'session-new', title: 'Loading selected campaign' });
+    expect(state.storyMessages).toEqual([]);
+    expect(state.recentEvents).not.toContain('Bran remembers the previous campaign.');
+    expect(state.narrativeLogEntries).toEqual([]);
   });
 
   it('derives safe session labels and bounded progress percentages', () => {

@@ -38,7 +38,7 @@ def test_pr0_manual_harness_has_no_fast_direct_gameplay_shortcut():
         assert fragment not in source
 
 
-def test_pr0_fast_direct_detection_lives_in_interactive_runtime():
+def test_pr0_fast_direct_detection_is_disabled_for_first_call_llm():
     from app.rpg.session import interactive_first_call_runtime
 
     action = interactive_first_call_runtime._fast_direct_action(
@@ -46,10 +46,7 @@ def test_pr0_fast_direct_detection_lives_in_interactive_runtime():
         {"fast_turn_mode": True},
     )
 
-    assert action["action_type"] == "combat"
-    assert action["target_id"] == "enemy:road_bandit"
-    assert action["metadata"]["fast_direct_runtime"] is True
-    assert action["metadata"]["skip_sync_combat_narration"] is True
+    assert action == {}
 
 
 def test_pr0_stateful_first_call_visible_response_is_ignored_for_stateful_runtime_contract():

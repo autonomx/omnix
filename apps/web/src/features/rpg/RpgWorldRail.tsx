@@ -65,6 +65,7 @@ export function RpgWorldRail({
 }: RpgWorldRailProps) {
   const railClassName = className ? `rpg-right-rail ${className}` : 'rpg-right-rail';
   const isPreview = selectedSessionSummary.source === 'preview';
+  const visibleJobCards = jobCards.slice(0, 3);
 
   return (
     <aside className={railClassName} aria-label="World, jobs, and reports">
@@ -135,8 +136,8 @@ export function RpgWorldRail({
         </div>
         <span>{rpgJobCount ? `${rpgJobCount} live` : isPreview ? 'Preview' : 'No active RPG jobs'}</span>
         <div className="rpg-list-stack">
-          {jobCards.length ? (
-            jobCards.map((job) => (
+          {visibleJobCards.length ? (
+            visibleJobCards.map((job) => (
               <article className="rpg-job-row" key={job.id}>
                 <div>
                   <strong>{job.title}</strong>

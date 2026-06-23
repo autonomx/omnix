@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { RpgHeroSummaryPreview, RpgSessionSummaryPreview, RpgStoryMessagePreview } from './rpgUiState';
 import './RpgVisualAssets.css';
 
@@ -14,6 +14,7 @@ interface RpgStorySceneProps {
 
 export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSessionSummary, storyMessages = [] }: RpgStorySceneProps) {
   const isPreview = selectedSessionSummary.source === 'preview';
+  const [recentEventsExpanded, setRecentEventsExpanded] = useState(false);
 
   return (
     <section className="rpg-card rpg-story-card" aria-labelledby="rpg-story-scene-title">
@@ -35,7 +36,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
         </div>
       </div>
       <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
-      <div className="rpg-dialogue-stack">
+      <div className="rpg-dialogue-stack" aria-label="Conversation">
         {isPreview ? (
           <>
             <article>
@@ -54,7 +55,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
             </article>
           </>
         ) : storyMessages.length ? (
-          storyMessages.slice(0, 6).map((message, index) => (
+          storyMessages.slice(0, 10).map((message, index) => (
             <article key={`${message.speaker}:${message.text}:${index}`}>
               <span className={`rpg-avatar rpg-avatar-small${message.tone === 'narrator' ? ' rpg-avatar-omnix' : ''}`}>
                 {message.avatar}
@@ -77,15 +78,25 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
           ))
         )}
       </div>
-      <div className="rpg-event-strip">
-        <strong>Recent events</strong>
-        <ul>
+      {children}
+      <div className={`rpg-event-strip${recentEventsExpanded ? ' is-expanded' : ' is-collapsed'}`}>
+        <button
+          aria-controls="rpg-recent-events-list"
+          aria-expanded={recentEventsExpanded}
+          className="rpg-event-strip-summary"
+          onClick={() => setRecentEventsExpanded((expanded) => !expanded)}
+          title={recentEventsExpanded ? 'Collapse recent events' : 'Expand recent events'}
+          type="button"
+        >
+          <strong>Recent events</strong>
+          <span aria-hidden="true" className="rpg-event-strip-toggle" />
+        </button>
+        <ul id="rpg-recent-events-list">
           {recentEvents.map((event, index) => (
             <li key={`${event}:${index}`}>{event}</li>
           ))}
         </ul>
       </div>
-      {children}
     </section>
   );
 }

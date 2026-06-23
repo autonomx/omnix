@@ -5,6 +5,7 @@ type RpgNarrativeTab = 'journal' | 'dialogue' | 'turns';
 
 interface RpgNarrativeTabsProps {
   journalEntries: RpgJournalEntryPreview[];
+  logEntries: RpgJournalEntryPreview[];
   journalDetail: RpgJournalDetailPreview;
   recentEvents: string[];
 }
@@ -27,11 +28,11 @@ const emptyTurnRow: RpgJournalEntryPreview = {
   detail: 'Submit a command to start recording replay-safe turn history for this campaign.',
 };
 
-export function RpgNarrativeTabs({ journalEntries, journalDetail, recentEvents }: RpgNarrativeTabsProps) {
+export function RpgNarrativeTabs({ journalEntries, logEntries, journalDetail, recentEvents }: RpgNarrativeTabsProps) {
   const [activeTab, setActiveTab] = useState<RpgNarrativeTab>('journal');
   const [selectedJournalIndex, setSelectedJournalIndex] = useState(0);
-  const dialogueRows = useMemo(() => buildDialogueRows(journalEntries, recentEvents), [journalEntries, recentEvents]);
-  const turnRows = useMemo(() => buildTurnRows(journalEntries), [journalEntries]);
+  const dialogueRows = useMemo(() => buildDialogueRows(logEntries, recentEvents), [logEntries, recentEvents]);
+  const turnRows = useMemo(() => buildTurnRows(logEntries), [logEntries]);
 
   useEffect(() => {
     setSelectedJournalIndex(0);

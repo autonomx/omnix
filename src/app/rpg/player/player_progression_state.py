@@ -5,9 +5,29 @@ from typing import Any, Dict
 
 _MAX_PROGRESSION_LOG = 50
 
+
+def _normalize_xp_meter(player_state: Dict[str, Any]) -> None:
+    xp = player_state.get("xp")
+    if not isinstance(xp, dict):
+        return
+
+    current = xp.get("current", 0)
+    maximum = xp.get("max", 100)
+    try:
+        player_state["xp"] = max(0, int(current))
+    except (TypeError, ValueError):
+        player_state["xp"] = 0
+    if "xp_to_next" not in player_state:
+        try:
+            player_state["xp_to_next"] = max(1, int(maximum))
+        except (TypeError, ValueError):
+            player_state["xp_to_next"] = 100
+
+
 def ensure_player_progression_state(player_state: Dict[str, Any]) -> Dict[str, Any]:
     """Ensure player_state has canonical progression fields. Idempotent."""
     player_state = dict(player_state or {})
+    _normalize_xp_meter(player_state)
     player_state.setdefault("name", "Player")
     player_state.setdefault("class_id", "")
     player_state.setdefault("background_id", "")

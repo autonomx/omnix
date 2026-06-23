@@ -158,6 +158,55 @@ def test_semantic_prompt_supports_non_stateful_visible_response_contract():
     assert normalized["state_mutation_requested"] is False
     assert normalized["risk_domain"] == "none"
     assert normalized["evidence_spans"] == ["what do you think about sword combat styles"]
+    assert normalized["action_intent"]["action_type"] == "social_activity"
+    assert normalized["semantic_advisory"]["semantic_family"] == "social"
+    assert normalized["dialogue_gate"]["safe_to_display_now"] is True
+    assert normalized["final_narration_candidate"]["npc"]["speaker"] == "Bran"
+
+
+def test_semantic_packet_contract_normalizes_canonical_first_call_fields():
+    normalized = normalize_semantic_action_advisory(
+        {
+            "action_intent": {
+                "action_type": "social_activity",
+                "target_id": "npc:bran",
+                "target_name": "Bran",
+                "stateful": False,
+                "needs_runtime_resolution": False,
+            },
+            "semantic_advisory": {
+                "semantic_family": "social",
+                "interaction_mode": "direct",
+                "activity_label": "opinion_on_sword_styles",
+                "utterance_mode": "opinion_question",
+                "literal_action_requested": False,
+                "state_mutation_requested": False,
+                "risk_domain": "none",
+                "intent_summary": "Player asks Bran for an opinion.",
+                "evidence_spans": ["what do you think"],
+            },
+            "dialogue_gate": {
+                "safe_to_display_now": True,
+                "reason": "non_mutating_opinion_dialogue",
+                "risk_flags": [],
+            },
+            "final_narration_candidate": {
+                "narration": "Bran considers the question.",
+                "npc": {"speaker": "Bran", "line": "Mud tests every style."},
+            },
+        },
+        {"action_type": "observe"},
+    )
+
+    assert normalized["action_type"] == "social_activity"
+    assert normalized["target_id"] == "npc:bran"
+    assert normalized["semantic_family"] == "social"
+    assert normalized["visible_response"]["npc"]["line"] == "Mud tests every style."
+    assert normalized["direct_response_gate"]["safe_to_display_now"] is True
+    assert normalized["action_intent"]["needs_runtime_resolution"] is False
+    assert normalized["semantic_advisory"]["utterance_mode"] == "opinion_question"
+    assert normalized["dialogue_gate"] == normalized["direct_response_gate"]
+    assert normalized["final_narration_candidate"] == normalized["visible_response"]
 
 
 def test_stateful_purchase_intent_remains_runtime_resolved():

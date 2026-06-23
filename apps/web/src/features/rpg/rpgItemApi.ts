@@ -53,6 +53,12 @@ export interface RpgItemDetailOptions {
   context?: Record<string, unknown>;
 }
 
+export interface RpgAbilityDetailOptions {
+  abilityName: string;
+  abilityId?: string;
+  source?: string;
+}
+
 export function applyRpgItemResolve(
   sessionId: string,
   options: RpgItemResolveOptions,
@@ -103,6 +109,23 @@ export function fetchRpgItemDetails(
       item_count: options.itemCount,
       source: options.source ?? 'rpg-item-panel',
       context: options.context,
+    },
+    client,
+  );
+}
+
+export function fetchRpgAbilityDetails(
+  sessionId: string,
+  options: RpgAbilityDetailOptions,
+  client: RpgItemApiClient = omnixApiClient,
+): Promise<RpgItemCompatResponse> {
+  return postRpgSessionGet(
+    {
+      action: 'ability_detail',
+      session_id: sessionId,
+      ability_name: options.abilityName,
+      ability_id: options.abilityId,
+      source: options.source ?? 'rpg-hotbar-tooltip',
     },
     client,
   );

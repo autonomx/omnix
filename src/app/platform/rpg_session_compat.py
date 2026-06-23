@@ -100,6 +100,8 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     - {"action": "loadout_action", "session_id": "...", "loadout": {...}}
     - {"action": "item_action", "session_id": "...", "item_action": {...}}
     - {"action": "item_command", "session_id": "...", "command": "item report"}
+    - {"action": "item_detail", "session_id": "...", "item_name": "Torch"}
+    - {"action": "ability_detail", "session_id": "...", "ability_name": "Frost Arrow"}
     - {"action": "item_resolve", "session_id": "...", "input": {...}}
     - {"action": "item_diagnostics", "session_id": "...", "record": true}
     - {"action": "item_maintenance", "session_id": "...", "dry_run": true}
@@ -242,6 +244,44 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             "game": saved.get("state", {}),
             **result,
         }
+
+    if action == "item_detail":
+        from app.rpg.session.item_detail import generate_item_detail
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        _session, state = _load_mutable_session(session_id)
+        if not _session:
+            return {"ok": False, "error": "session_not_found", "session_id": session_id}
+        item_name = _safe_str(payload.get("item_name") or payload.get("item_id")).strip()
+        if not item_name:
+            return {"ok": False, "error": "missing_item_name", "session_id": session_id}
+        result = generate_item_detail(
+            state,
+            item_name,
+            genre=_safe_str(payload.get("genre")).strip() or None,
+        )
+        return {"session_id": session_id, **result}
+
+    if action == "ability_detail":
+        from app.rpg.session.ability_detail import generate_ability_detail
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        session, state = _load_mutable_session(session_id)
+        if not session:
+            return {"ok": False, "error": "session_not_found", "session_id": session_id}
+        ability_name = _safe_str(payload.get("ability_name") or payload.get("ability_id")).strip()
+        if not ability_name:
+            return {"ok": False, "error": "missing_ability_name", "session_id": session_id}
+        result = generate_ability_detail(
+            state,
+            ability_name,
+            genre=_safe_str(payload.get("genre")).strip() or None,
+        )
+        return {"session_id": session_id, **result}
 
     if action == "item_resolve":
         from app.rpg.session.item_action_resolution import apply_item_action_input

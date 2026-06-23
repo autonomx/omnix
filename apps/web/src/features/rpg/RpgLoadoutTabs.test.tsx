@@ -38,10 +38,23 @@ function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }
         item_detail: {
           item_name: payload.item_name,
           summary: `LLM detail: ${payload.item_name} restores stamina without advancing the turn.`,
-          usage: 'Use when combat or travel has created immediate pressure.',
-          trade: 'Worth keeping unless a merchant offers a premium.',
-          risk: 'No spoilage or attunement risk indexed.',
+          status: 'Carried',
+          condition: 'Good',
+          source: 'llm',
           tags: ['consumable', 'recovery'],
+        },
+      } as never;
+    }
+    if (payload.action === 'ability_detail') {
+      return {
+        ok: true,
+        ability_detail: {
+          ability_id: payload.ability_id,
+          name: payload.ability_name,
+          summary: `LLM ability detail: ${payload.ability_name} is grounded in the current campaign.`,
+          resource_cost: { stamina: 10 },
+          cooldown_turns: 1,
+          source: 'llm',
         },
       } as never;
     }
@@ -146,7 +159,7 @@ describe('RpgLoadoutTabs', () => {
     expect(screen.getByRole('tabpanel', { name: 'Inventory' })).toHaveTextContent('12');
     expect(screen.getByRole('button', { name: 'Healing potion' })).toBeInTheDocument();
     expect(screen.getByLabelText('Selected item details: Healing potion')).toHaveTextContent('Preview item details');
-    expect(screen.getByRole('region', { name: 'Item actions and coverage' })).toHaveTextContent('Inventory, crafting, and trade');
+    expect(screen.getByRole('region', { name: 'Item actions and coverage' })).toHaveTextContent('Item details and actions');
     expect(screen.getByRole('button', { name: 'Use' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Abilities' }));
@@ -187,26 +200,37 @@ describe('RpgLoadoutTabs', () => {
     expect(onSelectCommand).toHaveBeenLastCalledWith('Search the area for useful supplies I can pick up and add to my inventory.');
   });
 
-  it('shows item details, objectives, status cards, and merchant entries for a live session', async () => {
-    mockLiveItemApis();
+  it('shows item details and merchant entries without diagnostics or item objectives', async () => {
+    const { post } = mockLiveItemApis();
 
     renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
 
     await screen.findByText('LLM detail: Healing potion restores stamina without advancing the turn.');
     const itemDetails = screen.getByLabelText('Selected item details: Healing potion');
     expect(itemDetails).toHaveTextContent('LLM item details');
+    expect(itemDetails).toHaveTextContent('StatusCarried');
+    expect(itemDetails).toHaveTextContent('ConditionGood');
+    expect(itemDetails).not.toHaveTextContent('Trade value depends');
     expect(screen.getByRole('button', { name: 'Use' })).toHaveAttribute('title', expect.stringContaining('Apply item effects'));
-    expect(await screen.findByText('Craft torch')).toBeInTheDocument();
-    expect(screen.getByText('Item diagnostics')).toBeInTheDocument();
-    expect(screen.getByText('Item coverage')).toBeInTheDocument();
+    expect(screen.queryByText('Suggested next item steps')).not.toBeInTheDocument();
+    expect(screen.queryByText('Item diagnostics')).not.toBeInTheDocument();
+    expect(screen.queryByText('Item maintenance')).not.toBeInTheDocument();
+    expect(screen.queryByText('Item coverage')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'buy Torch' })).toBeInTheDocument();
+    expect(post.mock.calls.some(([, body]) => (body as Record<string, unknown>).action === 'item_objectives')).toBe(false);
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Aimed Shot' }));
+    const abilityDescription = await screen.findByText('LLM ability detail: Aimed Shot is grounded in the current campaign.');
+    const abilityTooltip = abilityDescription.closest('[role="tooltip"]');
+    expect(abilityTooltip).toHaveTextContent('10 Stamina');
+    expect(abilityTooltip).toHaveTextContent('1-turn cooldown');
   });
 
   it('routes panel item actions through loadout and item command APIs', async () => {
     const { applyRpgLoadoutAction, post } = mockLiveItemApis();
 
     renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
-    await screen.findByText('Craft torch');
+    await screen.findByText('LLM detail: Healing potion restores stamina without advancing the turn.');
 
     fireEvent.click(screen.getByRole('button', { name: 'Use' }));
     await waitFor(() => {
@@ -228,28 +252,16 @@ describe('RpgLoadoutTabs', () => {
     mockLiveItemApis({ ok: true }, { merchantEntries: false });
 
     renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
-    await screen.findByText('Item diagnostics');
+    await screen.findByText('LLM detail: Healing potion restores stamina without advancing the turn.');
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Use' })).not.toBeDisabled();
     });
     expect(screen.getByRole('button', { name: 'Sell' })).toBeDisabled();
-    expect(screen.getByText('Start a merchant conversation or open a merchant service before selling.')).toBeInTheDocument();
-  });
-
-  it('routes structured item objectives through loadout actions', async () => {
-    const { applyRpgLoadoutAction } = mockLiveItemApis();
-
-    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Craft torch' }));
-    await waitFor(() => {
-      expect(applyRpgLoadoutAction).toHaveBeenCalledWith('session-live', {
-        action: 'craft',
-        recipe_id: 'torch',
-        station: 'campfire',
-      });
-    });
+    expect(screen.getByRole('button', { name: 'Sell' })).toHaveAttribute(
+      'title',
+      'Sell: Start a merchant conversation or open a merchant service before selling.',
+    );
   });
 
   it('wires skills, traits, effects, and coverage panels to commands or live refresh', async () => {

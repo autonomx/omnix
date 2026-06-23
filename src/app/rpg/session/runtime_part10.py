@@ -118,6 +118,35 @@ def derive_action_candidates(simulation_state, player_input, runtime_state=None)
 
         return candidates
     # Items
+    prior_contract = _safe_dict((runtime_state or {}).get("last_turn_contract"))
+    prior_service = _safe_dict(prior_contract.get("service_result"))
+    if not prior_service:
+        prior_resolved = _safe_dict(
+            prior_contract.get("resolved_result") or prior_contract.get("resolved_action")
+        )
+        prior_service = _safe_dict(prior_resolved.get("service_result"))
+    selects_prior_offer = any(
+        _safe_str(_safe_dict(offer).get("label")).strip().lower() in text
+        for offer in _safe_list(prior_service.get("offers"))
+        if _safe_str(_safe_dict(offer).get("label")).strip()
+    )
+    if (
+        prior_service.get("matched")
+        and selects_prior_offer
+        and any(phrase in text for phrase in ("i'll take", "ill take", "i will take"))
+    ):
+        candidates.append(
+            {
+                "action_type": "service_purchase",
+                "priority": 11,
+                "target_id": _safe_str(prior_service.get("provider_id")),
+                "target_name": _safe_str(prior_service.get("provider_name")),
+                "service_kind": _safe_str(prior_service.get("service_kind")),
+                "confidence": 0.98,
+                "source": "deterministic_prior_service_offer_selection",
+            }
+        )
+        return candidates
     if "take" in text or "pick up" in text:
         active_interactions = _safe_list((runtime_state or {}).get("active_interactions"))
         if active_interactions and any(

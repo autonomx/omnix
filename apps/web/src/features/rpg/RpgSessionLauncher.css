@@ -148,6 +148,18 @@
   font-weight: 700;
 }
 
+.rpg-unified-header .rpg-session-launcher {
+  position: static;
+  flex-wrap: nowrap;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
 .rpg-launcher-dialog-wide {
   width: min(1600px, 100%);
 }

@@ -244,39 +244,20 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
         "Convert freeform player intent into a bounded semantic action object.\n"
         "Do not decide success, failure, damage, XP, prices, stock, inventory mutation, quest completion, travel success, rewards, or final state.\n"
         "Do not invent absent actors. Prefer a nearby/addressed NPC id when the target role or name strongly implies one.\n"
-        "For non-stateful interpretive NPC dialogue/opinion questions, set stateful false, needs_runtime_resolution false, and provide visible_response.\n"
+        "For non-stateful interpretive NPC dialogue/opinion questions, set stateful false, needs_runtime_resolution false, and provide final_narration_candidate (compatibility alias visible_response is accepted).\n"
         "For commerce, combat, travel, inventory, quests, persuasion with consequences, threats, or anything that may mutate state, set stateful true and needs_runtime_resolution true.\n"
         "Classify semantic risk by meaning, not keywords. For example, 'I feel attacked' is emotional_expression with literal_action_requested false and risk_domain none; 'I attack Bran' is action_request with literal_action_requested true and risk_domain combat.\n"
         "Use evidence_spans to cite the smallest player-input phrases supporting your classification.\n"
-        "Always include direct_response_gate. It is your self-check for whether visible_response can be shown immediately before runtime. Set safe_to_display_now true only for non-mutating dialogue such as greeting, opinion, wellbeing, identity, local lore, small talk, emotional support, or clarification.\n"
-        "Set direct_response_gate.safe_to_display_now false for commerce, prices, discounts, purchases, inventory, combat, travel, quest progress, persuasion with outcomes, threats, rewards, relationship changes, or any requested state mutation.\n"
-        "Never reveal private_context or private NPC biography/inventory in visible_response.\n"
+        "Always include dialogue_gate (compatibility alias direct_response_gate is accepted). It is your self-check for whether final_narration_candidate can be shown immediately before runtime. Set safe_to_display_now true only for non-mutating dialogue such as greeting, opinion, wellbeing, identity, local lore, small talk, emotional support, or clarification.\n"
+        "Set dialogue_gate.safe_to_display_now false for commerce, prices, discounts, purchases, inventory, combat, travel, quest progress, persuasion with outcomes, threats, rewards, relationship changes, or any requested state mutation.\n"
+        "Never reveal private_context or private NPC biography/inventory in final_narration_candidate or visible_response.\n"
         "Use open-ended activity_label values, but only bounded enums for family/mode/visibility/observer hooks.\n"
-        "Schema:\n"
+        "Return this single foreground semantic packet. Compatibility fields are allowed, but these four keys are required:\n"
         "{\n"
-        '  "action_type": string,\n'
-        '  "semantic_family": string,\n'
-        '  "interaction_mode": string,\n'
-        '  "activity_label": string,\n'
-        '  "target_id": string,\n'
-        '  "target_name": string,\n'
-        '  "secondary_actor_ids": [string],\n'
-        '  "visibility": string,\n'
-        '  "intensity": 0,\n'
-        '  "stakes": 0,\n'
-        '  "social_axes": [{"axis":"camaraderie","delta":1}],\n'
-        '  "observer_hooks": [string],\n'
-        '  "scene_impact": string,\n'
-        '  "utterance_mode": string,\n'
-        '  "literal_action_requested": false,\n'
-        '  "state_mutation_requested": false,\n'
-        '  "risk_domain": string,\n'
-        '  "intent_summary": string,\n'
-        '  "evidence_spans": [string],\n'
-        '  "stateful": true,\n'
-        '  "needs_runtime_resolution": true,\n'
-        '  "visible_response": {"narration": string, "npc": {"speaker": string, "line": string}},\n'
-        '  "direct_response_gate": {"safe_to_display_now": false, "reason": string, "risk_flags": [string]},\n'
+        '  "action_intent": {"action_type": string, "target_id": string, "target_name": string, "stateful": true, "needs_runtime_resolution": true},\n'
+        '  "semantic_advisory": {"semantic_family": string, "interaction_mode": string, "activity_label": string, "utterance_mode": string, "literal_action_requested": false, "state_mutation_requested": false, "risk_domain": string, "intent_summary": string, "evidence_spans": [string]},\n'
+        '  "dialogue_gate": {"safe_to_display_now": false, "reason": string, "risk_flags": [string]},\n'
+        '  "final_narration_candidate": {"narration": string, "npc": {"speaker": string, "line": string}},\n'
         '  "reason": string\n'
         "}\n"
         "Examples:\n"
@@ -291,15 +272,29 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
 def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_action: Dict[str, Any]) -> Dict[str, Any]:
     advisory = _safe_dict(advisory)
     candidate_action = _safe_dict(candidate_action)
-    action_type = _safe_str(advisory.get("action_type")).strip().lower()
+    action_intent = _safe_dict(advisory.get("action_intent"))
+    semantic_packet = _safe_dict(advisory.get("semantic_advisory"))
+    action_type = _safe_str(
+        action_intent.get("action_type")
+        or action_intent.get("type")
+        or advisory.get("action_type")
+    ).strip().lower()
     if action_type not in _ALLOWED_ACTION_TYPES:
         action_type = _safe_str(candidate_action.get("action_type")).strip().lower()
     if action_type not in _ALLOWED_ACTION_TYPES:
         action_type = "observe"
-    semantic_family = _safe_str(advisory.get("semantic_family")).strip().lower()
+    semantic_family = _safe_str(
+        semantic_packet.get("semantic_family")
+        or semantic_packet.get("family")
+        or advisory.get("semantic_family")
+    ).strip().lower()
     if semantic_family not in _ALLOWED_SEMANTIC_FAMILIES:
         semantic_family = _semantic_family_for_action(action_type)
-    interaction_mode = _safe_str(advisory.get("interaction_mode")).strip().lower()
+    interaction_mode = _safe_str(
+        semantic_packet.get("interaction_mode")
+        or semantic_packet.get("mode")
+        or advisory.get("interaction_mode")
+    ).strip().lower()
     if interaction_mode not in _ALLOWED_INTERACTION_MODES:
         interaction_mode = "direct" if _safe_str(advisory.get("target_id") or candidate_action.get("target_id")) else "solo"
     visibility = _safe_str(advisory.get("visibility")).strip().lower()
@@ -342,23 +337,38 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
     scene_impact = _safe_str(advisory.get("scene_impact")).strip().lower()
     if scene_impact not in _ALLOWED_SCENE_IMPACTS:
         scene_impact = "none"
-    utterance_mode = _safe_str(advisory.get("utterance_mode")).strip().lower()
+    utterance_mode = _safe_str(
+        semantic_packet.get("utterance_mode")
+        or advisory.get("utterance_mode")
+    ).strip().lower()
     if utterance_mode not in _ALLOWED_UTTERANCE_MODES:
         utterance_mode = "action_request" if _safe_bool(advisory.get("literal_action_requested"), False) else "casual_conversation"
-    risk_domain = _safe_str(advisory.get("risk_domain")).strip().lower()
+    risk_domain = _safe_str(
+        semantic_packet.get("risk_domain")
+        or advisory.get("risk_domain")
+    ).strip().lower()
     if risk_domain not in _ALLOWED_RISK_DOMAINS:
         risk_domain = "unknown" if _safe_bool(advisory.get("state_mutation_requested"), False) else "none"
     evidence_spans: list[str] = []
-    for value in _safe_list(advisory.get("evidence_spans"))[:6]:
+    for value in _safe_list(
+        semantic_packet.get("evidence_spans")
+        or advisory.get("evidence_spans")
+    )[:6]:
         span = _clip_text(value, 120)
         if span and span not in evidence_spans:
             evidence_spans.append(span)
-    visible_response = _safe_dict(advisory.get("visible_response"))
+    visible_response = _safe_dict(
+        advisory.get("final_narration_candidate")
+        or advisory.get("visible_response")
+    )
     normalized_visible_response = {}
     if visible_response:
         npc = _safe_dict(visible_response.get("npc"))
         normalized_visible_response = {"narration": _clip_text(visible_response.get("narration"), 500), "npc": {"speaker": _clip_text(npc.get("speaker"), 80), "line": _clip_text(npc.get("line"), 900)}}
-    direct_gate = _safe_dict(advisory.get("direct_response_gate"))
+    direct_gate = _safe_dict(
+        advisory.get("dialogue_gate")
+        or advisory.get("direct_response_gate")
+    )
     normalized_direct_gate = {
         "safe_to_display_now": _safe_bool(direct_gate.get("safe_to_display_now"), False),
         "reason": _clip_text(direct_gate.get("reason"), 160),
@@ -368,8 +378,11 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
             if _clip_text(flag, 48)
         ],
     }
-    stateful = _safe_bool(advisory.get("stateful"), True)
-    needs_runtime_resolution = _safe_bool(advisory.get("needs_runtime_resolution"), stateful)
+    stateful = _safe_bool(action_intent.get("stateful", advisory.get("stateful")), True)
+    needs_runtime_resolution = _safe_bool(
+        action_intent.get("needs_runtime_resolution", advisory.get("needs_runtime_resolution")),
+        stateful,
+    )
     if not direct_gate and normalized_visible_response and not stateful and not needs_runtime_resolution:
         normalized_direct_gate = {
             "safe_to_display_now": True,
@@ -380,9 +393,21 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
         "action_type": action_type,
         "semantic_family": semantic_family,
         "interaction_mode": interaction_mode,
-        "activity_label": _clip_text(advisory.get("activity_label"), 64).lower().replace(" ", "_"),
-        "target_id": _safe_str(advisory.get("target_id") or candidate_action.get("target_id")).strip(),
-        "target_name": _clip_text(advisory.get("target_name") or candidate_action.get("target_name"), 80),
+        "activity_label": _clip_text(
+            semantic_packet.get("activity_label") or advisory.get("activity_label"),
+            64,
+        ).lower().replace(" ", "_"),
+        "target_id": _safe_str(
+            action_intent.get("target_id")
+            or advisory.get("target_id")
+            or candidate_action.get("target_id")
+        ).strip(),
+        "target_name": _clip_text(
+            action_intent.get("target_name")
+            or advisory.get("target_name")
+            or candidate_action.get("target_name"),
+            80,
+        ),
         "secondary_actor_ids": secondary_actor_ids,
         "visibility": visibility,
         "intensity": intensity,
@@ -391,15 +416,65 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
         "observer_hooks": observer_hooks,
         "scene_impact": scene_impact,
         "utterance_mode": utterance_mode,
-        "literal_action_requested": _safe_bool(advisory.get("literal_action_requested"), False),
-        "state_mutation_requested": _safe_bool(advisory.get("state_mutation_requested"), False),
+        "literal_action_requested": _safe_bool(
+            semantic_packet.get("literal_action_requested", advisory.get("literal_action_requested")),
+            False,
+        ),
+        "state_mutation_requested": _safe_bool(
+            semantic_packet.get("state_mutation_requested", advisory.get("state_mutation_requested")),
+            False,
+        ),
         "risk_domain": risk_domain,
-        "intent_summary": _clip_text(advisory.get("intent_summary"), 220),
+        "intent_summary": _clip_text(
+            semantic_packet.get("intent_summary") or advisory.get("intent_summary"),
+            220,
+        ),
         "evidence_spans": evidence_spans,
         "stateful": stateful,
         "needs_runtime_resolution": needs_runtime_resolution,
         "visible_response": normalized_visible_response,
         "direct_response_gate": normalized_direct_gate,
+        "action_intent": {
+            "action_type": action_type,
+            "target_id": _safe_str(
+                action_intent.get("target_id")
+                or advisory.get("target_id")
+                or candidate_action.get("target_id")
+            ).strip(),
+            "target_name": _clip_text(
+                action_intent.get("target_name")
+                or advisory.get("target_name")
+                or candidate_action.get("target_name"),
+                80,
+            ),
+            "stateful": stateful,
+            "needs_runtime_resolution": needs_runtime_resolution,
+        },
+        "semantic_advisory": {
+            "semantic_family": semantic_family,
+            "interaction_mode": interaction_mode,
+            "activity_label": _clip_text(
+                semantic_packet.get("activity_label") or advisory.get("activity_label"),
+                64,
+            ).lower().replace(" ", "_"),
+            "utterance_mode": utterance_mode,
+            "literal_action_requested": _safe_bool(
+                semantic_packet.get("literal_action_requested", advisory.get("literal_action_requested")),
+                False,
+            ),
+            "state_mutation_requested": _safe_bool(
+                semantic_packet.get("state_mutation_requested", advisory.get("state_mutation_requested")),
+                False,
+            ),
+            "risk_domain": risk_domain,
+            "intent_summary": _clip_text(
+                semantic_packet.get("intent_summary") or advisory.get("intent_summary"),
+                220,
+            ),
+            "evidence_spans": evidence_spans,
+        },
+        "dialogue_gate": normalized_direct_gate,
+        "final_narration_candidate": normalized_visible_response,
         "grounding_packet_version": "turn_grounding_packet_v1",
         "reason": _clip_text(advisory.get("reason"), 200),
     }
@@ -471,17 +546,6 @@ def _semantic_action_from_action_fast_path(candidate_action: Dict[str, Any]) -> 
 
 def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], candidate_action: Dict[str, Any]) -> Dict[str, Any]:
     candidate_action = _safe_dict(candidate_action)
-    if _is_action_fast_path_advisory(candidate_action):
-        advisory = _semantic_action_from_action_fast_path(candidate_action)
-        return _attach_first_call_diagnostics(
-            advisory,
-            raw_result=advisory,
-            raw_text=json.dumps(advisory, ensure_ascii=False, sort_keys=True),
-            source=_SEMANTIC_FAST_PATH_SOURCE,
-            provider_called=False,
-            provider_error="",
-            parse_ok=True,
-        )
     if llm_gateway is None:
         return {}
     prompt = build_semantic_action_prompt(player_input, simulation_state, runtime_state, candidate_action)

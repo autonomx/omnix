@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import threading
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
@@ -223,6 +225,24 @@ def _render_job(job: JobRecord) -> dict[str, Any]:
         session_id = None
         if isinstance(job.input_ref, dict):
             session_id = _text(job.input_ref.get("session_id"))
+        authoritative_result = _apply_authoritative_rpg_turn(session_id, command)
+        if authoritative_result is not None:
+            authoritative_result = _with_rpg_turn_command_context(authoritative_result, command)
+            authoritative_content = _rpg_turn_visible_text(authoritative_result)
+            if not authoritative_content:
+                raise RuntimeError("Authoritative RPG turn did not produce a visible response")
+            return {
+                "artifact_type": "rpg_turn_response",
+                "title": command[:80] or "RPG turn",
+                "content": authoritative_content,
+                "log_message": "RPG turn applied by authoritative session runtime",
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "resolved_model": None,
+            }
+
+        # Compatibility for tests and callers that intentionally submit a turn
+        # without a persisted RPG session.
         prompt = (
             "Resolve this RPG player command as a concise game-master response.\n"
             f"Session: {session_id or 'new/current'}\n"
@@ -243,9 +263,277 @@ def _render_job(job: JobRecord) -> dict[str, Any]:
     raise RuntimeError(f"Unsupported inline job type: {job.type}")
 
 
+def _with_rpg_turn_command_context(result: dict[str, Any], command: str) -> dict[str, Any]:
+    result = dict(result)
+    result.setdefault("player_input", command)
+    input_payload = _dict_value(result.get("input_payload"))
+    input_payload.setdefault("command", command)
+    input_payload.setdefault("player_input", command)
+    result["input_payload"] = input_payload
+    return result
+
+
+def _apply_authoritative_rpg_turn(session_id: str | None, command: str) -> dict[str, Any] | None:
+    if not session_id:
+        return None
+
+    from app.rpg.session import interactive_first_call_runtime  # type: ignore[import-untyped]
+    from app.rpg.session.service import load_session, save_session  # type: ignore[import-untyped]
+
+    session = load_session(session_id)
+    if session is None:
+        return None
+    if _hydrate_runtime_player_state(session):
+        save_session(session, compact=False)
+
+    result = interactive_first_call_runtime.apply_turn(
+        session_id,
+        command,
+        performance_override={"enable_live_narration_llm": False},
+    )
+    if result.get("ok") is True:
+        _queue_deferred_rpg_turn_narration(session_id, result)
+        result_session = result.get("session")
+        if isinstance(result_session, dict) and _sync_runtime_player_state(result_session):
+            result["session"] = save_session(result_session, compact=False)
+        return result
+    if result.get("error") == "session_not_found":
+        return None
+    raise RuntimeError(_text(result.get("error")) or "Authoritative RPG turn failed")
+
+
+def _queue_deferred_rpg_turn_narration(session_id: str, result: dict[str, Any]) -> bool:
+    narration_request = (
+        _dict_value(result.get("narration_request"))
+        or _dict_value(_dict_value(result.get("authoritative")).get("narration_request"))
+        or _dict_value(_dict_value(result.get("result")).get("narration_request"))
+    )
+    if not narration_request:
+        return False
+    turn_id = _text(narration_request.get("turn_id")) or _text(result.get("turn_id"))
+    if not turn_id:
+        return False
+    tick = int(narration_request.get("tick") or result.get("tick") or 0)
+
+    from app.rpg.session.narration_worker import (  # type: ignore[import-untyped]
+        ensure_narration_worker_running,
+        signal_narration_work,
+    )
+    from app.rpg.session.runtime import (  # type: ignore[import-untyped]
+        _enqueue_narration_request,
+        load_runtime_session,
+        save_runtime_session,
+    )
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return False
+
+    narration_request = deepcopy(narration_request)
+    narration_request["session_id"] = session_id
+    performance = _dict_value(narration_request.get("performance"))
+    performance["enable_live_narration_llm"] = True
+    narration_request["performance"] = performance
+
+    runtime_state = _dict_value(session.get("runtime_state"))
+    runtime_state["session_id"] = session_id
+    runtime_state, narration_job, is_new = _enqueue_narration_request(
+        runtime_state,
+        turn_id,
+        tick,
+        narration_request,
+    )
+    session["runtime_state"] = runtime_state
+    save_runtime_session(session)
+
+    result["narration_job"] = narration_job
+    result["narration_status"] = _text(narration_job.get("status")) or "queued"
+    if isinstance(result.get("result"), dict):
+        result["result"]["narration_status"] = result["narration_status"]
+    if is_new:
+        try:
+            ensure_narration_worker_running()
+            signal_narration_work(session_id)
+        except Exception:
+            return True
+    return True
+
+
+def _hydrate_runtime_player_state(session: dict[str, Any]) -> bool:
+    state = _dict_value(session.get("state"))
+    player = _dict_value(state.get("player"))
+    simulation = _dict_value(session.get("simulation_state"))
+    if not player or isinstance(simulation.get("player_state"), dict):
+        return False
+
+    player_state = deepcopy(player)
+    inventory = _list_value(player_state.get("inventory"))
+    if inventory and not isinstance(player_state.get("inventory_state"), dict):
+        player_state["inventory_state"] = {
+            "items": [
+                {
+                    **item,
+                    "item_id": _text(item.get("id")) or _text(item.get("item_id")) or "item",
+                    "name": _text(item.get("name")) or _text(item.get("label")) or "Item",
+                    "qty": int(item.get("quantity") or item.get("qty") or item.get("count") or 1),
+                }
+                for item in inventory
+                if isinstance(item, dict)
+            ],
+            "equipment": {},
+        }
+    simulation["player_state"] = player_state
+    session["simulation_state"] = simulation
+    return True
+
+
+def _sync_runtime_player_state(session: dict[str, Any]) -> bool:
+    simulation = _dict_value(session.get("simulation_state"))
+    player_state = _dict_value(simulation.get("player_state"))
+    state = _dict_value(session.get("state"))
+    player = _dict_value(state.get("player"))
+    if not player_state or not player:
+        return False
+
+    changed = False
+    currency = player_state.get("currency")
+    if isinstance(currency, dict) and player.get("currency") != currency:
+        player["currency"] = deepcopy(currency)
+        changed = True
+
+    inventory_state = _dict_value(player_state.get("inventory_state"))
+    runtime_items = inventory_state.get("items")
+    if isinstance(runtime_items, list):
+        existing_items = _list_value(player.get("inventory"))
+        existing_by_id = {
+            _text(item.get("id")) or _text(item.get("item_id")): item
+            for item in existing_items
+            if isinstance(item, dict)
+        }
+        inventory = [
+            {
+                **deepcopy(existing_by_id.get(_text(item.get("item_id")) or _text(item.get("id")), {})),
+                "id": _text(item.get("item_id")) or _text(item.get("id")) or "item",
+                "name": _text(item.get("name")) or _text(item.get("label")) or "Item",
+                "type": _text(item.get("type")) or _text(existing_by_id.get(_text(item.get("item_id")), {}).get("type")) or "item",
+                "quantity": int(item.get("qty") or item.get("quantity") or item.get("count") or 1),
+            }
+            for item in runtime_items
+            if isinstance(item, dict)
+        ]
+        if inventory and player.get("inventory") != inventory:
+            player["inventory"] = inventory
+            changed = True
+
+    if changed:
+        state["player"] = player
+        session["state"] = state
+    return changed
+
+
+def _rpg_turn_visible_text(result: dict[str, Any]) -> str | None:
+    nested = _dict_value(result.get("result"))
+    authoritative = _dict_value(result.get("authoritative"))
+    turn_contract = _dict_value(result.get("turn_contract"))
+    narration_brief = _dict_value(turn_contract.get("narration_brief"))
+    restatement_source = _rpg_turn_restatement_source(result, nested, authoritative, turn_contract)
+
+    for source in (result, nested, authoritative):
+        structured = _format_rpg_turn_narration(source)
+        if structured:
+            return structured
+
+    for value, source in (
+        (nested.get("narration"), nested),
+        (authoritative.get("narration"), authoritative),
+        (authoritative.get("deterministic_fallback_narration"), authoritative),
+        (narration_brief.get("summary"), turn_contract),
+    ):
+        visible = _text(value)
+        if visible and not _is_player_restatement(visible, _rpg_turn_restatement_source(source, restatement_source)):
+            return visible
+    return None
+
+
+def _rpg_turn_restatement_source(*sources: dict[str, Any]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        for key in (
+            "player_input",
+            "first_call_grounding_diagnostics",
+            "narration_context",
+            "input_payload",
+        ):
+            if key in source and key not in merged:
+                merged[key] = source[key]
+    return merged
+
+
+def _format_rpg_turn_narration(source: dict[str, Any]) -> str | None:
+    narration_json = _dict_value(source.get("narration_json"))
+    if not narration_json:
+        return None
+
+    narration = _text(narration_json.get("narration"))
+    npc = _dict_value(narration_json.get("npc")) or _dict_value(source.get("npc"))
+    speaker = _text(npc.get("speaker")) or _text(npc.get("name")) or "NPC"
+    line = _text(npc.get("line")) or _text(npc.get("text"))
+    if _is_non_npc_speaker(speaker):
+        speaker = ""
+        line = ""
+    if _is_player_restatement(line, source) or _is_player_restatement(narration, source):
+        return None
+    parts = [narration] if narration else []
+    if line and speaker:
+        parts.append(f'{speaker}: "{_normalize_dialogue_quotes(line)}"')
+    elif line:
+        parts.append(f'NPC: "{_normalize_dialogue_quotes(line)}"')
+    return "\n\n".join(parts) or None
+
+
+def _is_non_npc_speaker(speaker: str | None) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(speaker or "").casefold()).strip()
+    return normalized in {"scene", "narrator", "narration", "gm", "game master", "omnix", "system"}
+
+
+def _is_player_restatement(value: str | None, source: dict[str, Any]) -> bool:
+    text = re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+    if not text:
+        return False
+    player_input = _text(source.get("player_input"))
+    if not player_input:
+        diagnostics = _dict_value(source.get("first_call_grounding_diagnostics"))
+        packet = _dict_value(diagnostics.get("turn_grounding_packet"))
+        player_input = _text(packet.get("player_input"))
+    if not player_input:
+        narration_context = _dict_value(source.get("narration_context"))
+        player_input = _text(narration_context.get("player_input"))
+    if not player_input:
+        input_payload = _dict_value(source.get("input_payload"))
+        player_input = (
+            _text(input_payload.get("player_input"))
+            or _text(input_payload.get("command"))
+            or _text(input_payload.get("content"))
+        )
+    player = re.sub(r"[^a-z0-9]+", " ", str(player_input or "").casefold()).strip()
+    if not player or len(player) < 18:
+        return False
+    return player in text or text in player
+
+
+def _normalize_dialogue_quotes(line: str) -> str:
+    line = line.strip().strip('"').strip()
+    line = re.sub(r",['’](?=\s)", ',"', line)
+    line = re.sub(r"(?<=[.!?])['’](?=\s+[A-Z])", '"', line)
+    line = re.sub(r"(?<=\s)['’](?=[A-Z])", '"', line)
+    return line
+
+
 def _call_chat_provider(prompt: str, *, provider_id: str | None, model_id: str | None) -> tuple[str, str | None]:
-    from app import shared  # type: ignore[import-not-found]
-    from app.providers import ChatMessage as ProviderMessage  # type: ignore[import-not-found]
+    from app import shared  # type: ignore[import-untyped]
+    from app.providers import ChatMessage as ProviderMessage  # type: ignore[import-untyped]
 
     provider_name = _provider_key(provider_id)
     provider = shared.get_provider(provider_name)
@@ -287,6 +575,14 @@ def _text(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _dict_value(value: object) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _list_value(value: object) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 def _bool(value: object) -> bool:

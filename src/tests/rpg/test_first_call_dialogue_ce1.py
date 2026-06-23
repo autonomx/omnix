@@ -62,6 +62,24 @@ def test_service_or_commerce_match_blocks_visible_response_consumption():
     assert selected["reason"] == "service_or_commerce_runtime_wins"
 
 
+def test_scene_speaker_player_restatement_is_not_consumable_dialogue():
+    advisory = _dialogue_advisory()
+    advisory["target_id"] = "scene"
+    advisory["target_name"] = "Scene"
+    advisory["visible_response"] = {
+        "narration": "I ask Bran if he has any food for sale",
+        "npc": {"speaker": "Scene", "line": "I ask Bran if he has any food for sale"},
+    }
+    advisory["first_call_grounding_diagnostics"]["turn_grounding_packet"][
+        "player_input"
+    ] = "I ask Bran if he has any food for sale"
+
+    selected = choose_first_call_visible_response(semantic_advisory=advisory)
+
+    assert selected["consumable"] is False
+    assert any("speaker_does_not_match_addressed_npc" in row for row in selected["rejection_reasons"])
+
+
 def test_stateful_purchase_visible_response_is_ignored_until_runtime():
     selected = choose_first_call_visible_response(
         semantic_advisory={

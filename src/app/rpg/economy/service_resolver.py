@@ -98,6 +98,10 @@ def _detect_service_kind(text_l: str) -> str:
             "dinner",
             "breakfast",
             "lunch",
+            "ration",
+            "rations",
+            "provision",
+            "provisions",
         ],
     ):
         return SERVICE_KIND_MEAL
@@ -212,7 +216,8 @@ def _offer_matches_purchase_text(offer: Dict[str, Any], text_l: str) -> bool:
     aliases = {
         "bran_lodging_common_cot": ["common cot", "cot", "common room"],
         "bran_lodging_private_room": ["private room", "room"],
-        "bran_meal_stew": ["stew", "food", "meal"],
+        "bran_meal_stew": ["stew", "hot stew"],
+        "bran_dried_rations": ["dried ration", "dried rations", "ration", "rations", "provisions"],
         "bran_drink_ale": ["ale", "drink", "mug"],
         "bran_paid_rumor": ["rumor", "rumour", "information", "gossip"],
         "elara_torch": ["torch"],
@@ -278,6 +283,14 @@ def resolve_service_intent(
     action = _safe_dict(action)
 
     service_kind = _detect_service_kind(text_l)
+    runtime_state = _safe_dict(runtime_state)
+    prior_contract = _safe_dict(runtime_state.get("last_turn_contract"))
+    prior_service = _safe_dict(prior_contract.get("service_result"))
+    if not prior_service:
+        prior_resolved = _safe_dict(prior_contract.get("resolved_result") or prior_contract.get("resolved_action"))
+        prior_service = _safe_dict(prior_resolved.get("service_result"))
+    if not service_kind and _detect_kind(text_l) == "service_purchase" and prior_service.get("matched"):
+        service_kind = _safe_str(prior_service.get("service_kind"))
     if not service_kind:
         return {
             "matched": False,
@@ -290,6 +303,8 @@ def resolve_service_intent(
         }
 
     provider = find_provider_by_text(text_l)
+    if not provider and prior_service.get("provider_id"):
+        provider = get_service_provider(_safe_str(prior_service.get("provider_id")))
     if not provider:
         return {
             "matched": False,
@@ -433,6 +448,14 @@ def resolve_service_turn(
             if _offer_matches_purchase_text(_safe_dict(offer), text_l):
                 selected = _safe_dict(offer)
                 break
+        if not selected:
+            price_matches = [
+                _safe_dict(offer)
+                for offer in offers
+                if format_currency(normalize_currency(_safe_dict(offer).get("price"))).lower() in text_l
+            ]
+            if len(price_matches) == 1:
+                selected = price_matches[0]
 
         if selected:
             price = normalize_currency(selected.get("price"))
@@ -464,6 +487,14 @@ def resolve_service_turn(
                 "note": "No matching deterministic offer was found.",
             }
 
+    if kind == "service_inquiry" and service_kind == SERVICE_KIND_MEAL:
+        referenced_offers = [
+            offer
+            for offer in offers
+            if _offer_matches_purchase_text(_safe_dict(offer), _safe_str(player_input).lower())
+        ]
+        if referenced_offers:
+            result["offers"] = referenced_offers
     result["available_actions"] = _build_available_actions(result)
     return result
 

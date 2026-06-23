@@ -1,19 +1,7 @@
-:root.rpg-play-focus-mode .omnix-topbar,
-:root.rpg-play-focus-mode .rpg-layout-controls:not(.rpg-header-visibility-controls),
-:root.rpg-play-focus-mode .rpg-live-data-status {
+:root.rpg-play-focus-mode .omnix-topbar {
   display: none;
 }
 
 :root.rpg-play-focus-mode .rpg-workstation {
   padding-top: 0.45rem;
-}
-
-.rpg-header-visibility-controls {
-  justify-content: flex-end;
-  margin-bottom: 0.45rem;
-}
-
-.rpg-header-visibility-controls .rpg-header-toggle {
-  min-height: 1.85rem;
-  padding: 0.42rem 0.62rem;
 }

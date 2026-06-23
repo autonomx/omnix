@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { omnixApiClient, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
@@ -40,8 +40,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
   const [isPlayerRailCollapsed, setIsPlayerRailCollapsed] = useState(false);
   const [isWorldRailCollapsed, setIsWorldRailCollapsed] = useState(false);
-  const [isPlayerRailFullSize, setIsPlayerRailFullSize] = useState(true);
-  const [isWorldRailFullSize, setIsWorldRailFullSize] = useState(true);
+  const [isLiveDataExpanded, setIsLiveDataExpanded] = useState(false);
+  const [campaignMenuHost, setCampaignMenuHost] = useState<HTMLElement | null>(null);
   const inventoryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'replay-inventory'],
     queryFn: () => omnixApiClient.getReplayPersistenceInventory(),
@@ -77,7 +77,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     reports: reportsQuery.data,
     selectedSessionId,
   });
-  const selectedSummarySessionId = summaryState.selectedSessionSummary.source === 'live' ? summaryState.selectedSessionSummary.id : null;
+  const selectedSummarySessionId = selectedSessionId?.trim()
+    || (summaryState.selectedSessionSummary.source === 'live' ? summaryState.selectedSessionSummary.id : null);
   useEffect(() => {
     if (!selectedSessionId && selectedSummarySessionId) {
       setValue('sessionId', selectedSummarySessionId, { shouldValidate: true });
@@ -91,6 +92,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const {
     heroSummary,
     heroStats,
+    survival,
     equippedGear,
     partyMembers,
     activeQuests,
@@ -98,6 +100,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     storyMessages,
     recentEvents,
     journalEntries,
+    narrativeLogEntries,
     journalDetail,
     inventoryItems,
     hotbarAbilities,
@@ -121,6 +124,21 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   });
   const combatSurface = createRpgCombatSurfaceState({ encounter, heroSummary, partyMembers });
   const selectedLiveSessionId = selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : null;
+  const refreshedTurnJobRef = useRef<string | null>(null);
+  const latestCompletedTurnJob = rpgJobs
+    .filter((job) => {
+      const sessionId = typeof job.input_ref?.session_id === 'string' ? job.input_ref.session_id : null;
+      return job.type === 'rpg.turn' && job.status === 'completed' && sessionId === selectedLiveSessionId;
+    })
+    .sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0];
+  const latestCompletedTurnJobId = latestCompletedTurnJob?.id;
+  const refetchSelectedSession = selectedSessionQuery.refetch;
+  const refetchInventory = inventoryQuery.refetch;
+  useEffect(() => {
+    if (!latestCompletedTurnJobId || refreshedTurnJobRef.current === latestCompletedTurnJobId) return;
+    refreshedTurnJobRef.current = latestCompletedTurnJobId;
+    void Promise.all([refetchSelectedSession(), refetchInventory()]);
+  }, [latestCompletedTurnJobId, refetchInventory, refetchSelectedSession]);
   const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && ACTIVE_JOB_STATUSES.has(job.status));
   const hasLiveSessions = (inventoryQuery.data?.sessions?.length ?? 0) > 0;
   const liveDataStatusCards: RpgLiveDataStatusCard[] = [
@@ -332,6 +350,15 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     },
   });
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
+  const submittedTurnJob = createJobMutation.data
+    ? rpgJobs.find((job) => job.id === createJobMutation.data.id) ?? createJobMutation.data
+    : undefined;
+  const submittedTurnFailed = submittedTurnJob
+    ? ['failed', 'canceled', 'stale'].includes(submittedTurnJob.status)
+    : false;
+  const submittedTurnFailureMessage = submittedTurnFailed
+    ? `RPG turn ${submittedTurnJob?.status}: ${submittedTurnJob?.error?.message ?? 'The turn did not produce a response.'}`
+    : '';
   const checkpointControlStatus = createCheckpointMutation.isPending
     ? 'Creating checkpoint…'
     : createCheckpointMutation.isError
@@ -358,56 +385,40 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
   return (
     <WorkspacePanel className="rpg-workstation">
-      <RpgWorkspaceHeader module={module} selectedSessionSummary={selectedSessionSummary} submitStatus={submitStatus} />
+      <header className="rpg-unified-header" aria-label="Campaign menu header">
+        <div className="rpg-campaign-menu-host" ref={setCampaignMenuHost} />
+        <RpgWorkspaceHeader
+          isLiveDataExpanded={isLiveDataExpanded}
+          isPlayerRailCollapsed={isPlayerRailCollapsed}
+          isWorldRailCollapsed={isWorldRailCollapsed}
+          module={module}
+          onToggleLiveData={() => setIsLiveDataExpanded((value) => !value)}
+          onTogglePlayerRail={() => setIsPlayerRailCollapsed((value) => !value)}
+          onToggleWorldRail={() => setIsWorldRailCollapsed((value) => !value)}
+          selectedSessionSummary={selectedSessionSummary}
+          submitStatus={submitStatus}
+        />
+      </header>
 
-      <div className="rpg-layout-controls" aria-label="Workspace layout controls">
-        <button
-          className="rpg-secondary-button"
-          type="button"
-          aria-pressed={isPlayerRailCollapsed}
-          onClick={() => setIsPlayerRailCollapsed((value) => !value)}
-        >
-          {isPlayerRailCollapsed ? 'Show player rail' : 'Hide player rail'}
-        </button>
-        <button
-          className="rpg-secondary-button"
-          type="button"
-          aria-pressed={isPlayerRailFullSize}
-          disabled={isPlayerRailCollapsed}
-          onClick={() => setIsPlayerRailFullSize((value) => !value)}
-        >
-          {isPlayerRailFullSize ? 'Contain player rail' : 'Full-size player rail'}
-        </button>
-        <button
-          className="rpg-secondary-button"
-          type="button"
-          aria-pressed={isWorldRailCollapsed}
-          onClick={() => setIsWorldRailCollapsed((value) => !value)}
-        >
-          {isWorldRailCollapsed ? 'Show world rail' : 'Hide world rail'}
-        </button>
-        <button
-          className="rpg-secondary-button"
-          type="button"
-          aria-pressed={isWorldRailFullSize}
-          disabled={isWorldRailCollapsed}
-          onClick={() => setIsWorldRailFullSize((value) => !value)}
-        >
-          {isWorldRailFullSize ? 'Contain world rail' : 'Full-size world rail'}
-        </button>
-      </div>
-
-      <RpgLiveDataStatus cards={liveDataStatusCards} />
+      <RpgLiveDataStatus
+        cards={liveDataStatusCards}
+        expanded={isLiveDataExpanded}
+        hideWhenCollapsed
+        onExpandedChange={setIsLiveDataExpanded}
+        showToggle={false}
+      />
 
       <div className={dashboardClassName}>
         {isPlayerRailCollapsed ? null : (
           <RpgPlayerRail
             activeQuests={activeQuests}
-            className={isPlayerRailFullSize ? 'rpg-rail-full-size' : undefined}
+            className="rpg-rail-expanded"
             equippedGear={equippedGear}
             heroStats={heroStats}
             heroSummary={heroSummary}
+            onSelectCommand={selectCommand}
             partyMembers={partyMembers}
+            survival={survival}
           />
         )}
 
@@ -419,6 +430,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             storyMessages={storyMessages}
           >
             <RpgActionComposer
+              campaignMenuHost={campaignMenuHost}
               canSaveGame={Boolean(selectedLiveSessionId)}
               commandRegistration={register('command', { required: true })}
               hasCommandError={Boolean(errors.command)}
@@ -433,10 +445,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               renderNewCampaign={(closeLauncher) => (
                 <RpgCreateCampaignWizard
                   onCreateCampaign={(request) => createCampaignMutation.mutateAsync(request)}
-                  onSelectCommand={(command) => {
-                    selectCommand(command);
-                    closeLauncher();
-                  }}
+                  onEnterWorld={closeLauncher}
                 />
               )}
               selectedSessionId={selectedSessionId}
@@ -444,12 +453,13 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               sessionSummaries={sessionSummaries}
             />
             <FeatureValidationMessage show={Boolean(errors.command)} message="Enter a command before queueing an RPG turn." />
+            <FeatureValidationMessage show={submittedTurnFailed} message={submittedTurnFailureMessage} />
             <FeatureSubmitFeedback
               error={createJobMutation.error}
               errorPrefix="RPG turn request"
               isError={createJobMutation.isError}
               isPending={createJobMutation.isPending}
-              jobId={createJobMutation.data?.id}
+              jobId={submittedTurnFailed ? undefined : createJobMutation.data?.id}
               pendingMessage="Queueing RPG turn job…"
               successPrefix="RPG turn job queued"
             />
@@ -457,7 +467,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
           <RpgCombatSurface combat={combatSurface} onSelectCommand={selectCommand} />
 
-          <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} recentEvents={recentEvents} />
+          <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} logEntries={narrativeLogEntries} recentEvents={recentEvents} />
 
           <RpgLoadoutTabs
             hotbarAbilities={hotbarAbilities}
@@ -481,7 +491,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           <RpgWorldRail
             autoplayRunning={Boolean(activeAutoplayJob)}
             autoplayStatusLabel={autoplayStatusLabel}
-            className={isWorldRailFullSize ? 'rpg-rail-full-size' : undefined}
+            className="rpg-rail-expanded"
             checkpointControlStatus={checkpointControlStatus}
             checkpointSummary={checkpointSummary}
             encounter={encounter}

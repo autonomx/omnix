@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { omnixApiClient, type RpgLoadoutActionRequest, type RpgLaunchResponse } from '../../api/client';
-import { applyRpgItemCommand, applyRpgItemResolve, fetchRpgItemDiagnostics, fetchRpgItemObjectives, runRpgItemMaintenance } from './rpgItemApi';
+import { applyRpgItemCommand, applyRpgItemResolve, fetchRpgAbilityDetails, fetchRpgItemDiagnostics } from './rpgItemApi';
 import { RpgItemPanel } from './RpgItemPanel';
 import {
-  buildItemObjectivePreviews,
-  buildItemStatusCards,
   buildMerchantEntryPreviews,
   buildSelectedItemActions,
-  type RpgItemObjectivePreview,
-  type RpgItemStatusCard,
   type RpgItemUiAction,
   type RpgMerchantEntryPreview,
 } from './rpgItemUiState';
@@ -143,25 +139,12 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
     queryFn: () => omnixApiClient.getRpgSession(selectedSessionId ?? ''),
     staleTime: 0,
   });
-  const itemObjectivesQuery = useQuery({
-    enabled: Boolean(selectedSessionId) && activeTab === 'inventory',
-    queryKey: ['feature', 'rpg', 'item-objectives', selectedSessionId],
-    queryFn: () => fetchRpgItemObjectives(selectedSessionId ?? '', { objectiveLimit: 5 }),
-    staleTime: 0,
-  });
   const itemDiagnosticsQuery = useQuery({
     enabled: Boolean(selectedSessionId) && activeTab === 'inventory',
     queryKey: ['feature', 'rpg', 'item-diagnostics', selectedSessionId],
     queryFn: () => fetchRpgItemDiagnostics(selectedSessionId ?? '', { objectiveLimit: 4, scenarioLimit: 4 }),
     staleTime: 0,
   });
-  const itemMaintenanceQuery = useQuery({
-    enabled: Boolean(selectedSessionId) && activeTab === 'inventory',
-    queryKey: ['feature', 'rpg', 'item-maintenance', selectedSessionId],
-    queryFn: () => runRpgItemMaintenance(selectedSessionId ?? '', { dryRun: true, bucketLimit: 20, recordReport: true }),
-    staleTime: 0,
-  });
-
   const abilityOverview = useMemo(
     () => buildAbilityOverview(sessionQuery.data, hotbarAbilities, Boolean(selectedSessionId)),
     [hotbarAbilities, selectedSessionId, sessionQuery.data],
@@ -171,26 +154,6 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
   const activeAbility = abilityOverview.allAbilities[Math.min(activeAbilityIndex, Math.max(abilityOverview.allAbilities.length - 1, 0))];
   const coveragePercent = Math.round(abilityOverview.coverage.score * 100);
 
-  const itemObjectives = useMemo(
-    () =>
-      buildItemObjectivePreviews(
-        recordValue(itemObjectivesQuery.data?.objectives) ??
-          recordValue(recordValue(itemDiagnosticsQuery.data?.diagnostics)?.objectives) ??
-          recordValue(itemObjectivesQuery.data),
-      ),
-    [itemDiagnosticsQuery.data, itemObjectivesQuery.data],
-  );
-  const itemStatusCards = useMemo(
-    () =>
-      selectedSessionId
-        ? buildItemStatusCards({
-            diagnostics: recordValue(itemDiagnosticsQuery.data?.diagnostics),
-            maintenance: recordValue(itemMaintenanceQuery.data?.maintenance),
-            report: recordValue(recordValue(itemDiagnosticsQuery.data?.diagnostics)?.report),
-          })
-        : [],
-    [itemDiagnosticsQuery.data, itemMaintenanceQuery.data, selectedSessionId],
-  );
   const merchantEntries = useMemo(
     () =>
       buildMerchantEntryPreviews(
@@ -199,20 +162,16 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
           itemDiagnosticsQuery.data?.merchant_menu,
           recordValue(itemDiagnosticsQuery.data?.diagnostics)?.merchant,
           recordValue(itemDiagnosticsQuery.data?.diagnostics)?.merchant_menu,
-          recordValue(itemObjectivesQuery.data?.objectives)?.merchant,
-          recordValue(itemObjectivesQuery.data?.objectives)?.merchant_menu,
         ),
       ),
-    [itemDiagnosticsQuery.data, itemObjectivesQuery.data],
+    [itemDiagnosticsQuery.data],
   );
 
   const refreshItemPanelQueries = async () => {
     await Promise.all([
       sessionQuery.refetch(),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'item-objectives', selectedSessionId] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'item-diagnostics', selectedSessionId] }),
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'item-maintenance', selectedSessionId] }),
     ]);
   };
   const itemPanelMutation = useMutation({
@@ -224,12 +183,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
     },
     onSuccess: refreshItemPanelQueries,
   });
-  const itemPanelPending =
-    isApplyingLoadoutAction ||
-    itemPanelMutation.isPending ||
-    itemObjectivesQuery.isFetching ||
-    itemDiagnosticsQuery.isFetching ||
-    itemMaintenanceQuery.isFetching;
+  const itemPanelPending = isApplyingLoadoutAction || itemPanelMutation.isPending || itemDiagnosticsQuery.isFetching;
   const panelDisabled = isApplyingLoadoutAction || sessionQuery.isFetching;
 
   useEffect(() => {
@@ -276,11 +230,8 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
           isApplyingLoadoutAction={itemPanelPending}
           itemActions={buildSelectedItemActions({ item: activeItem, selectedSessionId })}
           itemMerchantEntries={merchantEntries}
-          itemObjectives={itemObjectives}
-          itemStatusCards={itemStatusCards}
           onApplyItemAction={(action) => itemPanelMutation.mutate({ kind: 'action', action })}
           onApplyItemMerchantEntry={(entry) => itemPanelMutation.mutate({ kind: 'merchant', entry })}
-          onApplyItemObjective={(objective) => itemPanelMutation.mutate({ kind: 'objective', objective })}
           onApplyLoadoutAction={onApplyLoadoutAction}
           onSelectCommand={onSelectCommand}
           onSelectItem={setActiveInventoryIndex}
@@ -323,11 +274,8 @@ interface InventoryPanelProps extends Pick<RpgLoadoutTabsProps, 'inventoryItems'
   hotbarAbilities: RpgHotbarAbilityPreview[];
   itemActions: RpgItemUiAction[];
   itemMerchantEntries: RpgMerchantEntryPreview[];
-  itemObjectives: RpgItemObjectivePreview[];
-  itemStatusCards: RpgItemStatusCard[];
   onApplyItemAction: (action: RpgItemUiAction) => void;
   onApplyItemMerchantEntry: (entry: RpgMerchantEntryPreview) => void;
-  onApplyItemObjective: (objective: RpgItemObjectivePreview) => void;
   onSelectItem: (index: number) => void;
 }
 
@@ -338,11 +286,8 @@ function InventoryPanel({
   isApplyingLoadoutAction,
   itemActions,
   itemMerchantEntries,
-  itemObjectives,
-  itemStatusCards,
   onApplyItemAction,
   onApplyItemMerchantEntry,
-  onApplyItemObjective,
   onApplyLoadoutAction,
   onSelectCommand,
   onSelectItem,
@@ -376,20 +321,17 @@ function InventoryPanel({
         </button>
         <div className="rpg-hotbar" aria-label="Ability hotbar">
           {hotbarAbilities.map((ability) => (
-            <button
-              type="button"
+            <InventoryHotbarAbilityButton
+              ability={ability}
+              disabled={Boolean(isApplyingLoadoutAction)}
               key={ability.key}
-              aria-label={ability.label}
-              disabled={isApplyingLoadoutAction}
-              onClick={() =>
+              onActivate={() =>
                 selectedSessionId && onApplyLoadoutAction
                   ? onApplyLoadoutAction({ action: 'hotbar', hotbar_slot: ability.key })
                   : onSelectCommand(`Use ${ability.label} from hotbar slot ${ability.key} when it is tactically useful.`)
               }
-            >
-              <small>{ability.key}</small>
-              <span>{ability.icon}</span>
-            </button>
+              selectedSessionId={selectedSessionId}
+            />
           ))}
         </div>
       </div>
@@ -398,12 +340,9 @@ function InventoryPanel({
         actions={itemActions}
         isPending={isApplyingLoadoutAction}
         merchantEntries={itemMerchantEntries}
-        objectives={itemObjectives}
         onApplyAction={onApplyItemAction}
         onApplyMerchantEntry={onApplyItemMerchantEntry}
-        onApplyObjective={onApplyItemObjective}
         onSelectCommand={onSelectCommand}
-        statusCards={itemStatusCards}
       />
     </div>
   );
@@ -411,7 +350,6 @@ function InventoryPanel({
 
 type RpgItemPanelRequest =
   | { kind: 'action'; action: RpgItemUiAction }
-  | { kind: 'objective'; objective: RpgItemObjectivePreview }
   | { kind: 'merchant'; entry: RpgMerchantEntryPreview };
 
 function applyRpgItemPanelRequest(sessionId: string, request: RpgItemPanelRequest): Promise<unknown> {
@@ -426,21 +364,72 @@ function applyRpgItemPanelRequest(sessionId: string, request: RpgItemPanelReques
     return applyRpgItemResolve(sessionId, { command: request.action.command, input: request.action.payload });
   }
 
-  if (request.kind === 'merchant') {
-    const itemName = firstString(request.entry.payload.item_name, request.entry.payload.item_id, request.entry.label) ?? request.entry.label;
-    return applyRpgItemCommand(sessionId, `${request.entry.action} ${itemName}`);
-  }
+  const itemName = firstString(request.entry.payload.item_name, request.entry.payload.item_id, request.entry.label) ?? request.entry.label;
+  return applyRpgItemCommand(sessionId, `${request.entry.action} ${itemName}`);
+}
 
-  const loadoutRequest = loadoutRequestFromPayload(request.objective.payload);
-  if (loadoutRequest) {
-    return omnixApiClient.applyRpgLoadoutAction(sessionId, loadoutRequest);
-  }
-  const action = firstString(request.objective.payload.action, request.objective.action);
-  const itemName = firstString(request.objective.payload.item_name, request.objective.payload.item_id);
-  if ((action === 'buy' || action === 'sell') && itemName) {
-    return applyRpgItemCommand(sessionId, `${action} ${itemName}`);
-  }
-  return applyRpgItemResolve(sessionId, { input: request.objective.payload });
+function InventoryHotbarAbilityButton({
+  ability,
+  disabled,
+  onActivate,
+  selectedSessionId,
+}: {
+  ability: RpgHotbarAbilityPreview;
+  disabled: boolean;
+  onActivate: () => void;
+  selectedSessionId?: string | null;
+}) {
+  const [detailRequested, setDetailRequested] = useState(false);
+  const tooltipId = `rpg-hotbar-tooltip-${ability.key}`;
+  const detailQuery = useQuery({
+    enabled: Boolean(selectedSessionId && detailRequested),
+    queryKey: ['feature', 'rpg', 'ability-detail-v1', selectedSessionId, ability.abilityId ?? ability.label],
+    queryFn: () =>
+      fetchRpgAbilityDetails(selectedSessionId ?? '', {
+        abilityName: ability.label,
+        abilityId: ability.abilityId,
+      }),
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+  const detail = recordValue(detailQuery.data?.ability_detail);
+  const description = firstString(detail?.summary, ability.description) ?? 'No ability description is available.';
+  const cost = formatAbilityCost(recordValue(detail?.resource_cost));
+  const cooldown = firstNumber(detail?.cooldown_turns);
+  const isLoading = Boolean(selectedSessionId && detailRequested && detailQuery.isFetching);
+
+  return (
+    <button
+      aria-describedby={tooltipId}
+      aria-label={ability.label}
+      disabled={disabled}
+      onClick={onActivate}
+      onFocus={() => setDetailRequested(true)}
+      onMouseEnter={() => setDetailRequested(true)}
+      type="button"
+    >
+      <small>{ability.key}</small>
+      <span>{ability.icon}</span>
+      <div className="rpg-hotbar-ability-tooltip" id={tooltipId} role="tooltip">
+        <strong>{ability.label}</strong>
+        <p>{isLoading ? 'Generating an ability description with the configured LLM.' : description}</p>
+        {cost || cooldown !== undefined ? (
+          <div className="rpg-hotbar-ability-meta">
+            {cost ? <span>{cost}</span> : null}
+            {cooldown !== undefined ? <span>{cooldown > 0 ? `${cooldown}-turn cooldown` : 'No cooldown'}</span> : null}
+          </div>
+        ) : null}
+      </div>
+    </button>
+  );
+}
+
+function formatAbilityCost(cost: Record<string, unknown> | undefined): string {
+  if (!cost) return '';
+  return Object.entries(cost)
+    .filter(([, value]) => typeof value === 'number')
+    .map(([resource, value]) => `${value} ${titleCase(resource)}`)
+    .join(' • ');
 }
 
 function loadoutRequestFromPayload(payload: Record<string, unknown>): RpgLoadoutActionRequest | null {
@@ -869,7 +858,13 @@ function buildAbilityOverview(
   const hotbarAbilities = hotbarSlots
     .filter((slot): slot is HotbarSlotPreview & { ability: AbilityPreview } => Boolean(slot.ability))
     .slice(0, 6)
-    .map((slot) => ({ key: slot.slot, icon: slot.ability.icon, label: slot.ability.name }));
+    .map((slot) => ({
+      key: slot.slot,
+      icon: slot.ability.icon,
+      label: slot.ability.name,
+      abilityId: slot.ability.id,
+      description: slot.ability.description,
+    }));
 
   return {
     className: firstString(tree.class_name) ?? 'Ability tree',

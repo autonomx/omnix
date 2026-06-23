@@ -46,9 +46,8 @@ describe('RpgWorkspace campaign handoff', () => {
       if (path === '/api/replay/persistence/inventory') {
         inventoryReads += 1;
         return Response.json({
-          sessions:
-            inventoryReads > 1
-              ? [
+          sessions: inventoryReads > 1
+            ? [
                   {
                     session_id: 'rpg-created-1',
                     title: 'Created Campaign',
@@ -58,7 +57,17 @@ describe('RpgWorkspace campaign handoff', () => {
                     updated_at: '2026-06-20T00:00:00Z',
                   },
                 ]
-              : [],
+            : [
+                {
+                  session_id: 'rpg-previous-1',
+                  title: 'Previous Campaign',
+                  location: 'Old Road',
+                  summary: 'The previous campaign is still selected.',
+                  turn_count: 4,
+                  updated_at: '2026-06-19T00:00:00Z',
+                  timeline: [{ title: 'Old conversation', detail: 'Bran speaks from the previous campaign.', turn: 4 }],
+                },
+              ],
           diagnostics: [],
         });
       }
@@ -160,11 +169,13 @@ describe('RpgWorkspace campaign handoff', () => {
     renderRpg();
 
     expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
+    expect((await screen.findAllByText('Bran speaks from the previous campaign.')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Campaign Menu' }));
     fireEvent.click(screen.getByRole('button', { name: /^New Campaign/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Create Campaign' }));
 
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
+    expect(screen.queryByText('Bran speaks from the previous campaign.')).not.toBeInTheDocument();
     expect(await screen.findByRole('option', { name: 'Created Campaign — rpg-created-1' })).toBeInTheDocument();
     expect(await screen.findByText('Created Campaign')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Elara' })).toBeInTheDocument();
@@ -189,7 +200,7 @@ describe('RpgWorkspace campaign handoff', () => {
 
     await waitFor(() => {
       const commandInput = screen.getByLabelText('Command') as HTMLTextAreaElement;
-      expect(commandInput.value).toContain('Session rpg-created-1 is ready');
+      expect(commandInput.value).toBe('');
     });
 
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'I ask Bran how he is.' } });

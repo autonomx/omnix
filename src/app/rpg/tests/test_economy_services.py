@@ -94,6 +94,7 @@ def test_service_registry_has_lodging_meal_info_and_goods():
 
     assert any(offer["offer_id"] == "bran_lodging_common_cot" for offer in bran_lodging)
     assert any(offer["offer_id"] == "bran_meal_stew" for offer in bran_meals)
+    assert any(offer["offer_id"] == "bran_dried_rations" for offer in bran_meals)
     assert any(offer["offer_id"] == "elara_torch" for offer in elara_goods)
 
 
@@ -190,6 +191,15 @@ def test_service_intent_detects_meal_inquiry():
     assert intent["provider_id"] == "npc:Bran"
 
 
+def test_service_intent_detects_food_for_sale_inquiry():
+    intent = resolve_service_intent("i ask bran if he has food for sale")
+
+    assert intent["matched"] is True
+    assert intent["kind"] == "service_inquiry"
+    assert intent["service_kind"] == "meal"
+    assert intent["provider_id"] == "npc:Bran"
+
+
 def test_service_intent_defaults_stew_purchase_to_bran_not_market_merchant():
     intent = resolve_service_intent("ill buy a hot stew")
 
@@ -197,6 +207,69 @@ def test_service_intent_defaults_stew_purchase_to_bran_not_market_merchant():
     assert intent["kind"] == "service_purchase"
     assert intent["service_kind"] == "meal"
     assert intent["provider_id"] == "npc:Bran"
+
+
+def test_service_turn_matches_bran_dried_rations_purchase():
+    result = resolve_service_turn(
+        player_input="I buy dried rations from Bran",
+        action={},
+        resolved_action={},
+        simulation_state={
+            "player_state": {
+                "currency": {"gold": 0, "silver": 10, "copper": 0},
+                "inventory_state": {"items": [], "currency": {"gold": 0, "silver": 10, "copper": 0}},
+            }
+        },
+        runtime_state={},
+    )
+
+    assert result["status"] == "purchase_ready"
+    assert result["selected_offer_id"] == "bran_dried_rations"
+    assert result["purchase"]["price"] == {"gold": 0, "silver": 5, "copper": 0}
+
+
+def test_service_turn_treats_take_named_rations_as_purchase_not_pickup():
+    inquiry = resolve_service_turn(
+        player_input="I ask Bran if he has any food to sell",
+        action={},
+        resolved_action={},
+        simulation_state={"player_state": {"currency": {"silver": 10}}},
+        runtime_state={},
+    )
+    result = resolve_service_turn(
+        player_input="ill take dried rations",
+        action={"action_type": "pickup_item"},
+        resolved_action={},
+        simulation_state={"player_state": {"currency": {"silver": 10}}},
+        runtime_state={"last_turn_contract": {"service_result": inquiry}},
+    )
+
+    assert result["matched"] is True
+    assert result["kind"] == "service_purchase"
+    assert result["status"] == "purchase_ready"
+    assert result["selected_offer_id"] == "bran_dried_rations"
+
+
+def test_service_turn_resolves_payment_confirmation_from_prior_rations_offer():
+    inquiry = resolve_service_turn(
+        player_input="Dried rations. How much would that be?",
+        action={},
+        resolved_action={},
+        simulation_state={"player_state": {"currency": {"silver": 10}}},
+        runtime_state={},
+    )
+    result = resolve_service_turn(
+        player_input="I'll take it. I pay Bran 5 silver coins",
+        action={},
+        resolved_action={},
+        simulation_state={"player_state": {"currency": {"silver": 10}}},
+        runtime_state={"last_turn_contract": {"service_result": inquiry}},
+    )
+
+    assert len(inquiry["available_actions"]) == 1
+    assert inquiry["available_actions"][0]["offer_id"] == "bran_dried_rations"
+    assert result["status"] == "purchase_ready"
+    assert result["selected_offer_id"] == "bran_dried_rations"
 
 
 def test_service_intent_detects_paid_information_inquiry():

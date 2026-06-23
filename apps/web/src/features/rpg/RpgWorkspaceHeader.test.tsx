@@ -15,36 +15,39 @@ function renderWithTheme(element: ReactElement) {
 }
 
 describe('RpgWorkspaceHeader', () => {
-  it('hides by default and restores collapsed runtime context on request', () => {
+  it('keeps workspace controls available when runtime context is hidden', () => {
     renderWithTheme(
       <RpgWorkspaceHeader
+        isLiveDataExpanded={false}
+        isPlayerRailCollapsed={false}
+        isWorldRailCollapsed={false}
         module={{
           id: 'rpg',
           label: 'RPG',
           route: '/rpg',
           summary: 'Run deterministic RPG campaigns.',
         }}
+        onToggleLiveData={() => undefined}
+        onTogglePlayerRail={() => undefined}
+        onToggleWorldRail={() => undefined}
         selectedSessionSummary={previewSessionSummary}
         submitStatus="ready"
       />
     );
 
-    expect(screen.getByRole('button', { name: 'Show RPG headers' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'RPG mode' })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Show RPG headers' }));
-
-    expect(screen.getByRole('heading', { name: 'RPG mode' })).toBeInTheDocument();
-    expect(screen.getByText('Run deterministic RPG campaigns.')).not.toBeVisible();
     expect(screen.getByLabelText('RPG runtime status')).toHaveTextContent('Engine: ready');
     expect(screen.getByLabelText('RPG runtime status')).toHaveTextContent('Session: Preview campaign');
     expect(screen.getByText('Replay-preserving')).toBeInTheDocument();
     expect(screen.getByText('/rpg')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Expand header' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide world rail' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand live data' })).toHaveAttribute('aria-expanded', 'false');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand header' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hide header' }));
 
-    expect(screen.getByText('Run deterministic RPG campaigns.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Collapse header' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByLabelText('RPG runtime status')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show header' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
   });
 });

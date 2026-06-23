@@ -1,18 +1,3 @@
-.rpg-layout-controls {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  justify-content: flex-end;
-  margin: -0.25rem 0 0.85rem;
-}
-
-.rpg-layout-controls .rpg-secondary-button[aria-pressed="true"] {
-  background: rgba(21, 186, 196, 0.14);
-  border-color: rgba(45, 212, 191, 0.34);
-  color: #ccfbf1;
-}
-
 .rpg-live-data-status {
   margin-bottom: 0.85rem;
 }
@@ -183,20 +168,12 @@
 .rpg-left-rail,
 .rpg-right-rail {
   align-content: start;
-  max-height: calc(100vh - 11rem);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 0.1rem;
-  scrollbar-gutter: stable;
 }
 
-.rpg-left-rail.rpg-rail-full-size,
-.rpg-right-rail.rpg-rail-full-size {
+.rpg-left-rail.rpg-rail-expanded,
+.rpg-right-rail.rpg-rail-expanded {
   max-height: none;
   overflow: visible;
-  overscroll-behavior: auto;
-  padding-right: 0;
-  scrollbar-gutter: auto;
 }
 
 .rpg-center-stage {
@@ -244,9 +221,22 @@
 
 .rpg-dialogue-stack,
 .rpg-event-strip ul {
-  max-height: 30rem;
   overflow-y: auto;
   padding-right: 0.15rem;
+}
+
+.rpg-dialogue-stack {
+  max-height: 38rem;
+}
+
+.rpg-event-strip ul {
+  max-height: 30rem;
+}
+
+@media (max-width: 48rem) {
+  .rpg-dialogue-stack {
+    min-height: 13rem;
+  }
 }
 
 .rpg-loadout-detail,
@@ -312,10 +302,6 @@
     padding: 0.85rem;
   }
 
-  .rpg-layout-controls {
-    justify-content: flex-start;
-  }
-
   .rpg-live-data-summary {
     justify-content: flex-start;
   }
@@ -331,13 +317,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .rpg-left-rail,
-  .rpg-right-rail {
-    max-height: none;
-    overflow: visible;
-    padding-right: 0;
-  }
-
   .rpg-right-rail {
     grid-column: auto;
     grid-template-columns: minmax(0, 1fr);
@@ -349,7 +328,6 @@
     padding: 0.65rem;
   }
 
-  .rpg-layout-controls .rpg-secondary-button,
   .rpg-primary-button,
   .rpg-secondary-button {
     width: 100%;

@@ -1,5 +1,5 @@
 import { MantineProvider } from '@mantine/core';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { omnixTheme } from '../../design/theme';
@@ -33,7 +33,18 @@ describe('RpgStoryScene', () => {
     expect(screen.getByLabelText('Glimmerdeep Pass scene preview')).toBeInTheDocument();
     expect(screen.getByText('Alyndra (You)')).toBeInTheDocument();
     expect(screen.getByText('Omnix (Narrator)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Conversation')).toHaveClass('rpg-dialogue-stack');
     expect(screen.getByText('You arrived at Glimmerdeep Pass.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Queue RPG turn' })).toBeInTheDocument();
+    const childControls = screen.getByRole('button', { name: 'Queue RPG turn' });
+    const recentEventsToggle = screen.getByRole('button', { name: 'Recent events' });
+    expect(childControls.compareDocumentPosition(recentEventsToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    expect(recentEventsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(recentEventsToggle.closest('.rpg-event-strip')).toHaveClass('is-collapsed');
+
+    fireEvent.click(recentEventsToggle);
+    expect(recentEventsToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(recentEventsToggle.closest('.rpg-event-strip')).toHaveClass('is-expanded');
   });
 });

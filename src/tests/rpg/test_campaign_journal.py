@@ -20,7 +20,7 @@ def test_campaign_time_for_turn_tracks_phase_and_date():
     assert eighth["season"] == "spring"
 
 
-def test_advance_campaign_journal_writes_entry_every_n_turns():
+def test_advance_campaign_journal_updates_one_entry_for_the_current_day():
     runtime_state = {}
     for turn in range(1, 5):
         runtime_state = advance_campaign_journal_for_turn(
@@ -30,7 +30,7 @@ def test_advance_campaign_journal_writes_entry_every_n_turns():
             turn_contract={
                 "turn_index": turn,
                 "player_input": f"I do thing {turn}",
-                "resolved_result": {"summary": f"Result {turn}"},
+                "resolved_result": {"summary": f"The outcome from turn {turn} was recorded."},
             },
             journal_every_turns=4,
             minutes_per_turn=60,
@@ -41,9 +41,10 @@ def test_advance_campaign_journal_writes_entry_every_n_turns():
 
     assert calendar["turns_tracked"] == 4
     assert journal["entry_count"] == 1
-    assert journal["entries"][0]["entry_id"] == "journal:turn:4"
+    assert journal["entries"][0]["entry_id"] == "journal:day:1"
+    assert journal["entries"][0]["source_turns"] == [1, 2, 3, 4]
     assert "I do thing 1" in journal["entries"][0]["text"]
-    assert "Result" in journal["entries"][0]["text"]
+    assert "outcome from turn" in journal["entries"][0]["text"]
 
 
 def test_advance_campaign_journal_is_idempotent_for_same_turn_entry():
@@ -63,11 +64,12 @@ def test_advance_campaign_journal_is_idempotent_for_same_turn_entry():
 
     journal = summarize_player_journal(runtime_state)
     assert journal["entry_count"] == 1
+    assert journal["entries"][0]["actions"] == ["I ask Bran."]
 
 
-def test_campaign_journal_history_accumulates_across_turns():
+def test_campaign_journal_creates_a_new_entry_only_when_the_day_changes():
     runtime_state = {}
-    for turn in range(1, 9):
+    for turn in range(1, 26):
         runtime_state = advance_campaign_journal_for_turn(
             runtime_state=runtime_state,
             turn_index=turn,
@@ -84,11 +86,36 @@ def test_campaign_journal_history_accumulates_across_turns():
     calendar = summarize_campaign_calendar(runtime_state)
     journal = summarize_player_journal(runtime_state)
 
-    assert calendar["turns_tracked"] == 8
-    assert calendar["end"]["turn_index"] == 8
+    assert calendar["turns_tracked"] == 25
+    assert calendar["end"]["turn_index"] == 25
     assert journal["entry_count"] == 2
-    assert journal["entries"][0]["entry_id"] == "journal:turn:4"
-    assert journal["entries"][1]["entry_id"] == "journal:turn:8"
+    assert journal["entries"][0]["entry_id"] == "journal:day:1"
+    assert journal["entries"][1]["entry_id"] == "journal:day:2"
+
+
+def test_daily_journal_uses_authoritative_day_and_player_personality_voice():
+    runtime_state = advance_campaign_journal_for_turn(
+        runtime_state={},
+        turn_index=3,
+        player_input="I question Bran about the road.",
+        turn_contract={"resolved_result": {"summary": "Bran warns me about the old mile marker."}},
+        calendar_snapshot={
+            "calendar": {"year": 1, "day_of_year": 7, "days_per_year": 360},
+            "absolute_minutes": 10560,
+        },
+        player_context={
+            "genre": "fantasy",
+            "character_identity": {"background": "wanderer"},
+            "metadata": {"flaw": "cautious", "values": ["loyalty"]},
+        },
+    )
+
+    entry = summarize_player_journal(runtime_state)["entries"][0]
+    assert entry["entry_id"] == "journal:day:7"
+    assert entry["title"] == "A Cautious Wanderer's Journal"
+    assert entry["voice"]["traits"] == ["loyalty", "cautious"]
+    assert "measured each choice" in entry["text"]
+    assert "I question Bran" in entry["text"]
 
 
 def test_clean_journal_text_filters_internal_codes():
@@ -201,8 +228,8 @@ def test_journal_prefers_narration_as_learned_and_changed_text():
 
     text = summarize_player_journal(runtime_state)["entries"][0]["text"]
 
-    assert "What I learned:" in text
     assert "strange lights near the woods" in text
+    assert "Before the next watch" in text
     assert "target_not_found" not in text
 
 

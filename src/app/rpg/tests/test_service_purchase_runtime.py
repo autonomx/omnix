@@ -129,6 +129,25 @@ def test_apply_service_purchase_adds_shop_item():
     assert applied["transaction_record"]["items_added"][0]["item_id"] == "torch"
 
 
+def test_apply_service_purchase_adds_bran_dried_rations_and_deducts_five_silver():
+    simulation_state = _state({"gold": 0, "silver": 10, "copper": 0})
+    service_result = resolve_service_turn(
+        player_input="I buy dried rations from Bran",
+        action={},
+        resolved_action={},
+        simulation_state=simulation_state,
+        runtime_state={},
+    )
+
+    applied = apply_service_purchase_result(simulation_state, service_result, tick=12)
+
+    assert applied["applied"] is True
+    assert applied["currency_after"] == {"gold": 0, "silver": 5, "copper": 0}
+    assert applied["simulation_state"]["player_state"]["inventory_state"]["items"] == [
+        {"item_id": "dried_rations", "name": "Dried rations", "quantity": 1, "type": "food"}
+    ]
+
+
 def test_apply_service_purchase_blocks_without_mutation_when_insufficient_funds():
     simulation_state = _state({"gold": 0, "silver": 1, "copper": 0})
     service_result = resolve_service_turn(

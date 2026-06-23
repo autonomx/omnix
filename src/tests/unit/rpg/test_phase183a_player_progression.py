@@ -42,6 +42,15 @@ class TestEnsurePlayerProgressionState:
         assert ps["name"] == "Hero"
         assert ps["level"] == 5
 
+    def test_normalizes_genesis_xp_meter(self):
+        ps = ensure_player_progression_state({"xp": {"current": 120, "max": 100}})
+        assert ps["xp"] == 120
+        assert ps["xp_to_next"] == 100
+
+        ps = resolve_level_ups(ps)
+        assert ps["level"] == 2
+        assert ps["xp"] == 20
+
     def test_progression_log_bounded(self):
         ps = {"progression_log": [{"type": "test"}] * 100}
         ps = ensure_player_progression_state(ps)

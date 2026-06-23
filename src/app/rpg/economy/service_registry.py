@@ -102,6 +102,31 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
             },
         },
         {
+            "offer_id": "bran_dried_rations",
+            "service_kind": SERVICE_KIND_MEAL,
+            "provider_id": "npc:Bran",
+            "provider_name": "Bran",
+            "label": "Dried rations",
+            "description": "A wrapped packet of dried meat, hard cheese, and preserved berries.",
+            "price": {"gold": 0, "silver": 5, "copper": 0},
+            "stock": 4,
+            "availability_rules": {
+                "requires_provider_present": True,
+                "requires_location": "loc_tavern",
+            },
+            "availability": "available",
+            "effects": {
+                "items_added": [
+                    {
+                        "item_id": "dried_rations",
+                        "name": "Dried rations",
+                        "quantity": 1,
+                        "type": "food",
+                    }
+                ],
+            },
+        },
+        {
             "offer_id": "bran_drink_ale",
             "service_kind": SERVICE_KIND_DRINK,
             "provider_id": "npc:Bran",
@@ -260,7 +285,7 @@ def find_provider_by_text(text: str) -> Dict[str, Any]:
             return deepcopy(provider)
 
     # Useful defaults for current starter world.
-    if any(word in text_l for word in ("room", "rent", "lodging", "bed", "stay", "meal", "food", "stew", "bread", "provision", "provisions", "drink", "ale", "rumor", "rumour")):
+    if any(word in text_l for word in ("room", "rent", "lodging", "bed", "stay", "meal", "food", "stew", "bread", "ration", "rations", "provision", "provisions", "drink", "ale", "rumor", "rumour")):
         return deepcopy(SERVICE_PROVIDERS["npc:Bran"])
     if any(word in text_l for word in ("shop", "buy", "sell", "sells", "merchant", "goods", "torch", "rope", "repair")):
         return deepcopy(SERVICE_PROVIDERS["npc:Elara"])

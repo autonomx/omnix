@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 CAMPAIGN_CALENDAR_VERSION = "campaign_calendar_v1"
-PLAYER_JOURNAL_VERSION = "player_journal_v1"
+PLAYER_JOURNAL_VERSION = "player_journal_v2"
 
 SEASONS = ("spring", "summer", "autumn", "winter")
 
@@ -385,11 +385,167 @@ def campaign_journal_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, A
             "entries": [],
             "pending_actions": [],
             "pending_results": [],
-            "journal_every_turns": 4,
             "max_entries": 100,
         },
     )
     return runtime_state
+
+
+def _authoritative_campaign_time(
+    calendar_snapshot: Dict[str, Any] | None,
+    *,
+    fallback: Dict[str, Any],
+) -> Dict[str, Any]:
+    snapshot = _safe_dict(calendar_snapshot)
+    calendar = _safe_dict(snapshot.get("calendar")) or snapshot
+    if not calendar:
+        return fallback
+
+    year = max(1, int(calendar.get("year") or fallback.get("year") or 1))
+    day_of_year = max(1, int(calendar.get("day_of_year") or fallback.get("day_of_year") or 1))
+    days_per_year = max(1, int(calendar.get("days_per_year") or 360))
+    absolute_minutes = int(
+        snapshot.get("absolute_minutes")
+        or calendar.get("absolute_minutes")
+        or ((day_of_year - 1) * 24 * 60)
+    )
+    minute_of_day = absolute_minutes % (24 * 60)
+    hour = minute_of_day // 60
+    minute = minute_of_day % 60
+    absolute_day = ((year - 1) * days_per_year) + day_of_year
+    season = _safe_str(
+        snapshot.get("season_id")
+        or _safe_dict(snapshot.get("display")).get("season")
+        or fallback.get("season")
+    ) or SEASONS[min(3, ((day_of_year - 1) * 4) // days_per_year)]
+    if 5 <= hour < 12:
+        phase = "morning"
+    elif 12 <= hour < 17:
+        phase = "afternoon"
+    elif 17 <= hour < 21:
+        phase = "evening"
+    else:
+        phase = "night"
+    return {
+        **fallback,
+        "year": year,
+        "season": season,
+        "day_of_year": day_of_year,
+        "day": ((day_of_year - 1) % 30) + 1,
+        "month": ((day_of_year - 1) // 30) + 1,
+        "hour": hour,
+        "minute": minute,
+        "time_label": f"{hour:02d}:{minute:02d}",
+        "day_phase": phase,
+        "absolute_day": absolute_day,
+        "calendar_source": "environment_runtime",
+    }
+
+
+def _player_voice_context(player_context: Dict[str, Any] | None) -> Dict[str, Any]:
+    context = _safe_dict(player_context)
+    profile = _safe_dict(context.get("personality_profile"))
+    metadata = _safe_dict(context.get("metadata"))
+    identity = _safe_dict(context.get("character_identity"))
+    drivers = _safe_dict(context.get("drivers"))
+    traits = [
+        _safe_str(value).strip().lower()
+        for value in _safe_list(profile.get("traits"))
+        + _safe_list(metadata.get("values"))
+        + _safe_list(drivers.get("values"))
+        if _safe_str(value).strip()
+    ]
+    flaw = _safe_str(metadata.get("flaw") or drivers.get("flaw")).strip().lower()
+    if flaw and flaw not in traits:
+        traits.append(flaw)
+    temperament = _safe_str(profile.get("temperament") or flaw).strip().lower()
+    tone = _safe_str(profile.get("tone_hint") or profile.get("tone")).strip().lower()
+    genre = _safe_str(
+        context.get("genre")
+        or metadata.get("genre")
+        or identity.get("genre")
+        or "fantasy"
+    ).strip().lower()
+    background = _safe_str(identity.get("background") or context.get("background")).strip().lower()
+    playstyle = _safe_str(
+        profile.get("playstyle")
+        or metadata.get("primary_capability")
+        or identity.get("primary_capability")
+    ).strip().lower()
+    return {
+        "label": _safe_str(profile.get("label") or background or "Adventurer").strip().title(),
+        "tone": tone or "neutral",
+        "temperament": temperament,
+        "traits": list(dict.fromkeys(traits))[:8],
+        "genre": genre,
+        "background": background,
+        "playstyle": playstyle,
+    }
+
+
+def _personality_reflection(voice: Dict[str, Any]) -> str:
+    markers = " ".join(
+        [
+            _safe_str(voice.get("tone")),
+            _safe_str(voice.get("temperament")),
+            *[_safe_str(value) for value in _safe_list(voice.get("traits"))],
+        ]
+    ).lower()
+    if any(token in markers for token in ("cautious", "careful", "patient", "pragmatic")):
+        return "I kept my eyes open and measured each choice; haste has never been the same thing as courage."
+    if any(token in markers for token in ("heroic", "brave", "honorable", "protective", "merciful")):
+        return "Whatever the cost, I meant to leave those around me safer than I found them."
+    if any(token in markers for token in ("dark", "ruthless", "cold", "dominating")):
+        return "I watched for weakness and leverage, because mercy is useful only when it buys something."
+    if any(token in markers for token in ("cunning", "sly", "deceptive", "manipulative")):
+        return "I showed only what served me and kept the sharper part of my purpose hidden."
+    if any(token in markers for token in ("wild", "chaotic", "impulsive", "unpredictable")):
+        return "The straight road looked dull, so I trusted instinct and let the day surprise me."
+    return "I tried to read the day clearly and make each choice count."
+
+
+def _daily_journal_text(
+    actions: List[str],
+    results: List[str],
+    *,
+    runtime_state: Dict[str, Any],
+    voice: Dict[str, Any],
+) -> str:
+    clean_actions = [_clean_journal_text(value, max_len=220) for value in actions[-6:]]
+    clean_results = [_clean_journal_text(value, max_len=340) for value in results[-6:]]
+    clean_actions = [value for value in clean_actions if value]
+    clean_results = [value for value in clean_results if value]
+    paragraphs = [_personality_reflection(voice)]
+    action_text = _sentence_join(clean_actions, max_items=4)
+    if action_text:
+        paragraphs.append(action_text)
+    result_text = _sentence_join(clean_results, max_items=3)
+    if result_text:
+        paragraphs.append(result_text)
+    next_text = _sentence_join(
+        _quest_progress_lines(runtime_state) + _infer_next_lines(clean_actions, clean_results),
+        max_items=2,
+    )
+    if next_text:
+        genre = _safe_str(voice.get("genre")).lower()
+        if any(token in genre for token in ("science", "sci-fi", "space", "cyber")):
+            reminder = "Before the next cycle, I must remember this"
+        elif any(token in genre for token in ("horror", "gothic")):
+            reminder = "Before darkness closes in again, I must remember this"
+        elif any(token in genre for token in ("western", "frontier")):
+            reminder = "Before I ride on, I must remember this"
+        else:
+            reminder = "Before the next watch, I must remember this"
+        paragraphs.append(f"{reminder}: {next_text}")
+    return "\n\n".join(_normalize_sentence_punctuation(value) for value in paragraphs if value).strip()
+
+
+def _daily_journal_title(voice: Dict[str, Any]) -> str:
+    temperament = _safe_str(voice.get("temperament")).strip().title()
+    label = _safe_str(voice.get("label") or "Adventurer").strip()
+    if temperament and temperament.lower() not in label.lower():
+        return f"A {temperament} {label}'s Journal"
+    return f"{label}'s Journal"
 
 
 def _extract_player_action(
@@ -540,8 +696,10 @@ def advance_campaign_journal_for_turn(
     turn_result: Dict[str, Any] | None = None,
     minutes_per_turn: int | None = None,
     journal_every_turns: int | None = None,
+    calendar_snapshot: Dict[str, Any] | None = None,
+    player_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    """Advance base-game calendar and deterministic player journal.
+    """Advance the calendar and upsert one player-perspective entry per day.
 
     This mutates runtime_state only. It does not mutate authoritative
     simulation facts.
@@ -549,16 +707,15 @@ def advance_campaign_journal_for_turn(
     runtime_state = campaign_journal_runtime_state(runtime_state)
     calendar = _safe_dict(runtime_state.get("campaign_calendar"))
     journal = _safe_dict(runtime_state.get("player_journal"))
+    journal["format_version"] = PLAYER_JOURNAL_VERSION
 
     if minutes_per_turn is None:
         minutes_per_turn = int(calendar.get("minutes_per_turn") or 30)
-    if journal_every_turns is None:
-        journal_every_turns = int(journal.get("journal_every_turns") or 4)
-
-    time_info = campaign_time_for_turn(
+    fallback_time = campaign_time_for_turn(
         turn_index=int(turn_index or 1),
         minutes_per_turn=int(minutes_per_turn or 30),
     )
+    time_info = _authoritative_campaign_time(calendar_snapshot, fallback=fallback_time)
     calendar["minutes_per_turn"] = int(minutes_per_turn or 30)
     calendar["current"] = time_info
     history = _safe_list(calendar.get("history"))
@@ -585,38 +742,59 @@ def advance_campaign_journal_for_turn(
     if result:
         pending_results.append(result)
 
-    journal["pending_actions"] = pending_actions[-12:]
-    journal["pending_results"] = pending_results[-12:]
-    journal["journal_every_turns"] = int(journal_every_turns or 4)
-
     entries = _safe_list(journal.get("entries"))
-    should_write = int(turn_index or 1) % max(1, int(journal_every_turns or 4)) == 0
-    existing_entry_ids = {_safe_str(entry.get("entry_id")) for entry in entries if isinstance(entry, dict)}
-
-    if should_write:
-        entry_id = f"journal:turn:{int(turn_index or 1)}"
-        if entry_id not in existing_entry_ids:
-            entries.append(
-                {
-                    "format_version": PLAYER_JOURNAL_VERSION,
-                    "entry_id": entry_id,
-                    "start_turn": max(
-                        1,
-                        int(turn_index or 1) - max(len(pending_actions), 1) + 1,
-                    ),
-                    "end_turn": int(turn_index or 1),
-                    "time": deepcopy(time_info),
-                    "perspective": "player",
-                    "text": _journal_text(
-                        pending_actions,
-                        pending_results,
-                        runtime_state=runtime_state,
-                    ),
-                    "source": "deterministic_runtime_journal",
-                }
-            )
-        journal["pending_actions"] = []
-        journal["pending_results"] = []
+    absolute_day = int(time_info.get("absolute_day") or 1)
+    entry_id = f"journal:day:{absolute_day}"
+    existing_index = next(
+        (
+            index
+            for index, value in enumerate(entries)
+            if _safe_str(_safe_dict(value).get("entry_id")) == entry_id
+        ),
+        None,
+    )
+    entry = _safe_dict(entries[existing_index]) if existing_index is not None else {}
+    source_turns = [int(value) for value in _safe_list(entry.get("source_turns")) if str(value).isdigit()]
+    if int(turn_index or 1) not in source_turns:
+        source_turns.append(int(turn_index or 1))
+        entry_actions = _safe_list(entry.get("actions")) + ([action] if action else [])
+        entry_results = _safe_list(entry.get("results")) + ([result] if result else [])
+    else:
+        entry_actions = _safe_list(entry.get("actions"))
+        entry_results = _safe_list(entry.get("results"))
+    voice = _player_voice_context(player_context)
+    entry.update(
+        {
+            "format_version": PLAYER_JOURNAL_VERSION,
+            "entry_id": entry_id,
+            "day": absolute_day,
+            "day_label": f"Day {absolute_day}",
+            "title": _daily_journal_title(voice),
+            "start_turn": min(source_turns) if source_turns else int(turn_index or 1),
+            "end_turn": max(source_turns) if source_turns else int(turn_index or 1),
+            "updated_through_turn": int(turn_index or 1),
+            "source_turns": source_turns[-100:],
+            "actions": entry_actions[-24:],
+            "results": entry_results[-24:],
+            "time": deepcopy(time_info),
+            "perspective": "player",
+            "voice": voice,
+            "text": _daily_journal_text(
+                entry_actions,
+                entry_results,
+                runtime_state=runtime_state,
+                voice=voice,
+            ),
+            "source": "deterministic_daily_player_journal",
+        }
+    )
+    if existing_index is None:
+        entries.append(entry)
+    else:
+        entries[existing_index] = entry
+    journal["pending_actions"] = []
+    journal["pending_results"] = []
+    journal.pop("journal_every_turns", None)
 
     max_entries = int(journal.get("max_entries") or 100)
     journal["entries"] = entries[-max_entries:]

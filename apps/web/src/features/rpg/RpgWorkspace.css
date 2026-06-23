@@ -14,6 +14,48 @@
   margin-bottom: 0.75rem;
 }
 
+.rpg-unified-header {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid rgba(168, 139, 250, 0.2);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.82);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(14px);
+}
+
+.rpg-campaign-menu-host,
+.rpg-workspace-header-content,
+.rpg-unified-header-controls {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+}
+
+.rpg-campaign-menu-host {
+  flex: 1 1 auto;
+}
+
+.rpg-workspace-header-content {
+  gap: 0.65rem;
+  margin-left: auto;
+}
+
+.rpg-unified-header-controls {
+  flex: 0 0 auto;
+  gap: 0.5rem;
+}
+
+.rpg-unified-header .rpg-secondary-button {
+  width: auto;
+  white-space: nowrap;
+}
+
 .rpg-workstation-header-collapsed {
   align-items: center;
   margin-bottom: 0.45rem;
@@ -279,6 +321,112 @@
   padding: 0.65rem;
 }
 
+.rpg-survival-card {
+  gap: 0.75rem;
+}
+
+.rpg-survival-status {
+  border: 1px solid rgba(134, 239, 172, 0.3);
+  border-radius: 999px;
+  color: #86efac;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 0.2rem 0.45rem;
+  text-transform: uppercase;
+}
+
+.rpg-survival-status.is-warning {
+  border-color: rgba(250, 204, 21, 0.35);
+  color: #fde047;
+}
+
+.rpg-survival-status.is-critical {
+  border-color: rgba(251, 113, 133, 0.4);
+  color: #fb7185;
+}
+
+.rpg-survival-detail,
+.rpg-survival-card > small {
+  color: #aaa1c1;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.rpg-survival-needs {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.rpg-survival-need {
+  display: grid;
+  gap: 0.28rem 0.6rem;
+  grid-template-columns: auto auto;
+}
+
+.rpg-survival-need > span:first-child {
+  color: #c9c1e8;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.rpg-survival-need > strong {
+  color: #f7f4ff;
+  font-size: 0.76rem;
+  justify-self: end;
+}
+
+.rpg-survival-meter {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  display: block;
+  grid-column: 1 / -1;
+  height: 0.38rem;
+  overflow: hidden;
+}
+
+.rpg-survival-meter > span {
+  background: linear-gradient(90deg, #22c55e, #86efac);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.rpg-survival-meter.is-warning > span {
+  background: linear-gradient(90deg, #f59e0b, #fde047);
+}
+
+.rpg-survival-meter.is-critical > span {
+  background: linear-gradient(90deg, #e11d48, #fb7185);
+}
+
+.rpg-survival-warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rpg-survival-warnings span {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  border-radius: 999px;
+  color: #fde68a;
+  font-size: 0.68rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.rpg-survival-actions {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rpg-survival-actions .rpg-secondary-button {
+  min-height: 2rem;
+  padding: 0.4rem;
+}
+
 .rpg-list-stack {
   display: grid;
   gap: 0.52rem;
@@ -462,8 +610,14 @@
 }
 
 .rpg-dialogue-stack {
+  align-content: start;
+  background: rgba(5, 7, 18, 0.34);
+  border: 1px solid rgba(151, 114, 255, 0.12);
+  border-radius: 0.78rem;
   display: grid;
   gap: 0.7rem;
+  min-height: clamp(18rem, 34vh, 26rem);
+  padding: 0.85rem;
 }
 
 .rpg-dialogue-stack article {
@@ -476,6 +630,7 @@
 .rpg-dialogue-stack p {
   line-height: 1.5;
   margin-top: 0.2rem;
+  white-space: pre-line;
 }
 
 .rpg-event-strip {
@@ -484,6 +639,36 @@
   border-radius: 0.75rem;
   color: #f7f4ff;
   padding: 0.8rem;
+  position: relative;
+}
+
+.rpg-event-strip-summary {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  justify-content: space-between;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.rpg-event-strip-toggle {
+  border-bottom: 2px solid #b9b1d1;
+  border-right: 2px solid #b9b1d1;
+  height: 0.5rem;
+  margin: 0 0.2rem 0.25rem 0;
+  transform: rotate(45deg);
+  transition: transform 140ms ease;
+  width: 0.5rem;
+}
+
+.rpg-event-strip.is-expanded .rpg-event-strip-toggle {
+  margin-bottom: -0.15rem;
+  transform: rotate(225deg);
 }
 
 .rpg-event-strip ul {
@@ -492,6 +677,28 @@
   gap: 0.25rem;
   margin: 0.45rem 0 0;
   padding-left: 1.2rem;
+}
+
+.rpg-event-strip.is-collapsed ul {
+  background: #14121e;
+  border: 1px solid rgba(151, 114, 255, 0.28);
+  border-radius: 0.75rem;
+  box-shadow: 0 0.9rem 2rem rgba(0, 0, 0, 0.38);
+  display: none;
+  left: 0;
+  margin-top: 0.4rem;
+  max-height: 16rem;
+  overflow: auto;
+  padding: 0.75rem 1rem 0.75rem 2rem;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+}
+
+.rpg-event-strip.is-collapsed:hover ul,
+.rpg-event-strip.is-collapsed:focus-within ul {
+  display: grid;
 }
 
 .rpg-action-composer {
@@ -749,6 +956,56 @@
 .rpg-hotbar button span {
   color: #c084fc;
   font-size: 1.2rem;
+}
+
+.rpg-hotbar-ability-tooltip {
+  background: linear-gradient(145deg, rgba(24, 16, 45, 0.98), rgba(7, 10, 24, 0.98));
+  border: 1px solid rgba(192, 132, 252, 0.38);
+  border-radius: 0.75rem;
+  bottom: calc(100% + 0.55rem);
+  box-shadow: 0 1rem 2.4rem rgba(0, 0, 0, 0.48);
+  color: #ddd6fe;
+  display: none;
+  gap: 0.45rem;
+  left: 0;
+  padding: 0.75rem;
+  pointer-events: none;
+  position: absolute;
+  text-align: left;
+  width: min(20rem, 75vw);
+  z-index: 60;
+}
+
+.rpg-hotbar button:hover .rpg-hotbar-ability-tooltip,
+.rpg-hotbar button:focus-visible .rpg-hotbar-ability-tooltip {
+  display: grid;
+}
+
+.rpg-hotbar-ability-tooltip strong {
+  color: #f7f4ff;
+  font-size: 0.9rem;
+}
+
+.rpg-hotbar-ability-tooltip p {
+  color: #c4bdd8;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.rpg-hotbar .rpg-hotbar-ability-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rpg-hotbar .rpg-hotbar-ability-meta span {
+  background: rgba(192, 132, 252, 0.1);
+  border: 1px solid rgba(192, 132, 252, 0.18);
+  border-radius: 999px;
+  color: #ddd6fe;
+  font-size: 0.68rem;
+  padding: 0.18rem 0.38rem;
 }
 
 .rpg-map-preview {

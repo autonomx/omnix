@@ -4,6 +4,7 @@ import type {
   RpgPartyMemberPreview,
   RpgQuestPreview,
   RpgStatPreview,
+  RpgSurvivalPreview,
 } from './rpgUiState';
 import './RpgVisualAssets.css';
 
@@ -15,10 +16,12 @@ interface RpgPlayerRailProps {
   equippedGear: RpgGearPreview[];
   heroStats: RpgStatPreview[];
   heroSummary: RpgHeroSummaryPreview;
+  onSelectCommand?: (command: string) => void;
   partyMembers: RpgPartyMemberPreview[];
+  survival: RpgSurvivalPreview;
 }
 
-export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats, heroSummary, partyMembers }: RpgPlayerRailProps) {
+export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats, heroSummary, onSelectCommand, partyMembers, survival }: RpgPlayerRailProps) {
   const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
   const heroAvatarClassName = heroSummary.source === 'preview' ? 'rpg-avatar rpg-hero-avatar rpg-hero-avatar-art' : 'rpg-avatar rpg-hero-avatar';
 
@@ -64,6 +67,47 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
             <strong>{heroSummary.renown}</strong>
           </div>
         </div>
+      </section>
+
+      <section className="rpg-card rpg-survival-card" aria-label="Survival status">
+        <div className="rpg-section-heading">
+          <p className="eyebrow">Survival</p>
+          <span className={`rpg-survival-status is-${survival.status.toLowerCase()}`}>{survival.status}</span>
+        </div>
+        <p className="rpg-survival-detail">{survival.detail}</p>
+        <div className="rpg-survival-needs">
+          {survival.needs.map((need) => (
+            <div className="rpg-survival-need" key={need.id}>
+              <span>{need.label}</span>
+              <strong>{need.value}</strong>
+              <span
+                aria-label={`${need.label} pressure ${need.value}`}
+                className={`rpg-survival-meter is-${need.severity}`}
+              >
+                <span style={{ width: `${need.percent}%` }} />
+              </span>
+            </div>
+          ))}
+        </div>
+        {survival.warnings.length ? (
+          <div className="rpg-survival-warnings" aria-label="Survival warnings">
+            {survival.warnings.map((warning) => <span key={warning}>{warning}</span>)}
+          </div>
+        ) : null}
+        <div className="rpg-survival-actions" aria-label="Survival actions">
+          {survival.actions.map((action) => (
+            <button
+              className="rpg-secondary-button"
+              disabled={!onSelectCommand}
+              key={action.command}
+              onClick={() => onSelectCommand?.(action.command)}
+              type="button"
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+        <small>Actions prepare a deterministic turn command.</small>
       </section>
 
       <section className="rpg-card">

@@ -4,6 +4,8 @@ import {
   applyRpgItemResolve,
   applyRpgMerchantCommand,
   applyRpgStructuredItemAction,
+  fetchRpgAbilityDetails,
+  fetchRpgItemDetails,
   fetchRpgItemDiagnostics,
   fetchRpgItemObjectives,
   runRpgItemMaintenance,
@@ -82,6 +84,34 @@ describe('rpg item API helpers', () => {
       dry_run: true,
       bucket_limit: 20,
       record_report: true,
+    });
+  });
+
+  it('posts item detail requests for the selected inventory item', async () => {
+    const { client, post } = fakeClient();
+
+    await fetchRpgItemDetails('session-1', { itemName: 'Field Kit', itemCount: 2 }, client);
+
+    expect(post).toHaveBeenCalledWith('/api/rpg/session/get', {
+      action: 'item_detail',
+      session_id: 'session-1',
+      item_name: 'Field Kit',
+      item_count: 2,
+      source: 'rpg-item-panel',
+    });
+  });
+
+  it('posts ability detail requests for a hotbar tooltip', async () => {
+    const { client, post } = fakeClient();
+
+    await fetchRpgAbilityDetails('session-1', { abilityName: 'Frost Arrow', abilityId: 'recon_frost_arrow' }, client);
+
+    expect(post).toHaveBeenCalledWith('/api/rpg/session/get', {
+      action: 'ability_detail',
+      session_id: 'session-1',
+      ability_name: 'Frost Arrow',
+      ability_id: 'recon_frost_arrow',
+      source: 'rpg-hotbar-tooltip',
     });
   });
 

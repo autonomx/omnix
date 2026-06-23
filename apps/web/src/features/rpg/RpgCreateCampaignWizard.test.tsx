@@ -69,9 +69,8 @@ describe('RpgCreateCampaignWizard', () => {
     expect(screen.getByLabelText('Derived stat preview')).toHaveTextContent('Strength: 10');
   });
 
-  it('uses backend progress and fills an enter-world command after API completion', async () => {
+  it('uses backend progress without manufacturing an enter-world command', async () => {
     vi.useFakeTimers();
-    const onSelectCommand = vi.fn();
     let resolveLaunch!: (value: {
       creation_progress: Record<string, unknown>;
       ok: true;
@@ -83,7 +82,7 @@ describe('RpgCreateCampaignWizard', () => {
           resolveLaunch = resolve;
         }),
     );
-    renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} onSelectCommand={onSelectCommand} />);
+    renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} />);
 
     fireEvent.change(getSelectByVisibleLabel('Opening hook'), { target: { value: 'merchant-job' } });
     fireEvent.change(getSelectByVisibleLabel('Relationship preset'), { target: { value: 'known-contact' } });
@@ -151,8 +150,7 @@ describe('RpgCreateCampaignWizard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 
-    expect(onSelectCommand).toHaveBeenCalledWith(expect.stringContaining('Session session-new is ready'));
-    expect(onSelectCommand).toHaveBeenCalledWith(expect.stringContaining('Opening: Merchant Job'));
+    expect(screen.queryByText(/Enter the newly created/)).not.toBeInTheDocument();
     vi.useRealTimers();
   });
 

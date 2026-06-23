@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgItemPanel } from './RpgItemPanel';
-import type { RpgItemObjectivePreview, RpgItemUiAction, RpgMerchantEntryPreview } from './rpgItemUiState';
+import type { RpgItemUiAction, RpgMerchantEntryPreview } from './rpgItemUiState';
 
 const action: RpgItemUiAction = {
   id: 'use:field-kit',
@@ -14,14 +14,6 @@ const action: RpgItemUiAction = {
   command: 'Use Field Kit',
   payload: { action: 'use', item_name: 'Field Kit' },
   item: { label: 'Field Kit', icon: '🧰', count: 1, sessionId: null },
-};
-
-const objective: RpgItemObjectivePreview = {
-  id: 'craft:torch',
-  label: 'Craft torch',
-  detail: 'Enough materials are available.',
-  action: 'craft',
-  payload: { recipe_id: 'torch' },
 };
 
 const merchantEntry: RpgMerchantEntryPreview = {
@@ -46,7 +38,7 @@ describe('RpgItemPanel', () => {
   it('renders an empty state when no selected item actions are available', () => {
     renderItemPanel(<RpgItemPanel actions={[]} />);
 
-    expect(screen.getByText('Inventory, crafting, and trade')).toBeInTheDocument();
+    expect(screen.getByText('Item details and actions')).toBeInTheDocument();
     expect(screen.getByText('No item selected')).toBeInTheDocument();
     expect(screen.getByText('Select an inventory item to reveal deterministic actions.')).toBeInTheDocument();
   });
@@ -58,6 +50,14 @@ describe('RpgItemPanel', () => {
     expect(detailCard).toHaveTextContent('Preview item details');
     expect(detailCard).toHaveTextContent('Field Kit');
     expect(detailCard).toHaveTextContent('1 carried');
+    expect(detailCard).toHaveTextContent('Status');
+    expect(detailCard).toHaveTextContent('Preview');
+    expect(detailCard).toHaveTextContent('Condition');
+    expect(detailCard).toHaveTextContent('Not recorded');
+    expect(detailCard).not.toHaveTextContent('Use');
+    expect(detailCard).not.toHaveTextContent('Trade');
+    expect(detailCard).not.toHaveTextContent('Risk');
+    expect(screen.queryByRole('list', { name: 'Item action context requirements' })).not.toBeInTheDocument();
   });
 
   it('applies selected item actions through callbacks', () => {
@@ -78,28 +78,22 @@ describe('RpgItemPanel', () => {
     expect(onSelectCommand).toHaveBeenCalledWith('Use Field Kit');
   });
 
-  it('renders status cards, objectives, and merchant entries', () => {
-    const onApplyObjective = vi.fn();
+  it('renders merchant entries without diagnostic cards or item objectives', () => {
     const onApplyMerchantEntry = vi.fn();
     renderItemPanel(
       <RpgItemPanel
         actions={[action]}
         merchantEntries={[merchantEntry]}
-        objectives={[objective]}
         onApplyMerchantEntry={onApplyMerchantEntry}
-        onApplyObjective={onApplyObjective}
-        statusCards={[{ id: 'coverage', label: 'Item coverage', value: '75%', detail: '3 of 4 pillars covered.', tone: 'warning' }]}
       />,
     );
 
-    expect(screen.getByText('75%')).toBeInTheDocument();
-    expect(screen.getByText('Suggested next item steps')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Item status cards')).not.toBeInTheDocument();
+    expect(screen.queryByText('Suggested next item steps')).not.toBeInTheDocument();
     expect(screen.getByText('Merchant service')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Craft torch' }));
     fireEvent.click(screen.getByRole('button', { name: 'buy Torch' }));
 
-    expect(onApplyObjective).toHaveBeenCalledWith(objective);
     expect(onApplyMerchantEntry).toHaveBeenCalledWith(merchantEntry);
   });
 

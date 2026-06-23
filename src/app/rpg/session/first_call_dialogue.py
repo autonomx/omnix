@@ -13,6 +13,15 @@ _STATEFUL_ACTION_TYPES = {
 }
 
 _PLAYER_SPEAKER_ALIASES = {"player", "you", "the player", "adventurer", "traveler"}
+_NON_NPC_SPEAKER_ALIASES = {
+    "scene",
+    "narrator",
+    "narration",
+    "gm",
+    "game master",
+    "omnix",
+    "system",
+}
 _INTERPRETIVE_DIALOGUE_ACTION_TYPES = {
     "ask",
     "conversation",
@@ -200,7 +209,11 @@ def _semantic_risk_rejection(advisory: Dict[str, Any]) -> str:
 
 def _speaker_matches_expected_npc(speaker: str, advisory: Dict[str, Any]) -> bool:
     speaker_norm = _norm(speaker)
-    if not speaker_norm or speaker_norm in _PLAYER_SPEAKER_ALIASES:
+    if (
+        not speaker_norm
+        or speaker_norm in _PLAYER_SPEAKER_ALIASES
+        or speaker_norm in _NON_NPC_SPEAKER_ALIASES
+    ):
         return False
     names = _expected_npc_names(advisory)
     if not names:

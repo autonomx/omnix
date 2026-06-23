@@ -198,44 +198,14 @@ def _stateful_runtime_performance_override(
 
 
 def _fast_turn_mode(performance_override: Dict[str, Any] | None) -> bool:
-    return _b(_d(performance_override).get("fast_turn_mode"), False)
+    # First-call shortcuts are disabled: every gameplay turn must build the
+    # foreground semantic packet through the provider before runtime acts.
+    return False
 
 
 def _fast_direct_action(player_input: str, performance_override: Dict[str, Any] | None) -> Dict[str, Any]:
-    if not _fast_turn_mode(performance_override):
-        return {}
-    text = _s(player_input).strip().lower()
-    if not text:
-        return {}
-
-    if any(term in text for term in ("waterskin", "ration", "hungry", "thirsty", "hunger", "thirst", "fatigue")):
-        return {
-            "action_type": "observe",
-            "target_id": "player:survival",
-            "target_name": "Survival State",
-            "metadata": {"fast_direct_runtime": True, "source": _FAST_DIRECT_SOURCE},
-        }
-
-    if "attack" in text and ("bandit" in text or "road bandit" in text):
-        return {
-            "action_type": "combat",
-            "target_id": "enemy:road_bandit",
-            "target_name": "road bandit",
-            "metadata": {
-                "fast_direct_runtime": True,
-                "skip_sync_combat_narration": True,
-                "source": _FAST_DIRECT_SOURCE,
-            },
-        }
-
-    if ("travel" in text or "continue" in text) and any(term in text for term in ("old mill", "north", "road")):
-        return {
-            "action_type": "travel",
-            "target_id": "loc:old_mill",
-            "target_name": "old mill",
-            "metadata": {"fast_direct_runtime": True, "source": _FAST_DIRECT_SOURCE},
-        }
-
+    # Disabled for now.  Keep the helper as a compatibility stub for older
+    # harnesses, but never bypass the first-call semantic LLM.
     return {}
 
 
@@ -736,6 +706,8 @@ def apply_turn(
     runtime_state = _d(session.get("runtime_state"))
     candidate_action = _d(action)
 
+    runtime_state["first_call_shortcuts_disabled"] = True
+    session["runtime_state"] = runtime_state
     fast_direct_action = _fast_direct_action(_s(player_input), performance_override)
     if fast_direct_action:
         narration_mode = _narration_mode(performance_override, runtime_state)
@@ -791,14 +763,13 @@ def apply_turn(
     llm_start = perf_counter()
     try:
         gateway = build_app_llm_gateway()
-        if _b(_d(performance_override).get("enable_semantic_action_advisory"), True):
-            semantic_advisory = get_semantic_action_advisory(
-                llm_gateway=gateway,
-                player_input=_s(player_input),
-                simulation_state=simulation_state,
-                runtime_state=runtime_state,
-                candidate_action=candidate_action,
-            )
+        semantic_advisory = get_semantic_action_advisory(
+            llm_gateway=gateway,
+            player_input=_s(player_input),
+            simulation_state=simulation_state,
+            runtime_state=runtime_state,
+            candidate_action=candidate_action,
+        )
     except Exception as exc:
         runtime_state["first_call_grounding_error"] = f"{type(exc).__name__}: {exc}"
     timing["pre_runtime_intent_llm_ms"] = _ms_since(llm_start)

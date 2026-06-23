@@ -595,6 +595,16 @@ def apply_turn(
     )
     journal_narration_payload = _safe_dict(locals().get("narration_payload"))
     runtime_state = session.setdefault("runtime_state", {})
+    journal_state = _safe_dict(session.get("state"))
+    journal_metadata = _safe_dict(journal_state.get("metadata"))
+    journal_identity = _safe_dict(journal_state.get("character_identity"))
+    journal_setup = _safe_dict(session.get("setup_payload"))
+    journal_genesis = _safe_dict(journal_setup.get("genesis"))
+    journal_drivers = _safe_dict(journal_genesis.get("drivers"))
+    journal_environment = _safe_dict(
+        _safe_dict(journal_state.get("world")).get("environment")
+        or journal_state.get("environment_snapshot")
+    )
     turn_index = int(
         journal_turn_contract.get("turn_index")
         or final_result.get("turn_index")
@@ -610,6 +620,25 @@ def apply_turn(
         turn_result={
             "narration_payload": journal_narration_payload,
             "player_action": journal_player_input,
+        },
+        calendar_snapshot=journal_environment,
+        player_context={
+            "personality_profile": _safe_dict(
+                journal_state.get("player_personality_profile")
+                or runtime_state.get("player_personality_profile")
+            ),
+            "metadata": journal_metadata,
+            "character_identity": journal_identity,
+            "drivers": journal_drivers,
+            "genre": _safe_str(
+                journal_setup.get("genre")
+                or journal_metadata.get("genre")
+                or journal_identity.get("genre")
+            ),
+            "background": _safe_str(
+                journal_identity.get("background")
+                or journal_setup.get("background")
+            ),
         },
     )
 
@@ -708,7 +737,10 @@ def apply_turn(
         or _safe_dict(final_result.get("result")).get("llm_called")
     )
 
-    defer_runtime_narration = bool(suppress_provider_runtime_narration())
+    defer_runtime_narration = bool(
+        suppress_provider_runtime_narration()
+        or performance_settings.get("enable_live_narration_llm") is False
+    )
     if defer_runtime_narration:
         runtime_provider = None
     else:
@@ -724,7 +756,7 @@ def apply_turn(
             runtime_provider = get_runtime_llm_provider()
     record_turn_perf_trace("runtime_checkpoint_04_after_core_turn")
     record_turn_perf_trace_stack("runtime_checkpoint_05_before_narration")
-    _defer_trace_value = suppress_provider_runtime_narration()
+    _defer_trace_value = defer_runtime_narration
     record_narration_trace_stack(
         "before_build_runtime_narration_payload",
         defer_runtime_narration=_defer_trace_value,

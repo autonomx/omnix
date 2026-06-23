@@ -37,10 +37,35 @@ function summarize(cards: RpgLiveDataStatusCard[]) {
   return 'All live sources ready';
 }
 
-export function RpgLiveDataStatus({ cards }: { cards: RpgLiveDataStatusCard[] }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+interface RpgLiveDataStatusProps {
+  cards: RpgLiveDataStatusCard[];
+  expanded?: boolean;
+  hideWhenCollapsed?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+  showToggle?: boolean;
+}
+
+export function RpgLiveDataStatus({
+  cards,
+  expanded,
+  hideWhenCollapsed = false,
+  onExpandedChange,
+  showToggle = true,
+}: RpgLiveDataStatusProps) {
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = expanded ?? internalExpanded;
+  const setIsExpanded = (value: boolean) => {
+    if (expanded === undefined) {
+      setInternalExpanded(value);
+    }
+    onExpandedChange?.(value);
+  };
   const detailsId = 'rpg-live-data-status-details';
   const className = isExpanded ? 'rpg-card rpg-live-data-status' : 'rpg-card rpg-live-data-status rpg-live-data-status-collapsed';
+
+  if (hideWhenCollapsed && !isExpanded) {
+    return null;
+  }
 
   return (
     <section className={className} aria-label="RPG live data status">
@@ -48,15 +73,17 @@ export function RpgLiveDataStatus({ cards }: { cards: RpgLiveDataStatusCard[] })
         <p className="eyebrow">Live data status</p>
         <div className="rpg-live-data-summary">
           <span>{summarize(cards)}</span>
-          <button
-            className="rpg-secondary-button rpg-live-data-toggle"
-            type="button"
-            aria-controls={detailsId}
-            aria-expanded={isExpanded}
-            onClick={() => setIsExpanded((value) => !value)}
-          >
-            {isExpanded ? 'Collapse live data' : 'Expand live data'}
-          </button>
+          {showToggle ? (
+            <button
+              className="rpg-secondary-button rpg-live-data-toggle"
+              type="button"
+              aria-controls={detailsId}
+              aria-expanded={isExpanded}
+              onClick={() => setIsExpanded(!isExpanded)}
+            >
+              {isExpanded ? 'Collapse live data' : 'Expand live data'}
+            </button>
+          ) : null}
         </div>
       </div>
       <div id={detailsId} className="rpg-data-status-grid" hidden={!isExpanded}>

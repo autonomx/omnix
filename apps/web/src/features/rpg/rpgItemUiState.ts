@@ -29,9 +29,8 @@ export interface RpgItemDetailPreview {
   icon: string;
   countLabel: string;
   summary: string;
-  usage: string;
-  trade: string;
-  risk: string;
+  status: string;
+  condition: string;
   tags: string[];
   source: 'llm' | 'preview' | 'pending' | 'unavailable';
 }
@@ -57,14 +56,6 @@ export interface RpgItemObjectivePreview {
   disabled?: boolean;
 }
 
-export interface RpgItemStatusCard {
-  id: string;
-  label: string;
-  value: string;
-  detail: string;
-  tone: 'ready' | 'warning' | 'danger' | 'muted';
-}
-
 export interface RpgMerchantEntryPreview {
   id: string;
   label: string;
@@ -78,12 +69,6 @@ export interface RpgMerchantEntryPreview {
 interface BuildSelectedItemActionsInput {
   item?: RpgInventoryItemPreview;
   selectedSessionId?: string | null;
-}
-
-interface BuildStatusCardsInput {
-  diagnostics?: Record<string, unknown> | null;
-  maintenance?: Record<string, unknown> | null;
-  report?: Record<string, unknown> | null;
 }
 
 const DEFAULT_ITEM_COUNT = '1';
@@ -150,7 +135,14 @@ export function buildItemDetailPreview(payload: Record<string, unknown> | null |
     asRecord(payload?.llm)?.item_detail,
     asRecord(payload?.llm)?.details,
   );
-  const source = detailPayload ? 'llm' : item.sessionId ? 'pending' : 'preview';
+  const detailSource = firstString(detailPayload?.source);
+  const source: RpgItemDetailPreview['source'] = !item.sessionId
+    ? 'preview'
+    : detailPayload && detailSource !== 'unavailable' && payload?.ok !== false
+      ? 'llm'
+      : payload
+        ? 'unavailable'
+        : 'pending';
   const summary =
     firstString(
       detailPayload?.summary,
@@ -160,14 +152,13 @@ export function buildItemDetailPreview(payload: Record<string, unknown> | null |
       payload?.summary,
       payload?.description,
     ) ??
-    (item.sessionId
-      ? 'Generating LLM item details for the selected inventory item.'
-      : 'Preview item details. Select or create a live session to generate LLM item details.');
-  const usage =
-    firstString(detailPayload?.usage, detailPayload?.use, detailPayload?.effect, detailPayload?.mechanical_effect) ??
-    'Use, equip, drop, salvage, or sell through the action icons below.';
-  const trade = firstString(detailPayload?.trade, detailPayload?.value, detailPayload?.economy) ?? 'Trade value depends on the active merchant context.';
-  const risk = firstString(detailPayload?.risk, detailPayload?.warning, detailPayload?.constraint) ?? 'No special handling risk is indexed yet.';
+    (source === 'pending'
+      ? 'Generating an item description with the configured LLM.'
+      : source === 'preview'
+        ? 'Select or create a live session to generate an item description.'
+        : 'An item description is unavailable right now.');
+  const status = firstString(detailPayload?.status, detailPayload?.state) ?? (source === 'pending' ? 'Loading' : item.sessionId ? 'Carried' : 'Preview');
+  const condition = firstString(detailPayload?.condition, detailPayload?.durability) ?? (source === 'pending' ? 'Loading' : 'Not recorded');
   const tags = firstArray(detailPayload?.tags, detailPayload?.traits, payload?.tags).map(String).slice(0, 5);
 
   return {
@@ -175,9 +166,8 @@ export function buildItemDetailPreview(payload: Record<string, unknown> | null |
     icon: item.icon,
     countLabel,
     summary,
-    usage,
-    trade,
-    risk,
+    status,
+    condition,
     tags,
     source,
   };
@@ -201,41 +191,6 @@ export function buildItemObjectivePreviews(payload: Record<string, unknown> | nu
       disabled: Boolean(objective.disabled),
     };
   });
-}
-
-export function buildItemStatusCards({ diagnostics, maintenance, report }: BuildStatusCardsInput): RpgItemStatusCard[] {
-  const diagnosticSummary = asRecord(diagnostics?.summary) ?? diagnostics ?? {};
-  const maintenanceSummary = asRecord(maintenance?.summary) ?? maintenance ?? {};
-  const reportSummary = asRecord(report?.summary) ?? report ?? {};
-  const severity = readString(diagnostics?.severity) || readString(diagnosticSummary.severity) || 'unknown';
-  const issueCount = readNumber(diagnosticSummary.issue_count) ?? readNumber(diagnostics?.issue_count) ?? 0;
-  const warningCount = readNumber(diagnosticSummary.warning_count) ?? readNumber(diagnostics?.warning_count) ?? 0;
-  const droppedCount = readNumber(maintenanceSummary.dropped_count) ?? readNumber(maintenance?.dropped_count) ?? 0;
-  const coverageScore = readNumber(reportSummary.coverage_score) ?? readNumber(report?.coverage_score) ?? 0;
-
-  return [
-    {
-      id: 'diagnostics',
-      label: 'Item diagnostics',
-      value: severity,
-      detail: `${issueCount} issue${issueCount === 1 ? '' : 's'} • ${warningCount} warning${warningCount === 1 ? '' : 's'}`,
-      tone: issueCount > 0 ? 'danger' : warningCount > 0 ? 'warning' : severity === 'unknown' ? 'muted' : 'ready',
-    },
-    {
-      id: 'maintenance',
-      label: 'Item maintenance',
-      value: droppedCount > 0 ? `${droppedCount} compacted` : 'Stable',
-      detail: droppedCount > 0 ? 'Oversized item traces were compacted.' : 'No item-state compaction required.',
-      tone: droppedCount > 0 ? 'warning' : 'ready',
-    },
-    {
-      id: 'coverage',
-      label: 'Item coverage',
-      value: `${Math.round(Math.max(0, Math.min(1, coverageScore)) * 100)}%`,
-      detail: readString(reportSummary.detail) || 'Autoplay/report item coverage summary.',
-      tone: coverageScore >= 0.8 ? 'ready' : coverageScore > 0 ? 'warning' : 'muted',
-    },
-  ];
 }
 
 export function buildMerchantEntryPreviews(payload: Record<string, unknown> | null | undefined): RpgMerchantEntryPreview[] {

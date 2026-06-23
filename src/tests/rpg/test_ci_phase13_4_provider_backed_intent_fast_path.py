@@ -24,6 +24,7 @@ def test_phase13_4_bounded_provider_backed_categories_get_fast_advisories():
         "I'm looking for a quest.": ("quest_inquiry", "quest_no_backed_state"),
         "What food do you have for sale?": ("service_inquiry", "commerce_food_purchase"),
         "I'll buy a hot stew.": ("service_purchase", "commerce_food_purchase"),
+        "ill take dried rations": ("service_purchase", "commerce_food_purchase"),
         "Bran, will you join my party as a companion?": ("talk", "party_companion_recruitment"),
         "Bran, who are you?": ("talk", "npc_dialogue_persona"),
     }

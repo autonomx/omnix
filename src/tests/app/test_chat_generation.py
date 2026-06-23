@@ -11,7 +11,12 @@ from app import shared
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.gateway.main import create_gateway_app
 from app.jobs import SQLiteJobStore
-from app.jobs.inline_feature_jobs import INLINE_FEATURE_JOB_EXECUTOR_ENV, THREAD_EXECUTOR
+from app.jobs.inline_feature_jobs import (
+    INLINE_FEATURE_JOB_EXECUTOR_ENV,
+    THREAD_EXECUTOR,
+    _queue_deferred_rpg_turn_narration,
+    _rpg_turn_visible_text,
+)
 from app.jobs.models import CreateJobRequest, JobRecord, JobStatus, ResourceClass
 
 
@@ -51,6 +56,108 @@ class BlockingProvider(FakeProvider):
             thinking="",
             reasoning="",
         )
+
+
+def test_rpg_turn_visible_text_prefers_structured_narration() -> None:
+    result = {
+        "result": {
+            "narration": (
+                '"Bran," you begin.\n\nAction: You ask Bran about business.\n\n'
+                'Result: You ask Bran about business.'
+            ),
+            "narration_json": {
+                "narration": '"Bran," you begin, addressing him directly.',
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "Business is steady,' Bran replies. 'The local trade keeps us going.",
+                },
+            },
+        }
+    }
+
+    assert _rpg_turn_visible_text(result) == (
+        '"Bran," you begin, addressing him directly.\n\n'
+        'Bran: "Business is steady," Bran replies. "The local trade keeps us going."'
+    )
+
+
+def test_rpg_turn_visible_text_skips_scene_restatement_narration() -> None:
+    result = {
+        "result": {
+            "player_input": "I ask Bran if he has any food for sale",
+            "narration": "Bran checks the available meal options.",
+            "narration_json": {
+                "narration": "I ask Bran if he has any food for sale",
+                "npc": {
+                    "speaker": "Scene",
+                    "line": "I ask Bran if he has any food for sale",
+                },
+            },
+        }
+    }
+
+    assert _rpg_turn_visible_text(result) == "Bran checks the available meal options."
+
+
+def test_rpg_turn_visible_text_rejects_plain_player_restatement_after_bad_structured() -> None:
+    result = {
+        "input_payload": {
+            "command": "i ask bran if he has food for sale",
+        },
+        "result": {
+            "narration": "Scene\ni ask bran if he has food for sale",
+            "narration_json": {
+                "narration": "i ask bran if he has food for sale",
+                "npc": {
+                    "speaker": "Scene",
+                    "line": "i ask bran if he has food for sale",
+                },
+            },
+        }
+    }
+
+    assert _rpg_turn_visible_text(result) is None
+
+
+def test_rpg_turn_job_queues_deferred_narration(monkeypatch) -> None:
+    from app.rpg.session import narration_worker
+    from app.rpg.session import runtime
+
+    saved_sessions: list[dict] = []
+    signaled: list[str] = []
+
+    def fake_enqueue(runtime_state, turn_id, tick, narration_request, job_kind="player_turn", priority=100):
+        assert turn_id == "turn:12"
+        assert tick == 12
+        assert narration_request["session_id"] == "session:live"
+        assert narration_request["performance"]["enable_live_narration_llm"] is True
+        runtime_state["narration_jobs_by_turn"] = {
+            turn_id: {"turn_id": turn_id, "status": "queued"}
+        }
+        return runtime_state, runtime_state["narration_jobs_by_turn"][turn_id], True
+
+    monkeypatch.setattr(runtime, "load_runtime_session", lambda _session_id: {"runtime_state": {}})
+    monkeypatch.setattr(runtime, "save_runtime_session", lambda session: saved_sessions.append(session) or session)
+    monkeypatch.setattr(runtime, "_enqueue_narration_request", fake_enqueue)
+    monkeypatch.setattr(narration_worker, "ensure_narration_worker_running", lambda: None)
+    monkeypatch.setattr(narration_worker, "signal_narration_work", lambda session_id: signaled.append(session_id))
+
+    result = {
+        "ok": True,
+        "result": {"narration": "Bran checks the goods.", "narration_status": "queued"},
+        "narration_request": {
+            "turn_id": "turn:12",
+            "tick": 12,
+            "performance": {"enable_live_narration_llm": False},
+            "narration_context": {"player_input": "I buy rations"},
+        },
+    }
+
+    assert _queue_deferred_rpg_turn_narration("session:live", result) is True
+    assert result["narration_job"]["status"] == "queued"
+    assert result["result"]["narration_status"] == "queued"
+    assert saved_sessions[-1]["runtime_state"]["session_id"] == "session:live"
+    assert signaled == ["session:live"]
 
 
 def _wait_for_job_status(
@@ -242,6 +349,80 @@ def test_rpg_turn_jobs_execute_in_background_and_complete(monkeypatch, tmp_path)
     assert completed.output_refs[0]["type"] == "rpg_turn_response"
     assert completed.output_refs[0]["title"] == "look around"
     assert "RPG player command" in provider.calls[0]["prompt"]
+
+
+def test_rpg_turn_jobs_apply_authoritative_session_turn(monkeypatch, tmp_path):
+    from app.rpg.session import interactive_first_call_runtime
+    from app.rpg.session import service
+
+    client, provider, store = _gateway_client(tmp_path, monkeypatch)
+    applied: list[tuple[str, str, dict[str, object]]] = []
+    saved_sessions: list[dict] = []
+
+    def apply_turn(session_id: str, command: str, *, performance_override=None):
+        applied.append((session_id, command, performance_override or {}))
+        return {
+            "ok": True,
+            "session": {
+                "state": {"player": {"currency": {"silver": 10}, "inventory": []}},
+                "simulation_state": {
+                    "player_state": {
+                        "currency": {"silver": 5},
+                        "inventory_state": {
+                            "items": [{"item_id": "provisions", "name": "Provisions", "qty": 1}]
+                        },
+                    }
+                },
+            },
+            "result": {"narration": "Bran takes five silver and hands Elara the registered provisions."},
+            "turn_contract": {
+                "presentation": {
+                    "available_actions": [
+                        {"label": "Buy provisions - 5 silver", "command": "I buy provisions from Bran"}
+                    ]
+                }
+            },
+        }
+
+    monkeypatch.setattr(interactive_first_call_runtime, "apply_turn", apply_turn)
+    monkeypatch.setattr(
+        service,
+        "load_session",
+        lambda _session_id: {"state": {"player": {"currency": {"silver": 10}}}, "simulation_state": {}},
+    )
+
+    def save_session(session, compact=False):
+        saved_sessions.append(session)
+        return session
+
+    monkeypatch.setattr(service, "save_session", save_session)
+    response = client.post(
+        "/api/jobs",
+        json={
+            "module": "rpg",
+            "type": "rpg.turn",
+            "resource_class": "gpu:llm",
+            "input_ref": {"session_id": "session:live"},
+            "input_payload": {"command": "I pay Bran five silver"},
+        },
+    )
+
+    completed = _wait_for_job_status(store, response.json()["id"], {JobStatus.COMPLETED})
+    assert applied == [
+        (
+            "session:live",
+            "I pay Bran five silver",
+            {"enable_live_narration_llm": False},
+        )
+    ]
+    assert completed.output_refs[0]["content"] == (
+        "Bran takes five silver and hands Elara the registered provisions."
+    )
+    assert saved_sessions[-1]["state"]["player"]["currency"] == {"silver": 5}
+    assert saved_sessions[-1]["state"]["player"]["inventory"] == [
+        {"id": "provisions", "name": "Provisions", "type": "item", "quantity": 1}
+    ]
+    assert provider.calls == []
 
 
 def test_rpg_turn_jobs_return_before_background_completion(monkeypatch, tmp_path):
