@@ -57,11 +57,12 @@ function providerPayload() {
 }
 
 afterEach(() => {
+  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 
 describe('ChatbotWorkspace', () => {
-  it('uses provider/model selectors and renders the assistant response', async () => {
+  it('uses provider/model selectors and renders the assistant response with activity events', async () => {
     let session: {
       id: string;
       title: string;
@@ -146,6 +147,7 @@ describe('ChatbotWorkspace', () => {
 
     expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
     expect(await screen.findByText('OpenAI compatible')).toBeInTheDocument();
+    expect(screen.getByText('Workspace activity')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'openai' } });
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-mini' } });
@@ -154,8 +156,14 @@ describe('ChatbotWorkspace', () => {
 
     expect(await screen.findByText('Generation completed: job:1')).toBeInTheDocument();
     expect(await screen.findByText('Provider reply from the selected model.')).toBeInTheDocument();
+    expect(await screen.findByText('Source: assistant_message')).toBeInTheDocument();
     const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('user'));
     expect(transcriptMessage).toBeTruthy();
+
+    await waitFor(() => {
+      const persistedEvents = JSON.parse(window.localStorage.getItem('omnix.assistantWorkspace.events') ?? '[]') as unknown[];
+      expect(persistedEvents).toHaveLength(2);
+    });
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
