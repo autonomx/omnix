@@ -310,3 +310,12 @@ export type { LiveAssistantSessionPanelProps } from './LiveAssistantSessionPanel
 
 export { createBrowserLiveAssistantController } from './browser-live-controller';
 export type { BrowserLiveAssistantControllerOptions, CapturedAudioReader } from './browser-live-controller';
+
+export { createMediaRecorderAudioReader } from './media-recorder-reader';
+export type {
+  BrowserMediaRecorder,
+  BrowserMediaRecorderFactory,
+  BrowserRecorderBlobEvent,
+  BrowserRecorderErrorEvent,
+  MediaRecorderAudioReaderOptions,
+} from './media-recorder-reader';
