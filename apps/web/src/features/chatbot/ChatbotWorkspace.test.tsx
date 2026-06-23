@@ -207,7 +207,6 @@ describe('ChatbotWorkspace', () => {
   });
 
   it('starts, advances, and resets the live call timer from call controls', async () => {
-    vi.useFakeTimers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);
 
@@ -229,6 +228,7 @@ describe('ChatbotWorkspace', () => {
     expect(screen.getByText('00:00:00')).toBeInTheDocument();
     expect(screen.getByText('Disconnected')).toBeInTheDocument();
 
+    vi.useFakeTimers();
     fireEvent.click(screen.getByRole('button', { name: 'Start Call' }));
 
     expect(screen.getByText('Connected')).toBeInTheDocument();
