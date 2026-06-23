@@ -8,6 +8,11 @@
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
+.assistant-chat-side > .assistant-live-tools-grid,
+.assistant-chat-side > .assistant-supporting-panels {
+  padding: 0;
+}
+
 .assistant-live-tools-grid {
   display: grid;
   gap: 0.75rem;
