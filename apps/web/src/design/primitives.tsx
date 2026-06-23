@@ -53,7 +53,7 @@ export function OmnixBrand() {
     <div className="omnix-brand" aria-label="Omnix">
       <span className="omnix-brand-mark" aria-hidden="true" />
       <span className="omnix-brand-copy">
-        <strong>Omnix</strong>
+        <h1>Omnix</h1>
         <small>Local AI workstation</small>
       </span>
     </div>
