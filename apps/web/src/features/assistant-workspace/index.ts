@@ -183,6 +183,23 @@ export {
 export type { AudioCaptureDevice, AudioCaptureState, CapturePermission } from './audio-capture';
 
 export {
+  refreshBrowserAudioCaptureDevices,
+  requestBrowserAudioCapturePermission,
+  startBrowserAudioCapture,
+  stopBrowserAudioCapture,
+  stopBrowserAudioStream,
+  toAudioCaptureDevices,
+} from './audio-capture-browser';
+export type {
+  BrowserAudioCaptureSession,
+  BrowserAudioConstraints,
+  BrowserAudioDeviceInfo,
+  BrowserAudioMediaDevices,
+  BrowserAudioStream,
+  BrowserAudioTrack,
+} from './audio-capture-browser';
+
+export {
   createTextSegment,
   getCompleteText,
   replaceDraftTextSegment,
