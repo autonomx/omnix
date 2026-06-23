@@ -47,7 +47,6 @@ function OmnixShell() {
               <Link
                 key={module.id}
                 to={module.route as never}
-                aria-label={module.label}
                 title={module.label}
                 activeProps={{ className: 'active' }}
               >

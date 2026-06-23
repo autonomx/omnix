@@ -556,6 +556,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
 
   return (
     <WorkspacePanel>
+      <h2 id="module-title" className="workspace-module-heading">{module.label}</h2>
       <div className="storyteller-workspace" aria-labelledby="module-title">
         <StoryLibrary
           activeItemId={activeLibraryItem?.id ?? null}
@@ -568,6 +569,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           trashItems={trashItems}
         />
         <main className="storyteller-stage">
+          <h2 className="storyteller-module-title">{module.label}</h2>
           <StoryProjectHeader
             canPersistStory={canPersistStory}
             chapterCount={chapterCount}
@@ -604,7 +606,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
                     <span>{activeChapter?.label ?? `Chapter ${selectedChapter}`}</span>
                     <span>{readingMinutes} min read</span>
                   </div>
-                  <h2 id="module-title">{activeChapter?.title ?? storyTitle}</h2>
+                  <h2>{activeChapter?.title ?? storyTitle}</h2>
                   <div className="storyteller-flourish" aria-hidden="true"><span /><strong>◇</strong><span /></div>
                   {activeStoryText ? (
                     <StoryText outline={outline} text={activeStoryText} />
@@ -859,7 +861,13 @@ function StoryControls({
           <button type="button" onClick={() => setSelectedChapter(selectedChapter + 1)}>›</button>
           <button type="button" onClick={onAddChapter}>New chapter</button>
         </div>
-        <Button className="storyteller-generate" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+        <Button
+          aria-label={createJobMutation.isPending ? 'Queueing story' : 'Queue story'}
+          className="storyteller-generate"
+          type="submit"
+          disabled={createJobMutation.isPending}
+          loading={createJobMutation.isPending}
+        >
           {createJobMutation.isPending ? 'Generating story…' : 'Generate story'}
         </Button>
       </form>

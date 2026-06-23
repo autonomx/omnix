@@ -281,12 +281,12 @@ export class OmnixApiClient {
 
   async getReplayPersistenceInventory(): Promise<PersistenceInventory> {
     try {
-      return (await this.listRpgSessions()) as unknown as PersistenceInventory;
+      return await this.get<PersistenceInventory>('/api/replay/persistence/inventory');
     } catch (error) {
       if (!this.isNotFound(error)) {
         throw error;
       }
-      return this.get<PersistenceInventory>('/api/replay/persistence/inventory');
+      return (await this.listRpgSessions()) as unknown as PersistenceInventory;
     }
   }
 

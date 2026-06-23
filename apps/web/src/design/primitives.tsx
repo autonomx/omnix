@@ -17,9 +17,9 @@ export function OmnixShellLayout({
 
   return (
     <Box className={shellClassName}>
+      {topbar}
       {sidebar}
       <main className="omnix-main">
-        {topbar}
         {children}
       </main>
     </Box>
@@ -105,7 +105,7 @@ export function OmnixTopBar({
   return (
     <header className="omnix-topbar">
       <button
-        className="omnix-workspace-select"
+        className="omnix-shell-toggle"
         type="button"
         aria-controls="omnix-sidebar"
         aria-expanded={isSidebarVisible}
@@ -113,35 +113,21 @@ export function OmnixTopBar({
         title={isSidebarVisible ? 'Hide Omnix sidebar' : 'Show Omnix sidebar'}
         onClick={onToggleSidebar}
       >
-        <span className="omnix-workspace-icon" aria-hidden="true">▦</span>
-        <span>Acme Workspace</span>
-        <span aria-hidden="true">⌄</span>
+        <span aria-hidden="true" />
       </button>
 
-      <label className="omnix-command-search">
-        <span aria-hidden="true">⌕</span>
-        <span className="visually-hidden">Search chats, messages, or tools</span>
-        <input type="search" placeholder="Search chats, messages, or tools..." />
-        <kbd>⌘ K</kbd>
-      </label>
-
-      <div className="omnix-topbar-actions" aria-label="Platform actions">
-        <button className="omnix-new-chat-button" type="button">
-          <span aria-hidden="true">＋</span>
-          New Chat
-        </button>
-        <button className="omnix-icon-button" type="button" aria-label="Open settings">
-          ⚙
-        </button>
-        <button className="omnix-icon-button" type="button" aria-label="Open notifications">
-          ♢
-        </button>
-        <span className="omnix-user-avatar" title={`${title} · ${status}`} aria-label={`${title}, ${status}`}>
-          O
-        </span>
+      <div className="omnix-topbar-brand" aria-label="Omnix">
+        <strong>Omnix</strong>
+        <small>Local AI workstation</small>
       </div>
 
       {children ? <div className="omnix-mode-tabs" aria-label="Workspace modes">{children}</div> : null}
+
+      <div className="omnix-topbar-status" aria-label={`${title}, ${status}`}>
+        <span>Assistant</span>
+        <b>{title}</b>
+        <b>{status}</b>
+      </div>
     </header>
   );
 }

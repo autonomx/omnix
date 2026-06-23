@@ -410,7 +410,7 @@ export function RpgActionComposer({
           ? 'RPG Settings'
           : 'Campaign Menu';
   const campaignMenuBar = (
-    <section className="rpg-session-launcher" aria-label="RPG session launcher">
+    <section className="rpg-session-launcher" aria-label="RPG launcher">
       <Button variant="light" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('home')}>
         Campaign Menu
       </Button>

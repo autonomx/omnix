@@ -167,7 +167,7 @@ describe('StorytellerWorkspace', () => {
     fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'lmstudio' } });
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'The Glass Orchard' } });
     fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A city grows fruit made of memory.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate story' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
 
     expect(await screen.findByText('Story generated: job:story')).toBeInTheDocument();
     await waitFor(() => {

@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ApiError, omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { WorkspacePanel } from '../../design/primitives';
 import {
   AssistantWorkspaceActivityPanel,
   AssistantWorkspaceDashboardPanel,
@@ -24,8 +24,27 @@ interface ChatbotFormValues {
   modelId: string;
 }
 
+const assistantSidebarItems = [
+  { label: 'Chats', route: '/chatbot', icon: '▣' },
+  { label: 'Voice Sessions', route: '/voice', icon: '◉' },
+  { label: 'Tools', route: '/providers', icon: '⚒' },
+  { label: 'Memory', route: '/assets', icon: '▦' },
+  { label: 'Settings', route: '/settings', icon: '⚙' },
+] as const;
+const pinnedItems = ['Product Roadmap Q2', 'Marketing Strategy', 'Customer Interview Prep'];
+const recentItems: Array<{ title: string; time: string; active?: boolean }> = [
+  { title: 'Hey! How are you today?', time: '10:24 AM', active: true },
+  { title: 'Write a project update email', time: 'Yesterday' },
+  { title: 'Explain quantum computing', time: 'Yesterday' },
+  { title: 'Brainstorm startup ideas', time: 'May 10' },
+  { title: 'Summarize meeting notes', time: 'May 9' },
+  { title: 'Design a landing page', time: 'May 8' },
+  { title: 'Budget planning 2025', time: 'May 7' },
+] as const;
+
 export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const messageLogRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const runtimeConfig = useMemo(() => createAssistantWorkspaceRuntimeConfig(), []);
   const eventStore = useMemo(() => createChatbotWorkspaceEventStore(runtimeConfig), [runtimeConfig]);
@@ -119,11 +138,17 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   const activeSession = sendMutation.data?.session ?? sessionQuery.data;
   const generationComplete = Boolean(sendMutation.data?.session.messages?.some((message) => message.role === 'assistant'));
-  const submitStatus = sendMutation.isPending ? 'generating' : sendMutation.isError ? 'error' : generationComplete ? 'completed' : sendMutation.data?.generation_status ?? 'ready';
   const activeMessageCount = activeSession?.messages?.length ?? 0;
   const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
   const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
   const recentMessages = activeSession?.messages?.slice(-4) ?? [];
+
+  useEffect(() => {
+    const messageLog = messageLogRef.current;
+    if (!messageLog) return;
+
+    messageLog.scrollTop = messageLog.scrollHeight;
+  }, [activeSession?.id, activeSession?.messages?.length]);
 
   useEffect(() => {
     const filter = createWorkspaceEventFilter(runtimeConfig, activeSession?.id);
@@ -146,12 +171,68 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   return (
     <WorkspacePanel className="assistant-chat-page">
+      <h2 id="module-title" className="workspace-module-heading">{module.label}</h2>
       <div className="assistant-chat-layout">
+        <aside className="assistant-chat-sidebar" aria-label="Chat workspace">
+          <nav className="assistant-sidebar-nav" aria-label="Assistant workspace">
+            {assistantSidebarItems.map((item) => (
+              <a
+                aria-label={`Open ${item.label} from chat panel`}
+                className={item.route === '/chatbot' ? 'active' : undefined}
+                href={item.route}
+                key={item.label}
+                title={item.label}
+              >
+                <span aria-hidden="true">{item.icon}</span>
+                <span>{item.label}</span>
+              </a>
+            ))}
+          </nav>
+
+          <section className="assistant-sidebar-section" aria-labelledby="assistant-chat-pinned">
+            <header>
+              <h2 id="assistant-chat-pinned">Pinned</h2>
+              <button type="button" aria-label="Add pinned chat">+</button>
+            </header>
+            <div className="assistant-sidebar-list">
+              {pinnedItems.map((item) => (
+                <button key={item} type="button">
+                  <span aria-hidden="true">▤</span>
+                  <span>{item}</span>
+                  <small aria-hidden="true">◆</small>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="assistant-sidebar-section" aria-labelledby="assistant-chat-recent">
+            <header>
+              <h2 id="assistant-chat-recent">Recent</h2>
+            </header>
+            <div className="assistant-sidebar-list">
+              {recentItems.map((item) => (
+                <button className={item.active ? 'active' : undefined} key={item.title} type="button">
+                  <span aria-hidden="true">▱</span>
+                  <span>{item.title}</span>
+                  <time>{item.time}</time>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="assistant-workspace-usage" aria-labelledby="assistant-chat-usage">
+            <h2 id="assistant-chat-usage">Workspace Usage</h2>
+            <p>42% of 100GB used</p>
+            <meter min="0" max="100" value="42">42%</meter>
+            <button type="button">Upgrade Plan</button>
+          </section>
+        </aside>
+
         <section className="assistant-chat-main" aria-labelledby="module-title">
           <header className="assistant-chat-header">
             <div>
               <p className="eyebrow">Current chat</p>
-              <h2 id="module-title">{activeSession?.title ?? 'Hey! How are you today?'}</h2>
+              <h2>{activeSession?.title ?? 'Hey! How are you today?'}</h2>
             </div>
             <div className="assistant-chat-header-actions">
               <button type="button">Share</button>
@@ -160,7 +241,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             </div>
           </header>
 
-          <div className="assistant-chat-messages" role="log" aria-live="polite">
+          <div className="assistant-chat-messages" ref={messageLogRef} role="log" aria-live="polite">
             {activeSession?.messages?.length ? (
               activeSession.messages.map((message) => (
                 <article key={message.id} className={`assistant-chat-message ${message.role}`}>
@@ -190,6 +271,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
 
           <form className="assistant-composer" onSubmit={handleSubmit((values) => sendMutation.mutate(values))}>
+            <div className="assistant-suggestion-row" aria-label="Suggested prompts">
+              <button type="button">Tell me a fun fact</button>
+              <button type="button">Recommend a movie</button>
+              <button type="button">Give me productivity tips</button>
+              <button type="button">More</button>
+            </div>
             <div className="assistant-composer-controls" aria-label="Conversation controls">
               <label>
                 <span>Provider</span>
@@ -215,7 +302,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               </label>
               <span className="assistant-composer-chip">Voice Ready</span>
               <span className="assistant-composer-chip">Memory On</span>
-              <span className="assistant-composer-chip">Tools {runtimeConfig.features.toolExecution ? 'Active' : 'Off'}</span>
+              <span className="assistant-composer-chip">Tools {runtimeConfig.features.toolExecution ? '3 Active' : 'Off'}</span>
               <span className="assistant-composer-chip">Context</span>
             </div>
             <label className="assistant-message-input">
@@ -231,14 +318,23 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <button type="button" className="assistant-mic-button" aria-label="Start voice input">
                 ◉
               </button>
-              <button className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>
+              <button
+                aria-label={sendMutation.isPending ? 'Generating response' : 'Queue response'}
+                className="assistant-send-button"
+                type="submit"
+                disabled={sendMutation.isPending}
+              >
                 {sendMutation.isPending ? 'Generating response…' : 'Send message'}
               </button>
             </div>
           </form>
 
+          <div className="assistant-mode-switch" aria-label="Chat mode">
+            <button type="button" className="active">Regular Chat</button>
+            <button type="button">Live Voice</button>
+          </div>
+
           <div className="assistant-inline-status" aria-live="polite">
-            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
             {errors.content ? <span role="alert">Enter a message before sending.</span> : null}
             {sendMutation.isPending ? <span role="status">Contacting the selected chat provider…</span> : null}
             {sendMutation.isError ? <span role="alert">{chatbotSubmitErrorMessage(sendMutation.error)}</span> : null}
@@ -255,23 +351,33 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             <header>
               <div>
                 <p className="eyebrow">Live Voice</p>
-                <strong>Connected</strong>
               </div>
-              <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
+              <strong>Connected</strong>
             </header>
+            <div className="assistant-live-state" aria-label="Live voice state">
+              <span>Listening</span>
+              <span aria-hidden="true">v</span>
+            </div>
             <div className="assistant-voice-orb" aria-hidden="true">
               <span />
             </div>
+            <time className="assistant-call-timer">00:01:24</time>
             <div className="assistant-voice-controls">
               <button type="button">Mute</button>
               <button type="button" className="danger">End Call</button>
             </div>
             <div className="assistant-voice-transcript">
-              <h3>Transcript</h3>
+              <div className="assistant-voice-transcript-header">
+                <h3>Transcript</h3>
+                <button type="button">Clear</button>
+              </div>
               {recentMessages.length ? (
                 recentMessages.map((message) => (
                   <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}>
-                    <strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong>
+                    <span>
+                      <strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong>
+                      <time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time>
+                    </span>
                     {message.content}
                   </p>
                 ))
@@ -279,74 +385,96 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <p className="muted">Voice transcript will appear here.</p>
               )}
             </div>
+            <div className="assistant-audio-devices">
+              <header>
+                <h3>Audio Devices</h3>
+                <button type="button" aria-label="Audio device settings">Settings</button>
+              </header>
+              <div>
+                <span>Input</span>
+                <strong>MacBook Pro Microphone</strong>
+                <i aria-hidden="true" />
+              </div>
+              <div>
+                <span>Output</span>
+                <strong>MacBook Pro Speakers</strong>
+                <i aria-hidden="true" />
+              </div>
+            </div>
+            <footer className="assistant-voice-status">
+              <span>Voice Status</span>
+              <strong>Listening</strong>
+            </footer>
           </section>
 
-          <AssistantWorkspaceDashboardPanel
-            input={{
-              workspaceName: runtimeConfig.workspaceId,
-              projectName: runtimeConfig.projectId ?? 'Chatbot',
-              sessionTitle: activeSession?.title ?? 'New chat',
-              sessionMode: 'text',
-              providerLabel,
-              modelLabel,
-              messageCount: activeMessageCount,
-              contextSourceCount: activeMessageCount > 0 ? 1 : 0,
-              memoryCount: 0,
-              knowledgeChunkCount: 0,
-              enabledToolCount: runtimeConfig.features.toolExecution ? 1 : 0,
-              qualitySignals: [
-                {
-                  id: 'session',
-                  label: 'Conversation session is available',
-                  passed: Boolean(activeSession?.id) || !selectedSessionId,
-                  severity: 'info',
-                },
-                {
-                  id: 'provider',
-                  label: 'At least one chat provider is available',
-                  passed: providerQuery.isLoading || chatProviders.length > 0,
-                  severity: 'warning',
-                },
-                {
-                  id: 'messages',
-                  label: 'Conversation projection can render messages',
-                  passed: Boolean(activeSession?.messages) || !activeSession,
-                  severity: 'info',
-                },
-                {
-                  id: 'event-store',
-                  label: 'Workspace events are configured for persistence',
-                  passed: runtimeConfig.features.persistedEvents,
-                  severity: 'warning',
-                },
-              ],
-            }}
-          />
+          <div className="assistant-supporting-panels" aria-hidden="true">
+            <AssistantWorkspaceDashboardPanel
+              input={{
+                workspaceName: runtimeConfig.workspaceId,
+                projectName: runtimeConfig.projectId ?? 'Chatbot',
+                sessionTitle: activeSession?.title ?? 'New chat',
+                sessionMode: 'text',
+                providerLabel,
+                modelLabel,
+                messageCount: activeMessageCount,
+                contextSourceCount: activeMessageCount > 0 ? 1 : 0,
+                memoryCount: 0,
+                knowledgeChunkCount: 0,
+                enabledToolCount: runtimeConfig.features.toolExecution ? 1 : 0,
+                qualitySignals: [
+                  {
+                    id: 'session',
+                    label: 'Conversation session is available',
+                    passed: Boolean(activeSession?.id) || !selectedSessionId,
+                    severity: 'info',
+                  },
+                  {
+                    id: 'provider',
+                    label: 'At least one chat provider is available',
+                    passed: providerQuery.isLoading || chatProviders.length > 0,
+                    severity: 'warning',
+                  },
+                  {
+                    id: 'messages',
+                    label: 'Conversation projection can render messages',
+                    passed: Boolean(activeSession?.messages) || !activeSession,
+                    severity: 'info',
+                  },
+                  {
+                    id: 'event-store',
+                    label: 'Workspace events are configured for persistence',
+                    passed: runtimeConfig.features.persistedEvents,
+                    severity: 'warning',
+                  },
+                ],
+              }}
+            />
 
-          <AssistantWorkspaceActivityPanel events={activityEvents} />
+            <AssistantWorkspaceActivityPanel events={activityEvents} />
 
-          <section className="assistant-sessions-card">
-            <h3>Sessions</h3>
-            {sessionsQuery.data?.sessions.length ? (
-              <div className="feature-list">
-                {sessionsQuery.data.sessions.map((session) => (
-                  <button
-                    className={session.id === selectedSessionId ? 'active' : undefined}
-                    key={session.id}
-                    type="button"
-                    onClick={() => setSelectedSessionId(session.id)}
-                  >
-                    <span>{session.title}</span>
-                    <small>{session.message_count} messages</small>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="platform-empty" role="status">
-                No chat sessions yet.
-              </div>
-            )}
-          </section>
+            <section className="assistant-sessions-card">
+              <h3>Sessions</h3>
+              {sessionsQuery.data?.sessions.length ? (
+                <div className="feature-list">
+                  {sessionsQuery.data.sessions.map((session) => (
+                    <button
+                      className={session.id === selectedSessionId ? 'active' : undefined}
+                      key={session.id}
+                      type="button"
+                      onClick={() => setSelectedSessionId(session.id)}
+                    >
+                      <span>{session.title}</span>
+                      <small>{session.message_count} messages</small>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="platform-empty" role="status">
+                  No chat sessions yet.
+                </div>
+              )}
+            </section>
+          </div>
         </aside>
       </div>
     </WorkspacePanel>

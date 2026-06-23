@@ -152,7 +152,7 @@ describe('ChatbotWorkspace', () => {
     fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'openai' } });
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-mini' } });
     fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Hello Omnix' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
     expect(await screen.findByText('Generation completed: job:1')).toBeInTheDocument();
     expect((await screen.findAllByText('Provider reply from the selected model.')).length).toBeGreaterThan(0);
@@ -203,7 +203,7 @@ describe('ChatbotWorkspace', () => {
     renderChatbot();
 
     fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Is this wired?' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Chat request failed with status 503');
     expect(await screen.findByText('chat request failed: Chat request failed with status 503')).toBeInTheDocument();
