@@ -34,7 +34,7 @@ export type AssistantWorkspaceEventPayloadByType = {
   };
   tool_result: {
     toolCallId: string;
-    status: 'completed' | 'failed';
+    status: 'completed' | 'failed' | 'denied';
     result?: unknown;
     error?: string;
     tokenUsage?: TokenUsage;
