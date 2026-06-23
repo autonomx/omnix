@@ -59,6 +59,7 @@ describe('LiveAssistantSessionPanel', () => {
         synthesis: { audioUrl: 'blob:hi' },
         playbackItem: { id: 'playback:1', text: 'hi', createdAt: '2026-06-23T09:00:01Z' },
         stages: ['transcribed', 'responded', 'synthesized', 'queued'],
+        events: [],
       },
     });
 
