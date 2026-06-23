@@ -33,9 +33,13 @@ describe('assistant workspace event stores', () => {
     const event = userEvent('event-1');
 
     store.append(event);
+    if (event.type !== 'user_message') throw new Error('expected user event');
     event.payload.turn.content = [];
 
-    expect(store.get('event-1')?.payload.turn.content).toHaveLength(1);
+    const stored = store.get('event-1');
+    if (stored?.type !== 'user_message') throw new Error('expected stored user event');
+
+    expect(stored.payload.turn.content).toHaveLength(1);
     expect(store.list({ workspaceId: 'workspace-1', type: 'user_message' })).toHaveLength(1);
     expect(store.list({ sessionId: 'missing' })).toEqual([]);
   });
