@@ -264,3 +264,14 @@ export type { WorkspaceAccessibilityProfile, WorkspaceBreakpoint } from './acces
 
 export { getWorkspaceQualityStatus, summarizeWorkspaceQuality } from './quality';
 export type { WorkspaceQualitySignal, WorkspaceQualitySummary } from './quality';
+
+export { AssistantWorkspaceDashboard, AssistantWorkspaceDashboardPanel } from './AssistantWorkspaceDashboard';
+export {
+  createAssistantWorkspaceDashboard,
+} from './workspace-dashboard';
+export type {
+  AssistantWorkspaceDashboardInput,
+  AssistantWorkspaceDashboardMetric,
+  AssistantWorkspaceDashboardStatus,
+  AssistantWorkspaceDashboardView,
+} from './workspace-dashboard';
