@@ -204,11 +204,24 @@ export {
 export type { PlaybackItem, PlaybackQueue } from './playback';
 
 export {
+  canInvokeCapability,
   canUseCapability,
   createCapabilityDefinition,
+  createCapabilityEvents,
+  createCapabilityInvocation,
+  executeCapabilityInvocation,
   getEnabledCapabilities,
 } from './capabilities';
-export type { CapabilityDefinition, CapabilityEvent, CapabilityScope } from './capabilities';
+export type {
+  CapabilityDefinition,
+  CapabilityEvent,
+  CapabilityExecutionRecord,
+  CapabilityExecutor,
+  CapabilityInvocation,
+  CapabilityInvocationResult,
+  CapabilityRunStatus,
+  CapabilityScope,
+} from './capabilities';
 
 export {
   DEFAULT_ASSISTANT_WORKSPACE_PREFERENCES,
