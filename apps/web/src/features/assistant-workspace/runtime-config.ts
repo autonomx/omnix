@@ -1,0 +1,80 @@
+export type AssistantWorkspaceRuntimeFeatureFlags = {
+  liveAssistant: boolean;
+  persistedEvents: boolean;
+  toolExecution: boolean;
+};
+
+export type AssistantWorkspaceRuntimeConfig = {
+  workspaceId: string;
+  projectId?: string;
+  defaultProviderId?: string;
+  defaultModelId?: string;
+  sttServiceUrl?: string;
+  ttsServiceUrl?: string;
+  ttsVoice?: string;
+  eventStorageKey: string;
+  features: AssistantWorkspaceRuntimeFeatureFlags;
+};
+
+export type AssistantWorkspaceRuntimeEnv = Record<string, string | boolean | number | undefined>;
+
+export const DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG: AssistantWorkspaceRuntimeConfig = {
+  workspaceId: 'workspace:default',
+  projectId: 'project:chatbot',
+  eventStorageKey: 'omnix.assistantWorkspace.events',
+  features: {
+    liveAssistant: false,
+    persistedEvents: true,
+    toolExecution: false,
+  },
+};
+
+export function createAssistantWorkspaceRuntimeConfig(
+  env: AssistantWorkspaceRuntimeEnv = getImportMetaEnv(),
+): AssistantWorkspaceRuntimeConfig {
+  return {
+    workspaceId: readString(env, 'VITE_ASSISTANT_WORKSPACE_ID') ?? DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.workspaceId,
+    projectId: readString(env, 'VITE_ASSISTANT_PROJECT_ID') ?? DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.projectId,
+    defaultProviderId: readString(env, 'VITE_ASSISTANT_PROVIDER_ID'),
+    defaultModelId: readString(env, 'VITE_ASSISTANT_MODEL_ID'),
+    sttServiceUrl: readString(env, 'VITE_ASSISTANT_STT_URL'),
+    ttsServiceUrl: readString(env, 'VITE_ASSISTANT_TTS_URL'),
+    ttsVoice: readString(env, 'VITE_ASSISTANT_TTS_VOICE'),
+    eventStorageKey:
+      readString(env, 'VITE_ASSISTANT_EVENT_STORAGE_KEY') ??
+      DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.eventStorageKey,
+    features: {
+      liveAssistant:
+        readBoolean(env, 'VITE_ASSISTANT_LIVE_ENABLED') ??
+        DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.features.liveAssistant,
+      persistedEvents:
+        readBoolean(env, 'VITE_ASSISTANT_PERSISTED_EVENTS') ??
+        DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.features.persistedEvents,
+      toolExecution:
+        readBoolean(env, 'VITE_ASSISTANT_TOOL_EXECUTION') ??
+        DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.features.toolExecution,
+    },
+  };
+}
+
+function getImportMetaEnv(): AssistantWorkspaceRuntimeEnv {
+  return ((import.meta as unknown as { env?: AssistantWorkspaceRuntimeEnv }).env ?? {}) as AssistantWorkspaceRuntimeEnv;
+}
+
+function readString(env: AssistantWorkspaceRuntimeEnv, key: string): string | undefined {
+  const value = env[key];
+  if (value === undefined || value === false) return undefined;
+  const text = String(value).trim();
+  return text ? text : undefined;
+}
+
+function readBoolean(env: AssistantWorkspaceRuntimeEnv, key: string): boolean | undefined {
+  const value = env[key];
+  if (value === undefined) return undefined;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) return false;
+  return undefined;
+}
