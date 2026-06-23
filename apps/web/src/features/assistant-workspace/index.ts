@@ -44,6 +44,18 @@ export type {
 } from './events';
 
 export {
+  createInMemoryAssistantWorkspaceEventStore,
+  createStoredAssistantWorkspaceEventStore,
+  parseAssistantWorkspaceEvents,
+  serializeAssistantWorkspaceEvents,
+} from './event-store';
+export type {
+  AssistantWorkspaceEventStorage,
+  AssistantWorkspaceEventStore,
+  AssistantWorkspaceEventStoreFilter,
+} from './event-store';
+
+export {
   appendProjectionEvent,
   createConversationProjection,
   rebuildConversationProjection,
