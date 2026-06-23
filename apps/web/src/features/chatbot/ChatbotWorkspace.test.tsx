@@ -155,9 +155,9 @@ describe('ChatbotWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     expect(await screen.findByText('Generation completed: job:1')).toBeInTheDocument();
-    expect(await screen.findByText('Provider reply from the selected model.')).toBeInTheDocument();
+    expect((await screen.findAllByText('Provider reply from the selected model.')).length).toBeGreaterThan(0);
     expect(await screen.findByText('Source: assistant_message')).toBeInTheDocument();
-    const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('user'));
+    const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('You'));
     expect(transcriptMessage).toBeTruthy();
 
     await waitFor(() => {

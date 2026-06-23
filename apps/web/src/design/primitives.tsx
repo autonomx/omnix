@@ -51,31 +51,31 @@ export function OmnixSidebar({ children, hidden = false }: { children: ReactNode
 export function OmnixBrand() {
   return (
     <div className="omnix-brand" aria-label="Omnix">
-      <span className="omnix-brand-mark">O</span>
+      <span className="omnix-brand-mark" aria-hidden="true" />
       <span className="omnix-brand-copy">
-        <strong>Omnix</strong>
-        <small>Chats</small>
+        <h1>Omnix</h1>
+        <small>Local AI workstation</small>
       </span>
     </div>
   );
 }
 
 const moduleMonograms: Record<OmnixModuleId, string> = {
-  chatbot: 'C',
-  rpg: 'R',
-  storyteller: 'S',
-  podcast: 'P',
-  voice: 'T',
-  'voice-cloning': 'VC',
-  stt: 'ST',
-  'image-generation': 'I',
-  providers: 'PR',
-  models: 'M',
-  jobs: 'J',
-  assets: 'A',
-  reports: 'RP',
-  settings: 'SE',
-  diagnostics: 'D',
+  chatbot: '▣',
+  rpg: '✦',
+  storyteller: '✍',
+  podcast: '◉',
+  voice: '◍',
+  'voice-cloning': '◎',
+  stt: '⌁',
+  'image-generation': '▧',
+  providers: '◇',
+  models: '✧',
+  jobs: '↻',
+  assets: '▤',
+  reports: '☷',
+  settings: '⚙',
+  diagnostics: '⌕',
 };
 
 export function OmnixNavItem({ active, moduleId, children }: { active: boolean; moduleId: OmnixModuleId; children: ReactNode }) {
@@ -104,26 +104,44 @@ export function OmnixTopBar({
 }) {
   return (
     <header className="omnix-topbar">
-      <div className="omnix-topbar-brand">
-        <button
-          className="omnix-logo-core omnix-logo-toggle"
-          type="button"
-          aria-controls="omnix-sidebar"
-          aria-expanded={isSidebarVisible}
-          aria-label={isSidebarVisible ? 'Hide Omnix sidebar' : 'Show Omnix sidebar'}
-          title={isSidebarVisible ? 'Hide Omnix sidebar' : 'Show Omnix sidebar'}
-          onClick={onToggleSidebar}
-        />
-        <div>
-          <Title order={1}>Omnix</Title>
-          <Text size="sm">Local AI workstation</Text>
-        </div>
+      <button
+        className="omnix-workspace-select"
+        type="button"
+        aria-controls="omnix-sidebar"
+        aria-expanded={isSidebarVisible}
+        aria-label={isSidebarVisible ? 'Hide Omnix sidebar' : 'Show Omnix sidebar'}
+        title={isSidebarVisible ? 'Hide Omnix sidebar' : 'Show Omnix sidebar'}
+        onClick={onToggleSidebar}
+      >
+        <span className="omnix-workspace-icon" aria-hidden="true">▦</span>
+        <span>Acme Workspace</span>
+        <span aria-hidden="true">⌄</span>
+      </button>
+
+      <label className="omnix-command-search">
+        <span aria-hidden="true">⌕</span>
+        <span className="visually-hidden">Search chats, messages, or tools</span>
+        <input type="search" placeholder="Search chats, messages, or tools..." />
+        <kbd>⌘ K</kbd>
+      </label>
+
+      <div className="omnix-topbar-actions" aria-label="Platform actions">
+        <button className="omnix-new-chat-button" type="button">
+          <span aria-hidden="true">＋</span>
+          New Chat
+        </button>
+        <button className="omnix-icon-button" type="button" aria-label="Open settings">
+          ⚙
+        </button>
+        <button className="omnix-icon-button" type="button" aria-label="Open notifications">
+          ♢
+        </button>
+        <span className="omnix-user-avatar" title={`${title} · ${status}`} aria-label={`${title}, ${status}`}>
+          O
+        </span>
       </div>
-      {children ? <div className="omnix-mode-tabs">{children}</div> : null}
-      <div className="omnix-topbar-status" aria-label="Platform status">
-        <OmnixStatusPill>{title}</OmnixStatusPill>
-        <OmnixStatusPill>{status}</OmnixStatusPill>
-      </div>
+
+      {children ? <div className="omnix-mode-tabs" aria-label="Workspace modes">{children}</div> : null}
     </header>
   );
 }
