@@ -75,6 +75,22 @@ function createToolTimelineItem(event: Extract<AssistantWorkspaceEvent, { type: 
   };
 }
 
+function createFailureTimelineItem(event: Extract<AssistantWorkspaceEvent, { type: 'operation_failed' }>): TimelineItem {
+  return {
+    id: event.id,
+    kind: 'event',
+    createdAt: event.createdAt,
+    label: truncateLabel(`${operationLabel(event.payload.operation)} failed: ${event.payload.message}`),
+    sourceEventType: event.type,
+    sourceEventId: event.id,
+    status: 'failed',
+  };
+}
+
+function operationLabel(operation: string): string {
+  return operation.replaceAll('_', ' ');
+}
+
 function createGenericEventTimelineItem(event: AssistantWorkspaceEvent): TimelineItem {
   return {
     id: event.id,
@@ -94,6 +110,9 @@ export function createTimelineItemsFromEvents(events: AssistantWorkspaceEvent[])
       }
       if (event.type === 'tool_call' || event.type === 'tool_result') {
         return createToolTimelineItem(event);
+      }
+      if (event.type === 'operation_failed') {
+        return createFailureTimelineItem(event);
       }
       return createGenericEventTimelineItem(event);
     }),
