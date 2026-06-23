@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
@@ -58,6 +58,7 @@ function providerPayload() {
 
 afterEach(() => {
   window.localStorage.clear();
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -203,6 +204,47 @@ describe('ChatbotWorkspace', () => {
       expect(messageCall?.[1]).toEqual(expect.objectContaining({ method: 'POST' }));
       expect(messageCall?.[1]?.body).toContain('"model_id":"gpt-mini"');
     });
+  });
+
+  it('starts, advances, and resets the live call timer from call controls', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') {
+        return Response.json(providerPayload());
+      }
+
+      if (path === '/api/chat/sessions') {
+        return Response.json({ sessions: [] });
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
+    expect(screen.getByText('00:00:00')).toBeInTheDocument();
+    expect(screen.getByText('Disconnected')).toBeInTheDocument();
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: 'Start Call' }));
+
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(screen.getByText('Live voice call started.')).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(65_000);
+    });
+
+    expect(screen.getByText('00:01:05')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'End Call' }));
+
+    expect(screen.getByText('00:00:00')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start Call' })).toBeInTheDocument();
+    expect(screen.getByText('Live voice call ended.')).toBeInTheDocument();
   });
 
   it('surfaces gateway failures in the replayable activity stream', async () => {

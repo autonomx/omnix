@@ -56,11 +56,14 @@ const recentItems: Array<{ title: string; time: string; active?: boolean }> = [
 ] as const;
 
 const suggestedPrompts = ['Tell me a fun fact', 'Recommend a movie', 'Give me productivity tips'] as const;
+const CALL_TIMER_TICK_MS = 1_000;
 
 export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [activeMode, setActiveMode] = useState<'regular' | 'live'>('regular');
   const [audioStatus, setAudioStatus] = useState<string | null>(null);
+  const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
+  const [callElapsedMs, setCallElapsedMs] = useState(0);
   const messageLogRef = useRef<HTMLDivElement>(null);
   const toolSidebarRef = useRef<HTMLElement>(null);
   const queryClient = useQueryClient();
@@ -164,6 +167,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const latestAssistantMessage = getLatestAssistantMessage(activeSession?.messages ?? []);
   const toolExecutionRows = useMemo(() => createToolExecutionRows(activityEvents), [activityEvents]);
   const enabledToolCount = runtimeConfig.features.toolExecution ? Math.max(toolExecutionRows.length, 3) : 0;
+  const liveVoiceActive = callStartedAt !== null;
+  const liveVoiceState = liveVoiceActive ? 'Listening' : 'Idle';
+  const liveConnectionLabel = liveVoiceActive ? 'Connected' : 'Disconnected';
+  const liveCallTimerLabel = formatCallDuration(callElapsedMs);
 
   useEffect(() => {
     const messageLog = messageLogRef.current;
@@ -171,6 +178,24 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
     messageLog.scrollTop = messageLog.scrollHeight;
   }, [activeSession?.id, activeSession?.messages?.length]);
+
+  useEffect(() => {
+    if (callStartedAt === null) {
+      setCallElapsedMs(0);
+      return undefined;
+    }
+
+    const updateElapsed = () => {
+      setCallElapsedMs(Date.now() - callStartedAt);
+    };
+
+    updateElapsed();
+    const intervalId = window.setInterval(updateElapsed, CALL_TIMER_TICK_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [callStartedAt]);
 
   useEffect(() => {
     const filter = createWorkspaceEventFilter(runtimeConfig, activeSession?.id);
@@ -197,6 +222,23 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   function refreshActivityPanel(): void {
     setActivityEvents(eventStore.list(createWorkspaceEventFilter(runtimeConfig, activeSession?.id)));
+  }
+
+  function startLiveCall(): void {
+    if (callStartedAt !== null) return;
+
+    setActiveMode('live');
+    setCallStartedAt(Date.now());
+    setCallElapsedMs(0);
+    setAudioStatus('Live voice call started.');
+  }
+
+  function stopLiveCall(): void {
+    if (callStartedAt === null) return;
+
+    setCallStartedAt(null);
+    setCallElapsedMs(0);
+    setAudioStatus('Live voice call ended.');
   }
 
   async function playAssistantResponseAudio(text: string): Promise<void> {
@@ -408,7 +450,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               />
             </label>
             <div className="assistant-composer-actions">
-              <button type="button" className="assistant-mic-button" aria-label="Start voice input" onClick={() => setActiveMode('live')}>
+              <button type="button" className="assistant-mic-button" aria-label="Start voice input" onClick={startLiveCall}>
                 ◉
               </button>
               <button
@@ -426,7 +468,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             <button type="button" className={activeMode === 'regular' ? 'active' : undefined} onClick={() => setActiveMode('regular')}>
               Regular Chat
             </button>
-            <button type="button" className={activeMode === 'live' ? 'active' : undefined} onClick={() => setActiveMode('live')}>
+            <button type="button" className={activeMode === 'live' ? 'active' : undefined} onClick={startLiveCall}>
               Live Voice
             </button>
           </div>
@@ -451,19 +493,27 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <div>
                   <p className="eyebrow">Live Voice</p>
                 </div>
-                <strong>Connected</strong>
+                <strong>{liveConnectionLabel}</strong>
               </header>
               <div className="assistant-live-state" aria-label="Live voice state">
-                <span>Listening</span>
+                <span>{liveVoiceState}</span>
                 <span aria-hidden="true">v</span>
               </div>
               <div className="assistant-voice-orb" aria-hidden="true">
                 <span />
               </div>
-              <time className="assistant-call-timer">00:01:24</time>
+              <time className="assistant-call-timer" dateTime={`PT${Math.floor(callElapsedMs / 1000)}S`}>
+                {liveCallTimerLabel}
+              </time>
               <div className="assistant-voice-controls">
-                <button type="button">Mute</button>
-                <button type="button" className="danger">End Call</button>
+                <button type="button" disabled={!liveVoiceActive}>Mute</button>
+                <button
+                  type="button"
+                  className={liveVoiceActive ? 'danger' : undefined}
+                  onClick={liveVoiceActive ? stopLiveCall : startLiveCall}
+                >
+                  {liveVoiceActive ? 'End Call' : 'Start Call'}
+                </button>
               </div>
               <div className="assistant-voice-transcript">
                 <div className="assistant-voice-transcript-header">
@@ -502,7 +552,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               </div>
               <footer className="assistant-voice-status">
                 <span>Voice Status</span>
-                <strong>Listening</strong>
+                <strong>{liveVoiceState}</strong>
               </footer>
             </section>
 
@@ -621,6 +671,17 @@ function chatbotSubmitErrorMessage(error: unknown): string {
 function formatMessageTime(value: string): string {
   if (value.includes('T')) return value.slice(11, 16);
   return value;
+}
+
+function formatCallDuration(valueMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(valueMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return [hours, minutes, seconds]
+    .map((value) => value.toString().padStart(2, '0'))
+    .join(':');
 }
 
 function createChatbotWorkspaceEventStore(config: AssistantWorkspaceRuntimeConfig): AssistantWorkspaceEventStore {
