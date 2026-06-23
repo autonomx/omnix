@@ -304,3 +304,6 @@ export type {
   LiveAssistantSessionState,
   LiveAssistantSessionStatus,
 } from './useLiveAssistantSession';
+
+export { LiveAssistantSessionPanel } from './LiveAssistantSessionPanel';
+export type { LiveAssistantSessionPanelProps } from './LiveAssistantSessionPanel';
