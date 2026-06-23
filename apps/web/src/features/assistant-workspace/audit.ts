@@ -28,9 +28,10 @@ export function createAssistantResponseAudit(audit: AssistantResponseAudit): Ass
 
 export function summarizeAssistantResponseAudit(audit: AssistantResponseAudit): ResponseAuditSummary {
   const sourceTypes = Array.from(new Set(audit.contextSources.map((source) => source.type))).sort();
-  const tokenTotal = audit.tokenUsage
-    ? audit.tokenUsage.inputTokens + audit.tokenUsage.outputTokens
-    : undefined;
+  const tokenTotal = audit.tokenUsage?.totalTokens ??
+    (audit.tokenUsage
+      ? (audit.tokenUsage.inputTokens ?? 0) + (audit.tokenUsage.outputTokens ?? 0)
+      : undefined);
 
   return {
     responseEventId: audit.responseEventId,
