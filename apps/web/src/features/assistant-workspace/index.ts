@@ -275,3 +275,21 @@ export type {
   AssistantWorkspaceDashboardStatus,
   AssistantWorkspaceDashboardView,
 } from './workspace-dashboard';
+
+export {
+  createFetchSpeechServiceTransport,
+  createSttServiceClient,
+  createTtsServiceClient,
+} from './speech-services';
+export type {
+  SpeechAudioInput,
+  SpeechServiceClientOptions,
+  SpeechServiceTransport,
+  SpeechServiceTransportRequest,
+  SttServiceClient,
+  SttTranscriptionRequest,
+  SttTranscriptionResponse,
+  TtsServiceClient,
+  TtsSynthesisRequest,
+  TtsSynthesisResponse,
+} from './speech-services';
