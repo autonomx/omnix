@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelRequest } from './provider';
 import {
+  createAnthropicProvider,
+  createOpenAiCompatibleProvider,
   flattenMessageContent,
   fromAnthropicMessagesResponse,
   fromOpenAiChatResponse,
   toAnthropicMessagesRequest,
   toOpenAiChatRequest,
+  type ProviderHttpRequest,
 } from './provider-adapters';
 
 const request: ModelRequest = {
@@ -77,5 +80,53 @@ describe('assistant workspace provider adapters', () => {
     expect(mapped.content).toEqual([{ kind: 'text', text: 'Done' }]);
     expect(mapped.finishReason).toBe('end_turn');
     expect(mapped.tokenUsage).toEqual({ inputTokens: 4, outputTokens: 6, totalTokens: 10 });
+  });
+
+  it('executes OpenAI-compatible providers through an injected transport', async () => {
+    let captured: ProviderHttpRequest | undefined;
+    const provider = createOpenAiCompatibleProvider({
+      id: 'openai-compatible',
+      name: 'OpenAI Compatible',
+      baseUrl: 'https://models.example.test/v1/',
+      apiKey: 'secret',
+      transport: async (httpRequest) => {
+        captured = httpRequest;
+        return {
+          choices: [{ message: { content: 'Done' }, finish_reason: 'stop' }],
+        };
+      },
+    });
+
+    const response = await provider.execute(request);
+
+    expect(captured?.url).toBe('https://models.example.test/v1/chat/completions');
+    expect(captured?.headers.authorization).toBe('Bearer secret');
+    expect(JSON.parse(captured?.body ?? '{}').model).toBe('gpt-test');
+    expect(response.content).toEqual([{ kind: 'text', text: 'Done' }]);
+  });
+
+  it('executes Anthropic providers through an injected transport', async () => {
+    let captured: ProviderHttpRequest | undefined;
+    const provider = createAnthropicProvider({
+      id: 'anthropic',
+      name: 'Anthropic',
+      baseUrl: 'https://anthropic.example.test/v1',
+      apiKey: 'secret',
+      transport: async (httpRequest) => {
+        captured = httpRequest;
+        return {
+          content: [{ type: 'text', text: 'Done' }],
+          stop_reason: 'end_turn',
+        };
+      },
+    });
+
+    const response = await provider.execute(request);
+
+    expect(captured?.url).toBe('https://anthropic.example.test/v1/messages');
+    expect(captured?.headers['x-api-key']).toBe('secret');
+    expect(captured?.headers['anthropic-version']).toBe('2023-06-01');
+    expect(JSON.parse(captured?.body ?? '{}').system).toBe('Be precise.');
+    expect(response.content).toEqual([{ kind: 'text', text: 'Done' }]);
   });
 });
