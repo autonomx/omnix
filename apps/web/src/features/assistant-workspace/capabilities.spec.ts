@@ -62,5 +62,9 @@ describe('capability contracts', () => {
 
     expect(record.status).toBe('denied');
     expect(record.result?.status).toBe('denied');
+    expect(createCapabilityEvents(record)[1]).toMatchObject({
+      type: 'tool_result',
+      payload: { status: 'denied' },
+    });
   });
 });
