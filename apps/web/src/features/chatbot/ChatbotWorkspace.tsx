@@ -6,6 +6,7 @@ import { ApiError, omnixApiClient, type ProviderFacadePayload } from '../../api/
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, OmnixTranscriptView, WorkspacePanel } from '../../design/primitives';
 import { AssistantWorkspaceDashboardPanel } from '../assistant-workspace/AssistantWorkspaceDashboard';
+import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
 
 interface ChatbotFormValues {
   content: string;
@@ -16,6 +17,7 @@ interface ChatbotFormValues {
 export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const runtimeConfig = useMemo(() => createAssistantWorkspaceRuntimeConfig(), []);
   const providerQuery = useQuery({
     queryKey: ['platform', 'providers'],
     queryFn: () => omnixApiClient.listProviders(),
@@ -36,7 +38,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     watch,
     formState: { errors },
   } = useForm<ChatbotFormValues>({
-    defaultValues: { content: '', providerId: '', modelId: '' },
+    defaultValues: {
+      content: '',
+      providerId: runtimeConfig.defaultProviderId ?? '',
+      modelId: runtimeConfig.defaultModelId ?? '',
+    },
   });
   const selectedProviderId = watch('providerId');
   const selectedModelId = watch('modelId');
@@ -176,8 +182,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <section className="feature-panel">
           <AssistantWorkspaceDashboardPanel
             input={{
-              workspaceName: 'Default workspace',
-              projectName: 'Chatbot',
+              workspaceName: runtimeConfig.workspaceId,
+              projectName: runtimeConfig.projectId ?? 'Chatbot',
               sessionTitle: activeSession?.title ?? 'New chat',
               sessionMode: 'text',
               providerLabel,
@@ -186,7 +192,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               contextSourceCount: activeMessageCount > 0 ? 1 : 0,
               memoryCount: 0,
               knowledgeChunkCount: 0,
-              enabledToolCount: 0,
+              enabledToolCount: runtimeConfig.features.toolExecution ? 1 : 0,
               qualitySignals: [
                 {
                   id: 'session',
@@ -205,6 +211,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   label: 'Conversation projection can render messages',
                   passed: Boolean(activeSession?.messages) || !activeSession,
                   severity: 'info',
+                },
+                {
+                  id: 'event-store',
+                  label: 'Workspace events are configured for persistence',
+                  passed: runtimeConfig.features.persistedEvents,
+                  severity: 'warning',
                 },
               ],
             }}
