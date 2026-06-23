@@ -124,7 +124,7 @@ describe('provider-backed feature submit feedback', () => {
 
     expect(await screen.findByText('Story controls')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A memory orchard.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate story' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
 
     expect(await screen.findByText(/Story request failed with status 500/)).toBeInTheDocument();
   });
@@ -178,7 +178,7 @@ describe('provider-backed feature submit feedback', () => {
     renderWithProviders(<ImageGenerationWorkspace module={moduleById('image-generation')} />);
 
     expect(await screen.findByRole('heading', { name: 'Image request' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A neon workstation.' } });
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A glowing nebula.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue image' }));
 
     expect(await screen.findByText(/Image request failed with status 500/)).toBeInTheDocument();
@@ -188,9 +188,8 @@ describe('provider-backed feature submit feedback', () => {
     installFailingJobApiMock();
     renderWithProviders(<RpgWorkspace module={moduleById('rpg')} />);
 
-    expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Talk to the innkeeper.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+    expect(await screen.findByText('Enter World')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 
     expect(await screen.findByText(/RPG turn request failed with status 500/)).toBeInTheDocument();
   });
