@@ -188,8 +188,9 @@ describe('provider-backed feature submit feedback', () => {
     installFailingJobApiMock();
     renderWithProviders(<RpgWorkspace module={moduleById('rpg')} />);
 
-    expect(await screen.findByText('Enter World')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
+    expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Look around the tavern.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
 
     expect(await screen.findByText(/RPG turn request failed with status 500/)).toBeInTheDocument();
   });
