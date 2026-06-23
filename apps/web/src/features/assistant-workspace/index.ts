@@ -66,3 +66,10 @@ export {
   estimateContextSourceTokens,
 } from './budget';
 export type { BudgetedContextAssembly, ContextBudget, ContextBudgetManager } from './budget';
+
+export {
+  createAssistantResponseAudit,
+  explainContextSource,
+  summarizeAssistantResponseAudit,
+} from './audit';
+export type { AssistantResponseAudit, ResponseAuditSummary } from './audit';
