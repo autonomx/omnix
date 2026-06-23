@@ -53,7 +53,7 @@ export function RpgCombatSurface({ combat, onSelectCommand }: RpgCombatSurfacePr
                 <strong>{combatant.name}</strong>
                 <small>{combatant.role}</small>
               </div>
-              <span className="rpg-party-health" aria-label="Combatant health">
+              <span className="rpg-party-health" aria-label={`${combatant.name} health`}>
                 <span style={{ width: `${combatant.hpPercent}%` }} />
               </span>
               <small>
