@@ -56,6 +56,16 @@ export type {
 } from './event-store';
 
 export {
+  DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG,
+  createAssistantWorkspaceRuntimeConfig,
+} from './runtime-config';
+export type {
+  AssistantWorkspaceRuntimeConfig,
+  AssistantWorkspaceRuntimeEnv,
+  AssistantWorkspaceRuntimeFeatureFlags,
+} from './runtime-config';
+
+export {
   appendProjectionEvent,
   createConversationProjection,
   rebuildConversationProjection,
