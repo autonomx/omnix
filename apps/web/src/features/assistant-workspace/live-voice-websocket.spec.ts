@@ -20,7 +20,7 @@ describe('live voice websocket helpers', () => {
   });
 
   it('encodes clipped pcm16 audio as base64 payloads for the STT websocket', () => {
-    expect(encodePcm16Base64(new Float32Array([-2, 0, 2]))).toBe('AYAAAH9/');
+    expect(encodePcm16Base64(new Float32Array([-2, 0, 2]))).toBe('AYAAAP9/');
   });
 
   it('calculates rms for voice activity detection', () => {
