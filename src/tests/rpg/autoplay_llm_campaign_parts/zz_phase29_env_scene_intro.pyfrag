@@ -1,0 +1,27 @@
+def _phase29_install_env_scene_intro_wrapper() -> None:
+    original = globals().get("run_autoplay_campaign")
+    if not callable(original) or getattr(original, "_phase29_intro_wrapped", False):
+        return
+
+    def _wrapped_phase29_run_autoplay_campaign(args, __original=original):
+        summary = __original(args)
+        if not isinstance(summary, dict):
+            return summary
+        from app.rpg.env_scene_intro import build_env_scene_intro_request
+
+        rows = []
+        for row in summary.get("transcript_rows") or ():
+            if isinstance(row, dict):
+                decorated = dict(row)
+                decorated["env_scene_intro"] = build_env_scene_intro_request(row.get("turn_result") or row)
+                rows.append(decorated)
+        result = dict(summary)
+        result["transcript_rows"] = rows
+        result["env_scene_intro"] = {"source": "phase29_env_scene_intro_v1", "turn_count": len(rows)}
+        return result
+
+    _wrapped_phase29_run_autoplay_campaign._phase29_intro_wrapped = True
+    globals()["run_autoplay_campaign"] = _wrapped_phase29_run_autoplay_campaign
+
+
+_phase29_install_env_scene_intro_wrapper()
