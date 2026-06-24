@@ -1,0 +1,42 @@
+.assistant-side-panel-toggle {
+  align-items: center;
+  background: linear-gradient(180deg, rgba(12, 18, 34, 0.92), rgba(7, 11, 22, 0.96));
+  border: 1px solid rgba(132, 148, 196, 0.2);
+  border-radius: 0.95rem;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0.35rem;
+}
+
+.assistant-chat-side > .assistant-side-panel-toggle ~ .assistant-side-panel-toggle {
+  display: none !important;
+}
+
+.assistant-side-panel-toggle button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.72rem;
+  color: #aab3c8;
+  cursor: pointer;
+  font-weight: 850;
+  min-height: 2.7rem;
+  padding: 0 0.85rem;
+  text-align: center;
+}
+
+.assistant-side-panel-toggle button:hover,
+.assistant-side-panel-toggle button:focus-visible {
+  background: rgba(124, 92, 255, 0.12);
+  border-color: rgba(151, 114, 255, 0.24);
+  color: #f4f7ff;
+  outline: none;
+}
+
+.assistant-side-panel-toggle button.active {
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.96), rgba(34, 211, 238, 0.42));
+  border-color: rgba(151, 114, 255, 0.48);
+  color: #ffffff;
+}
