@@ -388,7 +388,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgC
 
         <div className="rpg-create-section rpg-create-section-stats">
           <h4>Point-buy stats</h4>
-          <p>{remainingPoints} point{remainingPoints === 1 ? '' : 's'} remaining</p>
+          <p>{remainingPoints} point{remainingPoints === 1 ? '' : 's'} left</p>
           <div className="rpg-stat-editor-grid">
             {statDefinitions.map((stat) => (
               <div className="rpg-stat-editor-row" key={stat.key}>
@@ -397,9 +397,9 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgC
                   <small>{stat.detail}</small>
                 </div>
                 <div className="rpg-stat-stepper">
-                  <button type="button" onClick={() => adjustStat(stat.key, -1)}>-</button>
+                  <button aria-label={`Decrease ${stat.label}`} type="button" onClick={() => adjustStat(stat.key, -1)}>-</button>
                   <span>{stats[stat.key]}</span>
-                  <button type="button" onClick={() => adjustStat(stat.key, 1)}>+</button>
+                  <button aria-label={`Increase ${stat.label}`} type="button" onClick={() => adjustStat(stat.key, 1)}>+</button>
                 </div>
               </div>
             ))}
