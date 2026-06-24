@@ -1,0 +1,18 @@
+def _phase18_install_narration_prompt_runtime_summary_wrapper() -> None:
+    original = globals().get("run_autoplay_campaign")
+    if not callable(original) or getattr(original, "_phase18_narration_prompt_wrapped", False):
+        return
+
+    def _wrapped_phase18_run_autoplay_campaign(args, __original=original):
+        summary = __original(args)
+        if not isinstance(summary, dict):
+            return summary
+        from app.rpg.narration_prompt_runtime import attach_narration_prompt_runtime_to_summary
+
+        return attach_narration_prompt_runtime_to_summary(summary, persist=True)
+
+    _wrapped_phase18_run_autoplay_campaign._phase18_narration_prompt_wrapped = True
+    globals()["run_autoplay_campaign"] = _wrapped_phase18_run_autoplay_campaign
+
+
+_phase18_install_narration_prompt_runtime_summary_wrapper()
