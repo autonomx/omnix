@@ -282,6 +282,28 @@ Acceptance criteria:
 - autoplay does not stall in tavern/shop loops;
 - suggested actions are always valid in current state.
 
+## Phase 16 — Integration Hardening and Readiness Audit
+
+Goal: Compose the Phase 1-15 deterministic foundations into one turn-level audit payload that highlights runtime wiring readiness without letting presentation change state.
+
+Features:
+
+- phase 1 narration quality plus safe rewrite contract output;
+- phase 2 prompt profile debug payload and registry validation;
+- phase 12 fast-action and blocking/deferred path audit;
+- phase 13 stricter replay snapshot validation for full runtime state groups;
+- phase 14 nested mod overlay mutation guardrails;
+- phase 15 director suggestion/readiness audit.
+
+Acceptance criteria:
+
+- the integration report is pure and side-effect free;
+- rewrite requests remain presentation-only;
+- replay snapshots require world, player, party, NPC, quest, map, inventory, combat, memory, seed, and counters;
+- nested mod overlays cannot hide forbidden state-mutation keys;
+- tests prove several phase foundations compose in one stable report payload.
+
 ## Status Log
 
 - 2026-06-24: Roadmap created. Phase 1 implementation begins with pure narration quality policy/report helpers and regression tests.
+- 2026-06-24: Phase 16 integration hardening adds a composite readiness report, stricter replay snapshot validation, nested world-pack overlay guards, and integration tests.
