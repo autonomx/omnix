@@ -10,6 +10,7 @@ from app.rpg.benchmark_replay_runtime import build_benchmark_replay_report
 from app.rpg.combat_runtime import build_combat_runtime_report
 from app.rpg.economy_runtime import build_economy_runtime_report
 from app.rpg.environmental_narration_runtime import build_environmental_narration_report
+from app.rpg.environmental_panel_runtime import build_environmental_panel_report
 from app.rpg.narration_prompt_runtime import build_narration_prompt_runtime_metadata
 from app.rpg.quest_runtime import build_quest_runtime_report
 from app.rpg.social_runtime import build_social_runtime_report
@@ -19,6 +20,7 @@ REPORT_SURFACE_RUNTIME_SOURCE = "phase25_report_surface_runtime_v1"
 _SECTION_BUILDERS = (
     ("narration_prompt", build_narration_prompt_runtime_metadata),
     ("environmental_narration", build_environmental_narration_report),
+    ("environmental_panel", build_environmental_panel_report),
     ("world", build_world_runtime_report),
     ("economy", build_economy_runtime_report),
     ("combat", build_combat_runtime_report),
