@@ -122,7 +122,6 @@ CORE_STAT_MAP = {
 }
 RPG_ONLY_STAT_KEYS = ("archery", "survival")
 
-
 STARTING_LOCATIONS: dict[str, dict[str, Any]] = {
     "rusty_flagon_tavern": {
         "title": "Rusty Flagon Tavern",
@@ -236,124 +235,103 @@ OPENING_HOOKS: dict[str, dict[str, Any]] = {
     },
     "merchant_job": {
         "label": "Merchant Job",
-        "summary": "A merchant has paid work ready, making trade, supplies, and delivery pressure available immediately.",
-        "quest": {"id": "merchant_job", "title": "Merchant's Ledger", "status": "active", "objective": "Speak with Elara about a paid delivery job before leaving the tavern."},
-        "timeline": {"title": "Merchant job offered", "detail": "Elara taps a ledger and mentions paid work for someone who can move quietly and quickly.", "kind": "economy"},
-        "quick_actions": ["Speak with Elara", "Review the delivery terms", "Buy supplies for the job"],
+        "summary": "A merchant needs something moved or found, making prices, supplies, and trade pressure useful immediately.",
+        "quest": {"id": "merchant_job", "title": "Merchant Job", "status": "active", "objective": "Meet the merchant, confirm payment, and decide whether to accept the job."},
+        "timeline": {"title": "Merchant request", "detail": "A merchant asks for help with a job that involves goods, payment, and a short route.", "kind": "economy"},
+        "quick_actions": ["Ask about payment", "Inspect the goods", "Negotiate terms"],
     },
 }
 
-OPENING_HOOK_ORDER = ["tavern_rumor", "bandit_trail", "missing_person", "guard_trouble", "merchant_job"]
-OPENING_PACE_LABELS = {"slow_roleplay": "Slow roleplay", "balanced": "Balanced", "immediate_action": "Immediate action"}
+OPENING_PACE_LABELS = {
+    "slow_roleplay": "Slow roleplay",
+    "balanced": "Balanced",
+    "immediate_action": "Immediate action",
+}
+
 RELATIONSHIP_PRESETS: dict[str, dict[str, Any]] = {
-    "unknown_outsider": {"label": "Unknown outsider", "relationships": [], "timeline": None},
+    "unknown_outsider": {"label": "Unknown outsider", "relationships": []},
     "local_regular": {
         "label": "Local regular",
-        "relationships": [{"name": "Bran", "stance": "Familiar", "score": 18, "role": "Innkeeper"}],
-        "timeline": {"title": "Recognized by Bran", "detail": "Bran remembers your usual seat and starts neutral-warm.", "kind": "relationship"},
+        "relationships": [{"name": "Bran", "stance": "Familiar", "score": 18}],
+        "timeline": {"title": "Familiar face", "detail": "Bran recognizes you well enough to use your name.", "kind": "relationship"},
     },
-    "known_contact_nearby": {
+    "known_contact": {
         "label": "Known contact nearby",
-        "relationships": [{"name": "Elara", "stance": "Contact", "score": 24, "role": "Merchant"}],
-        "timeline": {"title": "Known contact nearby", "detail": "Elara recognizes you and can be approached as an opening contact.", "kind": "relationship"},
+        "relationships": [{"name": "Elara", "stance": "Contact", "score": 22}],
+        "timeline": {"title": "Known contact", "detail": "Elara may be willing to help if approached carefully.", "kind": "relationship"},
     },
-    "owes_someone_a_favor": {
+    "owes_favor": {
         "label": "Owes someone a favor",
-        "relationships": [{"name": "Bran", "stance": "Favor owed", "score": 10, "role": "Innkeeper"}],
-        "timeline": {"title": "Favor owed", "detail": "Someone nearby remembers a debt that can become an early objective.", "kind": "relationship"},
+        "relationships": [{"name": "Bran", "stance": "Owed favor", "score": 12}],
+        "timeline": {"title": "Debt remembered", "detail": "Someone nearby has not forgotten an old favor.", "kind": "relationship"},
     },
     "guard_suspicion": {
         "label": "Guard suspicion",
-        "relationships": [{"name": "Captain Aldric", "stance": "Suspicious", "score": -12, "role": "Guard"}],
-        "timeline": {"title": "Guard suspicion", "detail": "Captain Aldric has already heard your name and watches for trouble.", "kind": "relationship"},
+        "relationships": [{"name": "Captain Aldric", "stance": "Suspicious", "score": -10}],
+        "timeline": {"title": "Guard suspicion", "detail": "Captain Aldric has heard enough to watch you closely.", "kind": "faction"},
     },
 }
 
-OPENING_HOOK_LABELS = {value["label"].lower(): key for key, value in OPENING_HOOKS.items()} | {"random from seed": "random_from_seed"}
-OPENING_PACE_KEYS_BY_LABEL = {label.lower(): key for key, label in OPENING_PACE_LABELS.items()}
-RELATIONSHIP_KEYS_BY_LABEL = {value["label"].lower(): key for key, value in RELATIONSHIP_PRESETS.items()}
-
-DEFAULT_INVENTORY: list[dict[str, Any]] = [
-    {"id": "travelers_cloak", "name": "Traveler's cloak", "quantity": 1, "type": "clothing"},
-    {"id": "bedroll", "name": "Bedroll", "quantity": 1, "type": "camping"},
-    {"id": "waterskin", "name": "Waterskin", "quantity": 1, "type": "supply"},
-    {"id": "ration", "name": "Ration", "quantity": 3, "type": "food"},
-    {"id": "torch", "name": "Torch", "quantity": 2, "type": "tool"},
-    {"id": "iron_dagger", "name": "Iron dagger", "quantity": 1, "type": "weapon"},
-    {"id": "simple_bow", "name": "Simple bow", "quantity": 1, "type": "weapon"},
-    {"id": "arrow", "name": "Arrow", "quantity": 20, "type": "ammo"},
-    {"id": "journal", "name": "Journal", "quantity": 1, "type": "quest"},
-]
-DEFAULT_CURRENCY = {"gold": 10, "silver": 25, "copper": 50}
-DEFAULT_EQUIPMENT = [
-    {"slot": "Weapon", "name": "Iron dagger"},
-    {"slot": "Ranged", "name": "Simple bow"},
-    {"slot": "Cloak", "name": "Traveler's cloak"},
-]
-REQUIRED_STARTER_ITEMS = [
-    {"id": "waterskin", "name": "Waterskin", "quantity": 1, "type": "supply"},
-    {"id": "journal", "name": "Journal", "quantity": 1, "type": "quest"},
-]
 STARTER_GEAR_CATALOG: dict[str, dict[str, Any]] = {
-    "travel cloak": {"id": "travel_cloak", "name": "Travel cloak", "type": "clothing", "slot": "Cloak"},
-    "fine cloak": {"id": "fine_cloak", "name": "Fine cloak", "type": "clothing", "slot": "Cloak"},
-    "iron dagger": {"id": "iron_dagger", "name": "Iron dagger", "type": "weapon", "slot": "Weapon"},
-    "shortbow": {"id": "shortbow", "name": "Shortbow", "type": "weapon", "slot": "Ranged"},
-    "hand axe": {"id": "hand_axe", "name": "Hand axe", "type": "weapon", "slot": "Weapon"},
-    "arrow bundle": {"id": "arrow", "name": "Arrow", "type": "ammo", "quantity": 20},
-    "trail rations": {"id": "ration", "name": "Trail rations", "type": "food"},
-    "rations": {"id": "ration", "name": "Rations", "type": "food"},
-    "torch": {"id": "torch", "name": "Torch", "type": "tool"},
-    "bedroll": {"id": "bedroll", "name": "Bedroll", "type": "camping"},
-    "ledger note": {"id": "ledger_note", "name": "Ledger note", "type": "quest"},
-    "field kit": {"id": "field_kit", "name": "Field kit", "type": "tool"},
-    "rope coil": {"id": "rope_coil", "name": "Rope coil", "type": "tool"},
-    "field journal": {"id": "field_journal", "name": "Field journal", "type": "quest"},
-    "ink kit": {"id": "ink_kit", "name": "Ink kit", "type": "tool"},
-    "old map": {"id": "old_map", "name": "Old map", "type": "quest"},
+    "travel cloak": {"id": "travel_cloak", "name": "Travel Cloak", "quantity": 1, "type": "clothing", "slot": "Cloak"},
+    "iron dagger": {"id": "iron_dagger", "name": "Iron Dagger", "quantity": 1, "type": "weapon", "slot": "Weapon"},
+    "trail rations": {"id": "trail_rations", "name": "Trail Rations", "quantity": 1, "type": "food"},
+    "rations": {"id": "trail_rations", "name": "Trail Rations", "quantity": 1, "type": "food"},
+    "torch": {"id": "torch", "name": "Torch", "quantity": 1, "type": "tool"},
+    "shortbow": {"id": "shortbow", "name": "Shortbow", "quantity": 1, "type": "weapon", "slot": "Weapon"},
+    "arrow bundle": {"id": "arrow_bundle", "name": "Arrow Bundle", "quantity": 1, "type": "ammunition"},
+    "bedroll": {"id": "bedroll", "name": "Bedroll", "quantity": 1, "type": "camp"},
+    "fine cloak": {"id": "fine_cloak", "name": "Fine Cloak", "quantity": 1, "type": "clothing", "slot": "Cloak"},
+    "ledger note": {"id": "ledger_note", "name": "Ledger Note", "quantity": 1, "type": "quest"},
+    "hand axe": {"id": "hand_axe", "name": "Hand Axe", "quantity": 1, "type": "weapon", "slot": "Weapon"},
+    "field kit": {"id": "field_kit", "name": "Field Kit", "quantity": 1, "type": "tool"},
+    "rope coil": {"id": "rope_coil", "name": "Rope Coil", "quantity": 1, "type": "tool"},
+    "field journal": {"id": "field_journal", "name": "Field Journal", "quantity": 1, "type": "tool"},
+    "ink kit": {"id": "ink_kit", "name": "Ink Kit", "quantity": 1, "type": "tool"},
+    "old map": {"id": "old_map", "name": "Old Map", "quantity": 1, "type": "tool"},
 }
 
+DEFAULT_INVENTORY = [
+    {"id": "travel_cloak", "name": "Travel Cloak", "quantity": 1, "type": "clothing"},
+    {"id": "iron_dagger", "name": "Iron Dagger", "quantity": 1, "type": "weapon"},
+    {"id": "trail_rations", "name": "Trail Rations", "quantity": 3, "type": "food"},
+    {"id": "torch", "name": "Torch", "quantity": 2, "type": "tool"},
+]
+DEFAULT_EQUIPMENT = [{"slot": "Weapon", "name": "Iron Dagger"}, {"slot": "Cloak", "name": "Travel Cloak"}]
+DEFAULT_CURRENCY = {"gold": 0, "silver": 10, "copper": 0}
+REQUIRED_STARTER_ITEMS = [
+    {"id": "water_skin", "name": "Water Skin", "quantity": 1, "type": "drink"},
+    {"id": "small_pouch", "name": "Small Pouch", "quantity": 1, "type": "container"},
+]
 
-def _normal_key(value: Any, fallback: str) -> str:
-    text = str(value or "").strip().lower().replace("-", "_")
+
+def _normal_key(value: str | None, fallback: str) -> str:
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
     return text or fallback
 
 
-def _summary_field(summary: str | None, field_name: str) -> str | None:
-    if not summary:
-        return None
-    marker = f"{field_name}:"
-    start = summary.lower().find(marker.lower())
-    if start < 0:
-        return None
-    start += len(marker)
-    end = summary.find(".", start)
-    value = summary[start : end if end >= 0 else len(summary)].strip()
-    return value or None
+def _summary_field(summary: str | None, field: str) -> str:
+    marker = f"{field}:"
+    for line in str(summary or "").splitlines():
+        if line.strip().lower().startswith(marker.lower()):
+            return line.split(":", 1)[1].strip()
+    return ""
 
 
-def _story_option(request: RpgNewGameRequest, field_name: str, fallback: str) -> str:
-    summary = request.generated_class_summary
-    if field_name == "opening_hook":
-        label = _summary_field(summary, "Opening")
-        if label:
-            return OPENING_HOOK_LABELS.get(label.lower(), _normal_key(label, fallback))
-    if field_name == "opening_pace":
-        label = _summary_field(summary, "Pace")
-        if label:
-            return OPENING_PACE_KEYS_BY_LABEL.get(label.lower(), _normal_key(label, fallback))
-    if field_name == "relationship_preset":
-        label = _summary_field(summary, "Relationship")
-        if label:
-            return RELATIONSHIP_KEYS_BY_LABEL.get(label.lower(), _normal_key(label, fallback))
-    return fallback
+def _story_option(request: RpgNewGameRequest, key: str, fallback: str) -> str:
+    value = None
+    extra = getattr(request, "__pydantic_extra__", None)
+    if isinstance(extra, dict):
+        value = extra.get(key)
+    return _normal_key(str(value), fallback)
 
 
 def _resolve_opening_hook(request: RpgNewGameRequest, seed: int) -> str:
-    hook = _story_option(request, "opening_hook", "tavern_rumor")
-    if hook in {"random", "random_seed", "random_from_seed"}:
-        return OPENING_HOOK_ORDER[seed % len(OPENING_HOOK_ORDER)]
-    return hook if hook in OPENING_HOOKS else "tavern_rumor"
+    configured = _story_option(request, "opening_hook", "tavern_rumor")
+    if configured in OPENING_HOOKS:
+        return configured
+    keys = sorted(OPENING_HOOKS.keys())
+    return keys[seed % len(keys)]
 
 
 def _build_story_setup(request: RpgNewGameRequest, location: dict[str, Any], seed: int) -> dict[str, Any]:
@@ -826,7 +804,7 @@ def _save_created_session(session: dict[str, Any]) -> dict[str, Any]:
     state = session.get("state") if isinstance(session.get("state"), dict) else None
     if state is not None:
         write_ability_coverage_snapshot(state)
-    saved = save_session(session, compact=False)
+    saved = save_session(session, compact=True)
     manifest = saved.get("manifest", {})
     return {"ok": True, "session_id": manifest.get("session_id") or manifest.get("id"), "status": "ready", "session": saved, "game": saved.get("state", {})}
 
@@ -892,7 +870,10 @@ def continue_rpg_session(session_id: str) -> dict[str, Any]:
 
 
 def delete_rpg_session(session_id: str) -> dict[str, Any]:
-    return archive_session(session_id)
+    result = archive_session(session_id)
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error", "delete_failed"), "session_id": session_id}
+    return {"ok": True, "session_id": session_id, "archived": True}
 
 
 def rename_rpg_session(session_id: str, name: str) -> dict[str, Any]:
@@ -900,8 +881,15 @@ def rename_rpg_session(session_id: str, name: str) -> dict[str, Any]:
     if not session:
         return {"ok": False, "error": "session_not_found", "session_id": session_id}
     manifest = dict(session.get("manifest") or {})
-    manifest["title"] = str(name or "").strip() or manifest.get("title") or session_id
+    cleaned = name.strip()
+    if not cleaned:
+        return {"ok": False, "error": "empty_session_name", "session_id": session_id}
+    manifest["title"] = cleaned[:120]
     manifest["updated_at"] = _utc_now()
     session["manifest"] = manifest
+    state = dict(session.get("state") or {})
+    state["title"] = manifest["title"]
+    state["updated_at"] = manifest["updated_at"]
+    session["state"] = state
     saved = save_session(session, compact=False)
     return {"ok": True, "session_id": session_id, "session": saved}
