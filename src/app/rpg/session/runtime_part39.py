@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Dict, Iterable
 
 # Generated split module for app.rpg.session.runtime.
@@ -101,9 +102,6 @@ def _phase8_part39_iter_sources(payload: Dict[str, Any]) -> Iterable[Dict[str, A
     except Exception:
         pass
 
-    for root in list(seen):
-        del root
-
 
 def _phase8_part39_source_field(source: Dict[str, Any], key: str) -> str:
     source = _safe_dict(source)
@@ -133,7 +131,9 @@ def _phase8_part39_source_text(source: Dict[str, Any], player_input: str) -> str
     ]
     pieces.extend(_safe_list(source.get("evidence_spans")))
     pieces.extend(_safe_list(semantic.get("evidence_spans")))
-    return _phase8_part39_norm(" ".join(_phase8_part39_clean_text(piece) for piece in pieces))
+    return _phase8_part39_norm(
+        " ".join(_phase8_part39_clean_text(piece) for piece in pieces)
+    )
 
 
 def _phase8_part39_is_social_claim_source(source: Dict[str, Any], player_input: str) -> bool:
@@ -160,7 +160,11 @@ def _phase8_part39_is_social_claim_source(source: Dict[str, Any], player_input: 
     text = _phase8_part39_source_text(source, player_input)
     has_claim_marker = any(marker in text for marker in _PHASE8_PART39_CLAIM_MARKERS)
     has_achievement = any(verb in text.split() for verb in _PHASE8_PART39_ACHIEVEMENT_VERBS)
-    looks_declarative = utterance_mode in {"declarative", "report", "reporting", "statement"} or "report" in activity_label or "claim" in activity_label
+    looks_declarative = (
+        utterance_mode in {"declarative", "report", "reporting", "statement"}
+        or "report" in activity_label
+        or "claim" in activity_label
+    )
 
     # A player statement such as "I killed a dragon" is a claim heard in the
     # scene. It is not proof that combat, rewards, quests, or world facts changed.
@@ -182,7 +186,14 @@ def _phase8_part39_has_travel_mismatch(payload: Dict[str, Any]) -> bool:
         action_text = _phase8_part39_norm(
             " ".join(
                 _phase8_part39_clean_text(source.get(key))
-                for key in ("action", "narration", "final_narration", "summary", "outcome", "visible_interaction_reason")
+                for key in (
+                    "action",
+                    "narration",
+                    "final_narration",
+                    "summary",
+                    "outcome",
+                    "visible_interaction_reason",
+                )
             )
         )
         if action_type in _PHASE8_PART39_TRAVEL_ACTIONS and (
