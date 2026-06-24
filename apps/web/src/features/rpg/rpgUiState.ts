@@ -114,6 +114,7 @@ export interface RpgJobCardPreview {
   status: string;
   progress: number;
   detail: string;
+  errorDetail?: string;
   source: 'live' | 'preview';
 }
 
@@ -193,6 +194,7 @@ interface TimelineEvent {
 }
 
 const NOT_TRACKED = 'Not tracked yet';
+const EMPTY_VISIBLE_RESPONSE_TEXT = new Set(['', '[]', '{}', '[ ]', '{ }', 'null', 'none', 'false', 'true']);
 
 export const previewHeroSummary: RpgHeroSummaryPreview = {
   avatar: 'A',
@@ -367,7 +369,9 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
   const rpgJobs = sources.jobs?.jobs?.filter((job) => job.module === 'rpg') ?? [];
   const rpgAssets = sources.assets?.assets?.filter((asset) => asset.type === 'rpg_checkpoint' || asset.module === 'rpg') ?? [];
   const rpgReports = sources.reports?.reports?.filter((report) => report.kind.includes('rpg') || report.id.includes('rpg')) ?? [];
-  const jobCards = rpgJobs.length ? rpgJobs.map(toJobCard) : selectedSessionSummary.source === 'live' ? [] : previewJobs;
+  const jobCards = rpgJobs.length
+    ? [...rpgJobs].sort(compareRpgJobsForCards).map(toJobCard)
+    : selectedSessionSummary.source === 'live' ? [] : previewJobs;
   const heroSummary = buildHeroSummary(selectedSession);
   const turnMessages = buildRpgTurnJobTimelineEvents(rpgJobs, selectedSessionSummary.id, heroSummary.name);
   const sessionTimeline = buildTimelineEvents(selectedSession);
@@ -878,14 +882,42 @@ function buildCheckpointSummary(assets: RpgAsset[], selectedSession: RpgSessionS
 }
 
 function toJobCard(job: RpgJob): RpgJobCardPreview {
+  const errorDetail = jobErrorDetail(job);
   return {
     id: String(job.id),
     title: String(job.type),
     status: String(job.status),
     progress: progressPercent(job.progress),
     detail: job.stages?.map((stage) => stage.label).join(' / ') || String(job.resource_class),
+    ...(errorDetail ? { errorDetail } : {}),
     source: 'live',
   };
+}
+
+function compareRpgJobsForCards(left: RpgJob, right: RpgJob): number {
+  const leftActiveRank = activeJobRank(left.status);
+  const rightActiveRank = activeJobRank(right.status);
+  if (leftActiveRank !== rightActiveRank) return leftActiveRank - rightActiveRank;
+  const leftUpdated = timestampRank(firstString(left.updated_at, left.created_at));
+  const rightUpdated = timestampRank(firstString(right.updated_at, right.created_at));
+  if (leftUpdated !== rightUpdated) return rightUpdated - leftUpdated;
+  return String(left.id).localeCompare(String(right.id));
+}
+
+function activeJobRank(status: unknown): number {
+  const normalized = String(status ?? '').toLowerCase();
+  return ['queued', 'running', 'pending'].includes(normalized) ? 0 : 1;
+}
+
+function jobErrorDetail(job: RpgJob): string | undefined {
+  const jobError = recordValue(job.error);
+  const stageError = job.stages?.map((stage) => recordValue(stage.error)).find(Boolean);
+  return firstString(
+    jobError?.message,
+    jobError?.code,
+    stageError?.message,
+    stageError?.code,
+  );
 }
 
 function toStat(label: string, metric: { current: number; max: number }, tone: RpgStatPreview['tone']): RpgStatPreview {
@@ -1031,7 +1063,7 @@ function cleanRpgTurnResponse(response: string | undefined): string | undefined 
   const text = visibleParagraphs
     .map((paragraph) => paragraph.replace(/,['’](?=\s)/g, ',"').replace(/(\s)['’](?=[A-Z])/g, '$1"'))
     .join('\n\n');
-  return text || undefined;
+  return text && !EMPTY_VISIBLE_RESPONSE_TEXT.has(text.toLowerCase()) ? text : undefined;
 }
 
 function buildStoryMessages(events: TimelineEvent[], hero: RpgHeroSummaryPreview): RpgStoryMessagePreview[] {

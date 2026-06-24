@@ -94,11 +94,18 @@ function firstString(...values: unknown[]): string | null {
   return null;
 }
 
+const EMPTY_VISIBLE_RESPONSE_TEXT = new Set(['', '[]', '{}', '[ ]', '{ }', 'null', 'none', 'false', 'true']);
+
+function isEmptyVisibleResponseText(text: string): boolean {
+  return EMPTY_VISIBLE_RESPONSE_TEXT.has(text.trim().toLowerCase());
+}
+
 function cleanSubmittedTurnResponse(response: string | null): string | null {
   if (!response) return null;
   const paragraphs = response.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
   const visibleParagraphs = paragraphs.filter((paragraph) => !/^(?:Action|Result):\s*/i.test(paragraph));
-  return (visibleParagraphs.length ? visibleParagraphs : paragraphs).join('\n\n') || null;
+  const text = (visibleParagraphs.length ? visibleParagraphs : paragraphs).join('\n\n');
+  return text && !isEmptyVisibleResponseText(text) ? text : null;
 }
 
 function submittedTurnResponseContent(job: JobRecord | undefined): string | null {
@@ -599,9 +606,11 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     heroSummary.avatar,
     selectedLiveSessionId,
   );
-  const visibleStoryMessages = submittedTurnStoryMessages.length
-    && !storyMessages.some((message) => submittedTurnStoryMessages.some((submitted) => submitted.speaker === message.speaker && submitted.text === message.text))
-    ? [...submittedTurnStoryMessages, ...storyMessages].slice(0, 10)
+  const missingSubmittedTurnMessages = submittedTurnStoryMessages.filter(
+    (submitted) => !storyMessages.some((message) => submitted.text === message.text),
+  );
+  const visibleStoryMessages = missingSubmittedTurnMessages.length
+    ? [...storyMessages, ...missingSubmittedTurnMessages].slice(-10)
     : storyMessages;
 
   return (

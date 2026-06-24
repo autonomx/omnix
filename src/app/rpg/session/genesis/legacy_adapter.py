@@ -249,6 +249,9 @@ def _sync_session_stats_from_genesis(state: dict[str, Any], contract: CampaignGe
 def attach_genesis_to_created_session(
     result: dict[str, Any],
     contract: CampaignGenesisContract,
+    *,
+    persist: bool = True,
+    compact_save: bool = False,
 ) -> dict[str, Any]:
     if result.get("ok") is not True:
         return result
@@ -257,7 +260,9 @@ def attach_genesis_to_created_session(
         return result
     from app.rpg.session.service import load_session, save_session
 
-    session = load_session(session_id)
+    session = result.get("session") if isinstance(result.get("session"), dict) else None
+    if session is None:
+        session = load_session(session_id)
     if not session:
         return result
     genesis = canonical_genesis_payload(contract)
@@ -314,7 +319,7 @@ def attach_genesis_to_created_session(
             "manifest": manifest,
         }
     )
-    saved = save_session(session, compact=False)
+    saved = save_session(session, compact=compact_save) if persist else session
     return {
         **result,
         "session": saved,

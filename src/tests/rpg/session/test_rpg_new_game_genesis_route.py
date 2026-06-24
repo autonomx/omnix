@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.gateway.rpg_session_routes import register_rpg_session_routes
 from app.rpg.session import durable_store
+from app.rpg.session import service as session_service
 from app.rpg.session.service import load_session
 
 
@@ -199,3 +200,26 @@ def test_new_game_route_preserves_full_wizard_genesis_payload(monkeypatch, tmp_p
     inventory_names = {item["name"] for item in state["player"]["inventory"]}
     assert {"Travel cloak", "Iron dagger", "Trail rations", "Torch"}.issubset(inventory_names)
     assert state["player"]["currency"]["silver"] == 10
+
+
+def test_new_game_route_uses_one_compact_genesis_final_save(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(durable_store, "_SESSION_DIR", tmp_path)
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    save_compact_flags: list[bool] = []
+    original_save_session_to_disk = session_service.save_session_to_disk
+
+    def spy_save_session_to_disk(session: dict, *, compact: bool = False) -> dict:
+        save_compact_flags.append(compact)
+        return original_save_session_to_disk(session, compact=compact)
+
+    monkeypatch.setattr(session_service, "save_session_to_disk", spy_save_session_to_disk)
+
+    app = FastAPI()
+    register_rpg_session_routes(app)
+    client = TestClient(app)
+
+    response = client.post("/api/rpg/new-game", json=_wizard_payload())
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert save_compact_flags == [True, True]

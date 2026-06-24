@@ -37,6 +37,8 @@ def attach_compiled_genesis_to_session(
     result: dict[str, Any],
     compiled: dict[str, Any],
     bootstrap: dict[str, Any],
+    *,
+    compact_save: bool = False,
 ) -> dict[str, Any]:
     if result.get("ok") is not True:
         return result
@@ -45,7 +47,9 @@ def attach_compiled_genesis_to_session(
         return result
     from app.rpg.session.service import load_session, save_session
 
-    session = load_session(session_id)
+    session = result.get("session") if isinstance(result.get("session"), dict) else None
+    if session is None:
+        session = load_session(session_id)
     if not session:
         return result
     state = _safe_dict(session.get("state"))
@@ -74,7 +78,7 @@ def attach_compiled_genesis_to_session(
             "manifest": manifest,
         }
     )
-    saved = save_session(session, compact=False)
+    saved = save_session(session, compact=compact_save)
     return {
         **result,
         "session": saved,
@@ -95,5 +99,5 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
 
     legacy_request = _preserve_seed_zero(RpgNewGameRequest.model_validate(legacy))
     result = create_new_game_session(legacy_request)
-    result = attach_genesis_to_created_session(result, contract)
-    return attach_compiled_genesis_to_session(result, compiled, bootstrap)
+    result = attach_genesis_to_created_session(result, contract, persist=False)
+    return attach_compiled_genesis_to_session(result, compiled, bootstrap, compact_save=True)

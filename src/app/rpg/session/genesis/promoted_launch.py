@@ -30,5 +30,5 @@ def create_promoted_new_game(payload: dict[str, Any]) -> dict[str, Any]:
     from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
 
     result = create_new_game_session(RpgNewGameRequest.model_validate(legacy))
-    result = attach_genesis_to_created_session(result, contract)
-    return attach_compiled_genesis_to_session(result, compiled, bootstrap)
+    result = attach_genesis_to_created_session(result, contract, persist=False)
+    return attach_compiled_genesis_to_session(result, compiled, bootstrap, compact_save=True)

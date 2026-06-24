@@ -71,6 +71,101 @@ describe('rpg UI state', () => {
     expect(state.jobCards[0]).toMatchObject({ id: 'job:rpg', progress: 25, source: 'live', title: 'rpg.turn' });
   });
 
+  it('projects failed job reasons into RPG job cards', () => {
+    const jobs = {
+      jobs: [
+        {
+          id: 'job:rpg-report-failed',
+          module: 'rpg',
+          type: 'rpg.report.last10',
+          status: 'failed',
+          resource_class: 'cpu',
+          priority: 0,
+          progress: { current: 2, total: 3 },
+          stages: [
+            { id: 'load-session', label: 'Load RPG session', resource_class: 'cpu', status: 'done' },
+            {
+              id: 'collect-turns',
+              label: 'Collect last 10 turns',
+              resource_class: 'cpu',
+              status: 'failed',
+              error: { code: 'session_not_found', message: 'RPG session could not be loaded.', retryable: false },
+            },
+          ],
+          created_at: '2026-06-16T00:00:00Z',
+          updated_at: '2026-06-16T00:00:00Z',
+          error: { code: 'report_failed', message: 'Last 10 turn report failed before ZIP creation.', retryable: false },
+        },
+        {
+          id: 'job:rpg-stage-failed',
+          module: 'rpg',
+          type: 'rpg.turn',
+          status: 'failed',
+          resource_class: 'gpu:llm',
+          priority: 0,
+          stages: [
+            {
+              id: 'narrate',
+              label: 'Generate narration',
+              resource_class: 'gpu:llm',
+              status: 'failed',
+              error: { code: 'provider_unavailable', message: 'Narration provider is unavailable.', retryable: true },
+            },
+          ],
+          created_at: '2026-06-16T00:00:00Z',
+          updated_at: '2026-06-16T00:00:00Z',
+        },
+      ],
+    } as JobListResponse;
+
+    const state = createRpgWorkspaceState({ jobs });
+
+    expect(state.jobCards[0]).toMatchObject({
+      id: 'job:rpg-report-failed',
+      errorDetail: 'Last 10 turn report failed before ZIP creation.',
+    });
+    expect(state.jobCards[1]).toMatchObject({
+      id: 'job:rpg-stage-failed',
+      errorDetail: 'Narration provider is unavailable.',
+    });
+  });
+
+  it('orders active RPG jobs before older completed job cards', () => {
+    const jobs = {
+      jobs: [
+        {
+          id: 'job:completed-newer',
+          module: 'rpg',
+          type: 'rpg.turn',
+          status: 'completed',
+          resource_class: 'gpu:llm',
+          priority: 0,
+          progress: { current: 4, total: 4 },
+          stages: [],
+          created_at: '2026-06-16T00:10:00Z',
+          updated_at: '2026-06-16T00:20:00Z',
+        },
+        {
+          id: 'job:running-current',
+          module: 'rpg',
+          type: 'rpg.report.last10',
+          status: 'running',
+          resource_class: 'cpu',
+          priority: 0,
+          progress: { current: 1, total: 3 },
+          stages: [{ id: 'collect-turns', label: 'Collect last 10 turns', resource_class: 'cpu', status: 'running' }],
+          created_at: '2026-06-16T00:05:00Z',
+          updated_at: '2026-06-16T00:06:00Z',
+        },
+      ],
+    } as JobListResponse;
+
+    const state = createRpgWorkspaceState({ jobs });
+
+    expect(state.jobCards.map((job) => job.id)).toEqual(['job:running-current', 'job:completed-newer']);
+    expect(state.jobCards[0]).toMatchObject({ progress: 33, status: 'running', title: 'rpg.report.last10' });
+  });
+
   it('renders environment snapshot rows without moving reputation into world state', () => {
     const inventory = {
       sessions: [
@@ -408,6 +503,43 @@ describe('rpg UI state', () => {
     ]);
     expect(state.recentEvents).not.toContain('This belongs elsewhere.');
     expect(state.recentEvents).not.toContain('Wrong session response.');
+  });
+
+  it('does not project empty array RPG turn responses into the live timeline', () => {
+    const state = createRpgWorkspaceState({
+      inventory: {
+        sessions: [{ session_id: 'session-live', title: 'Live campaign', updated_at: '2026-06-22T01:00:00Z' }],
+      },
+      jobs: {
+        jobs: [
+          {
+            id: 'job:empty-response',
+            module: 'rpg',
+            type: 'rpg.turn',
+            status: 'completed',
+            resource_class: 'gpu:llm',
+            priority: 0,
+            stages: [],
+            input_ref: { session_id: 'session-live' },
+            input_payload: { command: 'Listen to the hearth-side conversation' },
+            output_refs: [{ type: 'rpg_turn_response', content: '[]' }],
+            created_at: '2026-06-22T01:19:36Z',
+            updated_at: '2026-06-22T01:19:39Z',
+            completed_at: '2026-06-22T01:19:39Z',
+          },
+        ],
+      } as JobListResponse,
+      selectedSessionId: 'session-live',
+      selectedSession: {
+        manifest: { session_id: 'session-live', title: 'Live campaign' },
+        state: { player: { name: 'Elara' } },
+      },
+    });
+
+    expect(state.storyMessages).toEqual([
+      { avatar: 'E', speaker: 'Elara (You)', text: 'Listen to the hearth-side conversation', tone: 'player' },
+    ]);
+    expect(state.storyMessages.some((message) => message.text === '[]')).toBe(false);
   });
 
   it('does not leak the previous campaign conversation while a new selection loads', () => {

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.jobs.models import JobRecord
+from app.jobs.inline_feature_jobs import _execute_feature_job
 from app.jobs.rpg_last10_report import (
     RPG_LAST10_REPORT_JOB_TYPE,
     build_rpg_last10_report_payload,
@@ -19,6 +20,40 @@ class FakeJobStore:
 
     def list_jobs(self) -> list[JobRecord]:
         return list(self._jobs)
+
+
+class FakeExecutableJobStore(FakeJobStore):
+    def __init__(self, jobs: list[JobRecord], output_root: Path) -> None:
+        super().__init__(jobs)
+        self.output_root = output_root
+        self.running_job_ids: list[str] = []
+        self.completed_requests: list[tuple[str, Any]] = []
+        self.failed_requests: list[tuple[str, Any]] = []
+
+    def mark_running(self, job_id: str) -> None:
+        self.running_job_ids.append(job_id)
+
+    def complete_job(self, job_id: str, request: Any) -> JobRecord:
+        self.completed_requests.append((job_id, request))
+        return _job_record(
+            job_id=job_id,
+            job_type=RPG_LAST10_REPORT_JOB_TYPE,
+            session_id="session-live-1",
+            created_offset=999,
+            duration=1,
+            input_payload={"turn_limit": 10},
+        )
+
+    def fail_job(self, job_id: str, request: Any) -> JobRecord:
+        self.failed_requests.append((job_id, request))
+        return _job_record(
+            job_id=job_id,
+            job_type=RPG_LAST10_REPORT_JOB_TYPE,
+            session_id="session-live-1",
+            created_offset=999,
+            duration=1,
+            input_payload={"turn_limit": 10},
+        )
 
 
 def _iso(offset_seconds: int) -> str:
@@ -107,3 +142,41 @@ def test_last10_report_payload_uses_completed_turn_jobs_and_performance_metrics(
             "rpg-last10-turn-transcript.json",
             "rpg-last10-turn-report.html",
         }
+
+
+def test_last10_report_is_supported_by_inline_feature_dispatcher(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    turn_job = _job_record(
+        job_id="job:turn-01",
+        job_type="rpg.turn",
+        session_id="session-live-1",
+        created_offset=10,
+        duration=3,
+        command="Ask Bran about business.",
+        response="Bran says business is steady.",
+    )
+    report_job = _job_record(
+        job_id="job:report",
+        job_type=RPG_LAST10_REPORT_JOB_TYPE,
+        session_id="session-live-1",
+        created_offset=999,
+        duration=1,
+        input_payload={"turn_limit": 10},
+    )
+    store = FakeExecutableJobStore([turn_job], tmp_path)
+
+    monkeypatch.setattr(
+        "app.jobs.rpg_last10_report.write_rpg_last10_report",
+        lambda payload: write_rpg_last10_report(payload, output_root=tmp_path),
+    )
+
+    _execute_feature_job(store, report_job)
+
+    assert store.running_job_ids == ["job:report"]
+    assert store.failed_requests == []
+    assert store.completed_requests
+    output_refs = store.completed_requests[0][1].output_refs
+    assert output_refs[0]["type"] == "rpg_last10_turn_report"
+    assert "rpg-last10-turn-report.zip" in output_refs[0]["content"]

@@ -194,6 +194,7 @@ export function RpgWorldRail({
                 </div>
                 <Progress value={job.progress} aria-label={`${job.title} progress`} />
                 <Text size="xs">{job.detail}</Text>
+                {job.errorDetail ? <Text className="rpg-job-error" size="xs">Reason: {job.errorDetail}</Text> : null}
               </article>
             ))
           ) : (

@@ -12,8 +12,10 @@ from typing import Any, Callable
 
 from .models import CompleteJobRequest, FailJobRequest, JobRecord
 
-INLINE_FEATURE_JOB_TYPES = {"story.generate", "podcast.generate", "rpg.turn"}
-BACKGROUND_INLINE_FEATURE_JOB_TYPES = {"rpg.turn"}
+RPG_LAST10_REPORT_JOB_TYPE = "rpg.report.last10"
+
+INLINE_FEATURE_JOB_TYPES = {"story.generate", "podcast.generate", "rpg.turn", RPG_LAST10_REPORT_JOB_TYPE}
+BACKGROUND_INLINE_FEATURE_JOB_TYPES = {"rpg.turn", RPG_LAST10_REPORT_JOB_TYPE}
 INLINE_FEATURE_JOB_EXECUTOR_ENV = "OMNIX_INLINE_FEATURE_JOB_EXECUTOR"
 THREAD_EXECUTOR = "thread"
 
@@ -107,6 +109,11 @@ def execute_feature_job_by_id(db_path: str, job_id: str) -> JobRecord:
 
 
 def _execute_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
+    if job.type == RPG_LAST10_REPORT_JOB_TYPE:
+        from .rpg_last10_report import execute_rpg_last10_report_job
+
+        return execute_rpg_last10_report_job(job_store, job)
+
     job_store.mark_running(job.id)
     try:
         result = _render_job(job)

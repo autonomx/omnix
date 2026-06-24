@@ -398,6 +398,65 @@ describe('RpgWorkspace', () => {
     expect(screen.queryByText(/Gateway did not acknowledge/)).not.toBeInTheDocument();
   });
 
+  it('keeps a newly submitted RPG turn at the end of the conversation while pending', async () => {
+    const previousTurnJob = {
+      id: 'job:rpg-previous-turn',
+      module: 'rpg',
+      type: 'rpg.turn',
+      status: 'completed',
+      resource_class: 'gpu:llm',
+      priority: 0,
+      stages: [],
+      input_ref: { session_id: 'rpg-session-1' },
+      input_payload: { command: 'Ask Bran about yesterday.' },
+      output_refs: [{
+        type: 'rpg_turn_response',
+        content: 'Bran nods at the ledger.',
+      }],
+      created_at: '2026-06-14T00:00:01Z',
+      updated_at: '2026-06-14T00:00:04Z',
+      completed_at: '2026-06-14T00:00:04Z',
+    };
+    const pendingTurnJob = {
+      id: 'job:rpg-new-pending',
+      module: 'rpg',
+      type: 'rpg.turn',
+      status: 'queued',
+      resource_class: 'gpu:llm',
+      priority: 0,
+      stages: [],
+      input_ref: { session_id: 'rpg-session-1' },
+      input_payload: { command: 'Ask Bran how business is going.' },
+      output_refs: [],
+      created_at: '2026-06-14T00:00:05Z',
+      updated_at: '2026-06-14T00:00:05Z',
+      completed_at: null,
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/replay/persistence/inventory') return Response.json(emptyWorkspaceResponses.inventory);
+      if (path === '/api/jobs' && init?.method === 'POST') return Response.json(pendingTurnJob);
+      if (path === '/api/jobs') return Response.json({ jobs: [previousTurnJob] });
+      if (path.startsWith('/api/jobs/job%3Arpg-new-pending')) return Response.json(pendingTurnJob);
+      if (path === '/api/assets') return Response.json(emptyWorkspaceResponses.assets);
+      if (path === '/api/reports') return Response.json(emptyWorkspaceResponses.reports);
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+
+    const conversation = screen.getByLabelText('Conversation');
+    const previousResponse = await within(conversation).findByText('Bran nods at the ledger.');
+
+    fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran how business is going.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+
+    const pendingCommand = await within(conversation).findByText('Ask Bran how business is going.');
+    expect(previousResponse.compareDocumentPosition(pendingCommand) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('renders the submitted RPG turn from the direct job poll when the job list is stale', async () => {
     let turnQueued = false;
     const completedJob = {
@@ -442,6 +501,54 @@ describe('RpgWorkspace', () => {
 
     expect(await screen.findByText('Ask Bran how business is going.')).toBeInTheDocument();
     expect(await screen.findByText(/Business is steady enough tonight/)).toBeInTheDocument();
+  });
+
+  it('does not render empty array submitted RPG responses as narrator text', async () => {
+    let turnQueued = false;
+    const completedJob = {
+      id: 'job:rpg-empty-response',
+      module: 'rpg',
+      type: 'rpg.turn',
+      status: 'completed',
+      resource_class: 'gpu:llm',
+      priority: 0,
+      stages: [],
+      input_ref: { session_id: 'rpg-session-1' },
+      input_payload: { command: 'Listen to the hearth-side conversation' },
+      output_refs: [{
+        type: 'rpg_turn_response',
+        content: '[]',
+      }],
+      created_at: '2026-06-14T00:00:01Z',
+      updated_at: '2026-06-14T00:00:04Z',
+      completed_at: '2026-06-14T00:00:04Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/replay/persistence/inventory') return Response.json(emptyWorkspaceResponses.inventory);
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        turnQueued = true;
+        return Response.json({ ...completedJob, status: 'queued', output_refs: [] });
+      }
+      if (path === '/api/jobs') return Response.json({ jobs: [] });
+      if (path.startsWith('/api/jobs/job%3Arpg-empty-response') && turnQueued) {
+        return Response.json(completedJob);
+      }
+      if (path === '/api/assets') return Response.json(emptyWorkspaceResponses.assets);
+      if (path === '/api/reports') return Response.json(emptyWorkspaceResponses.reports);
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+    fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Listen to the hearth-side conversation' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+
+    const conversation = screen.getByLabelText('Conversation');
+    expect(await within(conversation).findByText('Listen to the hearth-side conversation')).toBeInTheDocument();
+    expect(within(conversation).queryByText('[]')).not.toBeInTheDocument();
+    expect(within(conversation).queryByText('Omnix (Narrator)')).not.toBeInTheDocument();
   });
 
   it('surfaces a terminal RPG turn job failure', async () => {

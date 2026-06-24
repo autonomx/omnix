@@ -157,4 +157,42 @@ describe('RpgWorldRail', () => {
     expect(screen.getByText('rpg.turn.3')).toBeInTheDocument();
     expect(screen.queryByText('rpg.turn.4')).not.toBeInTheDocument();
   });
+
+  it('shows the failure reason for failed RPG job cards', () => {
+    renderWithTheme(
+      <RpgWorldRail
+        autoplayRunning={false}
+        autoplayStatusLabel="Off"
+        checkpointSummary={{ label: 'Latest checkpoint', detail: 'checkpoint-001.json', source: 'live' }}
+        encounter={previewEncounter}
+        isAutoplayPending={false}
+        isCreatingCheckpoint={false}
+        isRefreshingJobs={false}
+        jobCards={[
+          {
+            id: 'job-report-failed',
+            title: 'rpg.report.last10',
+            status: 'failed',
+            progress: 66,
+            detail: 'Load RPG session / Collect last 10 turns / Write debug ZIP report',
+            errorDetail: 'Last 10 turn report failed before ZIP creation.',
+            source: 'live',
+          },
+        ]}
+        npcRelationships={npcRelationships}
+        onCreateCheckpoint={vi.fn()}
+        onRefreshJobs={vi.fn()}
+        onToggleAutoplay={vi.fn()}
+        reportsHref="/api/reports"
+        rpgAssets={[]}
+        rpgJobCount={1}
+        rpgReportCount={0}
+        selectedSessionSummary={previewSessionSummary}
+        worldStateRows={previewWorldStateRows}
+      />
+    );
+
+    expect(screen.getByText('rpg.report.last10')).toBeInTheDocument();
+    expect(screen.getByText('Reason: Last 10 turn report failed before ZIP creation.')).toBeInTheDocument();
+  });
 });

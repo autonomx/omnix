@@ -1120,6 +1120,10 @@
   gap: 0.75rem;
 }
 
+.rpg-job-error {
+  color: #fca5a5;
+}
+
 .rpg-report-row {
   grid-template-columns: auto minmax(0, 1fr);
 }

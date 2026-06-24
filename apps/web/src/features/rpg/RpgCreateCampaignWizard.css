@@ -81,7 +81,9 @@
 }
 
 .rpg-create-section-identity,
+.rpg-create-section-profile,
 .rpg-create-section-build,
+.rpg-create-section-story,
 .rpg-create-section-world,
 .rpg-create-section-systems {
   grid-column: span 4;
@@ -98,7 +100,7 @@
 .rpg-create-field-grid,
 .rpg-system-toggle-grid,
 .rpg-capability-grid,
-.rpg-stat-allocation-grid,
+.rpg-stat-editor-grid,
 .rpg-create-stage-list,
 .rpg-create-summary dl,
 .rpg-starter-kit ul,
@@ -126,6 +128,11 @@
   color: #f3f0ff;
   min-width: 0;
   padding: 0.78rem;
+}
+
+.rpg-create-field-grid option {
+  background: #07060d;
+  color: #f3f0ff;
 }
 
 .rpg-create-field-grid input:focus,
@@ -182,11 +189,42 @@
   color: #fecdd3;
 }
 
-.rpg-stat-allocation-grid {
+.rpg-template-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.rpg-template-card {
+  align-items: start;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(151, 114, 255, 0.13);
+  border-radius: 0.72rem;
+  color: #f7f4ff;
+  cursor: pointer;
+  display: grid;
+  gap: 0.18rem;
+  min-height: 3.3rem;
+  min-width: 0;
+  padding: 0.68rem;
+  text-align: left;
+  width: 100%;
+}
+
+.rpg-template-card:hover,
+.rpg-template-card-selected {
+  background: rgba(124, 58, 237, 0.18);
+  border-color: rgba(151, 114, 255, 0.42);
+}
+
+.rpg-template-card small {
+  line-height: 1.35;
+}
+
+.rpg-stat-editor-grid {
   grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
 }
 
-.rpg-stat-allocation-row {
+.rpg-stat-editor-row {
   align-items: center;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(151, 114, 255, 0.12);
@@ -197,14 +235,15 @@
   padding: 0.68rem;
 }
 
-.rpg-stat-allocation-row strong,
+.rpg-stat-editor-row strong,
+.rpg-template-card strong,
 .rpg-create-summary dt,
 .rpg-starter-kit strong,
 .rpg-create-stage-row strong {
   color: #f7f4ff;
 }
 
-.rpg-stat-allocation-row div:first-child {
+.rpg-stat-editor-row div:first-child {
   display: grid;
   gap: 0.18rem;
   min-width: 0;
@@ -396,8 +435,10 @@
 
 @media (max-width: 1180px) {
   .rpg-create-section-identity,
+  .rpg-create-section-profile,
   .rpg-create-section-build,
   .rpg-create-section-stats,
+  .rpg-create-section-story,
   .rpg-create-section-world,
   .rpg-create-section-systems,
   .rpg-create-summary {
@@ -415,7 +456,7 @@
     flex-direction: column;
   }
 
-  .rpg-stat-allocation-row {
+  .rpg-stat-editor-row {
     grid-template-columns: 1fr;
   }
 }
