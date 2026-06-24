@@ -1,0 +1,18 @@
+def _phase25_install_report_surface_summary_wrapper() -> None:
+    original = globals().get("run_autoplay_campaign")
+    if not callable(original) or getattr(original, "_phase25_report_surface_wrapped", False):
+        return
+
+    def _wrapped_phase25_run_autoplay_campaign(args, __original=original):
+        summary = __original(args)
+        if not isinstance(summary, dict):
+            return summary
+        from app.rpg.report_surface_runtime import attach_report_surface_to_summary
+
+        return attach_report_surface_to_summary(summary, persist=True)
+
+    _wrapped_phase25_run_autoplay_campaign._phase25_report_surface_wrapped = True
+    globals()["run_autoplay_campaign"] = _wrapped_phase25_run_autoplay_campaign
+
+
+_phase25_install_report_surface_summary_wrapper()
