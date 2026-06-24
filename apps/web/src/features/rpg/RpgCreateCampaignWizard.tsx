@@ -56,7 +56,7 @@ type LaunchResponseWithProgress = RpgLaunchResponse & {
 };
 
 const FALLBACK_PROGRESS_STEPS = [8, 18, 31, 44, 56, 68, 78, 88, 96, 100];
-const PENDING_PROGRESS_STEPS = FALLBACK_PROGRESS_STEPS.slice(1, -1);
+const PENDING_PROGRESS_STEPS = FALLBACK_PROGRESS_STEPS.slice(1, -2);
 const MOTIVATION_OPTIONS = ['survival', 'knowledge', 'freedom', 'family', 'justice', 'renown'];
 const PROFILE_CHALLENGE_OPTIONS = ['cautious', 'restless', 'proud', 'guarded', 'naive', 'impulsive'];
 
@@ -347,24 +347,37 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgC
           </div>
         </div>
 
-        <div className="rpg-create-section rpg-create-section-build">
-          <h4>Archetype and talents</h4>
+        <div className="rpg-create-section rpg-create-section-profile">
+          <h4>Profile hooks</h4>
           <div className="rpg-create-field-grid">
+            <BasicSelect label="Primary motivation" value={motivationPrimary} onChange={setMotivationPrimary} options={MOTIVATION_OPTIONS} />
             <label>
-              <span>Starting archetype</span>
-              <select value={buildKey} onChange={(event) => setBuildKey(event.target.value as BuildKey)}>
-                {buildTemplates.map((template) => (
-                  <option key={template.key} value={template.key}>
-                    {template.label}
-                  </option>
-                ))}
-              </select>
-              <small>{selectedBuild.detail}</small>
+              <span>Motivation target</span>
+              <input value={motivationTarget} onChange={(event) => setMotivationTarget(event.target.value)} placeholder="family, guild, village..." />
             </label>
-            <OptionSelect label="Primary talent" value={primaryCapability} onChange={setPrimaryCapability} options={primaryCapabilities} detail={selectedPrimary.detail} />
+            <BasicSelect label="Complication / flaw" value={flaw} onChange={setFlaw} options={PROFILE_CHALLENGE_OPTIONS} />
+            <label>
+              <span>Values</span>
+              <input value={values} onChange={(event) => setValues(event.target.value)} placeholder="agency, loyalty" />
+            </label>
           </div>
-          <div className="rpg-capability-grid" aria-label="Secondary capabilities" role="group">
-            {(Object.keys(capabilityLabels) as Capability[]).map((capability) => (
+        </div>
+
+        <div className="rpg-create-section rpg-create-section-build">
+          <h4>Build</h4>
+          <div className="rpg-template-grid">
+            {buildTemplates.map((template) => (
+              <button key={template.key} className={template.key === buildKey ? 'rpg-template-card rpg-template-card-selected' : 'rpg-template-card'} type="button" onClick={() => setBuildKey(template.key)}>
+                <strong>{template.label}</strong>
+                <small>{template.detail}</small>
+              </button>
+            ))}
+          </div>
+          <div className="rpg-create-field-grid">
+            <OptionSelect label="Primary focus" value={primaryCapability} onChange={setPrimaryCapability} options={primaryCapabilities} detail={selectedPrimary.detail} />
+          </div>
+          <div className="rpg-capability-grid" aria-label="Secondary capabilities">
+            {(Object.keys(capabilities) as Capability[]).map((capability) => (
               <label key={capability} className="rpg-create-check-row">
                 <input type="checkbox" checked={capabilities[capability]} onChange={() => toggleCapability(capability)} />
                 <span>{capabilityLabels[capability]}</span>
@@ -373,50 +386,27 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgC
           </div>
         </div>
 
-        <div className="rpg-create-section rpg-create-section-build">
-          <h4>Character drivers</h4>
-          <div className="rpg-create-field-grid">
-            <BasicSelect label="Motivation" value={motivationPrimary} onChange={setMotivationPrimary} options={MOTIVATION_OPTIONS} />
-            <label>
-              <span>Motivation target</span>
-              <input value={motivationTarget} onChange={(event) => setMotivationTarget(event.target.value)} placeholder="person, place, faction, or mystery" />
-            </label>
-            <BasicSelect label="Profile challenge" value={flaw} onChange={setFlaw} options={PROFILE_CHALLENGE_OPTIONS} />
-            <label>
-              <span>Values</span>
-              <input value={values} onChange={(event) => setValues(event.target.value)} placeholder="agency, loyalty" />
-              <small>Comma-separated values that guide long-term choices.</small>
-            </label>
-          </div>
-        </div>
-
         <div className="rpg-create-section rpg-create-section-stats">
-          <div className="rpg-create-section-title-row">
-            <h4>Initial stat points</h4>
-            <span className={remainingPoints < 0 ? 'rpg-create-bad-count' : undefined}>{remainingPoints} points left</span>
-          </div>
-          <div className="rpg-stat-allocation-grid">
+          <h4>Point-buy stats</h4>
+          <p>{remainingPoints} point{remainingPoints === 1 ? '' : 's'} left</p>
+          <div className="rpg-stat-editor-grid">
             {statDefinitions.map((stat) => (
-              <div className="rpg-stat-allocation-row" key={stat.key}>
+              <div className="rpg-stat-editor-row" key={stat.key}>
                 <div>
                   <strong>{stat.label}</strong>
                   <small>{stat.detail}</small>
                 </div>
                 <div className="rpg-stat-stepper">
-                  <button type="button" aria-label={`Decrease ${stat.label}`} onClick={() => adjustStat(stat.key, -1)} disabled={stats[stat.key] <= BASE_STAT}>
-                    −
-                  </button>
+                  <button aria-label={`Decrease ${stat.label}`} type="button" onClick={() => adjustStat(stat.key, -1)}>-</button>
                   <span>{stats[stat.key]}</span>
-                  <button type="button" aria-label={`Increase ${stat.label}`} onClick={() => adjustStat(stat.key, 1)} disabled={stats[stat.key] >= MAX_STAT || remainingPoints <= 0}>
-                    +
-                  </button>
+                  <button aria-label={`Increase ${stat.label}`} type="button" onClick={() => adjustStat(stat.key, 1)}>+</button>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rpg-create-section rpg-create-section-world rpg-create-section-story">
+        <div className="rpg-create-section rpg-create-section-story">
           <h4>Opening story</h4>
           <div className="rpg-create-field-grid">
             <OptionSelect label="Opening hook" value={openingHook} onChange={setOpeningHook} options={openingHooks} detail={selectedOpeningHook.detail} />
