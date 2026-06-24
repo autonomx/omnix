@@ -1,4 +1,6 @@
 import { Progress, Text } from '@mantine/core';
+import { useState } from 'react';
+import { omnixApiClient } from '../../api/client';
 import type {
   RpgCheckpointSummaryPreview,
   RpgEncounterPreview,
@@ -10,6 +12,8 @@ import type {
 import './RpgVisualAssets.css';
 
 const MAP_ART_SRC = '/rpg/glimmerdeep-pass-map.svg';
+const LAST10_REPORT_JOB_TYPE = 'rpg.report.last10';
+const LAST10_REPORT_TIMEOUT_MS = 45_000;
 
 interface RpgReportAssetPreview {
   id: unknown;
@@ -66,6 +70,51 @@ export function RpgWorldRail({
   const railClassName = className ? `rpg-right-rail ${className}` : 'rpg-right-rail';
   const isPreview = selectedSessionSummary.source === 'preview';
   const visibleJobCards = jobCards.slice(0, 3);
+  const canGenerateLast10Report = selectedSessionSummary.source === 'live' && selectedSessionSummary.id.trim().length > 0;
+  const [isGeneratingLast10Report, setIsGeneratingLast10Report] = useState(false);
+  const [last10ReportStatusLabel, setLast10ReportStatusLabel] = useState('Ready to generate');
+
+  async function generateLast10Report(): Promise<void> {
+    if (!canGenerateLast10Report || isGeneratingLast10Report) {
+      return;
+    }
+    setIsGeneratingLast10Report(true);
+    setLast10ReportStatusLabel('Generating ZIP report…');
+    try {
+      const job = await omnixApiClient.createJob(
+        {
+          module: 'rpg',
+          type: LAST10_REPORT_JOB_TYPE,
+          resource_class: 'cpu',
+          priority: 0,
+          input_ref: { session_id: selectedSessionSummary.id },
+          input_payload: {
+            source: 'rpg-workspace',
+            report_kind: 'last_10_turns_debug_evaluation',
+            report_style: 'interactive_feature_matrix_zip_like_bundle',
+            turn_limit: 10,
+            include_performance_metrics: true,
+          },
+          stages: [
+            { id: 'load-session', label: 'Load RPG session', resource_class: 'cpu', status: 'queued' },
+            { id: 'collect-turns', label: 'Collect last 10 turns', resource_class: 'cpu', status: 'queued' },
+            { id: 'write-report', label: 'Write debug ZIP report', resource_class: 'cpu', status: 'queued' },
+          ],
+        },
+        {
+          timeoutMs: LAST10_REPORT_TIMEOUT_MS,
+          timeoutMessage:
+            'The RPG last-10 turn report request is taking longer than expected. Check RPG jobs and the Reports index for the generated ZIP.',
+        },
+      );
+      setLast10ReportStatusLabel(`${job.status} • ${job.id}`);
+      onRefreshJobs();
+    } catch (error) {
+      setLast10ReportStatusLabel(error instanceof Error ? error.message : 'Report generation failed.');
+    } finally {
+      setIsGeneratingLast10Report(false);
+    }
+  }
 
   return (
     <aside className={railClassName} aria-label="World, jobs, and reports">
@@ -162,6 +211,21 @@ export function RpgWorldRail({
             <small>{autoplayStatusLabel}</small>
             <button className="rpg-secondary-button" type="button" onClick={onToggleAutoplay} disabled={isAutoplayPending}>
               {isAutoplayPending ? 'Updating autoplay…' : autoplayRunning ? 'Stop autoplay' : 'Start autoplay'}
+            </button>
+          </div>
+        </div>
+        <div className="rpg-report-row">
+          <span>⇩</span>
+          <div>
+            <strong>Last 10 turn debug report</strong>
+            <small>{canGenerateLast10Report ? last10ReportStatusLabel : 'Select a live session to generate a ZIP report.'}</small>
+            <button
+              className="rpg-secondary-button"
+              type="button"
+              onClick={() => void generateLast10Report()}
+              disabled={isGeneratingLast10Report || !canGenerateLast10Report}
+            >
+              {isGeneratingLast10Report ? 'Generating report…' : 'Generate last 10 turn report'}
             </button>
           </div>
         </div>
