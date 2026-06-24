@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import sys
 
+import app.jobs  # noqa: F401 - installs inline feature job extensions before execution
+
 from .inline_feature_jobs import execute_feature_job_by_id
 
 

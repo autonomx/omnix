@@ -32,8 +32,14 @@ from .residency import (
 )
 from .store import SQLiteJobStore, default_job_store
 from .inline_feature_jobs import install_inline_feature_job_execution
+from .rpg_last10_report import (
+    RPG_LAST10_REPORT_JOB_TYPE,
+    build_rpg_last10_report_payload,
+    install_rpg_last10_report_inline_job,
+)
 
 install_inline_feature_job_execution(SQLiteJobStore)
+install_rpg_last10_report_inline_job()
 
 __all__ = [
     "CancelJobRequest",
@@ -51,11 +57,13 @@ __all__ = [
     "ModelResidencyDiagnostics",
     "ModelResidencyRecord",
     "ModelResidencyStatus",
+    "RPG_LAST10_REPORT_JOB_TYPE",
     "ResourceClass",
     "ResidencyDecision",
     "ResidencyDecisionAction",
     "SQLiteJobStore",
     "SQLiteModelResidencyStore",
+    "build_rpg_last10_report_payload",
     "create_model_evict_job_request",
     "create_model_load_job_request",
     "create_model_residency_handlers",
@@ -66,6 +74,7 @@ __all__ = [
     "enqueue_image_job",
     "enqueue_tts_job",
     "get_model_residency_diagnostics",
+    "install_rpg_last10_report_inline_job",
     "load_worker_model",
     "plan_model_residency",
 ]
