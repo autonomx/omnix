@@ -303,7 +303,27 @@ Acceptance criteria:
 - nested mod overlays cannot hide forbidden state-mutation keys;
 - tests prove several phase foundations compose in one stable report payload.
 
+## Phase 17 — Runtime Integration Report Surface
+
+Goal: Wire the Phase 16 audit into resolved turn/autoplay report surfaces so integration readiness is visible in real transcript and summary artifacts.
+
+Features:
+
+- resolved-turn integration report adapter;
+- transcript-row integration report attachment;
+- autoplay summary aggregation of ready turns and issue counts;
+- persisted autoplay summary/transcript JSON decoration through the fragment loader;
+- stale verification documentation cleanup.
+
+Acceptance criteria:
+
+- report decoration happens after simulation turn resolution;
+- integration reports do not mutate authoritative state;
+- autoplay summaries include per-turn runtime integration issues and aggregate counts;
+- tests prove report payloads and persisted artifacts include the Phase 17 source marker.
+
 ## Status Log
 
 - 2026-06-24: Roadmap created. Phase 1 implementation begins with pure narration quality policy/report helpers and regression tests.
 - 2026-06-24: Phase 16 integration hardening adds a composite readiness report, stricter replay snapshot validation, nested world-pack overlay guards, and integration tests.
+- 2026-06-24: Phase 17 begins runtime hardening by wiring the integration audit into resolved turn/autoplay report surfaces and persisted JSON artifacts.
