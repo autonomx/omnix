@@ -9,6 +9,8 @@ from pathlib import Path
 from app.rpg.benchmark_replay_runtime import build_benchmark_replay_report
 from app.rpg.combat_runtime import build_combat_runtime_report
 from app.rpg.economy_runtime import build_economy_runtime_report
+from app.rpg.env_scene_trace import carry as carry_env_scene_trace
+from app.rpg.env_scene_trace import latest as latest_env_scene_trace
 from app.rpg.environmental_narration_runtime import build_environmental_narration_report
 from app.rpg.environmental_panel_runtime import build_environmental_panel_report
 from app.rpg.narration_prompt_runtime import build_narration_prompt_runtime_metadata
@@ -36,8 +38,9 @@ def attach_report_surface_to_row(
 ) -> dict[str, object]:
     """Attach all runtime adapter sections to a transcript row."""
 
-    result = dict(row)
-    turn_result = _mapping(row.get("turn_result")) or row
+    carried_row = carry_env_scene_trace(row, latest_env_scene_trace(previous_rows))
+    result = dict(carried_row)
+    turn_result = _mapping(carried_row.get("turn_result")) or carried_row
     action = str(row.get("player_action") or turn_result.get("autoplay_action_text") or "")
     recent = tuple(str(item.get("narration") or "") for item in previous_rows if isinstance(item, Mapping))
     sections: dict[str, object] = {}
