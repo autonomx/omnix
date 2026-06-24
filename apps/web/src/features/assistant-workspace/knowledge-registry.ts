@@ -1,0 +1,1 @@
+export const KNOWLEDGE_REGISTRY_PLACEHOLDER = true;
