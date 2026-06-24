@@ -1,0 +1,18 @@
+def _phase26_install_autoplay_verification_gate_wrapper() -> None:
+    original = globals().get("run_autoplay_campaign")
+    if not callable(original) or getattr(original, "_phase26_gate_wrapped", False):
+        return
+
+    def _wrapped_phase26_run_autoplay_campaign(args, __original=original):
+        summary = __original(args)
+        if not isinstance(summary, dict):
+            return summary
+        from app.rpg.autoplay_verification_gate import attach_autoplay_verification_gate
+
+        return attach_autoplay_verification_gate(summary)
+
+    _wrapped_phase26_run_autoplay_campaign._phase26_gate_wrapped = True
+    globals()["run_autoplay_campaign"] = _wrapped_phase26_run_autoplay_campaign
+
+
+_phase26_install_autoplay_verification_gate_wrapper()
