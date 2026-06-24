@@ -1,0 +1,171 @@
+.assistant-sidebar-nav button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  color: #e8edff;
+  cursor: pointer;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 1.45rem minmax(0, 1fr);
+  min-height: 2.65rem;
+  padding: 0 0.75rem;
+  text-align: left;
+}
+
+.assistant-sidebar-nav button span:first-child {
+  color: #d7e2ff;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.assistant-sidebar-nav button:hover,
+.assistant-sidebar-nav button:focus-visible,
+.assistant-sidebar-nav button.active {
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.48), rgba(92, 62, 190, 0.22));
+  border-color: rgba(151, 114, 255, 0.26);
+  outline: none;
+}
+
+.assistant-chat-sidebar {
+  grid-template-rows: auto minmax(7rem, auto) minmax(5rem, auto) minmax(0, 1fr);
+}
+
+.assistant-sidebar-empty {
+  color: var(--omnix-muted);
+  font-size: 0.82rem;
+  margin: 0;
+  padding: 0.55rem 0.35rem;
+}
+
+.assistant-composer-controls {
+  grid-template-columns: repeat(6, minmax(7.25rem, 1fr));
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.assistant-mode-switch,
+.assistant-workspace-usage,
+.assistant-sessions-card {
+  display: none !important;
+}
+
+.assistant-view-panel {
+  align-content: start;
+  display: grid;
+  gap: 1rem;
+  min-height: 0;
+  overflow: auto;
+  padding: 1.25rem;
+}
+
+.assistant-view-panel > h2 {
+  color: var(--omnix-text);
+  margin: 0;
+}
+
+.assistant-view-panel > p,
+.assistant-view-note {
+  color: var(--omnix-muted);
+  margin: 0;
+}
+
+.assistant-view-panel article,
+.assistant-tool-config-list article,
+.assistant-settings-list div {
+  background: rgba(12, 18, 34, 0.72);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.assistant-view-panel article h3,
+.assistant-tool-config-list article h3 {
+  color: var(--omnix-text);
+  margin: 0 0 0.35rem;
+}
+
+.assistant-view-panel article p,
+.assistant-tool-config-list article p {
+  color: var(--omnix-muted);
+  margin: 0;
+}
+
+.assistant-view-panel button {
+  background: linear-gradient(135deg, #6544d9, #7c5cff);
+  border: 0;
+  border-radius: 0.65rem;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 2.55rem;
+  padding: 0 1rem;
+  justify-self: start;
+}
+
+.assistant-tool-config-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.assistant-tool-config-list article {
+  align-items: center;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.assistant-tool-config-list article > strong {
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid rgba(151, 114, 255, 0.32);
+  border-radius: 999px;
+  color: #e7ddff;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.65rem;
+  white-space: nowrap;
+}
+
+.assistant-settings-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.assistant-settings-list div {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(8rem, 0.6fr) minmax(0, 1fr);
+}
+
+.assistant-settings-list dt {
+  color: var(--omnix-muted);
+  font-weight: 700;
+}
+
+.assistant-settings-list dd {
+  color: var(--omnix-text);
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-workspace-activity [aria-label='Workspace timeline'] {
+  max-height: 27.5rem;
+  overflow: auto;
+  padding-right: 0.2rem;
+  scrollbar-width: thin;
+}
+
+.assistant-voice-transcript {
+  max-height: 15rem;
+  overflow: auto;
+}
+
+@media (max-width: 1500px) {
+  .assistant-composer-controls {
+    grid-template-columns: repeat(6, minmax(8.5rem, 1fr));
+  }
+}
