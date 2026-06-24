@@ -12,7 +12,17 @@ from app.rpg.world_director import DirectorState, StoryArc
 from app.rpg.world_packs import LoreEntry, ModOverlay, WorldPack
 
 RUNTIME_INTEGRATION_SOURCE = "phase17_runtime_integration_report_v1"
-_REQUIRED_STATE_KEYS = ("world", "player", "party", "npcs", "quests", "map", "inventory", "combat", "memory")
+_REQUIRED_STATE_KEYS = (
+    "world",
+    "player",
+    "party",
+    "npcs",
+    "quests",
+    "map",
+    "inventory",
+    "combat",
+    "memory",
+)
 
 
 def build_turn_runtime_integration_report(
@@ -26,7 +36,8 @@ def build_turn_runtime_integration_report(
     """Build a report payload suitable for turn/debug/autoplay surfaces."""
 
     state = _mapping(turn_result.get("simulation_state") or turn_result.get("state"))
-    narration = str(turn_result.get("narration") or _mapping(turn_result.get("narration_payload")).get("text") or "")
+    narration_payload = _mapping(turn_result.get("narration_payload"))
+    narration = str(turn_result.get("narration") or narration_payload.get("text") or "")
     snapshot = ReplaySnapshot(
         f"runtime-turn-{turn_index}",
         int(turn_index),
@@ -91,7 +102,8 @@ def attach_runtime_integration_to_autoplay_summary(
     result = dict(summary)
     rows: list[dict[str, object]] = []
     raw_rows = summary.get("transcript_rows") or ()
-    for raw in raw_rows if isinstance(raw_rows, Sequence) and not isinstance(raw_rows, (str, bytes)) else ():
+    iterable_rows = raw_rows if _is_sequence(raw_rows) else ()
+    for raw in iterable_rows:
         if not isinstance(raw, Mapping):
             continue
         rows.append(attach_runtime_integration_to_row(raw, previous_rows=rows))
@@ -170,18 +182,20 @@ def _world_pack(turn_result: Mapping[str, object], state: Mapping[str, object]) 
 def _director_state(turn_result: Mapping[str, object], state: Mapping[str, object], player_action: str) -> DirectorState:
     raw = _mapping(turn_result.get("director_state") or state.get("director_state"))
     arcs = tuple(_arc(item) for item in _sequence(raw.get("arcs")) if isinstance(item, Mapping))
+    recent_actions = tuple(str(item) for item in _sequence(raw.get("recent_actions")))
     return DirectorState(
         arcs=arcs,
         recent_locations=tuple(str(item) for item in _sequence(raw.get("recent_locations")))[-5:],
         recent_npcs=tuple(str(item) for item in _sequence(raw.get("recent_npcs")))[-5:],
-        recent_actions=(tuple(str(item) for item in _sequence(raw.get("recent_actions"))) + (player_action,))[-5:],
+        recent_actions=(recent_actions + (player_action,))[-5:],
         danger_level=int(raw.get("danger_level") or 0),
         downtime=int(raw.get("downtime") or 0),
     )
 
 
 def _valid_actions(turn_result: Mapping[str, object], player_action: str) -> tuple[str, ...]:
-    actions = tuple(str(item) for item in _sequence(turn_result.get("valid_actions") or turn_result.get("suggested_actions")))
+    raw_actions = turn_result.get("valid_actions") or turn_result.get("suggested_actions")
+    actions = tuple(str(item) for item in _sequence(raw_actions))
     return actions or ((player_action,) if player_action else ())
 
 
@@ -190,21 +204,36 @@ def _row_valid_actions(row: Mapping[str, object], turn_result: Mapping[str, obje
 
 
 def _sequence(value: object) -> tuple[object, ...]:
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        return tuple(value)
-    return ()
+    return tuple(value) if _is_sequence(value) else ()
+
+
+def _is_sequence(value: object) -> bool:
+    return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
 
 
 def _overlay(raw: Mapping[str, object]) -> ModOverlay:
-    return ModOverlay(str(raw.get("overlay_id") or "runtime-overlay"), str(raw.get("kind") or "item"), _mapping(raw.get("payload")))
+    return ModOverlay(
+        str(raw.get("overlay_id") or "runtime-overlay"),
+        str(raw.get("kind") or "item"),
+        _mapping(raw.get("payload")),
+    )
 
 
 def _lore(raw: Mapping[str, object]) -> LoreEntry:
-    return LoreEntry(str(raw.get("key") or "runtime"), str(raw.get("title") or "Runtime"), str(raw.get("body") or "Runtime lore."), str(raw.get("scope") or "world"))
+    return LoreEntry(
+        str(raw.get("key") or "runtime"),
+        str(raw.get("title") or "Runtime"),
+        str(raw.get("body") or "Runtime lore."),
+        str(raw.get("scope") or "world"),
+    )
 
 
 def _arc(raw: Mapping[str, object]) -> StoryArc:
-    return StoryArc(str(raw.get("arc_id") or "runtime-arc"), str(raw.get("title") or "Runtime Arc"), threat=str(raw.get("threat") or ""))
+    return StoryArc(
+        str(raw.get("arc_id") or "runtime-arc"),
+        str(raw.get("title") or "Runtime Arc"),
+        threat=str(raw.get("threat") or ""),
+    )
 
 
 def _persist_summary_artifacts(summary: Mapping[str, object]) -> None:
