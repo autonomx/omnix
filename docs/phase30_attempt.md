@@ -1,3 +1,3 @@
 # Phase 30
 
-Attempting clean source write path.
+Adds a compact environment state tuple contract and smoke coverage.
