@@ -131,8 +131,6 @@ def get_runtime_wrapper_drift_report(
             "final_apply_attack_combat_action_module"
         ],
         "expected_final_apply_attack_combat_action_module": _expected[
-            "expected_final_apply_attack_combat_action_module"
-        ] if "expected_final_apply_attack_combat_action_module" in _expected else _expected[
             "final_apply_attack_combat_action_module"
         ],
     }
