@@ -14,14 +14,15 @@ def build_environmental_activity_report(turn_result: Mapping[str, object]) -> di
     world = _mapping(state.get("world"))
     location = _mapping(state.get("location") or turn_result.get("location"))
     env = _mapping(state.get("environment") or turn_result.get("environment"))
-    visible = _visible_activity(turn_result, world, location, env)
+    location_id = str(turn_result.get("location_id") or location.get("location_id") or location.get("id") or "")
+    visible = _visible_activity(turn_result, state, world, location, env, location_id)
     intensity = _intensity(visible)
     issues = tuple(_issues(turn_result, location, visible))
     return {
         "source": ENVIRONMENTAL_ACTIVITY_SOURCE,
         "ready": not issues,
         "issues": list(issues),
-        "location": str(turn_result.get("location_id") or location.get("location_id") or location.get("id") or ""),
+        "location": location_id,
         "time_of_day": str(env.get("time_of_day") or world.get("time_of_day") or turn_result.get("time_of_day") or ""),
         "visible_activity": visible,
         "actor_groups": _actor_groups(visible),
@@ -50,19 +51,82 @@ def attach_environmental_activity_to_summary(summary: Mapping[str, object]) -> d
 
 def _visible_activity(
     turn_result: Mapping[str, object],
+    state: Mapping[str, object],
     world: Mapping[str, object],
     location: Mapping[str, object],
     env: Mapping[str, object],
+    location_id: str,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     rows.extend(_activity_rows("population", env.get("population_activity")))
+    rows.extend(_activity_rows("population", location.get("ambient_activity") or location.get("current_activity")))
     rows.extend(_activity_rows("npc", turn_result.get("nearby_npc_activity")))
+    rows.extend(_scheduled_actor_rows(turn_result, state, world, location, location_id))
     rows.extend(_activity_rows("event", turn_result.get("active_events") or world.get("active_events")))
+    rows.extend(_scheduled_event_rows(turn_result, state, world, location, location_id))
     rows.extend(_activity_rows("faction", world.get("faction_presence") or location.get("faction_presence")))
     rows.extend(_activity_rows("hazard", world.get("hazards") or location.get("hazards")))
     scene_activity = turn_result.get("scene_activity") or turn_result.get("action_category")
     rows.extend(_activity_rows("scene", scene_activity))
     return _dedupe(rows)
+
+
+def _scheduled_actor_rows(
+    turn_result: Mapping[str, object],
+    state: Mapping[str, object],
+    world: Mapping[str, object],
+    location: Mapping[str, object],
+    location_id: str,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for source in (
+        turn_result.get("npc_schedules"),
+        turn_result.get("npc_activity"),
+        state.get("npc_schedules"),
+        state.get("npcs"),
+        world.get("npc_schedules"),
+        world.get("npcs"),
+        location.get("npcs"),
+    ):
+        for item in _sequence(source):
+            actor = _mapping(item)
+            if not actor or not _matches_location(actor, location_id):
+                continue
+            label = str(actor.get("name") or actor.get("npc") or actor.get("id") or "someone")
+            action = str(actor.get("activity") or actor.get("action") or actor.get("status") or actor.get("task") or "is present")
+            rows.append({"kind": "npc", "text": f"{label}: {action}"})
+    return rows
+
+
+def _scheduled_event_rows(
+    turn_result: Mapping[str, object],
+    state: Mapping[str, object],
+    world: Mapping[str, object],
+    location: Mapping[str, object],
+    location_id: str,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for source in (
+        turn_result.get("scheduled_events"),
+        state.get("scheduled_events"),
+        world.get("scheduled_events"),
+        world.get("events"),
+        location.get("events"),
+    ):
+        for item in _sequence(source):
+            event = _mapping(item)
+            if not event or not _matches_location(event, location_id):
+                continue
+            text = str(event.get("description") or event.get("summary") or event.get("name") or event.get("id") or "local event")
+            rows.append({"kind": "event", "text": text})
+    return rows
+
+
+def _matches_location(item: Mapping[str, object], location_id: str) -> bool:
+    raw = item.get("location_id") or item.get("location") or item.get("place")
+    if not raw or not location_id:
+        return True
+    return str(raw) == location_id
 
 
 def _activity_rows(kind: str, value: object) -> list[dict[str, object]]:
