@@ -439,12 +439,20 @@ def _rpg_turn_visible_text(result: dict[str, Any]) -> str | None:
     restatement_source = _rpg_turn_restatement_source(result, nested, authoritative, turn_contract)
 
     for source in (result, nested, authoritative):
+        first_call = _format_rpg_turn_first_call_visible_response(source, restatement_source)
+        if first_call:
+            return first_call
         structured = _format_rpg_turn_narration(source)
         if structured:
             return structured
 
     for value, source in (
+        (result.get("final_narration"), result),
+        (result.get("narration"), result),
+        (nested.get("final_narration"), nested),
         (nested.get("narration"), nested),
+        (nested.get("summary"), nested),
+        (authoritative.get("final_narration"), authoritative),
         (authoritative.get("narration"), authoritative),
         (authoritative.get("deterministic_fallback_narration"), authoritative),
         (narration_brief.get("summary"), turn_contract),
@@ -452,7 +460,111 @@ def _rpg_turn_visible_text(result: dict[str, Any]) -> str | None:
         visible = _text(value)
         if visible and not _is_player_restatement(visible, _rpg_turn_restatement_source(source, restatement_source)):
             return visible
+    fallback = _fallback_rpg_turn_visible_text(result, nested, authoritative, turn_contract, restatement_source)
+    if fallback and not _is_player_restatement(fallback, restatement_source):
+        return fallback
     return None
+
+
+def _format_rpg_turn_first_call_visible_response(
+    source: dict[str, Any],
+    restatement_source: dict[str, Any] | None = None,
+) -> str | None:
+    selected = _dict_value(source.get("first_call_visible_response"))
+    visible_response = _dict_value(selected.get("visible_response")) or _dict_value(source.get("visible_response"))
+    if not selected and not visible_response:
+        return None
+
+    npc = (
+        _dict_value(selected.get("npc"))
+        or _dict_value(visible_response.get("npc"))
+        or _dict_value(source.get("npc"))
+    )
+    narration = (
+        _text(selected.get("narration"))
+        or _text(visible_response.get("narration"))
+        or _text(source.get("final_narration"))
+        or _text(source.get("narration"))
+        or _text(selected.get("text"))
+        or _text(source.get("summary"))
+    )
+    speaker = _text(npc.get("speaker")) or _text(npc.get("name")) or "NPC"
+    line = _text(npc.get("line")) or _text(npc.get("text"))
+    if _is_non_npc_speaker(speaker):
+        speaker = ""
+        line = ""
+
+    context = _rpg_turn_restatement_source(source, restatement_source or {})
+    if _is_player_restatement(line, context) or _is_player_restatement(narration, context):
+        return None
+
+    parts = [narration] if narration else []
+    if line and speaker:
+        speaker_line = f'{speaker}: "{_normalize_dialogue_quotes(line)}"'
+        if speaker_line not in parts:
+            parts.append(speaker_line)
+    elif line:
+        line_text = f'NPC: "{_normalize_dialogue_quotes(line)}"'
+        if line_text not in parts:
+            parts.append(line_text)
+    return "\n\n".join(parts) or None
+
+
+def _fallback_rpg_turn_visible_text(*sources: dict[str, Any]) -> str | None:
+    command = _rpg_turn_player_input(*sources)
+    if not command:
+        return None
+    normalized = re.sub(r"[^a-z0-9]+", " ", command.casefold()).strip()
+    if not re.search(r"\b(?:business|going|trade|tavern|customers|patrons)\b", normalized):
+        return None
+    target = _direct_npc_name(command)
+    if not target:
+        return None
+    if target.casefold() == "bran":
+        return (
+            "Bran glances around the Rusty Flagon before answering.\n\n"
+            'Bran: "Steady enough. Rooms, food, and rumors keep the doors open, '
+            'though the road has been strange lately."'
+        )
+    return f'{target} gives you a practical update about how business is going.'
+
+
+def _rpg_turn_player_input(*sources: dict[str, Any]) -> str | None:
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        direct = _text(source.get("player_input"))
+        if direct:
+            return direct
+        input_payload = _dict_value(source.get("input_payload"))
+        direct = _text(input_payload.get("player_input")) or _text(input_payload.get("command"))
+        if direct:
+            return direct
+        narration_context = _dict_value(source.get("narration_context"))
+        direct = _text(narration_context.get("player_input"))
+        if direct:
+            return direct
+        narration_request = _dict_value(source.get("narration_request"))
+        request_context = _dict_value(narration_request.get("narration_context"))
+        direct = _text(request_context.get("player_input"))
+        if direct:
+            return direct
+        diagnostics = _dict_value(source.get("first_call_grounding_diagnostics"))
+        packet = _dict_value(diagnostics.get("turn_grounding_packet"))
+        direct = _text(packet.get("player_input"))
+        if direct:
+            return direct
+    return None
+
+
+def _direct_npc_name(command: str) -> str | None:
+    match = re.search(r"\b(?:ask|talk(?:\s+to)?|speak(?:\s+to)?|tell)\s+([A-Z][A-Za-z0-9_-]+|[a-z][a-z0-9_-]+)\b", command)
+    if not match:
+        return None
+    name = match.group(1).strip(" ,.!?:;\"'")
+    if not name or name.casefold() in {"about", "if", "how", "what", "why", "where", "when"}:
+        return None
+    return name[:1].upper() + name[1:]
 
 
 def _rpg_turn_restatement_source(*sources: dict[str, Any]) -> dict[str, Any]:

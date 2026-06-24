@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { omnixApiClient, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
+import { ApiTimeoutError, omnixApiClient, type JobRecord, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
@@ -16,7 +16,7 @@ import { RpgStoryScene } from './RpgStoryScene';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { RpgWorldRail } from './RpgWorldRail';
 import { createRpgCombatSurfaceState } from './rpgCombatState';
-import { createRpgWorkspaceState } from './rpgUiState';
+import { createRpgWorkspaceState, type RpgStoryMessagePreview } from './rpgUiState';
 import './RpgWorkspace.css';
 import './RpgResponsivePolish.css';
 
@@ -25,8 +25,16 @@ interface RpgFormValues {
   command: string;
 }
 
+interface PendingRpgTurnSubmission {
+  command: string;
+  sessionId: string;
+  submittedAt: number;
+}
+
 const ACTIVE_JOB_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
-const RPG_TURN_QUEUE_TIMEOUT_MS = 10_000;
+const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
+const RPG_TURN_QUEUE_TIMEOUT_MS = 45_000;
+const RPG_TURN_RECOVERY_WINDOW_MS = 60_000;
 
 function formatQueryError(error: unknown) {
   if (error instanceof Error) {
@@ -34,6 +42,112 @@ function formatQueryError(error: unknown) {
   }
 
   return 'Request failed before the RPG workspace could read this source.';
+}
+
+function readStoredRpgSessionId(): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  try {
+    return window.localStorage.getItem(RPG_SELECTED_SESSION_STORAGE_KEY)?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function writeStoredRpgSessionId(sessionId: string | null): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    if (sessionId?.trim()) {
+      window.localStorage.setItem(RPG_SELECTED_SESSION_STORAGE_KEY, sessionId.trim());
+    } else {
+      window.localStorage.removeItem(RPG_SELECTED_SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // Storage can be unavailable in private or embedded contexts; the live selection still works in memory.
+  }
+}
+
+function timestampMs(value?: string | null): number {
+  const parsed = Date.parse(value ?? '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function arrayValue(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function cleanSubmittedTurnResponse(response: string | null): string | null {
+  if (!response) return null;
+  const paragraphs = response.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
+  const visibleParagraphs = paragraphs.filter((paragraph) => !/^(?:Action|Result):\s*/i.test(paragraph));
+  return (visibleParagraphs.length ? visibleParagraphs : paragraphs).join('\n\n') || null;
+}
+
+function submittedTurnResponseContent(job: JobRecord | undefined): string | null {
+  const output = arrayValue(job?.output_refs)
+    .map(recordValue)
+    .find((candidate) => firstString(candidate.type, candidate.kind) === 'rpg_turn_response');
+  return cleanSubmittedTurnResponse(firstString(output?.content, output?.text));
+}
+
+function submittedTurnCommand(job: JobRecord | undefined): string | null {
+  return firstString(recordValue(job?.input_payload).command);
+}
+
+function submittedTurnSessionId(job: JobRecord | undefined): string | null {
+  return firstString(recordValue(job?.input_ref).session_id);
+}
+
+function inferSubmittedResponseSpeaker(response: string): string {
+  const match = response.match(/^\s*([A-Z][A-Za-z0-9 _'-]{0,40}):/);
+  return match?.[1]?.trim() || 'Omnix';
+}
+
+function buildSubmittedTurnStoryMessages(
+  job: JobRecord | undefined,
+  heroName: string,
+  heroAvatar: string,
+  selectedSessionId: string | null,
+): RpgStoryMessagePreview[] {
+  if (!job || job.type !== 'rpg.turn') return [];
+  const jobSessionId = submittedTurnSessionId(job);
+  if (selectedSessionId && jobSessionId && jobSessionId !== selectedSessionId) return [];
+
+  const messages: RpgStoryMessagePreview[] = [];
+  const command = submittedTurnCommand(job);
+  if (command) {
+    messages.push({ avatar: heroAvatar, speaker: `${heroName} (You)`, text: command, tone: 'player' });
+  }
+
+  const response = submittedTurnResponseContent(job);
+  if (response) {
+    const speaker = inferSubmittedResponseSpeaker(response);
+    messages.push({
+      avatar: speaker === 'Omnix' ? 'O' : speaker.charAt(0).toUpperCase(),
+      speaker: speaker === 'Omnix' ? 'Omnix (Narrator)' : speaker,
+      text: response,
+      tone: speaker === 'Omnix' ? 'narrator' : 'npc',
+    });
+  }
+  return messages;
 }
 
 export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
@@ -59,6 +173,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     queryKey: ['platform', 'reports'],
     queryFn: () => omnixApiClient.listReports(),
   });
+  const trustedUnindexedSessionIdsRef = useRef<Set<string>>(new Set());
   const {
     register,
     handleSubmit,
@@ -67,7 +182,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     watch,
     formState: { errors },
   } = useForm<RpgFormValues>({
-    defaultValues: { sessionId: '', command: '' },
+    defaultValues: { sessionId: readStoredRpgSessionId(), command: '' },
   });
   const selectedSessionId = watch('sessionId');
   const summaryState = createRpgWorkspaceState({
@@ -77,18 +192,39 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     reports: reportsQuery.data,
     selectedSessionId,
   });
-  const selectedSummarySessionId = selectedSessionId?.trim()
-    || (summaryState.selectedSessionSummary.source === 'live' ? summaryState.selectedSessionSummary.id : null);
+  const requestedSessionId = selectedSessionId?.trim() ?? '';
+  const selectedSessionIsIndexed = Boolean(
+    requestedSessionId && summaryState.sessionSummaries.some((session) => session.source === 'live' && session.id === requestedSessionId),
+  );
+  const fallbackLiveSessionId = summaryState.sessionSummaries.find((session) => session.source === 'live')?.id ?? null;
+  const selectedSummarySessionId = requestedSessionId || fallbackLiveSessionId;
   useEffect(() => {
-    if (!selectedSessionId && selectedSummarySessionId) {
-      setValue('sessionId', selectedSummarySessionId, { shouldValidate: true });
+    if (!requestedSessionId && fallbackLiveSessionId) {
+      setValue('sessionId', fallbackLiveSessionId, { shouldValidate: true });
     }
-  }, [selectedSessionId, selectedSummarySessionId, setValue]);
+  }, [fallbackLiveSessionId, requestedSessionId, setValue]);
   const selectedSessionQuery = useQuery({
     queryKey: ['feature', 'rpg', 'session', selectedSummarySessionId],
     queryFn: () => omnixApiClient.getRpgSession(selectedSummarySessionId ?? ''),
     enabled: Boolean(selectedSummarySessionId),
   });
+  useEffect(() => {
+    if (!requestedSessionId || !inventoryQuery.data || selectedSessionIsIndexed || !selectedSessionQuery.isError) {
+      return;
+    }
+    if (trustedUnindexedSessionIdsRef.current.has(requestedSessionId)) {
+      return;
+    }
+
+    setValue('sessionId', fallbackLiveSessionId ?? '', { shouldValidate: true });
+  }, [
+    fallbackLiveSessionId,
+    inventoryQuery.data,
+    requestedSessionId,
+    selectedSessionIsIndexed,
+    selectedSessionQuery.isError,
+    setValue,
+  ]);
   const {
     heroSummary,
     heroStats,
@@ -124,7 +260,21 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   });
   const combatSurface = createRpgCombatSurfaceState({ encounter, heroSummary, partyMembers });
   const selectedLiveSessionId = selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : null;
+  const selectedLiveSessionIsIndexed = Boolean(
+    selectedLiveSessionId && sessionSummaries.some((session) => session.source === 'live' && session.id === selectedLiveSessionId),
+  );
+  useEffect(() => {
+    if (selectedLiveSessionId && selectedLiveSessionIsIndexed) {
+      writeStoredRpgSessionId(selectedLiveSessionId);
+      return;
+    }
+
+    if (inventoryQuery.data && !fallbackLiveSessionId) {
+      writeStoredRpgSessionId(null);
+    }
+  }, [fallbackLiveSessionId, inventoryQuery.data, selectedLiveSessionId, selectedLiveSessionIsIndexed]);
   const refreshedTurnJobRef = useRef<string | null>(null);
+  const pendingTurnSubmissionRef = useRef<PendingRpgTurnSubmission | null>(null);
   const latestCompletedTurnJob = rpgJobs
     .filter((job) => {
       const sessionId = typeof job.input_ref?.session_id === 'string' ? job.input_ref.session_id : null;
@@ -270,15 +420,45 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         {
           timeoutMs: RPG_TURN_QUEUE_TIMEOUT_MS,
           timeoutMessage:
-            'Gateway did not acknowledge the RPG turn queue request within 10s. The turn may still be running; refresh RPG jobs or restart the gateway if this repeats.',
+            'The RPG turn queue request is taking longer than expected. The workspace will keep checking the RPG job queue for this turn.',
         },
       );
     },
+    onMutate: (values) => {
+      pendingTurnSubmissionRef.current = {
+        command: values.command.trim(),
+        sessionId: values.sessionId || selectedLiveSessionId || '',
+        submittedAt: Date.now(),
+      };
+    },
     onSuccess: (_job, values) => {
-      reset({ sessionId: values.sessionId || selectedLiveSessionId || '', command: '' });
+      const sessionId = values.sessionId || selectedLiveSessionId || '';
+      if (sessionId) {
+        writeStoredRpgSessionId(sessionId);
+      }
+      reset({ sessionId, command: '' });
       void invalidateRpgWorkspaceQueries();
     },
   });
+  const activeSubmittedTurnJobId = createJobMutation.data?.id ?? null;
+  const submittedTurnJobQuery = useQuery({
+    queryKey: ['platform', 'jobs', 'submitted-rpg-turn', activeSubmittedTurnJobId],
+    queryFn: () => omnixApiClient.getJob(activeSubmittedTurnJobId ?? ''),
+    enabled: Boolean(activeSubmittedTurnJobId),
+    refetchInterval: activeSubmittedTurnJobId ? 1500 : false,
+  });
+  const submittedTurnJobFromQuery = submittedTurnJobQuery.data;
+  useEffect(() => {
+    if (
+      submittedTurnJobFromQuery?.type !== 'rpg.turn'
+      || submittedTurnJobFromQuery.status !== 'completed'
+      || refreshedTurnJobRef.current === submittedTurnJobFromQuery.id
+    ) {
+      return;
+    }
+    refreshedTurnJobRef.current = submittedTurnJobFromQuery.id;
+    void Promise.all([refetchSelectedSession(), refetchInventory(), jobsQuery.refetch()]);
+  }, [jobsQuery, refetchInventory, refetchSelectedSession, submittedTurnJobFromQuery]);
   const createCheckpointMutation = useMutation({
     mutationFn: () =>
       omnixApiClient.createReplayCheckpoint({
@@ -312,9 +492,11 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     mutationFn: (request: RpgNewGameRequest) => omnixApiClient.createRpgNewGame(request),
     onSuccess: (result) => {
       if (result.ok && result.session_id) {
+        trustedUnindexedSessionIdsRef.current.add(result.session_id);
         if (result.session) {
           queryClient.setQueryData(['feature', 'rpg', 'session', result.session_id], result);
         }
+        writeStoredRpgSessionId(result.session_id);
         setValue('sessionId', result.session_id, { shouldDirty: true, shouldValidate: true });
       }
       void invalidateRpgWorkspaceQueries();
@@ -349,16 +531,45 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       await invalidateRpgWorkspaceQueries();
     },
   });
-  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
+  const recoveredSubmittedTurnJob = (() => {
+    const pending = pendingTurnSubmissionRef.current;
+    if (!pending) return undefined;
+    const recoveryStart = pending.submittedAt - 5_000;
+    const recoveryEnd = pending.submittedAt + RPG_TURN_RECOVERY_WINDOW_MS;
+    return rpgJobs
+      .filter((job) => {
+        const sessionId = typeof job.input_ref?.session_id === 'string' ? job.input_ref.session_id : '';
+        const command = typeof job.input_payload?.command === 'string' ? job.input_payload.command.trim() : '';
+        const createdAt = timestampMs(job.created_at);
+        return job.type === 'rpg.turn'
+          && sessionId === pending.sessionId
+          && command === pending.command
+          && (!createdAt || (createdAt >= recoveryStart && createdAt <= recoveryEnd));
+      })
+      .sort((left, right) => timestampMs(right.created_at) - timestampMs(left.created_at))[0];
+  })();
   const submittedTurnJob = createJobMutation.data
-    ? rpgJobs.find((job) => job.id === createJobMutation.data.id) ?? createJobMutation.data
-    : undefined;
+    ? submittedTurnJobFromQuery ?? rpgJobs.find((job) => job.id === createJobMutation.data.id) ?? createJobMutation.data
+    : recoveredSubmittedTurnJob;
   const submittedTurnFailed = submittedTurnJob
     ? ['failed', 'canceled', 'stale'].includes(submittedTurnJob.status)
     : false;
   const submittedTurnFailureMessage = submittedTurnFailed
     ? `RPG turn ${submittedTurnJob?.status}: ${submittedTurnJob?.error?.message ?? 'The turn did not produce a response.'}`
     : '';
+  const recoveredAfterQueueTimeout = Boolean(!createJobMutation.data && createJobMutation.isError && recoveredSubmittedTurnJob);
+  const isReconcilingTimedOutTurn = Boolean(createJobMutation.error instanceof ApiTimeoutError && !submittedTurnJob);
+  const submitStatus = createJobMutation.isPending
+    ? 'queueing'
+    : submittedTurnFailed
+      ? 'error'
+      : submittedTurnJob
+        ? submittedTurnJob.status
+        : isReconcilingTimedOutTurn
+          ? 'reconciling'
+        : createJobMutation.isError
+          ? 'error'
+          : createJobMutation.data?.status ?? 'ready';
   const checkpointControlStatus = createCheckpointMutation.isPending
     ? 'Creating checkpoint…'
     : createCheckpointMutation.isError
@@ -382,6 +593,16 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     }
     loadoutActionMutation.mutate({ sessionId: selectedLiveSessionId, request });
   };
+  const submittedTurnStoryMessages = buildSubmittedTurnStoryMessages(
+    submittedTurnJob,
+    heroSummary.name,
+    heroSummary.avatar,
+    selectedLiveSessionId,
+  );
+  const visibleStoryMessages = submittedTurnStoryMessages.length
+    && !storyMessages.some((message) => submittedTurnStoryMessages.some((submitted) => submitted.speaker === message.speaker && submitted.text === message.text))
+    ? [...submittedTurnStoryMessages, ...storyMessages].slice(0, 10)
+    : storyMessages;
 
   return (
     <WorkspacePanel className="rpg-workstation">
@@ -428,14 +649,14 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             heroSummary={heroSummary}
             recentEvents={recentEvents}
             selectedSessionSummary={selectedSessionSummary}
-            storyMessages={storyMessages}
+            storyMessages={visibleStoryMessages}
           >
             <RpgActionComposer
               campaignMenuHost={campaignMenuHost}
               canSaveGame={Boolean(selectedLiveSessionId)}
               commandRegistration={register('command', { required: true })}
               hasCommandError={Boolean(errors.command)}
-              isPending={createJobMutation.isPending}
+              isPending={createJobMutation.isPending || isReconcilingTimedOutTurn}
               onQuickAction={selectCommand}
               onSaveGame={async () => {
                 const checkpoint = await createCheckpointMutation.mutateAsync();
@@ -456,12 +677,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             <FeatureValidationMessage show={Boolean(errors.command)} message="Enter a command before queueing an RPG turn." />
             <FeatureValidationMessage show={submittedTurnFailed} message={submittedTurnFailureMessage} />
             <FeatureSubmitFeedback
-              error={createJobMutation.error}
+              error={recoveredAfterQueueTimeout || isReconcilingTimedOutTurn ? null : createJobMutation.error}
               errorPrefix="RPG turn request"
-              isError={createJobMutation.isError}
-              isPending={createJobMutation.isPending}
-              jobId={submittedTurnFailed ? undefined : createJobMutation.data?.id}
-              pendingMessage="Queueing RPG turn job…"
+              isError={createJobMutation.isError && !recoveredAfterQueueTimeout && !isReconcilingTimedOutTurn}
+              isPending={createJobMutation.isPending || isReconcilingTimedOutTurn}
+              jobId={submittedTurnFailed ? undefined : submittedTurnJob?.id}
+              pendingMessage={isReconcilingTimedOutTurn ? 'Still checking the RPG job queue for this turn...' : 'Queueing RPG turn job…'}
               successPrefix="RPG turn job queued"
             />
           </RpgStoryScene>

@@ -391,6 +391,42 @@ def _is_nonstateful_direct_npc_dialogue(advisory: Dict[str, Any]) -> bool:
     )
 
 
+_NON_NPC_TARGET_HINTS = {
+    "scene",
+    "narrator",
+    "narration",
+    "gm",
+    "game master",
+    "omnix",
+    "system",
+    "player",
+    "the player",
+    "you",
+}
+
+
+def _direct_npc_target_hint(*advisories: Dict[str, Any]) -> bool:
+    for advisory in advisories:
+        advisory = _d(advisory)
+        action_intent = _d(advisory.get("action_intent"))
+        for value in (
+            advisory.get("target_id"),
+            advisory.get("target_name"),
+            action_intent.get("target_id"),
+            action_intent.get("target_name"),
+        ):
+            text = _s(value).strip()
+            if not text:
+                continue
+            normalized = text.casefold()
+            if normalized.startswith("npc:"):
+                normalized = normalized.split(":", 1)[1]
+            normalized = normalized.replace("_", " ").strip()
+            if normalized and normalized not in _NON_NPC_TARGET_HINTS:
+                return True
+    return False
+
+
 def _is_direct_npc_question_from_packet(
     *,
     player_input: str,
@@ -403,7 +439,11 @@ def _is_direct_npc_question_from_packet(
     npc_context = _d(packet.get("npc_context"))
     addressed_ids = _l(priority.get("addressed_npc_ids"))
     addressed_profiles = _l(npc_context.get("addressed_npcs"))
-    if not addressed_ids and not addressed_profiles:
+    if (
+        not addressed_ids
+        and not addressed_profiles
+        and not _direct_npc_target_hint(action_advisory, semantic_advisory)
+    ):
         return False
 
     text = _s(player_input).strip().lower()
@@ -501,6 +541,11 @@ def _direct_dialogue_fallback_topic(player_input: str) -> str:
             "his day",
             "her day",
             "their day",
+            "how business",
+            "how's business",
+            "how is business",
+            "business is going",
+            "business going",
             "how's it going",
             "how is it going",
             "how have you been",

@@ -83,11 +83,134 @@ function stubEmptyWorkspaceFetch() {
 
 afterEach(() => {
   vi.useRealTimers();
+  window.localStorage.clear();
   vi.unstubAllGlobals();
   document.documentElement.classList.remove('rpg-play-focus-mode');
 });
 
 describe('RpgWorkspace', () => {
+  it('restores the last selected live session after refresh instead of defaulting to the newest demo', async () => {
+    window.localStorage.setItem('omnix:rpg:selected-session-id', 'ongoing-session');
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/replay/persistence/inventory') {
+        return Response.json({
+          sessions: [
+            {
+              session_id: 'demo-session',
+              title: 'Demo Session',
+              location: 'Glimmerdeep Pass',
+              updated_at: '2026-06-24T02:00:00Z',
+            },
+            {
+              session_id: 'ongoing-session',
+              title: 'Ongoing Campaign',
+              location: 'Rusty Flagon Tavern',
+              updated_at: '2026-06-23T02:00:00Z',
+            },
+          ],
+          diagnostics: [],
+        });
+      }
+
+      if (path === '/api/rpg/sessions/ongoing-session') {
+        return Response.json({
+          ok: true,
+          session_id: 'ongoing-session',
+          session: {
+            session_id: 'ongoing-session',
+            title: 'Ongoing Campaign',
+            location: 'Rusty Flagon Tavern',
+            updated_at: '2026-06-23T02:00:00Z',
+            turn_count: 4,
+          },
+        });
+      }
+
+      if (path === '/api/rpg/sessions/demo-session') {
+        return Response.json({
+          ok: true,
+          session_id: 'demo-session',
+          session: {
+            session_id: 'demo-session',
+            title: 'Demo Session',
+            location: 'Glimmerdeep Pass',
+            updated_at: '2026-06-24T02:00:00Z',
+            turn_count: 12,
+          },
+        });
+      }
+
+      if (path === '/api/jobs') return Response.json(emptyWorkspaceResponses.jobs);
+      if (path === '/api/assets') return Response.json({ assets: [] });
+      if (path === '/api/reports') return Response.json({ reports: [] });
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+
+    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('ongoing-session'));
+    expect(window.localStorage.getItem('omnix:rpg:selected-session-id')).toBe('ongoing-session');
+
+    await waitFor(() => {
+      const sessionPaths = fetchMock.mock.calls
+        .map(([input]) => requestPath(input as RequestInfo | URL))
+        .filter((path) => path.startsWith('/api/rpg/sessions/'));
+      expect(sessionPaths).toContain('/api/rpg/sessions/ongoing-session');
+      expect(sessionPaths).not.toContain('/api/rpg/sessions/demo-session');
+    });
+  });
+
+  it('repairs a stale stored RPG session id to the first indexed live session', async () => {
+    window.localStorage.setItem('omnix:rpg:selected-session-id', 'missing-session');
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/replay/persistence/inventory') {
+        return Response.json({
+          sessions: [
+            {
+              session_id: 'indexed-session',
+              title: 'Indexed Campaign',
+              location: 'North Road',
+              updated_at: '2026-06-24T02:00:00Z',
+            },
+          ],
+          diagnostics: [],
+        });
+      }
+
+      if (path === '/api/rpg/sessions/indexed-session') {
+        return Response.json({
+          ok: true,
+          session_id: 'indexed-session',
+          session: {
+            session_id: 'indexed-session',
+            title: 'Indexed Campaign',
+            location: 'North Road',
+            updated_at: '2026-06-24T02:00:00Z',
+            turn_count: 8,
+          },
+        });
+      }
+
+      if (path === '/api/jobs') return Response.json(emptyWorkspaceResponses.jobs);
+      if (path === '/api/assets') return Response.json({ assets: [] });
+      if (path === '/api/reports') return Response.json({ reports: [] });
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+
+    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('indexed-session'));
+    await waitFor(() => expect(window.localStorage.getItem('omnix:rpg:selected-session-id')).toBe('indexed-session'));
+  });
+
   it('uses replay inventory and queues RPG turns through shared jobs', async () => {
     let turnQueued = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -196,12 +319,129 @@ describe('RpgWorkspace', () => {
       expect(screen.getByText('Queueing RPG turn job…')).toBeInTheDocument();
     });
 
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(45_000);
 
     await vi.waitFor(() => {
-      expect(screen.getByText(/Gateway did not acknowledge the RPG turn queue request within 10s/)).toBeInTheDocument();
+      expect(screen.getByText('Still checking the RPG job queue for this turn...')).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Queue RPG turn' })).toBeEnabled();
+    expect(screen.queryByText(/Gateway did not acknowledge/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Queueing RPG turn' })).toBeDisabled();
+  });
+
+  it('recovers a timed out RPG turn queue request from the matching polled job', async () => {
+    const failedJob = {
+      id: 'job:rpg-recovered-failed',
+      module: 'rpg',
+      type: 'rpg.turn',
+      status: 'failed',
+      resource_class: 'gpu:llm',
+      created_at: '',
+      updated_at: '',
+      completed_at: '',
+      priority: 0,
+      input_ref: { session_id: 'rpg-session-1' },
+      input_payload: {
+        command: 'Ask Bran how business is going.',
+        determinism_policy: 'replay_preserving',
+      },
+      output_refs: [],
+      error: {
+        code: 'inline_job_failed',
+        message: 'Authoritative RPG turn did not produce a visible response',
+        retryable: true,
+      },
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/replay/persistence/inventory') {
+        return Promise.resolve(Response.json(emptyWorkspaceResponses.inventory));
+      }
+
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        return Promise.reject(
+          new Error(
+            'The RPG turn queue request is taking longer than expected. The workspace will keep checking the RPG job queue for this turn.',
+          ),
+        );
+      }
+
+      if (path === '/api/jobs') {
+        return Promise.resolve(Response.json({ jobs: [failedJob] }));
+      }
+
+      if (path === '/api/assets') {
+        return Promise.resolve(Response.json(emptyWorkspaceResponses.assets));
+      }
+
+      if (path === '/api/reports') {
+        return Promise.resolve(Response.json(emptyWorkspaceResponses.reports));
+      }
+
+      return Promise.resolve(new Response('not found', { status: 404 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+
+    expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+
+    fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran how business is going.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'RPG turn failed: Authoritative RPG turn did not produce a visible response',
+      );
+    });
+    expect(screen.queryByText(/Gateway did not acknowledge/)).not.toBeInTheDocument();
+  });
+
+  it('renders the submitted RPG turn from the direct job poll when the job list is stale', async () => {
+    let turnQueued = false;
+    const completedJob = {
+      id: 'job:rpg-direct-completed',
+      module: 'rpg',
+      type: 'rpg.turn',
+      status: 'completed',
+      resource_class: 'gpu:llm',
+      priority: 0,
+      stages: [],
+      input_ref: { session_id: 'rpg-session-1' },
+      input_payload: { command: 'Ask Bran how business is going.' },
+      output_refs: [{
+        type: 'rpg_turn_response',
+        content: 'Bran glances toward the hearth.\n\nBran: "Business is steady enough tonight."',
+      }],
+      created_at: '2026-06-14T00:00:01Z',
+      updated_at: '2026-06-14T00:00:04Z',
+      completed_at: '2026-06-14T00:00:04Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/replay/persistence/inventory') return Response.json(emptyWorkspaceResponses.inventory);
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        turnQueued = true;
+        return Response.json({ ...completedJob, status: 'queued', output_refs: [] });
+      }
+      if (path === '/api/jobs') return Response.json({ jobs: [] });
+      if (path.startsWith('/api/jobs/job%3Arpg-direct-completed') && turnQueued) {
+        return Response.json(completedJob);
+      }
+      if (path === '/api/assets') return Response.json(emptyWorkspaceResponses.assets);
+      if (path === '/api/reports') return Response.json(emptyWorkspaceResponses.reports);
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+    fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran how business is going.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+
+    expect(await screen.findByText('Ask Bran how business is going.')).toBeInTheDocument();
+    expect(await screen.findByText(/Business is steady enough tonight/)).toBeInTheDocument();
   });
 
   it('surfaces a terminal RPG turn job failure', async () => {

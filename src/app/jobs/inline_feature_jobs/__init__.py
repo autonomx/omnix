@@ -61,12 +61,20 @@ def _rpg_turn_visible_text(result: dict[str, Any]) -> str | None:
     restatement_source = _source._rpg_turn_restatement_source(result, nested, authoritative, turn_contract)
 
     for source in (result, nested, authoritative):
+        first_call = _source._format_rpg_turn_first_call_visible_response(source, restatement_source)
+        if first_call:
+            return first_call
         structured = _format_rpg_turn_narration(source, restatement_source)
         if structured:
             return structured
 
     for value, source in (
+        (result.get("final_narration"), result),
+        (result.get("narration"), result),
+        (nested.get("final_narration"), nested),
         (nested.get("narration"), nested),
+        (nested.get("summary"), nested),
+        (authoritative.get("final_narration"), authoritative),
         (authoritative.get("narration"), authoritative),
         (authoritative.get("deterministic_fallback_narration"), authoritative),
         (narration_brief.get("summary"), turn_contract),
@@ -77,11 +85,14 @@ def _rpg_turn_visible_text(result: dict[str, Any]) -> str | None:
             _source._rpg_turn_restatement_source(source, restatement_source),
         ):
             return visible
+    fallback = _source._fallback_rpg_turn_visible_text(result, nested, authoritative, turn_contract, restatement_source)
+    if fallback and not _source._is_player_restatement(fallback, restatement_source):
+        return fallback
     return None
 
 
-_source._format_rpg_turn_narration = _format_rpg_turn_narration
-_source._rpg_turn_visible_text = _rpg_turn_visible_text
+setattr(_source, "_format_rpg_turn_narration", _format_rpg_turn_narration)
+setattr(_source, "_rpg_turn_visible_text", _rpg_turn_visible_text)
 
 for _name, _value in vars(_source).items():
     if _name.startswith("__") and _name != "__all__":

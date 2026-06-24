@@ -376,6 +376,66 @@ def test_direct_npc_question_packet_blocks_canonical_runtime_even_when_advisory_
     assert result["result"]["visible_interaction_reason"] == "first_call_safe_dialogue_fallback"
 
 
+def test_direct_npc_business_question_uses_semantic_target_when_packet_has_no_addressed_npcs(monkeypatch):
+    player_input = "i ask bran how business is going"
+    empty_packet_diagnostics = {
+        "format_version": "first_call_grounding_diagnostics_v1",
+        "turn_grounding_packet": {
+            "format_version": "turn_grounding_packet_v1",
+            "player_input": player_input,
+            "priority_context": {"addressed_npc_ids": []},
+            "npc_context": {"addressed_npcs": []},
+        },
+    }
+
+    monkeypatch.setattr(interactive_runtime.canonical_runtime, "resolve_service_turn", lambda **kwargs: {"matched": False})
+    monkeypatch.setattr(interactive_runtime, "build_app_llm_gateway", lambda: object())
+    monkeypatch.setattr(interactive_runtime.canonical_runtime, "_build_turn_id", lambda runtime_state: "turn:test")
+    monkeypatch.setattr(
+        interactive_runtime,
+        "get_semantic_action_advisory",
+        lambda **kwargs: {
+            "action_type": "social_activity",
+            "semantic_family": "social",
+            "interaction_mode": "direct",
+            "activity_label": "inquire_wellbeing",
+            "target_id": "bran",
+            "target_name": "Bran",
+            "stateful": False,
+            "needs_runtime_resolution": True,
+            "visible_response": {
+                "narration": "You turn to Bran and ask him how business is going for him these days.",
+                "npc": {"speaker": "Player", "line": "How's business going?"},
+            },
+            "direct_response_gate": {
+                "safe_to_display_now": True,
+                "reason": "non_mutating_social_question",
+                "risk_flags": ["social", "low_impact"],
+            },
+            "first_call_grounding_diagnostics": empty_packet_diagnostics,
+        },
+    )
+
+    def fail_if_called(**kwargs):
+        raise AssertionError("canonical runtime should not handle semantic-targeted direct NPC question")
+
+    monkeypatch.setattr(interactive_runtime.canonical_runtime, "apply_turn", fail_if_called)
+
+    result = interactive_runtime.apply_turn(
+        session_id="manual_service_bran_test",
+        player_input=player_input,
+        session_override={"session_id": "manual_service_bran_test", "simulation_state": {}, "runtime_state": {}},
+    )
+
+    line = result["npc"]["line"].lower()
+
+    assert result["consumed"] is True
+    assert result["llm_purpose"] == "first_call_safe_dialogue_fallback"
+    assert result["npc"]["speaker"] == "Bran"
+    assert result["grounding_validation"]["fallback_topic"] == "wellbeing_inquiry"
+    assert any(term in line for term in ("hearth", "decent", "busy"))
+
+
 def test_valid_provider_food_question_stays_llm_dialogue(monkeypatch):
     player_input = "Bran, what food do you sell?"
 

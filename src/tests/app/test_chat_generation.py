@@ -81,6 +81,36 @@ def test_rpg_turn_visible_text_prefers_structured_narration() -> None:
     )
 
 
+def test_rpg_turn_visible_text_displays_first_call_dialogue_response() -> None:
+    result = {
+        "player_input": "how is business bran?",
+        "source": "first_call_dialogue_v1",
+        "narration": "Bran glances toward the common room before answering.",
+        "final_narration": "Bran glances toward the common room before answering.",
+        "first_call_visible_response": {
+            "consumable": True,
+            "reason": "non_stateful_interpretive_dialogue",
+            "visible_response": {
+                "narration": "Bran glances toward the common room before answering.",
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "Steady enough. Rooms, food, and rumors keep the doors open.",
+                },
+            },
+            "narration": "Bran glances toward the common room before answering.",
+            "npc": {
+                "speaker": "Bran",
+                "line": "Steady enough. Rooms, food, and rumors keep the doors open.",
+            },
+        },
+    }
+
+    assert _rpg_turn_visible_text(result) == (
+        "Bran glances toward the common room before answering.\n\n"
+        'Bran: "Steady enough. Rooms, food, and rumors keep the doors open."'
+    )
+
+
 def test_rpg_turn_visible_text_skips_scene_restatement_narration() -> None:
     result = {
         "result": {
@@ -117,6 +147,29 @@ def test_rpg_turn_visible_text_rejects_plain_player_restatement_after_bad_struct
     }
 
     assert _rpg_turn_visible_text(result) is None
+
+
+def test_rpg_turn_visible_text_falls_back_for_direct_npc_business_question() -> None:
+    result = {
+        "input_payload": {
+            "command": "i ask bran how business is going",
+        },
+        "result": {
+            "narration_json": {
+                "narration": "i ask bran how business is going",
+                "npc": {
+                    "speaker": "Scene",
+                    "line": "i ask bran how business is going",
+                },
+            },
+        },
+    }
+
+    assert _rpg_turn_visible_text(result) == (
+        "Bran glances around the Rusty Flagon before answering.\n\n"
+        'Bran: "Steady enough. Rooms, food, and rumors keep the doors open, '
+        'though the road has been strange lately."'
+    )
 
 
 def test_rpg_turn_job_queues_deferred_narration(monkeypatch) -> None:

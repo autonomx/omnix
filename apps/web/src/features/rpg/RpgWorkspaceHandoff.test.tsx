@@ -33,10 +33,106 @@ function renderRpg() {
 }
 
 afterEach(() => {
+  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 
 describe('RpgWorkspace campaign handoff', () => {
+  it('keeps a created campaign selected before inventory catches up', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/replay/persistence/inventory') {
+        return Response.json({
+          sessions: [
+            {
+              session_id: 'rpg-previous-1',
+              title: 'Previous Campaign',
+              location: 'Old Road',
+              summary: 'The previous campaign is still selected.',
+              turn_count: 4,
+              updated_at: '2026-06-19T00:00:00Z',
+            },
+          ],
+          diagnostics: [],
+        });
+      }
+
+      if (path === '/api/rpg/sessions/rpg-previous-1') {
+        return Response.json({
+          ok: true,
+          session_id: 'rpg-previous-1',
+          session: {
+            session_id: 'rpg-previous-1',
+            title: 'Previous Campaign',
+            location: 'Old Road',
+            timeline: [{ title: 'Old conversation', detail: 'Bran remembers the previous campaign.' }],
+          },
+        });
+      }
+
+      if (path === '/api/rpg/new-game' && init?.method === 'POST') {
+        return Response.json({
+          ok: true,
+          session_id: 'rpg-created-lagging',
+          status: 'ready',
+          session: {
+            session_id: 'rpg-created-lagging',
+            title: 'Created Campaign',
+            location: 'Rusty Flagon Tavern',
+            summary: 'A fresh campaign begins at the tavern.',
+            turn_count: 0,
+            state: {
+              player: { name: 'Elara' },
+              timeline: [{ title: 'Campaign begins', detail: 'Elara enters the Rusty Flagon Tavern.' }],
+            },
+          },
+        });
+      }
+
+      if (path === '/api/jobs') {
+        return Response.json({
+          jobs: [
+            {
+              id: 'job:old-turn',
+              module: 'rpg',
+              type: 'rpg.turn',
+              status: 'completed',
+              resource_class: 'gpu:llm',
+              priority: 0,
+              stages: [],
+              input_ref: { session_id: 'rpg-previous-1' },
+              input_payload: { command: 'i ask bran how business is going' },
+              output_refs: [{ type: 'rpg_turn_response', content: 'Bran talks about the old campaign business.' }],
+              created_at: '2026-06-19T00:00:01Z',
+              updated_at: '2026-06-19T00:00:04Z',
+              completed_at: '2026-06-19T00:00:04Z',
+            },
+          ],
+        });
+      }
+
+      if (path === '/api/assets') return Response.json({ assets: [] });
+      if (path === '/api/reports') return Response.json({ reports: [] });
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+
+    expect(await screen.findByText('i ask bran how business is going')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Campaign Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: /^New Campaign/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create Campaign' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Session')).toHaveValue('rpg-created-lagging');
+    expect(screen.queryByText('i ask bran how business is going')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bran talks about the old campaign business.')).not.toBeInTheDocument();
+    expect((await screen.findAllByText('Elara enters the Rusty Flagon Tavern.')).length).toBeGreaterThan(0);
+  });
+
   it('surfaces a created campaign and queues the first turn for it', async () => {
     let inventoryReads = 0;
     let turnQueued = false;

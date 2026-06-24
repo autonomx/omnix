@@ -255,6 +255,10 @@ export class OmnixApiClient {
     return this.post<CreateJobRequest, JobRecord>('/api/jobs', request, options);
   }
 
+  async getJob(jobId: string): Promise<JobRecord> {
+    return this.get<JobRecord>(`/api/jobs/${encodeURIComponent(jobId)}`);
+  }
+
   async cancelJob(jobId: string, reason: string): Promise<JobRecord> {
     return this.post<CancelJobRequest, JobRecord>(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { reason });
   }
