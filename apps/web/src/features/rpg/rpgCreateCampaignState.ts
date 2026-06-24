@@ -204,12 +204,12 @@ export function applyBuildBoosts(stats: Record<string, number>, selectedBuild: B
 
 export function buildRpgNewGameRequest(selections: CampaignCreationSelections): RpgNewGameRequest {
   const selectedBuild = buildTemplates.find((template) => template.key === selections.buildKey) ?? buildTemplates[0];
-  const openingHook = selections.openingHook ?? 'tavern-rumor';
-  const openingPace = selections.openingPace ?? 'balanced';
-  const relationshipPreset = selections.relationshipPreset ?? 'unknown-outsider';
-  const selectedHook = openingHooks.find((option) => option.value === openingHook) ?? openingHooks[0];
-  const selectedPace = openingPaces.find((option) => option.value === openingPace) ?? openingPaces[1];
-  const selectedRelationship = relationshipPresets.find((option) => option.value === relationshipPreset) ?? relationshipPresets[0];
+  const selectedHook = openingHooks.find((option) => option.value === (selections.openingHook ?? 'tavern-rumor')) ?? openingHooks[0];
+  const selectedPace = openingPaces.find((option) => option.value === (selections.openingPace ?? 'balanced')) ?? openingPaces[1];
+  const selectedRelationship = relationshipPresets.find((option) => option.value === (selections.relationshipPreset ?? 'unknown-outsider')) ?? relationshipPresets[0];
+  const openingHook = mapOpeningHook(selectedHook.value);
+  const openingPace = mapOpeningPace(selectedPace.value);
+  const relationshipPreset = mapRelationshipPreset(selectedRelationship.value);
   const primary = mapPrimaryCapability(selections.primaryCapability);
   const secondary = (Object.entries(selections.capabilities) as Array<[Capability, boolean]>)
     .filter(([, enabled]) => enabled)
@@ -218,7 +218,7 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
   const seed = parseSeed(selections.seed);
   const derivedStats = applyBuildBoosts(selections.stats, selectedBuild);
   const request: RpgNewGameRequest & Record<string, unknown> = {
-    campaign_template: 'classic_fantasy',
+    campaign_template: 'deterministic_rpg_campaign',
     genre: selectedHook.value,
     tone: `${selectedPace.label.toLowerCase()} ${selectedHook.label.toLowerCase()}`,
     background: selections.background,
@@ -228,12 +228,13 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
       pronouns: selections.pronouns.trim() || 'they/them',
       background: selections.origin?.trim() || selections.background,
       build: mapBuild(selectedBuild.key),
+      portrait_seed: seed,
     },
     primary_capability: primary,
     secondary_capabilities: secondary,
     power_source: mapPower(selections.powerSource),
     generated_class_name: selectedBuild.label,
-    generated_class_summary: buildGeneratedSummary(selectedBuild, derivedStats, selections),
+    generated_class_summary: buildGeneratedSummary(selectedBuild, selectedHook, selectedPace, selectedRelationship, selections),
     difficulty: mapDifficulty(selections.difficulty),
     world_activity: mapWorldActivity(selections.worldActivity),
     economy_pressure: mapEconomyPressure(selections.economyPressure),
@@ -241,6 +242,9 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     companions_enabled: selections.systems.companions,
     permadeath: selections.systems.permadeath,
     seed,
+    initial_stats: derivedStats,
+    starter_gear: selectedBuild.starterGear,
+    starter_gear_tags: selectedBuild.starterGear,
     features: {
       autosave: selections.systems.autosave,
       validator: selections.systems.grounding,
@@ -250,9 +254,17 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
       tts: selections.systems.tts,
       stt: selections.systems.stt,
     },
-    opening_hook: selectedHook.value,
-    opening_pace: selectedPace.value,
-    relationship_preset: selectedRelationship.value,
+    opening_hook: openingHook,
+    opening_pace: openingPace,
+    relationship_preset: relationshipPreset,
+    story_options: {
+      opening_hook: openingHook,
+      opening_hook_label: selectedHook.label,
+      opening_pace: openingPace,
+      opening_pace_label: selectedPace.label,
+      relationship_preset: relationshipPreset,
+      relationship_label: selectedRelationship.label,
+    },
     character_origin: selections.origin,
     motivation: {
       primary: selections.motivationPrimary ?? 'survival',
@@ -264,15 +276,20 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
   return request;
 }
 
-function buildGeneratedSummary(selectedBuild: BuildTemplate, stats: Record<string, number>, selections: CampaignCreationSelections): string {
-  const statLine = statDefinitions.map((stat) => `${stat.label} ${stats[stat.key]}`).join(', ');
+function buildGeneratedSummary(
+  selectedBuild: BuildTemplate,
+  selectedHook: SelectOption,
+  selectedPace: SelectOption,
+  selectedRelationship: SelectOption,
+  selections: CampaignCreationSelections,
+): string {
   return [
-    `Build: ${selectedBuild.label}`,
-    `Stats: ${statLine}`,
-    `Starter gear: ${selectedBuild.starterGear.join(', ')}`,
-    `Origin: ${selections.origin || selections.background}`,
-    `Motivation: ${selections.motivationPrimary ?? 'survival'}${selections.motivationTarget ? ` toward ${selections.motivationTarget}` : ''}`,
-    `Values: ${selections.values || 'agency'}`,
+    `${selectedBuild.label}: ${selectedBuild.detail}`,
+    `Opens with ${selectedHook.label} at ${selectedPace.label} pace.`,
+    `Relationship baseline is ${selectedRelationship.label}.`,
+    `Origin is ${selections.origin || selections.background}.`,
+    `Motivation is ${selections.motivationPrimary ?? 'survival'}${selections.motivationTarget ? ` toward ${selections.motivationTarget}` : ''}.`,
+    `Values are ${selections.values || 'agency'}.`,
   ].join('\n');
 }
 
@@ -310,8 +327,31 @@ function mapPower(value: string): RpgPowerSource {
 function mapLocation(value: string): string {
   if (value === 'market-road') return 'northern_road';
   if (value === 'old-quarry') return 'old_quarry';
-  if (value === 'watch-post') return 'northern_road';
+  if (value === 'watch-post') return 'northern_watch_post';
   return 'rusty_flagon_tavern';
+}
+
+function mapOpeningHook(value: string): string {
+  if (value === 'bandit-trail') return 'bandit_trail';
+  if (value === 'missing-person') return 'missing_person';
+  if (value === 'guard-trouble') return 'guard_trouble';
+  if (value === 'merchant-job') return 'merchant_job';
+  if (value === 'random-seed') return 'random_seed';
+  return 'tavern_rumor';
+}
+
+function mapOpeningPace(value: string): string {
+  if (value === 'slow-roleplay') return 'slow_roleplay';
+  if (value === 'immediate-action') return 'immediate_action';
+  return 'balanced';
+}
+
+function mapRelationshipPreset(value: string): string {
+  if (value === 'local-regular') return 'local_regular';
+  if (value === 'known-contact') return 'known_contact_nearby';
+  if (value === 'owes-favor') return 'owes_favor';
+  if (value === 'guard-suspicion') return 'guard_suspicion';
+  return 'unknown_outsider';
 }
 
 function mapDifficulty(value: string): 'story' | 'normal' | 'harsh' {
