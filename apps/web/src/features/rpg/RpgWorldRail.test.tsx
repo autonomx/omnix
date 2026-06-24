@@ -1,7 +1,8 @@
 import { MantineProvider } from '@mantine/core';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { omnixApiClient } from '../../api/client';
 import { omnixTheme } from '../../design/theme';
 import { RpgWorldRail } from './RpgWorldRail';
 import { npcRelationships, previewEncounter, previewJobs, previewSessionSummary, previewWorldStateRows } from './rpgUiState';
@@ -48,12 +49,32 @@ describe('RpgWorldRail', () => {
     expect(screen.getByRole('link', { name: 'Open reports index' })).toHaveAttribute('href', '/api/reports');
     expect(screen.getByText('Latest checkpoint: checkpoint-001.json')).toBeInTheDocument();
     expect(screen.getByText('rpg_checkpoint / rpg')).toBeInTheDocument();
+    expect(screen.getByText('Last 10 turn debug report')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate last 10 turn report' })).toBeDisabled();
   });
 
-  it('keeps the wired job, autoplay, and checkpoint controls active', () => {
+  it('keeps the wired job, autoplay, report, and checkpoint controls active', async () => {
     const onCreateCheckpoint = vi.fn();
     const onRefreshJobs = vi.fn();
     const onToggleAutoplay = vi.fn();
+    const createJobSpy = vi.spyOn(omnixApiClient, 'createJob').mockResolvedValue({
+      id: 'job:report-1',
+      module: 'rpg',
+      type: 'rpg.report.last10',
+      status: 'queued',
+      resource_class: 'cpu',
+      priority: 0,
+      stages: [],
+      progress: { current: 0, total: 1 },
+      logs: [],
+      input_ref: { session_id: 'session-live-1' },
+      input_payload: {},
+      output_refs: [],
+      created_at: '2026-06-23T00:00:00Z',
+      updated_at: '2026-06-23T00:00:00Z',
+      cancel: { requested: false },
+      compat: {},
+    });
 
     renderWithTheme(
       <RpgWorldRail
@@ -73,18 +94,32 @@ describe('RpgWorldRail', () => {
         rpgAssets={[]}
         rpgJobCount={1}
         rpgReportCount={1}
-        selectedSessionSummary={previewSessionSummary}
+        selectedSessionSummary={{ ...previewSessionSummary, id: 'session-live-1', source: 'live' }}
         worldStateRows={previewWorldStateRows}
       />
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh RPG jobs' }));
     fireEvent.click(screen.getByRole('button', { name: 'Start autoplay' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate last 10 turn report' }));
     fireEvent.click(screen.getByRole('button', { name: 'Create checkpoint' }));
 
-    expect(onRefreshJobs).toHaveBeenCalledTimes(1);
     expect(onToggleAutoplay).toHaveBeenCalledTimes(1);
     expect(onCreateCheckpoint).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(createJobSpy).toHaveBeenCalledTimes(1));
+    expect(createJobSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        module: 'rpg',
+        type: 'rpg.report.last10',
+        resource_class: 'cpu',
+        input_ref: { session_id: 'session-live-1' },
+        input_payload: expect.objectContaining({ turn_limit: 10, include_performance_metrics: true }),
+      }),
+      expect.objectContaining({ timeoutMs: 45_000 }),
+    );
+    await waitFor(() => expect(onRefreshJobs).toHaveBeenCalledTimes(2));
+    await screen.findByText('queued • job:report-1');
+    createJobSpy.mockRestore();
   });
 
   it('shows at most three RPG job cards while preserving the live count', () => {
