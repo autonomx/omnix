@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from app.rpg.environmental_activity_runtime import build_environmental_activity_report
+
 ENVIRONMENTAL_NARRATION_SOURCE = "phase28_environmental_narration_v1"
 ENVIRONMENTAL_STATE_MEMORY_SOURCE = "phase33_environmental_state_memory_v1"
 _TRIGGER_KEYS = (
@@ -66,8 +68,9 @@ def build_environmental_narration_report(turn_result: Mapping[str, object]) -> d
     previous = _previous_scene(turn_result, state)
     current = _current_scene(turn_result, state)
     memory = _state_memory(previous, current)
+    activity = build_environmental_activity_report(turn_result)
     triggers = _triggers(turn_result, previous, current, memory)
-    contract = _scene_contract(current, triggers, memory)
+    contract = _scene_contract(current, triggers, memory, activity)
     issues = tuple(_issues(triggers, contract))
     return {
         "source": ENVIRONMENTAL_NARRATION_SOURCE,
@@ -77,6 +80,7 @@ def build_environmental_narration_report(turn_result: Mapping[str, object]) -> d
         "triggers": list(triggers),
         "scene_introduction_contract": contract,
         "state_memory": memory,
+        "living_activity": activity,
     }
 
 
@@ -226,6 +230,7 @@ def _scene_contract(
     current: Mapping[str, object],
     triggers: Sequence[str],
     memory: Mapping[str, object],
+    activity: Mapping[str, object],
 ) -> dict[str, object]:
     sensory = {key: current.get(key) for key in _SENSORY_KEYS}
     context = {key: current.get(key) for key in _CONTEXT_KEYS}
@@ -241,6 +246,7 @@ def _scene_contract(
         "world_context": context,
         "state_memory": memory,
         "changed_context": list(_sequence(memory.get("changed_fields"))),
+        "living_activity": activity,
         "instructions": (
             "Establish place, atmosphere, situation, living activity, and meaningful change. "
             "Acknowledge familiarity on return visits while highlighting what changed."
