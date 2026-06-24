@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.rpg.environmental_narration_runtime import build_environmental_narration_report
+from app.rpg.report_surface_runtime import attach_report_surface_to_summary
 
 
 def test_phase28_new_location_builds_scene_contract() -> None:
@@ -43,6 +44,15 @@ def test_phase28_changed_return_visit_trigger() -> None:
 
     assert "changed_return_visit" in report["triggers"]
     assert report["ready"] is True
+
+
+def test_phase28_report_surface_contains_environmental_section() -> None:
+    result = attach_report_surface_to_summary(
+        {"transcript_rows": [{"turn_result": {"new_game": True, "location": {"id": "road"}}}]}
+    )
+
+    sections = result["transcript_rows"][0]["report_surface"]["sections"]
+    assert "environmental_narration" in sections
 
 
 def test_phase28_flags_missing_trigger_and_context() -> None:
