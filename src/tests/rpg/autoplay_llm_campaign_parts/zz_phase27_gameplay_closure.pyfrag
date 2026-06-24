@@ -1,0 +1,27 @@
+def _phase27_install_gameplay_closure_summary_wrapper() -> None:
+    original = globals().get("run_autoplay_campaign")
+    if not callable(original) or getattr(original, "_phase27_closure_wrapped", False):
+        return
+
+    def _wrapped_phase27_run_autoplay_campaign(args, __original=original):
+        summary = __original(args)
+        if not isinstance(summary, dict):
+            return summary
+        from app.rpg.gameplay_closure_runtime import build_gameplay_closure_report
+
+        rows = []
+        for row in summary.get("transcript_rows") or ():
+            if isinstance(row, dict):
+                decorated = dict(row)
+                decorated["gameplay_closure"] = build_gameplay_closure_report(row.get("turn_result") or row)
+                rows.append(decorated)
+        result = dict(summary)
+        result["transcript_rows"] = rows
+        result["gameplay_closure"] = {"source": "phase27_gameplay_closure_runtime_v1", "turn_count": len(rows)}
+        return result
+
+    _wrapped_phase27_run_autoplay_campaign._phase27_closure_wrapped = True
+    globals()["run_autoplay_campaign"] = _wrapped_phase27_run_autoplay_campaign
+
+
+_phase27_install_gameplay_closure_summary_wrapper()
