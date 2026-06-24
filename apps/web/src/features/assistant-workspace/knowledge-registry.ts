@@ -36,3 +36,18 @@ export function createKnowledgeRegistry(sources: KnowledgeSource[] = []): Knowle
     },
   };
 }
+
+function createEmptyKnowledgeSource(input: Omit<KnowledgeSource, 'retrieve'>): KnowledgeSource {
+  return { ...input, retrieve: async () => ({ sourceId: input.id, chunks: [], status: 'empty' }) };
+}
+
+export const DEFAULT_KNOWLEDGE_SOURCES = [
+  createEmptyKnowledgeSource({ id: 'memory', label: 'Memory', type: 'memory', description: 'Assistant memory and user preferences.', defaultConfig: { enabled: true, priority: 10 } }),
+  createEmptyKnowledgeSource({ id: 'workspace_documents', label: 'Workspace Documents', type: 'workspace_document', description: 'Project and workspace documents managed by Omnix.', defaultConfig: { enabled: true, priority: 20 } }),
+  createEmptyKnowledgeSource({ id: 'attached_files', label: 'Attached Files', type: 'attached_file', description: 'Files attached to the active conversation or workspace.', defaultConfig: { enabled: true, priority: 30 } }),
+  createEmptyKnowledgeSource({ id: 'user_notes', label: 'User Notes', type: 'user_note', description: 'User notes available to the assistant.', defaultConfig: { enabled: true, priority: 40 } }),
+  createEmptyKnowledgeSource({ id: 'github_source', label: 'GitHub Source', type: 'github_source', description: 'Read-only repository, pull request, issue, commit, and run-log knowledge.', defaultConfig: { enabled: false, priority: 50 } }),
+  createEmptyKnowledgeSource({ id: 'web_research', label: 'Web Search', type: 'web', description: 'Fresh information retrieved as a knowledge source.', defaultConfig: { enabled: false, priority: 80, settings: { mode: 'manual' } } }),
+] as const;
+
+export function createDefaultKnowledgeRegistry(): KnowledgeRegistry { return createKnowledgeRegistry([...DEFAULT_KNOWLEDGE_SOURCES]); }
