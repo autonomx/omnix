@@ -1,0 +1,18 @@
+def _phase28_install_environmental_narration_wrapper() -> None:
+    original = globals().get("run_autoplay_campaign")
+    if not callable(original) or getattr(original, "_phase28_environment_wrapped", False):
+        return
+
+    def _wrapped_phase28_run_autoplay_campaign(args, __original=original):
+        summary = __original(args)
+        if not isinstance(summary, dict):
+            return summary
+        from app.rpg.environmental_narration_runtime import attach_environmental_narration_to_summary
+
+        return attach_environmental_narration_to_summary(summary)
+
+    _wrapped_phase28_run_autoplay_campaign._phase28_environment_wrapped = True
+    globals()["run_autoplay_campaign"] = _wrapped_phase28_run_autoplay_campaign
+
+
+_phase28_install_environmental_narration_wrapper()
