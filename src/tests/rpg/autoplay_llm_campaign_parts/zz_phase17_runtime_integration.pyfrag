@@ -1,0 +1,28 @@
+def _phase17_install_runtime_integration_autoplay_summary_wrapper() -> None:
+    original = globals().get("run_autoplay_campaign")
+    if not callable(original) or getattr(original, "_phase17_runtime_integration_wrapped", False):
+        return
+
+    def _wrapped_phase17_run_autoplay_campaign(args, __original=original):
+        summary = __original(args)
+        if not isinstance(summary, dict):
+            return summary
+        try:
+            from app.rpg.runtime_integration_report import attach_runtime_integration_to_autoplay_summary
+
+            return attach_runtime_integration_to_autoplay_summary(summary, persist=True)
+        except Exception as exc:
+            result = dict(summary)
+            result["runtime_integration"] = {
+                "source": "phase17_runtime_integration_report_v1",
+                "ok": False,
+                "error_type": type(exc).__name__,
+                "message": str(exc)[-300:],
+            }
+            return result
+
+    _wrapped_phase17_run_autoplay_campaign._phase17_runtime_integration_wrapped = True
+    globals()["run_autoplay_campaign"] = _wrapped_phase17_run_autoplay_campaign
+
+
+_phase17_install_runtime_integration_autoplay_summary_wrapper()
