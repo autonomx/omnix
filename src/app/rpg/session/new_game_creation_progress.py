@@ -74,9 +74,9 @@ CREATION_STAGES: list[dict[str, Any]] = [
         "progress": 96,
     },
     {
-        "id": "prepare_first_turn",
-        "label": "Preparing first turn context",
-        "detail": "Turn composer, narration, TTS/STT, and optional image hooks made ready.",
+        "id": "ready_first_turn",
+        "label": "Ready for first turn",
+        "detail": "Turn composer controls are ready; narration, TTS/STT, and image work stay deferred until you act.",
         "progress": 100,
     },
 ]
@@ -171,10 +171,8 @@ def build_creation_job(
     return job
 
 
-def _persist_creation_job(session_id: str, job: dict[str, Any], progress: dict[str, Any]) -> dict[str, Any] | None:
-    session = load_session(session_id)
-    if not session:
-        return None
+def _attach_creation_metadata(session: dict[str, Any], job: dict[str, Any], progress: dict[str, Any]) -> dict[str, Any]:
+    session = dict(session)
     runtime_state = dict(session.get("runtime_state") or {})
     runtime_state["creation_job"] = dict(job)
     runtime_state["creation_progress"] = dict(progress)
@@ -185,11 +183,25 @@ def _persist_creation_job(session_id: str, job: dict[str, Any], progress: dict[s
     manifest["creation_job_id"] = job.get("job_id")
     manifest["creation_status"] = job.get("status")
     session["manifest"] = manifest
-    return save_session(session, compact=False)
+    return session
+
+
+def _persist_creation_job(session_id: str, job: dict[str, Any], progress: dict[str, Any]) -> dict[str, Any] | None:
+    session = load_session(session_id)
+    if not session:
+        return None
+    return save_session(_attach_creation_metadata(session, job, progress), compact=True)
 
 
 def create_new_game_session_with_progress(request: RpgNewGameRequest) -> dict[str, Any]:
-    """Create a new game and attach backend-authored progress/job status."""
+    """Create a new game and attach backend-authored progress/job status.
+
+    Session creation must remain a fast launch path.  The creation job/progress
+    envelope is returned to the browser and attached to the returned session
+    payload, but the already-saved campaign is not immediately reloaded and
+    saved a second time just to persist completed progress metadata.  The
+    persisted creation-job lookup can synthesize a completed job later.
+    """
     timestamp = _utc_now()
     result = create_new_game_session(request)
     session_id = str(result.get("session_id") or "")
@@ -201,9 +213,10 @@ def create_new_game_session_with_progress(request: RpgNewGameRequest) -> dict[st
 
     job = build_creation_job(session_id=session_id, status="completed", timestamp=timestamp)
     progress = build_creation_progress_snapshot(session_id=session_id, status="completed")
-    saved = _persist_creation_job(session_id, job, progress)
-    if saved is not None:
-        result = {**result, "session": saved, "game": saved.get("state", result.get("game", {}))}
+    session = result.get("session")
+    if isinstance(session, dict):
+        session = _attach_creation_metadata(session, job, progress)
+        result = {**result, "session": session, "game": session.get("state", result.get("game", {}))}
     return {**result, "creation_job": job, "creation_progress": progress}
 
 
