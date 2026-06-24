@@ -180,7 +180,7 @@ export const creationStages: CreationStage[] = [
   { label: 'Seeding NPCs and services', detail: 'Innkeeper, merchants, rumors, party eligibility, and local events staged.' },
   { label: 'Creating opening hook', detail: 'First objective, suggested actions, and opening scene context generated.' },
   { label: 'Saving campaign session', detail: 'Autosave/checkpoint payload prepared for replay-preserving launch.' },
-  { label: 'Preparing first turn context', detail: 'Turn composer, narration, TTS/STT, and optional image hooks made ready.' },
+  { label: 'Ready for first turn', detail: 'Turn composer controls are ready; narration, TTS/STT, and image work stay deferred until you act.' },
 ];
 
 export const capabilityLabels: Record<Capability, string> = {
@@ -218,22 +218,22 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
   const seed = parseSeed(selections.seed);
   const derivedStats = applyBuildBoosts(selections.stats, selectedBuild);
   const request: RpgNewGameRequest & Record<string, unknown> = {
-    campaign_template: 'deterministic_rpg_campaign',
-    tone: selectedBuild.detail,
+    campaign_template: 'classic_fantasy',
+    genre: selectedHook.value,
+    tone: `${selectedPace.label.toLowerCase()} ${selectedHook.label.toLowerCase()}`,
     background: selections.background,
-    starting_location: mapStartingLocation(selections.startingLocation),
+    starting_location: mapLocation(selections.startingLocation),
     player: {
-      name: selections.characterName.trim(),
-      pronouns: selections.pronouns.trim(),
-      background: selections.background,
-      build: mapBuildKey(selections.buildKey),
-      portrait_seed: seed,
+      name: selections.characterName.trim() || 'Adventurer',
+      pronouns: selections.pronouns.trim() || 'they/them',
+      background: selections.origin?.trim() || selections.background,
+      build: mapBuild(selectedBuild.key),
     },
     primary_capability: primary,
     secondary_capabilities: secondary,
-    power_source: mapPowerSource(selections.powerSource),
+    power_source: mapPower(selections.powerSource),
     generated_class_name: selectedBuild.label,
-    generated_class_summary: `${selectedBuild.label}: ${selectedBuild.detail} Opens with ${selectedHook.label} at ${selectedPace.label} pace and ${selectedRelationship.label.toLowerCase()}.`,
+    generated_class_summary: buildGeneratedSummary(selectedBuild, derivedStats, selections),
     difficulty: mapDifficulty(selections.difficulty),
     world_activity: mapWorldActivity(selections.worldActivity),
     economy_pressure: mapEconomyPressure(selections.economyPressure),
@@ -241,28 +241,6 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     companions_enabled: selections.systems.companions,
     permadeath: selections.systems.permadeath,
     seed,
-    initial_stats: derivedStats,
-    starter_gear: [...selectedBuild.starterGear],
-    starter_gear_tags: [...selectedBuild.starterGear],
-    starting_build: selectedBuild.label,
-    opening_hook: mapOpeningHook(openingHook),
-    opening_pace: mapOpeningPace(openingPace),
-    relationship_preset: mapRelationshipPreset(relationshipPreset),
-    origin: selections.origin?.trim() || selections.background,
-    motivation_primary: selections.motivationPrimary?.trim() || mapOpeningHook(openingHook),
-    motivation_target: selections.motivationTarget?.trim() || null,
-    flaw: selections.flaw?.trim() || null,
-    values: parseValueList(selections.values),
-    talents: buildGenesisTalents(primary, secondary),
-    story_options: {
-      opening_hook: mapOpeningHook(openingHook),
-      opening_hook_label: selectedHook.label,
-      opening_pace: mapOpeningPace(openingPace),
-      opening_pace_label: selectedPace.label,
-      relationship_preset: mapRelationshipPreset(relationshipPreset),
-      relationship_label: selectedRelationship.label,
-    },
-    system_options: { ...selections.systems },
     features: {
       autosave: selections.systems.autosave,
       validator: selections.systems.grounding,
@@ -272,152 +250,90 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
       tts: selections.systems.tts,
       stt: selections.systems.stt,
     },
+    opening_hook: selectedHook.value,
+    opening_pace: selectedPace.value,
+    relationship_preset: selectedRelationship.value,
+    character_origin: selections.origin,
+    motivation: {
+      primary: selections.motivationPrimary ?? 'survival',
+      target: selections.motivationTarget ?? '',
+      flaw: selections.flaw ?? 'cautious',
+      values: selections.values ?? 'agency',
+    },
   };
   return request;
 }
 
+function buildGeneratedSummary(selectedBuild: BuildTemplate, stats: Record<string, number>, selections: CampaignCreationSelections): string {
+  const statLine = statDefinitions.map((stat) => `${stat.label} ${stats[stat.key]}`).join(', ');
+  return [
+    `Build: ${selectedBuild.label}`,
+    `Stats: ${statLine}`,
+    `Starter gear: ${selectedBuild.starterGear.join(', ')}`,
+    `Origin: ${selections.origin || selections.background}`,
+    `Motivation: ${selections.motivationPrimary ?? 'survival'}${selections.motivationTarget ? ` toward ${selections.motivationTarget}` : ''}`,
+    `Values: ${selections.values || 'agency'}`,
+  ].join('\n');
+}
+
 function parseSeed(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  if (!/^[+-]?\d+$/.test(trimmed)) {
-    return null;
-  }
-  const parsed = Number(trimmed);
-  return Number.isSafeInteger(parsed) ? parsed : null;
+  const numeric = Number.parseInt(value.trim(), 10);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
-function parseValueList(value?: string): string[] {
-  const values = (value ?? '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  return values.length > 0 ? values : ['agency'];
-}
-
-function buildGenesisTalents(primary: RpgCapability, secondary: RpgCapability[]): Array<{ id: string; rank: number }> {
-  const talentIds: Partial<Record<RpgCapability, string>> = {
-    combat: 'action_readiness',
-    influence: 'social_leverage',
-    knowledge: 'field_knowledge',
-    recon: 'reconnaissance',
-    support: 'party_support',
-    survival: 'survival_sense',
-    technical: 'technical_handling',
-  };
-  const rows: Array<{ id: string; rank: number }> = [];
-  const seen = new Set<string>();
-  const add = (capability: RpgCapability, rank: number) => {
-    const id = talentIds[capability] ?? capability;
-    if (!seen.has(id)) {
-      seen.add(id);
-      rows.push({ id, rank });
-    }
-  };
-  add(primary, 2);
-  secondary.forEach((capability) => add(capability, 1));
-  return rows;
-}
-
-function mapBuildKey(value: BuildKey): NonNullable<RpgNewGameRequest['player']>['build'] {
-  const mapping: Record<BuildKey, NonNullable<RpgNewGameRequest['player']>['build']> = {
-    balanced: 'balanced_adventurer',
-    scout: 'ranger',
-    negotiator: 'silver_tongue',
-    survivor: 'warrior',
-    scholar: 'balanced_adventurer',
-  };
-  return mapping[value];
+function mapBuild(value: BuildKey): RpgNewGameRequest['player'] extends infer Player ? Player extends { build?: infer Build } ? Build : never : never {
+  if (value === 'scout') return 'ranger';
+  if (value === 'negotiator') return 'silver_tongue';
+  if (value === 'survivor') return 'warrior';
+  return 'balanced_adventurer';
 }
 
 function mapPrimaryCapability(value: string): RpgCapability {
-  return value === 'craft' ? 'technical' : (value as RpgCapability);
+  if (value === 'craft') return 'technical';
+  if (['combat', 'recon', 'influence', 'support'].includes(value)) return value as RpgCapability;
+  return 'custom';
 }
 
 function mapSecondaryCapability(value: Capability): RpgCapability {
-  return value;
+  if (value === 'technical') return 'technical';
+  if (value === 'combat' || value === 'influence' || value === 'survival' || value === 'knowledge' || value === 'support') return value;
+  return 'custom';
 }
 
-function mapPowerSource(value: string): RpgPowerSource {
-  const mapping: Record<string, RpgPowerSource> = {
-    arcane: 'magic',
-    divine: 'divine',
-    mundane: 'mundane',
-    technique: 'martial',
-  };
-  return mapping[value] ?? 'custom';
+function mapPower(value: string): RpgPowerSource {
+  if (value === 'arcane') return 'magic';
+  if (value === 'technique') return 'martial';
+  if (value === 'divine') return 'divine';
+  return 'mundane';
 }
 
-function mapStartingLocation(value: string): string {
-  const mapping: Record<string, string> = {
-    'market-road': 'market_road',
-    'old-quarry': 'old_quarry_edge',
-    'rusty-flagons': 'rusty_flagon_tavern',
-    'watch-post': 'northern_watch_post',
-  };
-  return mapping[value] ?? value;
+function mapLocation(value: string): string {
+  if (value === 'market-road') return 'northern_road';
+  if (value === 'old-quarry') return 'old_quarry';
+  if (value === 'watch-post') return 'northern_road';
+  return 'rusty_flagon_tavern';
 }
 
-function mapOpeningHook(value: string): string {
-  const mapping: Record<string, string> = {
-    'bandit-trail': 'bandit_trail',
-    'guard-trouble': 'guard_trouble',
-    'merchant-job': 'merchant_job',
-    'missing-person': 'missing_person',
-    'random-seed': 'random_from_seed',
-    'tavern-rumor': 'tavern_rumor',
-  };
-  return mapping[value] ?? value;
-}
-
-function mapOpeningPace(value: string): string {
-  const mapping: Record<string, string> = {
-    balanced: 'balanced',
-    'immediate-action': 'immediate_action',
-    'slow-roleplay': 'slow_roleplay',
-  };
-  return mapping[value] ?? value;
-}
-
-function mapRelationshipPreset(value: string): string {
-  const mapping: Record<string, string> = {
-    'guard-suspicion': 'guard_suspicion',
-    'known-contact': 'known_contact_nearby',
-    'local-regular': 'local_regular',
-    'owes-favor': 'owes_someone_a_favor',
-    'unknown-outsider': 'unknown_outsider',
-  };
-  return mapping[value] ?? value;
-}
-
-function mapDifficulty(value: string): NonNullable<RpgNewGameRequest['difficulty']> {
-  if (value === 'hard') {
-    return 'harsh';
-  }
-  return value === 'story' ? 'story' : 'normal';
-}
-
-function mapWorldActivity(value: string): NonNullable<RpgNewGameRequest['world_activity']> {
-  if (value === 'busy') {
-    return 'living_world';
-  }
-  return value === 'quiet' ? 'quiet' : 'standard';
-}
-
-function mapEconomyPressure(value: string): NonNullable<RpgNewGameRequest['economy_pressure']> {
-  if (value === 'low') {
-    return 'relaxed';
-  }
-  if (value === 'tight') {
-    return 'strict';
-  }
+function mapDifficulty(value: string): 'story' | 'normal' | 'harsh' {
+  if (value === 'story') return 'story';
+  if (value === 'hard') return 'harsh';
   return 'normal';
 }
 
-function mapCombatLethality(value: string): NonNullable<RpgNewGameRequest['combat_lethality']> {
-  if (value === 'forgiving') {
-    return 'safe';
-  }
-  return value === 'deadly' ? 'deadly' : 'normal';
+function mapWorldActivity(value: string): 'quiet' | 'standard' | 'living_world' {
+  if (value === 'quiet') return 'quiet';
+  if (value === 'busy') return 'living_world';
+  return 'standard';
+}
+
+function mapEconomyPressure(value: string): 'relaxed' | 'normal' | 'strict' {
+  if (value === 'low') return 'relaxed';
+  if (value === 'tight') return 'strict';
+  return 'normal';
+}
+
+function mapCombatLethality(value: string): 'safe' | 'normal' | 'deadly' {
+  if (value === 'forgiving') return 'safe';
+  if (value === 'deadly') return 'deadly';
+  return 'normal';
 }
