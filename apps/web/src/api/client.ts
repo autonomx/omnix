@@ -555,7 +555,8 @@ export class OmnixApiClient {
       return null;
     }
 
-    const startedAt = Date.now();
+    const clientSubmitMs = Date.now();
+    const clientSubmitAt = new Date(clientSubmitMs).toISOString();
     let result: RpgForegroundTurnResponse;
     try {
       result = await this.post<{ command: string }, RpgForegroundTurnResponse>(
@@ -568,17 +569,32 @@ export class OmnixApiClient {
       }
       throw error;
     }
-    const now = new Date().toISOString();
+    const seenMs = Date.now();
+    const seenAt = new Date(seenMs).toISOString();
     const content = result.content || result.response || '';
+    const clientVisibleTimestamps = {
+      client_submit_at: clientSubmitAt,
+      server_job_created_at: result.creation_server_trace?.server_job_created_at ?? result.creation_server_trace?.created_at ?? null,
+      server_job_started_at: result.creation_server_trace?.server_job_started_at ?? result.creation_server_trace?.started_at ?? null,
+      server_job_completed_at: result.creation_server_trace?.server_job_completed_at ?? result.creation_server_trace?.completed_at ?? null,
+      server_response_persisted_at: result.creation_server_trace?.server_response_persisted_at ?? result.creation_server_trace?.response_persisted_at ?? null,
+      sse_or_poll_seen_at: seenAt,
+      ui_render_started_at: null,
+      ui_render_completed_at: null,
+      client_turn_request_ms: seenMs - clientSubmitMs,
+    };
     return {
-      id: `foreground:rpg.turn:${startedAt}`,
+      id: `foreground:rpg.turn:${clientSubmitMs}`,
       module: 'rpg',
       type: 'rpg.turn',
       resource_class: requestRecord.resource_class ?? 'gpu:llm',
       priority: typeof requestRecord.priority === 'number' ? requestRecord.priority : 0,
       status: 'completed',
       input_ref: inputRef,
-      input_payload: inputPayload,
+      input_payload: {
+        ...inputPayload,
+        client_visible_timestamps: clientVisibleTimestamps,
+      },
       output_refs: [
         {
           type: 'rpg_turn_response',
@@ -586,6 +602,7 @@ export class OmnixApiClient {
           title: command.slice(0, 80) || 'RPG turn',
           content,
           result,
+          client_visible_timestamps: clientVisibleTimestamps,
         },
       ],
       logs: [
@@ -593,12 +610,13 @@ export class OmnixApiClient {
           level: 'info',
           message: 'RPG turn applied through the foreground session route.',
           content,
+          client_visible_timestamps: clientVisibleTimestamps,
         },
       ],
       stages: [],
       error: null,
-      created_at: now,
-      updated_at: now,
+      created_at: clientSubmitAt,
+      updated_at: seenAt,
     } as unknown as JobRecord;
   }
 
