@@ -87,11 +87,38 @@ def test_unverified_debt_claim_is_not_treated_as_currency_mutation() -> None:
         selection=_selection(),
     )
 
+    constraints = result["interpretive_fact_constraints"]
     assert result["result"]["interpretive_intent"] == "unverified_debt_claim"
     assert result["result"]["interpretive_intent_family"] == "claim"
     assert result["result"]["no_state_mutation"] is True
+    assert constraints["may_transfer_currency"] is False
+    assert constraints["may_create_or_confirm_debt"] is False
+    assert constraints["must_require_proof_for_debt_or_memory"] is True
+    assert constraints["verified_facts"]["currency"] == {"gold": 1}
     assert "proof" in result["npc"]["line"].lower()
     assert result["simulation_state"] == {"currency": {"gold": 1}}
+
+
+def test_fact_constraints_capture_lore_and_private_context_boundaries() -> None:
+    from app.rpg.session.interpretive_adjudication import build_interpretive_adjudication_result
+
+    result = build_interpretive_adjudication_result(
+        session={},
+        simulation_state={"scene": {"location": "Rusty Flagon Tavern"}},
+        runtime_state={"tick": 7},
+        player_input="i used to be a dragon hunter before all this",
+        action_advisory={},
+        semantic_advisory=_semantic_advisory(),
+        selection=_selection(),
+    )
+
+    constraints = result["result"]["interpretive_fact_constraints"]
+    assert result["result"]["interpretive_intent"] == "lore_conflict_claim"
+    assert constraints["must_respect_lore_plausibility"] is True
+    assert constraints["may_assert_unverified_player_history"] is False
+    assert constraints["may_reveal_private_context"] is False
+    assert constraints["verified_facts"]["runtime_tick"] == 7
+    assert constraints["verified_facts"]["location"] == {"location": "Rusty Flagon Tavern"}
 
 
 def test_richer_claim_intent_classes_are_distinct() -> None:
@@ -136,9 +163,13 @@ def test_unsupported_mechanic_request_gets_own_category_without_mutation() -> No
         selection=_selection(),
     )
 
+    constraints = result["result"]["interpretive_fact_constraints"]
     assert result["result"]["interpretive_intent"] == "unsupported_mechanic_request"
     assert result["result"]["interpretive_intent_family"] == "unsupported_mechanic"
     assert result["result"]["no_state_mutation"] is True
+    assert constraints["may_add_inventory"] is False
+    assert constraints["may_complete_quest"] is False
+    assert constraints["may_move_player"] is False
     assert "not something" in result["npc"]["line"].lower()
 
 
