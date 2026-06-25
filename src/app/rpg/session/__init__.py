@@ -98,11 +98,11 @@ def _install_optional_fast_runtime_hooks() -> None:
         return
 
     try:
-        from .npc_dialogue_fallback_hook import install_npc_dialogue_fallback_hook
+        from .npc_dialogue_repair_hook import install_npc_dialogue_repair_hook
 
-        install_npc_dialogue_fallback_hook()
+        install_npc_dialogue_repair_hook()
     except Exception:
-        # Dialogue fallback hook installation must never block normal session imports.
+        # Dialogue repair hook installation must never block normal session imports.
         return
 
 
