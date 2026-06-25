@@ -158,6 +158,28 @@ def _with_rpg_response_surface(payload: dict[str, Any]) -> dict[str, Any]:
     return _with_world_scale_abilities(_with_environment_snapshot(payload))
 
 
+def _foreground_turn_command(payload: Any) -> str:
+    if isinstance(payload, dict):
+        value = payload.get("command") or payload.get("player_input") or payload.get("text") or payload.get("message")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    raise HTTPException(status_code=400, detail={"ok": False, "error": "missing_command"})
+
+
+def _foreground_turn_text(result: dict[str, Any], command: str) -> str:
+    for key in ("final_narration", "narration", "summary", "response", "content"):
+        value = result.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    nested = result.get("result")
+    if isinstance(nested, dict):
+        return _foreground_turn_text(nested, command)
+    authoritative = result.get("authoritative")
+    if isinstance(authoritative, dict):
+        return _foreground_turn_text(authoritative, command)
+    return f"Your command is accepted: {command}."
+
+
 def register_rpg_session_routes(app: FastAPI) -> None:
     """Attach the typed RPG session API once.
 
@@ -210,6 +232,38 @@ def register_rpg_session_routes(app: FastAPI) -> None:
     @app.post("/api/rpg/sessions/{session_id}/continue", tags=["rpg-session"])
     def rpg_continue_session(session_id: str) -> dict[str, Any]:
         return _with_rpg_response_surface(_raise_for_error(continue_rpg_session(session_id), not_found_errors={"session_not_found"}))
+
+    @app.post("/api/rpg/sessions/{session_id}/turn", tags=["rpg-session"], include_in_schema=False)
+    async def rpg_apply_turn(session_id: str, http_request: Request) -> dict[str, Any]:
+        raw_payload = await http_request.json()
+        command = _foreground_turn_command(raw_payload)
+
+        from app.rpg.session import interactive_first_call_runtime
+        from app.rpg.session.service import save_session
+
+        result = await asyncio.to_thread(
+            lambda: interactive_first_call_runtime.apply_turn(
+                session_id,
+                command,
+                performance_override={"enable_live_narration_llm": False},
+            )
+        )
+        if result.get("ok") is not True:
+            status_code = 404 if result.get("error") == "session_not_found" else 400
+            raise HTTPException(status_code=status_code, detail=result)
+        result_session = result.get("session")
+        session = save_session(result_session, compact=False) if isinstance(result_session, dict) else load_session(session_id)
+        text = _foreground_turn_text(result, command)
+        return _with_rpg_response_surface({
+            "ok": True,
+            "session_id": session_id,
+            "command": command,
+            "response": text,
+            "content": text,
+            "result": result,
+            "session": session,
+            "game": session.get("state", {}) if isinstance(session, dict) else {},
+        })
 
     @app.post("/api/rpg/sessions/{session_id}/rename", tags=["rpg-session"])
     def rpg_rename_session(session_id: str, request: RpgRenameSessionRequest) -> dict[str, Any]:
