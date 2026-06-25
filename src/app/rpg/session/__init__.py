@@ -105,6 +105,14 @@ def _install_optional_fast_runtime_hooks() -> None:
         # Dialogue repair hook installation must never block normal session imports.
         return
 
+    try:
+        from .interpretive_adjudication import install_interpretive_adjudication_hook
+
+        install_interpretive_adjudication_hook()
+    except Exception:
+        # Interpretive adjudication must never block normal session imports.
+        return
+
 
 _install_optional_fast_runtime_hooks()
 
