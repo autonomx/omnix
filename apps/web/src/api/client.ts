@@ -143,6 +143,13 @@ export interface RpgLaunchResponse {
   error?: string;
 }
 
+interface RpgForegroundTurnResponse extends RpgLaunchResponse {
+  command?: string;
+  response?: string;
+  content?: string;
+  result?: Record<string, unknown>;
+}
+
 export interface RpgSessionMutationResponse {
   ok: boolean;
   session_id?: string;
@@ -227,6 +234,14 @@ function errorLabel(error: unknown): string {
   return 'request_failed';
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 export class OmnixApiClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -301,6 +316,10 @@ export class OmnixApiClient {
   }
 
   async createJob(request: CreateJobRequest, options: ApiRequestOptions = {}): Promise<JobRecord> {
+    const foregroundTurn = await this.createForegroundRpgTurnJob(request);
+    if (foregroundTurn) {
+      return foregroundTurn;
+    }
     return this.post<CreateJobRequest, JobRecord>('/api/jobs', request, options);
   }
 
@@ -520,6 +539,67 @@ export class OmnixApiClient {
 
   async getDiagnostics(): Promise<DiagnosticsPayload> {
     return this.get<DiagnosticsPayload>('/api/diagnostics');
+  }
+
+  private async createForegroundRpgTurnJob(request: CreateJobRequest): Promise<JobRecord | null> {
+    const requestRecord = request as Record<string, unknown>;
+    if (requestRecord.module !== 'rpg' || requestRecord.type !== 'rpg.turn') {
+      return null;
+    }
+
+    const inputRef = asRecord(requestRecord.input_ref);
+    const inputPayload = asRecord(requestRecord.input_payload);
+    const sessionId = stringValue(inputRef.session_id);
+    const command = stringValue(inputPayload.command);
+    if (!sessionId || !command) {
+      return null;
+    }
+
+    const startedAt = Date.now();
+    let result: RpgForegroundTurnResponse;
+    try {
+      result = await this.post<{ command: string }, RpgForegroundTurnResponse>(
+        `/api/rpg/sessions/${encodeURIComponent(sessionId)}/turn`,
+        { command },
+      );
+    } catch (error) {
+      if (this.isNotFound(error)) {
+        return null;
+      }
+      throw error;
+    }
+    const now = new Date().toISOString();
+    const content = result.content || result.response || '';
+    return {
+      id: `foreground:rpg.turn:${startedAt}`,
+      module: 'rpg',
+      type: 'rpg.turn',
+      resource_class: requestRecord.resource_class ?? 'gpu:llm',
+      priority: typeof requestRecord.priority === 'number' ? requestRecord.priority : 0,
+      status: 'completed',
+      input_ref: inputRef,
+      input_payload: inputPayload,
+      output_refs: [
+        {
+          type: 'rpg_turn_response',
+          module: 'rpg',
+          title: command.slice(0, 80) || 'RPG turn',
+          content,
+          result,
+        },
+      ],
+      logs: [
+        {
+          level: 'info',
+          message: 'RPG turn applied through the foreground session route.',
+          content,
+        },
+      ],
+      stages: [],
+      error: null,
+      created_at: now,
+      updated_at: now,
+    } as unknown as JobRecord;
   }
 
   private isNotFound(error: unknown): boolean {

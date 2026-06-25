@@ -135,7 +135,7 @@ describe('RpgWorkspace campaign handoff', () => {
 
   it('surfaces a created campaign and queues the first turn for it', async () => {
     let inventoryReads = 0;
-    let turnQueued = false;
+    let turnApplied = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
@@ -212,26 +212,33 @@ describe('RpgWorkspace campaign handoff', () => {
         });
       }
 
-      if (path === '/api/jobs' && init?.method === 'POST') {
-        turnQueued = true;
+      if (path === '/api/rpg/sessions/rpg-created-1/turn' && init?.method === 'POST') {
+        turnApplied = true;
         return Response.json({
-          id: 'job:rpg-created-turn',
-          module: 'rpg',
-          type: 'rpg.turn',
-          status: 'queued',
-          resource_class: 'gpu:llm',
-          created_at: '2026-06-20T00:00:01Z',
-          updated_at: '2026-06-20T00:00:01Z',
-          priority: 0,
+          ok: true,
+          session_id: 'rpg-created-1',
+          command: 'I ask Bran how he is.',
+          response: 'Bran smiles and says he is well.',
+          content: 'Bran smiles and says he is well.',
+          session: {
+            manifest: { session_id: 'rpg-created-1', title: 'Created Campaign' },
+            state: {
+              timeline: [
+                { title: 'Campaign begins', detail: 'Elara enters the Rusty Flagon Tavern.', turn: 0 },
+                { title: 'Turn request', detail: 'I ask Bran how he is.', turn: 1 },
+                { title: 'Bran', detail: 'Bran smiles and says he is well.', turn: 1 },
+              ],
+            },
+          },
         });
       }
 
       if (path === '/api/jobs') {
         return Response.json({
-          jobs: turnQueued
+          jobs: turnApplied
             ? [
                 {
-                  id: 'job:rpg-created-turn',
+                  id: 'foreground:rpg.turn:1',
                   module: 'rpg',
                   type: 'rpg.turn',
                   status: 'completed',
@@ -305,11 +312,9 @@ describe('RpgWorkspace campaign handoff', () => {
     await waitFor(() => {
       const turnCall = fetchMock.mock.calls.find(
         ([input, init]) =>
-          requestPath(input as RequestInfo | URL) === '/api/jobs' &&
-          init?.method === 'POST' &&
-          String(init.body).includes('"type":"rpg.turn"'),
+          requestPath(input as RequestInfo | URL) === '/api/rpg/sessions/rpg-created-1/turn' &&
+          init?.method === 'POST',
       );
-      expect(String(turnCall?.[1]?.body)).toContain('"session_id":"rpg-created-1"');
       expect(String(turnCall?.[1]?.body)).toContain('"command":"I ask Bran how he is."');
     });
     expect(screen.getByText('Elara (You)')).toBeInTheDocument();
