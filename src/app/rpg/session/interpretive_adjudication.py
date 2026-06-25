@@ -55,11 +55,7 @@ def classify_interpretive_intent(
     semantic_advisory: dict[str, Any] | None = None,
     selection: dict[str, Any] | None = None,
 ) -> str:
-    """Return a non-mutating interpretive intent category, or an empty string.
-
-    The categories describe how to answer a meaningful prompt without letting the
-    LLM mutate state. They do not mark the input as mechanically successful.
-    """
+    """Return a non-mutating interpretive intent category, or an empty string."""
 
     text = _norm_words(player_input)
     if not _looks_like_meaningful_player_input(text):
@@ -71,9 +67,6 @@ def classify_interpretive_intent(
     if selection.get("reason") == "service_or_commerce_runtime_wins":
         return ""
 
-    # Claims and NPC-directed requests should be interpreted before the hard
-    # mechanic guard because an NPC may refuse, doubt, or ask for proof without
-    # mutating the world.
     if re.search(r"\bowe[sd]? me\b", text) or re.search(r"\byou owe\b", text):
         return "unverified_debt_claim"
     if re.search(r"\bremember me\b|\bwe met before\b|\byou know me\b|\byou promised\b", text):
@@ -111,6 +104,46 @@ def classify_interpretive_intent(
 
 def interpretive_intent_family(intent: str) -> str:
     return INTENT_FAMILIES.get(_s(intent), "")
+
+
+def build_interpretive_fact_constraints(
+    *,
+    intent: str,
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    grounding_packet: dict[str, Any],
+) -> dict[str, Any]:
+    """Return explicit constraints that keep interpretive answers fact-bound."""
+
+    family = interpretive_intent_family(intent)
+    authoritative = _d(_d(grounding_packet).get("authoritative_state"))
+    return {
+        "format_version": "interpretive_fact_constraints_v1",
+        "intent": _s(intent),
+        "intent_family": family,
+        "may_mutate_state": False,
+        "may_transfer_currency": False,
+        "may_create_or_confirm_debt": False,
+        "may_add_inventory": False,
+        "may_remove_inventory": False,
+        "may_complete_quest": False,
+        "may_start_combat": False,
+        "may_move_player": False,
+        "may_change_relationship": False,
+        "may_reveal_private_context": False,
+        "may_assert_unverified_player_history": False,
+        "must_frame_claims_as_unverified": family == "claim",
+        "must_require_proof_for_debt_or_memory": intent in {"unverified_debt_claim", "memory_claim"},
+        "must_respect_lore_plausibility": intent == "lore_conflict_claim",
+        "must_preserve_current_currency": True,
+        "must_preserve_current_inventory": True,
+        "verified_facts": {
+            "currency": deepcopy(_d(simulation_state).get("currency") or authoritative.get("currency") or {}),
+            "inventory": deepcopy(_d(simulation_state).get("inventory") or authoritative.get("inventory") or []),
+            "location": deepcopy(_d(simulation_state).get("scene") or authoritative.get("scene") or {}),
+            "runtime_tick": _d(runtime_state).get("tick"),
+        },
+    }
 
 
 def should_use_interpretive_adjudication(
@@ -156,6 +189,12 @@ def build_interpretive_adjudication_result(
         selection=selection,
     ) or "unsupported_but_diegetic_action"
     family = interpretive_intent_family(intent)
+    fact_constraints = build_interpretive_fact_constraints(
+        intent=intent,
+        simulation_state=_d(simulation_state),
+        runtime_state=_d(runtime_state),
+        grounding_packet=packet,
+    )
     line = _line_for_intent(intent=intent, speaker=speaker, profile=profile, player_input=player_input)
     narration = _narration_for_intent(intent=intent, speaker=speaker, player_input=player_input)
     visible_response = {"narration": narration, "npc": {"speaker": speaker, "line": line}}
@@ -164,6 +203,7 @@ def build_interpretive_adjudication_result(
         "selected_candidate": "interpretive_adjudication",
         "interpretive_intent": intent,
         "interpretive_intent_family": family,
+        "interpretive_fact_constraints": deepcopy(fact_constraints),
         "fallback_used": True,
         "fallback_source": _INTERPRETIVE_SOURCE,
         "violations": [],
@@ -183,6 +223,7 @@ def build_interpretive_adjudication_result(
         "semantic_family": "social",
         "interpretive_intent": intent,
         "interpretive_intent_family": family,
+        "interpretive_fact_constraints": deepcopy(fact_constraints),
         "stateful": False,
         "needs_runtime_resolution": False,
         "no_state_mutation": True,
@@ -211,6 +252,7 @@ def build_interpretive_adjudication_result(
         "first_call_semantic_advisory": deepcopy(semantic_advisory),
         "first_call_grounding_diagnostics": deepcopy(diagnostics),
         "grounding_validation": deepcopy(grounding_validation),
+        "interpretive_fact_constraints": deepcopy(fact_constraints),
         "llm_called": True,
         "llm_purpose": "world_grounded_interpretive_adjudication",
         "stateful": False,
