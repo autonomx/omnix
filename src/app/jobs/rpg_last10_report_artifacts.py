@@ -35,6 +35,7 @@ def write_rpg_last10_report(payload: dict[str, Any], *, output_root: Path | None
         "session_event_count": payload.get("session_event_count"),
         "performance": payload.get("performance"),
         "diagnostics": payload.get("diagnostics"),
+        "debug_payloads_in_transcript": True,
         "summary_path": str(summary_path),
         "performance_path": str(performance_path),
         "transcript_path": str(transcript_path),
@@ -71,7 +72,7 @@ def render_rpg_last10_report_html(payload: dict[str, Any]) -> str:
             "<head>",
             "<meta charset=\"utf-8\" />",
             "<title>RPG Last 10 Turn Debug Report</title>",
-            "<style>body{font-family:system-ui,sans-serif;line-height:1.45;margin:2rem;max-width:1200px}table{border-collapse:collapse;width:100%;margin:1rem 0}td,th{border:1px solid #ccc;padding:.45rem;text-align:left;vertical-align:top}code,pre{background:#f4f4f4;padding:.2rem .35rem}pre{overflow:auto;padding:1rem}.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem}.metric{border:1px solid #ddd;border-radius:8px;padding:.75rem}</style>",
+            "<style>body{font-family:system-ui,sans-serif;line-height:1.45;margin:2rem;max-width:1200px}table{border-collapse:collapse;width:100%;margin:1rem 0}td,th{border:1px solid #ccc;padding:.45rem;text-align:left;vertical-align:top}code,pre{background:#f4f4f4;padding:.2rem .35rem}pre{overflow:auto;padding:1rem}.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem}.metric{border:1px solid #ddd;border-radius:8px;padding:.75rem}details{margin:.35rem 0}summary{cursor:pointer;font-weight:600}</style>",
             "</head>",
             "<body>",
             "<h1>RPG Last 10 Turn Debug Report</h1>",
@@ -80,6 +81,8 @@ def render_rpg_last10_report_html(payload: dict[str, Any]) -> str:
             _performance_html(performance),
             "<h2>Last turn jobs</h2>",
             _turns_html(_list_value(payload.get("turns"))),
+            "<h2>Turn debug payloads</h2>",
+            _turn_debug_html(_list_value(payload.get("turns"))),
             "<h2>Session event fallback</h2>",
             _events_html(_list_value(payload.get("session_events"))),
             "<h2>Diagnostics</h2>",
@@ -105,9 +108,10 @@ def _performance_html(performance: dict[str, Any]) -> str:
         "p95_turn_seconds",
         "min_turn_seconds",
         "max_turn_seconds",
+        "provider_observed_turn_count",
     ]
     cards = [f"<div class=\"metric\"><strong>{_escape(key)}</strong><br />{_escape(performance.get(key))}</div>" for key in keys]
-    return f"<div class=\"metric-grid\">{''.join(cards)}</div>"
+    return f"<div class=\"metric-grid\">{''.join(cards)}</div><h3>Stage totals</h3><pre>{_escape(json.dumps(performance.get('stage_seconds_totals') or {}, indent=2, sort_keys=True))}</pre>"
 
 
 def _turns_html(turns: list[Any]) -> str:
@@ -116,16 +120,44 @@ def _turns_html(turns: list[Any]) -> str:
     rows = []
     for raw in turns:
         row = _dict_value(raw)
+        selection = _dict_value(row.get("response_selection_trace"))
+        timing = _dict_value(_dict_value(row.get("performance_trace")).get("job_timing_seconds"))
         rows.append(
             "<tr>"
             f"<td>{_escape(row.get('sequence'))}</td>"
             f"<td>{_escape(row.get('command'))}</td>"
             f"<td>{_escape(row.get('response'))}</td>"
             f"<td>{_escape(row.get('duration_seconds'))}</td>"
+            f"<td>{_escape(selection.get('selected_response_source') or selection.get('narration_source') or selection.get('fallback_source'))}</td>"
+            f"<td>{_escape(selection.get('fallback_reason'))}</td>"
+            f"<td>{_escape(timing.get('started_to_completed'))}</td>"
             f"<td>{_escape(row.get('job_id'))}</td>"
             "</tr>"
         )
-    return "<table><thead><tr><th>#</th><th>Command</th><th>Response</th><th>Seconds</th><th>Job</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    return "<table><thead><tr><th>#</th><th>Command</th><th>Response</th><th>Seconds</th><th>Source</th><th>Fallback</th><th>Run seconds</th><th>Job</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+
+
+def _turn_debug_html(turns: list[Any]) -> str:
+    if not turns:
+        return "<p>No turn debug payloads were found.</p>"
+    sections = []
+    for raw in turns:
+        row = _dict_value(raw)
+        debug = {
+            "raw_intent_diagnostics": row.get("raw_intent_diagnostics"),
+            "dialogue_payload": row.get("dialogue_payload"),
+            "response_selection_trace": row.get("response_selection_trace"),
+            "performance_trace": row.get("performance_trace"),
+            "raw_turn_result": row.get("raw_turn_result"),
+            "raw_input_payload": row.get("raw_input_payload"),
+            "raw_output_refs": row.get("raw_output_refs"),
+            "raw_logs": row.get("raw_logs"),
+        }
+        label = f"Turn {row.get('sequence')} · {row.get('command') or row.get('job_id')}"
+        sections.append(
+            f"<details><summary>{_escape(label)}</summary><pre>{_escape(json.dumps(debug, indent=2, ensure_ascii=False, sort_keys=True, default=str))}</pre></details>"
+        )
+    return "".join(sections)
 
 
 def _events_html(events: list[Any]) -> str:

@@ -13,9 +13,10 @@ from typing import Any
 
 from .models import CompleteJobRequest, FailJobRequest, JobRecord
 from .rpg_last10_report_artifacts import write_rpg_last10_report
+from .rpg_last10_report_debug import build_turn_debug_payload
 
 RPG_LAST10_REPORT_JOB_TYPE = "rpg.report.last10"
-RPG_LAST10_REPORT_FORMAT_VERSION = "rpg_last10_turn_debug_report_v1"
+RPG_LAST10_REPORT_FORMAT_VERSION = "rpg_last10_turn_debug_report_v2"
 DEFAULT_TURN_LIMIT = 10
 MAX_TURN_LIMIT = 100
 
@@ -143,6 +144,13 @@ def build_rpg_last10_report_payload(job: JobRecord, *, job_store: Any | None = N
                 "rpg-last10-turn-report.html",
                 "rpg-last10-turn-report.zip",
             ],
+            "debug_payloads": [
+                "raw_turn_result",
+                "raw_intent_diagnostics",
+                "dialogue_payload",
+                "response_selection_trace",
+                "performance_trace",
+            ],
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "job_id": job.id,
@@ -179,7 +187,7 @@ def _collect_turn_jobs(job_store: Any | None, *, session_id: str | None, limit: 
 
 def _turn_job_row(job: JobRecord, sequence: int) -> dict[str, Any]:
     duration_seconds = _job_duration_seconds(job)
-    return {
+    row = {
         "sequence": sequence,
         "job_id": job.id,
         "status": str(getattr(job.status, "value", job.status)),
@@ -193,6 +201,8 @@ def _turn_job_row(job: JobRecord, sequence: int) -> dict[str, Any]:
         "duration_seconds": duration_seconds,
         "stages": [stage.model_dump(mode="json") for stage in job.stages],
     }
+    row.update(build_turn_debug_payload(job))
+    return row
 
 
 def _collect_session_events(session_id: str | None, *, limit: int) -> list[dict[str, Any]]:
@@ -242,9 +252,22 @@ def _session_event_row(item: Any, sequence: int) -> dict[str, Any] | None:
 
 def _performance_summary(turns: list[dict[str, Any]]) -> dict[str, Any]:
     durations = [float(row["duration_seconds"]) for row in turns if isinstance(row.get("duration_seconds"), (int, float))]
+    stage_totals: dict[str, float] = {}
+    provider_turns = 0
+    for row in turns:
+        trace = _dict_value(row.get("performance_trace"))
+        provider = _dict_value(trace.get("provider_metrics"))
+        if provider.get("provider_called") or provider.get("intent_llm_used") or provider.get("dialogue_llm_ms"):
+            provider_turns += 1
+        for stage in _list_value(trace.get("stage_timings")):
+            stage_row = _dict_value(stage)
+            duration = stage_row.get("duration_seconds")
+            if isinstance(duration, (int, float)):
+                key = _text(stage_row.get("id") or stage_row.get("label")) or "unknown"
+                stage_totals[key] = round(stage_totals.get(key, 0.0) + float(duration), 3)
     return {
         "metrics_included": True,
-        "metrics_source": "gateway_job_created_started_completed_timestamps",
+        "metrics_source": "gateway_job_and_embedded_debug_timestamps",
         "turn_count": len(turns),
         "measured_turn_count": len(durations),
         "total_turn_seconds": _round(sum(durations)) if durations else None,
@@ -253,6 +276,8 @@ def _performance_summary(turns: list[dict[str, Any]]) -> dict[str, Any]:
         "min_turn_seconds": _round(min(durations)) if durations else None,
         "max_turn_seconds": _round(max(durations)) if durations else None,
         "per_turn_seconds": durations,
+        "stage_seconds_totals": dict(sorted(stage_totals.items())),
+        "provider_observed_turn_count": provider_turns,
     }
 
 
