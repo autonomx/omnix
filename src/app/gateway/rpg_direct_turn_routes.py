@@ -14,7 +14,7 @@ def register_direct_turn_route(app: FastAPI) -> None:
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
 
-    @app.post('/api/rpg/sessions/{session_id}/turn', tags=['rpg-session'])
+    @app.post('/api/rpg/sessions/{session_id}/turn', tags=['rpg-session'], include_in_schema=False)
     async def apply_turn_route(session_id: str, http_request: Request) -> dict[str, Any]:
         payload = await http_request.json()
         command = _command(payload)
