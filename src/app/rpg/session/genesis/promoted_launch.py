@@ -8,9 +8,8 @@ from .bootstrap import bootstrap_session_from_compiled_genesis
 from .compiler import compile_campaign_genesis
 from .legacy_adapter import (
     adapt_genesis_payload_to_new_game_payload,
-    attach_genesis_to_created_session,
 )
-from .pipeline_adapter import attach_compiled_genesis_to_session
+from .pipeline_adapter import create_new_game_session_from_compiled_genesis
 from .request_promoter import promote_new_game_request_to_genesis
 
 
@@ -27,8 +26,9 @@ def create_promoted_new_game(payload: dict[str, Any]) -> dict[str, Any]:
     compiled = compile_campaign_genesis(contract)
     bootstrap = bootstrap_session_from_compiled_genesis(compiled)
 
-    from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
-
-    result = create_new_game_session(RpgNewGameRequest.model_validate(legacy))
-    result = attach_genesis_to_created_session(result, contract, persist=False)
-    return attach_compiled_genesis_to_session(result, compiled, bootstrap, compact_save=True)
+    return create_new_game_session_from_compiled_genesis(
+        bootstrap=bootstrap,
+        compiled=compiled,
+        contract=contract,
+        legacy=legacy,
+    )

@@ -39,16 +39,17 @@ def attach_compiled_genesis_to_session(
     bootstrap: dict[str, Any],
     *,
     compact_save: bool = False,
+    persist: bool = True,
 ) -> dict[str, Any]:
     if result.get("ok") is not True:
         return result
     session_id = str(result.get("session_id") or "")
     if not session_id:
         return result
-    from app.rpg.session.service import load_session, save_session
-
     session = result.get("session") if isinstance(result.get("session"), dict) else None
     if session is None:
+        from app.rpg.session.service import load_session
+
         session = load_session(session_id)
     if not session:
         return result
@@ -78,12 +79,76 @@ def attach_compiled_genesis_to_session(
             "manifest": manifest,
         }
     )
-    saved = save_session(session, compact=compact_save)
+    if persist:
+        from app.rpg.session.service import save_session
+
+        saved = save_session(session, compact=compact_save)
+    else:
+        saved = session
     return {
         **result,
         "session": saved,
         "game": saved.get("state", result.get("game", {})),
     }
+
+
+def _result_from_unsaved_session(session: dict[str, Any]) -> dict[str, Any]:
+    manifest = _safe_dict(session.get("manifest"))
+    session_id = str(manifest.get("session_id") or manifest.get("id") or "")
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "status": "ready",
+        "session": session,
+        "game": session.get("state", {}),
+    }
+
+
+def _save_prepared_result(result: dict[str, Any]) -> dict[str, Any]:
+    session = result.get("session") if isinstance(result.get("session"), dict) else None
+    if session is None:
+        return result
+    from app.rpg.session.new_game import _save_created_session
+
+    saved_result = _save_created_session(session)
+    return {**result, **saved_result}
+
+
+def _attach_completed_creation_progress(result: dict[str, Any]) -> dict[str, Any]:
+    session_id = str(result.get("session_id") or "")
+    error = "" if result.get("ok") is True else str(result.get("error") or "new_game_creation_failed")
+    from app.rpg.session.new_game_creation_progress import (
+        CreationJobStatus,
+        attach_creation_metadata,
+        build_creation_job,
+        build_creation_progress_snapshot,
+    )
+
+    status: CreationJobStatus = "completed" if result.get("ok") is True else "failed"
+    job = build_creation_job(session_id=session_id, status=status, error=error)
+    progress = build_creation_progress_snapshot(session_id=session_id, status=status, error=error)
+    session = result.get("session")
+    if isinstance(session, dict):
+        session = attach_creation_metadata(session, job, progress)
+        result = {**result, "session": session, "game": session.get("state", result.get("game", {}))}
+    return {**result, "creation_job": job, "creation_progress": progress}
+
+
+def create_new_game_session_from_compiled_genesis(
+    *,
+    bootstrap: dict[str, Any],
+    compiled: dict[str, Any],
+    contract: CampaignGenesisContract,
+    legacy: dict[str, Any],
+) -> dict[str, Any]:
+    from app.rpg.session.new_game import RpgNewGameRequest, _build_new_game_session
+
+    legacy_request = _preserve_seed_zero(RpgNewGameRequest.model_validate(legacy))
+    result = _result_from_unsaved_session(_build_new_game_session(legacy_request))
+    result = attach_genesis_to_created_session(result, contract, persist=False)
+    result = attach_compiled_genesis_to_session(result, compiled, bootstrap, persist=False)
+    result = _attach_completed_creation_progress(result)
+    return _save_prepared_result(result)
 
 
 def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -95,9 +160,9 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
     compiled = compile_campaign_genesis(contract)
     bootstrap = bootstrap_session_from_compiled_genesis(compiled)
 
-    from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
-
-    legacy_request = _preserve_seed_zero(RpgNewGameRequest.model_validate(legacy))
-    result = create_new_game_session(legacy_request)
-    result = attach_genesis_to_created_session(result, contract, persist=False)
-    return attach_compiled_genesis_to_session(result, compiled, bootstrap, compact_save=True)
+    return create_new_game_session_from_compiled_genesis(
+        bootstrap=bootstrap,
+        compiled=compiled,
+        contract=contract,
+        legacy=legacy,
+    )

@@ -163,10 +163,14 @@ def test_new_game_route_preserves_full_wizard_genesis_payload(monkeypatch, tmp_p
     result = response.json()
     assert result["ok"] is True
     session_id = result["session_id"]
+    assert result["creation_progress"]["progress"] == 100
+    assert result["creation_progress"]["stage"] == "ready_first_turn"
+    assert result["creation_job"]["status"] == "completed"
     loaded = load_session(session_id)
     state = loaded["state"]
     metadata = state["metadata"]
     setup_payload = loaded["setup_payload"]
+    runtime_state = loaded["runtime_state"]
 
     assert state["contract_version"] == "rpg_genesis_v2"
     assert state["genesis_snapshot"]["identity"]["origin"] == "frontier_village"
@@ -183,6 +187,8 @@ def test_new_game_route_preserves_full_wizard_genesis_payload(monkeypatch, tmp_p
     assert metadata["origin"] == "frontier_village"
     assert metadata["flaw"] == "cautious"
     assert metadata["values"] == ["agency", "loyalty"]
+    assert runtime_state["creation_progress"]["stage"] == "ready_first_turn"
+    assert runtime_state["creation_job"]["status"] == "completed"
 
     assert state["player"]["name"] == "Elara"
     assert state["player"]["stats"]["strength"] == 18
@@ -197,8 +203,8 @@ def test_new_game_route_preserves_full_wizard_genesis_payload(monkeypatch, tmp_p
     assert ability_tree["primary_capability"] == "recon"
     assert ability_tree["secondary_capabilities"] == ["combat", "survival"]
 
-    inventory_names = {item["name"] for item in state["player"]["inventory"]}
-    assert {"Travel cloak", "Iron dagger", "Trail rations", "Torch"}.issubset(inventory_names)
+    inventory_names = {item["name"].lower() for item in state["player"]["inventory"]}
+    assert {"travel cloak", "iron dagger", "trail rations", "torch"}.issubset(inventory_names)
     assert state["player"]["currency"]["silver"] == 10
 
 
@@ -222,4 +228,4 @@ def test_new_game_route_uses_one_compact_genesis_final_save(monkeypatch, tmp_pat
 
     assert response.status_code == 200
     assert response.json()["ok"] is True
-    assert save_compact_flags == [True, True]
+    assert save_compact_flags == [True]

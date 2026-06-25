@@ -10,7 +10,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.rpg.session.ability_coverage import write_ability_coverage_snapshot
 from app.rpg.session.ability_system import build_progression_package
@@ -49,6 +49,8 @@ class RpgFeatureOptions(BaseModel):
 
 
 class RpgNewGameRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     campaign_template: str = "classic_fantasy"
     genre: str | None = None
     tone: str = "heroic adventure"
@@ -260,6 +262,11 @@ RELATIONSHIP_PRESETS: dict[str, dict[str, Any]] = {
         "relationships": [{"name": "Elara", "stance": "Contact", "score": 22}],
         "timeline": {"title": "Known contact", "detail": "Elara may be willing to help if approached carefully.", "kind": "relationship"},
     },
+    "known_contact_nearby": {
+        "label": "Known contact nearby",
+        "relationships": [{"name": "Elara", "stance": "Contact", "score": 22}],
+        "timeline": {"title": "Known contact", "detail": "Elara may be willing to help if approached carefully.", "kind": "relationship"},
+    },
     "owes_favor": {
         "label": "Owes someone a favor",
         "relationships": [{"name": "Bran", "stance": "Owed favor", "score": 12}],
@@ -320,10 +327,17 @@ def _summary_field(summary: str | None, field: str) -> str:
 
 def _story_option(request: RpgNewGameRequest, key: str, fallback: str) -> str:
     value = None
+    story_options = getattr(request, "story_options", None)
+    if isinstance(story_options, dict):
+        value = story_options.get(key)
     extra = getattr(request, "__pydantic_extra__", None)
-    if isinstance(extra, dict):
+    if value is None and isinstance(extra, dict):
+        nested_story_options = extra.get("story_options")
+        if isinstance(nested_story_options, dict):
+            value = nested_story_options.get(key)
+    if value is None and isinstance(extra, dict):
         value = extra.get(key)
-    return _normal_key(str(value), fallback)
+    return _normal_key(str(value) if value is not None else None, fallback)
 
 
 def _resolve_opening_hook(request: RpgNewGameRequest, seed: int) -> str:
@@ -809,20 +823,23 @@ def _save_created_session(session: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "session_id": manifest.get("session_id") or manifest.get("id"), "status": "ready", "session": saved, "game": saved.get("state", {})}
 
 
-def create_new_game_session(request: RpgNewGameRequest) -> dict[str, Any]:
+def _build_new_game_session(request: RpgNewGameRequest) -> dict[str, Any]:
     now = _utc_now()
     session_id = _new_session_id("rpg")
     state = _new_game_state(request, session_id, now)
     seed = int(request.seed or state.get("metadata", {}).get("seed") or 0)
     setup_payload = _setup_payload_with_identity(request, state["character_identity"])
-    session = {
+    return {
         "manifest": _base_manifest(session_id, state["title"], now, source_template_id=request.campaign_template, kind="new_game"),
         "state": state,
         "setup_payload": setup_payload,
         "simulation_state": _simulation_state_stub(seed),
         "runtime_state": {"active_job_id": None, "last_error": None, "created_from": "new_game"},
     }
-    return _save_created_session(session)
+
+
+def create_new_game_session(request: RpgNewGameRequest) -> dict[str, Any]:
+    return _save_created_session(_build_new_game_session(request))
 
 
 def list_rpg_presets() -> dict[str, Any]:

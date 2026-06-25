@@ -186,6 +186,12 @@ def _attach_creation_metadata(session: dict[str, Any], job: dict[str, Any], prog
     return session
 
 
+def attach_creation_metadata(session: dict[str, Any], job: dict[str, Any], progress: dict[str, Any]) -> dict[str, Any]:
+    """Attach creation job/progress metadata to an unsaved or returned session."""
+
+    return _attach_creation_metadata(session, job, progress)
+
+
 def _persist_creation_job(session_id: str, job: dict[str, Any], progress: dict[str, Any]) -> dict[str, Any] | None:
     session = load_session(session_id)
     if not session:

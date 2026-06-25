@@ -141,6 +141,7 @@ def adapt_genesis_payload_to_new_game_payload(payload: dict[str, Any]) -> dict[s
     world = contract.world_options
     system = contract.system_options
     identity = contract.identity
+    story = contract.story_options
     return {
         "campaign_template": contract.campaign_template,
         "genre": contract.genre,
@@ -165,6 +166,10 @@ def adapt_genesis_payload_to_new_game_payload(payload: dict[str, Any]) -> dict[s
         "companions_enabled": system.companions,
         "permadeath": system.permadeath,
         "seed": world.seed,
+        "opening_hook": story.opening_hook,
+        "opening_pace": story.opening_pace,
+        "relationship_preset": story.relationship_preset,
+        "story_options": story.model_dump(mode="json"),
         "features": {
             "autosave": system.autosave,
             "validator": system.validator,

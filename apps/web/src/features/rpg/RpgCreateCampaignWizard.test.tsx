@@ -154,6 +154,29 @@ describe('RpgCreateCampaignWizard', () => {
     vi.useRealTimers();
   });
 
+  it('advances unresolved pending progress into the save/finalize stage', () => {
+    vi.useFakeTimers();
+    const onCreateCampaign = vi.fn(
+      () =>
+        new Promise<{ ok: true; session_id: string }>(() => {
+          // Keep the request unresolved so only optimistic pending timers run.
+        }),
+    );
+    renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '88');
+    expect(screen.getByText('Saving campaign session: Autosave/checkpoint payload prepared for replay-preserving launch.')).toBeInTheDocument();
+    expect(screen.getByText('Creating opening hook').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-done');
+    expect(screen.getByText('Saving campaign session').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-active');
+    vi.useRealTimers();
+  });
+
   it('keeps the modal open and reports backend creation progress errors', async () => {
     const onCreateCampaign = vi.fn(async () => ({
       ok: false,
