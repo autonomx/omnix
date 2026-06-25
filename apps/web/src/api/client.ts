@@ -203,14 +203,14 @@ function nowMs(): number {
   return Date.now();
 }
 
-function logRpgLaunchTrace(message: string, detail?: Record<string, unknown>): void {
+function logRpgLaunchTrace(message: string, detail?: unknown): void {
   if (typeof console === 'undefined') {
     return;
   }
   console.info(`[RPG][new-game][client] ${message}`, detail ?? '');
 }
 
-function warnRpgLaunchTrace(message: string, detail?: Record<string, unknown>): void {
+function warnRpgLaunchTrace(message: string, detail?: unknown): void {
   if (typeof console === 'undefined') {
     return;
   }
