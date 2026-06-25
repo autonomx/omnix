@@ -44,6 +44,24 @@ from .rpg_last10_report import (
 # commands behind the background inline worker/polling path.
 _inline_feature_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES.discard("rpg.turn")
 
+_original_rpg_turn_visible_text = _inline_feature_jobs._rpg_turn_visible_text
+
+
+def _foreground_rpg_turn_visible_text(result):
+    visible = _original_rpg_turn_visible_text(result)
+    if visible:
+        return visible
+    command = _inline_feature_jobs._rpg_turn_player_input(result) or "your action"
+    command = str(command).strip() or "your action"
+    return (
+        f"Your command is accepted: {command}.\n\n"
+        "The turn updated without producing narration text, so the game keeps the scene active instead of dropping the response. "
+        "Try a concrete follow-up or check the latest session state."
+    )
+
+
+_inline_feature_jobs._rpg_turn_visible_text = _foreground_rpg_turn_visible_text
+
 install_inline_feature_job_execution(SQLiteJobStore)
 install_rpg_last10_report_inline_job()
 
