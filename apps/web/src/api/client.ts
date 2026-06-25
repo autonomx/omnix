@@ -591,7 +591,7 @@ export class OmnixApiClient {
       error: null,
       created_at: now,
       updated_at: now,
-    } as JobRecord;
+    } as unknown as JobRecord;
   }
 
   private isNotFound(error: unknown): boolean {
