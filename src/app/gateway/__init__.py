@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import app.jobs
 from .rpg_direct_turn_routes import install_direct_turn_hook
 from .rpg_session_routes import install_rpg_session_route_hook
 
