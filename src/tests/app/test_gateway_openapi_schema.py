@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 import sys
 from pathlib import Path
@@ -15,10 +17,13 @@ def test_generated_gateway_openapi_schema_is_current() -> None:
     current_schema = create_gateway_app().openapi()
 
     if generated_schema != current_schema:
+        current_json = json.dumps(current_schema, indent=2, sort_keys=True)
+        current_b64 = base64.b64encode(gzip.compress(current_json.encode("utf-8"))).decode("ascii")
         print(
             "Generated gateway OpenAPI schema is stale. "
             "Run `npm --workspace @omnix/web run api:schema` and commit the result.",
             file=sys.stderr,
         )
+        print(f"CURRENT_OPENAPI_SCHEMA_GZIP_BASE64={current_b64}", file=sys.stderr)
 
     assert generated_schema == current_schema
