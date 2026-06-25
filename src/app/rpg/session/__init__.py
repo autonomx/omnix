@@ -97,6 +97,14 @@ def _install_optional_fast_runtime_hooks() -> None:
         # Agency-option attachment must never block normal session imports.
         return
 
+    try:
+        from .npc_dialogue_fallback_hook import install_npc_dialogue_fallback_hook
+
+        install_npc_dialogue_fallback_hook()
+    except Exception:
+        # Dialogue fallback hook installation must never block normal session imports.
+        return
+
 
 _install_optional_fast_runtime_hooks()
 
@@ -148,8 +156,4 @@ __all__ = [
     "build_real_autoplay_certification_artifact",
     "build_saved_100_turn_certification_payload",
     "render_saved_100_turn_certification_report_html",
-    # Phase 7.9
-    "assert_phase7_saved_autoplay_digest_source_ready",
-    "build_saved_autoplay_digest_source_contract",
-    "capture_saved_autoplay_digest_sources",
 ]
