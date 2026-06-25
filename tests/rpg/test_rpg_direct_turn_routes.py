@@ -64,6 +64,7 @@ def test_direct_turn_route_persists_completed_rpg_turn_job(monkeypatch, tmp_path
         }
 
     monkeypatch.setattr(interactive_first_call_runtime, "apply_turn", apply_turn)
+    monkeypatch.delattr(interactive_first_call_runtime, "_omnix_rpg_turn_job_mirror_installed", raising=False)
     monkeypatch.setattr(service, "save_session", lambda session, compact=False: {"state": session["state"], "saved": True})
 
     install_rpg_turn_job_mirror_hook()
