@@ -16,6 +16,7 @@ _GENERIC_PARSE_FAILURE_REASONS = {
     "missing_visible_response_text",
     "no_safe_non_stateful_visible_response",
 }
+_CLIENT_CORRUPTION_MARKERS = ("[object object]", "undefined", "null")
 _HARD_MECHANIC_TERMS = (
     " buy ",
     " sell ",
@@ -34,7 +35,18 @@ _HARD_MECHANIC_TERMS = (
     " hire ",
     " join me",
 )
-_CLIENT_CORRUPTION_MARKERS = ("[object object]", "undefined", "null")
+
+INTENT_FAMILIES = {
+    "observation_request": "observation",
+    "npc_capability_request": "npc_request",
+    "unverified_player_claim": "claim",
+    "unverified_debt_claim": "claim",
+    "memory_claim": "claim",
+    "lore_conflict_claim": "claim",
+    "social_probe": "social",
+    "unsupported_mechanic_request": "unsupported_mechanic",
+    "unsupported_but_diegetic_action": "diegetic_noop",
+}
 
 
 def classify_interpretive_intent(
@@ -45,9 +57,8 @@ def classify_interpretive_intent(
 ) -> str:
     """Return a non-mutating interpretive intent category, or an empty string.
 
-    This deliberately favors false negatives over swallowing supported mechanics.
-    PRs that add richer intent classes can expand this map without changing the
-    runtime boundary: interpreted responses remain non-stateful.
+    The categories describe how to answer a meaningful prompt without letting the
+    LLM mutate state. They do not mark the input as mechanically successful.
     """
 
     text = _norm_words(player_input)
@@ -60,20 +71,29 @@ def classify_interpretive_intent(
     if selection.get("reason") == "service_or_commerce_runtime_wins":
         return ""
 
-    compact = f" {text} "
-    if any(term in compact for term in _HARD_MECHANIC_TERMS):
-        return ""
-
-    if re.search(r"\blook(s|ed|ing)? around\b", text) or text in {"look", "look around"}:
-        return "observation_request"
-    if re.search(r"\bask\b.+\bto\b", text):
-        return "npc_capability_request"
+    # Claims and NPC-directed requests should be interpreted before the hard
+    # mechanic guard because an NPC may refuse, doubt, or ask for proof without
+    # mutating the world.
     if re.search(r"\bowe[sd]? me\b", text) or re.search(r"\byou owe\b", text):
         return "unverified_debt_claim"
-    if re.search(r"\bi (tell|claim|say|said|used to|was|am)\b", text):
+    if re.search(r"\bremember me\b|\bwe met before\b|\byou know me\b|\byou promised\b", text):
+        return "memory_claim"
+    if _looks_like_lore_conflict_claim(text):
+        return "lore_conflict_claim"
+    if re.search(r"\bask\b.+\bto\b", text):
+        return "npc_capability_request"
+    if re.search(r"\bi (tell|claim|say|said|used to|was|am|were)\b", text):
         return "unverified_player_claim"
     if re.search(r"\bdo you trust me\b|\btrust me\b|\bwhat do you think of me\b", text):
         return "social_probe"
+    if re.search(r"\blook(s|ed|ing)? around\b", text) or text in {"look", "look around"}:
+        return "observation_request"
+    if _looks_like_unsupported_mechanic_request(text):
+        return "unsupported_mechanic_request"
+
+    compact = f" {text} "
+    if any(term in compact for term in _HARD_MECHANIC_TERMS):
+        return ""
 
     advisory = _d(semantic_advisory)
     action_type = _s(advisory.get("action_type")).lower()
@@ -87,6 +107,10 @@ def classify_interpretive_intent(
     ):
         return "unsupported_but_diegetic_action"
     return ""
+
+
+def interpretive_intent_family(intent: str) -> str:
+    return INTENT_FAMILIES.get(_s(intent), "")
 
 
 def should_use_interpretive_adjudication(
@@ -131,6 +155,7 @@ def build_interpretive_adjudication_result(
         semantic_advisory=semantic_advisory,
         selection=selection,
     ) or "unsupported_but_diegetic_action"
+    family = interpretive_intent_family(intent)
     line = _line_for_intent(intent=intent, speaker=speaker, profile=profile, player_input=player_input)
     narration = _narration_for_intent(intent=intent, speaker=speaker, player_input=player_input)
     visible_response = {"narration": narration, "npc": {"speaker": speaker, "line": line}}
@@ -138,6 +163,7 @@ def build_interpretive_adjudication_result(
         "ok": True,
         "selected_candidate": "interpretive_adjudication",
         "interpretive_intent": intent,
+        "interpretive_intent_family": family,
         "fallback_used": True,
         "fallback_source": _INTERPRETIVE_SOURCE,
         "violations": [],
@@ -156,6 +182,7 @@ def build_interpretive_adjudication_result(
         "semantic_action_type": "interpretive_adjudication",
         "semantic_family": "social",
         "interpretive_intent": intent,
+        "interpretive_intent_family": family,
         "stateful": False,
         "needs_runtime_resolution": False,
         "no_state_mutation": True,
@@ -198,12 +225,7 @@ def build_interpretive_adjudication_result(
 
 
 def install_interpretive_adjudication_hook() -> None:
-    """Install the adjudication path into the current interactive runtime.
-
-    The project already uses optional runtime hooks for narrow, auditable slices.
-    This hook only diverts meaningful unsupported input before deterministic
-    runtime fallback; supported service/commerce/mechanic turns still win.
-    """
+    """Install the adjudication path into the current interactive runtime."""
 
     from functools import wraps
 
@@ -248,6 +270,38 @@ def install_interpretive_adjudication_hook() -> None:
     setattr(runtime, sentinel, True)
 
 
+def _looks_like_lore_conflict_claim(text: str) -> bool:
+    claim_prefix = re.search(r"\bi (am|was|were|used to|come from|came from|killed|hunt|hunted)\b", text)
+    lore_terms = (
+        "dragon",
+        "dragons",
+        "spaceship",
+        "alien",
+        "aliens",
+        "robot",
+        "robots",
+        "laser",
+        "lasers",
+        "time traveler",
+        "from the future",
+    )
+    return bool(claim_prefix and any(term in text for term in lore_terms))
+
+
+def _looks_like_unsupported_mechanic_request(text: str) -> bool:
+    impossible_terms = (
+        "build a spaceship",
+        "craft a spaceship",
+        "summon a dragon",
+        "fly to the moon",
+        "teleport",
+        "turn invisible",
+        "jump ten feet",
+        "jump 10 feet",
+    )
+    return any(term in text for term in impossible_terms)
+
+
 def _first_call_diagnostics(action_advisory: dict[str, Any], semantic_advisory: dict[str, Any]) -> dict[str, Any]:
     return _d(
         _d(semantic_advisory).get("first_call_grounding_diagnostics")
@@ -278,6 +332,16 @@ def _line_for_intent(*, intent: str, speaker: str, profile: dict[str, Any], play
             "I do not accept debts just because someone names a number. "
             "Show proof, a witness, or a ledger entry, and I will answer that. Until then, that claim stays unproven."
         )
+    if intent == "memory_claim":
+        return (
+            "Memory is not a blank check. I will not pretend to remember a promise, debt, or meeting without proof. "
+            "Give me a name, place, or witness, and I will answer what I can verify."
+        )
+    if intent == "lore_conflict_claim":
+        return (
+            "That claim does not fit what I know of this world. I will treat it as a story until you bring proof, "
+            "and even then I will weigh it against what can actually be seen or known here."
+        )
     if intent == "unverified_player_claim":
         return (
             "That may be a story, a boast, or the truth, but I cannot treat it as fact without proof. "
@@ -293,6 +357,11 @@ def _line_for_intent(*, intent: str, speaker: str, profile: dict[str, Any], play
             "Look with your own eyes first: the place, the people, and the mood all matter. "
             "Name what you want to inspect, and I will answer from what can be seen or known here."
         )
+    if intent == "unsupported_mechanic_request":
+        return (
+            "That is not something this moment can honestly resolve as an accomplished action. "
+            "I can react to the attempt or explain the obstacle, but I will not pretend the impossible simply worked."
+        )
     return (
         "I can respond to that in-world, but I will not turn an unsupported request into a fact. "
         "Say what you want to accomplish, and I will answer from what is possible here."
@@ -304,10 +373,16 @@ def _narration_for_intent(*, intent: str, speaker: str, player_input: str) -> st
         return f"{speaker} measures the request against the limits of the moment."
     if intent == "unverified_debt_claim":
         return f"{speaker} treats the claimed debt as something that needs proof."
+    if intent == "memory_claim":
+        return f"{speaker} checks the claim against memory rather than accepting it."
+    if intent == "lore_conflict_claim":
+        return f"{speaker} tests your claim against what belongs in this world."
     if intent == "unverified_player_claim":
         return f"{speaker} weighs your claim without accepting it as proven fact."
     if intent == "social_probe":
         return f"{speaker} answers cautiously, judging trust by evidence rather than words."
+    if intent == "unsupported_mechanic_request":
+        return f"{speaker} treats the request as a constraint to answer in-world, not a completed mechanic."
     return f"{speaker} keeps the answer grounded in what can be known here."
 
 
