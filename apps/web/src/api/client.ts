@@ -556,10 +556,18 @@ export class OmnixApiClient {
     }
 
     const startedAt = Date.now();
-    const result = await this.post<{ command: string }, RpgForegroundTurnResponse>(
-      `/api/rpg/sessions/${encodeURIComponent(sessionId)}/turn`,
-      { command },
-    );
+    let result: RpgForegroundTurnResponse;
+    try {
+      result = await this.post<{ command: string }, RpgForegroundTurnResponse>(
+        `/api/rpg/sessions/${encodeURIComponent(sessionId)}/turn`,
+        { command },
+      );
+    } catch (error) {
+      if (this.isNotFound(error)) {
+        return null;
+      }
+      throw error;
+    }
     const now = new Date().toISOString();
     const content = result.content || result.response || '';
     return {
