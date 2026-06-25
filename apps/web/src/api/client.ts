@@ -139,6 +139,7 @@ export interface RpgLaunchResponse {
   game?: Record<string, unknown>;
   environment_snapshot?: Record<string, unknown>;
   creation_request_trace?: RpgLaunchRequestTrace;
+  creation_server_trace?: Record<string, unknown>;
   error?: string;
 }
 
@@ -200,6 +201,20 @@ function nowMs(): number {
     return performance.now();
   }
   return Date.now();
+}
+
+function logRpgLaunchTrace(message: string, detail?: Record<string, unknown>): void {
+  if (typeof console === 'undefined') {
+    return;
+  }
+  console.info(`[RPG][new-game][client] ${message}`, detail ?? '');
+}
+
+function warnRpgLaunchTrace(message: string, detail?: Record<string, unknown>): void {
+  if (typeof console === 'undefined') {
+    return;
+  }
+  console.warn(`[RPG][new-game][client] ${message}`, detail ?? '');
 }
 
 function errorLabel(error: unknown): string {
@@ -360,12 +375,13 @@ export class OmnixApiClient {
     const genesisRequest = withRpgGenesisContract(request);
     const traceStartedAt = nowMs();
     const events: RpgLaunchRequestTraceEvent[] = [{ endpoint: '/api/rpg/new-game', method: 'POST', status: 'started' }];
+    logRpgLaunchTrace('starting POST /api/rpg/new-game');
     try {
       const startedAt = nowMs();
       const result = await this.post<RpgNewGameRequest, RpgLaunchResponse>('/api/rpg/new-game', genesisRequest);
       const elapsed = Math.round(nowMs() - startedAt);
       events.push({ endpoint: '/api/rpg/new-game', method: 'POST', status: 'completed', elapsed_ms: elapsed });
-      return {
+      const tracedResult = {
         ...result,
         creation_request_trace: {
           active_endpoint: '/api/rpg/new-game',
@@ -374,6 +390,11 @@ export class OmnixApiClient {
           events,
         },
       };
+      logRpgLaunchTrace('completed POST /api/rpg/new-game', tracedResult.creation_request_trace);
+      if (tracedResult.creation_server_trace) {
+        logRpgLaunchTrace('server trace', tracedResult.creation_server_trace);
+      }
+      return tracedResult;
     } catch (error) {
       const primaryElapsed = Math.round(nowMs() - traceStartedAt);
       events.push({
@@ -384,17 +405,19 @@ export class OmnixApiClient {
         http_status: error instanceof ApiError ? error.status : undefined,
         error: errorLabel(error),
       });
+      warnRpgLaunchTrace('primary POST /api/rpg/new-game failed', events[events.length - 1]);
       if (!this.isNotFound(error)) {
         throw error;
       }
       events.push({ endpoint: '/api/rpg/session/get', method: 'POST', status: 'fallback' });
+      logRpgLaunchTrace('falling back to POST /api/rpg/session/get');
       const fallbackStartedAt = nowMs();
       const result = await this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
         action: 'new_game',
         request: genesisRequest,
       });
       events.push({ endpoint: '/api/rpg/session/get', method: 'POST', status: 'completed', elapsed_ms: Math.round(nowMs() - fallbackStartedAt) });
-      return {
+      const tracedResult = {
         ...result,
         creation_request_trace: {
           active_endpoint: '/api/rpg/session/get',
@@ -403,6 +426,11 @@ export class OmnixApiClient {
           events,
         },
       };
+      logRpgLaunchTrace('completed POST /api/rpg/session/get', tracedResult.creation_request_trace);
+      if (tracedResult.creation_server_trace) {
+        logRpgLaunchTrace('server trace', tracedResult.creation_server_trace);
+      }
+      return tracedResult;
     }
   }
 
