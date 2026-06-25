@@ -32,6 +32,7 @@ from .residency import (
     plan_model_residency,
 )
 from .store import SQLiteJobStore, default_job_store
+from . import inline_feature_jobs as _inline_feature_jobs
 from .inline_feature_jobs import install_inline_feature_job_execution
 from .rpg_last10_report import (
     RPG_LAST10_REPORT_JOB_TYPE,
@@ -41,6 +42,7 @@ from .rpg_last10_report import (
 
 install_inline_feature_job_execution(SQLiteJobStore)
 install_rpg_last10_report_inline_job()
+_inline_feature_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES.discard(RPG_LAST10_REPORT_JOB_TYPE)
 
 __all__ = [
     "CancelJobRequest",
