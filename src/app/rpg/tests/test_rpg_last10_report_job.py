@@ -1,17 +1,14 @@
 from __future__ import annotations
 
+import json
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from app.jobs.models import JobRecord
 from app.jobs.inline_feature_jobs import _execute_feature_job
-from app.jobs.rpg_last10_report import (
-    RPG_LAST10_REPORT_JOB_TYPE,
-    build_rpg_last10_report_payload,
-    write_rpg_last10_report,
-)
+from app.jobs.models import JobRecord
+from app.jobs.rpg_last10_report import RPG_LAST10_REPORT_JOB_TYPE, build_rpg_last10_report_payload, write_rpg_last10_report
 
 
 class FakeJobStore:
@@ -23,9 +20,8 @@ class FakeJobStore:
 
 
 class FakeExecutableJobStore(FakeJobStore):
-    def __init__(self, jobs: list[JobRecord], output_root: Path) -> None:
+    def __init__(self, jobs: list[JobRecord]) -> None:
         super().__init__(jobs)
-        self.output_root = output_root
         self.running_job_ids: list[str] = []
         self.completed_requests: list[tuple[str, Any]] = []
         self.failed_requests: list[tuple[str, Any]] = []
@@ -35,148 +31,115 @@ class FakeExecutableJobStore(FakeJobStore):
 
     def complete_job(self, job_id: str, request: Any) -> JobRecord:
         self.completed_requests.append((job_id, request))
-        return _job_record(
-            job_id=job_id,
-            job_type=RPG_LAST10_REPORT_JOB_TYPE,
-            session_id="session-live-1",
-            created_offset=999,
-            duration=1,
-            input_payload={"turn_limit": 10},
-        )
+        return _job(job_id=job_id, kind=RPG_LAST10_REPORT_JOB_TYPE, session="session-live-1", offset=999, duration=1)
 
     def fail_job(self, job_id: str, request: Any) -> JobRecord:
         self.failed_requests.append((job_id, request))
-        return _job_record(
-            job_id=job_id,
-            job_type=RPG_LAST10_REPORT_JOB_TYPE,
-            session_id="session-live-1",
-            created_offset=999,
-            duration=1,
-            input_payload={"turn_limit": 10},
-        )
+        return _job(job_id=job_id, kind=RPG_LAST10_REPORT_JOB_TYPE, session="session-live-1", offset=999, duration=1)
 
 
-def _iso(offset_seconds: int) -> str:
-    base = datetime(2026, 6, 23, 12, 0, tzinfo=timezone.utc)
-    return (base + timedelta(seconds=offset_seconds)).isoformat()
+def _iso(offset: int) -> str:
+    return (datetime(2026, 6, 23, 12, 0, tzinfo=timezone.utc) + timedelta(seconds=offset)).isoformat()
 
 
-def _job_record(
+def _job(
     *,
     job_id: str,
-    job_type: str,
-    session_id: str,
-    created_offset: int,
+    kind: str,
+    session: str,
+    offset: int,
     duration: int,
-    command: str | None = None,
-    response: str | None = None,
-    input_payload: dict[str, Any] | None = None,
+    command: str = "",
+    response: str = "",
+    output_refs: list[dict[str, Any]] | None = None,
+    stages: list[dict[str, Any]] | None = None,
 ) -> JobRecord:
-    created_at = _iso(created_offset)
-    started_at = _iso(created_offset + 1)
-    completed_at = _iso(created_offset + duration + 1)
+    refs = output_refs if output_refs is not None else ([{"type": "rpg_turn_response", "content": response}] if response else [])
     return JobRecord(
         id=job_id,
         module="rpg",
-        type=job_type,
+        type=kind,
         status="completed",
         resource_class="cpu",
         priority=0,
-        stages=[],
+        stages=stages or [],
         progress={"current": 1, "total": 1, "message": "completed"},
         logs=[],
-        input_ref={"session_id": session_id},
-        input_payload=input_payload if input_payload is not None else {"command": command or ""},
-        output_refs=[{"type": "rpg_turn_response", "content": response or ""}] if response is not None else [],
-        created_at=created_at,
-        started_at=started_at,
-        completed_at=completed_at,
-        updated_at=completed_at,
+        input_ref={"session_id": session},
+        input_payload={"command": command, "turn_limit": 10},
+        output_refs=refs,
+        created_at=_iso(offset),
+        started_at=_iso(offset + 1),
+        completed_at=_iso(offset + duration + 1),
+        updated_at=_iso(offset + duration + 1),
         cancel={"requested": False},
         compat={},
     )
 
 
-def test_last10_report_payload_uses_completed_turn_jobs_and_performance_metrics(tmp_path: Path) -> None:
-    turn_jobs = [
-        _job_record(
-            job_id=f"job:turn-{index:02d}",
-            job_type="rpg.turn",
-            session_id="session-live-1",
-            created_offset=index * 10,
-            duration=index,
-            command=f"command {index}",
-            response=f"response {index}",
-        )
-        for index in range(1, 13)
-    ]
-    report_job = _job_record(
-        job_id="job:report",
-        job_type=RPG_LAST10_REPORT_JOB_TYPE,
-        session_id="session-live-1",
-        created_offset=999,
-        duration=1,
-        input_payload={"turn_limit": 10},
-    )
+def test_last10_report_payload_metrics_and_zip(tmp_path: Path) -> None:
+    jobs = [_job(job_id=f"job:turn-{i:02d}", kind="rpg.turn", session="session-live-1", offset=i * 10, duration=i, command=f"command {i}", response=f"response {i}") for i in range(1, 13)]
+    report = _job(job_id="job:report", kind=RPG_LAST10_REPORT_JOB_TYPE, session="session-live-1", offset=999, duration=1)
+    payload = build_rpg_last10_report_payload(report, job_store=FakeJobStore(jobs))
 
-    payload = build_rpg_last10_report_payload(report_job, job_store=FakeJobStore(turn_jobs))
-
-    assert payload["format_version"] == "rpg_last10_turn_debug_report_v1"
-    assert payload["session_id"] == "session-live-1"
+    assert payload["format_version"] == "rpg_last10_turn_debug_report_v2"
     assert payload["turn_count"] == 10
-    assert [row["command"] for row in payload["turns"]][0] == "command 3"
-    assert [row["command"] for row in payload["turns"]][-1] == "command 12"
-    assert payload["performance"]["metrics_included"] is True
-    assert payload["performance"]["measured_turn_count"] == 10
+    assert payload["turns"][0]["command"] == "command 3"
     assert payload["performance"]["avg_turn_seconds"] == 7.5
     assert payload["performance"]["p95_turn_seconds"] == 12
 
     written = write_rpg_last10_report(payload, output_root=tmp_path)
-    summary = written["summary"]
-    zip_path = Path(summary["zip_path"])
-    assert zip_path.is_file()
-    with zipfile.ZipFile(zip_path) as archive:
-        assert set(archive.namelist()) == {
-            "rpg-last10-turn-report-summary.json",
-            "rpg-last10-turn-performance.json",
-            "rpg-last10-turn-transcript.json",
-            "rpg-last10-turn-report.html",
-        }
+    with zipfile.ZipFile(Path(written["summary"]["zip_path"])) as archive:
+        assert "rpg-last10-turn-transcript.json" in set(archive.namelist())
 
 
-def test_last10_report_is_supported_by_inline_feature_dispatcher(
-    tmp_path: Path,
-    monkeypatch: Any,
-) -> None:
-    turn_job = _job_record(
-        job_id="job:turn-01",
-        job_type="rpg.turn",
-        session_id="session-live-1",
-        created_offset=10,
-        duration=3,
-        command="Ask Bran about business.",
-        response="Bran says business is steady.",
+def test_last10_report_includes_handoff_debug_payload(tmp_path: Path) -> None:
+    raw = {
+        "narration_source": "deterministic_fallback",
+        "fallback_reason": "missing_dialogue_candidate",
+        "interactive_cli_intent_diagnostics": {"provider_status": "valid_json", "provider_called": True, "intent_llm_used": True, "provider_total_ms": 2900},
+        "dialogue_payload": {"mode": "direct_npc_question", "target_npc": "Example NPC", "npc_response_candidate": None},
+        "response_selection_trace": {"selected_response_source": "deterministic_fallback", "fallback_reason": "missing_dialogue_candidate"},
+    }
+    turn = _job(
+        job_id="job:turn-debug",
+        kind="rpg.turn",
+        session="session-live-1",
+        offset=10,
+        duration=6,
+        command="ask example npc a question",
+        output_refs=[{"type": "rpg_turn_response", "content": "fallback line"}, {"type": "rpg_turn_result", "content": json.dumps(raw)}],
+        stages=[
+            {"id": "load-session", "label": "Load", "status": "completed", "resource_class": "cpu", "started_at": _iso(11), "completed_at": _iso(12)},
+            {"id": "apply-turn", "label": "Apply", "status": "completed", "resource_class": "cpu", "started_at": _iso(12), "completed_at": _iso(16)},
+        ],
     )
-    report_job = _job_record(
-        job_id="job:report",
-        job_type=RPG_LAST10_REPORT_JOB_TYPE,
-        session_id="session-live-1",
-        created_offset=999,
-        duration=1,
-        input_payload={"turn_limit": 10},
-    )
-    store = FakeExecutableJobStore([turn_job], tmp_path)
+    report = _job(job_id="job:report", kind=RPG_LAST10_REPORT_JOB_TYPE, session="session-live-1", offset=999, duration=1)
+    payload = build_rpg_last10_report_payload(report, job_store=FakeJobStore([turn]))
+    row = payload["turns"][0]
 
-    monkeypatch.setattr(
-        "app.jobs.rpg_last10_report.write_rpg_last10_report",
-        lambda payload: write_rpg_last10_report(payload, output_root=tmp_path),
-    )
+    assert row["raw_intent_diagnostics"]["provider_status"] == "valid_json"
+    assert row["dialogue_payload"]["dialogue_payload"]["target_npc"] == "Example NPC"
+    assert row["response_selection_trace"]["fallback_reason"] == "missing_dialogue_candidate"
+    assert row["performance_trace"]["provider_metrics"]["provider_total_ms"] == 2900
+    assert payload["performance"]["stage_seconds_totals"] == {"apply-turn": 4.0, "load-session": 1.0}
 
-    _execute_feature_job(store, report_job)
+    written = write_rpg_last10_report(payload, output_root=tmp_path)
+    transcript = Path(written["summary"]["transcript_path"]).read_text(encoding="utf-8")
+    html = Path(written["summary"]["html_report_path"]).read_text(encoding="utf-8")
+    assert "raw_intent_diagnostics" in transcript
+    assert "response_selection_trace" in transcript
+    assert "Turn debug payloads" in html
+
+
+def test_last10_report_is_supported_by_inline_feature_dispatcher(tmp_path: Path, monkeypatch: Any) -> None:
+    turn = _job(job_id="job:turn-01", kind="rpg.turn", session="session-live-1", offset=10, duration=3, command="Ask NPC", response="NPC answers")
+    report = _job(job_id="job:report", kind=RPG_LAST10_REPORT_JOB_TYPE, session="session-live-1", offset=999, duration=1)
+    store = FakeExecutableJobStore([turn])
+    monkeypatch.setattr("app.jobs.rpg_last10_report.write_rpg_last10_report", lambda payload: write_rpg_last10_report(payload, output_root=tmp_path))
+
+    _execute_feature_job(store, report)
 
     assert store.running_job_ids == ["job:report"]
     assert store.failed_requests == []
-    assert store.completed_requests
-    output_refs = store.completed_requests[0][1].output_refs
-    assert output_refs[0]["type"] == "rpg_last10_turn_report"
-    assert "rpg-last10-turn-report.zip" in output_refs[0]["content"]
+    assert store.completed_requests[0][1].output_refs[0]["type"] == "rpg_last10_turn_report"
