@@ -31,12 +31,18 @@ from .residency import (
     plan_model_residency,
 )
 from .store import SQLiteJobStore, default_job_store
+from . import inline_feature_jobs as _inline_feature_jobs
 from .inline_feature_jobs import install_inline_feature_job_execution
 from .rpg_last10_report import (
     RPG_LAST10_REPORT_JOB_TYPE,
     build_rpg_last10_report_payload,
     install_rpg_last10_report_inline_job,
 )
+
+# Foreground player turns must produce a completed response for the RPG UI submit
+# cycle. Keep long reports/background jobs async, but do not hide normal player
+# commands behind the background inline worker/polling path.
+_inline_feature_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES.discard("rpg.turn")
 
 install_inline_feature_job_execution(SQLiteJobStore)
 install_rpg_last10_report_inline_job()
