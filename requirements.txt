@@ -38,6 +38,8 @@ pydub==0.25.1
 librosa==0.11.0
 # Qwen3-TTS vendored runtime imports ONNX Runtime during codec/model setup.
 onnxruntime>=1.18.0
+# Qwen3-TTS vendored runtime imports the Python sox wrapper for audio transforms.
+sox>=1.5.0
 
 # Speech enhancement (optional - for studio-quality voice)
 deepfilternet>=0.5.0
