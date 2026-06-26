@@ -2,7 +2,7 @@ import { Button, Group, Progress, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
+import { omnixApiClient, type AssetListResponse, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixAudioControls, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
@@ -13,6 +13,8 @@ interface VoiceFormValues {
   voiceId: string;
   providerId: string;
 }
+
+type VoiceAsset = AssetListResponse['assets'][number];
 
 export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -37,8 +39,9 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     defaultValues: { text: '', speaker: '', voiceId: '', providerId: '' },
   });
   const ttsProviders = useMemo(() => ttsCapableProviders(providersQuery.data), [providersQuery.data]);
-  const voiceJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'voice') ?? [];
+  const voiceJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'voice' || job.module === 'voice-cloning') ?? [];
   const audioAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'audio' || asset.type === 'voice_profile') ?? [];
+  const profileAssets = audioAssets.filter((asset) => asset.type === 'voice_profile');
   const createJobMutation = useMutation({
     mutationFn: (values: VoiceFormValues) =>
       omnixApiClient.createJob({
@@ -69,18 +72,18 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
       <div className="workspace-heading">
         <div>
           <p className="eyebrow">Feature module</p>
-          <h2 id="module-title">{module.label}</h2>
+          <h2 id="module-title">Voice Studio</h2>
         </div>
         <code>{module.route}</code>
       </div>
 
-      <p className="workspace-summary">{module.summary}</p>
+      <p className="workspace-summary">Text-to-speech generation, local voice profiles, previews, playback, and provider diagnostics.</p>
 
       <div className="feature-layout">
         <section className="feature-panel">
           <Group justify="space-between" align="start">
             <div>
-              <Title order={4}>Synthesis</Title>
+              <Title order={4}>Synthesis Composer</Title>
               <Text size="sm">Shared voice job queue</Text>
             </div>
             <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
@@ -103,8 +106,15 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <input {...register('speaker')} placeholder="Narrator" />
             </label>
             <label>
-              Voice ID
-              <input {...register('voiceId')} placeholder="optional" />
+              Voice profile
+              <select {...register('voiceId')}>
+                <option value="">Manual / default voice</option>
+                {profileAssets.map((asset) => (
+                  <option key={asset.id} value={asset.storage_path}>
+                    {voiceAssetName(asset)}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="feature-form-wide">
               Text
@@ -130,7 +140,39 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         </section>
 
         <section className="feature-panel">
-          <Title order={4}>Voice jobs</Title>
+          <Group justify="space-between" align="start">
+            <div>
+              <Title order={4}>Voice Library</Title>
+              <Text size="sm">Local profiles available for synthesis.</Text>
+            </div>
+            <OmnixStatusPill>{profileAssets.length} voices</OmnixStatusPill>
+          </Group>
+          {profileAssets.length ? (
+            <div className="feature-list">
+              {profileAssets.map((asset) => (
+                <article className="feature-mini-card" key={asset.id}>
+                  <Group justify="space-between">
+                    <strong>{voiceAssetName(asset)}</strong>
+                    <OmnixStatusPill>ready</OmnixStatusPill>
+                  </Group>
+                  <Text size="sm">{asset.storage_path}</Text>
+                  <Group gap="xs">
+                    <Button size="xs" variant="light">Preview</Button>
+                    <Button size="xs" variant="light">Use</Button>
+                    <Button size="xs" variant="subtle">Edit</Button>
+                  </Group>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="platform-empty" role="status">
+              No voice profiles indexed.
+            </div>
+          )}
+        </section>
+
+        <section className="feature-panel">
+          <Title order={4}>Jobs & Playback Queue</Title>
           {voiceJobs.length ? (
             <div className="feature-list">
               {voiceJobs.map((job) => (
@@ -178,6 +220,9 @@ function progressPercent(progress: { current: number; total: number } | undefine
   if (!progress || progress.total <= 0) {
     return 0;
   }
-
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
+}
+
+function voiceAssetName(asset: VoiceAsset): string {
+  return asset.storage_path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || asset.id;
 }

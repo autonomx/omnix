@@ -110,7 +110,7 @@ describe('VoiceWorkspace', () => {
 
     renderVoice();
 
-    expect(await screen.findByRole('heading', { name: 'Synthesis' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Synthesis Composer' })).toBeInTheDocument();
     expect(await screen.findByText('Faster Qwen TTS')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'audio / voice' })).toBeInTheDocument();
 
