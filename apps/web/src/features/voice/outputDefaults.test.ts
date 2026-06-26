@@ -8,7 +8,8 @@ describe('DEFAULT_OUTPUT_SETTINGS', () => {
       similarity: 0.8,
       style: 0.35,
       speed: 1,
-      level: 0,
+      pitch: 0,
+      volume: 0,
     });
   });
 });

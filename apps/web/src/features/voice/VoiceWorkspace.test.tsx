@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe('VoiceWorkspace', () => {
-  it('queues TTS jobs through the shared jobs API and renders audio assets', async () => {
+  it('queues TTS jobs through the shared jobs API and renders wired studio panels', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
@@ -50,7 +50,7 @@ describe('VoiceWorkspace', () => {
               family: 'tts',
               source: 'settings',
               status: 'configured',
-              capabilities: ['tts'],
+              capabilities: ['tts', 'voice_cloning'],
             },
           ],
           models: [],
@@ -93,6 +93,14 @@ describe('VoiceWorkspace', () => {
         return Response.json({
           assets: [
             {
+              id: 'voice-cloning:Dave',
+              module: 'voice-cloning',
+              type: 'voice_profile',
+              mime_type: 'application/octet-stream',
+              storage_path: 'resources/voice_clones/Dave.wav',
+              created_at: '2026-06-14T00:00:00Z',
+            },
+            {
               id: 'asset:audio',
               module: 'voice',
               type: 'audio',
@@ -110,14 +118,13 @@ describe('VoiceWorkspace', () => {
 
     renderVoice();
 
-    expect(await screen.findByRole('heading', { name: 'Synthesis Composer' })).toBeInTheDocument();
-    expect(await screen.findByText('Faster Qwen TTS')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'audio / voice' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Clone a Voice' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Voice Library' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Text-to-Speech (Multi-Voice)' })).toBeInTheDocument();
+    expect(screen.getAllByText('Dave').length).toBeGreaterThan(0);
 
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'faster-qwen3-tts' } });
-    fireEvent.change(screen.getByLabelText('Speaker'), { target: { value: 'Narrator' } });
-    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'A short line for synthesis.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue synthesis' }));
+    fireEvent.change(screen.getByLabelText('Script'), { target: { value: 'Narrator: A short line for synthesis.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Generate Speech/ }));
 
     expect(await screen.findByText('TTS job queued: job:tts')).toBeInTheDocument();
 
@@ -128,7 +135,9 @@ describe('VoiceWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"module":"voice"');
       expect(createCall?.[1]?.body).toContain('"type":"tts.synthesize"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
-      expect(createCall?.[1]?.body).toContain('"provider_id":"faster-qwen3-tts"');
+      expect(createCall?.[1]?.body).toContain('"output_settings"');
+      expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
+      expect(createCall?.[1]?.body).toContain('"audio_effects"');
     });
   });
 });
