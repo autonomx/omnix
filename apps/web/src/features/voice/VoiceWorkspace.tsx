@@ -6,6 +6,7 @@ import { omnixApiClient, type AssetListResponse, type ProviderFacadePayload } fr
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixAudioControls, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { parseScriptSpeakers } from './scriptLines';
 
 interface VoiceFormValues {
   text: string;
@@ -34,10 +35,13 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<VoiceFormValues>({
     defaultValues: { text: '', speaker: '', voiceId: '', providerId: '' },
   });
+  const textDraft = watch('text');
+  const parsedSpeakers = useMemo(() => parseScriptSpeakers(textDraft), [textDraft]);
   const ttsProviders = useMemo(() => ttsCapableProviders(providersQuery.data), [providersQuery.data]);
   const voiceJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'voice' || job.module === 'voice-cloning') ?? [];
   const audioAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'audio' || asset.type === 'voice_profile') ?? [];
@@ -118,7 +122,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
             </label>
             <label className="feature-form-wide">
               Text
-              <textarea rows={5} aria-invalid={Boolean(errors.text)} {...register('text', { required: true })} />
+              <textarea rows={6} aria-invalid={Boolean(errors.text)} {...register('text', { required: true })} />
             </label>
             <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
               {createJobMutation.isPending ? 'Queueing synthesis…' : 'Queue synthesis'}
@@ -137,6 +141,32 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
           />
 
           <OmnixAudioControls label="latest voice preview" />
+        </section>
+
+        <section className="feature-panel">
+          <Group justify="space-between" align="start">
+            <div>
+              <Title order={4}>Detected Characters</Title>
+              <Text size="sm">Lines written as name: text are grouped automatically.</Text>
+            </div>
+            <OmnixStatusPill>{parsedSpeakers.length} detected</OmnixStatusPill>
+          </Group>
+          {parsedSpeakers.length ? (
+            <div className="feature-list">
+              {parsedSpeakers.map((speaker) => (
+                <article className="feature-mini-card" key={speaker.name}>
+                  <Group justify="space-between">
+                    <strong>{speaker.name}</strong>
+                    <OmnixStatusPill>{speaker.count} lines</OmnixStatusPill>
+                  </Group>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="platform-empty" role="status">
+              Type speaker-tagged lines to detect characters.
+            </div>
+          )}
         </section>
 
         <section className="feature-panel">
