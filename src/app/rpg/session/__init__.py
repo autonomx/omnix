@@ -135,6 +135,13 @@ def _install_optional_fast_runtime_hooks() -> None:
     except Exception:
         return
 
+    try:
+        from .visible_response_runtime_hook import install_visible_response_runtime_guard
+
+        install_visible_response_runtime_guard()
+    except Exception:
+        return
+
 
 _install_optional_fast_runtime_hooks()
 
