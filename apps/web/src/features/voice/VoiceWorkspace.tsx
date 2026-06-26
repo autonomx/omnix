@@ -81,10 +81,10 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
             </Group>
             <form className="voice-studio-field-grid" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
-              <label className="voice-studio-field-wide">Provider<select {...register('providerId')}><option value="">Default TTS provider</option>{ttsProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select><small>Configured TTS provider</small></label>
+              <label className="voice-studio-field-wide">Provider<select aria-label="Provider" {...register('providerId')}><option value="">Default TTS provider</option>{ttsProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select><small>Configured TTS provider</small></label>
               <div className="voice-studio-field-wide voice-studio-field">Voice Source<div className="voice-source-tabs" aria-label="Voice source"><button type="button">System Voices</button><button type="button" className="active">Voice Clones (Local)</button></div></div>
               <label>Clone Voice<select {...register('voiceId')}><option value="">Manual / default voice</option>{profileAssets.map((asset) => <option key={asset.id} value={asset.storage_path}>{voiceAssetName(asset)}</option>)}</select></label>
-              <label>Speaker / Preset<input {...register('speaker')} placeholder="Narrator (Neutral)" /></label>
+              <label>Speaker / Preset<input aria-label="Speaker" {...register('speaker')} placeholder="Narrator (Neutral)" /></label>
               <label>Voice ID (optional)<input placeholder="e.g. narrator_v1" readOnly value={profileAssets[0]?.id ?? ''} /></label>
               <label>Style Prompt (optional)<input placeholder="authoritative, calm, cinematic" readOnly value="" /></label>
               <div className="voice-studio-field-wide voice-slider-grid">{Object.entries(DEFAULT_OUTPUT_SETTINGS).map(([name, value]) => <label className="voice-slider-card" key={name}><span>{formatSettingName(name)}</span><b>{formatSettingValue(value)}</b><input aria-label={`Output ${name}`} type="range" min={rangeMin(name)} max={rangeMax(name)} step="0.01" value={value} readOnly /></label>)}</div>
