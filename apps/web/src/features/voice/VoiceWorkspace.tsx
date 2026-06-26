@@ -96,10 +96,10 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
             <p className="voice-footer-note">All synthesis requests are queued. Latest preview will auto-play when ready.</p>
           </section>
 
-          <section className="voice-panel">
+          <section className="voice-panel voice-library-panel">
             <Group justify="space-between" align="start"><div><Title order={4}>Voice Clone Library</Title><Text size="sm">Local cloned voices from resources/voice_clones</Text></div><OmnixStatusPill>{profileAssets.length} voices</OmnixStatusPill></Group>
-            {profileAssets.length ? <div className="voice-clone-grid">{profileAssets.map((asset, index) => <VoiceCloneCard key={asset.id} asset={asset} active={index === 0} />)}</div> : <div className="platform-empty" role="status">No voice profiles indexed.</div>}
-            <p className="voice-footer-note">Voices are stored locally and never leave your environment.</p>
+            {profileAssets.length ? <div className="voice-clone-grid" aria-label="Voice clone library scroll area">{profileAssets.map((asset, index) => <VoiceCloneCard key={asset.id} asset={asset} active={index === 0} />)}</div> : <div className="platform-empty" role="status">No voice profiles indexed.</div>}
+            <p className="voice-footer-note">Showing six voices at a time. Scroll the library for more local clones.</p>
           </section>
 
           <section className="voice-panel">
@@ -125,7 +125,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
 }
 
 function VoiceCloneCard({ asset, active }: { asset: VoiceAsset; active: boolean }) {
-  return <article className={`voice-clone-card${active ? ' active' : ''}`}><Group justify="space-between"><Group gap="xs"><span className="voice-avatar">◉</span><strong>{voiceAssetName(asset)}</strong></Group><OmnixStatusPill>✓</OmnixStatusPill></Group><Text size="sm"><span className="voice-status-dot" /> Ready</Text><div className="voice-meta-list"><span>Profile</span><b>{asset.id}</b><span>Sample Rate</span><b>48 kHz</b><span>Source</span><b>{asset.storage_path}</b></div><div className="voice-card-actions"><Button size="xs" variant="subtle">Preview</Button><Button size="xs" variant="light">Use</Button></div></article>;
+  return <article className={`voice-clone-card${active ? ' active' : ''}`}><Group justify="space-between"><Group gap="xs"><span className="voice-avatar">◉</span><strong title={voiceAssetName(asset)}>{voiceAssetName(asset)}</strong></Group><OmnixStatusPill>✓</OmnixStatusPill></Group><Text size="sm"><span className="voice-status-dot" /> Ready</Text><div className="voice-meta-list"><span>Profile</span><b title={asset.id}>{voiceProfileName(asset)}</b><span>Sample Rate</span><b>48 kHz</b><span>Source</span><b title={asset.storage_path}>{voiceAssetName(asset)}</b></div><div className="voice-card-actions"><Button size="xs" variant="subtle">Preview</Button><Button size="xs" variant="light">Use</Button></div></article>;
 }
 
 function AudioAssetRow({ asset }: { asset: VoiceAsset }) {
@@ -151,6 +151,10 @@ function progressPercent(progress: { current: number; total: number } | undefine
 
 function voiceAssetName(asset: VoiceAsset): string {
   return asset.storage_path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || asset.id;
+}
+
+function voiceProfileName(asset: VoiceAsset): string {
+  return asset.id.replace(/^voice-cloning:/, '');
 }
 
 function formatSettingName(name: string): string {
