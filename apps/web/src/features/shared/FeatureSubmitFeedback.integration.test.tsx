@@ -144,7 +144,7 @@ describe('provider-backed feature submit feedback', () => {
     installFailingJobApiMock();
     renderWithProviders(<VoiceWorkspace module={moduleById('voice')} />);
 
-    expect(await screen.findByRole('heading', { name: 'Synthesis' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Synthesis Composer' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Read this aloud.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue synthesis' }));
 
