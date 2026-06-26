@@ -359,20 +359,9 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   return (
     <WorkspacePanel>
       <div className="voice-studio-app">
-        <aside className="voice-side-nav" aria-label="Voice Studio sections">
-          <div className="voice-brand"><span className="voice-brand-mark" /> <strong>OMNIX</strong></div>
-          <p>Voice Studio</p>
-          {['Overview', 'Voice Library', 'Clone Voice', 'Text to Speech', 'Settings'].map((item, index) => (
-            <button className={index === 0 ? 'active' : ''} key={item} type="button"><span>{['⌂', '▤', '▣', '♪', '⚙'][index]}</span>{item}</button>
-          ))}
-          <div className="voice-credit-card"><small>Credits</small><b>12,450</b><Button size="xs">Top up</Button></div>
-          <div className="voice-user-card"><span>OM</span><div><b>Omnix Team</b><small>team@omnix.ai</small></div></div>
-        </aside>
-
         <main className="voice-workspace-final">
           <header className="voice-final-header">
             <div><Title order={2}>Voice Studio</Title><Text size="sm">Clone voices, manage your voice library, and generate natural speech with advanced controls.</Text></div>
-            <Button variant="subtle">Documentation ↗</Button>
           </header>
 
           <div className="voice-top-grid">
@@ -426,7 +415,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
           <div className="voice-bottom-grid">
             <section className="voice-panel-final enhancement-panel"><Title order={5}>Voice Enhancement</Title><Text size="xs">Fine-tune and enhance the output with advanced controls.</Text><div className="enhancement-controls">{(Object.entries(outputSettings) as [OutputSettingName, number][]).map(([name, value]) => <label key={name}><span>{settingLabel(name)}</span><b>{settingValueLabel(name, value)}</b><input aria-label={`Output ${name}`} type="range" min={rangeMin(name)} max={rangeMax(name)} step="0.01" value={value} onChange={(event) => updateOutputSetting(name, Number(event.currentTarget.value))} /></label>)}</div></section>
-            <section className="voice-panel-final effects-panel"><Title order={5}>Audio Effects</Title><Text size="xs">Apply effects to polish and enhance the final audio.</Text><div className="effect-buttons">{AUDIO_EFFECTS.map((effect) => <button className={enabledEffects.includes(effect) ? 'active' : ''} key={effect} type="button" onClick={() => toggleEffect(effect, setEnabledEffects)}>{effect}</button>)}<button type="button">More</button></div></section>
+            <section className="voice-panel-final effects-panel"><Title order={5}>Audio Effects</Title><Text size="xs">Apply effects to polish and enhance the final audio.</Text><div className="effect-buttons">{AUDIO_EFFECTS.map((effect) => <button className={enabledEffects.includes(effect) ? 'active' : ''} key={effect} type="button" onClick={() => toggleEffect(effect, setEnabledEffects)}>{effect}</button>)}</div></section>
           </div>
 
           <footer className="now-playing-bar">
