@@ -497,7 +497,7 @@ function useVoice(asset: VoiceAsset, setValue: ReturnType<typeof useForm<VoiceFo
   setSaveMessage(`Selected ${voiceAssetName(asset)} for synthesis.`);
 }
 
-function activeJobs(jobs: Array<{ status: string }>) {
+function activeJobs<T extends { status: string }>(jobs: T[]): T[] {
   return jobs.filter((job) => job.status === 'queued' || job.status === 'running' || job.status === 'leased');
 }
 
