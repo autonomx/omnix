@@ -64,90 +64,35 @@ from .turn_readiness_report import (
 )
 
 
+def _try_install_optional_hook(import_path: str, installer_name: str) -> None:
+    try:
+        module_name, _, attr_name = import_path.rpartition(".")
+        module = __import__(module_name, fromlist=[attr_name])
+        installer = getattr(module, installer_name or attr_name)
+        installer()
+    except Exception:
+        return
+
+
 def _install_optional_fast_runtime_hooks() -> None:
-    try:
-        from .fast_combat_narration_skip import install_fast_combat_narration_skip
-
-        install_fast_combat_narration_skip()
-    except Exception:
-        return
-
-    try:
-        from .fast_combat_presentation_hook import install_fast_combat_presentation_hook
-
-        install_fast_combat_presentation_hook()
-    except Exception:
-        return
-
-    try:
-        from .interactive_fast_combat_result_hook import install_interactive_fast_combat_result_hook
-
-        install_interactive_fast_combat_result_hook()
-    except Exception:
-        return
-
-    try:
-        from .player_agency_runtime_hook import install_player_agency_runtime_hook
-
-        install_player_agency_runtime_hook()
-    except Exception:
-        return
-
-    try:
-        from .npc_dialogue_repair_hook import install_npc_dialogue_repair_hook
-
-        install_npc_dialogue_repair_hook()
-    except Exception:
-        return
-
-    try:
-        from .interpretive_adjudication import install_interpretive_adjudication_hook
-
-        install_interpretive_adjudication_hook()
-    except Exception:
-        return
-
-    try:
-        from .first_call_dialogue_guard import install_first_call_dialogue_placeholder_guard
-
-        install_first_call_dialogue_placeholder_guard()
-    except Exception:
-        return
-
-    try:
-        from .hypothetical_world_resolution import install_hypothetical_world_resolution
-
-        install_hypothetical_world_resolution()
-    except Exception:
-        return
-
-    try:
-        from .contract_attachment import install_contract_attachment as install_contracts
-
-        install_contracts()
-    except Exception:
-        return
-
-    try:
-        from .diegetic_fallback_hook import install_diegetic_fallback_hook
-
-        install_diegetic_fallback_hook()
-    except Exception:
-        return
-
-    try:
-        from .fast_visible_dialogue_hook import install_fast_visible_dialogue_hook
-
-        install_fast_visible_dialogue_hook()
-    except Exception:
-        return
-
-    try:
-        from .visible_response_runtime_hook import install_visible_response_runtime_guard
-
-        install_visible_response_runtime_guard()
-    except Exception:
-        return
+    # These hooks are best-effort and independent. A failure in an older hook
+    # must not abort later P0 latency hooks such as fast visible dialogue or the
+    # visible-response guard.
+    for import_path, installer_name in (
+        ("app.rpg.session.fast_combat_narration_skip.install_fast_combat_narration_skip", "install_fast_combat_narration_skip"),
+        ("app.rpg.session.fast_combat_presentation_hook.install_fast_combat_presentation_hook", "install_fast_combat_presentation_hook"),
+        ("app.rpg.session.interactive_fast_combat_result_hook.install_interactive_fast_combat_result_hook", "install_interactive_fast_combat_result_hook"),
+        ("app.rpg.session.player_agency_runtime_hook.install_player_agency_runtime_hook", "install_player_agency_runtime_hook"),
+        ("app.rpg.session.npc_dialogue_repair_hook.install_npc_dialogue_repair_hook", "install_npc_dialogue_repair_hook"),
+        ("app.rpg.session.interpretive_adjudication.install_interpretive_adjudication_hook", "install_interpretive_adjudication_hook"),
+        ("app.rpg.session.first_call_dialogue_guard.install_first_call_dialogue_placeholder_guard", "install_first_call_dialogue_placeholder_guard"),
+        ("app.rpg.session.hypothetical_world_resolution.install_hypothetical_world_resolution", "install_hypothetical_world_resolution"),
+        ("app.rpg.session.contract_attachment.install_contract_attachment", "install_contract_attachment"),
+        ("app.rpg.session.diegetic_fallback_hook.install_diegetic_fallback_hook", "install_diegetic_fallback_hook"),
+        ("app.rpg.session.fast_visible_dialogue_hook.install_fast_visible_dialogue_hook", "install_fast_visible_dialogue_hook"),
+        ("app.rpg.session.visible_response_runtime_hook.install_visible_response_runtime_guard", "install_visible_response_runtime_guard"),
+    ):
+        _try_install_optional_hook(import_path, installer_name)
 
 
 _install_optional_fast_runtime_hooks()

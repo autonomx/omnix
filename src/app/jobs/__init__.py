@@ -39,10 +39,12 @@ from .rpg_last10_report import (
     build_rpg_last10_report_payload,
     install_rpg_last10_report_inline_job,
 )
+from .rpg_turn_job_guard import install_rpg_turn_job_guard
 
 install_inline_feature_job_execution(SQLiteJobStore)
 install_rpg_last10_report_inline_job()
 _inline_feature_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES.discard(RPG_LAST10_REPORT_JOB_TYPE)
+install_rpg_turn_job_guard(SQLiteJobStore)
 
 __all__ = [
     "CancelJobRequest",
