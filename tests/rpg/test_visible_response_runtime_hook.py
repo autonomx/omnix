@@ -69,3 +69,39 @@ def test_first_call_selection_rejects_bracket_container_visible_line() -> None:
     assert selected["consumable"] is False
     assert selected["source"] == "visible_response_contract_guard_v1"
     assert selected["rejection_reasons"] == ["semantic_advisory:invalid_visible_response_text"]
+
+
+def test_first_call_selection_routes_rumor_facts_through_runtime() -> None:
+    from app.rpg.session.visible_response_runtime_hook import install_visible_response_runtime_guard
+
+    install_visible_response_runtime_guard()
+
+    from app.rpg.session import first_call_dialogue
+
+    selected = first_call_dialogue.choose_first_call_visible_response(
+        semantic_advisory={
+            "action_type": "social_activity",
+            "semantic_family": "social",
+            "interaction_mode": "direct",
+            "stateful": False,
+            "needs_runtime_resolution": False,
+            "target_id": "bran",
+            "target_name": "Bran",
+            "direct_response_gate": {"safe_to_display_now": True, "reason": "safe"},
+            "visible_response": {
+                "narration": "",
+                "npc": {"speaker": "Bran", "line": "There are strange lights near the quarry."},
+            },
+            "first_call_grounding_diagnostics": {
+                "turn_grounding_packet": {
+                    "player_input": "I ask Bran, any rumors lately?",
+                    "priority_context": {"addressed_npc_ids": ["bran"]},
+                    "npc_context": {"addressed_npcs": [{"id": "bran", "name": "Bran"}]},
+                }
+            },
+        }
+    )
+
+    assert selected["consumable"] is False
+    assert selected["source"] == "visible_response_contract_guard_v1"
+    assert selected["rejection_reasons"] == ["semantic_advisory:world_info_inquiry_requires_runtime"]
