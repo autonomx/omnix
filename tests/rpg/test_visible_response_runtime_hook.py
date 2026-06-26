@@ -45,7 +45,7 @@ def test_semantic_runtime_hook_reads_choices_content_not_tool_calls() -> None:
     assert advisory["visible_response"]["npc"]["line"] == "Rumors? Ask plain what kind you want."
 
 
-def test_first_call_selection_rejects_tool_call_metadata_shape() -> None:
+def test_first_call_selection_rejects_bracket_container_visible_line() -> None:
     from app.rpg.session.visible_response_runtime_hook import install_visible_response_runtime_guard
 
     install_visible_response_runtime_guard()
@@ -62,7 +62,7 @@ def test_first_call_selection_rejects_tool_call_metadata_shape() -> None:
             "target_id": "bran",
             "target_name": "Bran",
             "direct_response_gate": {"safe_to_display_now": True, "reason": "safe"},
-            "visible_response": {"tool_calls": []},
+            "visible_response": {"narration": "", "npc": {"speaker": "Bran", "line": "[]"}},
         }
     )
 
