@@ -1,147 +1,313 @@
 import { Button, Group, Progress, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { omnixApiClient, type AssetListResponse, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { OmnixAudioControls, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import { DEFAULT_OUTPUT_SETTINGS } from './outputDefaults';
 import { firstResultAsset } from './resultList';
-import { parseScriptSpeakers } from './scriptLines';
+import { parseScriptSpeakers, type ScriptSpeakerRow } from './scriptLines';
 import './VoiceStudioWorkspace.css';
 
 interface VoiceFormValues {
   text: string;
+  providerId: string;
   speaker: string;
   voiceId: string;
+}
+
+interface VoiceCloneFormValues {
   providerId: string;
+  profileName: string;
+  language: string;
+  quality: string;
+  notes: string;
 }
 
 type VoiceAsset = AssetListResponse['assets'][number];
+type CloneSourceKind = 'upload' | 'record';
+type OutputSettingName = keyof typeof DEFAULT_OUTPUT_SETTINGS;
+
+const DEFAULT_SCRIPT = 'dave: hello there\nbob: how do you do\nmarry: i am doing fine\ndave: now lets get to the topic\nmarry: agreed.';
+const STYLE_OPTIONS = ['Confident, Conversational', 'Calm', 'Enthusiastic', 'Warm', 'Deep, Authoritative', 'Narrator, Clear'];
+const AUDIO_EFFECTS = ['Equalizer', 'Reverb', 'Compression', 'De-esser', 'Noise Reduction'];
 
 export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
+  const [cloneSource, setCloneSource] = useState<CloneSourceKind>('upload');
+  const [sampleFile, setSampleFile] = useState<File | null>(null);
+  const [voiceSearch, setVoiceSearch] = useState('');
+  const [saveMessage, setSaveMessage] = useState('');
+  const [speakerVoiceAssignments, setSpeakerVoiceAssignments] = useState<Record<string, string>>({});
+  const [speakerStyleAssignments, setSpeakerStyleAssignments] = useState<Record<string, string>>({});
+  const [outputSettings, setOutputSettings] = useState(DEFAULT_OUTPUT_SETTINGS);
+  const [enabledEffects, setEnabledEffects] = useState<string[]>(AUDIO_EFFECTS);
+
   const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
   const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<VoiceFormValues>({ defaultValues: { text: '', speaker: '', voiceId: '', providerId: '' } });
-  const textDraft = watch('text');
-  const parsedSpeakers = useMemo(() => parseScriptSpeakers(textDraft), [textDraft]);
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<VoiceFormValues>({
+    defaultValues: { text: DEFAULT_SCRIPT, providerId: '', speaker: '', voiceId: '' },
+  });
+  const {
+    register: registerClone,
+    handleSubmit: handleCloneSubmit,
+    reset: resetClone,
+    formState: { errors: cloneErrors },
+  } = useForm<VoiceCloneFormValues>({
+    defaultValues: { providerId: '', profileName: '', language: 'English (US)', quality: 'High (Recommended)', notes: '' },
+  });
+
+  const scriptText = watch('text') ?? '';
+  const parsedSpeakers = useMemo(() => parseScriptSpeakers(scriptText), [scriptText]);
   const ttsProviders = useMemo(() => ttsCapableProviders(providersQuery.data), [providersQuery.data]);
+  const cloneProviders = useMemo(() => cloneCapableProviders(providersQuery.data), [providersQuery.data]);
   const voiceJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'voice' || job.module === 'voice-cloning') ?? [];
   const audioAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'audio' || asset.type === 'voice_profile') ?? [];
   const profileAssets = audioAssets.filter((asset) => asset.type === 'voice_profile');
   const generatedAudioAssets = audioAssets.filter((asset) => asset.type === 'audio');
   const latestResultAsset = firstResultAsset(generatedAudioAssets);
+  const filteredProfileAssets = useMemo(
+    () => profileAssets.filter((asset) => voiceAssetName(asset).toLowerCase().includes(voiceSearch.trim().toLowerCase()) || voiceProfileName(asset).toLowerCase().includes(voiceSearch.trim().toLowerCase())),
+    [profileAssets, voiceSearch],
+  );
+  const visibleProfileAssets = filteredProfileAssets.slice(0, 6);
+
   const createJobMutation = useMutation({
-    mutationFn: (values: VoiceFormValues) => omnixApiClient.createJob({
-      module: 'voice',
-      type: parsedSpeakers.length > 1 ? 'tts.multi_speaker_synthesize' : 'tts.synthesize',
-      resource_class: 'gpu:tts',
-      priority: 0,
-      input_payload: {
-        text: values.text,
-        speaker: values.speaker || null,
-        voice_id: values.voiceId || null,
-        provider_id: values.providerId || null,
-        script_speakers: parsedSpeakers,
-        script_mode: parsedSpeakers.length > 1 ? 'multi_speaker' : 'single_speaker',
-        output_settings: DEFAULT_OUTPUT_SETTINGS,
-      },
-      stages: [
-        { id: 'parse-script', label: 'Parse script', resource_class: 'cpu', status: 'queued' },
-        { id: 'synthesize', label: 'Synthesize speech', resource_class: 'gpu:tts', status: 'queued' },
-        { id: 'store-audio', label: 'Store audio asset', resource_class: 'cpu', status: 'queued' },
-      ],
-    }),
-    onSuccess: async (_job, values) => {
-      reset({ text: '', speaker: values.speaker, voiceId: values.voiceId, providerId: values.providerId });
-      await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+    mutationFn: (values: VoiceFormValues) =>
+      omnixApiClient.createJob({
+        module: 'voice',
+        type: parsedSpeakers.length > 1 ? 'tts.multi_speaker_synthesize' : 'tts.synthesize',
+        resource_class: 'gpu:tts',
+        priority: 0,
+        input_payload: {
+          text: values.text,
+          provider_id: values.providerId || null,
+          speaker: values.speaker || parsedSpeakers[0]?.name || null,
+          voice_id: values.voiceId || null,
+          script_mode: parsedSpeakers.length > 1 ? 'multi_speaker' : 'single_speaker',
+          script_speakers: parsedSpeakers,
+          character_voice_assignments: buildSpeakerAssignments(parsedSpeakers, profileAssets, speakerVoiceAssignments, speakerStyleAssignments),
+          output_settings: outputSettings,
+          audio_effects: enabledEffects,
+          save_output: true,
+        },
+        stages: [
+          { id: 'parse-script', label: 'Detect script characters', resource_class: 'cpu', status: 'queued' },
+          { id: 'assign-voices', label: 'Apply voice assignments', resource_class: 'cpu', status: 'queued' },
+          { id: 'synthesize', label: 'Generate speech', resource_class: 'gpu:tts', status: 'queued' },
+          { id: 'store-audio', label: 'Save audio output', resource_class: 'cpu', status: 'queued' },
+        ],
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
+      ]);
     },
   });
+
+  const cloneJobMutation = useMutation({
+    mutationFn: (values: VoiceCloneFormValues) =>
+      omnixApiClient.createJob({
+        module: 'voice-cloning',
+        type: 'voice-cloning.create-profile',
+        resource_class: 'gpu:tts',
+        priority: 0,
+        input_payload: {
+          profile_name: values.profileName,
+          provider_id: values.providerId || null,
+          language: values.language,
+          quality: values.quality,
+          notes: values.notes,
+          source_kind: cloneSource,
+          source_file_name: sampleFile?.name ?? null,
+          source_file_size: sampleFile?.size ?? null,
+          storage_hint: 'resources/voice_clones',
+        },
+        stages: [
+          { id: 'capture-sample', label: cloneSource === 'record' ? 'Record voice sample' : 'Ingest uploaded audio', resource_class: 'cpu', status: 'queued' },
+          { id: 'build-profile', label: 'Create voice profile', resource_class: 'gpu:tts', status: 'queued' },
+          { id: 'preview', label: 'Generate preview clip', resource_class: 'gpu:tts', status: 'queued' },
+          { id: 'store-profile', label: 'Store local voice clone', resource_class: 'cpu', status: 'queued' },
+        ],
+      }),
+    onSuccess: async (_job, values) => {
+      resetClone({ providerId: values.providerId, profileName: '', language: values.language, quality: values.quality, notes: '' });
+      setSampleFile(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
+      ]);
+    },
+  });
+
   const submitStatus = createJobMutation.isPending ? 'queued' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
     <WorkspacePanel>
-      <div className="voice-studio-shell">
-        <div className="workspace-heading">
-          <div>
-            <p className="eyebrow">Feature module</p>
-            <h2 id="module-title">Voice Studio</h2>
-            <p className="workspace-summary">Text-to-speech, cloned voices, previews, queue management, and provider diagnostics.</p>
+      <div className="voice-studio-app">
+        <aside className="voice-side-nav" aria-label="Voice Studio sections">
+          <div className="voice-brand"><span className="voice-brand-mark" /> <strong>OMNIX</strong></div>
+          <p>Voice Studio</p>
+          {['Overview', 'Voice Library', 'Clone Voice', 'Text to Speech', 'Settings'].map((item, index) => (
+            <button className={index === 0 ? 'active' : ''} key={item} type="button"><span>{['⌂', '▤', '▣', '♪', '⚙'][index]}</span>{item}</button>
+          ))}
+          <div className="voice-credit-card"><small>Credits</small><b>12,450</b><Button size="xs">Top up</Button></div>
+          <div className="voice-user-card"><span>OM</span><div><b>Omnix Team</b><small>team@omnix.ai</small></div></div>
+        </aside>
+
+        <main className="voice-workspace-final">
+          <header className="voice-final-header">
+            <div><Title order={2}>Voice Studio</Title><Text size="sm">Clone voices, manage your voice library, and generate natural speech with advanced controls.</Text></div>
+            <Button variant="subtle">Documentation ↗</Button>
+          </header>
+
+          <div className="voice-top-grid">
+            <section className="voice-panel-final clone-panel">
+              <Title order={4}>Clone a Voice</Title>
+              <Text size="sm">Create a high-quality clone from your audio.</Text>
+              <form className="voice-clone-form" onSubmit={handleCloneSubmit((values) => cloneJobMutation.mutate(values))}>
+                <div className="clone-source-grid">
+                  <button className={cloneSource === 'upload' ? 'active' : ''} type="button" onClick={() => setCloneSource('upload')}><strong>Upload Audio</strong><small>WAV, MP3, MP4</small><small>Min. 1 min recommended</small></button>
+                  <button className={cloneSource === 'record' ? 'active' : ''} type="button" onClick={() => setCloneSource('record')}><strong>Record Voice</strong><small>Record directly</small><small>in your browser</small></button>
+                </div>
+                <label>Voice Name<input aria-invalid={Boolean(cloneErrors.profileName)} placeholder="e.g. My New Voice" {...registerClone('profileName', { required: true })} /></label>
+                <label className="voice-file-field">Audio sample<input type="file" accept="audio/*" onChange={(event) => setSampleFile(event.currentTarget.files?.[0] ?? null)} /><small>{sampleFile ? `${sampleFile.name} · ${formatBytes(sampleFile.size)}` : 'No sample selected yet.'}</small></label>
+                <div className="voice-two-col"><label>Language / Accent<input {...registerClone('language')} /></label><label>Quality<select {...registerClone('quality')}><option>High (Recommended)</option><option>Balanced</option><option>Fast Preview</option></select></label></div>
+                <label>Notes / Tags (optional)<textarea rows={2} placeholder="Add notes or tags to help identify this voice..." {...registerClone('notes')} /></label>
+                <input type="hidden" {...registerClone('providerId')} value={cloneProviders[0]?.id ?? ''} readOnly />
+                <Group justify="space-between"><Text size="xs">Clones are stored to Omnix: /resources/voice_clones</Text><Button type="submit" loading={cloneJobMutation.isPending}>Create Clone</Button></Group>
+              </form>
+              <FeatureValidationMessage show={Boolean(cloneErrors.profileName)} message="Enter a voice name before creating a clone." />
+              <FeatureSubmitFeedback error={cloneJobMutation.error} errorPrefix="Voice clone request" isError={cloneJobMutation.isError} isPending={cloneJobMutation.isPending} jobId={cloneJobMutation.data?.id} pendingMessage="Queueing voice clone job…" successPrefix="Voice clone job queued" />
+            </section>
+
+            <section className="voice-panel-final library-panel-final">
+              <Group justify="space-between"><div><Title order={4}>Voice Library</Title><Text size="sm">Your cloned voices stored in Omnix resources.</Text></div><Button size="xs" variant="subtle">Filter ⟳</Button></Group>
+              <label className="voice-search"><span>Search voices</span><input aria-label="Search voices" value={voiceSearch} onChange={(event) => setVoiceSearch(event.currentTarget.value)} placeholder="Search voices..." /></label>
+              <div className="voice-library-table" aria-label="Voice library">
+                <div className="voice-library-row table-head"><span>Name</span><span>ID / Prefix</span><span>Source</span><span>Status</span><span></span></div>
+                {visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} key={asset.id} onUse={() => useVoice(asset, setValue)} />)}
+              </div>
+              <Group justify="space-between"><Text size="xs">{filteredProfileAssets.length} voices</Text><Button size="xs" variant="subtle">View all voices →</Button></Group>
+            </section>
+
+            <section className="voice-panel-final queue-panel-final">
+              <Title order={4}>Jobs & Playback Queue</Title>
+              <Text size="sm">Monitor synthesis jobs and replay results.</Text>
+              <div className="queue-tabs"><button type="button">Active ({activeJobs(voiceJobs).length})</button><button type="button">Recent</button><button type="button">Failed ({voiceJobs.filter((job) => job.status === 'failed').length})</button></div>
+              <div className="queue-list-final">{(voiceJobs.length ? voiceJobs : demoJobs()).slice(0, 4).map((job) => <QueueRow job={job} key={job.id} />)}</div>
+              <div className="latest-preview-row"><Button size="xs" variant="subtle">▶</Button><Waveform /><Text size="xs">{latestResultAsset ? voiceAssetName(latestResultAsset) : '00:14 / 00:38'}</Text></div>
+            </section>
           </div>
-          <code>{module.route}</code>
-        </div>
 
-        <div className="voice-dashboard-grid">
-          <section className="voice-panel">
-            <Group justify="space-between" align="start">
-              <div><Title order={4}>Synthesis Composer</Title><Text size="sm">Build single voice or multi-speaker narration jobs.</Text></div>
-              <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
-            </Group>
-            <form className="voice-studio-field-grid" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
-              <label className="voice-studio-field-wide">Provider<select aria-label="Provider" {...register('providerId')}><option value="">Default TTS provider</option>{ttsProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select><small>Configured TTS provider</small></label>
-              <div className="voice-studio-field-wide voice-studio-field">Voice Source<div className="voice-source-tabs" aria-label="Voice source"><button type="button">System Voices</button><button type="button" className="active">Voice Clones (Local)</button></div></div>
-              <label>Clone Voice<select {...register('voiceId')}><option value="">Manual / default voice</option>{profileAssets.map((asset) => <option key={asset.id} value={asset.storage_path}>{voiceAssetName(asset)}</option>)}</select></label>
-              <label>Speaker / Preset<input aria-label="Speaker" {...register('speaker')} placeholder="Narrator (Neutral)" /></label>
-              <label>Voice ID (optional)<input placeholder="e.g. narrator_v1" readOnly value={profileAssets[0]?.id ?? ''} /></label>
-              <label>Style Prompt (optional)<input placeholder="authoritative, calm, cinematic" readOnly value="" /></label>
-              <div className="voice-studio-field-wide voice-slider-grid">{Object.entries(DEFAULT_OUTPUT_SETTINGS).map(([name, value]) => <label className="voice-slider-card" key={name}><span>{formatSettingName(name)}</span><b>{formatSettingValue(value)}</b><input aria-label={`Output ${name}`} type="range" min={rangeMin(name)} max={rangeMax(name)} step="0.01" value={value} readOnly /></label>)}</div>
-              <label className="voice-studio-field-wide">Text to synthesize<textarea aria-label="Text" rows={7} aria-invalid={Boolean(errors.text)} placeholder={'Dave: hello there\nBob: how do you do\nMarry: I am doing fine'} {...register('text', { required: true })} /></label>
-              <div className="voice-primary-actions voice-studio-field-wide"><Button type="button" variant="light">Preview</Button><Button className="voice-action-cyan" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>Queue synthesis</Button><Button type="submit" variant="light" disabled={createJobMutation.isPending}>Generate & Play</Button><Button type="button" variant="subtle">Stop</Button></div>
+          <section className="voice-panel-final tts-panel-final">
+            <Group justify="space-between"><div><Title order={4}>Text-to-Speech (Multi-Voice)</Title><Text size="sm">Write your script with character tags, AI will detect speakers and you can assign voices and styles before generating speech.</Text></div><div className="script-actions"><Button variant="subtle" onClick={() => setValue('text', '')}>Clear</Button><Button variant="subtle" onClick={() => loadScript(setValue, setSaveMessage)}>Load Script</Button><Button onClick={() => saveScript(scriptText, setSaveMessage)}>Save Script</Button></div></Group>
+            <form className="tts-workflow-grid" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
+              <section className="script-card"><Group justify="space-between"><b>1. Script <small>(use character tags)</small></b><small>ⓘ How it works</small></Group><textarea aria-label="Script" rows={8} {...register('text', { required: true })} /><Group justify="space-between"><Text size="xs">{scriptText.split('\n').filter(Boolean).length} lines · {parsedSpeakers.length} speakers detected</Text><Button size="xs" type="button" variant="subtle">Detect Characters</Button></Group>{parsedSpeakers.length ? <div className="voice-success-note">AI automatically detected {parsedSpeakers.length} characters from your script.</div> : null}{saveMessage ? <div className="voice-success-note">{saveMessage}</div> : null}</section>
+              <section className="assignment-card"><Group justify="space-between"><b>2. Detected Characters & Voice Assignment</b><OmnixStatusPill>{parsedSpeakers.length} detected</OmnixStatusPill></Group><div className="assignment-table"><div className="assignment-row assignment-head"><span>Character</span><span>Assign Voice</span><span>Style / Emotion</span><span>Preview</span></div>{parsedSpeakers.map((speaker, index) => <AssignmentRow assets={profileAssets} index={index} key={speaker.name} speaker={speaker} voiceValue={assignedVoiceFor(speaker, profileAssets, speakerVoiceAssignments)} styleValue={speakerStyleAssignments[speaker.name] ?? STYLE_OPTIONS[Math.min(index, STYLE_OPTIONS.length - 1)]} onVoiceChange={(voiceId) => setSpeakerVoiceAssignments((current) => ({ ...current, [speaker.name]: voiceId }))} onStyleChange={(style) => setSpeakerStyleAssignments((current) => ({ ...current, [speaker.name]: style }))} />)}</div><Text size="xs">Voices must be assigned to all detected characters before generating.</Text></section>
+              <section className="generate-card"><b>3. Generate Speech</b><Text size="sm">Generate multi-voice audio from your script.</Text><input type="hidden" {...register('providerId')} value={ttsProviders[0]?.id ?? ''} readOnly /><input type="hidden" {...register('voiceId')} value={profileAssets[0]?.storage_path ?? ''} readOnly /><input type="hidden" {...register('speaker')} value={parsedSpeakers[0]?.name ?? 'Narrator'} readOnly /><Button className="generate-speech-button" type="submit" loading={createJobMutation.isPending}>▥ Generate Speech</Button><Button type="button" variant="subtle">⇩ Save Output</Button><Text size="xs">Estimated duration: ~ 00:38</Text><FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="TTS request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.id} pendingMessage="Queueing TTS job…" successPrefix="TTS job queued" /></section>
             </form>
-            <FeatureValidationMessage show={Boolean(errors.text)} message="Enter text before queueing speech synthesis." />
-            <FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="TTS request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.id} pendingMessage="Queueing TTS job…" successPrefix="TTS job queued" />
-            <p className="voice-footer-note">All synthesis requests are queued. Latest preview will auto-play when ready.</p>
+            <FeatureValidationMessage show={Boolean(errors.text)} message="Enter script text before generating speech." />
           </section>
 
-          <section className="voice-panel voice-library-panel">
-            <Group justify="space-between" align="start"><div><Title order={4}>Voice Clone Library</Title><Text size="sm">Local cloned voices from resources/voice_clones</Text></div><OmnixStatusPill>{profileAssets.length} voices</OmnixStatusPill></Group>
-            {profileAssets.length ? <div className="voice-clone-grid" aria-label="Voice clone library scroll area">{profileAssets.map((asset, index) => <VoiceCloneCard key={asset.id} asset={asset} active={index === 0} />)}</div> : <div className="platform-empty" role="status">No voice profiles indexed.</div>}
-            <p className="voice-footer-note">Showing six voices at a time. Scroll the library for more local clones.</p>
-          </section>
+          <div className="voice-bottom-grid">
+            <section className="voice-panel-final enhancement-panel"><Title order={5}>Voice Enhancement</Title><Text size="xs">Fine-tune and enhance the output with advanced controls.</Text><div className="enhancement-controls">{(Object.entries(outputSettings) as [OutputSettingName, number][]).map(([name, value]) => <label key={name}><span>{settingLabel(name)}</span><b>{settingValueLabel(name, value)}</b><input aria-label={`Output ${name}`} type="range" min={rangeMin(name)} max={rangeMax(name)} step="0.01" value={value} onChange={(event) => setOutputSettings((current) => ({ ...current, [name]: Number(event.currentTarget.value) }))} /></label>)}</div></section>
+            <section className="voice-panel-final effects-panel"><Title order={5}>Audio Effects</Title><Text size="xs">Apply effects to polish and enhance the final audio.</Text><div className="effect-buttons">{AUDIO_EFFECTS.map((effect) => <button className={enabledEffects.includes(effect) ? 'active' : ''} key={effect} type="button" onClick={() => toggleEffect(effect, setEnabledEffects)}>{effect}</button>)}<button type="button">More</button></div></section>
+          </div>
 
-          <section className="voice-panel">
-            <Group justify="space-between" align="start"><div><Title order={4}>Jobs & Playback Queue</Title><Text size="sm">Active queue, recent jobs, and latest preview.</Text></div><Button size="xs" variant="subtle">Clear Completed</Button></Group>
-            <div className="voice-queue-list"><div className="voice-queue-row voice-table-heading"><span>Job</span><span>Status</span><span>Provider</span><span>Time</span></div>{voiceJobs.slice(0, 5).map((job) => <div className="voice-queue-row" key={job.id}><span><b>{job.type}</b><small>{job.module}</small></span><span><OmnixStatusPill>{job.status}</OmnixStatusPill><Progress value={progressPercent(job.progress)} /></span><span>Default TTS</span><span>{job.progress?.message ?? '—'}</span></div>)}{!voiceJobs.length ? <div className="platform-empty" role="status">No voice jobs queued.</div> : null}</div>
-            <div className="voice-player-panel"><Group justify="space-between"><Text size="sm">Latest Preview · {latestResultAsset ? voiceAssetName(latestResultAsset) : 'Narrator (Neutral)'}</Text><Text size="sm">00:06 / 00:12</Text></Group><Waveform /><Group gap="xs"><Button size="xs" variant="light">Pause</Button><Button size="xs" variant="subtle">Back</Button><Button size="xs" variant="subtle">Forward</Button><Button size="xs" variant="subtle">Export</Button><Button size="xs" variant="subtle">Keep</Button></Group></div>
-          </section>
-
-          <section className="voice-panel voice-panel-wide">
-            <Group justify="space-between" align="start"><div><Title order={4}>Audio Assets</Title><Text size="sm">Recent generated audio clips</Text></div><Button size="xs" variant="subtle">Export Selected</Button></Group>
-            {generatedAudioAssets.length ? <div className="voice-asset-table"><div className="voice-asset-row voice-table-heading"><span></span><span>File Name</span><span>Voice</span><span>Provider</span><span>Duration</span><span>Actions</span></div>{generatedAudioAssets.slice(0, 6).map((asset) => <AudioAssetRow key={asset.id} asset={asset} />)}</div> : <div className="platform-empty" role="status">No audio assets indexed.</div>}
-          </section>
-
-          <section className="voice-panel">
-            <Group justify="space-between" align="start"><div><Title order={4}>Provider Diagnostics</Title><Text size="sm">Last updated: local session</Text></div><Button size="xs" variant="subtle">Refresh</Button></Group>
-            <div className="voice-diagnostics-grid"><DiagnosticCard title="TTS Provider" status="Online" tone="online" detail="Latency 128 ms" /><DiagnosticCard title="Queue Worker" status="Online" tone="online" detail={`${voiceJobs.length} jobs`} /><DiagnosticCard title="GPU (CUDA)" status="Idle" tone="idle" detail="Memory available" /><DiagnosticCard title="CPU" status="Ready" tone="idle" detail="Resources normal" /></div>
-            <div className="voice-diagnostic-list">{['TTS provider health check passed', 'Queue worker heartbeat OK', 'GPU status OK', 'System resources within normal limits'].map((message) => <div className="voice-diagnostic-row" key={message}><span>✓</span><span>{message}</span><span>now</span></div>)}</div>
-          </section>
-        </div>
+          <footer className="now-playing-bar"><button type="button">⌃</button><div><b>Now Playing</b><span>{latestResultAsset ? voiceAssetName(latestResultAsset) : 'meeting_script_v2'} · Multi-voice · {parsedSpeakers.length} speakers</span></div><button type="button">↢</button><button className="main-play" type="button">▶</button><button type="button">↣</button><span>00:14</span><Progress value={36} /><span>00:38</span><button type="button">⇩</button><button type="button">⋯</button></footer>
+        </main>
       </div>
     </WorkspacePanel>
   );
 }
 
-function VoiceCloneCard({ asset, active }: { asset: VoiceAsset; active: boolean }) {
-  return <article className={`voice-clone-card${active ? ' active' : ''}`}><Group justify="space-between"><Group gap="xs"><span className="voice-avatar">◉</span><strong title={voiceAssetName(asset)}>{voiceAssetName(asset)}</strong></Group><OmnixStatusPill>✓</OmnixStatusPill></Group><Text size="sm"><span className="voice-status-dot" /> Ready</Text><div className="voice-meta-list"><span>Profile</span><b title={asset.id}>{voiceProfileName(asset)}</b><span>Sample Rate</span><b>48 kHz</b><span>Source</span><b title={asset.storage_path}>{voiceAssetName(asset)}</b></div><div className="voice-card-actions"><Button size="xs" variant="subtle">Preview</Button><Button size="xs" variant="light">Use</Button></div></article>;
+function VoiceLibraryRow({ asset, onUse }: { asset: VoiceAsset; onUse: () => void }) {
+  return <div className="voice-library-row"><span><i>{voiceInitial(asset)}</i><b>{voiceAssetName(asset)}</b><small>{voiceProfileDescription(asset)}</small></span><span>{voiceProfileName(asset)}</span><span>Local Clone</span><span className="ready-chip">Ready</span><span><Button size="xs" variant="subtle">▶</Button><Button size="xs" variant="subtle" onClick={onUse}>Use</Button><Button size="xs" variant="subtle">⋯</Button></span></div>;
 }
 
-function AudioAssetRow({ asset }: { asset: VoiceAsset }) {
-  return <div className="voice-asset-row"><span>▶</span><span><Title order={4}>audio / voice</Title><small>{asset.storage_path}</small></span><span>Narrator</span><span>Default TTS</span><span>00:12</span><span><Button size="xs" variant="subtle">Play</Button><Button size="xs" variant="subtle">Export</Button></span></div>;
+function QueueRow({ job }: { job: { id: string; type: string; status: string; module: string; progress?: { current: number; total: number } } }) {
+  const progress = progressPercent(job.progress);
+  return <article className="queue-row-final"><span className="job-icon">▥</span><div><b>{job.type}</b><small>{job.module}</small></div><div><OmnixStatusPill>{job.status}</OmnixStatusPill>{progress ? <Progress value={progress} /> : null}</div><small>{progress || job.status === 'completed' ? `${progress}%` : '—'}</small><button type="button">⋯</button></article>;
 }
 
-function DiagnosticCard({ title, status, detail, tone }: { title: string; status: string; detail: string; tone: 'online' | 'idle' }) {
-  return <article className="voice-diagnostic-card"><Text size="sm">{title}</Text><span className={tone === 'online' ? 'voice-provider-online' : 'voice-provider-idle'}>{status}</span><Text size="sm">{detail}</Text></article>;
+function AssignmentRow({ assets, index, speaker, voiceValue, styleValue, onVoiceChange, onStyleChange }: { assets: VoiceAsset[]; index: number; speaker: ScriptSpeakerRow; voiceValue: string; styleValue: string; onVoiceChange: (voiceId: string) => void; onStyleChange: (style: string) => void }) {
+  return <div className="assignment-row"><span><i>{speaker.name.slice(0, 2).toUpperCase()}</i>{speaker.name}</span><select aria-label={`${speaker.name} voice`} value={voiceValue} onChange={(event) => onVoiceChange(event.currentTarget.value)}>{assets.map((asset) => <option key={asset.id} value={asset.storage_path}>{voiceAssetName(asset)} ({voiceProfileName(asset)})</option>)}{!assets.length ? <option value="">No cloned voices</option> : null}</select><select aria-label={`${speaker.name} style`} value={styleValue} onChange={(event) => onStyleChange(event.currentTarget.value)}>{STYLE_OPTIONS.map((style) => <option key={style} value={style}>{style}</option>)}</select><Button size="xs" variant="subtle" type="button">▶</Button></div>;
 }
 
 function Waveform() {
-  return <div className="voice-waveform" aria-hidden="true">{Array.from({ length: 42 }, (_, index) => <span key={index} style={{ height: `${20 + ((index * 17) % 60)}%` }} />)}</div>;
+  return <div className="voice-waveform-final" aria-hidden="true">{Array.from({ length: 64 }, (_, index) => <span key={index} style={{ height: `${18 + ((index * 19) % 62)}%` }} />)}</div>;
 }
 
 function ttsCapableProviders(payload: ProviderFacadePayload | undefined) {
   return payload?.providers.filter((provider) => provider.capabilities.includes('tts')) ?? [];
+}
+
+function cloneCapableProviders(payload: ProviderFacadePayload | undefined) {
+  return payload?.providers.filter((provider) => provider.capabilities.includes('voice_cloning') || provider.capabilities.includes('tts')) ?? [];
+}
+
+function buildSpeakerAssignments(speakers: ScriptSpeakerRow[], assets: VoiceAsset[], voiceAssignments: Record<string, string>, styleAssignments: Record<string, string>) {
+  return speakers.map((speaker, index) => ({
+    speaker: speaker.name,
+    voice_id: assignedVoiceFor(speaker, assets, voiceAssignments) || null,
+    style: styleAssignments[speaker.name] ?? STYLE_OPTIONS[Math.min(index, STYLE_OPTIONS.length - 1)],
+    line_count: speaker.count,
+  }));
+}
+
+function assignedVoiceFor(speaker: ScriptSpeakerRow, assets: VoiceAsset[], voiceAssignments: Record<string, string>): string {
+  return voiceAssignments[speaker.name] ?? findMatchingVoice(speaker.name, assets)?.storage_path ?? assets[0]?.storage_path ?? '';
+}
+
+function findMatchingVoice(name: string, assets: VoiceAsset[]): VoiceAsset | undefined {
+  const normalizedName = name.toLowerCase();
+  return assets.find((asset) => voiceAssetName(asset).toLowerCase().includes(normalizedName) || voiceProfileName(asset).toLowerCase().includes(normalizedName));
+}
+
+function useVoice(asset: VoiceAsset, setValue: ReturnType<typeof useForm<VoiceFormValues>>['setValue']) {
+  setValue('voiceId', asset.storage_path);
+  setValue('speaker', voiceAssetName(asset));
+}
+
+function activeJobs(jobs: Array<{ status: string }>) {
+  return jobs.filter((job) => job.status === 'queued' || job.status === 'running');
+}
+
+function demoJobs() {
+  return [
+    { id: 'demo-active', type: 'meeting_script_v2', status: 'running', module: 'Multi-voice synthesis', progress: { current: 65, total: 100 } },
+    { id: 'demo-queued', type: 'character_demo', status: 'queued', module: 'Multi-voice synthesis', progress: { current: 0, total: 100 } },
+    { id: 'demo-done', type: 'product_intro_v1', status: 'completed', module: 'Single voice', progress: { current: 100, total: 100 } },
+  ];
+}
+
+function saveScript(text: string, setSaveMessage: (message: string) => void) {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem('omnix.voice.lastScript', text);
+  }
+  setSaveMessage('Script saved locally.');
+}
+
+function loadScript(setValue: ReturnType<typeof useForm<VoiceFormValues>>['setValue'], setSaveMessage: (message: string) => void) {
+  const saved = typeof window !== 'undefined' ? window.localStorage.getItem('omnix.voice.lastScript') : null;
+  setValue('text', saved || DEFAULT_SCRIPT);
+  setSaveMessage(saved ? 'Loaded saved script.' : 'Loaded example script.');
+}
+
+function toggleEffect(effect: string, setEnabledEffects: (value: (current: string[]) => string[]) => void) {
+  setEnabledEffects((current) => current.includes(effect) ? current.filter((entry) => entry !== effect) : [...current, effect]);
 }
 
 function progressPercent(progress: { current: number; total: number } | undefined): number {
@@ -154,21 +320,44 @@ function voiceAssetName(asset: VoiceAsset): string {
 }
 
 function voiceProfileName(asset: VoiceAsset): string {
-  return asset.id.replace(/^voice-cloning:/, '');
+  return asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, '');
 }
 
-function formatSettingName(name: string): string {
-  return name.replace(/_/g, ' ').replace(/^./, (first) => first.toUpperCase());
+function voiceInitial(asset: VoiceAsset): string {
+  return voiceAssetName(asset).slice(0, 2).toUpperCase() || 'VC';
 }
 
-function formatSettingValue(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+function voiceProfileDescription(asset: VoiceAsset): string {
+  return asset.module === 'voice-cloning' ? 'Cloned voice' : 'Local voice';
 }
 
-function rangeMin(name: string): number {
-  return name === 'level' ? -1 : 0;
+function formatBytes(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function rangeMax(name: string): number {
-  return name === 'speed' ? 2 : 1;
+function settingLabel(name: OutputSettingName): string {
+  if (name === 'style') return 'Style Exaggeration';
+  return name.replace(/^./, (first) => first.toUpperCase());
+}
+
+function settingValueLabel(name: OutputSettingName, value: number): string {
+  if (name === 'speed') return `${value.toFixed(2)}x`;
+  if (name === 'pitch') return `${value.toFixed(0)} st`;
+  if (name === 'volume') return `${value.toFixed(1)} dB`;
+  return value.toFixed(2);
+}
+
+function rangeMin(name: OutputSettingName): number {
+  if (name === 'pitch') return -12;
+  if (name === 'volume') return -12;
+  return 0;
+}
+
+function rangeMax(name: OutputSettingName): number {
+  if (name === 'speed') return 2;
+  if (name === 'pitch') return 12;
+  if (name === 'volume') return 12;
+  return 1;
 }
