@@ -108,6 +108,13 @@ def _install_optional_fast_runtime_hooks() -> None:
         return
 
     try:
+        from .first_call_dialogue_guard import install_first_call_dialogue_placeholder_guard
+
+        install_first_call_dialogue_placeholder_guard()
+    except Exception:
+        return
+
+    try:
         from .hypothetical_world_resolution import install_hypothetical_world_resolution
 
         install_hypothetical_world_resolution()
