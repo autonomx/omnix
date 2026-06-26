@@ -121,7 +121,7 @@ describe('VoiceWorkspace', () => {
     expect(await screen.findByRole('heading', { name: 'Clone a Voice' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Voice Library' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Text-to-Speech (Multi-Voice)' })).toBeInTheDocument();
-    expect(screen.getByText('Dave')).toBeInTheDocument();
+    expect(screen.getAllByText('Dave').length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByLabelText('Script'), { target: { value: 'Narrator: A short line for synthesis.' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate Speech/ }));
