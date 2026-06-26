@@ -108,6 +108,13 @@ def _install_optional_fast_runtime_hooks() -> None:
         return
 
     try:
+        from .hypothetical_world_resolution import install_hypothetical_world_resolution
+
+        install_hypothetical_world_resolution()
+    except Exception:
+        return
+
+    try:
         from .contract_attachment import install_contract_attachment as install_contracts
 
         install_contracts()
