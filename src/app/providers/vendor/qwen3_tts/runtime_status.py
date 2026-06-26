@@ -37,6 +37,10 @@ def _fail_payload(provider: str, error: str, details: Dict[str, Any] | None = No
     }
 
 
+def _dependency_missing_error(package_name: str, install_hint: str, exc: Exception) -> str:
+    return f"missing_dependency:{package_name}:install={install_hint}:error={exc!r}"
+
+
 def validate_qwen3_tts_runtime() -> Dict[str, Any]:
     versions: Dict[str, Any] = {}
     compat: Dict[str, Any] = {}
@@ -96,6 +100,16 @@ def validate_qwen3_tts_runtime() -> Dict[str, Any]:
         versions["soundfile"] = getattr(soundfile, "__version__", "")
     except Exception as exc:
         return _fail_payload("qwen3_tts", f"soundfile_import_failed:{exc!r}", {"versions": versions, "vendor_paths": vendor_paths})
+
+    try:
+        import onnxruntime  # noqa: F401
+        versions["onnxruntime"] = getattr(onnxruntime, "__version__", "")
+    except Exception as exc:
+        return _fail_payload(
+            "qwen3_tts",
+            _dependency_missing_error("onnxruntime", "pip install onnxruntime>=1.18.0", exc),
+            {"versions": versions, "vendor_paths": vendor_paths},
+        )
 
     try:
         from transformers import modeling_utils  # noqa: F401
