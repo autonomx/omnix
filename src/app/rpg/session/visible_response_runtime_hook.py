@@ -14,6 +14,7 @@ from app.rpg.session.visible_response_contract import (
 
 _SENTINEL = "_omnix_visible_response_runtime_guard_installed"
 _PARSE_NOISE_VALUES = {"[]", "[ ]", "{}", "{ }", "tool_calls: []", '"tool_calls": []'}
+_WORLD_INFO_TERMS = ("rumor", "rumour", "gossip", "news", "heard", "word around", "word is")
 
 
 def install_visible_response_runtime_guard() -> None:
@@ -79,7 +80,7 @@ def _patch_first_call_selection(first_call_dialogue: Any) -> None:
     @wraps(original)
     def guarded_choose_first_call_visible_response(*args: Any, **kwargs: Any) -> dict[str, Any]:
         selected = original(*args, **kwargs)
-        reason = invalid_visible_selection_reason(selected)
+        reason = invalid_visible_selection_reason(selected) or _world_info_requires_runtime_reason(selected)
         if not reason:
             return selected
         copied = deepcopy(selected) if isinstance(selected, dict) else {}
@@ -93,6 +94,35 @@ def _patch_first_call_selection(first_call_dialogue: Any) -> None:
         }
 
     first_call_dialogue.choose_first_call_visible_response = guarded_choose_first_call_visible_response
+
+
+def _world_info_requires_runtime_reason(selection: Any) -> str:
+    data = selection if isinstance(selection, dict) else {}
+    if not data.get("consumable"):
+        return ""
+    packet = _turn_grounding_packet_from_selection(data)
+    player_input = str(packet.get("player_input") or "").casefold()
+    if not player_input or not any(term in player_input for term in _WORLD_INFO_TERMS):
+        return ""
+    priority = packet.get("priority_context") if isinstance(packet.get("priority_context"), dict) else {}
+    npc_context = packet.get("npc_context") if isinstance(packet.get("npc_context"), dict) else {}
+    addressed_ids = priority.get("addressed_npc_ids") if isinstance(priority.get("addressed_npc_ids"), list) else []
+    addressed_profiles = npc_context.get("addressed_npcs") if isinstance(npc_context.get("addressed_npcs"), list) else []
+    if addressed_ids or addressed_profiles or data.get("npc"):
+        return "world_info_inquiry_requires_runtime"
+    return ""
+
+
+def _turn_grounding_packet_from_selection(selection: dict[str, Any]) -> dict[str, Any]:
+    for source in (
+        selection.get("first_call_grounding_diagnostics"),
+        (selection.get("advisory") if isinstance(selection.get("advisory"), dict) else {}).get("first_call_grounding_diagnostics"),
+    ):
+        diagnostics = source if isinstance(source, dict) else {}
+        packet = diagnostics.get("turn_grounding_packet") if isinstance(diagnostics.get("turn_grounding_packet"), dict) else {}
+        if packet:
+            return packet
+    return {}
 
 
 def _patch_interactive_runtime(runtime: Any) -> None:
