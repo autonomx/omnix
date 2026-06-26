@@ -31,6 +31,8 @@ interface VoiceOutputRef {
   data_url?: string;
   duration?: number;
   mime_type?: string;
+  provider_fallback?: boolean;
+  provider_success?: boolean;
   segments?: unknown[];
   storage_path?: string;
   title?: string;
@@ -113,6 +115,10 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const visibleProfileAssets = showAllVoices ? filteredProfileAssets : filteredProfileAssets.slice(0, 6);
   const selectedCloneSample = cloneSource === 'record' ? recordedSample : sampleFile;
   const selectedCloneSampleName = cloneSource === 'record' ? 'recorded-voice.webm' : sampleFile?.name ?? null;
+  const defaultTtsProviderId = ttsProviders[0]?.id ?? '';
+  const defaultCloneProviderId = cloneProviders[0]?.id ?? '';
+  const defaultVoiceId = profileAssets[0] ? voiceStoragePath(profileAssets[0]) : '';
+  const defaultSpeakerName = parsedSpeakers[0]?.name ?? 'Narrator';
 
   const createJobMutation = useMutation({
     mutationFn: (values: VoiceFormValues) =>
@@ -123,9 +129,9 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         priority: 0,
         input_payload: {
           text: values.text,
-          provider_id: values.providerId || ttsProviders[0]?.id || null,
-          speaker: values.speaker || parsedSpeakers[0]?.name || null,
-          voice_id: values.voiceId || assignedVoiceFor(parsedSpeakers[0] ?? { name: '', count: 0 }, profileAssets, speakerVoiceAssignments) || null,
+          provider_id: values.providerId || defaultTtsProviderId || null,
+          speaker: values.speaker || defaultSpeakerName || null,
+          voice_id: values.voiceId || assignedVoiceFor(parsedSpeakers[0] ?? { name: '', count: 0 }, profileAssets, speakerVoiceAssignments) || defaultVoiceId || null,
           script_mode: parsedSpeakers.length > 1 ? 'multi_speaker' : 'single_speaker',
           script_speakers: parsedSpeakers,
           script_segments: scriptSegments,
@@ -146,26 +152,30 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   });
 
   const previewVoiceMutation = useMutation({
-    mutationFn: (asset: VoiceAsset) => omnixApiClient.createJob({
-      module: 'voice',
-      type: 'tts.synthesize',
-      resource_class: 'gpu:tts',
-      priority: 1,
-      input_payload: {
-        text: `This is a preview of ${voiceAssetName(asset)} speaking in Voice Studio.`,
-        provider_id: ttsProviders[0]?.id || null,
-        speaker: voiceAssetName(asset),
-        voice_id: asset.storage_path,
-        script_mode: 'single_speaker',
-        script_speakers: [{ name: 'Preview', count: 1 }],
-        script_segments: [{ index: 0, speaker: 'Preview', text: `This is a preview of ${voiceAssetName(asset)} speaking in Voice Studio.` }],
-        character_voice_assignments: [{ speaker: 'Preview', voice_id: asset.storage_path, style: 'Neutral', line_count: 1 }],
-        output_settings: outputSettings,
-        audio_effects: enabledEffects,
-        save_output: true,
-      },
-      stages: voiceSynthesisStages([{ index: 0, speaker: 'Preview', text: 'Preview voice.' }]),
-    }),
+    mutationFn: (asset: VoiceAsset) => {
+      const voiceId = voiceStoragePath(asset) || voiceAssetId(asset);
+      const voiceName = voiceAssetName(asset);
+      return omnixApiClient.createJob({
+        module: 'voice',
+        type: 'tts.synthesize',
+        resource_class: 'gpu:tts',
+        priority: 1,
+        input_payload: {
+          text: `This is a preview of ${voiceName} speaking in Voice Studio.`,
+          provider_id: defaultTtsProviderId || null,
+          speaker: voiceName,
+          voice_id: voiceId,
+          script_mode: 'single_speaker',
+          script_speakers: [{ name: 'Preview', count: 1 }],
+          script_segments: [{ index: 0, speaker: 'Preview', text: `This is a preview of ${voiceName} speaking in Voice Studio.` }],
+          character_voice_assignments: [{ speaker: 'Preview', voice_id: voiceId, style: 'Neutral', line_count: 1 }],
+          output_settings: outputSettings,
+          audio_effects: enabledEffects,
+          save_output: true,
+        },
+        stages: voiceSynthesisStages([{ index: 0, speaker: 'Preview', text: 'Preview voice.' }]),
+      });
+    },
     onSuccess: async (job) => {
       selectFirstJobOutput(job, setSelectedOutputKey);
       await Promise.all([
@@ -188,7 +198,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         priority: 0,
         input_payload: {
           profile_name: values.profileName,
-          provider_id: values.providerId || cloneProviders[0]?.id || null,
+          provider_id: values.providerId || defaultCloneProviderId || null,
           language: values.language,
           quality: values.quality,
           notes: values.notes,
@@ -228,7 +238,10 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const currentOutputTitle = currentOutput?.title ?? (latestResultAsset ? voiceAssetName(latestResultAsset) : `${module.label} output`);
   const latestPreviewTitle = currentOutput?.title ?? (latestResultAsset ? voiceAssetName(latestResultAsset) : 'No generated audio yet');
   const effectiveDuration = playbackDuration || currentOutput?.duration || estimateDurationFromText(scriptText);
-  const submitStatus = createJobMutation.isPending ? 'queued' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
+  const createJobFailureMessage = voiceJobErrorMessage(createJobMutation.data);
+  const previewFailureMessage = voiceJobErrorMessage(previewVoiceMutation.data);
+  const latestFailedVoiceJob = voiceJobs.find((job) => (job.module === 'voice' || job.module === 'voice-cloning') && job.status === 'failed');
+  const voiceGenerationFailure = createJobFailureMessage || previewFailureMessage || voiceJobErrorMessage(latestFailedVoiceJob);
 
   useEffect(() => {
     if (playableOutputs.length > 0 && !playableOutputs.some((output) => output.key === selectedOutputKey)) {
@@ -368,11 +381,10 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 <label className="voice-file-field">Audio sample<input type="file" accept="audio/*" onChange={(event) => { setSampleFile(event.currentTarget.files?.[0] ?? null); setRecordedSample(null); setCloneSource('upload'); }} /><small>{cloneSource === 'record' ? recordingStatus || 'No recording yet.' : sampleFile ? `${sampleFile.name} · ${formatBytes(sampleFile.size)}` : 'No sample selected yet.'}</small></label>
                 <div className="voice-two-col"><label>Language / Accent<input {...registerClone('language')} /></label><label>Quality<select {...registerClone('quality')}><option>High (Recommended)</option><option>Balanced</option><option>Fast Preview</option></select></label></div>
                 <label>Notes / Tags (optional)<textarea rows={2} placeholder="Add notes or tags to help identify this voice..." {...registerClone('notes')} /></label>
-                <input type="hidden" {...registerClone('providerId')} value={cloneProviders[0]?.id ?? ''} readOnly />
                 <Group justify="space-between"><Text size="xs">Clones are stored to Omnix: /resources/voice_clones</Text><Button type="submit" loading={cloneJobMutation.isPending} disabled={!selectedCloneSample || cloneJobMutation.isPending}>Create Clone</Button></Group>
               </form>
               <FeatureValidationMessage show={Boolean(cloneErrors.profileName)} message="Enter a voice name before creating a clone." />
-              <FeatureSubmitFeedback error={cloneJobMutation.error} errorPrefix="Voice clone request" isError={cloneJobMutation.isError} isPending={cloneJobMutation.isPending} jobId={cloneJobMutation.data?.id} pendingMessage="Queueing voice clone job…" successPrefix="Voice clone job queued" />
+              <FeatureSubmitFeedback error={cloneJobMutation.error} errorPrefix="Voice clone request" isError={cloneJobMutation.isError} isPending={cloneJobMutation.isPending} jobId={cloneJobMutation.data?.status === 'failed' ? undefined : cloneJobMutation.data?.id} pendingMessage="Queueing voice clone job…" successPrefix="Voice clone job queued" />
             </section>
 
             <section className="voice-panel-final library-panel-final">
@@ -380,7 +392,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <label className="voice-search"><span>Search voices</span><input aria-label="Search voices" value={voiceSearch} onChange={(event) => setVoiceSearch(event.currentTarget.value)} placeholder="Search voices..." /></label>
               <div className="voice-library-table" aria-label="Voice library">
                 <div className="voice-library-row table-head"><span>Name</span><span>ID / Prefix</span><span>Source</span><span>Status</span><span></span></div>
-                {visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} key={asset.id} onPreview={() => previewVoiceMutation.mutate(asset)} onUse={() => useVoice(asset, setValue, setSaveMessage)} />)}
+                {visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} key={voiceAssetId(asset)} onPreview={() => previewVoiceMutation.mutate(asset)} onUse={() => useVoice(asset, setValue, setSaveMessage)} />)}
               </div>
               <Group justify="space-between"><Text size="xs">{filteredProfileAssets.length} voices</Text><Button size="xs" variant="subtle" onClick={() => setShowAllVoices((value) => !value)}>{showAllVoices ? 'Show first 6' : 'View all voices →'}</Button></Group>
             </section>
@@ -398,10 +410,11 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
             <Group justify="space-between"><div><Title order={4}>Text-to-Speech (Multi-Voice)</Title><Text size="sm">Write your script with character tags, AI will detect speakers and you can assign voices and styles before generating speech.</Text></div><div className="script-actions"><Button variant="subtle" onClick={() => setValue('text', '')}>Clear</Button><Button variant="subtle" onClick={() => loadScript(setValue, setSaveMessage)}>Load Script</Button><Button onClick={() => saveScript(scriptText, setSaveMessage)}>Save Script</Button></div></Group>
             <form className="tts-workflow-grid" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
               <section className="script-card"><Group justify="space-between"><b>1. Script <small>(use character tags)</small></b><small>ⓘ How it works</small></Group><textarea aria-label="Script" rows={8} {...register('text', { required: true })} /><Group justify="space-between"><Text size="xs">{scriptSegments.length} stages · {parsedSpeakers.length} speakers detected</Text><Button size="xs" type="button" variant="subtle" onClick={() => setSaveMessage(`${parsedSpeakers.length} speaker${parsedSpeakers.length === 1 ? '' : 's'} detected: ${parsedSpeakers.map((speaker) => speaker.name).join(', ')}`)}>Detect Characters</Button></Group>{parsedSpeakers.length ? <div className="voice-success-note">AI automatically detected {parsedSpeakers.length} character{parsedSpeakers.length === 1 ? '' : 's'} from your script.</div> : null}{saveMessage ? <div className="voice-success-note">{saveMessage}</div> : null}</section>
-              <section className="assignment-card"><Group justify="space-between"><b>2. Detected Characters & Voice Assignment</b><OmnixStatusPill>{parsedSpeakers.length} detected</OmnixStatusPill></Group><div className="assignment-table"><div className="assignment-row assignment-head"><span>Character</span><span>Assign Voice</span><span>Style / Emotion</span><span>Preview</span></div>{parsedSpeakers.map((speaker, index) => <AssignmentRow assets={profileAssets} index={index} key={speaker.name} speaker={speaker} voiceValue={assignedVoiceFor(speaker, profileAssets, speakerVoiceAssignments)} styleValue={speakerStyleAssignments[speaker.name] ?? STYLE_OPTIONS[Math.min(index, STYLE_OPTIONS.length - 1)]} onPreview={(voiceId) => previewVoiceById(voiceId, profileAssets, previewVoiceMutation.mutate)} onVoiceChange={(voiceId) => setSpeakerVoiceAssignments((current) => ({ ...current, [speaker.name]: voiceId }))} onStyleChange={(style) => setSpeakerStyleAssignments((current) => ({ ...current, [speaker.name]: style }))} />)}</div><Text size="xs">Unlabeled scripts use a single Narrator speaker. Tagged scripts are generated one stage per line.</Text></section>
-              <section className="generate-card"><b>3. Generate Speech</b><Text size="sm">Generate multi-stage audio from your script.</Text><input type="hidden" {...register('providerId')} value={ttsProviders[0]?.id ?? ''} readOnly /><input type="hidden" {...register('voiceId')} value={profileAssets[0]?.storage_path ?? ''} readOnly /><input type="hidden" {...register('speaker')} value={parsedSpeakers[0]?.name ?? 'Narrator'} readOnly /><Button className="generate-speech-button" type="submit" loading={createJobMutation.isPending}>▥ Generate Speech</Button><Button type="button" variant="subtle" onClick={downloadCurrentOutput}>⇩ Save Output</Button><Text size="xs">Estimated duration: ~ {formatPlaybackTime(estimateDurationFromText(scriptText))}</Text><FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="TTS request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.id} pendingMessage="Queueing TTS job…" successPrefix="TTS job queued" /></section>
+              <section className="assignment-card"><Group justify="space-between"><b>2. Detected Characters & Voice Assignment</b><OmnixStatusPill>{parsedSpeakers.length} detected</OmnixStatusPill></Group><div className="assignment-table"><div className="assignment-row assignment-head"><span>Character</span><span>Assign Voice</span><span>Style / Emotion</span><span>Preview</span></div>{parsedSpeakers.map((speaker, index) => <AssignmentRow assets={profileAssets} index={index} key={speaker.name} speaker={speaker} voiceValue={assignedVoiceFor(speaker, profileAssets, speakerVoiceAssignments)} styleValue={speakerStyleAssignments[speaker.name] ?? STYLE_OPTIONS[Math.min(index, STYLE_OPTIONS.length - 1)]} onPreview={(voiceId) => previewVoiceById(voiceId, profileAssets, previewVoiceMutation.mutate, setSaveMessage)} onVoiceChange={(voiceId) => setSpeakerVoiceAssignments((current) => ({ ...current, [speaker.name]: voiceId }))} onStyleChange={(style) => setSpeakerStyleAssignments((current) => ({ ...current, [speaker.name]: style }))} />)}</div><Text size="xs">Unlabeled scripts use a single Narrator speaker. Tagged scripts are generated one stage per line.</Text></section>
+              <section className="generate-card"><b>3. Generate Speech</b><Text size="sm">Generate multi-stage audio from your script.</Text><Button className="generate-speech-button" type="submit" loading={createJobMutation.isPending}>▥ Generate Speech</Button><Button type="button" variant="subtle" onClick={downloadCurrentOutput}>⇩ Save Output</Button><Text size="xs">Estimated duration: ~ {formatPlaybackTime(estimateDurationFromText(scriptText))}</Text><FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="TTS request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.status === 'failed' ? undefined : createJobMutation.data?.id} pendingMessage="Queueing TTS job…" successPrefix="TTS job queued" /></section>
             </form>
             <FeatureValidationMessage show={Boolean(errors.text)} message="Enter script text before generating speech." />
+            <FeatureValidationMessage show={Boolean(voiceGenerationFailure)} message={voiceGenerationFailure || ''} />
           </section>
 
           <div className="voice-bottom-grid">
@@ -429,7 +442,7 @@ function QueueRow({ job, onSelect, selected }: { job: { id: string; type: string
 }
 
 function AssignmentRow({ assets, index, speaker, voiceValue, styleValue, onPreview, onVoiceChange, onStyleChange }: { assets: VoiceAsset[]; index: number; speaker: ScriptSpeakerRow; voiceValue: string; styleValue: string; onPreview: (voiceId: string) => void; onVoiceChange: (voiceId: string) => void; onStyleChange: (style: string) => void }) {
-  return <div className="assignment-row"><span><i>{speaker.name.slice(0, 2).toUpperCase()}</i>{speaker.name}</span><select aria-label={`${speaker.name} voice`} value={voiceValue} onChange={(event) => onVoiceChange(event.currentTarget.value)}>{assets.map((asset) => <option key={asset.id} value={asset.storage_path}>{voiceAssetName(asset)} ({voiceProfileName(asset)})</option>)}{!assets.length ? <option value="">No cloned voices</option> : null}</select><select aria-label={`${speaker.name} style`} value={styleValue} onChange={(event) => onStyleChange(event.currentTarget.value)}>{STYLE_OPTIONS.map((style) => <option key={style} value={style}>{style}</option>)}</select><Button size="xs" variant="subtle" type="button" onClick={() => onPreview(voiceValue)}>▶</Button></div>;
+  return <div className="assignment-row"><span><i>{speaker.name.slice(0, 2).toUpperCase()}</i>{speaker.name}</span><select aria-label={`${speaker.name} voice`} value={voiceValue} onChange={(event) => onVoiceChange(event.currentTarget.value)}>{assets.map((asset) => <option key={voiceAssetId(asset)} value={voiceStoragePath(asset)}>{voiceAssetName(asset)} ({voiceProfileName(asset)})</option>)}{!assets.length ? <option value="">No cloned voices</option> : null}</select><select aria-label={`${speaker.name} style`} value={styleValue} onChange={(event) => onStyleChange(event.currentTarget.value)}>{STYLE_OPTIONS.map((style) => <option key={style} value={style}>{style}</option>)}</select><Button size="xs" variant="subtle" type="button" onClick={() => onPreview(voiceValue)}>▶</Button></div>;
 }
 
 function Waveform() {
@@ -454,7 +467,7 @@ function buildSpeakerAssignments(speakers: ScriptSpeakerRow[], assets: VoiceAsse
 }
 
 function assignedVoiceFor(speaker: ScriptSpeakerRow, assets: VoiceAsset[], voiceAssignments: Record<string, string>): string {
-  return voiceAssignments[speaker.name] ?? findMatchingVoice(speaker.name, assets)?.storage_path ?? assets[0]?.storage_path ?? '';
+  return voiceAssignments[speaker.name] ?? voiceStoragePath(findMatchingVoice(speaker.name, assets)) ?? voiceStoragePath(assets[0]) ?? '';
 }
 
 function findMatchingVoice(name: string, assets: VoiceAsset[]): VoiceAsset | undefined {
@@ -462,15 +475,17 @@ function findMatchingVoice(name: string, assets: VoiceAsset[]): VoiceAsset | und
   return assets.find((asset) => voiceAssetName(asset).toLowerCase().includes(normalizedName) || voiceProfileName(asset).toLowerCase().includes(normalizedName));
 }
 
-function previewVoiceById(voiceId: string, assets: VoiceAsset[], preview: (asset: VoiceAsset) => void) {
-  const asset = assets.find((entry) => entry.storage_path === voiceId || entry.id === voiceId);
+function previewVoiceById(voiceId: string, assets: VoiceAsset[], preview: (asset: VoiceAsset) => void, setSaveMessage: (message: string) => void) {
+  const asset = assets.find((entry) => voiceStoragePath(entry) === voiceId || voiceAssetId(entry) === voiceId);
   if (asset) {
     preview(asset);
+  } else {
+    setSaveMessage('Select a cloned voice before previewing.');
   }
 }
 
 function useVoice(asset: VoiceAsset, setValue: ReturnType<typeof useForm<VoiceFormValues>>['setValue'], setSaveMessage: (message: string) => void) {
-  setValue('voiceId', asset.storage_path);
+  setValue('voiceId', voiceStoragePath(asset));
   setValue('speaker', voiceAssetName(asset));
   setSaveMessage(`Selected ${voiceAssetName(asset)} for synthesis.`);
 }
@@ -494,7 +509,7 @@ function extractPlayableOutputs(jobs: JobRecord[]): PlayableVoiceOutput[] {
   for (const job of jobs) {
     const refs = (job.output_refs ?? []) as VoiceOutputRef[];
     for (const ref of refs) {
-      if (ref.data_url) {
+      if (isPlayableAudioRef(ref)) {
         const title = ref.title || job.type || 'voice_output';
         outputs.push({ dataUrl: ref.data_url, duration: Number(ref.duration || 0), jobId: job.id, key: `${job.id}:${ref.asset_id || ref.title || outputs.length}`, title });
       }
@@ -503,11 +518,37 @@ function extractPlayableOutputs(jobs: JobRecord[]): PlayableVoiceOutput[] {
   return outputs;
 }
 
+function isPlayableAudioRef(ref: VoiceOutputRef): ref is VoiceOutputRef & { data_url: string } {
+  return typeof ref.data_url === 'string' && ref.data_url.startsWith('data:audio/') && !isFallbackOutput(ref);
+}
+
+function isFallbackOutput(ref: VoiceOutputRef): boolean {
+  if (ref.provider_fallback || ref.provider_success === false) {
+    return true;
+  }
+  const segments = Array.isArray(ref.segments) ? ref.segments : [];
+  return segments.some((segment) => {
+    if (!segment || typeof segment !== 'object') {
+      return false;
+    }
+    const row = segment as { provider_fallback?: unknown; provider_success?: unknown };
+    return row.provider_fallback === true || row.provider_success === false;
+  });
+}
+
 function selectFirstJobOutput(job: JobRecord, setSelectedOutputKey: (key: string) => void): void {
   const output = extractPlayableOutputs([job])[0];
   if (output) {
     setSelectedOutputKey(output.key);
   }
+}
+
+function voiceJobErrorMessage(job: JobRecord | undefined): string {
+  if (!job || job.status !== 'failed') {
+    return '';
+  }
+  const message = typeof job.error?.message === 'string' ? job.error.message : 'Voice Studio job failed.';
+  return `Voice Studio failed: ${message}`;
 }
 
 function demoJobs() {
@@ -559,12 +600,23 @@ function progressPercent(progress: { current: number; total: number } | undefine
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
 
+function voiceStoragePath(asset: VoiceAsset | undefined): string {
+  const value = (asset as { storage_path?: unknown } | undefined)?.storage_path;
+  return typeof value === 'string' ? value : '';
+}
+
+function voiceAssetId(asset: VoiceAsset | undefined): string {
+  const value = (asset as { id?: unknown } | undefined)?.id;
+  return typeof value === 'string' ? value : 'voice';
+}
+
 function voiceAssetName(asset: VoiceAsset): string {
-  return asset.storage_path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || asset.id;
+  const source = voiceStoragePath(asset) || voiceAssetId(asset);
+  return source.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || voiceAssetId(asset);
 }
 
 function voiceProfileName(asset: VoiceAsset): string {
-  return asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, '');
+  return voiceAssetId(asset).replace(/^voice-cloning:/, '').replace(/^asset:/, '');
 }
 
 function voiceInitial(asset: VoiceAsset): string {
