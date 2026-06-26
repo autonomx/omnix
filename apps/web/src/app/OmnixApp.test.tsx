@@ -26,7 +26,7 @@ describe('OmnixApp', () => {
     expect(screen.getByRole('link', { name: 'Chatbot' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Storyteller' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Podcast' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Voice / TTS' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Voice Studio' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Voice Cloning' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'STT' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Image Generation' })).toBeInTheDocument();

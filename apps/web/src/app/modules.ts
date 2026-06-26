@@ -66,7 +66,7 @@ export const omnixModules: OmnixModuleDefinition[] = [
   },
   {
     id: 'voice',
-    label: 'Voice / TTS',
+    label: 'Voice Studio',
     summary: 'Text-to-speech generation, previews, playback, and voice provider diagnostics.',
     route: '/voice',
   },
