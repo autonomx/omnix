@@ -182,7 +182,7 @@ describe('ChatbotWorkspace', () => {
 
     await waitFor(() => {
       const playedAudio = audioCtor.mock.calls.length > 0 && playMock.mock.calls.length > 0;
-      const voiceStatus = screen.queryByText(/Playing response voice|Playing cloned response voice|Configure VITE_ASSISTANT_TTS_URL|Voice Studio|Omnix API request failed/);
+      const voiceStatus = screen.queryAllByText(/Playing response voice|Playing cloned response voice|Configure VITE_ASSISTANT_TTS_URL|Voice Studio|Omnix API request failed/).length > 0;
       expect(playedAudio || voiceStatus).toBeTruthy();
     });
 
