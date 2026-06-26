@@ -1,0 +1,113 @@
+.storyteller-audio-panel {
+  align-items: stretch;
+  background:
+    radial-gradient(circle at 85% 10%, rgba(34, 211, 238, 0.12), transparent 18rem),
+    linear-gradient(180deg, rgba(22, 21, 34, 0.9), rgba(10, 10, 19, 0.9)),
+    rgba(12, 11, 21, 0.92);
+  border: 1px solid rgba(151, 114, 255, 0.22);
+  border-radius: 0.625rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 1.25rem 3rem rgba(0, 0, 0, 0.22);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(18rem, 0.9fr) minmax(22rem, 1.1fr);
+  padding: 0.95rem 1rem;
+}
+
+.storyteller-audio-copy {
+  align-content: center;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.storyteller-audio-copy h3,
+.storyteller-audio-copy p {
+  margin: 0;
+}
+
+.storyteller-audio-copy h3 {
+  color: #f7f3ff;
+  font-size: 1.05rem;
+}
+
+.storyteller-audio-copy p:not(.eyebrow) {
+  color: #c4bdd8;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.storyteller-audio-controls {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.storyteller-audio-controls label {
+  color: #e9ddff;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.86rem;
+}
+
+.storyteller-audio-controls select {
+  background: rgba(7, 6, 13, 0.82);
+  border: 1px solid rgba(151, 114, 255, 0.22);
+  border-radius: 0.5rem;
+  color: #f7f3ff;
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+}
+
+.storyteller-audio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.storyteller-audio-actions button {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(151, 114, 255, 0.24);
+  border-radius: 0.5rem;
+  color: #f3f0ff;
+  cursor: pointer;
+  min-height: 2.5rem;
+  padding: 0 0.85rem;
+}
+
+.storyteller-audio-actions button:first-child {
+  background: linear-gradient(135deg, #15bac4, #7c3aed);
+  border-color: rgba(205, 191, 255, 0.32);
+}
+
+.storyteller-audio-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.storyteller-audio-progress {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.storyteller-audio-progress span,
+.storyteller-audio-controls small {
+  color: #aaa5bc;
+  font-size: 0.8rem;
+}
+
+.storyteller-audio-progress progress {
+  accent-color: #15bac4;
+  height: 0.7rem;
+  width: 100%;
+}
+
+.storyteller-audio-controls audio {
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .storyteller-audio-panel {
+    grid-template-columns: 1fr;
+  }
+}
