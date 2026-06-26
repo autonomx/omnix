@@ -50,6 +50,7 @@ interface PlayableVoiceOutput {
 type VoiceAsset = AssetListResponse['assets'][number];
 type CloneSourceKind = 'upload' | 'record';
 type OutputSettingName = keyof typeof DEFAULT_OUTPUT_SETTINGS;
+type JobQueueFilter = 'active' | 'recent' | 'failed';
 
 const DEFAULT_SCRIPT = 'dave: hello there\nbob: how do you do\nmarry: i am doing fine\ndave: now lets get to the topic\nmarry: agreed.';
 const STYLE_OPTIONS = ['Confident, Conversational', 'Calm', 'Enthusiastic', 'Warm', 'Deep, Authoritative', 'Narrator, Clear'];
@@ -67,6 +68,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [voiceSearch, setVoiceSearch] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
   const [showAllVoices, setShowAllVoices] = useState(false);
+  const [jobQueueFilter, setJobQueueFilter] = useState<JobQueueFilter>('active');
   const [selectedOutputKey, setSelectedOutputKey] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackTime, setPlaybackTime] = useState(0);
@@ -233,6 +235,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     () => mergeVoiceJobs([createJobMutation.data, previewVoiceMutation.data, cloneJobMutation.data, ...queriedVoiceJobs]),
     [cloneJobMutation.data, createJobMutation.data, previewVoiceMutation.data, queriedVoiceJobs],
   );
+  const filteredVoiceJobs = jobQueueFilter === 'active' ? activeJobs(voiceJobs) : jobQueueFilter === 'failed' ? voiceJobs.filter((job) => job.status === 'failed') : voiceJobs.filter((job) => job.status !== 'queued' && job.status !== 'running' && job.status !== 'leased');
   const playableOutputs = useMemo(() => extractPlayableOutputs(voiceJobs), [voiceJobs]);
   const currentOutput = playableOutputs.find((output) => output.key === selectedOutputKey) ?? playableOutputs[0] ?? null;
   const currentOutputTitle = currentOutput?.title ?? (latestResultAsset ? voiceAssetName(latestResultAsset) : `${module.label} output`);
@@ -404,8 +407,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
             <section className="voice-panel-final queue-panel-final">
               <Title order={4}>Jobs & Playback Queue</Title>
               <Text size="sm">Monitor synthesis jobs and replay results.</Text>
-              <div className="queue-tabs"><button type="button">Active ({activeJobs(voiceJobs).length})</button><button type="button">Recent</button><button type="button">Failed ({voiceJobs.filter((job) => job.status === 'failed').length})</button></div>
-              <div className="queue-list-final">{(voiceJobs.length ? voiceJobs : demoJobs()).slice(0, 4).map((job) => <QueueRow job={job} key={job.id} onSelect={() => selectJobOutput(job.id)} selected={playableOutputs.some((output) => output.jobId === job.id && output.key === currentOutput?.key)} />)}</div>
+              <div className="queue-tabs"><button className={jobQueueFilter === 'active' ? 'active' : ''} type="button" aria-pressed={jobQueueFilter === 'active'} onClick={() => setJobQueueFilter('active')}>Active ({activeJobs(voiceJobs).length})</button><button className={jobQueueFilter === 'recent' ? 'active' : ''} type="button" aria-pressed={jobQueueFilter === 'recent'} onClick={() => setJobQueueFilter('recent')}>Recent ({voiceJobs.filter((job) => job.status !== 'queued' && job.status !== 'running' && job.status !== 'leased').length})</button><button className={jobQueueFilter === 'failed' ? 'active' : ''} type="button" aria-pressed={jobQueueFilter === 'failed'} onClick={() => setJobQueueFilter('failed')}>Failed ({voiceJobs.filter((job) => job.status === 'failed').length})</button></div>
+              <div className="queue-list-final">{(voiceJobs.length ? filteredVoiceJobs : demoJobs()).slice(0, 4).map((job) => <QueueRow job={job} key={job.id} onSelect={() => selectJobOutput(job.id)} selected={playableOutputs.some((output) => output.jobId === job.id && output.key === currentOutput?.key)} />)}</div>
               <div className="latest-preview-row"><Button size="xs" variant="subtle" onClick={() => void togglePlayback()}>{isPlaying ? 'Ⅱ' : '▶'}</Button><Waveform /><Text size="xs">{latestPreviewTitle}</Text></div>
             </section>
           </div>
@@ -494,7 +497,7 @@ function useVoice(asset: VoiceAsset, setValue: ReturnType<typeof useForm<VoiceFo
   setSaveMessage(`Selected ${voiceAssetName(asset)} for synthesis.`);
 }
 
-function activeJobs(jobs: Array<{ status: string }>) {
+function activeJobs<T extends { status: string }>(jobs: T[]): T[] {
   return jobs.filter((job) => job.status === 'queued' || job.status === 'running' || job.status === 'leased');
 }
 
