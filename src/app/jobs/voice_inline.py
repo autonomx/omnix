@@ -220,30 +220,33 @@ def _generate_audio_bytes(text: str, *, speaker: str, payload: dict[str, Any]) -
             output_settings=payload.get("output_settings") or {},
             audio_effects=payload.get("audio_effects") or [],
         )
+        if not isinstance(result, dict):
+            raise RuntimeError("TTS provider returned an invalid response")
+
+        provider_error = _text(result.get("error"))
+        provider_fallback = bool(result.get("is_fallback") or result.get("fallback"))
+        if not result.get("success") or provider_fallback:
+            reason = provider_error or _text(result.get("fallback_reason")) or "TTS provider did not produce speech audio"
+            raise RuntimeError(reason)
+
         encoded = _text(result.get("audio_base64")) or _text(result.get("audio"))
-        if encoded:
-            return base64.b64decode(encoded), {
-                "sample_rate": result.get("sample_rate"),
-                "duration": result.get("duration"),
-                "provider_success": bool(result.get("success")),
-                "provider_fallback": bool(result.get("is_fallback")),
-                "provider_error": _text(result.get("error")),
-            }
-    except Exception as exc:
-        return _fallback_wav(text), {
-            "sample_rate": 12000,
-            "duration": _fallback_duration(text),
-            "provider_success": False,
-            "provider_fallback": True,
-            "provider_error": str(exc),
+        if not encoded:
+            raise RuntimeError("TTS provider returned no speech audio")
+        try:
+            wav_bytes = base64.b64decode(encoded)
+        except Exception as exc:
+            raise RuntimeError("TTS provider returned invalid base64 audio") from exc
+        if not wav_bytes:
+            raise RuntimeError("TTS provider returned empty speech audio")
+        return wav_bytes, {
+            "sample_rate": result.get("sample_rate"),
+            "duration": result.get("duration"),
+            "provider_success": True,
+            "provider_fallback": False,
+            "provider_error": "",
         }
-    return _fallback_wav(text), {
-        "sample_rate": 12000,
-        "duration": _fallback_duration(text),
-        "provider_success": False,
-        "provider_fallback": True,
-        "provider_error": "provider_returned_no_audio",
-    }
+    except Exception as exc:
+        raise RuntimeError(f"Real TTS generation failed for speaker '{speaker}': {exc}") from exc
 
 
 def _fallback_wav(text: str) -> bytes:
@@ -267,8 +270,7 @@ def _fallback_wav(text: str) -> bytes:
 
 def _combine_segment_wavs(wav_chunks: list[bytes], fallback_text: str) -> tuple[bytes, dict[str, Any]]:
     if not wav_chunks:
-        wav_bytes = _fallback_wav(fallback_text)
-        return wav_bytes, {"sample_rate": 12000, "duration": _fallback_duration(fallback_text), "segment_count": 1}
+        raise ValueError("No TTS audio segments were generated")
     if len(wav_chunks) == 1:
         metadata = _wav_metadata(wav_chunks[0])
         metadata["segment_count"] = 1
@@ -278,15 +280,8 @@ def _combine_segment_wavs(wav_chunks: list[bytes], fallback_text: str) -> tuple[
         metadata = _wav_metadata(combined)
         metadata["segment_count"] = len(wav_chunks)
         return combined, metadata
-    except Exception:
-        wav_bytes = _fallback_wav(fallback_text)
-        return wav_bytes, {
-            "sample_rate": 12000,
-            "duration": _fallback_duration(fallback_text),
-            "segment_count": len(wav_chunks),
-            "provider_fallback": True,
-            "provider_error": "segment_audio_concat_failed",
-        }
+    except Exception as exc:
+        raise ValueError("Voice Studio could not stitch generated speech segments") from exc
 
 
 def _concat_wavs(wav_chunks: list[bytes]) -> bytes:
