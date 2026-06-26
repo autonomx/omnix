@@ -40,11 +40,13 @@ from .rpg_last10_report import (
     install_rpg_last10_report_inline_job,
 )
 from .rpg_turn_job_guard import install_rpg_turn_job_guard
+from .voice_inline import install_voice_studio_job_execution
 
 install_inline_feature_job_execution(SQLiteJobStore)
 install_rpg_last10_report_inline_job()
 _inline_feature_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES.discard(RPG_LAST10_REPORT_JOB_TYPE)
 install_rpg_turn_job_guard(SQLiteJobStore)
+install_voice_studio_job_execution(SQLiteJobStore)
 
 __all__ = [
     "CancelJobRequest",
@@ -75,8 +77,6 @@ __all__ = [
     "create_worker_model_control_hooks",
     "default_job_store",
     "evict_worker_model",
-    "enqueue_image_job",
-    "enqueue_tts_job",
     "get_model_residency_diagnostics",
     "install_rpg_last10_report_inline_job",
     "load_worker_model",
