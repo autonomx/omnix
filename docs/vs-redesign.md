@@ -1,1 +1,0 @@
-# Voice Studio redesign
