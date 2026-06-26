@@ -5,7 +5,7 @@ from typing import Any
 
 from app.rpg.session.world_reasoning_contracts import build_response_authority
 
-_PARSE_NOISE = {"[object object]", "undefined", "null", "none", "nan"}
+_PARSE_NOISE = {"[object object]", "undefined", "null", "none", "nan", "[]", "[ ]", "{}", "{ }", "tool_calls: []", '"tool_calls": []'}
 _RUNTIME_KINDS = {"buy", "sell", "attack", "travel", "equip", "unequip", "pay", "hire", "runtime_action"}
 
 
