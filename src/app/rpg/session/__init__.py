@@ -113,6 +113,14 @@ def _install_optional_fast_runtime_hooks() -> None:
         # Interpretive adjudication must never block normal session imports.
         return
 
+    try:
+        from .diegetic_fallback_hook import install_diegetic_fallback_hook
+
+        install_diegetic_fallback_hook()
+    except Exception:
+        # Diegetic fallback repair must never block normal session imports.
+        return
+
 
 _install_optional_fast_runtime_hooks()
 
