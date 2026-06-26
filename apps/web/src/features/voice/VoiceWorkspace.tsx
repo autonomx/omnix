@@ -6,6 +6,8 @@ import { omnixApiClient, type AssetListResponse, type ProviderFacadePayload } fr
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixAudioControls, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { DEFAULT_OUTPUT_SETTINGS } from './outputDefaults';
+import { firstResultAsset } from './resultList';
 import { parseScriptSpeakers } from './scriptLines';
 
 interface VoiceFormValues {
@@ -46,6 +48,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const voiceJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'voice' || job.module === 'voice-cloning') ?? [];
   const audioAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'audio' || asset.type === 'voice_profile') ?? [];
   const profileAssets = audioAssets.filter((asset) => asset.type === 'voice_profile');
+  const generatedAudioAssets = audioAssets.filter((asset) => asset.type === 'audio');
+  const latestResultAsset = firstResultAsset(generatedAudioAssets);
   const createJobMutation = useMutation({
     mutationFn: (values: VoiceFormValues) =>
       omnixApiClient.createJob({
@@ -60,6 +64,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
           provider_id: values.providerId || null,
           script_speakers: parsedSpeakers,
           script_mode: parsedSpeakers.length > 1 ? 'multi_speaker' : 'single_speaker',
+          output_settings: DEFAULT_OUTPUT_SETTINGS,
         },
         stages: [
           { id: 'parse-script', label: 'Parse script', resource_class: 'cpu', status: 'queued' },
@@ -149,6 +154,27 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         <section className="feature-panel">
           <Group justify="space-between" align="start">
             <div>
+              <Title order={4}>Output Controls</Title>
+              <Text size="sm">Visible defaults sent with synthesis jobs.</Text>
+            </div>
+            <OmnixStatusPill>ready</OmnixStatusPill>
+          </Group>
+          <div className="feature-list">
+            {Object.entries(DEFAULT_OUTPUT_SETTINGS).map(([name, value]) => (
+              <label className="feature-mini-card" key={name}>
+                <Group justify="space-between">
+                  <strong>{formatSettingName(name)}</strong>
+                  <OmnixStatusPill>{formatSettingValue(value)}</OmnixStatusPill>
+                </Group>
+                <input aria-label={`Output ${name}`} type="range" min={rangeMin(name)} max={rangeMax(name)} step="0.01" value={value} readOnly />
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section className="feature-panel">
+          <Group justify="space-between" align="start">
+            <div>
               <Title order={4}>Detected Characters</Title>
               <Text size="sm">Lines written as name: text are grouped automatically.</Text>
             </div>
@@ -224,6 +250,19 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
               No voice jobs queued.
             </div>
           )}
+          {latestResultAsset ? (
+            <article className="feature-mini-card">
+              <Group justify="space-between">
+                <strong>Latest output</strong>
+                <OmnixStatusPill>{voiceAssetName(latestResultAsset)}</OmnixStatusPill>
+              </Group>
+              <OmnixAudioControls label={voiceAssetName(latestResultAsset)} />
+              <Group gap="xs">
+                <Button size="xs" variant="light">Export</Button>
+                <Button size="xs" variant="subtle">Keep</Button>
+              </Group>
+            </article>
+          ) : null}
         </section>
 
         <section className="feature-panel feature-panel-wide">
@@ -231,7 +270,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
           {audioAssets.length ? (
             <div className="platform-grid">
               {audioAssets.map((asset) => (
-                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.storage_path} />
+                asset.type === 'audio' ? <AudioOutputCard key={asset.id} asset={asset} /> : <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.storage_path} />
               ))}
             </div>
           ) : (
@@ -242,6 +281,23 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         </section>
       </div>
     </WorkspacePanel>
+  );
+}
+
+function AudioOutputCard({ asset }: { asset: VoiceAsset }) {
+  return (
+    <article className="feature-mini-card">
+      <Group justify="space-between">
+        <Title order={4}>{`${asset.type} / ${asset.module}`}</Title>
+        <OmnixStatusPill>{asset.mime_type}</OmnixStatusPill>
+      </Group>
+      <Text size="sm">{asset.storage_path}</Text>
+      <OmnixAudioControls label={voiceAssetName(asset)} />
+      <Group gap="xs">
+        <Button size="xs" variant="light">Export</Button>
+        <Button size="xs" variant="subtle">Keep</Button>
+      </Group>
+    </article>
   );
 }
 
@@ -258,4 +314,20 @@ function progressPercent(progress: { current: number; total: number } | undefine
 
 function voiceAssetName(asset: VoiceAsset): string {
   return asset.storage_path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || asset.id;
+}
+
+function formatSettingName(name: string): string {
+  return name.replace(/_/g, ' ').replace(/^./, (first) => first.toUpperCase());
+}
+
+function formatSettingValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function rangeMin(name: string): number {
+  return name === 'level' ? -1 : 0;
+}
+
+function rangeMax(name: string): number {
+  return name === 'speed' ? 2 : 1;
 }
