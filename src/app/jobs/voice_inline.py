@@ -15,13 +15,14 @@ from typing import Any
 from app.assets import AssetRecord, AssetType, default_asset_store
 from app.runtime_paths import resources_data_root
 
-from .models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord, JobStage, ResourceClass
+from .models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord
 
 VOICE_STUDIO_JOB_TYPES = {
     "tts.synthesize",
     "tts.multi_speaker_synthesize",
     "voice-cloning.create-profile",
 }
+DEFAULT_UNTAGGED_SPEAKER = "Narrator"
 
 
 def install_voice_studio_job_execution(sqlite_job_store_cls: Any) -> None:
@@ -129,16 +130,56 @@ def _execute_tts_job(job: JobRecord) -> dict[str, Any]:
     payload = job.input_payload or {}
     text = _require_text(payload.get("text"), "Text is required")
     assignments = payload.get("character_voice_assignments") if isinstance(payload.get("character_voice_assignments"), list) else []
+    assignments_by_speaker = _assignments_by_speaker(assignments)
+    segments = _script_segments(payload, text)
     primary_voice = _text(payload.get("voice_id")) or _first_assignment_voice(assignments)
-    speaker = _voice_stem(primary_voice) or _text(payload.get("speaker")) or "default"
-    wav_bytes, audio_metadata = _generate_audio_bytes(text, speaker=speaker, payload=payload)
+    default_speaker = _voice_stem(primary_voice) or _text(payload.get("speaker")) or DEFAULT_UNTAGGED_SPEAKER
 
+    wav_chunks: list[bytes] = []
+    segment_outputs: list[dict[str, Any]] = []
+    for segment in segments:
+        speaker_name = _text(segment.get("speaker")) or DEFAULT_UNTAGGED_SPEAKER
+        assignment = assignments_by_speaker.get(speaker_name.casefold(), {})
+        voice_id = _text(assignment.get("voice_id")) or primary_voice
+        generated_speaker = _voice_stem(voice_id) or speaker_name or default_speaker
+        wav_bytes, metadata = _generate_audio_bytes(_text(segment.get("text")), speaker=generated_speaker, payload=payload)
+        wav_chunks.append(wav_bytes)
+        segment_outputs.append(
+            {
+                "index": int(segment.get("index") or len(segment_outputs)),
+                "speaker": speaker_name,
+                "text": _text(segment.get("text")),
+                "voice_id": voice_id,
+                "style": _text(assignment.get("style")),
+                "sample_rate": metadata.get("sample_rate"),
+                "duration": metadata.get("duration"),
+                "provider_success": metadata.get("provider_success"),
+                "provider_fallback": metadata.get("provider_fallback"),
+                "provider_error": metadata.get("provider_error"),
+            }
+        )
+
+    wav_bytes, combined_metadata = _combine_segment_wavs(wav_chunks, text)
     title = _tts_title(payload, job)
     output_dir = resources_data_root() / "voice_studio"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{_safe_segment(title)}-{_safe_segment(job.id)}.wav"
     output_path.write_bytes(wav_bytes)
 
+    metadata = {
+        "title": title,
+        "text": text,
+        "speaker": default_speaker,
+        "provider_id": _text(payload.get("provider_id")),
+        "script_mode": "multi_speaker" if len({segment["speaker"] for segment in segments}) > 1 else "single_speaker",
+        "script_speakers": payload.get("script_speakers") or _speakers_from_segments(segments),
+        "script_segments": segments,
+        "segment_outputs": segment_outputs,
+        "character_voice_assignments": assignments,
+        "output_settings": payload.get("output_settings") or {},
+        "audio_effects": payload.get("audio_effects") or [],
+        **combined_metadata,
+    }
     asset = _upsert_asset(
         AssetRecord(
             id=f"audio:voice-studio-{_safe_segment(job.id)}",
@@ -146,27 +187,24 @@ def _execute_tts_job(job: JobRecord) -> dict[str, Any]:
             type=AssetType.AUDIO,
             mime_type="audio/wav",
             storage_path=str(output_path),
-            metadata={
-                "title": title,
-                "text": text,
-                "speaker": speaker,
-                "provider_id": _text(payload.get("provider_id")),
-                "script_mode": _text(payload.get("script_mode")) or "single_speaker",
-                "script_speakers": payload.get("script_speakers") or [],
-                "character_voice_assignments": assignments,
-                "output_settings": payload.get("output_settings") or {},
-                "audio_effects": payload.get("audio_effects") or [],
-                **audio_metadata,
-            },
+            metadata=metadata,
             source_job_id=job.id,
             created_at=_utcnow(),
-            compat={"contract": "voice_studio_tts_v1"},
+            compat={"contract": "voice_studio_tts_v2", "generation_mode": "segment_stitch"},
         )
+    )
+    output_ref = _asset_output_ref(asset, title=title)
+    output_ref.update(
+        {
+            "data_url": f"data:audio/wav;base64,{base64.b64encode(wav_bytes).decode('utf-8')}",
+            "duration": combined_metadata.get("duration"),
+            "segments": segment_outputs,
+        }
     )
     return {
         "content": f"Speech audio saved to {output_path}",
-        "log_message": "Voice Studio speech generated and saved",
-        "output_refs": [_asset_output_ref(asset, title=title)],
+        "log_message": "Voice Studio speech generated per script segment and saved",
+        "output_refs": [output_ref],
     }
 
 
@@ -227,8 +265,122 @@ def _fallback_wav(text: str) -> bytes:
     return buffer.getvalue()
 
 
+def _combine_segment_wavs(wav_chunks: list[bytes], fallback_text: str) -> tuple[bytes, dict[str, Any]]:
+    if not wav_chunks:
+        wav_bytes = _fallback_wav(fallback_text)
+        return wav_bytes, {"sample_rate": 12000, "duration": _fallback_duration(fallback_text), "segment_count": 1}
+    if len(wav_chunks) == 1:
+        metadata = _wav_metadata(wav_chunks[0])
+        metadata["segment_count"] = 1
+        return wav_chunks[0], metadata
+    try:
+        combined = _concat_wavs(wav_chunks)
+        metadata = _wav_metadata(combined)
+        metadata["segment_count"] = len(wav_chunks)
+        return combined, metadata
+    except Exception:
+        wav_bytes = _fallback_wav(fallback_text)
+        return wav_bytes, {
+            "sample_rate": 12000,
+            "duration": _fallback_duration(fallback_text),
+            "segment_count": len(wav_chunks),
+            "provider_fallback": True,
+            "provider_error": "segment_audio_concat_failed",
+        }
+
+
+def _concat_wavs(wav_chunks: list[bytes]) -> bytes:
+    params = None
+    frames = bytearray()
+    for wav_bytes in wav_chunks:
+        with wave.open(BytesIO(wav_bytes), "rb") as wav_file:
+            current_params = (wav_file.getnchannels(), wav_file.getsampwidth(), wav_file.getframerate())
+            if params is None:
+                params = current_params
+            if current_params != params:
+                raise ValueError("segment audio parameters do not match")
+            frames.extend(wav_file.readframes(wav_file.getnframes()))
+            frames.extend(b"\x00" * current_params[0] * current_params[1] * max(int(current_params[2] * 0.16), 1))
+    channels, sample_width, frame_rate = params or (1, 2, 12000)
+    buffer = BytesIO()
+    with wave.open(buffer, "wb") as output:
+        output.setnchannels(channels)
+        output.setsampwidth(sample_width)
+        output.setframerate(frame_rate)
+        output.writeframes(bytes(frames))
+    return buffer.getvalue()
+
+
+def _wav_metadata(wav_bytes: bytes) -> dict[str, Any]:
+    with wave.open(BytesIO(wav_bytes), "rb") as wav_file:
+        sample_rate = wav_file.getframerate()
+        frame_count = wav_file.getnframes()
+    return {"sample_rate": sample_rate, "duration": frame_count / sample_rate if sample_rate else 0.0}
+
+
 def _fallback_duration(text: str) -> float:
     return max(0.75, min(6.0, max(len(text.strip()), 1) / 16.0))
+
+
+def _script_segments(payload: dict[str, Any], text: str) -> list[dict[str, Any]]:
+    raw_segments = payload.get("script_segments")
+    if isinstance(raw_segments, list):
+        segments = []
+        for index, raw in enumerate(raw_segments):
+            if not isinstance(raw, dict):
+                continue
+            segment_text = _text(raw.get("text"))
+            if segment_text:
+                segments.append({"index": int(raw.get("index") or index), "speaker": _text(raw.get("speaker")) or DEFAULT_UNTAGGED_SPEAKER, "text": segment_text})
+        if segments:
+            return segments
+
+    segments: list[dict[str, Any]] = []
+    untagged: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        tagged = _parse_tagged_line(line)
+        if tagged:
+            if untagged:
+                segments.append({"index": len(segments), "speaker": DEFAULT_UNTAGGED_SPEAKER, "text": " ".join(untagged)})
+                untagged = []
+            segments.append({"index": len(segments), **tagged})
+        else:
+            untagged.append(line)
+    if untagged:
+        segments.append({"index": len(segments), "speaker": DEFAULT_UNTAGGED_SPEAKER, "text": " ".join(untagged)})
+    return segments or [{"index": 0, "speaker": DEFAULT_UNTAGGED_SPEAKER, "text": text.strip()}]
+
+
+def _parse_tagged_line(line: str) -> dict[str, str] | None:
+    colon = line.find(":")
+    if colon <= 0:
+        return None
+    speaker = line[:colon].strip()
+    content = line[colon + 1 :].strip()
+    if not speaker or not content or len(speaker) > 50:
+        return None
+    return {"speaker": speaker, "text": content}
+
+
+def _speakers_from_segments(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for segment in segments:
+        speaker = _text(segment.get("speaker")) or DEFAULT_UNTAGGED_SPEAKER
+        counts[speaker] = counts.get(speaker, 0) + 1
+    return [{"name": speaker, "count": count} for speaker, count in counts.items()]
+
+
+def _assignments_by_speaker(assignments: list[Any]) -> dict[str, dict[str, Any]]:
+    mapped: dict[str, dict[str, Any]] = {}
+    for row in assignments:
+        if isinstance(row, dict):
+            speaker = _text(row.get("speaker"))
+            if speaker:
+                mapped[speaker.casefold()] = row
+    return mapped
 
 
 def _decode_audio_payload(value: Any) -> bytes:
@@ -310,7 +462,7 @@ def _tts_title(payload: dict[str, Any], job: JobRecord) -> str:
     speakers = payload.get("script_speakers")
     if isinstance(speakers, list) and len(speakers) > 1:
         return "multi_voice_script"
-    speaker = _text(payload.get("speaker")) or "voice"
+    speaker = _text(payload.get("speaker")) or DEFAULT_UNTAGGED_SPEAKER
     return f"{speaker}_speech"
 
 
