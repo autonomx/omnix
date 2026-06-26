@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { ApiError, omnixApiClient, type ChatSession as ApiChatSession, type JobRecord, type ProviderFacadePayload } from '../../api/client';
+import {
+  ApiError,
+  omnixApiClient,
+  type AssetListResponse,
+  type ChatSession as ApiChatSession,
+  type JobRecord,
+  type ProviderFacadePayload,
+} from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import {
@@ -34,6 +41,8 @@ interface ChatbotFormValues {
 type AssistantView = 'chats' | 'voice' | 'tools' | 'memory' | 'settings';
 type UtilityPanel = 'voice' | 'tools';
 type VoiceCaptureMode = 'idle' | 'listening' | 'recording' | 'transcribing' | 'error';
+type VoiceProfileAsset = AssetListResponse['assets'][number];
+type PersonalityId = 'default' | 'concise' | 'coach' | 'technical' | 'creative' | 'custom';
 
 type ChatMessage = {
   id: string;
@@ -69,6 +78,12 @@ type VoiceJobOutputRef = {
   segments?: unknown;
 };
 
+type AssistantSettings = {
+  voiceId: string;
+  personalityId: PersonalityId;
+  customPersonality: string;
+};
+
 const assistantSidebarItems: Array<{ id: AssistantView; label: string; icon: string }> = [
   { id: 'chats', label: 'Chats', icon: '▣' },
   { id: 'voice', label: 'Voice Sessions', icon: '◉' },
@@ -80,12 +95,47 @@ const assistantSidebarItems: Array<{ id: AssistantView; label: string; icon: str
 const suggestedPrompts = ['Tell me a fun fact', 'Recommend a movie', 'Give me productivity tips'] as const;
 const CALL_TIMER_TICK_MS = 1_000;
 const DEFAULT_SPEECH_LANGUAGE = 'en-US';
+const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
+
+const personalityOptions: Array<{ id: PersonalityId; label: string; prompt: string }> = [
+  {
+    id: 'default',
+    label: 'Omnix Default',
+    prompt: 'You are Omnix Assistant. Be helpful, clear, and practical.',
+  },
+  {
+    id: 'concise',
+    label: 'Concise operator',
+    prompt: 'You are Omnix Assistant. Be direct, concise, and action-oriented. Prefer short answers unless detail is requested.',
+  },
+  {
+    id: 'coach',
+    label: 'Friendly coach',
+    prompt: 'You are Omnix Assistant. Be warm, encouraging, and practical. Ask at most one clarifying question when needed.',
+  },
+  {
+    id: 'technical',
+    label: 'Technical expert',
+    prompt: 'You are Omnix Assistant. Be precise, technical, and implementation-focused. Include concrete steps and caveats.',
+  },
+  {
+    id: 'creative',
+    label: 'Creative collaborator',
+    prompt: 'You are Omnix Assistant. Be imaginative, collaborative, and vivid while staying useful and grounded.',
+  },
+  {
+    id: 'custom',
+    label: 'Custom personality',
+    prompt: '',
+  },
+];
 
 export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<AssistantView>('chats');
   const [activeUtilityPanel, setActiveUtilityPanel] = useState<UtilityPanel>('voice');
   const [audioStatus, setAudioStatus] = useState<string | null>(null);
+  const [settingsStatus, setSettingsStatus] = useState<string | null>(null);
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
   const [callElapsedMs, setCallElapsedMs] = useState(0);
   const [voiceCaptureMode, setVoiceCaptureMode] = useState<VoiceCaptureMode>('idle');
@@ -99,12 +149,18 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const recordingChunksRef = useRef<Blob[]>([]);
   const queryClient = useQueryClient();
   const runtimeConfig = useMemo(() => createAssistantWorkspaceRuntimeConfig(), []);
+  const [assistantSettings, setAssistantSettings] = useState<AssistantSettings>(() => loadAssistantSettings(runtimeConfig));
   const eventStore = useMemo(() => createChatbotWorkspaceEventStore(runtimeConfig), [runtimeConfig]);
   const [activityEvents, setActivityEvents] = useState<AssistantWorkspaceEvent[]>(() =>
     eventStore.list(createWorkspaceEventFilter(runtimeConfig)),
   );
   const providerQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
   const sessionsQuery = useQuery({ queryKey: ['feature', 'chatbot', 'sessions'], queryFn: () => omnixApiClient.listChatSessions() });
+  const assetsQuery = useQuery({
+    queryKey: ['platform', 'assets', 'chatbot-settings'],
+    queryFn: () => omnixApiClient.listAssets(),
+    enabled: activeView === 'settings',
+  });
   const sessionQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'session', selectedSessionId],
     queryFn: () => omnixApiClient.getChatSession(selectedSessionId ?? ''),
@@ -121,6 +177,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const chatModels = useMemo(() => chatCapableModels(providerPayload, selectedProviderId), [providerPayload, selectedProviderId]);
   const chatSessions = sessionsQuery.data?.sessions ?? [];
   const pinnedSessions = useMemo(() => chatSessions.filter(isPinnedSession), [chatSessions]);
+  const voiceProfiles = useMemo(() => getVoiceProfileAssets(assetsQuery.data), [assetsQuery.data]);
 
   useEffect(() => {
     if (!selectedSessionId && sessionsQuery.data?.sessions[0]) setSelectedSessionId(sessionsQuery.data.sessions[0].id);
@@ -130,9 +187,15 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     mutationFn: async (values: ChatbotFormValues) => {
       const providerId = values.providerId || undefined;
       const modelId = values.modelId || undefined;
+      const personalityPrompt = createPersonalityPrompt(assistantSettings);
       let sessionId = selectedSessionId;
       if (!sessionId) {
-        const created = await omnixApiClient.createChatSession({ title: values.content.slice(0, 48) || 'New chat', provider_id: providerId, model_id: modelId });
+        const created = await omnixApiClient.createChatSession({
+          title: values.content.slice(0, 48) || 'New chat',
+          provider_id: providerId,
+          model_id: modelId,
+          system_prompt: personalityPrompt || undefined,
+        });
         sessionId = created.id;
         setSelectedSessionId(sessionId);
       }
@@ -178,8 +241,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveConnectionLabel = liveVoiceActive ? 'Connected' : 'Disconnected';
   const liveCallTimerLabel = formatCallDuration(callElapsedMs);
   const liveDraftText = [liveTranscript, liveInterimTranscript].filter(Boolean).join(' ').trim();
+  const activeVoiceId = assistantSettings.voiceId || runtimeConfig.ttsVoice || '';
+  const activeVoiceLabel = voiceLabelForId(activeVoiceId, voiceProfiles);
+  const selectedPersonalityLabel = personalityLabel(assistantSettings.personalityId);
   const speechInputLabel = getSpeechRecognitionConstructor() ? 'Browser speech-to-text' : runtimeConfig.sttServiceUrl ? 'STT service recording' : 'No STT input configured';
-  const ttsOutputLabel = runtimeConfig.ttsServiceUrl ? 'TTS service' : 'Voice Studio TTS job';
+  const ttsOutputLabel = `${runtimeConfig.ttsServiceUrl ? 'TTS service' : 'Voice Studio TTS job'}${activeVoiceLabel ? ` · ${activeVoiceLabel}` : ''}`;
 
   useEffect(() => {
     if (callStartedAt === null) {
@@ -229,6 +295,19 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setActiveView(view);
     if (view === 'voice') setActiveUtilityPanel('voice');
     if (view === 'tools') setActiveUtilityPanel('tools');
+  }
+
+  function updateAssistantSettings(next: AssistantSettings): void {
+    setAssistantSettings(next);
+    saveAssistantSettings(next);
+    setSettingsStatus('Assistant settings saved. They apply to new chat sessions and response audio.');
+  }
+
+  function resetAssistantSettings(): void {
+    const next = defaultAssistantSettings(runtimeConfig);
+    setAssistantSettings(next);
+    saveAssistantSettings(next);
+    setSettingsStatus('Assistant settings reset to defaults.');
   }
 
   async function startLiveCall(): Promise<void> {
@@ -411,13 +490,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       return;
     }
     try {
-      setAudioStatus(runtimeConfig.ttsVoice ? `Synthesizing ${runtimeConfig.ttsVoice} voice…` : 'Synthesizing response voice…');
+      setAudioStatus(activeVoiceId ? `Synthesizing ${activeVoiceLabel || activeVoiceId} voice…` : 'Synthesizing response voice…');
       const audioSource = runtimeConfig.ttsServiceUrl
         ? await synthesizeWithTtsService(spokenText)
         : await synthesizeWithVoiceJob(spokenText);
       const audio = new Audio(audioSource);
       await audio.play();
-      setAudioStatus(runtimeConfig.ttsVoice ? 'Playing cloned response voice.' : 'Playing response voice.');
+      setAudioStatus(activeVoiceId ? 'Playing cloned response voice.' : 'Playing response voice.');
     } catch (error) {
       setAudioStatus(error instanceof Error ? error.message : 'Response audio playback failed.');
     }
@@ -428,7 +507,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     const ttsClient = createTtsServiceClient({ baseUrl: runtimeConfig.ttsServiceUrl, transport: createFetchSpeechServiceTransport() });
     const response = await ttsClient.synthesizeSpeech({
       text,
-      voice: runtimeConfig.ttsVoice,
+      voice: activeVoiceId || undefined,
       format: 'wav',
       metadata: { source: 'chatbot_response_playback', sessionId: activeSession?.id, providerId: selectedProviderId || runtimeConfig.defaultProviderId, modelId: selectedModelId || runtimeConfig.defaultModelId },
     });
@@ -446,11 +525,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         text,
         provider_id: null,
         speaker: 'Omnix Assistant',
-        voice_id: runtimeConfig.ttsVoice || null,
+        voice_id: activeVoiceId || null,
         script_mode: 'single_speaker',
         script_speakers: [{ name: 'Omnix Assistant', count: 1 }],
         script_segments: [{ index: 0, speaker: 'Omnix Assistant', text }],
-        character_voice_assignments: [{ speaker: 'Omnix Assistant', voice_id: runtimeConfig.ttsVoice || null, style: 'Conversational', line_count: 1 }],
+        character_voice_assignments: [{ speaker: 'Omnix Assistant', voice_id: activeVoiceId || null, style: selectedPersonalityLabel, line_count: 1 }],
         save_output: true,
       },
       stages: [
@@ -542,7 +621,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <label><span>Provider</span><select {...register('providerId')} aria-label="Provider"><option value="">Default provider</option>{chatProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select></label>
                   <label><span>Model</span><select {...register('modelId')} aria-label="Model"><option value="">Default model</option>{chatModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select></label>
                   <button type="button" className="assistant-composer-chip" onClick={() => void playAssistantResponseAudio(latestAssistantMessage?.content ?? '')} disabled={!latestAssistantMessage}><span>Voice</span><strong>{ttsOutputLabel}</strong></button>
-                  <button className="assistant-composer-chip" type="button" onClick={() => showAssistantView('memory')}><span>Memory</span><strong>On</strong></button>
+                  <button className="assistant-composer-chip" type="button" onClick={() => showAssistantView('settings')}><span>Personality</span><strong>{selectedPersonalityLabel}</strong></button>
                   <button type="button" className="assistant-composer-chip" onClick={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }}><span>Tools</span><strong>{runtimeConfig.features.toolExecution ? `${enabledToolCount} Active` : 'Off'}</strong></button>
                   <button type="button" className="assistant-composer-chip" onClick={refreshActivityPanel}><span>Context</span><strong>{activeMessageCount > 0 ? 'Project Brief' : 'Ready'}</strong></button>
                 </div>
@@ -551,13 +630,32 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               </form>
             </>
           ) : (
-            <AssistantWorkspaceView activeView={activeView} chatProviders={chatProviders} enabledToolCount={enabledToolCount} modelLabel={modelLabel} providerLabel={providerLabel} runtimeConfig={runtimeConfig} speechInputLabel={speechInputLabel} toolExecutionRows={toolExecutionRows.length} ttsOutputLabel={ttsOutputLabel} onStartLiveCall={startLiveCall} onShowTools={() => setActiveUtilityPanel('tools')} />
+            <AssistantWorkspaceView
+              activeView={activeView}
+              assistantSettings={assistantSettings}
+              chatProviders={chatProviders}
+              enabledToolCount={enabledToolCount}
+              modelLabel={modelLabel}
+              providerLabel={providerLabel}
+              runtimeConfig={runtimeConfig}
+              settingsStatus={settingsStatus}
+              speechInputLabel={speechInputLabel}
+              toolExecutionRows={toolExecutionRows.length}
+              ttsOutputLabel={ttsOutputLabel}
+              voiceProfiles={voiceProfiles}
+              voiceProfilesLoading={assetsQuery.isLoading}
+              onResetAssistantSettings={resetAssistantSettings}
+              onStartLiveCall={startLiveCall}
+              onUpdateAssistantSettings={updateAssistantSettings}
+              onShowTools={() => setActiveUtilityPanel('tools')}
+            />
           )}
           <div className="assistant-inline-status" aria-live="polite">
             {errors.content ? <span role="alert">Enter a message before sending.</span> : null}
             {sendMutation.isPending ? <span role="status">Contacting the selected chat provider…</span> : null}
             {sendMutation.isError ? <span role="alert">{chatbotSubmitErrorMessage(sendMutation.error)}</span> : null}
             {audioStatus ? <span role="status">{audioStatus}</span> : null}
+            {settingsStatus && activeView === 'settings' ? <span role="status">{settingsStatus}</span> : null}
             {sendMutation.data ? <span role="status">{generationComplete ? 'Generation completed' : 'Generation job queued'}: {sendMutation.data.job.id}</span> : null}
           </div>
         </section>
@@ -580,7 +678,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             <section className="assistant-tool-sidebar-card" aria-labelledby="assistant-tool-execution-heading"><ToolExecutionPanel rows={toolExecutionRows} title="Tool execution" description="Review approvals and monitor tool execution results." /></section>
           </div>
           <div className="assistant-supporting-panels">
-            <AssistantWorkspaceDashboardPanel input={{ workspaceName: runtimeConfig.workspaceId, projectName: runtimeConfig.projectId ?? 'Chatbot', sessionTitle: activeSession?.title ?? 'New chat', sessionMode: liveVoiceActive ? 'voice' : 'text', providerLabel, modelLabel, messageCount: activeMessageCount, contextSourceCount: activeMessageCount > 0 ? 1 : 0, memoryCount: 0, knowledgeChunkCount: 0, enabledToolCount: runtimeConfig.features.toolExecution ? 1 : 0, qualitySignals: [{ id: 'session', label: 'Conversation session is available', passed: Boolean(activeSession?.id) || !selectedSessionId, severity: 'info' }, { id: 'provider', label: 'At least one chat provider is available', passed: providerQuery.isLoading || chatProviders.length > 0, severity: 'warning' }, { id: 'stt', label: 'Speech-to-text input is available', passed: Boolean(getSpeechRecognitionConstructor() || runtimeConfig.sttServiceUrl), severity: 'warning' }, { id: 'tts', label: 'TTS playback can use service or Voice Studio jobs', passed: true, severity: 'info' }, { id: 'messages', label: 'Conversation projection can render messages', passed: Boolean(activeSession?.messages) || !activeSession, severity: 'info' }, { id: 'event-store', label: 'Workspace events are configured for persistence', passed: runtimeConfig.features.persistedEvents, severity: 'warning' }] }} />
+            <AssistantWorkspaceDashboardPanel input={{ workspaceName: runtimeConfig.workspaceId, projectName: runtimeConfig.projectId ?? 'Chatbot', sessionTitle: activeSession?.title ?? 'New chat', sessionMode: liveVoiceActive ? 'voice' : 'text', providerLabel, modelLabel, messageCount: activeMessageCount, contextSourceCount: activeMessageCount > 0 ? 1 : 0, memoryCount: 0, knowledgeChunkCount: 0, enabledToolCount: runtimeConfig.features.toolExecution ? 1 : 0, qualitySignals: [{ id: 'session', label: 'Conversation session is available', passed: Boolean(activeSession?.id) || !selectedSessionId, severity: 'info' }, { id: 'provider', label: 'At least one chat provider is available', passed: providerQuery.isLoading || chatProviders.length > 0, severity: 'warning' }, { id: 'stt', label: 'Speech-to-text input is available', passed: Boolean(getSpeechRecognitionConstructor() || runtimeConfig.sttServiceUrl), severity: 'warning' }, { id: 'tts', label: 'TTS playback can use service or Voice Studio jobs', passed: true, severity: 'info' }, { id: 'personality', label: `Personality: ${selectedPersonalityLabel}`, passed: true, severity: 'info' }, { id: 'messages', label: 'Conversation projection can render messages', passed: Boolean(activeSession?.messages) || !activeSession, severity: 'info' }, { id: 'event-store', label: 'Workspace events are configured for persistence', passed: runtimeConfig.features.persistedEvents, severity: 'warning' }] }} />
             <AssistantWorkspaceActivityPanel events={activityEvents} />
           </div>
         </aside>
@@ -589,11 +687,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   );
 }
 
-function AssistantWorkspaceView({ activeView, chatProviders, enabledToolCount, modelLabel, onShowTools, onStartLiveCall, providerLabel, runtimeConfig, speechInputLabel, toolExecutionRows, ttsOutputLabel }: { activeView: Exclude<AssistantView, 'chats'>; chatProviders: ReturnType<typeof chatCapableProviders>; enabledToolCount: number; modelLabel: string; onShowTools: () => void; onStartLiveCall: () => void | Promise<void>; providerLabel: string; runtimeConfig: AssistantWorkspaceRuntimeConfig; speechInputLabel: string; toolExecutionRows: number; ttsOutputLabel: string }) {
-  if (activeView === 'voice') return <section className="assistant-view-panel" aria-label="Voice Sessions view"><p className="eyebrow">Omnix Assistant</p><h2>Voice Sessions</h2><p>Use browser speech-to-text or the configured STT service to draft messages, then play assistant replies through the TTS service or local Voice Studio jobs.</p><div className="platform-grid"><article><h3>Live call</h3><p>Input: {speechInputLabel}. Output: {ttsOutputLabel}.</p><button type="button" onClick={() => void onStartLiveCall()}>Start Call</button></article><article><h3>Response playback</h3><p>{runtimeConfig.ttsVoice ? `Active voice: ${runtimeConfig.ttsVoice}` : 'Chatbot will synthesize assistant replies with the default configured voice.'}</p></article></div></section>;
+function AssistantWorkspaceView({ activeView, assistantSettings, chatProviders, enabledToolCount, modelLabel, onResetAssistantSettings, onShowTools, onStartLiveCall, onUpdateAssistantSettings, providerLabel, runtimeConfig, settingsStatus, speechInputLabel, toolExecutionRows, ttsOutputLabel, voiceProfiles, voiceProfilesLoading }: { activeView: Exclude<AssistantView, 'chats'>; assistantSettings: AssistantSettings; chatProviders: ReturnType<typeof chatCapableProviders>; enabledToolCount: number; modelLabel: string; onResetAssistantSettings: () => void; onShowTools: () => void; onStartLiveCall: () => void | Promise<void>; onUpdateAssistantSettings: (settings: AssistantSettings) => void; providerLabel: string; runtimeConfig: AssistantWorkspaceRuntimeConfig; settingsStatus: string | null; speechInputLabel: string; toolExecutionRows: number; ttsOutputLabel: string; voiceProfiles: VoiceProfileAsset[]; voiceProfilesLoading: boolean }) {
+  if (activeView === 'voice') return <section className="assistant-view-panel" aria-label="Voice Sessions view"><p className="eyebrow">Omnix Assistant</p><h2>Voice Sessions</h2><p>Use browser speech-to-text or the configured STT service to draft messages, then play assistant replies through the TTS service or local Voice Studio jobs.</p><div className="platform-grid"><article><h3>Live call</h3><p>Input: {speechInputLabel}. Output: {ttsOutputLabel}.</p><button type="button" onClick={() => void onStartLiveCall()}>Start Call</button></article><article><h3>Response playback</h3><p>{assistantSettings.voiceId ? `Active cloned voice: ${voiceLabelForId(assistantSettings.voiceId, voiceProfiles) || assistantSettings.voiceId}` : runtimeConfig.ttsVoice ? `Configured voice: ${runtimeConfig.ttsVoice}` : 'Chatbot will synthesize assistant replies with the default configured voice.'}</p></article></div></section>;
   if (activeView === 'tools') return <AssistantToolSettingsPanel enabledToolCount={enabledToolCount} toolExecutionRows={toolExecutionRows} onShowExecutionPanel={onShowTools} />;
   if (activeView === 'memory') return <section className="assistant-view-panel" aria-label="Memory view"><p className="eyebrow">Omnix Assistant</p><h2>Memory</h2><p>Review assistant-scoped memory and what is available to future chat, voice, tool, and context assembly flows.</p><div className="platform-grid"><article><h3>Project memory</h3><p>Project-scoped memories are enabled for this assistant workspace.</p></article><article><h3>Conversation memory</h3><p>Current session events are persisted and replayable through the assistant workspace event store.</p></article></div></section>;
-  return <section className="assistant-view-panel" aria-label="Settings view"><p className="eyebrow">Omnix Assistant</p><h2>Settings</h2><p>Review runtime configuration used by this assistant workspace.</p><dl className="assistant-settings-list"><div><dt>Provider</dt><dd>{providerLabel}</dd></div><div><dt>Model</dt><dd>{modelLabel}</dd></div><div><dt>Speech input</dt><dd>{speechInputLabel}</dd></div><div><dt>TTS output</dt><dd>{ttsOutputLabel}</dd></div><div><dt>Event storage</dt><dd>{runtimeConfig.features.persistedEvents ? runtimeConfig.eventStorageKey : 'In-memory only'}</dd></div><div><dt>Live assistant</dt><dd>{runtimeConfig.features.liveAssistant ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Tool execution</dt><dd>{runtimeConfig.features.toolExecution ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Available chat providers</dt><dd>{chatProviders.length}</dd></div></dl></section>;
+  return <section className="assistant-view-panel" aria-label="Settings view"><p className="eyebrow">Omnix Assistant</p><h2>Settings</h2><p>Select the assistant personality and cloned voice used by Chatbot sessions and response audio.</p><div className="assistant-settings-list"><div><label htmlFor="assistant-personality">Personality</label><select id="assistant-personality" aria-label="Personality" value={assistantSettings.personalityId} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, personalityId: event.currentTarget.value as PersonalityId })}>{personalityOptions.map((personality) => <option key={personality.id} value={personality.id}>{personality.label}</option>)}</select></div><div><label htmlFor="assistant-custom-personality">Custom personality</label><textarea id="assistant-custom-personality" aria-label="Custom personality" rows={4} value={assistantSettings.customPersonality} disabled={assistantSettings.personalityId !== 'custom'} placeholder="Describe how the assistant should behave, speak, and prioritize responses." onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, customPersonality: event.currentTarget.value })} /></div><div><label htmlFor="assistant-voice">Cloned voice</label><select id="assistant-voice" aria-label="Cloned voice" value={assistantSettings.voiceId} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}><option value="">{runtimeConfig.ttsVoice ? `Default configured voice (${runtimeConfig.ttsVoice})` : 'Default voice'}</option>{voiceProfiles.map((asset) => <option key={asset.id} value={voiceProfileId(asset)}>{voiceProfileLabel(asset)}</option>)}</select></div><div><span>Voice profiles</span><strong>{voiceProfilesLoading ? 'Loading cloned voices…' : voiceProfiles.length ? `${voiceProfiles.length} cloned voices available` : 'No cloned voices indexed'}</strong></div><div><span>TTS output</span><strong>{ttsOutputLabel}</strong></div><div><span>Provider</span><strong>{providerLabel}</strong></div><div><span>Model</span><strong>{modelLabel}</strong></div><div><span>Speech input</span><strong>{speechInputLabel}</strong></div><div><span>Event storage</span><strong>{runtimeConfig.features.persistedEvents ? runtimeConfig.eventStorageKey : 'In-memory only'}</strong></div><div><span>Live assistant</span><strong>{runtimeConfig.features.liveAssistant ? 'Enabled' : 'Disabled'}</strong></div><div><span>Tool execution</span><strong>{runtimeConfig.features.toolExecution ? 'Enabled' : 'Disabled'}</strong></div><div><span>Available chat providers</span><strong>{chatProviders.length}</strong></div></div><div className="assistant-settings-actions"><button type="button" onClick={onResetAssistantSettings}>Reset assistant settings</button></div>{settingsStatus ? <p className="assistant-view-note" role="status">{settingsStatus}</p> : null}<p className="assistant-view-note">Personality is sent as the system prompt when a new chat session is created. Existing sessions keep their original system prompt.</p></section>;
 }
 
 function chatCapableProviders(payload: ProviderFacadePayload | undefined) { return payload?.providers.filter((provider) => provider.capabilities.includes('chat')) ?? []; }
@@ -618,3 +716,15 @@ function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor 
 function getVoiceJobAudioSource(job: JobRecord): string | null { const refs = Array.isArray(job.output_refs) ? job.output_refs : []; for (const ref of refs) { const output = ref as VoiceJobOutputRef; if (isFallbackVoiceOutput(output)) continue; if (typeof output.data_url === 'string' && output.data_url.startsWith('data:audio/')) return output.data_url; if (typeof output.audio_url === 'string' && output.audio_url.trim()) return output.audio_url; } return null; }
 function isFallbackVoiceOutput(ref: VoiceJobOutputRef): boolean { if (ref.provider_fallback === true || ref.provider_success === false) return true; const segments = Array.isArray(ref.segments) ? ref.segments : []; return segments.some((segment) => { const row = segment as { provider_fallback?: unknown; provider_success?: unknown } | null; return row?.provider_fallback === true || row?.provider_success === false; }); }
 function voiceJobErrorMessage(job: JobRecord): string { if (job.status !== 'failed') return ''; const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio TTS job failed.'; }
+function getVoiceProfileAssets(payload: AssetListResponse | undefined): VoiceProfileAsset[] { return payload?.assets.filter((asset) => asset.type === 'voice_profile') ?? []; }
+function asRecord(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
+function voiceProfileId(asset: VoiceProfileAsset): string { const metadata = asRecord(asset.metadata); return stringMetadata(metadata.voice_id) || stringMetadata(metadata.profile_id) || stringMetadata(metadata.id) || asset.id; }
+function voiceProfileLabel(asset: VoiceProfileAsset): string { const metadata = asRecord(asset.metadata); return stringMetadata(metadata.profile_name) || stringMetadata(metadata.name) || stringMetadata(metadata.voice_name) || asset.storage_path.split(/[\\/]/).pop() || asset.id; }
+function voiceLabelForId(voiceId: string, voiceProfiles: VoiceProfileAsset[]): string { if (!voiceId) return ''; const profile = voiceProfiles.find((asset) => voiceProfileId(asset) === voiceId || asset.id === voiceId); return profile ? voiceProfileLabel(profile) : voiceId; }
+function stringMetadata(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
+function defaultAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { return { voiceId: config.ttsVoice ?? '', personalityId: 'default', customPersonality: '' }; }
+function loadAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { const fallback = defaultAssistantSettings(config); try { if (typeof window === 'undefined') return fallback; const raw = window.localStorage.getItem(ASSISTANT_SETTINGS_STORAGE_KEY); if (!raw) return fallback; const parsed = JSON.parse(raw) as Partial<AssistantSettings>; return { voiceId: typeof parsed.voiceId === 'string' ? parsed.voiceId : fallback.voiceId, personalityId: isPersonalityId(parsed.personalityId) ? parsed.personalityId : fallback.personalityId, customPersonality: typeof parsed.customPersonality === 'string' ? parsed.customPersonality : fallback.customPersonality }; } catch { return fallback; } }
+function saveAssistantSettings(settings: AssistantSettings): void { try { if (typeof window !== 'undefined') window.localStorage.setItem(ASSISTANT_SETTINGS_STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore local storage failures */ } }
+function isPersonalityId(value: unknown): value is PersonalityId { return typeof value === 'string' && personalityOptions.some((option) => option.id === value); }
+function personalityLabel(value: PersonalityId): string { return personalityOptions.find((option) => option.id === value)?.label ?? 'Omnix Default'; }
+function createPersonalityPrompt(settings: AssistantSettings): string | undefined { if (settings.personalityId === 'custom') return settings.customPersonality.trim() || undefined; return personalityOptions.find((option) => option.id === settings.personalityId)?.prompt; }
