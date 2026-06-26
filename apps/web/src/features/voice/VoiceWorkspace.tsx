@@ -100,6 +100,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
                     <option key={provider.id} value={provider.id}>{provider.label}</option>
                   ))}
                 </select>
+                <small>{ttsProviders[0]?.label ?? 'Default TTS provider'}</small>
               </label>
 
               <div className="voice-studio-field-wide voice-studio-field">
@@ -144,7 +145,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
               <label className="voice-studio-field-wide">
                 Text to synthesize
-                <textarea rows={7} aria-invalid={Boolean(errors.text)} placeholder={'Dave: hello there\nBob: how do you do\nMarry: I am doing fine'} {...register('text', { required: true })} />
+                <textarea aria-label="Text" rows={7} aria-invalid={Boolean(errors.text)} placeholder={'Dave: hello there\nBob: how do you do\nMarry: I am doing fine'} {...register('text', { required: true })} />
               </label>
 
               <div className="voice-primary-actions voice-studio-field-wide">
