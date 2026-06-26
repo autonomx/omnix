@@ -1,4 +1,4 @@
-.voice-studio-app { background: radial-gradient(circle at 70% 20%, rgba(85, 64, 190, 0.12), transparent 34%), #060914; border: 1px solid rgba(124, 92, 255, 0.18); border-radius: 1rem; color: #edf2ff; display: grid; grid-template-columns: 14rem minmax(0, 1fr); min-height: 72rem; overflow: hidden; }
+.voice-studio-app { background: radial-gradient(circle at 70% 20%, rgba(85, 64, 190, 0.12), transparent 34%), #060914; border: 1px solid rgba(124, 92, 255, 0.18); border-radius: 1rem; color: #edf2ff; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 72rem; overflow: hidden; }
 .voice-side-nav { background: linear-gradient(180deg, rgba(9, 13, 27, 0.96), rgba(5, 8, 18, 0.96)); border-right: 1px solid rgba(148, 163, 184, 0.12); display: grid; gap: 0.7rem; grid-template-rows: auto auto repeat(5, auto) 1fr auto auto; padding: 1.2rem 0.8rem; }
 .voice-brand { align-items: center; display: flex; gap: 0.65rem; font-weight: 900; letter-spacing: 0.03em; }
 .voice-brand-mark { background: conic-gradient(from 90deg, #8b5cf6, #22d3ee, #8b5cf6); border-radius: 999px; display: inline-block; height: 1.45rem; width: 1.45rem; }
