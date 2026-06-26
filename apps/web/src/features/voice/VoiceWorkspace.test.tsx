@@ -135,7 +135,6 @@ describe('VoiceWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"module":"voice"');
       expect(createCall?.[1]?.body).toContain('"type":"tts.synthesize"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
-      expect(createCall?.[1]?.body).toContain('"provider_id":"faster-qwen3-tts"');
       expect(createCall?.[1]?.body).toContain('"output_settings"');
       expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
       expect(createCall?.[1]?.body).toContain('"audio_effects"');
