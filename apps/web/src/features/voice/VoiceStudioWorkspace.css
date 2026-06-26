@@ -41,6 +41,8 @@
 .queue-list-final { border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 0.45rem; display: grid; overflow: hidden; }
 .queue-row-final { align-items: center; border-bottom: 1px solid rgba(148, 163, 184, 0.1); display: grid; gap: 0.55rem; grid-template-columns: auto minmax(8rem, 1fr) minmax(7rem, 0.8fr) auto auto; min-width: 0; padding: 0.65rem; }
 .queue-row-final b, .queue-row-final small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-progress { background: rgba(148, 163, 184, 0.18); border-radius: 999px; height: 0.35rem; margin-top: 0.35rem; overflow: hidden; }
+.queue-progress span { background: linear-gradient(90deg, #22d3ee, #8b5cf6); display: block; height: 100%; }
 .job-icon { color: #8b5cf6; font-size: 1.35rem; }
 .latest-preview-row { align-items: center; background: rgba(15, 20, 36, 0.74); border-radius: 0.45rem; display: grid; gap: 0.55rem; grid-template-columns: auto 1fr auto; padding: 0.55rem; }
 .tts-panel-final { gap: 0.75rem; }
@@ -61,9 +63,11 @@
 .enhancement-controls input[type='range'] { accent-color: #8b5cf6; width: 100%; }
 .effect-buttons { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 .now-playing-bar { align-items: center; background: rgba(10, 14, 28, 0.96); border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 0.55rem; display: grid; gap: 0.65rem; grid-template-columns: auto minmax(12rem, 1fr) auto auto auto auto minmax(18rem, 2fr) auto auto auto; min-width: 0; padding: 0.55rem 0.75rem; }
+.now-playing-bar audio { display: none; }
 .now-playing-bar button { background: rgba(15, 20, 36, 0.9); border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 0.4rem; color: #e2e8f0; min-height: 2rem; min-width: 2rem; }
 .now-playing-bar .main-play { background: linear-gradient(135deg, #8b5cf6, #5b21d4); border-radius: 999px; height: 2.5rem; width: 2.5rem; }
 .now-playing-bar b, .now-playing-bar span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-playing-seek { accent-color: #22d3ee; background: transparent; min-width: 0; width: 100%; }
 .voice-waveform-final { align-items: end; display: grid; gap: 0.08rem; grid-template-columns: repeat(64, 1fr); height: 1.5rem; min-width: 0; }
 .voice-waveform-final span { background: linear-gradient(180deg, #22d3ee, #8b5cf6); border-radius: 999px; min-height: 0.18rem; }
 @media (max-width: 1500px) { .voice-studio-app { grid-template-columns: 1fr; } .voice-side-nav { display: none; } .voice-top-grid, .tts-workflow-grid, .voice-bottom-grid { grid-template-columns: 1fr; } .now-playing-bar { grid-template-columns: 1fr; } }
