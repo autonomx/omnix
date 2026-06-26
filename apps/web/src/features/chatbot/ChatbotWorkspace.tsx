@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { ApiError, omnixApiClient, type ChatSession as ApiChatSession, type ProviderFacadePayload } from '../../api/client';
+import { ApiError, omnixApiClient, type ChatSession as ApiChatSession, type JobRecord, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import {
@@ -11,6 +11,7 @@ import {
   createFetchSpeechServiceTransport,
   createInMemoryAssistantWorkspaceEventStore,
   createStoredAssistantWorkspaceEventStore,
+  createSttServiceClient,
   createToolExecutionRows,
   createTtsServiceClient,
   type AssistantWorkspaceEvent,
@@ -32,6 +33,7 @@ interface ChatbotFormValues {
 
 type AssistantView = 'chats' | 'voice' | 'tools' | 'memory' | 'settings';
 type UtilityPanel = 'voice' | 'tools';
+type VoiceCaptureMode = 'idle' | 'listening' | 'recording' | 'transcribing' | 'error';
 
 type ChatMessage = {
   id: string;
@@ -39,6 +41,32 @@ type ChatMessage = {
   content: string;
   created_at: string;
   metadata?: Record<string, unknown>;
+};
+
+type BrowserSpeechRecognitionAlternative = { transcript: string };
+type BrowserSpeechRecognitionResult = { isFinal: boolean; 0?: BrowserSpeechRecognitionAlternative };
+type BrowserSpeechRecognitionEvent = { resultIndex: number; results: { length: number; [index: number]: BrowserSpeechRecognitionResult } };
+type BrowserSpeechRecognitionErrorEvent = { error?: string; message?: string };
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+};
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+type SpeechRecognitionWindow = Window & { SpeechRecognition?: BrowserSpeechRecognitionConstructor; webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor };
+
+type VoiceJobOutputRef = {
+  data_url?: unknown;
+  audio_url?: unknown;
+  provider_fallback?: unknown;
+  provider_success?: unknown;
+  segments?: unknown;
 };
 
 const assistantSidebarItems: Array<{ id: AssistantView; label: string; icon: string }> = [
@@ -51,6 +79,7 @@ const assistantSidebarItems: Array<{ id: AssistantView; label: string; icon: str
 
 const suggestedPrompts = ['Tell me a fun fact', 'Recommend a movie', 'Give me productivity tips'] as const;
 const CALL_TIMER_TICK_MS = 1_000;
+const DEFAULT_SPEECH_LANGUAGE = 'en-US';
 
 export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -59,6 +88,15 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [audioStatus, setAudioStatus] = useState<string | null>(null);
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
   const [callElapsedMs, setCallElapsedMs] = useState(0);
+  const [voiceCaptureMode, setVoiceCaptureMode] = useState<VoiceCaptureMode>('idle');
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [liveInterimTranscript, setLiveInterimTranscript] = useState('');
+  const [autoSpeakResponses, setAutoSpeakResponses] = useState(true);
+  const [spokenMessageIds, setSpokenMessageIds] = useState<Record<string, true>>({});
+  const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
   const queryClient = useQueryClient();
   const runtimeConfig = useMemo(() => createAssistantWorkspaceRuntimeConfig(), []);
   const eventStore = useMemo(() => createChatbotWorkspaceEventStore(runtimeConfig), [runtimeConfig]);
@@ -75,6 +113,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<ChatbotFormValues>({
     defaultValues: { content: '', providerId: runtimeConfig.defaultProviderId ?? '', modelId: runtimeConfig.defaultModelId ?? '' },
   });
+  const composerContent = watch('content') ?? '';
   const selectedProviderId = watch('providerId');
   const selectedModelId = watch('modelId');
   const providerPayload = providerQuery.data;
@@ -101,6 +140,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     },
     onSuccess: async (_result, values) => {
       reset({ content: '', providerId: values.providerId, modelId: values.modelId });
+      setLiveTranscript('');
+      setLiveInterimTranscript('');
       await queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
@@ -133,9 +174,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const toolExecutionRows = useMemo(() => createToolExecutionRows(activityEvents), [activityEvents]);
   const enabledToolCount = runtimeConfig.features.toolExecution ? Math.max(toolExecutionRows.length, 3) : 0;
   const liveVoiceActive = callStartedAt !== null;
-  const liveVoiceState = liveVoiceActive ? 'Listening' : 'Idle';
+  const liveVoiceState = liveVoiceActive ? voiceCaptureLabel(voiceCaptureMode) : voiceCaptureMode === 'error' ? 'Error' : 'Idle';
   const liveConnectionLabel = liveVoiceActive ? 'Connected' : 'Disconnected';
   const liveCallTimerLabel = formatCallDuration(callElapsedMs);
+  const liveDraftText = [liveTranscript, liveInterimTranscript].filter(Boolean).join(' ').trim();
+  const speechInputLabel = getSpeechRecognitionConstructor() ? 'Browser speech-to-text' : runtimeConfig.sttServiceUrl ? 'STT service recording' : 'No STT input configured';
+  const ttsOutputLabel = runtimeConfig.ttsServiceUrl ? 'TTS service' : 'Voice Studio TTS job';
 
   useEffect(() => {
     if (callStartedAt === null) {
@@ -162,6 +206,16 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setActivityEvents(eventStore.list(filter));
   }, [activeSession, eventStore, runtimeConfig]);
 
+  useEffect(() => {
+    return () => stopVoiceInput();
+  }, []);
+
+  useEffect(() => {
+    if (!autoSpeakResponses || !liveVoiceActive || !latestAssistantMessage || spokenMessageIds[latestAssistantMessage.id]) return;
+    setSpokenMessageIds((current) => ({ ...current, [latestAssistantMessage.id]: true }));
+    void playAssistantResponseAudio(latestAssistantMessage.content);
+  }, [autoSpeakResponses, latestAssistantMessage?.id, liveVoiceActive, spokenMessageIds]);
+
   function applySuggestedPrompt(prompt: string): void {
     setActiveView('chats');
     setValue('content', prompt, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
@@ -177,19 +231,177 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (view === 'tools') setActiveUtilityPanel('tools');
   }
 
-  function startLiveCall(): void {
+  async function startLiveCall(): Promise<void> {
     if (callStartedAt !== null) return;
     setActiveUtilityPanel('voice');
     setCallStartedAt(Date.now());
     setCallElapsedMs(0);
-    setAudioStatus('Live voice call started.');
+    await startVoiceInput();
   }
 
   function stopLiveCall(): void {
     if (callStartedAt === null) return;
+    stopVoiceInput();
     setCallStartedAt(null);
     setCallElapsedMs(0);
     setAudioStatus('Live voice call ended.');
+  }
+
+  async function startVoiceInput(): Promise<void> {
+    setActiveUtilityPanel('voice');
+    setLiveTranscript('');
+    setLiveInterimTranscript('');
+    const Recognition = getSpeechRecognitionConstructor();
+    if (Recognition) {
+      try {
+        const recognition = new Recognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = DEFAULT_SPEECH_LANGUAGE;
+        recognition.onresult = (event) => {
+          let finalText = '';
+          let interimText = '';
+          for (let index = event.resultIndex; index < event.results.length; index += 1) {
+            const result = event.results[index];
+            const transcript = result?.[0]?.transcript?.trim() ?? '';
+            if (!transcript) continue;
+            if (result.isFinal) finalText = mergeTranscript(finalText, transcript);
+            else interimText = mergeTranscript(interimText, transcript);
+          }
+          if (finalText) {
+            setLiveTranscript((current) => {
+              const next = mergeTranscript(current, finalText);
+              setValue('content', next, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+              return next;
+            });
+          }
+          setLiveInterimTranscript(interimText);
+        };
+        recognition.onerror = (event) => {
+          setVoiceCaptureMode('error');
+          setAudioStatus(`Speech recognition failed${event.error ? `: ${event.error}` : ''}.`);
+        };
+        recognition.onend = () => {
+          if (speechRecognitionRef.current === recognition) {
+            setVoiceCaptureMode((current) => current === 'listening' ? 'idle' : current);
+          }
+        };
+        speechRecognitionRef.current = recognition;
+        recognition.start();
+        setVoiceCaptureMode('listening');
+        setAudioStatus('Listening. Speak and your words will appear in the message composer.');
+      } catch (error) {
+        setVoiceCaptureMode('error');
+        setAudioStatus(error instanceof Error ? error.message : 'Speech recognition could not start.');
+      }
+      return;
+    }
+    await startSttRecordingFallback();
+  }
+
+  async function startSttRecordingFallback(): Promise<void> {
+    if (!runtimeConfig.sttServiceUrl) {
+      setVoiceCaptureMode('error');
+      setAudioStatus('Browser speech recognition is unavailable and VITE_ASSISTANT_STT_URL is not configured.');
+      return;
+    }
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setVoiceCaptureMode('error');
+      setAudioStatus('Browser audio recording is not available.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordingChunksRef.current = [];
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const mimeType = recordingChunksRef.current[0]?.type || 'audio/webm';
+        const audio = new Blob(recordingChunksRef.current, { type: mimeType });
+        recordingChunksRef.current = [];
+        stopMediaStream();
+        void transcribeRecordedAudio(audio, mimeType);
+      };
+      recorder.start();
+      setVoiceCaptureMode('recording');
+      setAudioStatus('Recording voice input. End the call to transcribe it.');
+    } catch (error) {
+      setVoiceCaptureMode('error');
+      setAudioStatus(error instanceof Error ? error.message : 'Could not start voice recording.');
+      stopMediaStream();
+    }
+  }
+
+  async function transcribeRecordedAudio(audio: Blob, mimeType: string): Promise<void> {
+    if (!runtimeConfig.sttServiceUrl) return;
+    try {
+      setVoiceCaptureMode('transcribing');
+      setAudioStatus('Transcribing recorded voice input…');
+      const sttClient = createSttServiceClient({ baseUrl: runtimeConfig.sttServiceUrl, transport: createFetchSpeechServiceTransport() });
+      const response = await sttClient.transcribeAudio({ audio, filename: 'chatbot-live-voice.webm', mimeType });
+      const text = response.text.trim();
+      if (!text) {
+        setAudioStatus('No speech was detected in the recording.');
+        setVoiceCaptureMode('idle');
+        return;
+      }
+      setLiveTranscript((current) => {
+        const next = mergeTranscript(current, text);
+        setValue('content', next, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+        return next;
+      });
+      setLiveInterimTranscript('');
+      setVoiceCaptureMode('idle');
+      setAudioStatus('Voice input transcribed into the message composer.');
+    } catch (error) {
+      setVoiceCaptureMode('error');
+      setAudioStatus(error instanceof Error ? error.message : 'Voice transcription failed.');
+    }
+  }
+
+  function stopVoiceInput(): void {
+    const recognition = speechRecognitionRef.current;
+    speechRecognitionRef.current = null;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      try { recognition.stop(); } catch { recognition.abort(); }
+    }
+    const recorder = mediaRecorderRef.current;
+    mediaRecorderRef.current = null;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    } else {
+      stopMediaStream();
+    }
+    setLiveInterimTranscript('');
+    setVoiceCaptureMode((current) => current === 'transcribing' ? current : 'idle');
+  }
+
+  function stopMediaStream(): void {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+  }
+
+  function clearVoiceTranscript(): void {
+    setLiveTranscript('');
+    setLiveInterimTranscript('');
+    setValue('content', '', { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+    setAudioStatus('Voice transcript cleared.');
+  }
+
+  function sendVoiceTranscript(): void {
+    const content = (liveDraftText || composerContent).trim();
+    if (!content) {
+      setAudioStatus('Speak or type a message before sending voice text.');
+      return;
+    }
+    sendMutation.mutate({ content, providerId: selectedProviderId, modelId: selectedModelId });
   }
 
   async function playAssistantResponseAudio(text: string): Promise<void> {
@@ -198,25 +410,58 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       setAudioStatus('No assistant response is ready to play.');
       return;
     }
-    if (!runtimeConfig.ttsServiceUrl) {
-      setAudioStatus('Configure VITE_ASSISTANT_TTS_URL to play response audio.');
-      return;
-    }
     try {
       setAudioStatus(runtimeConfig.ttsVoice ? `Synthesizing ${runtimeConfig.ttsVoice} voice…` : 'Synthesizing response voice…');
-      const ttsClient = createTtsServiceClient({ baseUrl: runtimeConfig.ttsServiceUrl, transport: createFetchSpeechServiceTransport() });
-      const response = await ttsClient.synthesizeSpeech({
-        text: spokenText,
-        voice: runtimeConfig.ttsVoice,
-        format: 'wav',
-        metadata: { source: 'chatbot_response_playback', sessionId: activeSession?.id, providerId: selectedProviderId || runtimeConfig.defaultProviderId, modelId: selectedModelId || runtimeConfig.defaultModelId },
-      });
-      const audio = new Audio(getSynthesizedAudioSource(response));
+      const audioSource = runtimeConfig.ttsServiceUrl
+        ? await synthesizeWithTtsService(spokenText)
+        : await synthesizeWithVoiceJob(spokenText);
+      const audio = new Audio(audioSource);
       await audio.play();
       setAudioStatus(runtimeConfig.ttsVoice ? 'Playing cloned response voice.' : 'Playing response voice.');
     } catch (error) {
       setAudioStatus(error instanceof Error ? error.message : 'Response audio playback failed.');
     }
+  }
+
+  async function synthesizeWithTtsService(text: string): Promise<string> {
+    if (!runtimeConfig.ttsServiceUrl) throw new Error('TTS service URL is not configured.');
+    const ttsClient = createTtsServiceClient({ baseUrl: runtimeConfig.ttsServiceUrl, transport: createFetchSpeechServiceTransport() });
+    const response = await ttsClient.synthesizeSpeech({
+      text,
+      voice: runtimeConfig.ttsVoice,
+      format: 'wav',
+      metadata: { source: 'chatbot_response_playback', sessionId: activeSession?.id, providerId: selectedProviderId || runtimeConfig.defaultProviderId, modelId: selectedModelId || runtimeConfig.defaultModelId },
+    });
+    return getSynthesizedAudioSource(response);
+  }
+
+  async function synthesizeWithVoiceJob(text: string): Promise<string> {
+    setAudioStatus('Queueing local Voice Studio TTS job…');
+    const job = await omnixApiClient.createJob({
+      module: 'voice',
+      type: 'tts.synthesize',
+      resource_class: 'gpu:tts',
+      priority: 1,
+      input_payload: {
+        text,
+        provider_id: null,
+        speaker: 'Omnix Assistant',
+        voice_id: runtimeConfig.ttsVoice || null,
+        script_mode: 'single_speaker',
+        script_speakers: [{ name: 'Omnix Assistant', count: 1 }],
+        script_segments: [{ index: 0, speaker: 'Omnix Assistant', text }],
+        character_voice_assignments: [{ speaker: 'Omnix Assistant', voice_id: runtimeConfig.ttsVoice || null, style: 'Conversational', line_count: 1 }],
+        save_output: true,
+      },
+      stages: [
+        { id: 'synthesize-chatbot-response', label: 'Generate chatbot response speech', resource_class: 'gpu:tts', status: 'queued' },
+        { id: 'store-chatbot-response-audio', label: 'Save chatbot response audio', resource_class: 'cpu', status: 'queued' },
+      ],
+    }, { timeoutMs: 120_000, timeoutMessage: 'Voice synthesis timed out after 120s.' });
+    await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+    const source = getVoiceJobAudioSource(job);
+    if (!source) throw new Error(voiceJobErrorMessage(job) || 'Voice Studio did not return playable speech audio.');
+    return source;
   }
 
   return (
@@ -296,17 +541,17 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <div className="assistant-composer-controls" aria-label="Conversation controls">
                   <label><span>Provider</span><select {...register('providerId')} aria-label="Provider"><option value="">Default provider</option>{chatProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select></label>
                   <label><span>Model</span><select {...register('modelId')} aria-label="Model"><option value="">Default model</option>{chatModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select></label>
-                  <button type="button" className="assistant-composer-chip" onClick={() => void playAssistantResponseAudio(latestAssistantMessage?.content ?? '')} disabled={!latestAssistantMessage}><span>Voice</span><strong>{runtimeConfig.ttsVoice ? `Clone: ${runtimeConfig.ttsVoice}` : 'Ready'}</strong></button>
+                  <button type="button" className="assistant-composer-chip" onClick={() => void playAssistantResponseAudio(latestAssistantMessage?.content ?? '')} disabled={!latestAssistantMessage}><span>Voice</span><strong>{ttsOutputLabel}</strong></button>
                   <button className="assistant-composer-chip" type="button" onClick={() => showAssistantView('memory')}><span>Memory</span><strong>On</strong></button>
                   <button type="button" className="assistant-composer-chip" onClick={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }}><span>Tools</span><strong>{runtimeConfig.features.toolExecution ? `${enabledToolCount} Active` : 'Off'}</strong></button>
                   <button type="button" className="assistant-composer-chip" onClick={refreshActivityPanel}><span>Context</span><strong>{activeMessageCount > 0 ? 'Project Brief' : 'Ready'}</strong></button>
                 </div>
-                <label className="assistant-message-input"><span>Message</span><textarea rows={3} aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant..." {...register('content', { required: true })} /></label>
-                <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label="Start voice input" onClick={startLiveCall}>◉</button><button aria-label={sendMutation.isPending ? 'Generating response' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>{sendMutation.isPending ? 'Generating response…' : 'Send message'}</button></div>
+                <label className="assistant-message-input"><span>Message</span><textarea rows={3} aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant, or use the microphone…" {...register('content', { required: true })} /></label>
+                <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Generating response' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>{sendMutation.isPending ? 'Generating response…' : 'Send message'}</button></div>
               </form>
             </>
           ) : (
-            <AssistantWorkspaceView activeView={activeView} chatProviders={chatProviders} enabledToolCount={enabledToolCount} modelLabel={modelLabel} providerLabel={providerLabel} runtimeConfig={runtimeConfig} toolExecutionRows={toolExecutionRows.length} onStartLiveCall={startLiveCall} onShowTools={() => setActiveUtilityPanel('tools')} />
+            <AssistantWorkspaceView activeView={activeView} chatProviders={chatProviders} enabledToolCount={enabledToolCount} modelLabel={modelLabel} providerLabel={providerLabel} runtimeConfig={runtimeConfig} speechInputLabel={speechInputLabel} toolExecutionRows={toolExecutionRows.length} ttsOutputLabel={ttsOutputLabel} onStartLiveCall={startLiveCall} onShowTools={() => setActiveUtilityPanel('tools')} />
           )}
           <div className="assistant-inline-status" aria-live="polite">
             {errors.content ? <span role="alert">Enter a message before sending.</span> : null}
@@ -325,15 +570,17 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <div className="assistant-live-state" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>
               <div className="assistant-voice-orb" aria-hidden="true"><span /></div>
               <time className="assistant-call-timer" dateTime={`PT${Math.floor(callElapsedMs / 1000)}S`}>{liveCallTimerLabel}</time>
-              <div className="assistant-voice-controls"><button type="button" disabled={!liveVoiceActive}>Mute</button><button type="button" className={liveVoiceActive ? 'danger' : undefined} onClick={liveVoiceActive ? stopLiveCall : startLiveCall}>{liveVoiceActive ? 'End Call' : 'Start Call'}</button></div>
-              <div className="assistant-voice-transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button">Clear</button></div>{recentMessages.length ? recentMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>) : <p className="muted">Voice transcript will appear here during live calls.</p>}</div>
-              <div className="assistant-audio-devices"><header><h3>Audio Devices</h3><button type="button" aria-label="Audio device settings">Settings</button></header><div><span>Input</span><strong>MacBook Pro Microphone</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>MacBook Pro Speakers</strong><i aria-hidden="true" /></div></div>
+              <div className="assistant-voice-controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveVoiceActive ? 'danger' : undefined} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || !(liveDraftText || composerContent).trim()}>Send text</button></div>
+              <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => setAutoSpeakResponses(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
+              <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
+              <div className="assistant-voice-transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{recentMessages.length ? recentMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>) : <p className="muted">Voice transcript will appear here during live calls.</p>}</div>
+              <div className="assistant-audio-devices"><header><h3>Audio Services</h3><button type="button" onClick={() => void startVoiceInput()}>Test input</button></header><div><span>Input</span><strong>{speechInputLabel}</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>{ttsOutputLabel}</strong><i aria-hidden="true" /></div></div>
               <footer className="assistant-voice-status"><span>Voice Status</span><strong>{liveVoiceState}</strong></footer>
             </section>
             <section className="assistant-tool-sidebar-card" aria-labelledby="assistant-tool-execution-heading"><ToolExecutionPanel rows={toolExecutionRows} title="Tool execution" description="Review approvals and monitor tool execution results." /></section>
           </div>
           <div className="assistant-supporting-panels">
-            <AssistantWorkspaceDashboardPanel input={{ workspaceName: runtimeConfig.workspaceId, projectName: runtimeConfig.projectId ?? 'Chatbot', sessionTitle: activeSession?.title ?? 'New chat', sessionMode: 'text', providerLabel, modelLabel, messageCount: activeMessageCount, contextSourceCount: activeMessageCount > 0 ? 1 : 0, memoryCount: 0, knowledgeChunkCount: 0, enabledToolCount: runtimeConfig.features.toolExecution ? 1 : 0, qualitySignals: [{ id: 'session', label: 'Conversation session is available', passed: Boolean(activeSession?.id) || !selectedSessionId, severity: 'info' }, { id: 'provider', label: 'At least one chat provider is available', passed: providerQuery.isLoading || chatProviders.length > 0, severity: 'warning' }, { id: 'messages', label: 'Conversation projection can render messages', passed: Boolean(activeSession?.messages) || !activeSession, severity: 'info' }, { id: 'event-store', label: 'Workspace events are configured for persistence', passed: runtimeConfig.features.persistedEvents, severity: 'warning' }] }} />
+            <AssistantWorkspaceDashboardPanel input={{ workspaceName: runtimeConfig.workspaceId, projectName: runtimeConfig.projectId ?? 'Chatbot', sessionTitle: activeSession?.title ?? 'New chat', sessionMode: liveVoiceActive ? 'voice' : 'text', providerLabel, modelLabel, messageCount: activeMessageCount, contextSourceCount: activeMessageCount > 0 ? 1 : 0, memoryCount: 0, knowledgeChunkCount: 0, enabledToolCount: runtimeConfig.features.toolExecution ? 1 : 0, qualitySignals: [{ id: 'session', label: 'Conversation session is available', passed: Boolean(activeSession?.id) || !selectedSessionId, severity: 'info' }, { id: 'provider', label: 'At least one chat provider is available', passed: providerQuery.isLoading || chatProviders.length > 0, severity: 'warning' }, { id: 'stt', label: 'Speech-to-text input is available', passed: Boolean(getSpeechRecognitionConstructor() || runtimeConfig.sttServiceUrl), severity: 'warning' }, { id: 'tts', label: 'TTS playback can use service or Voice Studio jobs', passed: true, severity: 'info' }, { id: 'messages', label: 'Conversation projection can render messages', passed: Boolean(activeSession?.messages) || !activeSession, severity: 'info' }, { id: 'event-store', label: 'Workspace events are configured for persistence', passed: runtimeConfig.features.persistedEvents, severity: 'warning' }] }} />
             <AssistantWorkspaceActivityPanel events={activityEvents} />
           </div>
         </aside>
@@ -342,11 +589,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   );
 }
 
-function AssistantWorkspaceView({ activeView, chatProviders, enabledToolCount, modelLabel, onShowTools, onStartLiveCall, providerLabel, runtimeConfig, toolExecutionRows }: { activeView: Exclude<AssistantView, 'chats'>; chatProviders: ReturnType<typeof chatCapableProviders>; enabledToolCount: number; modelLabel: string; onShowTools: () => void; onStartLiveCall: () => void; providerLabel: string; runtimeConfig: AssistantWorkspaceRuntimeConfig; toolExecutionRows: number }) {
-  if (activeView === 'voice') return <section className="assistant-view-panel" aria-label="Voice Sessions view"><p className="eyebrow">Omnix Assistant</p><h2>Voice Sessions</h2><p>Manage live calls, speech input, transcript capture, cloned voice playback, and TTS/STT connectivity for the Omnix assistant.</p><div className="platform-grid"><article><h3>Live call</h3><p>Use the right-side Live Voice panel to start a WebSocket-backed call and capture the live transcript.</p><button type="button" onClick={onStartLiveCall}>Start Call</button></article><article><h3>Cloned voice playback</h3><p>{runtimeConfig.ttsVoice ? `Active cloned voice: ${runtimeConfig.ttsVoice}` : 'Configure VITE_ASSISTANT_TTS_VOICE to select the cloned response voice.'}</p></article></div></section>;
+function AssistantWorkspaceView({ activeView, chatProviders, enabledToolCount, modelLabel, onShowTools, onStartLiveCall, providerLabel, runtimeConfig, speechInputLabel, toolExecutionRows, ttsOutputLabel }: { activeView: Exclude<AssistantView, 'chats'>; chatProviders: ReturnType<typeof chatCapableProviders>; enabledToolCount: number; modelLabel: string; onShowTools: () => void; onStartLiveCall: () => void | Promise<void>; providerLabel: string; runtimeConfig: AssistantWorkspaceRuntimeConfig; speechInputLabel: string; toolExecutionRows: number; ttsOutputLabel: string }) {
+  if (activeView === 'voice') return <section className="assistant-view-panel" aria-label="Voice Sessions view"><p className="eyebrow">Omnix Assistant</p><h2>Voice Sessions</h2><p>Use browser speech-to-text or the configured STT service to draft messages, then play assistant replies through the TTS service or local Voice Studio jobs.</p><div className="platform-grid"><article><h3>Live call</h3><p>Input: {speechInputLabel}. Output: {ttsOutputLabel}.</p><button type="button" onClick={() => void onStartLiveCall()}>Start Call</button></article><article><h3>Response playback</h3><p>{runtimeConfig.ttsVoice ? `Active voice: ${runtimeConfig.ttsVoice}` : 'Chatbot will synthesize assistant replies with the default configured voice.'}</p></article></div></section>;
   if (activeView === 'tools') return <AssistantToolSettingsPanel enabledToolCount={enabledToolCount} toolExecutionRows={toolExecutionRows} onShowExecutionPanel={onShowTools} />;
   if (activeView === 'memory') return <section className="assistant-view-panel" aria-label="Memory view"><p className="eyebrow">Omnix Assistant</p><h2>Memory</h2><p>Review assistant-scoped memory and what is available to future chat, voice, tool, and context assembly flows.</p><div className="platform-grid"><article><h3>Project memory</h3><p>Project-scoped memories are enabled for this assistant workspace.</p></article><article><h3>Conversation memory</h3><p>Current session events are persisted and replayable through the assistant workspace event store.</p></article></div></section>;
-  return <section className="assistant-view-panel" aria-label="Settings view"><p className="eyebrow">Omnix Assistant</p><h2>Settings</h2><p>Review runtime configuration used by this assistant workspace.</p><dl className="assistant-settings-list"><div><dt>Provider</dt><dd>{providerLabel}</dd></div><div><dt>Model</dt><dd>{modelLabel}</dd></div><div><dt>Event storage</dt><dd>{runtimeConfig.features.persistedEvents ? runtimeConfig.eventStorageKey : 'In-memory only'}</dd></div><div><dt>Live assistant</dt><dd>{runtimeConfig.features.liveAssistant ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Tool execution</dt><dd>{runtimeConfig.features.toolExecution ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Available chat providers</dt><dd>{chatProviders.length}</dd></div></dl></section>;
+  return <section className="assistant-view-panel" aria-label="Settings view"><p className="eyebrow">Omnix Assistant</p><h2>Settings</h2><p>Review runtime configuration used by this assistant workspace.</p><dl className="assistant-settings-list"><div><dt>Provider</dt><dd>{providerLabel}</dd></div><div><dt>Model</dt><dd>{modelLabel}</dd></div><div><dt>Speech input</dt><dd>{speechInputLabel}</dd></div><div><dt>TTS output</dt><dd>{ttsOutputLabel}</dd></div><div><dt>Event storage</dt><dd>{runtimeConfig.features.persistedEvents ? runtimeConfig.eventStorageKey : 'In-memory only'}</dd></div><div><dt>Live assistant</dt><dd>{runtimeConfig.features.liveAssistant ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Tool execution</dt><dd>{runtimeConfig.features.toolExecution ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Available chat providers</dt><dd>{chatProviders.length}</dd></div></dl></section>;
 }
 
 function chatCapableProviders(payload: ProviderFacadePayload | undefined) { return payload?.providers.filter((provider) => provider.capabilities.includes('chat')) ?? []; }
@@ -365,3 +612,9 @@ function getSynthesizedAudioSource(response: TtsSynthesisResponse): string { if 
 function isPinnedSession(session: ApiChatSession): boolean { const metadata = 'metadata' in session ? (session as { metadata?: Record<string, unknown> }).metadata : undefined; return metadata?.pinned === true || metadata?.starred === true; }
 function sessionTitle(session: ApiChatSession): string { return session.title?.trim() || 'Untitled chat'; }
 function formatSessionTime(session: ApiChatSession): string { const timestamp = session.updated_at || session.created_at; if (!timestamp) return 'Recent'; return timestamp.includes('T') ? formatMessageTime(timestamp) : timestamp; }
+function mergeTranscript(current: string, next: string): string { return [current.trim(), next.trim()].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(); }
+function voiceCaptureLabel(mode: VoiceCaptureMode): string { if (mode === 'recording') return 'Recording'; if (mode === 'transcribing') return 'Transcribing'; if (mode === 'error') return 'Error'; if (mode === 'listening') return 'Listening'; return 'Ready'; }
+function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | undefined { if (typeof window === 'undefined') return undefined; const speechWindow = window as SpeechRecognitionWindow; return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition; }
+function getVoiceJobAudioSource(job: JobRecord): string | null { const refs = Array.isArray(job.output_refs) ? job.output_refs : []; for (const ref of refs) { const output = ref as VoiceJobOutputRef; if (isFallbackVoiceOutput(output)) continue; if (typeof output.data_url === 'string' && output.data_url.startsWith('data:audio/')) return output.data_url; if (typeof output.audio_url === 'string' && output.audio_url.trim()) return output.audio_url; } return null; }
+function isFallbackVoiceOutput(ref: VoiceJobOutputRef): boolean { if (ref.provider_fallback === true || ref.provider_success === false) return true; const segments = Array.isArray(ref.segments) ? ref.segments : []; return segments.some((segment) => { const row = segment as { provider_fallback?: unknown; provider_success?: unknown } | null; return row?.provider_fallback === true || row?.provider_success === false; }); }
+function voiceJobErrorMessage(job: JobRecord): string { if (job.status !== 'failed') return ''; const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio TTS job failed.'; }
