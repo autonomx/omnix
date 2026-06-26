@@ -136,7 +136,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         },
         stages: voiceSynthesisStages(scriptSegments),
       }),
-    onSuccess: async () => {
+    onSuccess: async (job) => {
+      selectFirstJobOutput(job, setSelectedOutputKey);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
         queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
@@ -165,7 +166,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
       },
       stages: voiceSynthesisStages([{ index: 0, speaker: 'Preview', text: 'Preview voice.' }]),
     }),
-    onSuccess: async () => {
+    onSuccess: async (job) => {
+      selectFirstJobOutput(job, setSelectedOutputKey);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
         queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
@@ -223,6 +225,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   );
   const playableOutputs = useMemo(() => extractPlayableOutputs(voiceJobs), [voiceJobs]);
   const currentOutput = playableOutputs.find((output) => output.key === selectedOutputKey) ?? playableOutputs[0] ?? null;
+  const currentOutputTitle = currentOutput?.title ?? (latestResultAsset ? voiceAssetName(latestResultAsset) : `${module.label} output`);
+  const latestPreviewTitle = currentOutput?.title ?? (latestResultAsset ? voiceAssetName(latestResultAsset) : 'No generated audio yet');
   const effectiveDuration = playbackDuration || currentOutput?.duration || estimateDurationFromText(scriptText);
   const submitStatus = createJobMutation.isPending ? 'queued' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
@@ -265,6 +269,14 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     const index = Math.max(0, playableOutputs.findIndex((output) => output.key === currentOutput?.key));
     const nextIndex = (index + offset + playableOutputs.length) % playableOutputs.length;
     setSelectedOutputKey(playableOutputs[nextIndex].key);
+  }
+
+  function selectJobOutput(jobId: string) {
+    const output = playableOutputs.find((entry) => entry.jobId === jobId);
+    if (output) {
+      setSelectedOutputKey(output.key);
+      setSaveMessage(`Selected ${output.title} for playback.`);
+    }
   }
 
   function seekPlayback(value: number) {
@@ -377,8 +389,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <Title order={4}>Jobs & Playback Queue</Title>
               <Text size="sm">Monitor synthesis jobs and replay results.</Text>
               <div className="queue-tabs"><button type="button">Active ({activeJobs(voiceJobs).length})</button><button type="button">Recent</button><button type="button">Failed ({voiceJobs.filter((job) => job.status === 'failed').length})</button></div>
-              <div className="queue-list-final">{(voiceJobs.length ? voiceJobs : demoJobs()).slice(0, 4).map((job) => <QueueRow job={job} key={job.id} />)}</div>
-              <div className="latest-preview-row"><Button size="xs" variant="subtle" onClick={() => void togglePlayback()}>{isPlaying ? 'Ⅱ' : '▶'}</Button><Waveform /><Text size="xs">{currentOutput?.title ?? latestResultAsset ? voiceAssetName(latestResultAsset as VoiceAsset) : 'No generated audio yet'}</Text></div>
+              <div className="queue-list-final">{(voiceJobs.length ? voiceJobs : demoJobs()).slice(0, 4).map((job) => <QueueRow job={job} key={job.id} onSelect={() => selectJobOutput(job.id)} selected={playableOutputs.some((output) => output.jobId === job.id && output.key === currentOutput?.key)} />)}</div>
+              <div className="latest-preview-row"><Button size="xs" variant="subtle" onClick={() => void togglePlayback()}>{isPlaying ? 'Ⅱ' : '▶'}</Button><Waveform /><Text size="xs">{latestPreviewTitle}</Text></div>
             </section>
           </div>
 
@@ -399,7 +411,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
           <footer className="now-playing-bar">
             <audio ref={audioRef} src={currentOutput?.dataUrl ?? undefined} preload="metadata" onLoadedMetadata={(event) => setPlaybackDuration(event.currentTarget.duration || currentOutput?.duration || 0)} onTimeUpdate={(event) => setPlaybackTime(event.currentTarget.currentTime)} onEnded={() => setIsPlaying(false)} />
-            <button type="button">⌃</button><div><b>Now Playing</b><span>{currentOutput?.title ?? latestResultAsset ? voiceAssetName(latestResultAsset as VoiceAsset) : `${module.label} output`} · {parsedSpeakers.length} speaker{parsedSpeakers.length === 1 ? '' : 's'}</span></div><button type="button" onClick={() => selectOutputOffset(-1)}>↢</button><button className="main-play" type="button" onClick={() => void togglePlayback()}>{isPlaying ? 'Ⅱ' : '▶'}</button><button type="button" onClick={() => selectOutputOffset(1)}>↣</button><span>{formatPlaybackTime(playbackTime)}</span><input aria-label="Voice playback position" className="now-playing-seek" type="range" min={0} max={Math.max(effectiveDuration, 0.1)} step="0.01" value={Math.min(playbackTime, effectiveDuration)} onChange={(event) => seekPlayback(Number(event.currentTarget.value))} /><span>{formatPlaybackTime(effectiveDuration)}</span><button type="button" onClick={downloadCurrentOutput}>⇩</button><button type="button">⋯</button></footer>
+            <button type="button">⌃</button><div><b>Now Playing</b><span>{currentOutputTitle} · {parsedSpeakers.length} speaker{parsedSpeakers.length === 1 ? '' : 's'}</span></div><button type="button" onClick={() => selectOutputOffset(-1)}>↢</button><button className="main-play" type="button" onClick={() => void togglePlayback()}>{isPlaying ? 'Ⅱ' : '▶'}</button><button type="button" onClick={() => selectOutputOffset(1)}>↣</button><span>{formatPlaybackTime(playbackTime)}</span><input aria-label="Voice playback position" className="now-playing-seek" type="range" min={0} max={Math.max(effectiveDuration, 0.1)} step="0.01" value={Math.min(playbackTime, effectiveDuration)} onChange={(event) => seekPlayback(Number(event.currentTarget.value))} /><span>{formatPlaybackTime(effectiveDuration)}</span><button type="button" onClick={downloadCurrentOutput}>⇩</button><button type="button">⋯</button></footer>
         </main>
       </div>
     </WorkspacePanel>
@@ -410,10 +422,10 @@ function VoiceLibraryRow({ asset, onPreview, onUse }: { asset: VoiceAsset; onPre
   return <div className="voice-library-row"><span><i>{voiceInitial(asset)}</i><b>{voiceAssetName(asset)}</b><small>{voiceProfileDescription(asset)}</small></span><span>{voiceProfileName(asset)}</span><span>Local Clone</span><span className="ready-chip">Ready</span><span><Button size="xs" variant="subtle" onClick={onPreview}>▶</Button><Button size="xs" variant="subtle" onClick={onUse}>Use</Button><Button size="xs" variant="subtle">⋯</Button></span></div>;
 }
 
-function QueueRow({ job }: { job: { id: string; type: string; status: string; module: string; progress?: { current: number; total: number }; stages?: Array<{ label?: string; status?: string }> } }) {
+function QueueRow({ job, onSelect, selected }: { job: { id: string; type: string; status: string; module: string; progress?: { current: number; total: number }; stages?: Array<{ label?: string; status?: string }> }; onSelect?: () => void; selected?: boolean }) {
   const progress = progressPercent(job.progress);
   const stageSummary = job.stages?.length ? `${job.stages.length} stages · ${job.stages.slice(0, 2).map((stage) => stage.label || stage.status || 'stage').join(', ')}` : job.module;
-  return <article className="queue-row-final"><span className="job-icon">▥</span><div><b>{job.type}</b><small>{stageSummary}</small></div><div><OmnixStatusPill>{job.status}</OmnixStatusPill>{progress ? <div className="queue-progress"><span style={{ width: `${progress}%` }} /></div> : null}</div><small>{progress || job.status === 'completed' ? `${progress}%` : '—'}</small><button type="button">⋯</button></article>;
+  return <article className={selected ? 'queue-row-final selected' : 'queue-row-final'}><span className="job-icon">▥</span><div><b>{job.type}</b><small>{stageSummary}</small></div><div><OmnixStatusPill>{job.status}</OmnixStatusPill>{progress ? <div className="queue-progress"><span style={{ width: `${progress}%` }} /></div> : null}</div><small>{progress || job.status === 'completed' ? `${progress}%` : '—'}</small><button type="button" onClick={onSelect}>▶</button></article>;
 }
 
 function AssignmentRow({ assets, index, speaker, voiceValue, styleValue, onPreview, onVoiceChange, onStyleChange }: { assets: VoiceAsset[]; index: number; speaker: ScriptSpeakerRow; voiceValue: string; styleValue: string; onPreview: (voiceId: string) => void; onVoiceChange: (voiceId: string) => void; onStyleChange: (style: string) => void }) {
@@ -489,6 +501,13 @@ function extractPlayableOutputs(jobs: JobRecord[]): PlayableVoiceOutput[] {
     }
   }
   return outputs;
+}
+
+function selectFirstJobOutput(job: JobRecord, setSelectedOutputKey: (key: string) => void): void {
+  const output = extractPlayableOutputs([job])[0];
+  if (output) {
+    setSelectedOutputKey(output.key);
+  }
 }
 
 function demoJobs() {
