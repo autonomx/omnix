@@ -70,7 +70,6 @@ def _install_optional_fast_runtime_hooks() -> None:
 
         install_fast_combat_narration_skip()
     except Exception:
-        # Runtime hook installation must never block normal session imports.
         return
 
     try:
@@ -78,7 +77,6 @@ def _install_optional_fast_runtime_hooks() -> None:
 
         install_fast_combat_presentation_hook()
     except Exception:
-        # Presentation hook installation must never block normal session imports.
         return
 
     try:
@@ -86,7 +84,6 @@ def _install_optional_fast_runtime_hooks() -> None:
 
         install_interactive_fast_combat_result_hook()
     except Exception:
-        # Interactive result hook installation must never block normal session imports.
         return
 
     try:
@@ -94,7 +91,6 @@ def _install_optional_fast_runtime_hooks() -> None:
 
         install_player_agency_runtime_hook()
     except Exception:
-        # Agency-option attachment must never block normal session imports.
         return
 
     try:
@@ -102,7 +98,6 @@ def _install_optional_fast_runtime_hooks() -> None:
 
         install_npc_dialogue_repair_hook()
     except Exception:
-        # Dialogue repair hook installation must never block normal session imports.
         return
 
     try:
@@ -110,7 +105,13 @@ def _install_optional_fast_runtime_hooks() -> None:
 
         install_interpretive_adjudication_hook()
     except Exception:
-        # Interpretive adjudication must never block normal session imports.
+        return
+
+    try:
+        from .contract_attachment import install_contract_attachment as install_contracts
+
+        install_contracts()
+    except Exception:
         return
 
     try:
@@ -118,7 +119,6 @@ def _install_optional_fast_runtime_hooks() -> None:
 
         install_diegetic_fallback_hook()
     except Exception:
-        # Diegetic fallback repair must never block normal session imports.
         return
 
 
@@ -130,11 +130,9 @@ __all__ = [
     "get_session",
     "list_sessions",
     "save_session",
-    # Phase 15.0
     "list_sessions_from_disk",
     "load_session_from_disk",
     "save_session_to_disk",
-    # Phase 7.1
     "assert_phase7_replay_checkpoint_foundation_ready",
     "build_replay_checkpoint_contract",
     "build_session_checkpoint",
@@ -142,31 +140,25 @@ __all__ = [
     "compare_session_checkpoints",
     "restore_session_from_checkpoint",
     "session_checkpoint_digest",
-    # Phase 7.2
     "assert_phase7_replay_turn_sequence_ready",
     "build_replay_turn_sequence_contract",
     "default_replay_command_handlers",
     "run_replay_turn_sequence",
     "validate_replay_turn_sequence",
-    # Phase 7.3
     "assert_phase7_save_load_replay_roundtrip_ready",
     "build_save_load_replay_roundtrip_contract",
     "run_save_load_replay_persistence_roundtrip",
-    # Phase 7.4
     "assert_phase7_100_turn_readiness_ready",
     "build_100_turn_readiness_contract",
     "build_100_turn_readiness_result",
-    # Phase 7.5
     "append_100_turn_readiness_report_to_campaign_report_html",
     "assert_phase7_100_turn_readiness_report_ready",
     "build_100_turn_readiness_report_contract",
     "build_100_turn_readiness_report_payload",
     "render_100_turn_readiness_report_html",
-    # Phase 7.6
     "assert_phase7_full_100_turn_certification_ready",
     "build_full_100_turn_certification_contract",
     "build_full_100_turn_certification_result",
-    # Phase 7.7
     "append_saved_100_turn_certification_to_campaign_report_html",
     "assert_phase7_real_autoplay_certification_artifact_ready",
     "build_real_autoplay_certification_artifact",
