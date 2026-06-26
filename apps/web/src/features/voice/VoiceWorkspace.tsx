@@ -50,7 +50,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     mutationFn: (values: VoiceFormValues) =>
       omnixApiClient.createJob({
         module: 'voice',
-        type: 'tts.synthesize',
+        type: parsedSpeakers.length > 1 ? 'tts.multi_speaker_synthesize' : 'tts.synthesize',
         resource_class: 'gpu:tts',
         priority: 0,
         input_payload: {
@@ -58,8 +58,11 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
           speaker: values.speaker || null,
           voice_id: values.voiceId || null,
           provider_id: values.providerId || null,
+          script_speakers: parsedSpeakers,
+          script_mode: parsedSpeakers.length > 1 ? 'multi_speaker' : 'single_speaker',
         },
         stages: [
+          { id: 'parse-script', label: 'Parse script', resource_class: 'cpu', status: 'queued' },
           { id: 'synthesize', label: 'Synthesize speech', resource_class: 'gpu:tts', status: 'queued' },
           { id: 'store-audio', label: 'Store audio asset', resource_class: 'cpu', status: 'queued' },
         ],
