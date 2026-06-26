@@ -3,7 +3,8 @@ export interface OutputDefaults {
   similarity: number;
   style: number;
   speed: number;
-  level: number;
+  pitch: number;
+  volume: number;
 }
 
 export const DEFAULT_OUTPUT_SETTINGS: OutputDefaults = {
@@ -11,5 +12,6 @@ export const DEFAULT_OUTPUT_SETTINGS: OutputDefaults = {
   similarity: 0.8,
   style: 0.35,
   speed: 1,
-  level: 0,
+  pitch: 0,
+  volume: 0,
 };
