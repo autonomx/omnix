@@ -15,6 +15,8 @@ import './features/storyteller/StorytellerWorkspace.css';
 import './features/storyteller/StorytellerSidebar.css';
 import './features/storyteller/StoryMode.css';
 import './features/storyteller/StoryThemeThumbnails.css';
+import './features/storyteller/StoryAudioEnhancer.css';
+import './features/storyteller/story-audio-enhancer';
 
 const queryClient = new QueryClient({
   defaultOptions: {
