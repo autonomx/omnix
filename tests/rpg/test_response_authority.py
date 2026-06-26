@@ -54,6 +54,16 @@ def test_system_authority_for_parse_noise() -> None:
     assert authority["metadata"]["reason"] == "parse_noise"
 
 
+def test_system_authority_for_provider_container_parse_noise() -> None:
+    from app.rpg.session.response_authority import resolve_response_authority
+
+    for player_input in ("[]", "{}", "tool_calls: []"):
+        authority = resolve_response_authority(player_input=player_input, intent_result={}, world_assessment={})
+
+        assert authority["source"] == "system"
+        assert authority["metadata"]["reason"] == "parse_noise"
+
+
 def test_packet_addressed_npc_can_supply_authority_target() -> None:
     from app.rpg.session.response_authority import resolve_response_authority
 
