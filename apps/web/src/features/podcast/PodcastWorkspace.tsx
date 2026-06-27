@@ -8,19 +8,37 @@ import { mockPodcastRelationships, mockPodcastSpeakerProfiles } from '../convers
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import type { PodcastFormat } from './types';
 import {
-  mockDirectorNote,
   mockDownloadAssetTiles,
   mockProductionAssetTiles,
   mockProductionStages,
   mockQualityGates,
   mockRecentPodcastJobs,
   mockSessionMetrics,
-  mockTranscriptLines,
   type MockProductionStage,
   type MockTranscriptLine,
 } from './mockProduction';
 import { buildReviewPolicy, generationStyleOptions, reviewStopOptions } from './reviewPolicy';
 import './PodcastWorkspace.css';
+
+interface VoiceOption {
+  id: string;
+  label: string;
+  source?: string;
+}
+
+interface SpeakerDraft {
+  id: string;
+  name: string;
+  role: string;
+  avatar: string;
+  identity: string;
+  beliefs: string;
+  personality: string;
+  speakingStyle: string;
+  goal: string;
+  instructions: string;
+  voiceDisplayName: string;
+}
 
 const formatOptions: Array<{ id: PodcastFormat; label: string; icon: string; description: string }> = [
   { id: 'debate', label: 'Debate', icon: '👥', description: 'Two or more opposing sides' },
@@ -28,7 +46,13 @@ const formatOptions: Array<{ id: PodcastFormat; label: string; icon: string; des
   { id: 'speech', label: 'Speech', icon: '♜', description: 'Solo host presentation' },
 ];
 
-const voiceOptions = ['Host – Confident Calm', 'Dr. Alex Morgan', 'Jordan Lee', 'Narrator – Warm Studio', 'Analyst – Crisp Focus'];
+const fallbackVoiceOptions: VoiceOption[] = [
+  { id: 'host_confident_calm', label: 'Host – Confident Calm', source: 'Fallback preset' },
+  { id: 'dr_alex_morgan', label: 'Dr. Alex Morgan', source: 'Fallback preset' },
+  { id: 'jordan_lee', label: 'Jordan Lee', source: 'Fallback preset' },
+  { id: 'narrator_warm_studio', label: 'Narrator – Warm Studio', source: 'Fallback preset' },
+  { id: 'analyst_crisp_focus', label: 'Analyst – Crisp Focus', source: 'Fallback preset' },
+];
 
 const liveInterventionResponses: Record<string, string> = {
   skeptical: 'Director applied live note: Guest B will challenge assumptions harder in the remaining script.',
@@ -36,6 +60,28 @@ const liveInterventionResponses: Record<string, string> = {
   shorter: 'Director applied live note: producer will compress the remaining segments and reduce turn length.',
   examples: 'Director applied live note: writer will add more concrete examples for the selected audience.',
 };
+
+const voiceEndpoints: Array<`/api/${string}`> = ['/api/voice-studio/voices', '/api/voices', '/api/voice/voices'];
+
+function speakerDraftFromProfile(profile: (typeof mockPodcastSpeakerProfiles)[number]): SpeakerDraft {
+  return {
+    id: profile.id,
+    name: profile.name,
+    role: profile.role,
+    avatar: profile.avatar,
+    identity: profile.identity,
+    beliefs: profile.beliefs.join(', '),
+    personality: profile.personality.join(', '),
+    speakingStyle: profile.speakingStyle.join(', '),
+    goal: profile.segmentGoals.map(({ goal }) => goal).join(' → ') || profile.defaultGoal,
+    instructions: '',
+    voiceDisplayName: profile.voiceMapping.voiceDisplayName,
+  };
+}
+
+function splitTags(value: string): string[] {
+  return value.split(/[,\n]/).map((tag) => tag.trim()).filter(Boolean);
+}
 
 function durationToSeconds(duration: string): number {
   return Number.parseInt(duration, 10) * 60;
@@ -46,14 +92,60 @@ function durationToClock(duration: string): string {
 }
 
 function nextTimestamp(lines: MockTranscriptLine[]): string {
-  const last = lines.at(-1)?.timestamp ?? '06:55';
+  const last = lines.at(-1)?.timestamp ?? '00:00';
   const [minutes, seconds] = last.split(':').map((part) => Number.parseInt(part, 10));
   const total = minutes * 60 + seconds + 14;
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
+function normalizeVoicePayload(payload: unknown): VoiceOption[] {
+  const records = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === 'object'
+      ? Object.values(payload as Record<string, unknown>).find((value) => Array.isArray(value)) as unknown[] | undefined
+      : undefined;
+
+  if (!records) {
+    return [];
+  }
+
+  return records.map((record) => {
+    if (typeof record === 'string') {
+      return { id: record, label: record, source: 'Cloned voice' };
+    }
+    if (!record || typeof record !== 'object') {
+      return null;
+    }
+    const item = record as Record<string, unknown>;
+    const id = String(item.id ?? item.voice_id ?? item.name ?? item.display_name ?? item.label ?? '').trim();
+    const label = String(item.display_name ?? item.name ?? item.label ?? item.voice_id ?? item.id ?? '').trim();
+    if (!id || !label) {
+      return null;
+    }
+    const source = String(item.kind ?? item.type ?? item.provider ?? 'Cloned voice');
+    return { id, label, source };
+  }).filter((voice): voice is VoiceOption => Boolean(voice));
+}
+
+async function loadClonedVoiceOptions(): Promise<VoiceOption[]> {
+  for (const endpoint of voiceEndpoints) {
+    try {
+      const voices = normalizeVoicePayload(await omnixApiClient.get<unknown>(endpoint));
+      if (voices.length) {
+        return voices;
+      }
+    } catch {
+      // Try the next known voice endpoint; some deployments expose cloned voices differently.
+    }
+  }
+  return [];
+}
+
 function statusToStageState(status: string | undefined, index: number, activeIndex: number): MockProductionStage['state'] {
   const normalized = String(status ?? '').toLowerCase();
+  if (['failed', 'error', 'cancelled', 'canceled'].includes(normalized)) {
+    return 'failed';
+  }
   if (['completed', 'complete', 'succeeded', 'success', 'done'].includes(normalized)) {
     return 'done';
   }
@@ -64,6 +156,14 @@ function statusToStageState(status: string | undefined, index: number, activeInd
     return index === activeIndex ? 'active' : index < activeIndex ? 'done' : 'pending';
   }
   return index < activeIndex ? 'done' : 'pending';
+}
+
+function isTerminalStatus(status: unknown): boolean {
+  return ['completed', 'complete', 'succeeded', 'success', 'done', 'failed', 'error', 'cancelled', 'canceled'].includes(String(status ?? '').toLowerCase());
+}
+
+function isFailedStatus(status: unknown): boolean {
+  return ['failed', 'error', 'cancelled', 'canceled'].includes(String(status ?? '').toLowerCase());
 }
 
 function jobTitle(job: { type: string; input_payload?: unknown }): string {
@@ -82,6 +182,12 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const jobsQuery = useQuery({
     queryKey: ['platform', 'jobs'],
     queryFn: () => omnixApiClient.listJobs(),
+    refetchInterval: 3_000,
+  });
+  const clonedVoicesQuery = useQuery({
+    queryKey: ['podcast', 'cloned-voices'],
+    queryFn: loadClonedVoiceOptions,
+    staleTime: 30_000,
   });
   const [title, setTitle] = useState('The Future of AI in Everyday Life');
   const [brief, setBrief] = useState(
@@ -94,41 +200,33 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [format, setFormat] = useState<PodcastFormat>('debate');
   const [generationStyle, setGenerationStyle] = useState<ProductionGenerationStyle>('automatic');
   const [manualReviewStops, setManualReviewStops] = useState<Array<keyof ReviewPolicy>>([]);
-  const [voiceSelections, setVoiceSelections] = useState<Record<string, string>>(() =>
-    Object.fromEntries(mockPodcastSpeakerProfiles.map((speaker) => [speaker.id, speaker.voiceMapping.voiceDisplayName]))
-  );
-  const [extraParticipants, setExtraParticipants] = useState(0);
-  const [transcriptLines, setTranscriptLines] = useState<MockTranscriptLine[]>(mockTranscriptLines);
+  const [speakerDrafts, setSpeakerDrafts] = useState<SpeakerDraft[]>(() => mockPodcastSpeakerProfiles.map(speakerDraftFromProfile));
+  const [transcriptLines, setTranscriptLines] = useState<MockTranscriptLine[]>([]);
   const [liveCommand, setLiveCommand] = useState('');
-  const [directorNote, setDirectorNote] = useState(mockDirectorNote);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [directorNote, setDirectorNote] = useState('No live production is running. Configure the episode, then press Generate live podcast.');
+  const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState('1.0x');
   const [actionMessage, setActionMessage] = useState('Ready for automatic production.');
 
   const reviewPolicy = buildReviewPolicy(generationStyle, generationStyle === 'guided' ? manualReviewStops : []);
   const podcastJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'podcast') ?? [];
+  const activePodcastJob = podcastJobs.find((job) => !isTerminalStatus(job.status));
+  const connectedJob = createJobMutationData(createJobMutation.data) ?? activePodcastJob ?? podcastJobs[0];
+  const connectedJobStages = connectedJob?.stages ?? [];
+  const connectedJobFailed = isFailedStatus(connectedJob?.status);
+  const liveProductionActive = createJobMutation.isPending || Boolean(connectedJob && !isTerminalStatus(connectedJob.status));
+  const livePanelStatus = createJobMutation.isPending ? 'QUEUEING' : connectedJob ? String(connectedJob.status).toUpperCase() : 'IDLE';
+  const clonedVoiceOptions = useMemo(() => {
+    const loaded = clonedVoicesQuery.data ?? [];
+    return loaded.length ? loaded : fallbackVoiceOptions;
+  }, [clonedVoicesQuery.data]);
 
-  const displayedSpeakers = useMemo(() => {
-    if (extraParticipants <= 0) {
-      return mockPodcastSpeakerProfiles;
+  function voiceChoicesFor(selectedVoice: string): VoiceOption[] {
+    if (clonedVoiceOptions.some((voice) => voice.label === selectedVoice)) {
+      return clonedVoiceOptions;
     }
-    return [
-      ...mockPodcastSpeakerProfiles,
-      ...Array.from({ length: extraParticipants }, (_, index) => ({
-        ...mockPodcastSpeakerProfiles[2],
-        id: `guest_extra_${index + 1}`,
-        name: `Guest ${String.fromCharCode(67 + index)}`,
-        role: 'Guest Analyst',
-        avatar: `G${String.fromCharCode(67 + index)}`,
-        voiceMapping: {
-          speakerId: `guest_extra_${index + 1}`,
-          voiceId: `guest_extra_${index + 1}`,
-          voiceDisplayName: 'Analyst – Crisp Focus',
-          previewAvailable: true,
-        },
-      })),
-    ];
-  }, [extraParticipants]);
+    return [{ id: selectedVoice, label: selectedVoice, source: 'Selected voice' }, ...clonedVoiceOptions];
+  }
 
   const createJobMutation = useMutation({
     mutationFn: () =>
@@ -148,11 +246,22 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
           generation_style: generationStyle,
           review_policy: reviewPolicy,
           renderer: 'podcast',
-          speakers: displayedSpeakers.map((speaker) => ({
-            ...speaker,
+          speakers: speakerDrafts.map((speaker) => ({
+            id: speaker.id,
+            name: speaker.name,
+            role: speaker.role,
+            avatar: speaker.avatar,
+            identity: speaker.identity,
+            beliefs: splitTags(speaker.beliefs),
+            personality: splitTags(speaker.personality),
+            speakingStyle: splitTags(speaker.speakingStyle),
+            defaultGoal: speaker.goal,
+            speakerInstructions: speaker.instructions,
             voiceMapping: {
-              ...speaker.voiceMapping,
-              voiceDisplayName: voiceSelections[speaker.id] ?? speaker.voiceMapping.voiceDisplayName,
+              speakerId: speaker.id,
+              voiceId: speaker.voiceDisplayName,
+              voiceDisplayName: speaker.voiceDisplayName,
+              previewAvailable: true,
             },
           })),
           relationships: mockPodcastRelationships,
@@ -180,39 +289,69 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
         })),
       }),
     onMutate: () => {
-      setDirectorNote('Director started production. Research is queued and the stage rail is now following the shared job state.');
+      setIsPlaying(true);
+      setDirectorNote('Director started production. Research is queued and the live panel is waiting for job updates.');
+      setTranscriptLines([{ timestamp: '00:00', speaker: 'Director', text: 'Production started. Waiting for Research stage events.' }]);
       setActionMessage('Podcast production is starting…');
     },
     onSuccess: async (job) => {
       setDirectorNote(`Director queued ${job.type}. Live production is tracking job ${job.id}.`);
+      setTranscriptLines((lines) => [...lines, { timestamp: nextTimestamp(lines), speaker: 'Director', text: `Job ${job.id} queued. Stage updates will appear as the backend reports progress.` }]);
       setActionMessage('Podcast production queued and connected to the live panel.');
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
+    onError: () => {
+      setIsPlaying(false);
+      setDirectorNote('Podcast job creation failed. Update the request and try again.');
+      setTranscriptLines((lines) => [...lines, { timestamp: nextTimestamp(lines), speaker: 'Director', text: 'Job creation failed before live production could start.' }]);
+    },
   });
 
-  const connectedJob = createJobMutation.data ?? podcastJobs[0];
-  const connectedJobStages = connectedJob?.stages ?? [];
   const firstIncompleteStage = connectedJobStages.findIndex((stage) => !['completed', 'done', 'success'].includes(String(stage.status).toLowerCase()));
-  const activeStageIndex = createJobMutation.isPending ? 0 : connectedJob ? (firstIncompleteStage >= 0 ? firstIncompleteStage : connectedJobStages.length - 1) : 3;
+  const activeStageIndex = createJobMutation.isPending ? 0 : connectedJob ? (firstIncompleteStage >= 0 ? firstIncompleteStage : connectedJobStages.length - 1) : -1;
   const productionStages = connectedJobStages.length
     ? connectedJobStages.map((stage, index) => ({
         id: String(stage.id) as MockProductionStage['id'],
         label: stage.label,
         state: statusToStageState(stage.status, index, activeStageIndex),
       }))
-    : mockProductionStages;
+    : mockProductionStages.map((stage) => ({ ...stage, state: 'pending' as const }));
   const recentJobs = podcastJobs.length
     ? podcastJobs.slice(0, 3).map((job) => ({ name: jobTitle(job), status: job.status, duration }))
     : mockRecentPodcastJobs;
   const showBriefError = brief.trim().length === 0 && createJobMutation.isIdle === false;
   const reviewModeBadge = generationStyle === 'automatic' ? 'Auto-approved' : `${manualReviewStops.length || 0} review stop${manualReviewStops.length === 1 ? '' : 's'}`;
+  const effectiveDirectorNote = connectedJobFailed
+    ? `Last podcast job failed. Fix the request or regenerate to start a new live production run.`
+    : directorNote;
 
   function toggleReviewStop(stopId: keyof ReviewPolicy) {
     setManualReviewStops((current) => (current.includes(stopId) ? current.filter((id) => id !== stopId) : [...current, stopId]));
   }
 
+  function updateSpeaker(id: string, field: keyof SpeakerDraft, value: string) {
+    setSpeakerDrafts((speakers) => speakers.map((speaker) => speaker.id === id ? { ...speaker, [field]: value } : speaker));
+  }
+
+  function addParticipant() {
+    const nextIndex = speakerDrafts.length + 1;
+    setSpeakerDrafts((speakers) => [...speakers, {
+      id: `guest_${nextIndex}`,
+      name: `Guest ${String.fromCharCode(64 + nextIndex)}`,
+      role: 'Guest Analyst',
+      avatar: `G${String.fromCharCode(64 + nextIndex)}`,
+      identity: 'Guest Analyst',
+      beliefs: '',
+      personality: '',
+      speakingStyle: '',
+      goal: '',
+      instructions: '',
+      voiceDisplayName: clonedVoiceOptions[0]?.label ?? 'Select cloned voice',
+    }]);
+  }
+
   function handleVoicePreview(speakerName: string) {
-    setDirectorNote(`Voice preview requested for ${speakerName}. The selected cloned voice is now staged for this participant.`);
+    setDirectorNote(`Voice preview requested for ${speakerName}. The selected cloned voice is staged for this participant.`);
     setActionMessage(`Previewing voice for ${speakerName}.`);
   }
 
@@ -221,17 +360,14 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (!command) {
       return;
     }
+    if (!liveProductionActive) {
+      setActionMessage('Live edits apply during an active production run. Press Generate live podcast first.');
+      return;
+    }
     const lowered = command.toLowerCase();
     const response = Object.entries(liveInterventionResponses).find(([keyword]) => lowered.includes(keyword))?.[1] ?? `Director applied live note: ${command}`;
     setDirectorNote(response);
-    setTranscriptLines((lines) => [
-      ...lines,
-      {
-        timestamp: nextTimestamp(lines),
-        speaker: 'Director',
-        text: response,
-      },
-    ]);
+    setTranscriptLines((lines) => [...lines, { timestamp: nextTimestamp(lines), speaker: 'Director', text: response }]);
     setActionMessage('Live intervention applied to the remaining production run.');
     setLiveCommand('');
   }
@@ -307,23 +443,27 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
             </article>
 
             <article className="podcast-card">
-              <h3>⚭ 2. Participants & voice casting</h3>
-              <div className="speaker-table" role="table" aria-label="Podcast participants and voice casting">
-                <div className="speaker-row speaker-header" role="row"><span>Speaker</span><span>Identity</span><span>Beliefs</span><span>Personality</span><span>Speaking style</span><span>Goal this episode</span><span>Cloned voice</span><span>Preview</span></div>
-                {displayedSpeakers.map((speaker) => (
-                  <div className="speaker-row" role="row" key={speaker.id}>
-                    <span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><strong>{speaker.name}</strong><small>{speaker.role}</small></span></span>
-                    <span>{speaker.identity}</span>
-                    <span className="tag-stack">{speaker.beliefs.map((belief) => <b key={belief}>{belief}</b>)}</span>
-                    <span className="tag-stack green">{speaker.personality.map((trait) => <b key={trait}>{trait}</b>)}</span>
-                    <span className="tag-stack blue">{speaker.speakingStyle.map((style) => <b key={style}>{style}</b>)}</span>
-                    <span className="tag-stack purple"><b>{speaker.segmentGoals.map(({ goal }) => goal).join(' → ') || speaker.defaultGoal}</b></span>
-                    <span><select value={voiceSelections[speaker.id] ?? speaker.voiceMapping.voiceDisplayName} onChange={(event) => setVoiceSelections((current) => ({ ...current, [speaker.id]: event.target.value }))}>{voiceOptions.map((voice) => <option key={voice}>{voice}</option>)}</select></span>
+              <div className="card-heading-row">
+                <h3>⚭ 2. Participants & voice casting</h3>
+                <small>{clonedVoicesQuery.data?.length ? 'Loaded cloned voices' : 'Using fallback voice presets until cloned voices are available'}</small>
+              </div>
+              <div className="speaker-table editable-speaker-table" role="table" aria-label="Podcast participants and voice casting">
+                <div className="speaker-row speaker-header" role="row"><span>Speaker</span><span>Identity</span><span>Beliefs</span><span>Personality</span><span>Speaking style</span><span>Goal this episode</span><span>Instructions</span><span>Cloned voice</span><span>Preview</span></div>
+                {speakerDrafts.map((speaker) => (
+                  <div className="speaker-row editable-speaker-row" role="row" key={speaker.id}>
+                    <span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><input value={speaker.name} onChange={(event) => updateSpeaker(speaker.id, 'name', event.target.value)} aria-label={`${speaker.name} name`} /><input value={speaker.role} onChange={(event) => updateSpeaker(speaker.id, 'role', event.target.value)} aria-label={`${speaker.name} role`} /></span></span>
+                    <span><input value={speaker.identity} onChange={(event) => updateSpeaker(speaker.id, 'identity', event.target.value)} aria-label={`${speaker.name} identity`} /></span>
+                    <span><textarea rows={2} value={speaker.beliefs} onChange={(event) => updateSpeaker(speaker.id, 'beliefs', event.target.value)} placeholder="Optimistic, Tech-first" aria-label={`${speaker.name} beliefs`} /></span>
+                    <span><textarea rows={2} value={speaker.personality} onChange={(event) => updateSpeaker(speaker.id, 'personality', event.target.value)} placeholder="Warm, Direct" aria-label={`${speaker.name} personality`} /></span>
+                    <span><textarea rows={2} value={speaker.speakingStyle} onChange={(event) => updateSpeaker(speaker.id, 'speakingStyle', event.target.value)} placeholder="Conversational, Punchy" aria-label={`${speaker.name} speaking style`} /></span>
+                    <span><textarea rows={2} value={speaker.goal} onChange={(event) => updateSpeaker(speaker.id, 'goal', event.target.value)} placeholder="Educate → Defend" aria-label={`${speaker.name} goal`} /></span>
+                    <span><textarea rows={2} value={speaker.instructions} onChange={(event) => updateSpeaker(speaker.id, 'instructions', event.target.value)} placeholder="Extra personality, pacing, conflict, or behavior notes…" aria-label={`${speaker.name} instructions`} /></span>
+                    <span><select value={speaker.voiceDisplayName} onChange={(event) => updateSpeaker(speaker.id, 'voiceDisplayName', event.target.value)}>{voiceChoicesFor(speaker.voiceDisplayName).map((voice) => <option key={`${speaker.id}-${voice.id}`} value={voice.label}>{voice.label}{voice.source ? ` · ${voice.source}` : ''}</option>)}</select></span>
                     <span className="speaker-preview"><button type="button" onClick={() => handleVoicePreview(speaker.name)}>▥</button><button type="button" onClick={() => setActionMessage(`${speaker.name} actions opened.`)}>⋮</button></span>
                   </div>
                 ))}
               </div>
-              <button className="ghost-button" type="button" onClick={() => setExtraParticipants((count) => count + 1)}>+ Add participant</button>
+              <button className="ghost-button" type="button" onClick={addParticipant}>+ Add participant</button>
             </article>
 
             <article className="podcast-card relationship-card">
@@ -342,14 +482,16 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </section>
 
           <section className="podcast-live-column">
-            <article className="podcast-card live-production-card">
-              <div className="card-heading-row"><h3>◌ Live production</h3><span className="auto-badge">{reviewModeBadge}</span></div>
-              <div className="stage-rail">{productionStages.map((stage, index) => <span key={`${stage.id}-${stage.label}`} className={stage.state === 'done' ? 'done' : stage.state === 'active' ? 'active' : undefined}>{stage.state === 'done' ? '✓' : index + 1}<small>{stage.label}</small></span>)}</div>
-              <div className="director-note"><b>Director</b><span>{directorNote}</span><button type="button" onClick={() => setActionMessage('Director details toggled.')}>⌄</button></div>
-              <div className="waveform" aria-hidden="true">{Array.from({ length: 64 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17 + transcriptLines.length * 5) % 42)}px` }} />)}</div>
-              <div className="live-transcript">{transcriptLines.map((line) => <p key={`${line.timestamp}-${line.speaker}-${line.text}`}><time>{line.timestamp}</time><b>{line.speaker}</b><span>{line.text}</span></p>)}</div>
-              <div className="playback-row"><button type="button" onClick={() => setIsPlaying((playing) => !playing)}>{isPlaying ? 'Ⅱ' : '▶'}</button><span>▁▁▁▁▁▁</span><strong>06:42 / {durationToClock(duration)}</strong><select value={playbackRate} onChange={(event) => setPlaybackRate(event.target.value)}><option>0.8x</option><option>1.0x</option><option>1.25x</option></select><small>{connectedJob ? String(connectedJob.status).toUpperCase() : 'LIVE'} ▥</small></div>
-              <form className="live-command" onSubmit={(event) => { event.preventDefault(); handleLiveCommandSubmit(); }}><input value={liveCommand} onChange={(event) => setLiveCommand(event.target.value)} placeholder="Make Guest B more skeptical…" /><button type="submit">▷</button></form>
+            <article className={`podcast-card live-production-card ${liveProductionActive ? 'streaming' : 'idle'}`}>
+              <div className="card-heading-row"><h3>◌ Live production</h3><span className="auto-badge">{livePanelStatus}</span></div>
+              <div className="stage-rail">{productionStages.map((stage, index) => <span key={`${stage.id}-${stage.label}`} className={stage.state}>{stage.state === 'done' ? '✓' : stage.state === 'failed' ? '!' : index + 1}<small>{stage.label}</small></span>)}</div>
+              <div className="director-note"><b>Director</b><span>{effectiveDirectorNote}</span><button type="button" onClick={() => setActionMessage('Director details toggled.')}>⌄</button></div>
+              <div className={`waveform ${liveProductionActive ? 'streaming' : 'idle'}`} aria-hidden="true">{Array.from({ length: 64 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17 + transcriptLines.length * 5) % 42)}px` }} />)}</div>
+              <div className="live-transcript">
+                {transcriptLines.length ? transcriptLines.map((line) => <p key={`${line.timestamp}-${line.speaker}-${line.text}`}><time>{line.timestamp}</time><b>{line.speaker}</b><span>{line.text}</span></p>) : <div className="live-empty-state"><strong>{connectedJobFailed ? 'Production failed' : 'No live transcript yet'}</strong><span>{connectedJobFailed ? 'The last podcast job reported a failure. Regenerate to start a clean live run.' : 'Press Generate live podcast to start Research, Producer Plan, Script, Voice Takes, Mix, and Renderer events.'}</span></div>}
+              </div>
+              <div className="playback-row"><button type="button" disabled={!liveProductionActive} onClick={() => setIsPlaying((playing) => !playing)}>{isPlaying ? 'Ⅱ' : '▶'}</button><span>▁▁▁▁▁▁</span><strong>06:42 / {durationToClock(duration)}</strong><select value={playbackRate} onChange={(event) => setPlaybackRate(event.target.value)}><option>0.8x</option><option>1.0x</option><option>1.25x</option></select><small>{livePanelStatus} ▥</small></div>
+              <form className="live-command" onSubmit={(event) => { event.preventDefault(); handleLiveCommandSubmit(); }}><input value={liveCommand} disabled={!liveProductionActive} onChange={(event) => setLiveCommand(event.target.value)} placeholder={liveProductionActive ? 'Make Guest B more skeptical…' : 'Start generation to edit the live run…'} /><button type="submit" disabled={!liveProductionActive || !liveCommand.trim()}>▷</button></form>
             </article>
           </section>
 
@@ -366,7 +508,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
             <h3>⚙ Podcast outputs ⓘ</h3>
             <div className="output-layout">
               <div className="cover-art">AI<br />EVERYDAY<br />LIFE</div>
-              <div className="output-copy"><h4>{title || 'Untitled episode'} <span>{connectedJob ? String(connectedJob.status).toUpperCase() : 'LIVE'}</span></h4><small>{formatOptions.find((option) => option.id === format)?.label} • {displayedSpeakers.length} voices • {duration}</small><p>A deep dive for {audience.toLowerCase()} in a {tone.toLowerCase()} tone — with transcript, citations, chapters, and downloadable audio assets.</p><b>AI</b><b>Future</b><b>Technology</b></div>
+              <div className="output-copy"><h4>{title || 'Untitled episode'} <span>{connectedJob ? String(connectedJob.status).toUpperCase() : 'IDLE'}</span></h4><small>{formatOptions.find((option) => option.id === format)?.label} • {speakerDrafts.length} voices • {duration}</small><p>A deep dive for {audience.toLowerCase()} in a {tone.toLowerCase()} tone — with transcript, citations, chapters, and downloadable audio assets.</p><b>AI</b><b>Future</b><b>Technology</b></div>
               <div className="download-grid">{mockDownloadAssetTiles.map((asset) => <button key={asset.label} type="button" onClick={() => handleAssetAction(asset.label, 'Download')}><span>{asset.icon}</span><strong>{asset.label}</strong><small>{asset.metadata}</small></button>)}<button type="button" className="download-all" onClick={() => setActionMessage('Download all requested.')}>Download all ⇩</button><button type="button" onClick={handleCopyLink}>Copy link</button><button type="button" onClick={() => createJobMutation.mutate()}>Regenerate</button></div>
             </div>
           </article>
@@ -375,4 +517,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
       </div>
     </WorkspacePanel>
   );
+}
+
+function createJobMutationData<TJob>(job: TJob | undefined): TJob | undefined {
+  return job;
 }
