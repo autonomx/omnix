@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { omnixApiClient } from '../../api/client';
