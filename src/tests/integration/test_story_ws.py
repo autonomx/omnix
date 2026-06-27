@@ -24,7 +24,7 @@ def _story_source():
 def _function_body(name):
     src = _story_source()
     match = re.search(
-        rf"function {re.escape(name)}\s*\([^)]*\)\s*\{{.*?(?=\n    function |\n    async function |\n    // -{{5,}}|\n    if \(document|\n\}}\)\(\);|\Z)",
+        rf"(?:async\s+)?function {re.escape(name)}\s*\([^)]*\)\s*\{{.*?(?=\n    function |\n    async function |\n    // -{{5,}}|\n    if \(document|\n\}}\)\(\);|\Z)",
         src,
         re.DOTALL,
     )
