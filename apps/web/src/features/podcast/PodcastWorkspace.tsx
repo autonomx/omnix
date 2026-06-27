@@ -49,7 +49,7 @@ function speakerDraftFromProfile(profile: (typeof mockPodcastSpeakerProfiles)[nu
 function splitTags(value: string): string[] { return value.split(/[,\n]/).map((tag) => tag.trim()).filter(Boolean); }
 function durationToSeconds(duration: string): number { return Number.parseInt(duration, 10) * 60; }
 function durationToClock(duration: string): string { return `${Number.parseInt(duration, 10)}:00`; }
-function nextTimestamp(lines: MockTranscriptLine[]): string { const last = lines.at(-1)?.timestamp ?? '00:00'; const [minutes, seconds] = last.split(':').map((part) => Number.parseInt(part, 10)); const total = minutes * 60 + seconds + 14; return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`; }
+function nextTimestamp(lines: MockTranscriptLine[]): string { const last = lines.length ? lines[lines.length - 1].timestamp : '00:00'; const [minutes, seconds] = last.split(':').map((part) => Number.parseInt(part, 10)); const total = minutes * 60 + seconds + 14; return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`; }
 function normalizeVoicePayload(payload: unknown): VoiceOption[] {
   const records = Array.isArray(payload) ? payload : payload && typeof payload === 'object' ? Object.values(payload as Record<string, unknown>).find((value) => Array.isArray(value)) as unknown[] | undefined : undefined;
   if (!records) return [];
