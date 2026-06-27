@@ -2,6 +2,7 @@ import * as React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { StoryAudioPanel } from './StoryAudioPanel';
 import { StoryCastPanel } from './StoryCastPanel';
+import { StoryChapterAudioPanel } from './StoryChapterAudioPanel';
 import { StoryDocumentPanel } from './StoryDocumentPanel';
 import { StoryVoiceCastPanel } from './StoryVoiceCastPanel';
 
@@ -17,6 +18,7 @@ function StorytellerAudioAndCast() {
     React.createElement(StoryAudioPanel, { key: 'audio' }),
     React.createElement(StoryCastPanel, { key: 'cast' }),
     React.createElement(StoryVoiceCastPanel, { key: 'voice-cast' }),
+    React.createElement(StoryChapterAudioPanel, { key: 'chapter-audio' }),
     React.createElement(StoryDocumentPanel, { key: 'document' }),
   ]);
 }
