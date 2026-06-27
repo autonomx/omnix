@@ -2,41 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
 import { assignmentRowsFromSegments, mapStoryToAudioSegments, speakerRowsFromSegments, type StoryAudioScriptSegment } from './storyAudioMapper';
 
-export type StoryAudioVoiceOption = {
-  id: string;
-  label: string;
-};
-
+export type StoryAudioVoiceOption = { id: string; label: string };
 export type StoryAudioSegment = StoryAudioScriptSegment & { title?: string };
 
 type StoryAudioStatus = 'ready' | 'loading_voices' | 'queued' | 'running' | 'completed' | 'failed';
-
-type StoryAudioJobOutputRef = {
-  data_url?: unknown;
-  audio_url?: unknown;
-  url?: unknown;
-  provider_fallback?: unknown;
-  provider_success?: unknown;
-  segments?: unknown;
-};
-
+type StoryAudioJobOutputRef = { data_url?: unknown; audio_url?: unknown; url?: unknown; provider_fallback?: unknown; provider_success?: unknown; segments?: unknown };
 type StoryAudioStreamControlMessage =
   | { type: 'start'; total_segments?: number }
   | { type: 'segment'; index?: number; speaker?: string; text?: string }
   | { type: 'done'; job_id?: string }
   | { type: 'stopped' }
   | { type: 'error'; message?: string; error?: string };
-
-type StoryAudioRealtimeResult = {
-  audioUrl: string;
-  chunkCount: number;
-};
-
-type StoryAudioRealtimeCallbacks = {
-  signal: AbortSignal;
-  onProgress: (progress: number) => void;
-  onStatusMessage: (message: string) => void;
-};
+type StoryAudioRealtimeResult = { audioUrl: string; chunkCount: number };
+type StoryAudioRealtimeCallbacks = { signal: AbortSignal; onProgress: (progress: number) => void; onStatusMessage: (message: string) => void };
 
 const STORY_AUDIO_SELECTED_VOICE_KEY = 'omnix.storyteller.audio.selectedVoiceId';
 const STORY_AUDIO_POLL_INTERVAL_MS = 1_500;
@@ -368,17 +346,13 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
     const audioContext = new AudioContext({ sampleRate: STORY_AUDIO_STREAM_SAMPLE_RATE, latencyHint: 'interactive' });
     const pcmChunks: Uint8Array[] = [];
     const voiceMapping = buildVoiceMappingFromSegments(segments, fallbackVoiceId);
-    const url = defaultStoryAudioWebSocketUrl(window.location);
-    const socket = new WebSocket(url);
+    const socket = new WebSocket(defaultStoryAudioWebSocketUrl(window.location));
     socket.binaryType = 'arraybuffer';
     let finished = false;
     let totalSegments = segments.length;
     let nextPlaybackTime = audioContext.currentTime;
 
-    const cleanup = () => {
-      callbacks.signal.removeEventListener('abort', abort);
-    };
-
+    const cleanup = () => callbacks.signal.removeEventListener('abort', abort);
     const finish = (result: StoryAudioRealtimeResult) => {
       if (finished) return;
       finished = true;
@@ -388,7 +362,6 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
       window.setTimeout(() => { void audioContext.close().catch(() => undefined); }, drainMs);
       resolve(result);
     };
-
     const fail = (error: unknown) => {
       if (finished) return;
       finished = true;
@@ -397,7 +370,6 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
       void audioContext.close().catch(() => undefined);
       reject(error instanceof Error ? error : new Error('Realtime story audio failed.'));
     };
-
     function abort() {
       try {
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'stop' }));
@@ -458,18 +430,13 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
           fail(makeAbortError('Story audio stream was stopped.'));
           return;
         }
-        if (message.type === 'error') {
-          fail(new Error(message.message || message.error || 'Realtime story audio stream failed.'));
-        }
+        if (message.type === 'error') fail(new Error(message.message || message.error || 'Realtime story audio stream failed.'));
       } catch (error) {
         fail(error);
       }
     };
-
     socket.onerror = () => fail(new Error('Realtime story audio websocket failed.'));
-    socket.onclose = () => {
-      if (!finished) fail(new Error('Realtime story audio websocket closed before completion.'));
-    };
+    socket.onclose = () => { if (!finished) fail(new Error('Realtime story audio websocket closed before completion.')); };
   });
 }
 
@@ -492,13 +459,9 @@ function defaultStoryAudioWebSocketUrl(locationLike: Pick<Location, 'protocol' |
 function schedulePcmChunk(audioContext: AudioContext, chunk: ArrayBuffer, nextPlaybackTime: number): number {
   const pcm16 = new Int16Array(chunk);
   if (!pcm16.length) return nextPlaybackTime;
-
   const audioBuffer = audioContext.createBuffer(1, pcm16.length, STORY_AUDIO_STREAM_SAMPLE_RATE);
   const channel = audioBuffer.getChannelData(0);
-  for (let index = 0; index < pcm16.length; index += 1) {
-    channel[index] = Math.max(-1, Math.min(1, pcm16[index] / 32768));
-  }
-
+  for (let index = 0; index < pcm16.length; index += 1) channel[index] = Math.max(-1, Math.min(1, pcm16[index] / 32768));
   const source = audioContext.createBufferSource();
   source.buffer = audioBuffer;
   source.connect(audioContext.destination);
@@ -514,7 +477,6 @@ function pcmChunksToWavBlob(chunks: Uint8Array[], sampleRate: number): Blob {
   const channels = 1;
   const byteRate = sampleRate * channels * 2;
   const blockAlign = channels * 2;
-
   writeAscii(view, 0, 'RIFF');
   view.setUint32(4, 36 + dataSize, true);
   writeAscii(view, 8, 'WAVE');
@@ -528,10 +490,11 @@ function pcmChunksToWavBlob(chunks: Uint8Array[], sampleRate: number): Blob {
   view.setUint16(34, 16, true);
   writeAscii(view, 36, 'data');
   view.setUint32(40, dataSize, true);
-
   const parts: BlobPart[] = [header];
   for (const chunk of chunks) {
-    parts.push(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength));
+    const copy = new Uint8Array(chunk.byteLength);
+    copy.set(chunk);
+    parts.push(copy.buffer);
   }
   return new Blob(parts, { type: 'audio/wav' });
 }
@@ -539,16 +502,8 @@ function pcmChunksToWavBlob(chunks: Uint8Array[], sampleRate: number): Blob {
 function writeAscii(view: DataView, offset: number, value: string): void {
   for (let index = 0; index < value.length; index += 1) view.setUint8(offset + index, value.charCodeAt(index));
 }
-
-function makeAbortError(message: string): Error {
-  const error = new Error(message);
-  error.name = 'AbortError';
-  return error;
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError';
-}
+function makeAbortError(message: string): Error { const error = new Error(message); error.name = 'AbortError'; return error; }
+function isAbortError(error: unknown): boolean { return error instanceof Error && error.name === 'AbortError'; }
 
 function playableAudioSource(job: JobRecord): string {
   const refs = Array.isArray(job.output_refs) ? job.output_refs : [];
@@ -573,69 +528,17 @@ function isFallbackVoiceOutput(ref: StoryAudioJobOutputRef): boolean {
     return row?.provider_fallback === true || row?.provider_success === false;
   });
 }
-
-function isTerminalJob(job: JobRecord): boolean {
-  return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled';
-}
-
-function jobErrorMessage(job: JobRecord): string {
-  const error = job.error as { message?: unknown } | null | undefined;
-  return typeof error?.message === 'string' ? error.message : 'Voice Studio audio generation failed.';
-}
-
-function readStoryTitle(): string {
-  return (document.querySelector('.storyteller-project-copy h1') as HTMLElement | null)?.innerText.trim() || 'Untitled story';
-}
-
-function normalizeStoryAudioText(value: string): string {
-  return value.replace(/\r\n/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean).join('\n\n').trim();
-}
-
-function fingerprintStoryAudio(text: string): string {
-  return `${text.length}:${text.slice(0, 80)}:${text.slice(-80)}`;
-}
-
-function voiceAssetId(asset: AssetListResponse['assets'][number]): string {
-  return stringValue(asset.storage_path) || stringValue(asset.metadata?.voice_id) || stringValue(asset.metadata?.profile_id) || stringValue(asset.metadata?.id) || asset.id;
-}
-
-function voiceAssetLabel(asset: AssetListResponse['assets'][number]): string {
-  return stringValue(asset.metadata?.profile_name) || stringValue(asset.metadata?.name) || stringValue(asset.metadata?.voice_name) || basename(asset.storage_path) || asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, '');
-}
-
-function voiceLabelForId(voiceId: string, voices: StoryAudioVoiceOption[]): string {
-  return voices.find((voice) => voice.id === voiceId)?.label || voiceId;
-}
-
-function stringValue(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function basename(path: string | undefined): string {
-  return path?.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || '';
-}
-
-function slugify(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'story';
-}
-
-function readSelectedVoiceId(): string {
-  try {
-    return typeof window !== 'undefined' ? window.localStorage.getItem(STORY_AUDIO_SELECTED_VOICE_KEY) ?? '' : '';
-  } catch {
-    return '';
-  }
-}
-
-function persistSelectedVoiceId(value: string): void {
-  try {
-    if (!value) window.localStorage.removeItem(STORY_AUDIO_SELECTED_VOICE_KEY);
-    else window.localStorage.setItem(STORY_AUDIO_SELECTED_VOICE_KEY, value);
-  } catch {
-    // Voice selection persistence is best-effort.
-  }
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
+function isTerminalJob(job: JobRecord): boolean { return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled'; }
+function jobErrorMessage(job: JobRecord): string { const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio audio generation failed.'; }
+function readStoryTitle(): string { return (document.querySelector('.storyteller-project-copy h1') as HTMLElement | null)?.innerText.trim() || 'Untitled story'; }
+function normalizeStoryAudioText(value: string): string { return value.replace(/\r\n/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean).join('\n\n').trim(); }
+function fingerprintStoryAudio(text: string): string { return `${text.length}:${text.slice(0, 80)}:${text.slice(-80)}`; }
+function voiceAssetId(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.storage_path) || stringValue(asset.metadata?.voice_id) || stringValue(asset.metadata?.profile_id) || stringValue(asset.metadata?.id) || asset.id; }
+function voiceAssetLabel(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.metadata?.profile_name) || stringValue(asset.metadata?.name) || stringValue(asset.metadata?.voice_name) || basename(asset.storage_path) || asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, ''); }
+function voiceLabelForId(voiceId: string, voices: StoryAudioVoiceOption[]): string { return voices.find((voice) => voice.id === voiceId)?.label || voiceId; }
+function stringValue(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
+function basename(path: string | undefined): string { return path?.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || ''; }
+function slugify(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'story'; }
+function readSelectedVoiceId(): string { try { return typeof window !== 'undefined' ? window.localStorage.getItem(STORY_AUDIO_SELECTED_VOICE_KEY) ?? '' : ''; } catch { return ''; } }
+function persistSelectedVoiceId(value: string): void { try { if (!value) window.localStorage.removeItem(STORY_AUDIO_SELECTED_VOICE_KEY); else window.localStorage.setItem(STORY_AUDIO_SELECTED_VOICE_KEY, value); } catch { /* Voice selection persistence is best-effort. */ } }
+function wait(ms: number): Promise<void> { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
