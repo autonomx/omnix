@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { StoryAudioPanel } from './StoryAudioPanel';
+import { StoryCastPanel } from './StoryCastPanel';
 
 const STORY_AUDIO_MOUNT_ID = 'omnix-story-audio-panel-root';
 
@@ -8,6 +9,13 @@ let mountedRoot: Root | null = null;
 let mountedElement: HTMLElement | null = null;
 let observerStarted = false;
 let renderScheduled = false;
+
+function StorytellerAudioAndCast() {
+  return React.createElement(React.Fragment, null, [
+    React.createElement(StoryAudioPanel, { key: 'audio' }),
+    React.createElement(StoryCastPanel, { key: 'cast' }),
+  ]);
+}
 
 function scheduleStoryAudioMount(): void {
   if (renderScheduled) return;
@@ -33,7 +41,7 @@ function mountStoryAudioPanel(): void {
   mountedRoot?.unmount();
   mountedElement = mountElement;
   mountedRoot = createRoot(mountElement);
-  mountedRoot.render(React.createElement(StoryAudioPanel));
+  mountedRoot.render(React.createElement(StorytellerAudioAndCast));
 }
 
 function installStoryAudioEnhancer(): void {
