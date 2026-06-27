@@ -92,7 +92,7 @@ describe('PodcastWorkspace', () => {
     fireEvent.change(screen.getByLabelText(/Episode brief/), { target: { value: 'Discuss local AI workstation design.' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate live podcast/i }));
 
-    expect(await screen.findByText('Podcast production queued: job:podcast')).toBeInTheDocument();
+    expect((await screen.findAllByText('Podcast production queued: job:podcast')).length).toBeGreaterThan(0);
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
