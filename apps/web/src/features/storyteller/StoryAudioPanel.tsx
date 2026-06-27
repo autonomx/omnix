@@ -1,17 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
+import { assignmentRowsFromSegments, mapStoryToAudioSegments, speakerRowsFromSegments, type StoryAudioScriptSegment } from './storyAudioMapper';
 
 export type StoryAudioVoiceOption = {
   id: string;
   label: string;
 };
 
-export type StoryAudioSegment = {
-  index: number;
-  speaker: string;
-  text: string;
-  title?: string;
-};
+export type StoryAudioSegment = StoryAudioScriptSegment & { title?: string };
 
 type StoryAudioStatus = 'ready' | 'loading_voices' | 'queued' | 'running' | 'completed' | 'failed';
 
@@ -112,7 +108,8 @@ export function StoryAudioPanel() {
 
   async function generateStoryAudio(): Promise<void> {
     const snapshot = readStorySnapshot();
-    const segments = splitStoryAudioSegments(snapshot.text);
+    const audioMap = mapStoryToAudioSegments(snapshot.title, snapshot.text, selectedVoiceId);
+    const segments = audioMap.segments;
     if (!snapshot.text.trim() || !segments.length) {
       setStatus('failed');
       setStatusMessage('Generate or select a story before creating audio.');
@@ -127,10 +124,10 @@ export function StoryAudioPanel() {
     setProgress(2);
     setJobId('');
     setStatus('queued');
-    setStatusMessage(`Queueing ${segments.length > 1 ? `${segments.length} chapter segments` : 'full-story'} Voice Studio narration…`);
+    setStatusMessage(`Queueing ${segments.length > 1 ? `${segments.length} mapped story segments` : 'full-story'} Voice Studio narration…`);
 
     try {
-      const job = await createStoryAudioJob({ title: snapshot.title, text: snapshot.text, segments, voiceId: selectedVoiceId });
+      const job = await createStoryAudioJob({ title: snapshot.title, text: snapshot.text, segments, voiceId: selectedVoiceId, storyDocumentId: audioMap.document.id });
       if (generationRunRef.current !== runId) return;
       setJobId(job.id);
       applyJobProgress(job);
@@ -211,11 +208,11 @@ export function StoryAudioPanel() {
       <div className="storyteller-audio-copy">
         <p className="eyebrow">Story audio</p>
         <h3>Generate full-story narration</h3>
-        <p>Use a cloned voice to narrate the complete manuscript. Multi-chapter stories are queued as chapter-aware segments, stream into the player when audio becomes available, and can be downloaded after synthesis finishes.</p>
+        <p>Use the structured story document and Voice Cast assignments to narrate the manuscript. Dialogue blocks use character voices when assigned, while narration and missing voices fall back to the narrator voice.</p>
       </div>
       <div className="storyteller-audio-controls">
         <label>
-          Cloned voice
+          Default narrator voice
           <select aria-label="Story audio cloned voice" disabled={status === 'queued' || status === 'running'} value={selectedVoiceId} onChange={(event) => handleVoiceChange(event.currentTarget.value)}>
             <option value="">Default Voice Studio voice</option>
             {voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}
@@ -230,7 +227,7 @@ export function StoryAudioPanel() {
           <progress max="100" value={Math.max(0, Math.min(100, progress))}>{progress}%</progress>
         </div>
         <audio ref={audioRef} controls preload="metadata" />
-        <small>{jobId ? `Voice job: ${jobId}` : selectedVoiceLabel ? `Voice: ${selectedVoiceLabel}` : 'Voice: default'}</small>
+        <small>{jobId ? `Voice job: ${jobId}` : selectedVoiceLabel ? `Narrator voice: ${selectedVoiceLabel}` : 'Narrator voice: default'}</small>
       </div>
     </section>
   );
@@ -266,7 +263,7 @@ export function splitStoryAudioSegments(text: string): StoryAudioSegment[] {
     current.lines.push(line);
   }
   if (current.lines.join('\n').trim()) segments.push(current);
-  return segments.map((segment, index) => ({ index, speaker: 'Narrator', text: segment.lines.join('\n').trim(), title: segment.title }));
+  return segments.map((segment, index) => ({ index, speaker: 'Narrator', text: segment.lines.join('\n').trim(), title: segment.title, voice_id: null, character_id: 'narrator', block_id: `legacy-${index}`, chapter_id: `legacy-${index}` }));
 }
 
 export function voiceOptionsFromAssets(assets: AssetListResponse['assets']): StoryAudioVoiceOption[] {
@@ -277,7 +274,7 @@ export function voiceOptionsFromAssets(assets: AssetListResponse['assets']): Sto
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
-async function createStoryAudioJob({ title, text, segments, voiceId }: { title: string; text: string; segments: StoryAudioSegment[]; voiceId: string }): Promise<JobRecord> {
+async function createStoryAudioJob({ title, text, segments, voiceId, storyDocumentId }: { title: string; text: string; segments: StoryAudioScriptSegment[]; voiceId: string; storyDocumentId: string }): Promise<JobRecord> {
   return omnixApiClient.createJob({
     module: 'voice',
     type: segments.length > 1 ? 'tts.multi_speaker_synthesize' : 'tts.synthesize',
@@ -288,17 +285,19 @@ async function createStoryAudioJob({ title, text, segments, voiceId }: { title: 
       provider_id: null,
       speaker: 'Narrator',
       voice_id: voiceId || null,
-      script_mode: segments.length > 1 ? 'story_full_audio' : 'single_speaker',
+      script_mode: segments.length > 1 ? 'story_structured_audio' : 'single_speaker',
       story_title: title || null,
+      story_document_id: storyDocumentId,
       source_module: 'storyteller',
-      script_speakers: [{ name: 'Narrator', count: segments.length }],
+      source_mapping: 'story_blocks_to_voice_cast',
+      script_speakers: speakerRowsFromSegments(segments),
       script_segments: segments,
-      character_voice_assignments: [{ speaker: 'Narrator', voice_id: voiceId || null, style: 'Story narrator', line_count: segments.length }],
+      character_voice_assignments: assignmentRowsFromSegments(segments),
       save_output: true,
     },
     stages: [
-      { id: 'prepare-story-audio', label: 'Prepare full story narration', resource_class: 'cpu', status: 'queued' },
-      ...segments.map((segment) => ({ id: `narrate-story-${String(segment.index + 1).padStart(3, '0')}`, label: segment.title ? `Narrate ${segment.title}` : `Narrate segment ${segment.index + 1}`, resource_class: 'gpu:tts' as const, status: 'queued' as const })),
+      { id: 'prepare-story-audio', label: 'Prepare structured story narration', resource_class: 'cpu', status: 'queued' },
+      ...segments.map((segment) => ({ id: `narrate-story-${String(segment.index + 1).padStart(3, '0')}`, label: `Narrate ${segment.speaker} segment ${segment.index + 1}`, resource_class: 'gpu:tts' as const, status: 'queued' as const })),
       { id: 'stitch-story-audio', label: 'Stitch full story audio', resource_class: 'cpu', status: 'queued' },
       { id: 'store-story-audio', label: 'Save downloadable story audio', resource_class: 'cpu', status: 'queued' },
     ],
