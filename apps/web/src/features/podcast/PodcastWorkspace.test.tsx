@@ -41,28 +41,8 @@ describe('PodcastWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/providers') {
-        return Response.json({
-          providers: [
-            {
-              id: 'lmstudio',
-              label: 'LM Studio',
-              family: 'llm',
-              source: 'settings',
-              status: 'configured',
-              capabilities: ['chat'],
-            },
-            {
-              id: 'faster-qwen3-tts',
-              label: 'Faster Qwen TTS',
-              family: 'tts',
-              source: 'settings',
-              status: 'configured',
-              capabilities: ['tts'],
-            },
-          ],
-          models: [],
-        });
+      if (path === '/api/voice-studio/voices') {
+        return Response.json({ voices: [{ id: 'faster-qwen3-tts', name: 'Faster Qwen TTS' }] });
       }
 
       if (path === '/api/jobs' && init?.method === 'POST') {
@@ -82,21 +62,6 @@ describe('PodcastWorkspace', () => {
         return Response.json({ jobs: [] });
       }
 
-      if (path === '/api/assets') {
-        return Response.json({
-          assets: [
-            {
-              id: 'asset:script',
-              module: 'podcast',
-              type: 'podcast_script',
-              mime_type: 'text/markdown',
-              storage_path: 'artifacts/podcast.md',
-              created_at: '2026-06-14T00:00:00Z',
-            },
-          ],
-        });
-      }
-
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -105,15 +70,13 @@ describe('PodcastWorkspace', () => {
 
     expect(await screen.findByRole('heading', { name: 'Episode request' })).toBeInTheDocument();
     expect(await screen.findByText('Faster Qwen TTS')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'podcast_script / podcast' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '⚭ 2. Participants & voice casting' })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('LLM provider'), { target: { value: 'lmstudio' } });
-    fireEvent.change(screen.getByLabelText('TTS provider'), { target: { value: 'faster-qwen3-tts' } });
-    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Signals' } });
-    fireEvent.change(screen.getByLabelText('Brief'), { target: { value: 'Discuss local AI workstation design.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue episode' }));
+    fireEvent.change(screen.getByLabelText('Topic / Episode title'), { target: { value: 'Signals' } });
+    fireEvent.change(screen.getByLabelText('Episode brief'), { target: { value: 'Discuss local AI workstation design.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Generate live podcast/i }));
 
-    expect(await screen.findByText('Podcast job queued: job:podcast')).toBeInTheDocument();
+    expect(await screen.findByText('Podcast production queued: job:podcast')).toBeInTheDocument();
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
@@ -122,8 +85,9 @@ describe('PodcastWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"module":"podcast"');
       expect(createCall?.[1]?.body).toContain('"type":"podcast.generate"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:llm"');
-      expect(createCall?.[1]?.body).toContain('"id":"voices"');
+      expect(createCall?.[1]?.body).toContain('"id":"voice_takes"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
+      expect(createCall?.[1]?.body).toContain('"speakerInstructions"');
     });
   });
 });
