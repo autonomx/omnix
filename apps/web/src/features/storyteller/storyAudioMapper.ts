@@ -1,5 +1,5 @@
-import { buildStoryDocumentFromText, type StoryDocument } from './storyDocument';
-import { loadStoryVoiceCast, voiceAssignmentFor } from './storyVoiceCast';
+import { buildStoryDocumentFromText, fingerprintText, type StoryDocument } from './storyDocument';
+import { loadStoryVoiceCastAny, voiceAssignmentFor } from './storyVoiceCast';
 
 export interface StoryAudioScriptSegment {
   index: number;
@@ -18,7 +18,7 @@ export interface StoryAudioMapResult {
 
 export function mapStoryToAudioSegments(title: string, text: string, fallbackVoiceId: string): StoryAudioMapResult {
   const document = buildStoryDocumentFromText({ title, text });
-  const voiceCast = loadStoryVoiceCast(document.id);
+  const voiceCast = loadStoryVoiceCastAny([document.id, fingerprintText(text)]);
   const narratorVoice = voiceAssignmentFor(voiceCast, 'narrator')?.voiceId || fallbackVoiceId || '';
   const segments: StoryAudioScriptSegment[] = [];
 
