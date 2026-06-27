@@ -6,9 +6,9 @@ import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { mockPodcastRelationships, mockPodcastSpeakerProfiles } from '../conversation-production/speakers';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
-import type { PodcastFormat } from './types';
 import { mockProductionAssetTiles, mockProductionStages, mockQualityGates, mockRecentPodcastJobs, mockSessionMetrics } from './mockProduction';
 import { buildReviewPolicy, generationStyleOptions, reviewStopOptions } from './reviewPolicy';
+import type { PodcastFormat } from './types';
 import './PodcastWorkspace.css';
 
 type VoiceAsset = AssetListResponse['assets'][number];
@@ -60,9 +60,8 @@ function durationClock(duration: string): string {
 }
 
 function formatClock(seconds: number): string {
-  const safeSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
-  const total = Math.floor(safeSeconds);
-  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+  const safeSeconds = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
+  return `${String(Math.floor(safeSeconds / 60)).padStart(2, '0')}:${String(safeSeconds % 60).padStart(2, '0')}`;
 }
 
 function isTerminal(status: unknown): boolean {
@@ -106,12 +105,11 @@ function voiceAssetName(asset: VoiceAsset): string {
   return source.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || voiceAssetId(asset) || 'Voice';
 }
 
-function voiceProfileName(asset: VoiceAsset): string {
-  return (voiceAssetId(asset) || voiceAssetName(asset)).replace(/^voice-cloning:/, '').replace(/^asset:/, '');
-}
-
 function voiceOptionsFromAssets(assets: VoiceAsset[]) {
-  return assets.filter((asset) => asset.type === 'voice_profile').map((asset) => ({ id: voiceStoragePath(asset) || voiceAssetId(asset), label: voiceAssetName(asset), profileName: voiceProfileName(asset) })).filter((voice) => voice.id);
+  return assets
+    .filter((asset) => asset.type === 'voice_profile')
+    .map((asset) => ({ id: voiceStoragePath(asset) || voiceAssetId(asset), label: voiceAssetName(asset) }))
+    .filter((voice) => voice.id);
 }
 
 function firstTag(value: string): string {
@@ -178,7 +176,12 @@ function buildPodcastJobPayload(args: { title: string; brief: string; format: Po
     script_mode: args.segments.length > 1 ? 'multi_speaker' : 'single_speaker',
     script_speakers: Object.entries(counts).map(([name, count]) => ({ name, count })),
     script_segments: args.segments,
-    character_voice_assignments: args.speakers.map((speaker, index) => ({ speaker: speaker.name, voice_id: speaker.voice || args.voiceOptions[index % Math.max(args.voiceOptions.length, 1)]?.id || null, style: firstTag(speaker.speakingStyle || speaker.personality), line_count: counts[speaker.name] ?? 0 })),
+    character_voice_assignments: args.speakers.map((speaker, index) => ({
+      speaker: speaker.name,
+      voice_id: speaker.voice || args.voiceOptions[index % Math.max(args.voiceOptions.length, 1)]?.id || null,
+      style: firstTag(speaker.speakingStyle || speaker.personality),
+      line_count: counts[speaker.name] ?? 0,
+    })),
     output_settings: outputSettings,
     audio_effects: audioEffects,
     save_output: true,
@@ -203,7 +206,7 @@ function extractPlayableOutputs(jobs: Array<JobRecord | undefined>): PlayablePod
   const outputs: PlayablePodcastOutput[] = [];
   const seen = new Set<string>();
   for (const job of jobs) {
-    const refs = (job?.output_refs ?? []) as Array<{ data_url?: unknown; duration?: unknown; asset_id?: unknown; title?: unknown; type?: unknown }>;
+    const refs = (job?.output_refs ?? []) as Array<{ data_url?: unknown; duration?: unknown; asset_id?: unknown; title?: unknown }>;
     for (const ref of refs) {
       const dataUrl = typeof ref.data_url === 'string' ? ref.data_url : '';
       if (!dataUrl.startsWith('data:audio/')) continue;
@@ -315,9 +318,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const showBriefError = brief.trim().length === 0 && createJobMutation.isIdle === false;
 
   useEffect(() => {
-    if (playableOutputs.length > 0 && !playableOutputs.some((output) => output.key === selectedOutputKey)) {
-      setSelectedOutputKey(playableOutputs[0].key);
-    }
+    if (playableOutputs.length > 0 && !playableOutputs.some((output) => output.key === selectedOutputKey)) setSelectedOutputKey(playableOutputs[0].key);
   }, [playableOutputs, selectedOutputKey]);
 
   useEffect(() => {
@@ -336,15 +337,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   async function togglePlayback() {
     const audio = audioRef.current;
-    if (!audio || !currentOutput) {
-      setActionMessage('Generate podcast audio before pressing play.');
-      return;
-    }
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-      return;
-    }
+    if (!audio || !currentOutput) { setActionMessage('Generate podcast audio before pressing play.'); return; }
+    if (isPlaying) { audio.pause(); setIsPlaying(false); return; }
     try {
       audio.playbackRate = Number.parseFloat(playbackRate) || 1;
       await audio.play();
@@ -365,19 +359,12 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   function selectRecentJob(jobId: string) {
     const output = playableOutputs.find((entry) => entry.jobId === jobId);
-    if (output) {
-      setSelectedOutputKey(output.key);
-      setActionMessage(`Selected audio output: ${output.title}.`);
-      return;
-    }
+    if (output) { setSelectedOutputKey(output.key); setActionMessage(`Selected audio output: ${output.title}.`); return; }
     setActionMessage(`Selected job ${jobId}; no playable audio output is attached yet.`);
   }
 
   function downloadCurrentOutput(label = 'Podcast audio') {
-    if (!currentOutput || typeof document === 'undefined') {
-      setActionMessage('Generate podcast audio before downloading.');
-      return;
-    }
+    if (!currentOutput || typeof document === 'undefined') { setActionMessage('Generate podcast audio before downloading.'); return; }
     const link = document.createElement('a');
     link.href = currentOutput.dataUrl;
     link.download = `${safeDownloadName(currentOutput.title || title)}.wav`;
@@ -387,12 +374,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   async function copyEpisodeLink() {
     const link = typeof window !== 'undefined' ? `${window.location.href.split('#')[0]}#${connectedJob?.id ?? 'podcast'}` : connectedJob?.id ?? 'podcast';
-    try {
-      await navigator.clipboard?.writeText(link);
-      setActionMessage('Podcast link copied.');
-    } catch {
-      setActionMessage(`Podcast link: ${link}`);
-    }
+    try { await navigator.clipboard?.writeText(link); setActionMessage('Podcast link copied.'); }
+    catch { setActionMessage(`Podcast link: ${link}`); }
   }
 
   return (
@@ -401,7 +384,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <header className="podcast-studio-header"><div><p className="eyebrow">Conversation engine</p><h2 id="module-title">{module.label}</h2><p>Create a podcast from a speaker-tagged conversation, Voice Library assignments, and the same local TTS generation path used by Voice Studio.</p></div><code>/podcast-renderer</code></header>
         <div className="podcast-studio-grid">
           <section className="podcast-studio-stack">
-            <article className="podcast-card episode-setup-card"><h3>Episode request</h3><div className="episode-setup-grid"><div className="podcast-field-stack"><label>Topic / Episode title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Episode brief<textarea rows={5} value={brief} onChange={(event) => setBrief(event.target.value)} /><small>{brief.length}/2000</small></label><label>Audience<select value={audience} onChange={(event) => setAudience(event.target.value)}><option>Software Engineers</option><option>General Public</option><option>Executives</option><option>Students</option><option>Experts</option></select></label></div><div className="podcast-config-stack"><span className="podcast-label">Podcast format</span><div className="format-card-grid">{formatOptions.map((option) => <button key={option.id} type="button" className={option.id === format ? 'selected' : undefined} onClick={() => setFormat(option.id)}><strong>{option.label}</strong><small>{option.description}</small></button>)}</div><div className="podcast-select-grid"><label>Duration<select value={duration} onChange={(event) => setDuration(event.target.value)}><option>20 min</option><option>45 min</option><option>60 min</option></select></label><label>Tone<select value={tone} onChange={(event) => setTone(event.target.value)}><option>Professional</option><option>Conversational</option><option>Humorous</option></select></label><label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>English (US)</option><option>English (UK)</option></select></label></div><div className="generation-style-panel"><span className="podcast-label">Generation Style</span>{generationStyleOptions.map((option) => <label key={option.id} className={generationStyle === option.id ? 'generation-style selected' : 'generation-style'}><input type="radio" checked={generationStyle === option.id} onChange={() => setGenerationStyle(option.id)} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}<div className="review-stop-row">{reviewStopOptions.map((option) => <label key={option.id}><input type="checkbox" disabled={generationStyle !== 'guided'} checked={manualReviewStops.includes(option.id)} onChange={() => toggleReviewStop(option.id)} />{option.label}</label>)}</div></div></div></div></article>
+            <article className="podcast-card episode-setup-card"><h3>1. Episode setup</h3><div className="episode-setup-grid"><div className="podcast-field-stack"><label>Topic / Episode title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Episode brief<textarea rows={5} value={brief} onChange={(event) => setBrief(event.target.value)} /><small>{brief.length}/2000</small></label><label>Audience<select value={audience} onChange={(event) => setAudience(event.target.value)}><option>Software Engineers</option><option>General Public</option><option>Executives</option><option>Students</option><option>Experts</option></select></label></div><div className="podcast-config-stack"><span className="podcast-label">Podcast format</span><div className="format-card-grid">{formatOptions.map((option) => <button key={option.id} type="button" className={option.id === format ? 'selected' : undefined} onClick={() => setFormat(option.id)}><strong>{option.label}</strong><small>{option.description}</small></button>)}</div><div className="podcast-select-grid"><label>Duration<select value={duration} onChange={(event) => setDuration(event.target.value)}><option>20 min</option><option>45 min</option><option>60 min</option></select></label><label>Tone<select value={tone} onChange={(event) => setTone(event.target.value)}><option>Professional</option><option>Conversational</option><option>Humorous</option></select></label><label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>English (US)</option><option>English (UK)</option></select></label></div><div className="generation-style-panel"><span className="podcast-label">Generation Style</span>{generationStyleOptions.map((option) => <label key={option.id} className={generationStyle === option.id ? 'generation-style selected' : 'generation-style'}><input type="radio" checked={generationStyle === option.id} onChange={() => setGenerationStyle(option.id)} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}<div className="review-stop-row">{reviewStopOptions.map((option) => <label key={option.id}><input type="checkbox" disabled={generationStyle !== 'guided'} checked={manualReviewStops.includes(option.id)} onChange={() => toggleReviewStop(option.id)} />{option.label}</label>)}</div></div></div></div></article>
             <article className="podcast-card"><div className="card-heading-row"><h3>2. Participants and voice casting</h3><small>{voiceOptions.length ? `Loaded ${voiceOptions.length} Voice Library voice${voiceOptions.length === 1 ? '' : 's'}` : 'No Voice Library voices found'}</small></div><div className="speaker-table editable-speaker-table"><div className="speaker-row speaker-header"><span>Speaker</span><span>Identity</span><span>Voice</span><span>Beliefs</span><span>Personality</span><span>Speaking style</span><span>Goal this episode</span><span>Instructions</span><span>Actions</span></div>{speakers.map((speaker) => <div className="speaker-row editable-speaker-row" key={speaker.id}><span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><input value={speaker.name} onChange={(event) => updateSpeaker(speaker.id, 'name', event.target.value)} /><input value={speaker.role} onChange={(event) => updateSpeaker(speaker.id, 'role', event.target.value)} /></span></span><span><input value={speaker.identity} onChange={(event) => updateSpeaker(speaker.id, 'identity', event.target.value)} /></span><span><select aria-label={`${speaker.name} voice`} value={speaker.voice} onChange={(event) => updateSpeaker(speaker.id, 'voice', event.target.value)}>{voiceOptions.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}{!voiceOptions.length ? <option value="">No cloned voices</option> : null}</select></span><span><textarea rows={2} value={speaker.beliefs} onChange={(event) => updateSpeaker(speaker.id, 'beliefs', event.target.value)} /></span><span><textarea rows={2} value={speaker.personality} onChange={(event) => updateSpeaker(speaker.id, 'personality', event.target.value)} /></span><span><textarea rows={2} value={speaker.speakingStyle} onChange={(event) => updateSpeaker(speaker.id, 'speakingStyle', event.target.value)} /></span><span><textarea rows={2} value={speaker.goal} onChange={(event) => updateSpeaker(speaker.id, 'goal', event.target.value)} /></span><span><textarea rows={2} value={speaker.instructions} onChange={(event) => updateSpeaker(speaker.id, 'instructions', event.target.value)} placeholder="Extra personality, pacing, conflict, or behavior notes" /></span><span className="speaker-preview speaker-actions"><button type="button" onClick={() => previewVoiceMutation.mutate(speaker)} disabled={!speaker.voice || previewVoiceMutation.isPending}>Preview</button><button type="button" onClick={() => removeParticipant(speaker.id)}>Remove</button><button type="button" onClick={() => setSpeakerMenuId((current) => current === speaker.id ? '' : speaker.id)}>More</button>{speakerMenuId === speaker.id ? <div className="speaker-menu"><button type="button" onClick={() => duplicateParticipant(speaker)}>Duplicate participant</button><button type="button" onClick={() => updateSpeaker(speaker.id, 'instructions', '')}>Clear instructions</button></div> : null}</span></div>)}</div><button className="ghost-button" type="button" onClick={addParticipant}>+ Add participant</button></article>
             <article className="podcast-card relationship-card"><h3>3. Relationships and constraints</h3><div className="relationship-layout"><div className="relationship-map"><b className="node host">H<span>Host</span></b><b className="node guest-a">GA<span>Guest A</span></b><b className="node guest-b">GB<span>Guest B</span></b><span className="line mod">moderates</span><span className="line respect">respects</span><span className="line disagree">disagrees with</span></div><div className="constraint-grid">{[['Max duration', durationClock(duration)], ['Citation required', 'On'], ['Family friendly', 'On'], ['Reading level', 'Grade 8'], ['Max turn', '45 sec'], ['Avoid topics', 'Politics']].map(([label, value]) => <div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div></div></article>
             <form onSubmit={(event) => { event.preventDefault(); if (brief.trim()) createJobMutation.mutate(); }}><button className="podcast-generate-button" type="submit" disabled={createJobMutation.isPending}>Generate live podcast</button></form><FeatureValidationMessage show={showBriefError} message="Enter an episode brief before generating a podcast." /><FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="Podcast request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.status === 'failed' ? undefined : createJobMutation.data?.id} pendingMessage="Starting voice production" successPrefix="Podcast production queued" />
