@@ -37,6 +37,7 @@ type StoryAudioState = {
   isGenerating: boolean;
   jobId: string;
   lastStoryFingerprint: string;
+  lastRenderedStoryFingerprint: string;
   progress: number;
   selectedVoiceId: string;
   status: string;
@@ -54,6 +55,7 @@ const storyAudioState: StoryAudioState = {
   isGenerating: false,
   jobId: '',
   lastStoryFingerprint: '',
+  lastRenderedStoryFingerprint: '',
   progress: 0,
   selectedVoiceId: readSelectedVoiceId(),
   status: 'Ready to narrate the full story.',
@@ -68,7 +70,7 @@ export function extractStoryTextFromDocument(root: ParentNode = document): strin
   const prose = root.querySelector('.storyteller-prose') as HTMLElement | null;
   const storyModePage = root.querySelector('.story-mode-page') as HTMLElement | null;
   const manuscript = root.querySelector('[aria-label="Story manuscript"]') as HTMLElement | null;
-  const source = prose?.innerText || storyModePage?.innerText || manuscript?.innerText || '';
+  const source = prose?.innerText || prose?.textContent || storyModePage?.innerText || storyModePage?.textContent || manuscript?.innerText || manuscript?.textContent || '';
   return normalizeStoryAudioText(source);
 }
 
@@ -103,7 +105,7 @@ export function voiceOptionsFromAssets(assets: StoryAudioAsset[]): StoryAudioVoi
   return assets
     .filter((asset) => asset.type === 'voice_profile')
     .map((asset) => ({ id: voiceAssetId(asset), label: voiceAssetLabel(asset) }))
-    .filter((voice, index, voices) => voice.id && voices.findIndex((entry) => entry.id === voice.id) === index)
+    .filter((voice, index, voices) => Boolean(voice.id) && voices.findIndex((entry) => entry.id === voice.id) === index)
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
@@ -117,48 +119,31 @@ function scheduleStoryAudioRender(): void {
 }
 
 function ensureStoryAudioPanel(): void {
-  const workspace = document.querySelector('.storyteller-workspace');
   const header = document.querySelector('.storyteller-project-header');
-  if (!workspace || !header) return;
+  if (!header) return;
 
   let panel = document.getElementById(STORY_AUDIO_ROOT_ID);
   if (!panel) {
-    panel = document.createElement('section');
-    panel.id = STORY_AUDIO_ROOT_ID;
-    panel.className = 'storyteller-audio-panel';
-    panel.setAttribute('aria-label', 'Story audio');
+    panel = createStoryAudioPanel();
     header.insertAdjacentElement('afterend', panel);
   }
 
   const storyText = extractStoryTextFromDocument(document);
-  const fingerprint = fingerprintStoryAudio(storyText);
-  if (fingerprint && fingerprint !== storyAudioState.lastStoryFingerprint) {
-    storyAudioState.lastStoryFingerprint = fingerprint;
-    if (!storyAudioState.isGenerating) {
-      storyAudioState.audioSource = '';
-      storyAudioState.progress = 0;
-      storyAudioState.jobId = '';
-      storyAudioState.filename = `${slugify(readStoryTitle()) || 'story'}-audio.wav`;
-      storyAudioState.status = 'Ready to narrate the full story.';
-    }
-  }
+  syncStoryFingerprint(storyText);
 
   if (!voiceLoadStarted) {
     voiceLoadStarted = true;
     void loadVoiceProfiles();
   }
 
-  renderStoryAudioPanel(panel, storyText);
+  updateStoryAudioPanel(panel, storyText);
 }
 
-function renderStoryAudioPanel(panel: HTMLElement, storyText: string): void {
-  const hasStory = Boolean(storyText.trim());
-  const hasAudio = Boolean(storyAudioState.audioSource);
-  const voiceOptions = storyAudioState.voices.length
-    ? storyAudioState.voices.map((voice) => `<option value="${escapeHtml(voice.id)}"${voice.id === storyAudioState.selectedVoiceId ? ' selected' : ''}>${escapeHtml(voice.label)}</option>`).join('')
-    : '<option value="">No cloned voices found</option>';
-  const progressValue = Math.max(0, Math.min(100, storyAudioState.progress));
-
+function createStoryAudioPanel(): HTMLElement {
+  const panel = document.createElement('section');
+  panel.id = STORY_AUDIO_ROOT_ID;
+  panel.className = 'storyteller-audio-panel';
+  panel.setAttribute('aria-label', 'Story audio');
   panel.innerHTML = `
     <div class="storyteller-audio-copy">
       <p class="eyebrow">Story audio</p>
@@ -168,21 +153,18 @@ function renderStoryAudioPanel(panel: HTMLElement, storyText: string): void {
     <div class="storyteller-audio-controls">
       <label>
         Cloned voice
-        <select data-story-audio-voice aria-label="Story audio cloned voice" ${storyAudioState.isGenerating ? 'disabled' : ''}>
-          <option value="">Default Voice Studio voice</option>
-          ${voiceOptions}
-        </select>
+        <select data-story-audio-voice aria-label="Story audio cloned voice"></select>
       </label>
       <div class="storyteller-audio-actions">
-        <button data-story-audio-generate type="button" ${!hasStory || storyAudioState.isGenerating ? 'disabled' : ''}>${storyAudioState.isGenerating ? 'Generating audio…' : 'Generate story audio'}</button>
-        <button data-story-audio-download type="button" ${hasAudio ? '' : 'disabled'}>Download audio</button>
+        <button data-story-audio-generate type="button">Generate story audio</button>
+        <button data-story-audio-download type="button">Download audio</button>
       </div>
       <div class="storyteller-audio-progress" role="status" aria-live="polite">
-        <span>${escapeHtml(storyAudioState.status)}</span>
-        <progress max="100" value="${progressValue}">${progressValue}%</progress>
+        <span data-story-audio-status>Ready to narrate the full story.</span>
+        <progress data-story-audio-progress max="100" value="0">0%</progress>
       </div>
-      <audio data-story-audio-player controls preload="metadata" ${hasAudio ? `src="${escapeAttribute(storyAudioState.audioSource)}"` : ''}></audio>
-      ${storyAudioState.jobId ? `<small>Voice job: ${escapeHtml(storyAudioState.jobId)}</small>` : ''}
+      <audio data-story-audio-player controls preload="metadata"></audio>
+      <small data-story-audio-job hidden></small>
     </div>
   `;
 
@@ -191,13 +173,94 @@ function renderStoryAudioPanel(panel: HTMLElement, storyText: string): void {
     storyAudioState.selectedVoiceId = voiceSelect.value;
     persistSelectedVoiceId(voiceSelect.value);
     storyAudioState.status = voiceSelect.value ? 'Selected cloned voice for Storyteller narration.' : 'Using the default Voice Studio voice.';
-    ensureStoryAudioPanel();
+    updateStoryAudioPanel(panel, extractStoryTextFromDocument(document));
   });
 
   panel.querySelector('[data-story-audio-generate]')?.addEventListener('click', () => {
     void generateStoryAudio();
   });
   panel.querySelector('[data-story-audio-download]')?.addEventListener('click', downloadStoryAudio);
+  return panel;
+}
+
+function syncStoryFingerprint(storyText: string): void {
+  const fingerprint = fingerprintStoryAudio(storyText);
+  if (!fingerprint || fingerprint === storyAudioState.lastStoryFingerprint) return;
+  storyAudioState.lastStoryFingerprint = fingerprint;
+  if (storyAudioState.isGenerating) return;
+  storyAudioState.audioSource = '';
+  storyAudioState.progress = 0;
+  storyAudioState.jobId = '';
+  storyAudioState.filename = `${slugify(readStoryTitle()) || 'story'}-audio.wav`;
+  storyAudioState.status = 'Ready to narrate the full story.';
+}
+
+function updateStoryAudioPanel(panel: HTMLElement, storyText: string): void {
+  const hasStory = Boolean(storyText.trim());
+  const hasAudio = Boolean(storyAudioState.audioSource);
+  const progressValue = Math.max(0, Math.min(100, storyAudioState.progress));
+  const voiceSelect = panel.querySelector('[data-story-audio-voice]') as HTMLSelectElement | null;
+  const generateButton = panel.querySelector('[data-story-audio-generate]') as HTMLButtonElement | null;
+  const downloadButton = panel.querySelector('[data-story-audio-download]') as HTMLButtonElement | null;
+  const statusNode = panel.querySelector('[data-story-audio-status]') as HTMLElement | null;
+  const progressNode = panel.querySelector('[data-story-audio-progress]') as HTMLProgressElement | null;
+  const audio = panel.querySelector('[data-story-audio-player]') as HTMLAudioElement | null;
+  const jobNode = panel.querySelector('[data-story-audio-job]') as HTMLElement | null;
+
+  if (voiceSelect && document.activeElement !== voiceSelect) {
+    updateVoiceSelectOptions(voiceSelect);
+    voiceSelect.disabled = storyAudioState.isGenerating;
+  }
+  if (generateButton) {
+    generateButton.disabled = !hasStory || storyAudioState.isGenerating;
+    generateButton.textContent = storyAudioState.isGenerating ? 'Generating audio…' : 'Generate story audio';
+  }
+  if (downloadButton) downloadButton.disabled = !hasAudio;
+  if (statusNode) statusNode.textContent = storyAudioState.status;
+  if (progressNode) {
+    progressNode.value = progressValue;
+    progressNode.textContent = `${progressValue}%`;
+  }
+  if (audio) {
+    if (hasAudio && audio.getAttribute('src') !== storyAudioState.audioSource) {
+      audio.src = storyAudioState.audioSource;
+      audio.load();
+    } else if (!hasAudio && audio.hasAttribute('src')) {
+      audio.removeAttribute('src');
+      audio.load();
+    }
+  }
+  if (jobNode) {
+    jobNode.hidden = !storyAudioState.jobId;
+    jobNode.textContent = storyAudioState.jobId ? `Voice job: ${storyAudioState.jobId}` : '';
+  }
+}
+
+function updateVoiceSelectOptions(select: HTMLSelectElement): void {
+  const signature = `${storyAudioState.selectedVoiceId}|${storyAudioState.voices.map((voice) => `${voice.id}:${voice.label}`).join('|')}`;
+  if (select.dataset.optionSignature !== signature) {
+    select.replaceChildren();
+    select.appendChild(createVoiceOption('', 'Default Voice Studio voice'));
+    if (storyAudioState.voices.length) {
+      for (const voice of storyAudioState.voices) {
+        select.appendChild(createVoiceOption(voice.id, voice.label));
+      }
+    } else {
+      const emptyOption = createVoiceOption('', 'No cloned voices found');
+      emptyOption.disabled = true;
+      select.appendChild(emptyOption);
+    }
+    select.dataset.optionSignature = signature;
+  }
+  const hasSelectedVoice = Array.from(select.options).some((option) => option.value === storyAudioState.selectedVoiceId);
+  select.value = hasSelectedVoice ? storyAudioState.selectedVoiceId : '';
+}
+
+function createVoiceOption(value: string, label: string): HTMLOptionElement {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  return option;
 }
 
 async function loadVoiceProfiles(): Promise<void> {
@@ -221,6 +284,7 @@ async function loadVoiceProfiles(): Promise<void> {
 }
 
 async function generateStoryAudio(): Promise<void> {
+  if (storyAudioState.isGenerating) return;
   const text = extractStoryTextFromDocument(document);
   const title = readStoryTitle();
   const segments = splitStoryAudioSegments(text);
@@ -234,7 +298,7 @@ async function generateStoryAudio(): Promise<void> {
   storyAudioState.filename = `${slugify(title || 'story')}-audio.wav`;
   storyAudioState.isGenerating = true;
   storyAudioState.progress = 2;
-  storyAudioState.status = 'Queueing full-story Voice Studio narration…';
+  storyAudioState.status = `Queueing ${segments.length > 1 ? `${segments.length} chapter segments` : 'full-story'} Voice Studio narration…`;
   ensureStoryAudioPanel();
 
   try {
@@ -246,23 +310,18 @@ async function generateStoryAudio(): Promise<void> {
       storyAudioState.audioSource = earlySource;
       storyAudioState.status = 'Streaming generated story audio…';
       ensureStoryAudioPanel();
-      playStoryAudioWhenReady();
     }
 
-    const completedJob = job.status === 'completed' || job.status === 'failed' ? job : await pollStoryAudioJob(job.id);
+    const completedJob = isTerminalJob(job) ? job : await pollStoryAudioJob(job.id);
     updateAudioProgressFromJob(completedJob);
     const audioSource = playableAudioSource(completedJob);
-    if (completedJob.status === 'failed') {
-      throw new Error(completedJob.error?.message || 'Voice Studio audio generation failed.');
-    }
-    if (!audioSource) {
-      throw new Error('Voice Studio did not return downloadable story audio.');
-    }
+    if (completedJob.status === 'failed') throw new Error(completedJob.error?.message || 'Voice Studio audio generation failed.');
+    if (completedJob.status === 'cancelled') throw new Error('Voice Studio audio generation was cancelled.');
+    if (!audioSource) throw new Error('Voice Studio did not return downloadable story audio.');
     storyAudioState.audioSource = audioSource;
     storyAudioState.progress = 100;
     storyAudioState.status = 'Full-story audio ready to play or download.';
     ensureStoryAudioPanel();
-    playStoryAudioWhenReady();
   } catch (error) {
     storyAudioState.status = error instanceof Error ? error.message : 'Story audio generation failed.';
     storyAudioState.progress = 0;
@@ -284,7 +343,7 @@ async function createStoryAudioJob({ title, text, segments, voiceId }: { title: 
       provider_id: null,
       speaker: 'Narrator',
       voice_id: voiceId || null,
-      script_mode: 'story_full_audio',
+      script_mode: segments.length > 1 ? 'story_full_audio' : 'single_speaker',
       story_title: title || null,
       source_module: 'storyteller',
       script_speakers: [{ name: 'Narrator', count: segments.length }],
@@ -321,12 +380,9 @@ async function pollStoryAudioJob(jobId: string): Promise<StoryAudioJob> {
     if (source && !storyAudioState.audioSource) {
       storyAudioState.audioSource = source;
       storyAudioState.status = 'Streaming generated story audio…';
-      ensureStoryAudioPanel();
-      playStoryAudioWhenReady();
-    } else {
-      ensureStoryAudioPanel();
     }
-    if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') return job;
+    ensureStoryAudioPanel();
+    if (isTerminalJob(job)) return job;
   }
   throw new Error(lastJob ? 'Story audio generation timed out before completion.' : 'Story audio job never started.');
 }
@@ -365,6 +421,10 @@ function playableAudioSource(job: StoryAudioJob): string {
   return '';
 }
 
+function isTerminalJob(job: StoryAudioJob): boolean {
+  return job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled';
+}
+
 function downloadStoryAudio(): void {
   if (!storyAudioState.audioSource) return;
   const link = document.createElement('a');
@@ -376,16 +436,6 @@ function downloadStoryAudio(): void {
   link.remove();
   storyAudioState.status = `Downloaded ${storyAudioState.filename}.`;
   ensureStoryAudioPanel();
-}
-
-function playStoryAudioWhenReady(): void {
-  const audio = document.querySelector(`#${STORY_AUDIO_ROOT_ID} audio`) as HTMLAudioElement | null;
-  if (!audio || !storyAudioState.audioSource) return;
-  audio.src = storyAudioState.audioSource;
-  audio.play().catch(() => {
-    storyAudioState.status = 'Audio is ready. Press play to start narration.';
-    ensureStoryAudioPanel();
-  });
 }
 
 function readStoryTitle(): string {
@@ -401,13 +451,11 @@ function fingerprintStoryAudio(text: string): string {
 }
 
 function voiceAssetId(asset: StoryAudioAsset): string {
-  const metadata = asset.metadata ?? {};
-  return stringValue(metadata.voice_id) || stringValue(metadata.profile_id) || stringValue(metadata.id) || stringValue(asset.storage_path) || asset.id;
+  return stringValue(asset.storage_path) || stringValue(asset.metadata?.voice_id) || stringValue(asset.metadata?.profile_id) || stringValue(asset.metadata?.id) || asset.id;
 }
 
 function voiceAssetLabel(asset: StoryAudioAsset): string {
-  const metadata = asset.metadata ?? {};
-  return stringValue(metadata.profile_name) || stringValue(metadata.name) || stringValue(metadata.voice_name) || basename(asset.storage_path) || asset.id;
+  return stringValue(asset.metadata?.profile_name) || stringValue(asset.metadata?.name) || stringValue(asset.metadata?.voice_name) || basename(asset.storage_path) || asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, '');
 }
 
 function stringValue(value: unknown): string {
@@ -439,14 +487,6 @@ function persistSelectedVoiceId(value: string): void {
   }
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character));
-}
-
-function escapeAttribute(value: string): string {
-  return escapeHtml(value).replace(/`/g, '&#96;');
-}
-
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -455,7 +495,16 @@ function installStoryAudioEnhancer(): void {
   if (observerStarted || typeof window === 'undefined' || typeof document === 'undefined') return;
   observerStarted = true;
   scheduleStoryAudioRender();
-  const observer = new MutationObserver(scheduleStoryAudioRender);
+  const observer = new MutationObserver((mutations) => {
+    if (mutations.every((mutation) => {
+      const target = mutation.target as Node;
+      const panel = document.getElementById(STORY_AUDIO_ROOT_ID);
+      return panel ? panel.contains(target) : false;
+    })) {
+      return;
+    }
+    scheduleStoryAudioRender();
+  });
   observer.observe(document.body, { childList: true, subtree: true });
   window.addEventListener('popstate', scheduleStoryAudioRender);
   window.addEventListener('hashchange', scheduleStoryAudioRender);
