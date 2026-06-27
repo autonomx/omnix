@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { omnixApiClient, type AssetListResponse } from '../../api/client';
 import { readStorySnapshot, voiceOptionsFromAssets } from './StoryAudioPanel';
 import { deriveStoryCast, loadStoryCast, type StoryCharacter } from './storyCast';
-import { loadStoryVoiceCast, removeVoiceAssignment, saveStoryVoiceCast, upsertVoiceAssignment, voiceAssignmentFor, type VoiceCastOption } from './storyVoiceCast';
+import { buildStoryDocumentFromText } from './storyDocument';
+import { loadStoryVoiceCastAny, removeVoiceAssignment, saveStoryVoiceCastAliases, upsertVoiceAssignment, voiceAssignmentFor, type VoiceCastOption } from './storyVoiceCast';
 
 const styleOptions = ['Story narrator', 'Warm', 'Dramatic', 'Soft', 'Gravelly', 'Playful'];
 
@@ -10,7 +11,8 @@ export function StoryVoiceCastPanel() {
   const [snapshot, setSnapshot] = useState(() => readStorySnapshot());
   const [characters, setCharacters] = useState<StoryCharacter[]>(() => deriveStoryCast(snapshot.text, loadStoryCast(snapshot.fingerprint)));
   const [voices, setVoices] = useState<VoiceCastOption[]>([]);
-  const [assignments, setAssignments] = useState(() => loadStoryVoiceCast(snapshot.fingerprint));
+  const [documentId, setDocumentId] = useState(() => buildStoryDocumentFromText({ title: snapshot.title, text: snapshot.text }).id);
+  const [assignments, setAssignments] = useState(() => loadStoryVoiceCastAny([snapshot.fingerprint, documentId]));
   const assignedCount = useMemo(() => assignments.filter((assignment) => assignment.voiceId).length, [assignments]);
 
   useEffect(() => {
@@ -27,9 +29,11 @@ export function StoryVoiceCastPanel() {
   useEffect(() => {
     const refresh = () => {
       const nextSnapshot = readStorySnapshot();
+      const nextDocumentId = buildStoryDocumentFromText({ title: nextSnapshot.title, text: nextSnapshot.text }).id;
       setSnapshot(nextSnapshot);
+      setDocumentId(nextDocumentId);
       setCharacters(deriveStoryCast(nextSnapshot.text, loadStoryCast(nextSnapshot.fingerprint)));
-      setAssignments(loadStoryVoiceCast(nextSnapshot.fingerprint));
+      setAssignments(loadStoryVoiceCastAny([nextSnapshot.fingerprint, nextDocumentId]));
     };
     refresh();
     const intervalId = window.setInterval(refresh, 1_500);
@@ -40,22 +44,25 @@ export function StoryVoiceCastPanel() {
     };
   }, []);
 
+  function persistAssignments(next: ReturnType<typeof loadStoryVoiceCastAny>): void {
+    setAssignments(next);
+    saveStoryVoiceCastAliases([snapshot.fingerprint, documentId], next);
+  }
+
   function updateVoice(character: StoryCharacter, voiceId: string): void {
     const voiceLabel = voices.find((voice) => voice.id === voiceId)?.label ?? '';
     const existing = voiceAssignmentFor(assignments, character.id);
     const next = voiceId
       ? upsertVoiceAssignment(assignments, { characterId: character.id, voiceId, voiceLabel, style: existing?.style ?? defaultStyleFor(character), updatedAt: new Date().toISOString() })
       : removeVoiceAssignment(assignments, character.id);
-    setAssignments(next);
-    saveStoryVoiceCast(snapshot.fingerprint, next);
+    persistAssignments(next);
   }
 
   function updateStyle(character: StoryCharacter, style: string): void {
     const existing = voiceAssignmentFor(assignments, character.id);
     if (!existing) return;
     const next = upsertVoiceAssignment(assignments, { ...existing, style, updatedAt: new Date().toISOString() });
-    setAssignments(next);
-    saveStoryVoiceCast(snapshot.fingerprint, next);
+    persistAssignments(next);
   }
 
   return (
