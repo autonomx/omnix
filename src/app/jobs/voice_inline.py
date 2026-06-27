@@ -216,7 +216,7 @@ def _generate_audio_bytes(text: str, *, speaker: str, payload: dict[str, Any]) -
         result = provider.generate_audio(
             text,
             speaker=speaker,
-            language=_text(payload.get("language")) or "en",
+            language=_tts_language_code(payload.get("language")),
             output_settings=payload.get("output_settings") or {},
             audio_effects=payload.get("audio_effects") or [],
         )
@@ -247,6 +247,50 @@ def _generate_audio_bytes(text: str, *, speaker: str, payload: dict[str, Any]) -
         }
     except Exception as exc:
         raise RuntimeError(f"Real TTS generation failed for speaker '{speaker}': {exc}") from exc
+
+
+def _tts_language_code(value: Any) -> str:
+    """Normalize UI language labels to provider language codes.
+
+    The Qwen3 provider maps short codes such as ``en`` to its supported
+    language name (``English``). Podcast forms use display labels like
+    ``English (US)``, which the provider runtime does not accept directly.
+    """
+    raw = _text(value)
+    if not raw:
+        return "en"
+
+    compact = re.sub(r"[^a-z]+", "", raw.casefold())
+    first_word = re.split(r"[^a-z]+", raw.casefold(), maxsplit=1)[0]
+    language_map = {
+        "en": "en",
+        "eng": "en",
+        "english": "en",
+        "englishus": "en",
+        "englishuk": "en",
+        "enus": "en",
+        "engb": "en",
+        "zh": "zh",
+        "chinese": "zh",
+        "mandarin": "zh",
+        "ja": "ja",
+        "japanese": "ja",
+        "fr": "fr",
+        "french": "fr",
+        "de": "de",
+        "german": "de",
+        "es": "es",
+        "spanish": "es",
+        "it": "it",
+        "italian": "it",
+        "ru": "ru",
+        "russian": "ru",
+        "ko": "ko",
+        "korean": "ko",
+        "pt": "pt",
+        "portuguese": "pt",
+    }
+    return language_map.get(compact) or language_map.get(first_word) or raw
 
 
 def _fallback_wav(text: str) -> bytes:
