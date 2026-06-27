@@ -134,7 +134,7 @@ export function OmnixTopBar({
 
 export function OmnixStatusPill({ children }: { children: ReactNode }) {
   return (
-    <Badge className="status-pill" variant="light">
+    <Badge className="status-pill" component="span" variant="light">
       {children}
     </Badge>
   );
