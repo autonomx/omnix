@@ -15,11 +15,15 @@ type StoryAudioStreamControlMessage =
   | { type: 'error'; message?: string; error?: string };
 type StoryAudioRealtimeResult = { audioUrl: string; chunkCount: number };
 type StoryAudioRealtimeCallbacks = { signal: AbortSignal; onProgress: (progress: number) => void; onStatusMessage: (message: string) => void };
+type StoryAudioWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
 
 const STORY_AUDIO_SELECTED_VOICE_KEY = 'omnix.storyteller.audio.selectedVoiceId';
+const STORY_AUDIO_WS_URL_KEY = 'omnix.storyteller.audio.websocketUrl';
 const STORY_AUDIO_POLL_INTERVAL_MS = 1_500;
 const STORY_AUDIO_MAX_POLLS = 160;
 const STORY_AUDIO_STREAM_SAMPLE_RATE = 24_000;
+const STORY_AUDIO_WS_CONNECT_TIMEOUT_MS = 4_000;
+const STORY_AUDIO_DEV_API_PORT = '8000';
 
 export function StoryAudioPanel() {
   const [voices, setVoices] = useState<StoryAudioVoiceOption[]>([]);
@@ -338,21 +342,35 @@ async function createStoryAudioJob({ title, text, segments, voiceId, storyDocume
 
 function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallbackVoiceId: string, callbacks: StoryAudioRealtimeCallbacks): Promise<StoryAudioRealtimeResult> {
   return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined' || typeof WebSocket === 'undefined' || typeof AudioContext === 'undefined') {
+    const audioWindow = window as StoryAudioWindow;
+    const AudioContextCtor = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
+    const WebSocketCtor = audioWindow.WebSocket;
+    if (typeof window === 'undefined' || !WebSocketCtor || !AudioContextCtor) {
       reject(new Error('Realtime story audio requires browser WebSocket and AudioContext support.'));
       return;
     }
 
-    const audioContext = new AudioContext({ sampleRate: STORY_AUDIO_STREAM_SAMPLE_RATE, latencyHint: 'interactive' });
+    const streamUrl = defaultStoryAudioWebSocketUrl(window.location);
+    callbacks.onStatusMessage(`Connecting realtime narration stream at ${streamUrl}…`);
+    const audioContext = new AudioContextCtor({ sampleRate: STORY_AUDIO_STREAM_SAMPLE_RATE, latencyHint: 'interactive' });
     const pcmChunks: Uint8Array[] = [];
     const voiceMapping = buildVoiceMappingFromSegments(segments, fallbackVoiceId);
-    const socket = new WebSocket(defaultStoryAudioWebSocketUrl(window.location));
+    const socket = new WebSocketCtor(streamUrl);
     socket.binaryType = 'arraybuffer';
     let finished = false;
     let totalSegments = segments.length;
     let nextPlaybackTime = audioContext.currentTime;
+    let connectTimer: ReturnType<typeof window.setTimeout> | null = window.setTimeout(() => {
+      fail(new Error(`Realtime story audio websocket did not connect within ${STORY_AUDIO_WS_CONNECT_TIMEOUT_MS / 1000}s.`));
+    }, STORY_AUDIO_WS_CONNECT_TIMEOUT_MS);
 
-    const cleanup = () => callbacks.signal.removeEventListener('abort', abort);
+    const cleanup = () => {
+      if (connectTimer !== null) {
+        window.clearTimeout(connectTimer);
+        connectTimer = null;
+      }
+      callbacks.signal.removeEventListener('abort', abort);
+    };
     const finish = (result: StoryAudioRealtimeResult) => {
       if (finished) return;
       finished = true;
@@ -372,7 +390,7 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
     };
     function abort() {
       try {
-        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'stop' }));
+        if (socket.readyState === WebSocketCtor.OPEN) socket.send(JSON.stringify({ type: 'stop' }));
       } catch { /* best-effort */ }
       fail(makeAbortError('Story audio stream was stopped.'));
     }
@@ -384,6 +402,10 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
     }
 
     socket.onopen = () => {
+      if (connectTimer !== null) {
+        window.clearTimeout(connectTimer);
+        connectTimer = null;
+      }
       if (audioContext.state === 'suspended') void audioContext.resume().catch(() => undefined);
       callbacks.onStatusMessage('Realtime narration connected. Waiting for the first audio chunk…');
       socket.send(JSON.stringify({
@@ -435,7 +457,7 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
         fail(error);
       }
     };
-    socket.onerror = () => fail(new Error('Realtime story audio websocket failed.'));
+    socket.onerror = () => fail(new Error(`Realtime story audio websocket failed at ${streamUrl}.`));
     socket.onclose = () => { if (!finished) fail(new Error('Realtime story audio websocket closed before completion.')); };
   });
 }
@@ -451,9 +473,23 @@ function buildVoiceMappingFromSegments(segments: StoryAudioScriptSegment[], fall
   return mapping;
 }
 
-function defaultStoryAudioWebSocketUrl(locationLike: Pick<Location, 'protocol' | 'host'>): string {
+function defaultStoryAudioWebSocketUrl(locationLike: Pick<Location, 'protocol' | 'host' | 'hostname' | 'port'>): string {
+  const configuredUrl = readConfiguredStoryAudioWebSocketUrl();
+  if (configuredUrl) return configuredUrl;
   const protocol = locationLike.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${locationLike.host}/ws/audiobook`;
+  const hostname = locationLike.hostname || locationLike.host.split(':')[0] || 'localhost';
+  const isLocalDevHost = ['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname);
+  const devUiPort = Boolean(locationLike.port && !['80', '443', STORY_AUDIO_DEV_API_PORT].includes(locationLike.port));
+  const port = isLocalDevHost && devUiPort ? STORY_AUDIO_DEV_API_PORT : locationLike.port;
+  return `${protocol}//${hostname}${port ? `:${port}` : ''}/ws/audiobook`;
+}
+
+function readConfiguredStoryAudioWebSocketUrl(): string {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage.getItem(STORY_AUDIO_WS_URL_KEY)?.trim() || '' : '';
+  } catch {
+    return '';
+  }
 }
 
 function schedulePcmChunk(audioContext: AudioContext, chunk: ArrayBuffer, nextPlaybackTime: number): number {
