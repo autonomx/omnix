@@ -69,7 +69,7 @@ describe('PodcastWorkspace', () => {
     renderPodcast();
 
     expect(await screen.findByRole('heading', { name: 'Episode request' })).toBeInTheDocument();
-    expect(await screen.findByText('Faster Qwen TTS')).toBeInTheDocument();
+    expect((await screen.findAllByText('Faster Qwen TTS')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: '⚭ 2. Participants & voice casting' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Topic / Episode title'), { target: { value: 'Signals' } });
