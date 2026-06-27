@@ -15,6 +15,14 @@ type StoryAudioStreamControlMessage =
   | { type: 'error'; message?: string; error?: string };
 type StoryAudioRealtimeResult = { audioUrl: string; chunkCount: number };
 type StoryAudioRealtimeCallbacks = { audioElement: HTMLAudioElement | null; signal: AbortSignal; onProgress: (progress: number) => void; onStatusMessage: (message: string) => void };
+type StoryAudioWebSocketPayload = {
+  type: 'start';
+  segments: Array<{ index: number; speaker: string; text: string; voice_id: string | null; character_id: string; block_id: string; chapter_id: string }>;
+  voice_mapping: Record<string, string>;
+  voice_map: Record<string, string>;
+  default_voices: { narrator: string | null; male: string | null; female: string | null };
+  job_id: string;
+};
 
 const STORY_AUDIO_SELECTED_VOICE_KEY = 'omnix.storyteller.audio.selectedVoiceId';
 const STORY_AUDIO_WS_URL_KEY = 'omnix.storyteller.audio.websocketUrl';
@@ -36,6 +44,7 @@ export function StoryAudioPanel() {
   const [audioSource, setAudioSource] = useState('');
   const [filename, setFilename] = useState('story-audio.wav');
   const [storySnapshot, setStorySnapshot] = useState(() => readStorySnapshot());
+  const [debugAudioJson, setDebugAudioJson] = useState('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const generationRunRef = useRef(0);
   const streamAbortRef = useRef<(() => void) | null>(null);
@@ -79,6 +88,7 @@ export function StoryAudioPanel() {
         setAudioSource('');
         setProgress(0);
         setJobId('');
+        setDebugAudioJson('');
         setFilename(`${slugify(next.title || 'story')}-audio.wav`);
         setStatus('ready');
         setStatusMessage('Story changed. Ready to regenerate full-story narration.');
@@ -128,6 +138,27 @@ export function StoryAudioPanel() {
     setStatusMessage('Story audio generation stopped.');
   }
 
+  function printAudioDebugJson(): void {
+    if (!debugAudioJson) return;
+    try {
+      console.info('[STORY AUDIO DEBUG PAYLOAD]', JSON.parse(debugAudioJson));
+    } catch {
+      console.info('[STORY AUDIO DEBUG PAYLOAD]', debugAudioJson);
+    }
+    setStatusMessage('Printed Story Audio JSON to the browser console.');
+  }
+
+  async function copyAudioDebugJson(): Promise<void> {
+    if (!debugAudioJson) return;
+    if (!navigator.clipboard) {
+      printAudioDebugJson();
+      setStatusMessage('Clipboard unavailable. Printed Story Audio JSON to the browser console.');
+      return;
+    }
+    await navigator.clipboard.writeText(debugAudioJson);
+    setStatusMessage('Copied Story Audio JSON to clipboard.');
+  }
+
   async function generateStoryAudio(): Promise<void> {
     const snapshot = readStorySnapshot();
     const audioMap = mapStoryToAudioSegments(snapshot.title, snapshot.text, selectedVoiceId);
@@ -139,6 +170,7 @@ export function StoryAudioPanel() {
     }
 
     const runId = generationRunRef.current + 1;
+    const websocketPayload = buildStoryAudioWebSocketPayload(segments, selectedVoiceId, `story-${Date.now()}`);
     generationRunRef.current = runId;
     streamAbortRef.current?.();
     const streamAbortController = new AbortController();
@@ -147,13 +179,14 @@ export function StoryAudioPanel() {
     setAudioSource('');
     setFilename(`${slugify(snapshot.title || 'story')}-audio.wav`);
     setProgress(2);
-    setJobId('');
+    setJobId(websocketPayload.job_id);
+    setDebugAudioJson(JSON.stringify(websocketPayload, null, 2));
     setStatus('queued');
     setStatusMessage(`Starting realtime narration for ${segments.length > 1 ? `${segments.length} mapped story segments` : 'the full story'}…`);
 
     try {
       try {
-        const realtimeAudio = await streamStoryAudioViaWebSocket(segments, selectedVoiceId, {
+        const realtimeAudio = await streamStoryAudioViaWebSocket(websocketPayload, {
           audioElement: audioRef.current,
           signal: streamAbortController.signal,
           onProgress: setProgress,
@@ -278,6 +311,14 @@ export function StoryAudioPanel() {
           <progress max="100" value={Math.max(0, Math.min(100, progress))}>{progress}%</progress>
         </div>
         <audio ref={audioRef} controls preload="metadata" />
+        <details className="storyteller-audio-debug">
+          <summary>Audio mapping JSON</summary>
+          <div className="storyteller-audio-actions">
+            <button disabled={!debugAudioJson} type="button" onClick={printAudioDebugJson}>Print JSON</button>
+            <button disabled={!debugAudioJson} type="button" onClick={() => void copyAudioDebugJson()}>Copy JSON</button>
+          </div>
+          <textarea aria-label="Story audio mapping JSON" readOnly rows={12} spellCheck={false} value={debugAudioJson || 'Generate story audio to inspect the exact websocket payload.'} />
+        </details>
         <small>{jobId ? `Voice job: ${jobId}` : selectedVoiceLabel ? `Narrator voice: ${selectedVoiceLabel}` : 'Narrator voice: default'}</small>
       </div>
     </section>
@@ -355,7 +396,7 @@ async function createStoryAudioJob({ title, text, segments, voiceId, storyDocume
   }, { timeoutMs: 120_000, timeoutMessage: 'Story audio generation timed out after 120s.' });
 }
 
-function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallbackVoiceId: string, callbacks: StoryAudioRealtimeCallbacks): Promise<StoryAudioRealtimeResult> {
+function streamStoryAudioViaWebSocket(payload: StoryAudioWebSocketPayload, callbacks: StoryAudioRealtimeCallbacks): Promise<StoryAudioRealtimeResult> {
   return new Promise((resolve, reject) => {
     const WebSocketCtor = window.WebSocket;
     const audioElement = callbacks.audioElement;
@@ -371,11 +412,10 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
     const streamUrl = defaultStoryAudioWebSocketUrl(window.location);
     callbacks.onStatusMessage(`Connecting realtime narration stream at ${streamUrl}…`);
     const pcmChunks: Uint8Array[] = [];
-    const voiceMapping = buildVoiceMappingFromSegments(segments, fallbackVoiceId);
     const socket = new WebSocketCtor(streamUrl);
     socket.binaryType = 'arraybuffer';
     let finished = false;
-    let totalSegments = segments.length;
+    let totalSegments = payload.segments.length;
     let firstPlayerSource = false;
     let sourceRefreshing = false;
     let userPaused = false;
@@ -484,14 +524,7 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
         connectTimer = null;
       }
       callbacks.onStatusMessage('Realtime narration connected. The audio player will start as chunks arrive…');
-      socket.send(JSON.stringify({
-        type: 'start',
-        segments: segments.map((segment) => ({ speaker: segment.speaker, text: segment.text })),
-        voice_mapping: voiceMapping,
-        voice_map: voiceMapping,
-        default_voices: { narrator: fallbackVoiceId || null, male: fallbackVoiceId || null, female: fallbackVoiceId || null },
-        job_id: `story-${Date.now()}`,
-      }));
+      socket.send(JSON.stringify(payload));
     };
 
     socket.onmessage = (event) => {
@@ -536,6 +569,26 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
     socket.onerror = () => fail(new Error(`Realtime story audio websocket failed at ${streamUrl}.`));
     socket.onclose = () => { if (!finished) fail(new Error('Realtime story audio websocket closed before completion.')); };
   });
+}
+
+function buildStoryAudioWebSocketPayload(segments: StoryAudioScriptSegment[], fallbackVoiceId: string, jobId: string): StoryAudioWebSocketPayload {
+  const voiceMapping = buildVoiceMappingFromSegments(segments, fallbackVoiceId);
+  return {
+    type: 'start',
+    segments: segments.map((segment) => ({
+      index: segment.index,
+      speaker: segment.speaker,
+      text: segment.text,
+      voice_id: segment.voice_id,
+      character_id: segment.character_id,
+      block_id: segment.block_id,
+      chapter_id: segment.chapter_id,
+    })),
+    voice_mapping: voiceMapping,
+    voice_map: voiceMapping,
+    default_voices: { narrator: fallbackVoiceId || null, male: fallbackVoiceId || null, female: fallbackVoiceId || null },
+    job_id: jobId,
+  };
 }
 
 function buildVoiceMappingFromSegments(segments: StoryAudioScriptSegment[], fallbackVoiceId: string): Record<string, string> {
