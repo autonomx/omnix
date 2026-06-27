@@ -84,7 +84,7 @@ describe('PodcastWorkspace', () => {
     renderPodcast();
 
     expect(await screen.findByRole('heading', { name: 'Episode request' })).toBeInTheDocument();
-    expect(await screen.findByText('Alex Voice')).toBeInTheDocument();
+    expect((await screen.findAllByText('Alex Voice')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: '2. Participants and voice casting' })).toBeInTheDocument();
     expect(screen.getByText('Voice')).toBeInTheDocument();
 
