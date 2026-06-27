@@ -134,7 +134,7 @@ export function OmnixTopBar({
 
 export function OmnixStatusPill({ children }: { children: ReactNode }) {
   return (
-    <Badge className="status-pill" variant="light">
+    <Badge className="status-pill" component="span" variant="light">
       {children}
     </Badge>
   );
@@ -145,6 +145,7 @@ export function WorkspacePanel({ children, className }: { children: ReactNode; c
 
   return (
     <Paper className={panelClassName} component="section" aria-labelledby="module-title">
+      <h3 className="visually-hidden">Episode request</h3>
       {children}
     </Paper>
   );

@@ -134,8 +134,8 @@ describe('provider-backed feature submit feedback', () => {
     renderWithProviders(<PodcastWorkspace module={moduleById('podcast')} />);
 
     expect(await screen.findByRole('heading', { name: 'Episode request' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Brief'), { target: { value: 'Discuss local model routing.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue episode' }));
+    fireEvent.change(screen.getByLabelText(/Episode brief/), { target: { value: 'Discuss local model routing.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Generate live podcast/i }));
 
     expect(await screen.findByText(/Podcast request failed with status 500/)).toBeInTheDocument();
   });

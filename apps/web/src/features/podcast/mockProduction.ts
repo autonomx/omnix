@@ -3,7 +3,7 @@ import type { ProductionStage } from '../conversation-production/types';
 export interface MockProductionStage {
   id: ProductionStage | 'podcast_renderer';
   label: string;
-  state: 'done' | 'active' | 'pending';
+  state: 'done' | 'active' | 'pending' | 'failed';
 }
 
 export interface MockTranscriptLine {
