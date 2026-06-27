@@ -63,7 +63,8 @@
 }
 
 .storyteller-audio-controls select,
-.storyteller-cast-add input {
+.storyteller-cast-add input,
+.storyteller-voice-row select {
   background: rgba(7, 6, 13, 0.82);
   border: 1px solid rgba(151, 114, 255, 0.22);
   border-radius: 0.5rem;
@@ -139,32 +140,45 @@
   padding: 0.25rem 0.65rem;
 }
 
-.storyteller-cast-list {
+.storyteller-cast-list,
+.storyteller-voice-cast-table {
   display: grid;
   gap: 0.55rem;
+}
+
+.storyteller-cast-list {
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
 }
 
-.storyteller-cast-card {
+.storyteller-cast-card,
+.storyteller-voice-row {
   background: rgba(7, 6, 13, 0.55);
   border: 1px solid rgba(151, 114, 255, 0.16);
   border-radius: 0.5rem;
   display: grid;
-  gap: 0.35rem;
+  gap: 0.55rem;
   padding: 0.7rem;
 }
 
-.storyteller-cast-card div {
+.storyteller-voice-row {
+  align-items: center;
+  grid-template-columns: minmax(10rem, 0.8fr) minmax(12rem, 1fr) minmax(10rem, 0.8fr);
+}
+
+.storyteller-cast-card div,
+.storyteller-voice-row div {
   display: grid;
   gap: 0.1rem;
 }
 
-.storyteller-cast-card strong {
+.storyteller-cast-card strong,
+.storyteller-voice-row strong {
   color: #f7f3ff;
 }
 
 .storyteller-cast-card span,
-.storyteller-cast-card small {
+.storyteller-cast-card small,
+.storyteller-voice-row span {
   color: #aaa5bc;
   font-size: 0.78rem;
 }
@@ -174,7 +188,8 @@
 }
 
 @media (max-width: 1180px) {
-  .storyteller-audio-panel {
+  .storyteller-audio-panel,
+  .storyteller-voice-row {
     grid-template-columns: 1fr;
   }
 }
