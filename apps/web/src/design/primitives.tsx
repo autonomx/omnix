@@ -145,6 +145,7 @@ export function WorkspacePanel({ children, className }: { children: ReactNode; c
 
   return (
     <Paper className={panelClassName} component="section" aria-labelledby="module-title">
+      <h3 className="visually-hidden">Episode request</h3>
       {children}
     </Paper>
   );
