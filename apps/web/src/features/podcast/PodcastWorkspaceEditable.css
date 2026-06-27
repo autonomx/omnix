@@ -1,0 +1,86 @@
+.editable-speaker-table .speaker-row {
+  grid-template-columns: 1.25fr 1fr 1.15fr 1.15fr 1.15fr 1.1fr 1.35fr 1.25fr 0.62fr;
+  min-width: 96rem;
+}
+
+.editable-speaker-row {
+  align-items: stretch;
+}
+
+.editable-speaker-row > span {
+  min-width: 0;
+}
+
+.editable-speaker-row input,
+.editable-speaker-row textarea,
+.editable-speaker-row select {
+  background: rgba(5, 8, 17, 0.62);
+  border-color: rgba(132, 148, 196, 0.24);
+  font-size: 0.82rem;
+  min-height: 2rem;
+  padding: 0.42rem 0.52rem;
+}
+
+.editable-speaker-row textarea {
+  line-height: 1.25;
+  min-height: 3.9rem;
+  resize: vertical;
+}
+
+.editable-speaker-row .speaker-cell-main span {
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.stage-rail .failed {
+  color: #ff9c9c;
+}
+
+.stage-rail .failed::after {
+  background: rgba(244, 63, 94, 0.32);
+  border-color: rgba(251, 113, 133, 0.72);
+  box-shadow: 0 0 18px rgba(244, 63, 94, 0.28);
+}
+
+.live-production-card.idle .waveform,
+.waveform.idle {
+  opacity: 0.35;
+  filter: grayscale(0.55);
+}
+
+.live-production-card.idle .playback-row button:disabled,
+.live-command button:disabled,
+.live-command input:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.live-empty-state {
+  background: rgba(7, 11, 24, 0.5);
+  border: 1px dashed rgba(132, 148, 196, 0.22);
+  border-radius: 0.7rem;
+  color: #aeb9d7;
+  display: grid;
+  gap: 0.35rem;
+  min-height: 7rem;
+  padding: 1rem;
+  place-content: center;
+  text-align: center;
+}
+
+.live-empty-state strong {
+  color: #f5f7ff;
+}
+
+@media (max-width: 1400px) {
+  .editable-speaker-table .speaker-row {
+    min-width: 88rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .editable-speaker-table .speaker-row {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+}
