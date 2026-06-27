@@ -428,7 +428,7 @@ function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallb
       if (event.data instanceof ArrayBuffer) {
         const chunk = event.data.slice(0);
         pcmChunks.push(new Uint8Array(chunk));
-        schedulePcmChunk(audioContext, chunk, (nextTime) => { nextPlaybackTime = nextTime; });
+        nextPlaybackTime = schedulePcmChunk(audioContext, chunk, nextPlaybackTime);
         return;
       }
 
@@ -489,9 +489,9 @@ function defaultStoryAudioWebSocketUrl(locationLike: Pick<Location, 'protocol' |
   return `${protocol}//${locationLike.host}/ws/audiobook`;
 }
 
-function schedulePcmChunk(audioContext: AudioContext, chunk: ArrayBuffer, updateNextPlaybackTime: (nextTime: number) => void): void {
+function schedulePcmChunk(audioContext: AudioContext, chunk: ArrayBuffer, nextPlaybackTime: number): number {
   const pcm16 = new Int16Array(chunk);
-  if (!pcm16.length) return;
+  if (!pcm16.length) return nextPlaybackTime;
 
   const audioBuffer = audioContext.createBuffer(1, pcm16.length, STORY_AUDIO_STREAM_SAMPLE_RATE);
   const channel = audioBuffer.getChannelData(0);
@@ -502,11 +502,9 @@ function schedulePcmChunk(audioContext: AudioContext, chunk: ArrayBuffer, update
   const source = audioContext.createBufferSource();
   source.buffer = audioBuffer;
   source.connect(audioContext.destination);
-  const startAt = Math.max(audioContext.currentTime + 0.02, (schedulePcmChunk as unknown as { nextPlaybackTime?: number }).nextPlaybackTime ?? audioContext.currentTime);
+  const startAt = Math.max(audioContext.currentTime + 0.02, nextPlaybackTime);
   source.start(startAt);
-  const nextTime = startAt + audioBuffer.duration;
-  (schedulePcmChunk as unknown as { nextPlaybackTime?: number }).nextPlaybackTime = nextTime;
-  updateNextPlaybackTime(nextTime);
+  return startAt + audioBuffer.duration;
 }
 
 function pcmChunksToWavBlob(chunks: Uint8Array[], sampleRate: number): Blob {
@@ -531,7 +529,11 @@ function pcmChunksToWavBlob(chunks: Uint8Array[], sampleRate: number): Blob {
   writeAscii(view, 36, 'data');
   view.setUint32(40, dataSize, true);
 
-  return new Blob([header, ...chunks], { type: 'audio/wav' });
+  const parts: BlobPart[] = [header];
+  for (const chunk of chunks) {
+    parts.push(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength));
+  }
+  return new Blob(parts, { type: 'audio/wav' });
 }
 
 function writeAscii(view: DataView, offset: number, value: string): void {
