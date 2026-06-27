@@ -18,6 +18,7 @@ import './features/storyteller/StoryThemeThumbnails.css';
 import './features/storyteller/StoryAudioEnhancer.css';
 import './features/storyteller/story-audio-enhancer';
 import './features/storyteller/story-extra-mount';
+import './features/podcast/PodcastWorkspaceLayoutFix.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
