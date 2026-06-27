@@ -70,6 +70,18 @@ export interface StoryDocument {
 }
 
 const STORY_DOCUMENT_STORAGE_PREFIX = 'omnix.storyteller.document:';
+const DIALOGUE_ATTRIBUTION_VERBS = [
+  'said', 'asked', 'replied', 'answered', 'suggested', 'insisted', 'whispered', 'boomed',
+  'murmured', 'muttered', 'shouted', 'called', 'declared', 'continued', 'added', 'sighed',
+  'snapped', 'cried', 'exclaimed', 'noted', 'observed', 'warned', 'hissed', 'growled',
+  'laughed', 'began', 'admitted', 'urged', 'promised', 'responded', 'remarked',
+];
+
+interface SpeakerAttribution {
+  character: StoryCharacter;
+  confidence: number;
+  evidence: string;
+}
 
 export function storyDocumentStorageKey(storyId: string): string {
   return `${STORY_DOCUMENT_STORAGE_PREFIX}${storyId || 'draft'}`;
@@ -172,10 +184,11 @@ function splitParagraphIntoBlocks(paragraph: string, chapterId: string, starting
     const before = paragraph.slice(lastIndex, index).trim();
     if (before) blocks.push(narrationBlock(chapterId, order++, before));
     const quote = match[1].trim();
-    const afterWindow = paragraph.slice(index + match[0].length, index + match[0].length + 120);
-    const beforeWindow = paragraph.slice(Math.max(0, index - 120), index);
-    blocks.push(dialogueBlock(chapterId, order++, quote, cast, `${beforeWindow} ${afterWindow}`));
-    lastIndex = index + match[0].length;
+    const quoteEnd = index + match[0].length;
+    const afterWindow = paragraph.slice(quoteEnd, quoteEnd + 180);
+    const beforeWindow = paragraph.slice(Math.max(0, index - 180), index);
+    blocks.push(dialogueBlock(chapterId, order++, quote, cast, beforeWindow, afterWindow));
+    lastIndex = quoteEnd;
   }
   const remaining = paragraph.slice(lastIndex).trim();
   if (remaining) blocks.push(narrationBlock(chapterId, order++, remaining));
@@ -187,24 +200,103 @@ function narrationBlock(chapterId: string, order: number, text: string): StoryBl
   return { id: `${chapterId}-narration-${order}`, kind: 'narration', chapterId, text, speakerId: 'narrator', order };
 }
 
-function dialogueBlock(chapterId: string, order: number, text: string, cast: StoryCharacter[], context: string): StoryBlock {
-  const attributed = inferSpeakerFromContext(context, cast);
+function dialogueBlock(chapterId: string, order: number, text: string, cast: StoryCharacter[], beforeContext: string, afterContext: string): StoryBlock {
+  const attributed = inferSpeakerFromContext(beforeContext, afterContext, cast);
   return {
     id: `${chapterId}-dialogue-${order}`,
     kind: 'dialogue',
     chapterId,
     text,
-    speakerId: attributed?.id ?? 'narrator',
-    speakerName: attributed?.displayName ?? 'Narrator',
+    speakerId: attributed?.character.id ?? 'narrator',
+    speakerName: attributed?.character.displayName ?? 'Narrator',
     order,
-    confidence: attributed ? 0.78 : 0.2,
-    attributionEvidence: attributed ? 'nearby explicit character name' : 'no reliable attribution',
+    confidence: attributed?.confidence ?? 0.2,
+    attributionEvidence: attributed?.evidence ?? 'no reliable attribution',
   };
 }
 
-function inferSpeakerFromContext(context: string, cast: StoryCharacter[]): StoryCharacter | null {
+function inferSpeakerFromContext(beforeContext: string, afterContext: string, cast: StoryCharacter[]): SpeakerAttribution | null {
+  return inferTrailingNamedAttribution(afterContext, cast)
+    ?? inferTrailingPronounAttribution(beforeContext, afterContext, cast)
+    ?? inferNearestSpeaker(beforeContext, afterContext, cast);
+}
+
+function inferTrailingNamedAttribution(afterContext: string, cast: StoryCharacter[]): SpeakerAttribution | null {
+  const immediate = afterContext.trimStart().slice(0, 140);
+  for (const character of nonNarratorCast(cast)) {
+    for (const alias of sortedAliases(character)) {
+      const aliasPattern = escapeRegExp(alias);
+      const verbPattern = DIALOGUE_ATTRIBUTION_VERBS.join('|');
+      const direct = new RegExp(`^[,\\s—–-]*${aliasPattern}\\b(?:\\s+[a-z'’-]+){0,3}\\s+(?:${verbPattern})\\b`, 'i');
+      if (direct.test(immediate)) {
+        return { character, confidence: 0.96, evidence: `trailing dialogue attribution: ${alias}` };
+      }
+      const actionFirst = new RegExp(`^[,\\s—–-]*(?:${verbPattern})\\s+${aliasPattern}\\b`, 'i');
+      if (actionFirst.test(immediate)) {
+        return { character, confidence: 0.9, evidence: `trailing action-first attribution: ${alias}` };
+      }
+    }
+  }
+  return null;
+}
+
+function inferTrailingPronounAttribution(beforeContext: string, afterContext: string, cast: StoryCharacter[]): SpeakerAttribution | null {
+  const immediate = afterContext.trimStart().slice(0, 80);
+  const verbPattern = DIALOGUE_ATTRIBUTION_VERBS.join('|');
+  if (!new RegExp(`^[,\\s—–-]*(?:he|she|they)\\s+(?:${verbPattern})\\b`, 'i').test(immediate)) return null;
+  const nearest = nearestCharacterBeforeQuote(beforeContext, cast);
+  return nearest ? { character: nearest, confidence: 0.74, evidence: 'pronoun attribution resolved to nearest preceding character' } : null;
+}
+
+function inferNearestSpeaker(beforeContext: string, afterContext: string, cast: StoryCharacter[]): SpeakerAttribution | null {
+  const before = nearestCharacterBeforeQuote(beforeContext, cast);
+  const after = nearestCharacterAfterQuote(afterContext, cast);
+  if (after && after.index <= 60) {
+    return { character: after.character, confidence: 0.62, evidence: 'nearest following character name' };
+  }
+  if (before) {
+    return { character: before, confidence: 0.55, evidence: 'nearest preceding character name' };
+  }
+  return after ? { character: after.character, confidence: 0.5, evidence: 'nearby following character name' } : null;
+}
+
+function nearestCharacterBeforeQuote(context: string, cast: StoryCharacter[]): StoryCharacter | null {
   const lowerContext = context.toLowerCase();
-  return cast.find((character) => character.id !== 'narrator' && character.aliases.some((alias) => lowerContext.includes(alias.toLowerCase()))) ?? null;
+  let best: { character: StoryCharacter; index: number } | null = null;
+  for (const character of nonNarratorCast(cast)) {
+    for (const alias of sortedAliases(character)) {
+      const index = lowerContext.lastIndexOf(alias.toLowerCase());
+      if (index >= 0 && (!best || index > best.index)) best = { character, index };
+    }
+  }
+  return best?.character ?? null;
+}
+
+function nearestCharacterAfterQuote(context: string, cast: StoryCharacter[]): { character: StoryCharacter; index: number } | null {
+  const lowerContext = context.toLowerCase();
+  let best: { character: StoryCharacter; index: number } | null = null;
+  for (const character of nonNarratorCast(cast)) {
+    for (const alias of sortedAliases(character)) {
+      const index = lowerContext.indexOf(alias.toLowerCase());
+      if (index >= 0 && (!best || index < best.index)) best = { character, index };
+    }
+  }
+  return best;
+}
+
+function nonNarratorCast(cast: StoryCharacter[]): StoryCharacter[] {
+  return cast.filter((character) => character.id !== 'narrator');
+}
+
+function sortedAliases(character: StoryCharacter): string[] {
+  return [...character.aliases, character.displayName]
+    .map((alias) => alias.trim())
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function validateStoryDocument(value: unknown): StoryDocument | null {
