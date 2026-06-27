@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { StoryAudioPanel } from './StoryAudioPanel';
 import { StoryCastPanel } from './StoryCastPanel';
 import { StoryDocumentPanel } from './StoryDocumentPanel';
+import { StoryVoiceCastPanel } from './StoryVoiceCastPanel';
 
 const STORY_AUDIO_MOUNT_ID = 'omnix-story-audio-panel-root';
 
@@ -15,6 +16,7 @@ function StorytellerAudioAndCast() {
   return React.createElement(React.Fragment, null, [
     React.createElement(StoryAudioPanel, { key: 'audio' }),
     React.createElement(StoryCastPanel, { key: 'cast' }),
+    React.createElement(StoryVoiceCastPanel, { key: 'voice-cast' }),
     React.createElement(StoryDocumentPanel, { key: 'document' }),
   ]);
 }
