@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { StoryAudioPanel } from './StoryAudioPanel';
 
@@ -32,7 +33,7 @@ function mountStoryAudioPanel(): void {
   mountedRoot?.unmount();
   mountedElement = mountElement;
   mountedRoot = createRoot(mountElement);
-  mountedRoot.render(<StoryAudioPanel />);
+  mountedRoot.render(React.createElement(StoryAudioPanel));
 }
 
 function installStoryAudioEnhancer(): void {
