@@ -1,6 +1,6 @@
 .editable-speaker-table .speaker-row {
-  grid-template-columns: 1.25fr 1fr 1.15fr 1.15fr 1.15fr 1.1fr 1.35fr 1.25fr 0.62fr;
-  min-width: 96rem;
+  grid-template-columns: 1.25fr 1fr 1.15fr 1.15fr 1.15fr 1.15fr 1.1fr 1.35fr 1fr;
+  min-width: 98rem;
 }
 
 .editable-speaker-row {
@@ -29,6 +29,38 @@
 
 .editable-speaker-row .speaker-cell-main span {
   gap: 0.35rem;
+  width: 100%;
+}
+
+.speaker-actions {
+  display: flex;
+  gap: 0.35rem;
+  position: relative;
+}
+
+.speaker-actions button {
+  white-space: nowrap;
+}
+
+.speaker-menu {
+  background: rgba(7, 11, 24, 0.98);
+  border: 1px solid rgba(132, 148, 196, 0.28);
+  border-radius: 0.7rem;
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.32);
+  display: grid;
+  gap: 0.25rem;
+  min-width: 11rem;
+  padding: 0.45rem;
+  position: absolute;
+  right: 0;
+  top: 2.35rem;
+  z-index: 20;
+}
+
+.speaker-menu button {
+  justify-content: flex-start;
+  min-height: 2rem;
+  text-align: left;
   width: 100%;
 }
 
@@ -74,7 +106,7 @@
 
 @media (max-width: 1400px) {
   .editable-speaker-table .speaker-row {
-    min-width: 88rem;
+    min-width: 90rem;
   }
 }
 
