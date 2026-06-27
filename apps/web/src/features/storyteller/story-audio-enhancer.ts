@@ -14,13 +14,25 @@ let observerStarted = false;
 let renderScheduled = false;
 
 function StorytellerAudioAndCast() {
-  return React.createElement(React.Fragment, null, [
-    React.createElement(StoryAudioPanel, { key: 'audio' }),
-    React.createElement(StoryCastPanel, { key: 'cast' }),
-    React.createElement(StoryVoiceCastPanel, { key: 'voice-cast' }),
-    React.createElement(StoryChapterAudioPanel, { key: 'chapter-audio' }),
-    React.createElement(StoryDocumentPanel, { key: 'document' }),
-  ]);
+  return React.createElement(
+    'details',
+    { className: 'storyteller-toolbox storyteller-toolbox-primary' },
+    React.createElement(
+      'summary',
+      null,
+      React.createElement('span', null, React.createElement('strong', null, 'Audio & cast tools'), React.createElement('small', null, 'Narration, voices, character registry, chapter audio, structured JSON')), 
+      React.createElement('em', null, 'Open tools'),
+    ),
+    React.createElement(
+      'div',
+      { className: 'storyteller-toolbox-content storyteller-toolbox-grid' },
+      React.createElement(StoryAudioPanel, { key: 'audio' }),
+      React.createElement(StoryVoiceCastPanel, { key: 'voice-cast' }),
+      React.createElement(StoryCastPanel, { key: 'cast' }),
+      React.createElement(StoryChapterAudioPanel, { key: 'chapter-audio' }),
+      React.createElement(StoryDocumentPanel, { key: 'document' }),
+    ),
+  );
 }
 
 function scheduleStoryAudioMount(): void {

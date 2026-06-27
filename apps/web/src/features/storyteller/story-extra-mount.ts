@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { StoryExtraPanels } from './StoryExtraPanels';
 
 function mount(): void {
-  const host = document.querySelector('.storyteller-project-header');
+  const host = document.getElementById('omnix-story-audio-panel-root') ?? document.querySelector('.storyteller-project-header');
   if (!host || document.getElementById('omnix-story-extra-root')) return;
   const node = document.createElement('div');
   node.id = 'omnix-story-extra-root';
