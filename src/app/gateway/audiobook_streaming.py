@@ -6,8 +6,9 @@ import json
 import re
 import time
 import wave
+from functools import wraps
 from io import BytesIO
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
@@ -16,10 +17,15 @@ from app.jobs.voice_inline import _generate_audio_bytes, _voice_stem
 AUDIOBOOK_SAMPLE_RATE = 24_000
 AUDIOBOOK_FRAME_BYTES = 4_800  # 100 ms of mono int16 PCM at 24 kHz.
 MAX_SENTENCE_CHARS = 500
+_ROUTE_SENTINEL = "_omnix_audiobook_ws_registered"
+_HOOK_SENTINEL = "_omnix_audiobook_ws_hook_installed"
 
 
 def register_audiobook_websocket(gateway: FastAPI) -> None:
     """Register the Storyteller-compatible audiobook websocket route."""
+    if getattr(gateway.state, _ROUTE_SENTINEL, False):
+        return
+    setattr(gateway.state, _ROUTE_SENTINEL, True)
 
     @gateway.websocket("/ws/audiobook")
     async def websocket_audiobook(websocket: WebSocket) -> None:
@@ -76,6 +82,23 @@ def register_audiobook_websocket(gateway: FastAPI) -> None:
                 await websocket.send_json({"type": "error", "message": str(exc) or "Audiobook websocket failed."})
             except Exception:
                 return
+
+
+def install_audiobook_websocket_hook() -> None:
+    """Install the websocket route hook for the local gateway app."""
+    if getattr(FastAPI, _HOOK_SENTINEL, False):
+        return
+
+    original_init: Callable[..., None] = FastAPI.__init__
+
+    @wraps(original_init)
+    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
+        original_init(self, *args, **kwargs)
+        if kwargs.get("title") == "Omnix Web Gateway" or (args and args[0] == "Omnix Web Gateway"):
+            register_audiobook_websocket(self)
+
+    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
+    setattr(FastAPI, _HOOK_SENTINEL, True)
 
 
 def _sentence_segments_from_start_message(message: dict[str, Any]) -> list[dict[str, str]]:
