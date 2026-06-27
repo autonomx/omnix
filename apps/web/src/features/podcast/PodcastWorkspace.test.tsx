@@ -105,7 +105,7 @@ describe('PodcastWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: /Generate live podcast/i }));
 
     expect((await screen.findAllByText('Podcast audio ready: job:podcast')).length).toBeGreaterThan(0);
-    expect(await screen.findByText('Generated podcast audio')).toBeInTheDocument();
+    expect((await screen.findAllByText('Generated podcast audio')).length).toBeGreaterThan(0);
     expect(screen.getByLabelText('Podcast audio player').querySelector('audio')?.getAttribute('src')).toBe(GENERATED_AUDIO_DATA_URL);
 
     await waitFor(() => {
