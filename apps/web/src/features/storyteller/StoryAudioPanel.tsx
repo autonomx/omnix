@@ -144,7 +144,7 @@ export function StoryAudioPanel() {
       if (generationRunRef.current !== runId) return;
       applyJobProgress(completedJob);
       if (completedJob.status === 'failed') throw new Error(jobErrorMessage(completedJob));
-      if (completedJob.status === 'cancelled') throw new Error('Voice Studio audio generation was cancelled.');
+      if (completedJob.status === 'canceled') throw new Error('Voice Studio audio generation was canceled.');
       const source = playableAudioSource(completedJob);
       if (!source) throw new Error('Voice Studio did not return downloadable story audio.');
       setAudioSource(source);
@@ -330,7 +330,7 @@ function isFallbackVoiceOutput(ref: StoryAudioJobOutputRef): boolean {
 }
 
 function isTerminalJob(job: JobRecord): boolean {
-  return job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled';
+  return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled';
 }
 
 function jobErrorMessage(job: JobRecord): string {
