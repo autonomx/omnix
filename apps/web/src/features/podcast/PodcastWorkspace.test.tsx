@@ -37,21 +37,36 @@ afterEach(() => {
 });
 
 describe('PodcastWorkspace', () => {
-  it('queues multi-stage podcast jobs through the shared jobs API', async () => {
+  it('queues podcast voice generation through the Voice Studio TTS path', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/voice-studio/voices') {
-        return Response.json({ voices: [{ id: 'faster-qwen3-tts', name: 'Faster Qwen TTS' }] });
+      if (path === '/api/assets') {
+        return Response.json({
+          assets: [
+            {
+              id: 'voice-cloning:alex',
+              module: 'voice-cloning',
+              type: 'voice_profile',
+              mime_type: 'audio/wav',
+              storage_path: 'resources/voice_clones/alex.wav',
+              metadata: { profile_name: 'Alex Voice' },
+              created_at: '2026-06-14T00:00:00Z',
+            },
+          ],
+        });
       }
 
       if (path === '/api/jobs' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
         return Response.json({
           id: 'job:podcast',
           module: 'podcast',
-          type: 'podcast.generate',
+          type: body.type,
           status: 'queued',
-          resource_class: 'gpu:llm',
+          resource_class: body.resource_class,
+          input_payload: body.input_payload,
+          stages: body.stages,
           created_at: '2026-06-14T00:00:01Z',
           updated_at: '2026-06-14T00:00:01Z',
           priority: 0,
@@ -69,8 +84,9 @@ describe('PodcastWorkspace', () => {
     renderPodcast();
 
     expect(await screen.findByRole('heading', { name: 'Episode request' })).toBeInTheDocument();
-    expect((await screen.findAllByText('Faster Qwen TTS')).length).toBeGreaterThan(0);
-    expect(screen.getByRole('heading', { name: '⚭ 2. Participants & voice casting' })).toBeInTheDocument();
+    expect(await screen.findByText('Alex Voice')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2. Participants and voice casting' })).toBeInTheDocument();
+    expect(screen.getByText('Voice')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Topic / Episode title'), { target: { value: 'Signals' } });
     fireEvent.change(screen.getByLabelText(/Episode brief/), { target: { value: 'Discuss local AI workstation design.' } });
@@ -83,10 +99,11 @@ describe('PodcastWorkspace', () => {
         ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST',
       );
       expect(createCall?.[1]?.body).toContain('"module":"podcast"');
-      expect(createCall?.[1]?.body).toContain('"type":"podcast.generate"');
-      expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:llm"');
-      expect(createCall?.[1]?.body).toContain('"id":"voice_takes"');
+      expect(createCall?.[1]?.body).toContain('"type":"tts.multi_speaker_synthesize"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
+      expect(createCall?.[1]?.body).toContain('"script_segments"');
+      expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
+      expect(createCall?.[1]?.body).toContain('"voice_id":"resources/voice_clones/alex.wav"');
       expect(createCall?.[1]?.body).toContain('"speakerInstructions"');
     });
   });
