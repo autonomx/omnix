@@ -143,7 +143,6 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   function handleLiveCommandSubmit() { const command = liveCommand.trim(); if (!command) return; if (!liveProductionActive) { setActionMessage('Live edits apply during an active production run. Press Generate live podcast first.'); return; } const lowered = command.toLowerCase(); const response = Object.entries(liveInterventionResponses).find(([keyword]) => lowered.includes(keyword))?.[1] ?? `Director applied live note: ${command}`; setDirectorNote(response); setTranscriptLines((lines) => [...lines, { timestamp: nextTimestamp(lines), speaker: 'Director', text: response }]); setActionMessage('Live intervention applied to the remaining production run.'); setLiveCommand(''); }
   function handleCopyLink() { if (typeof navigator !== 'undefined' && navigator.clipboard) void navigator.clipboard.writeText(`${window.location.origin}/podcast`); setActionMessage('Podcast link copied.'); }
   function handleAssetAction(asset: string, action: string) { setActionMessage(`${asset}: ${action} requested.`); }
-  const reviewModeBadge = generationStyle === 'automatic' ? 'Auto-approved' : `${manualReviewStops.length || 0} review stop${manualReviewStops.length === 1 ? '' : 's'}`;
 
   return (
     <WorkspacePanel>
