@@ -33,6 +33,8 @@ const STORY_AUDIO_WS_CONNECT_TIMEOUT_MS = 4_000;
 const STORY_AUDIO_DEV_API_PORT = '8000';
 const STORY_AUDIO_LIVE_REFRESH_MS = 700;
 const STORY_AUDIO_LIVE_PAD_SECONDS = 8;
+const STORY_AUDIO_INITIAL_PREROLL_SECONDS = 1.5;
+const STORY_AUDIO_STARTUP_REFRESH_HOLD_SECONDS = 0.75;
 
 export function StoryAudioPanel() {
   const [voices, setVoices] = useState<StoryAudioVoiceOption[]>([]);
@@ -481,10 +483,12 @@ function streamStoryAudioViaWebSocket(payload: StoryAudioWebSocketPayload, callb
     const refreshPlayerSource = (final = false): string => {
       if (!pcmChunks.length) return liveObjectUrl;
       const now = Date.now();
+      const realDuration = pcmDurationSeconds(pcmChunks, STORY_AUDIO_STREAM_SAMPLE_RATE);
+      if (!final && !firstPlayerSource && realDuration < STORY_AUDIO_INITIAL_PREROLL_SECONDS) return liveObjectUrl;
+      if (!final && firstPlayerSource && !audioElement.paused && audioElement.currentTime < STORY_AUDIO_STARTUP_REFRESH_HOLD_SECONDS) return liveObjectUrl;
       if (!final && firstPlayerSource && now - lastRefreshMs < STORY_AUDIO_LIVE_REFRESH_MS) return liveObjectUrl;
       lastRefreshMs = now;
       const previousUrl = liveObjectUrl;
-      const realDuration = pcmDurationSeconds(pcmChunks, STORY_AUDIO_STREAM_SAMPLE_RATE);
       const currentTime = Number.isFinite(audioElement.currentTime) ? audioElement.currentTime : 0;
       const restoreTime = Math.max(0, Math.min(currentTime, Math.max(0, realDuration - 0.05)));
       const shouldPlay = !userPaused || !firstPlayerSource || audioElement.ended;
@@ -523,7 +527,7 @@ function streamStoryAudioViaWebSocket(payload: StoryAudioWebSocketPayload, callb
         window.clearTimeout(connectTimer);
         connectTimer = null;
       }
-      callbacks.onStatusMessage('Realtime narration connected. The audio player will start as chunks arrive…');
+      callbacks.onStatusMessage('Realtime narration connected. Building a short preroll buffer before playback…');
       socket.send(JSON.stringify(payload));
     };
 
@@ -539,7 +543,7 @@ function streamStoryAudioViaWebSocket(payload: StoryAudioWebSocketPayload, callb
         const message = JSON.parse(String(event.data)) as StoryAudioStreamControlMessage;
         if (message.type === 'start') {
           totalSegments = typeof message.total_segments === 'number' && message.total_segments > 0 ? message.total_segments : totalSegments;
-          callbacks.onStatusMessage('Realtime narration streaming through the story audio player…');
+          callbacks.onStatusMessage('Realtime narration buffering through the story audio player…');
           callbacks.onProgress(8);
           return;
         }
@@ -547,7 +551,7 @@ function streamStoryAudioViaWebSocket(payload: StoryAudioWebSocketPayload, callb
           const index = typeof message.index === 'number' ? message.index : 0;
           const current = Math.min(totalSegments, index + 1);
           callbacks.onProgress(Math.min(99, Math.max(10, Math.round((current / Math.max(1, totalSegments)) * 100))));
-          callbacks.onStatusMessage(`Buffering ${message.speaker || 'Narrator'} segment ${current}/${totalSegments}; use the player to pause or rewind generated audio.`);
+          callbacks.onStatusMessage(`Buffering ${message.speaker || 'Narrator'} segment ${current}/${totalSegments}; playback starts after a short preroll so the opening is not clipped.`);
           return;
         }
         if (message.type === 'done') {
