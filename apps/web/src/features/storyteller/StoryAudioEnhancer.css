@@ -24,6 +24,100 @@
   grid-template-columns: 1fr;
 }
 
+.storyteller-toolbox {
+  background:
+    radial-gradient(circle at 85% 10%, rgba(34, 211, 238, 0.1), transparent 14rem),
+    linear-gradient(180deg, rgba(22, 21, 34, 0.9), rgba(10, 10, 19, 0.9)),
+    rgba(12, 11, 21, 0.92);
+  border: 1px solid rgba(151, 114, 255, 0.22);
+  border-radius: 0.625rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 1.25rem 3rem rgba(0, 0, 0, 0.16);
+  margin-top: 0.65rem;
+  overflow: clip;
+}
+
+.storyteller-toolbox summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 3.25rem;
+  padding: 0.65rem 0.85rem;
+}
+
+.storyteller-toolbox summary::-webkit-details-marker {
+  display: none;
+}
+
+.storyteller-toolbox summary span {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.storyteller-toolbox summary strong {
+  color: #f7f3ff;
+  font-size: 0.98rem;
+}
+
+.storyteller-toolbox summary small {
+  color: #aaa5bc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storyteller-toolbox summary em {
+  background: rgba(124, 58, 237, 0.22);
+  border: 1px solid rgba(151, 114, 255, 0.24);
+  border-radius: 999px;
+  color: #f7f3ff;
+  flex: 0 0 auto;
+  font-style: normal;
+  padding: 0.22rem 0.65rem;
+}
+
+.storyteller-toolbox[open] summary {
+  border-bottom: 1px solid rgba(151, 114, 255, 0.18);
+}
+
+.storyteller-toolbox[open] summary em::before {
+  content: 'Close';
+}
+
+.storyteller-toolbox[open] summary em {
+  font-size: 0;
+}
+
+.storyteller-toolbox[open] summary em::before {
+  font-size: 0.86rem;
+}
+
+.storyteller-toolbox-content {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.storyteller-toolbox-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+}
+
+.storyteller-toolbox .storyteller-audio-panel,
+.storyteller-toolbox .storyteller-cast-panel {
+  box-shadow: none;
+  margin-top: 0;
+}
+
+.storyteller-toolbox-primary .storyteller-audio-panel,
+.storyteller-toolbox-primary .storyteller-cast-panel:nth-child(2) {
+  grid-column: 1 / -1;
+}
+
 .storyteller-audio-copy {
   align-content: center;
   display: grid;
