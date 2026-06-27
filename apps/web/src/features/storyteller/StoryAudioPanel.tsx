@@ -2,27 +2,24 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
 import { assignmentRowsFromSegments, mapStoryToAudioSegments, speakerRowsFromSegments, type StoryAudioScriptSegment } from './storyAudioMapper';
 
-export type StoryAudioVoiceOption = {
-  id: string;
-  label: string;
-};
-
+export type StoryAudioVoiceOption = { id: string; label: string };
 export type StoryAudioSegment = StoryAudioScriptSegment & { title?: string };
 
 type StoryAudioStatus = 'ready' | 'loading_voices' | 'queued' | 'running' | 'completed' | 'failed';
-
-type StoryAudioJobOutputRef = {
-  data_url?: unknown;
-  audio_url?: unknown;
-  url?: unknown;
-  provider_fallback?: unknown;
-  provider_success?: unknown;
-  segments?: unknown;
-};
+type StoryAudioJobOutputRef = { data_url?: unknown; audio_url?: unknown; url?: unknown; provider_fallback?: unknown; provider_success?: unknown; segments?: unknown };
+type StoryAudioStreamControlMessage =
+  | { type: 'start'; total_segments?: number }
+  | { type: 'segment'; index?: number; speaker?: string; text?: string }
+  | { type: 'done'; job_id?: string }
+  | { type: 'stopped' }
+  | { type: 'error'; message?: string; error?: string };
+type StoryAudioRealtimeResult = { audioUrl: string; chunkCount: number };
+type StoryAudioRealtimeCallbacks = { signal: AbortSignal; onProgress: (progress: number) => void; onStatusMessage: (message: string) => void };
 
 const STORY_AUDIO_SELECTED_VOICE_KEY = 'omnix.storyteller.audio.selectedVoiceId';
 const STORY_AUDIO_POLL_INTERVAL_MS = 1_500;
 const STORY_AUDIO_MAX_POLLS = 160;
+const STORY_AUDIO_STREAM_SAMPLE_RATE = 24_000;
 
 export function StoryAudioPanel() {
   const [voices, setVoices] = useState<StoryAudioVoiceOption[]>([]);
@@ -36,6 +33,7 @@ export function StoryAudioPanel() {
   const [storySnapshot, setStorySnapshot] = useState(() => readStorySnapshot());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const generationRunRef = useRef(0);
+  const streamAbortRef = useRef<(() => void) | null>(null);
 
   const canGenerate = Boolean(storySnapshot.text.trim()) && status !== 'queued' && status !== 'running';
   const selectedVoiceLabel = useMemo(() => voiceLabelForId(selectedVoiceId, voices), [selectedVoiceId, voices]);
@@ -70,6 +68,8 @@ export function StoryAudioPanel() {
       const next = readStorySnapshot();
       setStorySnapshot((current) => {
         if (current.fingerprint === next.fingerprint) return current;
+        streamAbortRef.current?.();
+        streamAbortRef.current = null;
         setAudioSource('');
         setProgress(0);
         setJobId('');
@@ -100,6 +100,11 @@ export function StoryAudioPanel() {
     }
   }, [audioSource]);
 
+  useEffect(() => () => {
+    streamAbortRef.current?.();
+    streamAbortRef.current = null;
+  }, []);
+
   function handleVoiceChange(value: string): void {
     setSelectedVoiceId(value);
     persistSelectedVoiceId(value);
@@ -118,17 +123,43 @@ export function StoryAudioPanel() {
 
     const runId = generationRunRef.current + 1;
     generationRunRef.current = runId;
+    streamAbortRef.current?.();
+    const streamAbortController = new AbortController();
+    streamAbortRef.current = () => streamAbortController.abort();
     setStorySnapshot(snapshot);
     setAudioSource('');
     setFilename(`${slugify(snapshot.title || 'story')}-audio.wav`);
     setProgress(2);
     setJobId('');
     setStatus('queued');
-    setStatusMessage(`Queueing ${segments.length > 1 ? `${segments.length} mapped story segments` : 'full-story'} Voice Studio narration…`);
+    setStatusMessage(`Starting realtime narration for ${segments.length > 1 ? `${segments.length} mapped story segments` : 'the full story'}…`);
 
     try {
+      try {
+        const realtimeAudio = await streamStoryAudioViaWebSocket(segments, selectedVoiceId, {
+          signal: streamAbortController.signal,
+          onProgress: setProgress,
+          onStatusMessage: setStatusMessage,
+        });
+        if (generationRunRef.current !== runId) return;
+        streamAbortRef.current = null;
+        setAudioSource(realtimeAudio.audioUrl);
+        setProgress(100);
+        setStatus('completed');
+        setStatusMessage(`Realtime story audio complete. Streamed ${realtimeAudio.chunkCount} audio chunks.`);
+        return;
+      } catch (streamError) {
+        if (isAbortError(streamError)) throw streamError;
+        if (generationRunRef.current !== runId) return;
+        console.warn('[STORY AUDIO] WebSocket stream failed; falling back to job queue:', streamError);
+        setProgress((current) => Math.max(current, 5));
+        setStatus('queued');
+        setStatusMessage('Realtime audio stream unavailable. Falling back to queued Voice Studio generation…');
+      }
+
       const job = await createStoryAudioJob({ title: snapshot.title, text: snapshot.text, segments, voiceId: selectedVoiceId, storyDocumentId: audioMap.document.id });
       if (generationRunRef.current !== runId) return;
+      streamAbortRef.current = null;
       setJobId(job.id);
       applyJobProgress(job);
       const earlySource = playableAudioSource(job);
@@ -150,9 +181,10 @@ export function StoryAudioPanel() {
       setStatusMessage('Full-story audio ready to play or download.');
     } catch (error) {
       if (generationRunRef.current !== runId) return;
+      streamAbortRef.current = null;
       setStatus('failed');
       setProgress(0);
-      setStatusMessage(error instanceof Error ? error.message : 'Story audio generation failed.');
+      setStatusMessage(isAbortError(error) ? 'Story audio generation was stopped.' : error instanceof Error ? error.message : 'Story audio generation failed.');
     }
   }
 
@@ -304,6 +336,175 @@ async function createStoryAudioJob({ title, text, segments, voiceId, storyDocume
   }, { timeoutMs: 120_000, timeoutMessage: 'Story audio generation timed out after 120s.' });
 }
 
+function streamStoryAudioViaWebSocket(segments: StoryAudioScriptSegment[], fallbackVoiceId: string, callbacks: StoryAudioRealtimeCallbacks): Promise<StoryAudioRealtimeResult> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || typeof WebSocket === 'undefined' || typeof AudioContext === 'undefined') {
+      reject(new Error('Realtime story audio requires browser WebSocket and AudioContext support.'));
+      return;
+    }
+
+    const audioContext = new AudioContext({ sampleRate: STORY_AUDIO_STREAM_SAMPLE_RATE, latencyHint: 'interactive' });
+    const pcmChunks: Uint8Array[] = [];
+    const voiceMapping = buildVoiceMappingFromSegments(segments, fallbackVoiceId);
+    const socket = new WebSocket(defaultStoryAudioWebSocketUrl(window.location));
+    socket.binaryType = 'arraybuffer';
+    let finished = false;
+    let totalSegments = segments.length;
+    let nextPlaybackTime = audioContext.currentTime;
+
+    const cleanup = () => callbacks.signal.removeEventListener('abort', abort);
+    const finish = (result: StoryAudioRealtimeResult) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      try { socket.close(); } catch { /* best-effort */ }
+      const drainMs = Math.max(250, Math.round(Math.max(0, nextPlaybackTime - audioContext.currentTime + 0.25) * 1000));
+      window.setTimeout(() => { void audioContext.close().catch(() => undefined); }, drainMs);
+      resolve(result);
+    };
+    const fail = (error: unknown) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      try { socket.close(); } catch { /* best-effort */ }
+      void audioContext.close().catch(() => undefined);
+      reject(error instanceof Error ? error : new Error('Realtime story audio failed.'));
+    };
+    function abort() {
+      try {
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'stop' }));
+      } catch { /* best-effort */ }
+      fail(makeAbortError('Story audio stream was stopped.'));
+    }
+
+    callbacks.signal.addEventListener('abort', abort, { once: true });
+    if (callbacks.signal.aborted) {
+      abort();
+      return;
+    }
+
+    socket.onopen = () => {
+      if (audioContext.state === 'suspended') void audioContext.resume().catch(() => undefined);
+      callbacks.onStatusMessage('Realtime narration connected. Waiting for the first audio chunk…');
+      socket.send(JSON.stringify({
+        type: 'start',
+        segments: segments.map((segment) => ({ speaker: segment.speaker, text: segment.text })),
+        voice_mapping: voiceMapping,
+        voice_map: voiceMapping,
+        default_voices: { narrator: fallbackVoiceId || null, male: fallbackVoiceId || null, female: fallbackVoiceId || null },
+        job_id: `story-${Date.now()}`,
+      }));
+    };
+
+    socket.onmessage = (event) => {
+      if (event.data instanceof ArrayBuffer) {
+        const chunk = event.data.slice(0);
+        pcmChunks.push(new Uint8Array(chunk));
+        nextPlaybackTime = schedulePcmChunk(audioContext, chunk, nextPlaybackTime);
+        return;
+      }
+
+      try {
+        const message = JSON.parse(String(event.data)) as StoryAudioStreamControlMessage;
+        if (message.type === 'start') {
+          totalSegments = typeof message.total_segments === 'number' && message.total_segments > 0 ? message.total_segments : totalSegments;
+          callbacks.onStatusMessage('Realtime narration streaming…');
+          callbacks.onProgress(8);
+          return;
+        }
+        if (message.type === 'segment') {
+          const index = typeof message.index === 'number' ? message.index : 0;
+          const current = Math.min(totalSegments, index + 1);
+          callbacks.onProgress(Math.min(99, Math.max(10, Math.round((current / Math.max(1, totalSegments)) * 100))));
+          callbacks.onStatusMessage(`Playing ${message.speaker || 'Narrator'} segment ${current}/${totalSegments} as it streams…`);
+          return;
+        }
+        if (message.type === 'done') {
+          callbacks.onProgress(100);
+          callbacks.onStatusMessage('Realtime narration complete. Preparing replay/download audio…');
+          const audioBlob = pcmChunksToWavBlob(pcmChunks, STORY_AUDIO_STREAM_SAMPLE_RATE);
+          finish({ audioUrl: URL.createObjectURL(audioBlob), chunkCount: pcmChunks.length });
+          return;
+        }
+        if (message.type === 'stopped') {
+          fail(makeAbortError('Story audio stream was stopped.'));
+          return;
+        }
+        if (message.type === 'error') fail(new Error(message.message || message.error || 'Realtime story audio stream failed.'));
+      } catch (error) {
+        fail(error);
+      }
+    };
+    socket.onerror = () => fail(new Error('Realtime story audio websocket failed.'));
+    socket.onclose = () => { if (!finished) fail(new Error('Realtime story audio websocket closed before completion.')); };
+  });
+}
+
+function buildVoiceMappingFromSegments(segments: StoryAudioScriptSegment[], fallbackVoiceId: string): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  for (const segment of segments) {
+    const voiceId = segment.voice_id || (segment.speaker === 'Narrator' ? fallbackVoiceId : '') || '';
+    if (!voiceId) continue;
+    mapping[segment.speaker] = voiceId;
+    mapping[segment.speaker.toLowerCase().trim()] = voiceId;
+  }
+  return mapping;
+}
+
+function defaultStoryAudioWebSocketUrl(locationLike: Pick<Location, 'protocol' | 'host'>): string {
+  const protocol = locationLike.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${locationLike.host}/ws/audiobook`;
+}
+
+function schedulePcmChunk(audioContext: AudioContext, chunk: ArrayBuffer, nextPlaybackTime: number): number {
+  const pcm16 = new Int16Array(chunk);
+  if (!pcm16.length) return nextPlaybackTime;
+  const audioBuffer = audioContext.createBuffer(1, pcm16.length, STORY_AUDIO_STREAM_SAMPLE_RATE);
+  const channel = audioBuffer.getChannelData(0);
+  for (let index = 0; index < pcm16.length; index += 1) channel[index] = Math.max(-1, Math.min(1, pcm16[index] / 32768));
+  const source = audioContext.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(audioContext.destination);
+  const startAt = Math.max(audioContext.currentTime + 0.02, nextPlaybackTime);
+  source.start(startAt);
+  return startAt + audioBuffer.duration;
+}
+
+function pcmChunksToWavBlob(chunks: Uint8Array[], sampleRate: number): Blob {
+  const dataSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const header = new ArrayBuffer(44);
+  const view = new DataView(header);
+  const channels = 1;
+  const byteRate = sampleRate * channels * 2;
+  const blockAlign = channels * 2;
+  writeAscii(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, 'WAVE');
+  writeAscii(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+  const parts: BlobPart[] = [header];
+  for (const chunk of chunks) {
+    const copy = new Uint8Array(chunk.byteLength);
+    copy.set(chunk);
+    parts.push(copy.buffer);
+  }
+  return new Blob(parts, { type: 'audio/wav' });
+}
+
+function writeAscii(view: DataView, offset: number, value: string): void {
+  for (let index = 0; index < value.length; index += 1) view.setUint8(offset + index, value.charCodeAt(index));
+}
+function makeAbortError(message: string): Error { const error = new Error(message); error.name = 'AbortError'; return error; }
+function isAbortError(error: unknown): boolean { return error instanceof Error && error.name === 'AbortError'; }
+
 function playableAudioSource(job: JobRecord): string {
   const refs = Array.isArray(job.output_refs) ? job.output_refs : [];
   for (const ref of refs) {
@@ -327,69 +528,17 @@ function isFallbackVoiceOutput(ref: StoryAudioJobOutputRef): boolean {
     return row?.provider_fallback === true || row?.provider_success === false;
   });
 }
-
-function isTerminalJob(job: JobRecord): boolean {
-  return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled';
-}
-
-function jobErrorMessage(job: JobRecord): string {
-  const error = job.error as { message?: unknown } | null | undefined;
-  return typeof error?.message === 'string' ? error.message : 'Voice Studio audio generation failed.';
-}
-
-function readStoryTitle(): string {
-  return (document.querySelector('.storyteller-project-copy h1') as HTMLElement | null)?.innerText.trim() || 'Untitled story';
-}
-
-function normalizeStoryAudioText(value: string): string {
-  return value.replace(/\r\n/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean).join('\n\n').trim();
-}
-
-function fingerprintStoryAudio(text: string): string {
-  return `${text.length}:${text.slice(0, 80)}:${text.slice(-80)}`;
-}
-
-function voiceAssetId(asset: AssetListResponse['assets'][number]): string {
-  return stringValue(asset.storage_path) || stringValue(asset.metadata?.voice_id) || stringValue(asset.metadata?.profile_id) || stringValue(asset.metadata?.id) || asset.id;
-}
-
-function voiceAssetLabel(asset: AssetListResponse['assets'][number]): string {
-  return stringValue(asset.metadata?.profile_name) || stringValue(asset.metadata?.name) || stringValue(asset.metadata?.voice_name) || basename(asset.storage_path) || asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, '');
-}
-
-function voiceLabelForId(voiceId: string, voices: StoryAudioVoiceOption[]): string {
-  return voices.find((voice) => voice.id === voiceId)?.label || voiceId;
-}
-
-function stringValue(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function basename(path: string | undefined): string {
-  return path?.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || '';
-}
-
-function slugify(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'story';
-}
-
-function readSelectedVoiceId(): string {
-  try {
-    return typeof window !== 'undefined' ? window.localStorage.getItem(STORY_AUDIO_SELECTED_VOICE_KEY) ?? '' : '';
-  } catch {
-    return '';
-  }
-}
-
-function persistSelectedVoiceId(value: string): void {
-  try {
-    if (!value) window.localStorage.removeItem(STORY_AUDIO_SELECTED_VOICE_KEY);
-    else window.localStorage.setItem(STORY_AUDIO_SELECTED_VOICE_KEY, value);
-  } catch {
-    // Voice selection persistence is best-effort.
-  }
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
+function isTerminalJob(job: JobRecord): boolean { return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled'; }
+function jobErrorMessage(job: JobRecord): string { const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio audio generation failed.'; }
+function readStoryTitle(): string { return (document.querySelector('.storyteller-project-copy h1') as HTMLElement | null)?.innerText.trim() || 'Untitled story'; }
+function normalizeStoryAudioText(value: string): string { return value.replace(/\r\n/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean).join('\n\n').trim(); }
+function fingerprintStoryAudio(text: string): string { return `${text.length}:${text.slice(0, 80)}:${text.slice(-80)}`; }
+function voiceAssetId(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.storage_path) || stringValue(asset.metadata?.voice_id) || stringValue(asset.metadata?.profile_id) || stringValue(asset.metadata?.id) || asset.id; }
+function voiceAssetLabel(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.metadata?.profile_name) || stringValue(asset.metadata?.name) || stringValue(asset.metadata?.voice_name) || basename(asset.storage_path) || asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, ''); }
+function voiceLabelForId(voiceId: string, voices: StoryAudioVoiceOption[]): string { return voices.find((voice) => voice.id === voiceId)?.label || voiceId; }
+function stringValue(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
+function basename(path: string | undefined): string { return path?.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || ''; }
+function slugify(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'story'; }
+function readSelectedVoiceId(): string { try { return typeof window !== 'undefined' ? window.localStorage.getItem(STORY_AUDIO_SELECTED_VOICE_KEY) ?? '' : ''; } catch { return ''; } }
+function persistSelectedVoiceId(value: string): void { try { if (!value) window.localStorage.removeItem(STORY_AUDIO_SELECTED_VOICE_KEY); else window.localStorage.setItem(STORY_AUDIO_SELECTED_VOICE_KEY, value); } catch { /* Voice selection persistence is best-effort. */ } }
+function wait(ms: number): Promise<void> { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
