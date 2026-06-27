@@ -73,7 +73,7 @@ describe('PodcastWorkspace', () => {
     expect(screen.getByRole('heading', { name: '⚭ 2. Participants & voice casting' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Topic / Episode title'), { target: { value: 'Signals' } });
-    fireEvent.change(screen.getByLabelText('Episode brief'), { target: { value: 'Discuss local AI workstation design.' } });
+    fireEvent.change(screen.getByLabelText(/Episode brief/), { target: { value: 'Discuss local AI workstation design.' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate live podcast/i }));
 
     expect(await screen.findByText('Podcast production queued: job:podcast')).toBeInTheDocument();
