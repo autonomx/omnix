@@ -23,12 +23,24 @@ export function loadStoryVoiceCast(storyFingerprint: string): StoryVoiceAssignme
   }
 }
 
+export function loadStoryVoiceCastAny(keys: string[]): StoryVoiceAssignment[] {
+  for (const key of dedupeKeys(keys)) {
+    const assignments = loadStoryVoiceCast(key);
+    if (assignments.length) return assignments;
+  }
+  return [];
+}
+
 export function saveStoryVoiceCast(storyFingerprint: string, assignments: StoryVoiceAssignment[]): void {
   try {
     window.localStorage.setItem(storyVoiceCastStorageKey(storyFingerprint), JSON.stringify(assignments.filter(isVoiceAssignment)));
   } catch {
     // Local voice cast persistence is best-effort until backend persistence exists.
   }
+}
+
+export function saveStoryVoiceCastAliases(keys: string[], assignments: StoryVoiceAssignment[]): void {
+  for (const key of dedupeKeys(keys)) saveStoryVoiceCast(key, assignments);
 }
 
 export function upsertVoiceAssignment(assignments: StoryVoiceAssignment[], next: StoryVoiceAssignment): StoryVoiceAssignment[] {
@@ -47,6 +59,10 @@ export function voiceAssignmentFor(assignments: StoryVoiceAssignment[], characte
 export function voiceCastFingerprint(assignments: StoryVoiceAssignment[]): string {
   const packed = assignments.map((assignment) => `${assignment.characterId}:${assignment.voiceId}:${assignment.style ?? ''}`).sort().join('|');
   return `${packed.length}:${packed.slice(0, 80)}:${packed.slice(-80)}`;
+}
+
+function dedupeKeys(keys: string[]): string[] {
+  return [...new Set(keys.map((key) => key.trim()).filter(Boolean))];
 }
 
 function isVoiceAssignment(value: unknown): value is StoryVoiceAssignment {
