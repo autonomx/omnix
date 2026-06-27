@@ -6,6 +6,8 @@ import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { PodcastWorkspace } from './PodcastWorkspace';
 
+const GENERATED_AUDIO_DATA_URL = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
+
 function renderPodcast() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -37,7 +39,7 @@ afterEach(() => {
 });
 
 describe('PodcastWorkspace', () => {
-  it('queues podcast voice generation through the Voice Studio TTS path', async () => {
+  it('queues podcast voice generation through the Voice Studio TTS path and exposes playback audio', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
@@ -63,10 +65,20 @@ describe('PodcastWorkspace', () => {
           id: 'job:podcast',
           module: 'podcast',
           type: body.type,
-          status: 'queued',
+          status: 'completed',
           resource_class: body.resource_class,
           input_payload: body.input_payload,
           stages: body.stages,
+          output_refs: [
+            {
+              type: 'audio',
+              asset_id: 'audio:podcast-job',
+              title: 'Generated podcast audio',
+              data_url: GENERATED_AUDIO_DATA_URL,
+              duration: 2,
+              mime_type: 'audio/wav',
+            },
+          ],
           created_at: '2026-06-14T00:00:01Z',
           updated_at: '2026-06-14T00:00:01Z',
           priority: 0,
@@ -92,7 +104,9 @@ describe('PodcastWorkspace', () => {
     fireEvent.change(screen.getByLabelText(/Episode brief/), { target: { value: 'Discuss local AI workstation design.' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate live podcast/i }));
 
-    expect((await screen.findAllByText('Podcast production queued: job:podcast')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Podcast audio ready: job:podcast')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Generated podcast audio')).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('Podcast audio player').querySelector('audio')?.getAttribute('src')).toBe(GENERATED_AUDIO_DATA_URL);
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
