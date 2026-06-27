@@ -41,6 +41,10 @@ function durationToSeconds(duration: string): number {
   return Number.parseInt(duration, 10) * 60;
 }
 
+function durationToClock(duration: string): string {
+  return `${Number.parseInt(duration, 10)}:00`;
+}
+
 function nextTimestamp(lines: MockTranscriptLine[]): string {
   const last = lines.at(-1)?.timestamp ?? '06:55';
   const [minutes, seconds] = last.split(':').map((part) => Number.parseInt(part, 10));
@@ -60,6 +64,17 @@ function statusToStageState(status: string | undefined, index: number, activeInd
     return index === activeIndex ? 'active' : index < activeIndex ? 'done' : 'pending';
   }
   return index < activeIndex ? 'done' : 'pending';
+}
+
+function jobTitle(job: { type: string; input_payload?: unknown }): string {
+  const payload = job.input_payload;
+  if (payload && typeof payload === 'object' && 'title' in payload) {
+    const title = (payload as { title?: unknown }).title;
+    if (typeof title === 'string' && title.trim()) {
+      return title;
+    }
+  }
+  return job.type;
 }
 
 export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) {
@@ -92,7 +107,6 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   const reviewPolicy = buildReviewPolicy(generationStyle, generationStyle === 'guided' ? manualReviewStops : []);
   const podcastJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'podcast') ?? [];
-  const activeJob = createSafeJobRecord(createJobCandidate(createJobMutationPlaceholder, podcastJobs));
 
   const displayedSpeakers = useMemo(() => {
     if (extraParticipants <= 0) {
@@ -178,16 +192,17 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   const connectedJob = createJobMutation.data ?? podcastJobs[0];
   const connectedJobStages = connectedJob?.stages ?? [];
-  const activeStageIndex = createJobMutation.isPending ? 0 : connectedJob ? Math.min(3, Math.max(0, connectedJobStages.findIndex((stage) => !['completed', 'done', 'success'].includes(String(stage.status).toLowerCase())))) : 3;
+  const firstIncompleteStage = connectedJobStages.findIndex((stage) => !['completed', 'done', 'success'].includes(String(stage.status).toLowerCase()));
+  const activeStageIndex = createJobMutation.isPending ? 0 : connectedJob ? (firstIncompleteStage >= 0 ? firstIncompleteStage : connectedJobStages.length - 1) : 3;
   const productionStages = connectedJobStages.length
     ? connectedJobStages.map((stage, index) => ({
         id: String(stage.id) as MockProductionStage['id'],
         label: stage.label,
-        state: statusToStageState(stage.status, index, activeStageIndex === -1 ? connectedJobStages.length - 1 : activeStageIndex),
+        state: statusToStageState(stage.status, index, activeStageIndex),
       }))
     : mockProductionStages;
   const recentJobs = podcastJobs.length
-    ? podcastJobs.slice(0, 3).map((job) => ({ name: job.input_payload?.title?.toString() || job.type, status: job.status, duration }))
+    ? podcastJobs.slice(0, 3).map((job) => ({ name: jobTitle(job), status: job.status, duration }))
     : mockRecentPodcastJobs;
   const showBriefError = brief.trim().length === 0 && createJobMutation.isIdle === false;
   const reviewModeBadge = generationStyle === 'automatic' ? 'Auto-approved' : `${manualReviewStops.length || 0} review stop${manualReviewStops.length === 1 ? '' : 's'}`;
@@ -222,9 +237,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
 
   function handleCopyLink() {
-    const url = `${window.location.origin}/podcast`;
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      void navigator.clipboard.writeText(url);
+      void navigator.clipboard.writeText(`${window.location.origin}/podcast`);
     }
     setActionMessage('Podcast link copied.');
   }
@@ -316,7 +330,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <h3>⌁ 3. Relationships & constraints</h3>
               <div className="relationship-layout">
                 <div className="relationship-map" aria-label="Guest relationship map"><b className="node host">H<span>Host</span></b><b className="node guest-a">GA<span>Guest A</span></b><b className="node guest-b">GB<span>Guest B</span></b><span className="line mod">moderates</span><span className="line respect">respects</span><span className="line disagree">disagrees with</span></div>
-                <div className="constraint-grid">{[['Max duration', duration.replace(' min', ':00')], ['Citation required', 'On'], ['Family friendly', 'On'], ['Reading level', 'Grade 8'], ['Max turn', '45 sec'], ['Avoid topics', 'Politics']].map(([label, value]) => <div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
+                <div className="constraint-grid">{[['Max duration', durationToClock(duration)], ['Citation required', 'On'], ['Family friendly', 'On'], ['Reading level', 'Grade 8'], ['Max turn', '45 sec'], ['Avoid topics', 'Politics']].map(([label, value]) => <div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
               </div>
             </article>
 
@@ -334,7 +348,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <div className="director-note"><b>Director</b><span>{directorNote}</span><button type="button" onClick={() => setActionMessage('Director details toggled.')}>⌄</button></div>
               <div className="waveform" aria-hidden="true">{Array.from({ length: 64 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17 + transcriptLines.length * 5) % 42)}px` }} />)}</div>
               <div className="live-transcript">{transcriptLines.map((line) => <p key={`${line.timestamp}-${line.speaker}-${line.text}`}><time>{line.timestamp}</time><b>{line.speaker}</b><span>{line.text}</span></p>)}</div>
-              <div className="playback-row"><button type="button" onClick={() => setIsPlaying((playing) => !playing)}>{isPlaying ? 'Ⅱ' : '▶'}</button><span>▁▁▁▁▁▁</span><strong>06:42 / {duration.replace(' min', ':00')}</strong><select value={playbackRate} onChange={(event) => setPlaybackRate(event.target.value)}><option>0.8x</option><option>1.0x</option><option>1.25x</option></select><small>{connectedJob ? String(connectedJob.status).toUpperCase() : 'LIVE'} ▥</small></div>
+              <div className="playback-row"><button type="button" onClick={() => setIsPlaying((playing) => !playing)}>{isPlaying ? 'Ⅱ' : '▶'}</button><span>▁▁▁▁▁▁</span><strong>06:42 / {durationToClock(duration)}</strong><select value={playbackRate} onChange={(event) => setPlaybackRate(event.target.value)}><option>0.8x</option><option>1.0x</option><option>1.25x</option></select><small>{connectedJob ? String(connectedJob.status).toUpperCase() : 'LIVE'} ▥</small></div>
               <form className="live-command" onSubmit={(event) => { event.preventDefault(); handleLiveCommandSubmit(); }}><input value={liveCommand} onChange={(event) => setLiveCommand(event.target.value)} placeholder="Make Guest B more skeptical…" /><button type="submit">▷</button></form>
             </article>
           </section>
@@ -361,14 +375,4 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
       </div>
     </WorkspacePanel>
   );
-}
-
-const createJobMutationPlaceholder = null;
-
-function createJobCandidate<TJob>(candidate: TJob | null, jobs: TJob[]): TJob | undefined {
-  return candidate ?? jobs[0];
-}
-
-function createSafeJobRecord<TJob>(job: TJob | undefined): TJob | undefined {
-  return job;
 }
