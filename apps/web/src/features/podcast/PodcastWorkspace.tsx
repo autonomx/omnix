@@ -83,7 +83,7 @@ function jobTitle(job: { type: string; input_payload?: unknown }): string { cons
 
 export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
-  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs(), refetchInterval: 3_000 });
+  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
   const clonedVoicesQuery = useQuery({ queryKey: ['podcast', 'cloned-voices'], queryFn: loadClonedVoiceOptions, staleTime: 30_000 });
   const [title, setTitle] = useState('The Future of AI in Everyday Life');
   const [brief, setBrief] = useState('Explore how artificial intelligence is shaping our daily lives, transforming work and productivity, inspiring creativity, influencing relationships, and augmenting decision-making. We’ll discuss opportunities, risks, and what comes next.');
