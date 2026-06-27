@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .audiobook_streaming import install_audiobook_websocket_hook
 from .rpg_session_routes import install_rpg_session_route_hook
 from .rpg_turn_job_mirror import install_rpg_turn_job_mirror_hook
 
@@ -10,6 +11,7 @@ __all__ = ["app", "create_gateway_app"]
 
 install_rpg_session_route_hook()
 install_rpg_turn_job_mirror_hook()
+install_audiobook_websocket_hook()
 
 
 def __getattr__(name: str) -> Any:
