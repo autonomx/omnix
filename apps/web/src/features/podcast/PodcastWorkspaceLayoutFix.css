@@ -115,7 +115,8 @@
 
 .speaker-preview button,
 .quality-card button,
-.recent-card .card-heading-row button {
+.recent-card .card-heading-row button,
+.audio-transport-buttons button {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(132, 148, 196, 0.16);
   border-radius: 0.45rem;
@@ -123,6 +124,25 @@
   cursor: pointer;
   min-height: 1.9rem;
   padding: 0 0.45rem;
+}
+
+.audio-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(12rem, 0.75fr) minmax(16rem, 1fr) auto;
+}
+
+.audio-transport-buttons {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.audio-transport-buttons button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .quality-card button {
@@ -153,6 +173,127 @@
   font-weight: 800;
 }
 
+.relationship-layout-clear {
+  grid-template-columns: minmax(24rem, 0.95fr) minmax(22rem, 1.05fr);
+}
+
+.relationship-map-clear {
+  background: rgba(7, 11, 24, 0.52);
+  border: 1px solid rgba(132, 148, 196, 0.16);
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-height: 0;
+  padding: 0.75rem;
+  position: static;
+}
+
+.relationship-map-title,
+.relationship-edge-list {
+  grid-column: 1 / -1;
+}
+
+.relationship-map-title {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.relationship-map-title b {
+  color: #f8fbff;
+}
+
+.relationship-map-title small {
+  color: #91a1c3;
+}
+
+.relationship-node-card {
+  background: rgba(10, 16, 34, 0.84);
+  border: 1px solid rgba(132, 148, 196, 0.18);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+  min-width: 0;
+  padding: 0.65rem 0.45rem;
+  text-align: center;
+}
+
+.relationship-node-card b {
+  align-items: center;
+  background: rgba(34, 211, 238, 0.16);
+  border: 1px solid rgba(34, 211, 238, 0.38);
+  border-radius: 999px;
+  color: #6ff8ff;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.relationship-node-card.guest-a b {
+  background: rgba(124, 92, 255, 0.22);
+  border-color: rgba(151, 114, 255, 0.5);
+  color: #d7c7ff;
+}
+
+.relationship-node-card span {
+  color: #f6f8ff;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.relationship-node-card small {
+  color: #91a1c3;
+}
+
+.relationship-edge-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.relationship-edge-list p {
+  align-items: center;
+  background: rgba(5, 8, 17, 0.5);
+  border: 1px solid rgba(132, 148, 196, 0.12);
+  border-radius: 0.55rem;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+}
+
+.relationship-edge-list p::before {
+  color: #48dfff;
+  content: '→';
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+  transform: translateY(-1.1rem);
+}
+
+.relationship-edge-list strong {
+  color: #eaf3ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relationship-edge-list em {
+  color: #8af7ff;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 800;
+  grid-column: 2;
+  justify-self: center;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .action-toast {
   background: rgba(7, 11, 24, 0.72);
   border: 1px solid rgba(34, 211, 238, 0.22);
@@ -172,7 +313,9 @@
   .podcast-studio-grid,
   .podcast-bottom-grid,
   .podcast-sidebar,
-  .episode-setup-grid {
+  .episode-setup-grid,
+  .relationship-layout-clear,
+  .audio-toolbar {
     grid-template-columns: 1fr;
   }
 }
@@ -198,5 +341,9 @@
 
   .health-card {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .relationship-map-clear {
+    grid-template-columns: 1fr;
   }
 }
