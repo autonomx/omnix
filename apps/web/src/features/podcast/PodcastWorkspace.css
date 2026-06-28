@@ -1,13 +1,14 @@
 .podcast-studio-shell {
   display: grid;
   gap: 1rem;
+  min-width: 0;
 }
 
 .podcast-studio-header {
   align-items: start;
   display: flex;
-  justify-content: space-between;
   gap: 1rem;
+  justify-content: space-between;
 }
 
 .podcast-studio-header h2 {
@@ -34,15 +35,17 @@
 .podcast-studio-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(34rem, 1.2fr) minmax(31rem, 0.92fr) minmax(17rem, 0.46fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(28rem, 0.95fr) minmax(19rem, 0.42fr);
+  min-width: 0;
 }
 
 .podcast-studio-stack,
 .podcast-live-column,
 .podcast-sidebar {
+  align-content: start;
   display: grid;
   gap: 0.85rem;
-  align-content: start;
+  min-width: 0;
 }
 
 .podcast-card {
@@ -51,6 +54,8 @@
   border-radius: 1rem;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   color: #f6f8ff;
+  min-width: 0;
+  overflow: hidden;
   padding: 1rem;
 }
 
@@ -63,16 +68,26 @@
   margin: 0 0 0.9rem;
 }
 
+.card-heading-row {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
 .episode-setup-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(18rem, 0.9fr) minmax(22rem, 1.1fr);
+  grid-template-columns: minmax(18rem, 0.85fr) minmax(0, 1.15fr);
+  min-width: 0;
 }
 
 .podcast-field-stack,
 .podcast-config-stack {
   display: grid;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .podcast-card label,
@@ -81,6 +96,7 @@
   display: grid;
   font-size: 0.82rem;
   gap: 0.35rem;
+  min-width: 0;
 }
 
 .podcast-card input,
@@ -91,6 +107,7 @@
   border-radius: 0.55rem;
   color: #f6f8ff;
   min-height: 2.35rem;
+  min-width: 0;
   outline: none;
   padding: 0.55rem 0.7rem;
   width: 100%;
@@ -109,6 +126,7 @@
   display: grid;
   gap: 0.5rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
 }
 
 .format-card-grid button {
@@ -119,6 +137,7 @@
   cursor: pointer;
   display: grid;
   min-height: 5.1rem;
+  min-width: 0;
   padding: 0.65rem;
   text-align: left;
 }
@@ -151,7 +170,7 @@
   border-radius: 0.6rem;
   display: grid !important;
   gap: 0.45rem !important;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   padding: 0.55rem;
 }
 
@@ -176,7 +195,7 @@
 .speaker-table {
   border: 1px solid rgba(132, 148, 196, 0.16);
   border-radius: 0.8rem;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .speaker-row {
@@ -184,8 +203,9 @@
   border-top: 1px solid rgba(132, 148, 196, 0.12);
   display: grid;
   gap: 0.55rem;
-  grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr 1fr 1.1fr 0.55fr;
+  grid-template-columns: minmax(11rem, 1.1fr) minmax(10rem, 0.9fr) minmax(10rem, 0.9fr) repeat(4, minmax(10rem, 1fr)) minmax(9rem, 0.8fr) minmax(10rem, 0.85fr);
   min-height: 3.25rem;
+  min-width: 96rem;
   padding: 0.45rem 0.55rem;
 }
 
@@ -204,10 +224,12 @@
   align-items: center;
   display: flex;
   gap: 0.55rem;
+  min-width: 0;
 }
 
 .speaker-cell-main span {
   display: grid;
+  min-width: 0;
 }
 
 .speaker-avatar {
@@ -228,63 +250,69 @@
   color: #c4a7ff;
 }
 
-.tag-stack {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.tag-stack b,
-.output-copy b {
-  background: rgba(124, 92, 255, 0.18);
-  border: 1px solid rgba(151, 114, 255, 0.24);
-  border-radius: 0.4rem;
-  color: #cabaff;
-  font-size: 0.72rem;
-  padding: 0.12rem 0.35rem;
-}
-
-.tag-stack.green b {
-  background: rgba(45, 212, 191, 0.14);
-  border-color: rgba(45, 212, 191, 0.24);
-  color: #89f5e8;
-}
-
-.tag-stack.blue b {
-  background: rgba(59, 130, 246, 0.16);
-  border-color: rgba(59, 130, 246, 0.26);
-  color: #a6d2ff;
-}
-
-.tag-stack.purple b {
-  background: rgba(191, 92, 255, 0.16);
-  color: #f0c4ff;
-}
-
 .speaker-preview {
   color: #9feeff;
-  letter-spacing: 0.25rem;
+  letter-spacing: 0.02rem;
+}
+
+.speaker-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  position: relative;
+}
+
+.speaker-actions button,
+.collapse-toggle,
+.recent-actions button,
+.recent-card button,
+.quality-card button,
+.ghost-button,
+.live-command button {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(132, 148, 196, 0.18);
+  border-radius: 0.55rem;
+  color: #eaf3ff;
+  cursor: pointer;
+  min-height: 2rem;
+  padding: 0 0.7rem;
 }
 
 .ghost-button {
   background: transparent;
-  border: 1px dashed rgba(132, 148, 196, 0.38);
-  border-radius: 0.55rem;
-  color: #e8efff;
-  cursor: pointer;
+  border-style: dashed;
   margin-top: 0.55rem;
-  min-height: 2.2rem;
-  padding: 0 0.8rem;
+}
+
+.ghost-button.compact {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.speaker-menu {
+  background: #0a1022;
+  border: 1px solid rgba(132, 148, 196, 0.24);
+  border-radius: 0.65rem;
+  box-shadow: 0 18px 38px rgba(0,0,0,0.35);
+  display: grid;
+  gap: 0.3rem;
+  min-width: 12rem;
+  padding: 0.45rem;
+  position: absolute;
+  right: 0;
+  top: 2.2rem;
+  z-index: 5;
 }
 
 .relationship-layout {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(16rem, 0.9fr) 1.1fr;
+  grid-template-columns: minmax(16rem, 0.85fr) minmax(16rem, 1fr);
 }
 
 .relationship-map {
-  min-height: 8rem;
+  min-height: 12rem;
   position: relative;
 }
 
@@ -314,14 +342,19 @@
 .line.respect { bottom: 0.3rem; left: 42%; }
 .line.disagree { color: #ff9c74; right: 15%; top: 2.3rem; }
 
+.relationship-config-grid,
 .constraint-grid {
   display: grid;
   gap: 0.5rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.constraint-grid div,
-.health-card div {
+.constraint-grid {
+  grid-column: 1 / -1;
+}
+
+.constraint-grid label,
+.health-grid div {
   background: rgba(7, 11, 24, 0.54);
   border: 1px solid rgba(132, 148, 196, 0.16);
   border-radius: 0.55rem;
@@ -331,8 +364,18 @@
 }
 
 .constraint-grid strong,
-.health-card strong {
+.health-grid strong {
   color: #f7fbff;
+}
+
+.episode-action-row {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.episode-action-row .ghost-button {
+  margin: 0;
 }
 
 .podcast-generate-button {
@@ -348,11 +391,10 @@
   width: 100%;
 }
 
-.card-heading-row {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
+.podcast-generate-button:disabled,
+.download-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .auto-badge {
@@ -380,6 +422,7 @@
   font-weight: 850;
   justify-items: center;
   min-height: 3rem;
+  position: relative;
 }
 
 .stage-rail span::before {
@@ -387,6 +430,7 @@
   content: '';
   height: 2px;
   position: absolute;
+  top: 0.6rem;
   width: 100%;
 }
 
@@ -414,7 +458,7 @@
   border-radius: 0.7rem;
   display: grid;
   gap: 0.55rem;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   padding: 0.7rem;
 }
 
@@ -423,9 +467,7 @@
   font-size: 0.82rem;
 }
 
-.director-note button,
-.live-command button,
-.playback-row button {
+.director-note button {
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(132, 148, 196, 0.18);
   border-radius: 0.55rem;
@@ -483,21 +525,42 @@
   color: #cbd6ef;
 }
 
-.playback-row {
-  align-items: center;
-  border-top: 1px solid rgba(132, 148, 196, 0.14);
-  display: flex;
-  gap: 0.75rem;
+.podcast-audio-player {
+  background: rgba(7, 11, 24, 0.5);
+  border: 1px solid rgba(132, 148, 196, 0.14);
+  border-radius: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
   margin-top: 0.75rem;
-  padding-top: 0.75rem;
+  padding: 0.75rem;
 }
 
-.playback-row button {
-  background: linear-gradient(135deg, #22d3ee, #6d4df7);
-  border-radius: 999px;
-  font-weight: 900;
-  height: 2.55rem;
-  width: 2.55rem;
+.audio-player-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.audio-player-heading span {
+  color: #f8fbff;
+  font-weight: 850;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.podcast-audio-player audio {
+  width: 100%;
+}
+
+.audio-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(10rem, 12rem) minmax(0, 1fr);
 }
 
 .live-command {
@@ -507,7 +570,7 @@
   border-radius: 0.7rem;
   display: grid !important;
   gap: 0.45rem !important;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   margin-top: 0.75rem;
   padding: 0.4rem;
 }
@@ -517,62 +580,67 @@
   border: 0;
 }
 
-.quality-card p,
-.recent-card p {
-  align-items: center;
-  border-top: 1px solid rgba(132, 148, 196, 0.12);
+.sidebar-card-body,
+.health-grid,
+.recent-job-list {
   display: grid;
-  gap: 0.4rem;
-  grid-template-columns: 1fr auto;
-  margin: 0;
-  min-height: 2.25rem;
+  gap: 0.55rem;
 }
 
-.quality-card p b {
+.quality-card .sidebar-card-body button {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-items: stretch;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+}
+
+.quality-card .sidebar-card-body button b {
   color: #7df29d;
 }
 
-.quality-card p.warning b {
+.quality-card .sidebar-card-body button.warning b {
   color: #f7b55f;
 }
 
-.health-card {
-  display: grid;
-  gap: 0.55rem;
+.health-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.health-card h3 {
-  grid-column: 1 / -1;
+.recent-actions {
+  display: inline-flex;
+  gap: 0.35rem;
 }
 
-.recent-card p {
-  grid-template-columns: 1fr auto auto auto;
+.recent-job-list p {
+  align-items: center;
+  border-top: 1px solid rgba(132, 148, 196, 0.12);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  margin: 0;
+  min-height: 2.65rem;
 }
 
-.recent-card a {
-  color: #48dfff;
-  font-size: 0.75rem;
-}
-
-.recent-card button {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(132, 148, 196, 0.16);
-  border-radius: 0.45rem;
-  color: #eaf3ff;
-  cursor: pointer;
+.recent-job-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .podcast-bottom-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(33rem, 0.9fr) minmax(32rem, 1.1fr);
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  min-width: 0;
 }
 
 .production-assets-panel > div {
   display: grid;
-  gap: 0.55rem;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
 }
 
 .asset-tile {
@@ -582,7 +650,12 @@
   display: grid;
   gap: 0.35rem;
   min-height: 6.4rem;
-  padding: 0.6rem;
+  min-width: 0;
+  padding: 0.7rem;
+}
+
+.asset-tile b {
+  line-height: 1.25;
 }
 
 .asset-tile.green { border-color: rgba(34, 197, 94, 0.32); }
@@ -604,7 +677,7 @@
 .output-layout {
   display: grid;
   gap: 0.85rem;
-  grid-template-columns: 7rem minmax(12rem, 1fr) minmax(22rem, 1.1fr);
+  grid-template-columns: 7rem minmax(12rem, 1fr) minmax(18rem, 1.1fr);
 }
 
 .cover-art {
@@ -640,6 +713,19 @@
   margin: 0.45rem 0;
 }
 
+.output-copy b,
+.output-copy em {
+  background: rgba(124, 92, 255, 0.18);
+  border: 1px solid rgba(151, 114, 255, 0.24);
+  border-radius: 0.4rem;
+  color: #cabaff;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-style: normal;
+  margin: 0.12rem 0.2rem 0.12rem 0;
+  padding: 0.12rem 0.35rem;
+}
+
 .download-grid {
   display: grid;
   gap: 0.55rem;
@@ -659,21 +745,57 @@
   color: white;
 }
 
-@media (max-width: 1500px) {
-  .podcast-studio-grid,
-  .podcast-bottom-grid {
-    grid-template-columns: 1fr;
+.action-toast {
+  color: #9fb1d6;
+  margin: 0;
+}
+
+@media (max-width: 1700px) {
+  .podcast-studio-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(28rem, 0.82fr);
+  }
+
+  .podcast-sidebar {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1500px) {
+  .podcast-studio-grid,
+  .podcast-bottom-grid,
   .episode-setup-grid,
   .relationship-layout,
   .output-layout {
     grid-template-columns: 1fr;
   }
 
+  .podcast-sidebar {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .podcast-studio-header,
+  .card-heading-row,
+  .audio-player-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .format-card-grid,
+  .podcast-select-grid,
+  .relationship-config-grid,
+  .constraint-grid,
+  .health-grid,
+  .download-grid,
+  .episode-action-row,
+  .audio-toolbar {
+    grid-template-columns: 1fr;
+  }
+
   .speaker-row {
+    min-width: 0;
     grid-template-columns: 1fr;
   }
 
@@ -681,8 +803,7 @@
     display: none;
   }
 
-  .production-assets-panel > div,
-  .download-grid {
+  .production-assets-panel > div {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

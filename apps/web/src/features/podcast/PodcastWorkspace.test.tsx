@@ -95,7 +95,9 @@ describe('PodcastWorkspace', () => {
 
     renderPodcast();
 
-    expect(await screen.findByRole('heading', { name: 'Episode request' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '1. Episode setup' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /New podcast/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('option', { name: '2 min' })).toBeInTheDocument();
     expect((await screen.findAllByText('Alex Voice')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: '2. Participants and voice casting' })).toBeInTheDocument();
     expect(screen.getByText('Voice')).toBeInTheDocument();
@@ -106,6 +108,7 @@ describe('PodcastWorkspace', () => {
 
     expect((await screen.findAllByText('Podcast audio ready: job:podcast')).length).toBeGreaterThan(0);
     expect((await screen.findAllByText('Generated podcast audio')).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('Podcast audio player').querySelectorAll('audio')).toHaveLength(1);
     expect(screen.getByLabelText('Podcast audio player').querySelector('audio')?.getAttribute('src')).toBe(GENERATED_AUDIO_DATA_URL);
 
     await waitFor(() => {
@@ -119,6 +122,7 @@ describe('PodcastWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
       expect(createCall?.[1]?.body).toContain('"voice_id":"resources/voice_clones/alex.wav"');
       expect(createCall?.[1]?.body).toContain('"speakerInstructions"');
+      expect(createCall?.[1]?.body).toContain('"maxSpeakerTurnSeconds":45');
     });
   });
 });
