@@ -13,25 +13,26 @@ import './PodcastWorkspace.css';
 
 type VoiceAsset = AssetListResponse['assets'][number];
 type SpeakerDraft = ReturnType<typeof toSpeakerDraft>;
-
 type SidebarPanel = 'quality' | 'health' | 'recent';
 
-interface PlayablePodcastOutput {
+type TranscriptRow = { timestamp: string; speaker: string; text: string };
+
+type PlayablePodcastOutput = {
   dataUrl: string;
   duration: number;
   jobId: string;
   key: string;
   title: string;
-}
+};
 
-interface RelationshipConfig {
+type RelationshipConfig = {
   hostLabel: string;
   guestALabel: string;
   guestBLabel: string;
   moderation: string;
   respect: string;
   disagreement: string;
-}
+};
 
 const defaultTitle = 'The Future of AI in Everyday Life';
 const defaultBrief = 'Explore how artificial intelligence is shaping our daily lives, transforming work and productivity, inspiring creativity, influencing relationships, and augmenting decision-making. We will discuss opportunities, risks, and what comes next.';
@@ -53,7 +54,8 @@ const terminalStatuses = ['completed', 'complete', 'succeeded', 'success', 'done
 const outputSettings = { speed: 1, pitch: 0, stability: 0.72, similarity: 0.78 };
 const audioEffects = ['Compression', 'De-esser'];
 const wordsPerMinute = 150;
-const wordsPerSegment = 105;
+const wordsPerSegment = 70;
+const transcriptStorageKey = 'omnix:persistent-podcast-transcripts:v1';
 
 function toSpeakerDraft(profile: (typeof mockPodcastSpeakerProfiles)[number]) {
   return {
@@ -75,16 +77,16 @@ function splitTags(value: string): string[] {
   return value.split(/[,\n]/).map((tag) => tag.trim()).filter(Boolean);
 }
 
-function durationSeconds(duration: string): number {
-  return Number.parseInt(duration, 10) * 60;
-}
-
 function durationMinutes(duration: string): number {
   return Math.max(1, Number.parseInt(duration, 10) || 1);
 }
 
+function durationSeconds(duration: string): number {
+  return durationMinutes(duration) * 60;
+}
+
 function durationClock(duration: string): string {
-  return `${Number.parseInt(duration, 10)}:00`;
+  return `${durationMinutes(duration)}:00`;
 }
 
 function targetWordCount(duration: string): number {
@@ -114,9 +116,10 @@ function stageState(status: unknown, index: number, activeIndex: number) {
 
 function jobTitle(job: { type: string; input_payload?: unknown }): string {
   const payload = job.input_payload;
-  return payload && typeof payload === 'object' && typeof (payload as { title?: unknown }).title === 'string'
-    ? String((payload as { title: string }).title)
-    : job.type;
+  if (payload && typeof payload === 'object' && typeof (payload as { title?: unknown }).title === 'string') {
+    return String((payload as { title: string }).title);
+  }
+  return job.type;
 }
 
 function voiceStoragePath(asset: VoiceAsset | undefined): string {
@@ -157,24 +160,43 @@ function countWords(value: string): number {
   return value.trim().split(/\s+/).filter(Boolean).length;
 }
 
-function segmentDraft(args: { title: string; brief: string; audience: string; tone: string; speaker: SpeakerDraft | undefined; index: number; total: number }) {
+function speakerDisplayName(speaker: string): string {
+  return speaker.length > 18 ? `${speaker.slice(0, 17)}…` : speaker;
+}
+
+function voiceStem(voiceId: string): string {
+  return voiceId.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || voiceId;
+}
+
+function languageCode(language: string): string {
+  return language.toLowerCase().startsWith('english') ? 'en' : language;
+}
+
+function segmentDraft(args: {
+  title: string;
+  brief: string;
+  audience: string;
+  tone: string;
+  speaker: SpeakerDraft | undefined;
+  index: number;
+  total: number;
+}) {
   const speakerName = args.speaker?.name || 'Host';
-  const speakerRole = args.speaker?.role || 'speaker';
-  const identity = trimText(args.speaker?.identity || speakerRole, 120);
-  const goal = trimText(args.speaker?.goal || args.speaker?.instructions || 'advance the conversation with specific examples', 160);
+  const identity = trimText(args.speaker?.identity || args.speaker?.role || 'speaker', 90);
+  const goal = trimText(args.speaker?.goal || args.speaker?.instructions || 'advance the conversation with specific examples', 120);
   const angle = [
-    `frame the main claim and explain why it matters now`,
-    `give concrete examples and name the tradeoffs`,
-    `challenge the easy answer and test the assumptions`,
-    `connect the issue to everyday decisions for ${args.audience.toLowerCase()}`,
-    `summarize what listeners should watch next`,
+    'state the main claim clearly',
+    'give one concrete example and one tradeoff',
+    'challenge the strongest assumption',
+    `connect the issue to ${args.audience.toLowerCase()}`,
+    'summarize what listeners should watch next',
   ][args.index % 5];
-  return `${speakerName} speaks as ${identity}. For ${args.title}, ${angle}. The brief is: ${args.brief}. Keep the tone ${args.tone.toLowerCase()}, use plain language for ${args.audience.toLowerCase()}, and make this segment ${args.index + 1} of ${args.total} feel like a complete part of one continuous podcast. The speaker goal is to ${goal}. Include a clear transition into the next voice so the final audio sustains the selected runtime instead of ending after a short preview.`;
+  return `${speakerName} speaks as ${identity}. For ${args.title}, ${angle}. ${args.brief} Keep the tone ${args.tone.toLowerCase()} and make this part ${args.index + 1} of ${args.total} move the episode forward. The speaker goal is to ${goal}.`;
 }
 
 function buildPodcastSegments(title: string, brief: string, audience: string, tone: string, speakers: SpeakerDraft[], duration: string) {
   const cleanTitle = title.trim() || 'Untitled episode';
-  const cleanBrief = trimText(brief || 'Discuss the topic with practical examples, risks, and a clear takeaway.', 360);
+  const cleanBrief = trimText(brief || 'Discuss the topic with practical examples, risks, and a clear takeaway.', 260);
   const targetWords = targetWordCount(duration);
   const plannedSegments = Math.max(3, Math.ceil(targetWords / wordsPerSegment));
   const rows: Array<{ index: number; speaker: string; text: string }> = [];
@@ -186,22 +208,55 @@ function buildPodcastSegments(title: string, brief: string, audience: string, to
     words += countWords(text);
     if (rows.length >= 96) break;
   }
-  rows.push({ index: rows.length, speaker: speakers[0]?.name || 'Host', text: `Closing notes for ${cleanTitle}: recap the strongest point, the biggest risk, and one practical next step for ${audience.toLowerCase()}.` });
+  rows.push({
+    index: rows.length,
+    speaker: speakers[0]?.name || 'Host',
+    text: `Closing notes for ${cleanTitle}: recap the strongest point, the biggest risk, and one practical next step for ${audience.toLowerCase()}.`,
+  });
   return rows;
 }
 
-function transcriptFromJob(job: JobRecord | undefined, liveRows: Array<{ timestamp: string; speaker: string; text: string }>) {
-  if (liveRows.length > 1) return liveRows;
-  const payload = job?.input_payload as { script_segments?: Array<{ speaker?: unknown; text?: unknown }>; constraints?: { targetDurationSeconds?: unknown }; target_duration_seconds?: unknown } | undefined;
-  const scriptSegments = Array.isArray(payload?.script_segments) ? payload.script_segments : [];
-  if (!scriptSegments.length) return liveRows;
-  const targetSeconds = Number(payload?.constraints?.targetDurationSeconds || payload?.target_duration_seconds || 0);
-  const segmentStep = scriptSegments.length && targetSeconds > 0 ? Math.max(8, targetSeconds / scriptSegments.length) : 18;
-  return scriptSegments.slice(0, 24).map((segment, index) => ({
+function transcriptRowsFromSegments(segments: Array<{ speaker: string; text: string }>, targetSeconds: number): TranscriptRow[] {
+  if (!segments.length) return [];
+  const segmentStep = Math.max(8, targetSeconds / segments.length);
+  return segments.map((segment, index) => ({
     timestamp: formatClock(index * segmentStep),
     speaker: String(segment.speaker || 'Speaker'),
     text: String(segment.text || ''),
   }));
+}
+
+function transcriptRowsFromJob(job: JobRecord | undefined): TranscriptRow[] {
+  const payload = job?.input_payload as {
+    script_segments?: Array<{ speaker?: unknown; text?: unknown }>;
+    constraints?: { targetDurationSeconds?: unknown };
+    target_duration_seconds?: unknown;
+  } | undefined;
+  const scriptSegments = Array.isArray(payload?.script_segments) ? payload.script_segments : [];
+  if (!scriptSegments.length) return [];
+  const targetSeconds = Number(payload?.constraints?.targetDurationSeconds || payload?.target_duration_seconds || 0);
+  return transcriptRowsFromSegments(
+    scriptSegments.map((segment) => ({ speaker: String(segment.speaker || 'Speaker'), text: String(segment.text || '') })),
+    targetSeconds,
+  );
+}
+
+function readStoredTranscripts(): Record<string, TranscriptRow[]> {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(transcriptStorageKey) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredTranscripts(value: Record<string, TranscriptRow[]>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(transcriptStorageKey, JSON.stringify(value));
+  } catch {
+    // Browser storage can be unavailable in private modes; the in-memory rows still work.
+  }
 }
 
 function speakerCounts(segments: Array<{ speaker: string }>) {
@@ -214,14 +269,38 @@ function podcastStages(segments: Array<{ speaker: string }>) {
   return [
     { id: 'producer_plan', label: 'Producer Plan', resource_class: 'cpu' as const, status: 'queued' as const },
     { id: 'performance_script', label: 'Performance Script', resource_class: 'cpu' as const, status: 'queued' as const },
-    ...segments.map((segment, index) => ({ id: `voice_take_${index}`, label: `Voice Take: ${segment.speaker}`, resource_class: 'gpu:tts' as const, status: 'queued' as const })),
+    ...segments.map((segment, index) => ({
+      id: `voice_take_${index}`,
+      label: `Voice Take: ${segment.speaker}`,
+      resource_class: 'gpu:tts' as const,
+      status: 'queued' as const,
+    })),
     { id: 'voice_takes', label: 'Voice Takes', resource_class: 'gpu:tts' as const, status: 'queued' as const },
     { id: 'mix', label: 'Mix', resource_class: 'cpu' as const, status: 'queued' as const },
     { id: 'podcast_renderer', label: 'Podcast Renderer', resource_class: 'cpu' as const, status: 'queued' as const },
   ];
 }
 
-function buildPodcastJobPayload(args: { title: string; brief: string; format: PodcastFormat; audience: string; duration: string; tone: string; language: string; generationStyle: string; reviewPolicy: unknown; speakers: SpeakerDraft[]; voiceOptions: Array<{ id: string; label: string }>; segments: Array<{ index: number; speaker: string; text: string }>; citationRequired: string; familyFriendly: string; readingLevel: string; maxTurnSeconds: string; avoidTopics: string; relationships: RelationshipConfig }) {
+function buildPodcastJobPayload(args: {
+  title: string;
+  brief: string;
+  format: PodcastFormat;
+  audience: string;
+  duration: string;
+  tone: string;
+  language: string;
+  generationStyle: string;
+  reviewPolicy: unknown;
+  speakers: SpeakerDraft[];
+  voiceOptions: Array<{ id: string; label: string }>;
+  segments: Array<{ index: number; speaker: string; text: string }>;
+  citationRequired: string;
+  familyFriendly: string;
+  readingLevel: string;
+  maxTurnSeconds: string;
+  avoidTopics: string;
+  relationships: RelationshipConfig;
+}) {
   const counts = speakerCounts(args.segments);
   const firstVoice = args.speakers.find((speaker) => speaker.voice)?.voice || args.voiceOptions[0]?.id || null;
   const targetSeconds = durationSeconds(args.duration);
@@ -265,7 +344,12 @@ function buildPodcastJobPayload(args: { title: string; brief: string; format: Po
       speakingStyle: splitTags(speaker.speakingStyle),
       defaultGoal: speaker.goal,
       speakerInstructions: speaker.instructions,
-      voiceMapping: { speakerId: speaker.id, voiceId: speaker.voice, voiceDisplayName: args.voiceOptions.find((voice) => voice.id === speaker.voice)?.label || speaker.voice, previewAvailable: Boolean(speaker.voice) },
+      voiceMapping: {
+        speakerId: speaker.id,
+        voiceId: speaker.voice,
+        voiceDisplayName: args.voiceOptions.find((voice) => voice.id === speaker.voice)?.label || speaker.voice,
+        previewAvailable: Boolean(speaker.voice),
+      },
     })),
     relationships: mockPodcastRelationships,
     relationship_overrides: args.relationships,
@@ -287,14 +371,14 @@ function buildPodcastJobPayload(args: { title: string; brief: string; format: Po
   };
 }
 
-function extractPlayableOutputs(jobs: Array<JobRecord | undefined>): PlayablePodcastOutput[] {
-  const outputs: PlayablePodcastOutput[] = [];
-  const seen = new Set<string>();
+function extractPlayableOutputs(jobs: Array<JobRecord | undefined>, streamOutput?: PlayablePodcastOutput | null): PlayablePodcastOutput[] {
+  const outputs: PlayablePodcastOutput[] = streamOutput ? [streamOutput] : [];
+  const seen = new Set(outputs.map((output) => output.key));
   for (const job of jobs) {
     const refs = (job?.output_refs ?? []) as Array<{ data_url?: unknown; duration?: unknown; asset_id?: unknown; title?: unknown }>;
     for (const ref of refs) {
       const dataUrl = typeof ref.data_url === 'string' ? ref.data_url : '';
-      if (!dataUrl.startsWith('data:audio/')) continue;
+      if (!dataUrl.startsWith('data:audio/') && !dataUrl.startsWith('blob:')) continue;
       const title = typeof ref.title === 'string' && ref.title.trim() ? ref.title : jobTitle(job as JobRecord);
       const key = `${job?.id ?? 'job'}:${String(ref.asset_id || title || outputs.length)}`;
       if (seen.has(key)) continue;
@@ -319,9 +403,156 @@ function safeDownloadName(value: string): string {
   return value.replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'podcast-output';
 }
 
+function decodeBase64Pcm16(value: string): Int16Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Int16Array(bytes.buffer);
+}
+
+function schedulePcmChunk(audioContext: AudioContext, pcm: Int16Array, sampleRate: number, timing: { nextAt: number }) {
+  if (!pcm.length) return;
+  const samples = new Float32Array(pcm.length);
+  for (let index = 0; index < pcm.length; index += 1) samples[index] = Math.max(-1, Math.min(1, pcm[index] / 32768));
+  const buffer = audioContext.createBuffer(1, samples.length, sampleRate || 24000);
+  buffer.copyToChannel(samples, 0);
+  const source = audioContext.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audioContext.destination);
+  const startAt = Math.max(audioContext.currentTime + 0.04, timing.nextAt || 0);
+  source.start(startAt);
+  timing.nextAt = startAt + buffer.duration;
+}
+
+function buildWavDataUrl(chunks: Int16Array[], sampleRate: number): { dataUrl: string; duration: number } | null {
+  const totalSamples = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  if (!totalSamples) return null;
+  const pcm = new Int16Array(totalSamples);
+  let offset = 0;
+  for (const chunk of chunks) {
+    pcm.set(chunk, offset);
+    offset += chunk.length;
+  }
+  const dataSize = pcm.length * 2;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeString = (at: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) view.setUint8(at + index, value.charCodeAt(index));
+  };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+  for (let index = 0; index < pcm.length; index += 1) view.setInt16(44 + index * 2, pcm[index], true);
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return {
+    dataUrl: `data:audio/wav;base64,${btoa(binary)}`,
+    duration: pcm.length / sampleRate,
+  };
+}
+
+async function streamPodcastSegments(args: {
+  abortSignal: AbortSignal;
+  language: string;
+  onChunk: (message: string) => void;
+  onComplete: (output: PlayablePodcastOutput) => void;
+  onFallback: (message: string) => void;
+  segments: Array<{ speaker: string; text: string }>;
+  speakers: SpeakerDraft[];
+  title: string;
+}) {
+  if (typeof window === 'undefined' || typeof fetch === 'undefined' || typeof atob === 'undefined') return;
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  let audioContext: AudioContext | null = null;
+  if (AudioContextCtor) {
+    audioContext = new AudioContextCtor();
+    await audioContext.resume().catch(() => undefined);
+  }
+  const scheduled = { nextAt: audioContext ? audioContext.currentTime + 0.05 : 0 };
+  const pcmChunks: Int16Array[] = [];
+  let sampleRate = 24000;
+  for (let index = 0; index < args.segments.length; index += 1) {
+    if (args.abortSignal.aborted) return;
+    const segment = args.segments[index];
+    const speaker = args.speakers.find((entry) => entry.name === segment.speaker) ?? args.speakers[index % Math.max(args.speakers.length, 1)];
+    const voiceId = speaker?.voice || '';
+    args.onChunk(`Streaming voice take ${index + 1}/${args.segments.length}: ${segment.speaker}`);
+    let response: Response;
+    try {
+      response = await fetch('/api/tts/stream/server-sent-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({ text: segment.text, speaker: voiceStem(voiceId || segment.speaker), language: languageCode(args.language) }),
+        signal: args.abortSignal,
+      });
+    } catch (error) {
+      if (!args.abortSignal.aborted) args.onFallback('Live audio stream could not start; waiting for completed podcast output.');
+      return;
+    }
+    if (!response.ok || !response.body) {
+      args.onFallback('Live audio stream endpoint is unavailable; waiting for completed podcast output.');
+      return;
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let textBuffer = '';
+    while (!args.abortSignal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      textBuffer += decoder.decode(value, { stream: true });
+      const events = textBuffer.split('\n\n');
+      textBuffer = events.pop() ?? '';
+      for (const event of events) {
+        const dataLine = event.split('\n').find((line) => line.startsWith('data:'));
+        if (!dataLine) continue;
+        try {
+          const payload = JSON.parse(dataLine.slice(5).trim());
+          if (payload.type === 'chunk' && payload.audio_b64) {
+            const pcm = decodeBase64Pcm16(payload.audio_b64);
+            sampleRate = Number(payload.sample_rate || sampleRate || 24000);
+            pcmChunks.push(pcm);
+            if (audioContext) schedulePcmChunk(audioContext, pcm, sampleRate, scheduled);
+          } else if (payload.type === 'queued') {
+            args.onChunk(`Queued behind ${payload.position} live TTS job${payload.position === 1 ? '' : 's'}.`);
+          } else if (payload.type === 'error') {
+            args.onFallback(`Live audio stream failed: ${payload.message || 'unknown error'}`);
+          }
+        } catch {
+          // Ignore malformed SSE keepalive data.
+        }
+      }
+    }
+  }
+  const wav = buildWavDataUrl(pcmChunks, sampleRate);
+  if (wav && !args.abortSignal.aborted) {
+    args.onComplete({
+      dataUrl: wav.dataUrl,
+      duration: wav.duration,
+      jobId: 'live-stream',
+      key: `live-stream:${Date.now()}`,
+      title: `${args.title || 'Podcast'} live stream`,
+    });
+  }
+}
+
 export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
   const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs(), refetchInterval: 1500, refetchOnWindowFocus: true });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets(), refetchInterval: 5000 });
   const [title, setTitle] = useState(defaultTitle);
@@ -334,7 +565,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [generationStyle, setGenerationStyle] = useState('automatic');
   const [manualReviewStops, setManualReviewStops] = useState<string[]>([]);
   const [speakers, setSpeakers] = useState(() => mockPodcastSpeakerProfiles.map(toSpeakerDraft));
-  const [transcript, setTranscript] = useState<Array<{ timestamp: string; speaker: string; text: string }>>([]);
+  const [transcript, setTranscript] = useState<TranscriptRow[]>([]);
+  const [storedTranscripts, setStoredTranscripts] = useState<Record<string, TranscriptRow[]>>(() => readStoredTranscripts());
   const [directorNote, setDirectorNote] = useState('No live production is running. Configure the episode, then press Generate live podcast.');
   const [directorCollapsed, setDirectorCollapsed] = useState(false);
   const [speakerMenuId, setSpeakerMenuId] = useState('');
@@ -344,6 +576,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [playbackRate, setPlaybackRate] = useState('1.0x');
   const [playbackDuration, setPlaybackDuration] = useState(0);
   const [selectedOutputKey, setSelectedOutputKey] = useState('');
+  const [streamOutput, setStreamOutput] = useState<PlayablePodcastOutput | null>(null);
+  const [streamStatus, setStreamStatus] = useState('');
   const [citationRequired, setCitationRequired] = useState('On');
   const [familyFriendly, setFamilyFriendly] = useState('On');
   const [readingLevel, setReadingLevel] = useState('Grade 8');
@@ -356,48 +590,124 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   useEffect(() => {
     if (!voiceOptions.length) return;
-    setSpeakers((current) => current.map((speaker, index) => speaker.voice && voiceOptions.some((voice) => voice.id === speaker.voice) ? speaker : { ...speaker, voice: voiceOptions[index % voiceOptions.length].id }));
+    setSpeakers((current) => current.map((speaker, index) => (
+      speaker.voice && voiceOptions.some((voice) => voice.id === speaker.voice)
+        ? speaker
+        : { ...speaker, voice: voiceOptions[index % voiceOptions.length].id }
+    )));
   }, [voiceOptions.map((voice) => voice.id).join('|')]);
 
   const createJobMutation = useMutation({
-    mutationFn: () => {
-      const segments = buildPodcastSegments(title, brief, audience, tone, speakers, duration);
-      return omnixApiClient.createJob({ module: 'podcast', type: 'tts.multi_speaker_synthesize', resource_class: 'gpu:tts', priority: 0, input_payload: buildPodcastJobPayload({ title, brief, format, audience, duration, tone, language, generationStyle, reviewPolicy, speakers, voiceOptions, segments, citationRequired, familyFriendly, readingLevel, maxTurnSeconds, avoidTopics, relationships }), stages: podcastStages(segments) });
-    },
-    onMutate: () => {
+    mutationFn: (segments: Array<{ index: number; speaker: string; text: string }>) => omnixApiClient.createJob({
+      module: 'podcast',
+      type: 'tts.multi_speaker_synthesize',
+      resource_class: 'gpu:tts',
+      priority: 0,
+      input_payload: buildPodcastJobPayload({
+        title,
+        brief,
+        format,
+        audience,
+        duration,
+        tone,
+        language,
+        generationStyle,
+        reviewPolicy,
+        speakers,
+        voiceOptions,
+        segments,
+        citationRequired,
+        familyFriendly,
+        readingLevel,
+        maxTurnSeconds,
+        avoidTopics,
+        relationships,
+      }),
+      stages: podcastStages(segments),
+    }),
+    onMutate: (segments) => {
       audioRef.current?.pause();
+      setStreamOutput(null);
       setSelectedOutputKey('__pending__');
       setPlaybackDuration(0);
-      setDirectorNote('Director started production through the same local TTS path used by Voice Studio. Audio will attach as soon as a generated output is available.');
-      setTranscript([{ timestamp: '00:00', speaker: 'Director', text: 'Production started. Building a duration-aware speaker-tagged script and queueing voice takes.' }]);
+      const rows = transcriptRowsFromSegments(segments, durationSeconds(duration));
+      setTranscript(rows);
+      setDirectorNote('Director started live production. Transcript is locked from the generated speaker-tagged script; live TTS will play voice takes as chunks arrive.');
+      setStreamStatus('Connecting to live TTS stream...');
       setActionMessage('Podcast production is starting...');
     },
     onSuccess: async (job) => {
       selectFirstJobOutput(job, setSelectedOutputKey);
+      const rows = transcriptRowsFromJob(job);
+      if (rows.length) {
+        setTranscript(rows);
+        setStoredTranscripts((current) => {
+          const next = { ...current, [job.id]: rows };
+          writeStoredTranscripts(next);
+          return next;
+        });
+      }
       if (isFailed(job.status)) {
         setDirectorNote(jobErrorMessage(job));
         setActionMessage(jobErrorMessage(job));
       } else {
         setDirectorNote(`Director queued ${job.type}. Podcast audio is using Voice Library assignments.`);
-        setTranscript((lines) => [...lines, { timestamp: '00:14', speaker: 'Director', text: `Job ${job.id} returned with status ${job.status}.` }]);
         setActionMessage(extractPlayableOutputs([job]).length ? `Podcast audio ready: ${job.id}` : `Podcast production queued: ${job.id}`);
       }
-      await Promise.all([queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }), queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] })]);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
+      ]);
     },
   });
 
   const previewVoiceMutation = useMutation({
-    mutationFn: (speaker: SpeakerDraft) => omnixApiClient.createJob({ module: 'podcast', type: 'tts.synthesize', resource_class: 'gpu:tts', priority: 1, input_payload: { text: `${speaker.name}: This is a preview of ${speaker.name} for ${title}.`, title: `${speaker.name} preview`, provider_id: null, speaker: speaker.name, voice_id: speaker.voice || null, script_mode: 'single_speaker', script_speakers: [{ name: speaker.name, count: 1 }], script_segments: [{ index: 0, speaker: speaker.name, text: `This is a preview of ${speaker.name} for ${title}.` }], character_voice_assignments: [{ speaker: speaker.name, voice_id: speaker.voice || null, style: firstTag(speaker.speakingStyle), line_count: 1 }], output_settings: outputSettings, audio_effects: audioEffects, save_output: true }, stages: [{ id: 'preview_script', label: 'Prepare preview', resource_class: 'cpu', status: 'queued' }, { id: 'preview_voice', label: 'Generate preview', resource_class: 'gpu:tts', status: 'queued' }] }),
-    onSuccess: async (job) => { selectFirstJobOutput(job, setSelectedOutputKey); setActionMessage(isFailed(job.status) ? jobErrorMessage(job) : `Voice preview ${extractPlayableOutputs([job]).length ? 'ready' : 'queued'}: ${job.id}`); await Promise.all([queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }), queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] })]); },
+    mutationFn: (speaker: SpeakerDraft) => omnixApiClient.createJob({
+      module: 'podcast',
+      type: 'tts.synthesize',
+      resource_class: 'gpu:tts',
+      priority: 1,
+      input_payload: {
+        text: `${speaker.name}: This is a preview of ${speaker.name} for ${title}.`,
+        title: `${speaker.name} preview`,
+        provider_id: null,
+        speaker: speaker.name,
+        voice_id: speaker.voice || null,
+        script_mode: 'single_speaker',
+        script_speakers: [{ name: speaker.name, count: 1 }],
+        script_segments: [{ index: 0, speaker: speaker.name, text: `This is a preview of ${speaker.name} for ${title}.` }],
+        character_voice_assignments: [{ speaker: speaker.name, voice_id: speaker.voice || null, style: firstTag(speaker.speakingStyle), line_count: 1 }],
+        output_settings: outputSettings,
+        audio_effects: audioEffects,
+        save_output: true,
+      },
+      stages: [
+        { id: 'preview_script', label: 'Prepare preview', resource_class: 'cpu', status: 'queued' },
+        { id: 'preview_voice', label: 'Generate preview', resource_class: 'gpu:tts', status: 'queued' },
+      ],
+    }),
+    onSuccess: async (job) => {
+      selectFirstJobOutput(job, setSelectedOutputKey);
+      setActionMessage(isFailed(job.status) ? jobErrorMessage(job) : `Voice preview ${extractPlayableOutputs([job]).length ? 'ready' : 'queued'}: ${job.id}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
+      ]);
+    },
   });
 
   const podcastJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'podcast') ?? [];
   const activeJob = podcastJobs.find((job) => !isTerminal(job.status));
   const connectedJob = createJobMutation.data ?? previewVoiceMutation.data ?? activeJob ?? podcastJobs[0];
-  const playableOutputs = useMemo(() => extractPlayableOutputs([createJobMutation.data, previewVoiceMutation.data, ...podcastJobs]), [createJobMutation.data, podcastJobs, previewVoiceMutation.data]);
+  const playableOutputs = useMemo(
+    () => extractPlayableOutputs([createJobMutation.data, previewVoiceMutation.data, ...podcastJobs], streamOutput),
+    [createJobMutation.data, podcastJobs, previewVoiceMutation.data, streamOutput],
+  );
   const selectedOutput = selectedOutputKey ? playableOutputs.find((output) => output.key === selectedOutputKey) ?? null : playableOutputs[0] ?? null;
   const currentOutput = selectedOutputKey === '__pending__' || selectedOutputKey === '__new__' ? null : selectedOutput;
-  const transcriptRows = useMemo(() => transcriptFromJob(connectedJob, transcript), [connectedJob, transcript]);
+  const persistedTranscript = connectedJob?.id ? storedTranscripts[connectedJob.id] ?? [] : [];
+  const jobTranscript = transcriptRowsFromJob(connectedJob);
+  const transcriptRows = transcript.length ? transcript : persistedTranscript.length ? persistedTranscript : jobTranscript;
   const jobStages = connectedJob?.stages ?? [];
   const liveActive = createJobMutation.isPending || previewVoiceMutation.isPending || Boolean(connectedJob && !isTerminal(connectedJob.status));
   const liveStatus = createJobMutation.isPending || previewVoiceMutation.isPending ? 'QUEUEING' : connectedJob ? String(connectedJob.status).toUpperCase() : 'IDLE';
@@ -410,8 +720,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   useEffect(() => {
     if (!selectedOutputKey && playableOutputs.length > 0) setSelectedOutputKey(playableOutputs[0].key);
-    if (selectedOutputKey === '__pending__' && createJobMutation.data?.id) {
-      const newOutput = playableOutputs.find((output) => output.jobId === createJobMutation.data?.id);
+    if (selectedOutputKey === '__pending__') {
+      const newOutput = createJobMutation.data?.id ? playableOutputs.find((output) => output.jobId === createJobMutation.data?.id) : playableOutputs.find((output) => output.jobId === 'live-stream');
       if (newOutput) setSelectedOutputKey(newOutput.key);
     }
   }, [createJobMutation.data?.id, playableOutputs, selectedOutputKey]);
@@ -422,16 +732,101 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setPlaybackDuration(currentOutput?.duration ?? 0);
   }, [currentOutput?.key]);
 
-  function toggleReviewStop(stopId: string) { setManualReviewStops((current) => current.includes(stopId) ? current.filter((id) => id !== stopId) : [...current, stopId]); }
-  function updateSpeaker(id: string, field: string, value: string) { setSpeakers((current) => current.map((speaker) => speaker.id === id ? { ...speaker, [field]: value } : speaker)); }
-  function addParticipant() { const next = speakers.length + 1; setSpeakers((current) => [...current, { id: `guest_${next}`, name: `Guest ${next}`, role: 'Guest Analyst', avatar: `G${next}`, identity: 'Guest Analyst', beliefs: '', personality: '', speakingStyle: '', goal: '', instructions: '', voice: voiceOptions[0]?.id ?? '' }]); setActionMessage('Added participant.'); }
-  function removeParticipant(id: string) { if (speakers.length <= 1) { setActionMessage('Keep at least one participant.'); return; } setSpeakers((current) => current.filter((speaker) => speaker.id !== id)); setSpeakerMenuId(''); setActionMessage('Removed participant.'); }
-  function duplicateParticipant(speaker: SpeakerDraft) { setSpeakers((current) => [...current, { ...speaker, id: `${speaker.id}_copy_${current.length + 1}`, name: `${speaker.name} Copy` }]); setSpeakerMenuId(''); setActionMessage(`Duplicated ${speaker.name}.`); }
-  function submitLiveCommand() { const command = liveCommand.trim(); if (!command) return; if (!liveActive) { setActionMessage('Live edits apply during an active production run.'); return; } setDirectorNote(`Director applied live note: ${command}`); setTranscript((lines) => [...lines, { timestamp: '00:28', speaker: 'Director', text: command }]); setLiveCommand(''); }
-  function updateRelationship(field: keyof RelationshipConfig, value: string) { setRelationships((current) => ({ ...current, [field]: value })); }
-  function toggleSidebarPanel(panel: SidebarPanel) { setCollapsedPanels((current) => ({ ...current, [panel]: !current[panel] })); }
+  useEffect(() => () => streamAbortRef.current?.abort(), []);
+
+  function startGeneration() {
+    if (!brief.trim()) return;
+    const segments = buildPodcastSegments(title, brief, audience, tone, speakers, duration);
+    streamAbortRef.current?.abort();
+    const abortController = new AbortController();
+    streamAbortRef.current = abortController;
+    void streamPodcastSegments({
+      abortSignal: abortController.signal,
+      language,
+      segments,
+      speakers,
+      title: title || 'Podcast',
+      onChunk: (message) => {
+        setStreamStatus(message);
+        setActionMessage(message);
+      },
+      onFallback: (message) => {
+        setStreamStatus(message);
+        setActionMessage(message);
+      },
+      onComplete: (output) => {
+        setStreamOutput(output);
+        setSelectedOutputKey((current) => current === '__pending__' ? output.key : current);
+        setStreamStatus('Live TTS stream complete. Final persisted podcast output will replace it when the job finishes.');
+      },
+    });
+    createJobMutation.mutate(segments);
+  }
+
+  function toggleReviewStop(stopId: string) {
+    setManualReviewStops((current) => current.includes(stopId) ? current.filter((id) => id !== stopId) : [...current, stopId]);
+  }
+
+  function updateSpeaker(id: string, field: string, value: string) {
+    setSpeakers((current) => current.map((speaker) => speaker.id === id ? { ...speaker, [field]: value } : speaker));
+  }
+
+  function addParticipant() {
+    const next = speakers.length + 1;
+    setSpeakers((current) => [...current, {
+      id: `guest_${next}`,
+      name: `Guest ${next}`,
+      role: 'Guest Analyst',
+      avatar: `G${next}`,
+      identity: 'Guest Analyst',
+      beliefs: '',
+      personality: '',
+      speakingStyle: '',
+      goal: '',
+      instructions: '',
+      voice: voiceOptions[0]?.id ?? '',
+    }]);
+    setActionMessage('Added participant.');
+  }
+
+  function removeParticipant(id: string) {
+    if (speakers.length <= 1) {
+      setActionMessage('Keep at least one participant.');
+      return;
+    }
+    setSpeakers((current) => current.filter((speaker) => speaker.id !== id));
+    setSpeakerMenuId('');
+    setActionMessage('Removed participant.');
+  }
+
+  function duplicateParticipant(speaker: SpeakerDraft) {
+    setSpeakers((current) => [...current, { ...speaker, id: `${speaker.id}_copy_${current.length + 1}`, name: `${speaker.name} Copy` }]);
+    setSpeakerMenuId('');
+    setActionMessage(`Duplicated ${speaker.name}.`);
+  }
+
+  function submitLiveCommand() {
+    const command = liveCommand.trim();
+    if (!command) return;
+    if (!liveActive) {
+      setActionMessage('Live edits apply during an active production run.');
+      return;
+    }
+    setDirectorNote(`Director applied live note: ${command}`);
+    setTranscript((lines) => [...lines, { timestamp: formatClock(lines.length * 15), speaker: 'Director', text: command }]);
+    setLiveCommand('');
+  }
+
+  function updateRelationship(field: keyof RelationshipConfig, value: string) {
+    setRelationships((current) => ({ ...current, [field]: value }));
+  }
+
+  function toggleSidebarPanel(panel: SidebarPanel) {
+    setCollapsedPanels((current) => ({ ...current, [panel]: !current[panel] }));
+  }
 
   function resetPodcast() {
+    streamAbortRef.current?.abort();
     audioRef.current?.pause();
     setTitle('');
     setBrief('');
@@ -443,6 +838,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setGenerationStyle('automatic');
     setManualReviewStops([]);
     setTranscript([]);
+    setStreamOutput(null);
+    setStreamStatus('');
     setDirectorNote('New podcast request cleared. Add a title and brief, then generate.');
     setSelectedOutputKey('__new__');
     setPlaybackDuration(0);
@@ -451,12 +848,22 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   function selectRecentJob(jobId: string) {
     const output = playableOutputs.find((entry) => entry.jobId === jobId);
-    if (output) { setSelectedOutputKey(output.key); setActionMessage(`Selected audio output: ${output.title}.`); return; }
+    const job = podcastJobs.find((entry) => entry.id === jobId);
+    const rows = storedTranscripts[jobId] ?? transcriptRowsFromJob(job);
+    if (rows.length) setTranscript(rows);
+    if (output) {
+      setSelectedOutputKey(output.key);
+      setActionMessage(`Selected audio output: ${output.title}.`);
+      return;
+    }
     setActionMessage(`Selected job ${jobId}; no playable audio output is attached yet.`);
   }
 
   function downloadCurrentOutput(label = 'Podcast audio') {
-    if (!currentOutput || typeof document === 'undefined') { setActionMessage('Generate podcast audio before downloading.'); return; }
+    if (!currentOutput || typeof document === 'undefined') {
+      setActionMessage('Generate podcast audio before downloading.');
+      return;
+    }
     const link = document.createElement('a');
     link.href = currentOutput.dataUrl;
     link.download = `${safeDownloadName(currentOutput.title || title)}.wav`;
@@ -466,24 +873,81 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   async function copyEpisodeLink() {
     const link = typeof window !== 'undefined' ? `${window.location.href.split('#')[0]}#${connectedJob?.id ?? 'podcast'}` : connectedJob?.id ?? 'podcast';
-    try { await navigator.clipboard?.writeText(link); setActionMessage('Podcast link copied.'); }
-    catch { setActionMessage(`Podcast link: ${link}`); }
+    try {
+      await navigator.clipboard?.writeText(link);
+      setActionMessage('Podcast link copied.');
+    } catch {
+      setActionMessage(`Podcast link: ${link}`);
+    }
   }
 
   return (
     <WorkspacePanel className="podcast-workspace-panel">
       <div className="podcast-studio-shell">
-        <header className="podcast-studio-header"><div><p className="eyebrow">Conversation engine</p><h2 id="module-title">{module.label}</h2><p>Create a podcast from a speaker-tagged conversation, Voice Library assignments, and the same local TTS generation path used by Voice Studio.</p></div><code>/podcast-renderer</code></header>
+        <header className="podcast-studio-header">
+          <div>
+            <p className="eyebrow">Conversation engine</p>
+            <h2 id="module-title">{module.label}</h2>
+            <p>Create a podcast from a speaker-tagged conversation, Voice Library assignments, and the same local TTS generation path used by Voice Studio.</p>
+          </div>
+          <code>/podcast-renderer</code>
+        </header>
+
         <div className="podcast-studio-grid">
           <section className="podcast-studio-stack">
-            <article className="podcast-card episode-setup-card"><div className="card-heading-row"><h3>1. Episode setup</h3><button className="ghost-button compact" type="button" onClick={resetPodcast}>New podcast</button></div><div className="episode-setup-grid"><div className="podcast-field-stack"><label>Topic / Episode title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Episode brief<textarea rows={5} value={brief} onChange={(event) => setBrief(event.target.value)} /><small>{brief.length}/2000</small></label><label>Audience<select value={audience} onChange={(event) => setAudience(event.target.value)}><option>Software Engineers</option><option>General Public</option><option>Executives</option><option>Students</option><option>Experts</option></select></label></div><div className="podcast-config-stack"><span className="podcast-label">Podcast format</span><div className="format-card-grid">{formatOptions.map((option) => <button key={option.id} type="button" className={option.id === format ? 'selected' : undefined} onClick={() => setFormat(option.id)}><strong>{option.label}</strong><small>{option.description}</small></button>)}</div><div className="podcast-select-grid"><label>Duration<select value={duration} onChange={(event) => setDuration(event.target.value)}>{durationOptions.map((option) => <option key={option}>{option}</option>)}</select></label><label>Tone<select value={tone} onChange={(event) => setTone(event.target.value)}><option>Professional</option><option>Conversational</option><option>Humorous</option></select></label><label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>English (US)</option><option>English (UK)</option></select></label></div><div className="generation-style-panel"><span className="podcast-label">Generation Style</span>{generationStyleOptions.map((option) => <label key={option.id} className={generationStyle === option.id ? 'generation-style selected' : 'generation-style'}><input type="radio" checked={generationStyle === option.id} onChange={() => setGenerationStyle(option.id)} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}<div className="review-stop-row">{reviewStopOptions.map((option) => <label key={option.id}><input type="checkbox" disabled={generationStyle !== 'guided'} checked={manualReviewStops.includes(option.id)} onChange={() => toggleReviewStop(option.id)} />{option.label}</label>)}</div></div></div></div></article>
-            <article className="podcast-card"><div className="card-heading-row"><h3>2. Participants and voice casting</h3><small>{voiceOptions.length ? `Loaded ${voiceOptions.length} Voice Library voice${voiceOptions.length === 1 ? '' : 's'}` : 'No Voice Library voices found'}</small></div><div className="speaker-table editable-speaker-table"><div className="speaker-row speaker-header"><span>Speaker</span><span>Identity</span><span>Voice</span><span>Beliefs</span><span>Personality</span><span>Speaking style</span><span>Goal this episode</span><span>Instructions</span><span>Actions</span></div>{speakers.map((speaker) => <div className="speaker-row editable-speaker-row" key={speaker.id}><span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><input value={speaker.name} onChange={(event) => updateSpeaker(speaker.id, 'name', event.target.value)} /><input value={speaker.role} onChange={(event) => updateSpeaker(speaker.id, 'role', event.target.value)} /></span></span><span><input value={speaker.identity} onChange={(event) => updateSpeaker(speaker.id, 'identity', event.target.value)} /></span><span><select aria-label={`${speaker.name} voice`} value={speaker.voice} onChange={(event) => updateSpeaker(speaker.id, 'voice', event.target.value)}>{voiceOptions.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}{!voiceOptions.length ? <option value="">No cloned voices</option> : null}</select></span><span><textarea rows={2} value={speaker.beliefs} onChange={(event) => updateSpeaker(speaker.id, 'beliefs', event.target.value)} /></span><span><textarea rows={2} value={speaker.personality} onChange={(event) => updateSpeaker(speaker.id, 'personality', event.target.value)} /></span><span><textarea rows={2} value={speaker.speakingStyle} onChange={(event) => updateSpeaker(speaker.id, 'speakingStyle', event.target.value)} /></span><span><textarea rows={2} value={speaker.goal} onChange={(event) => updateSpeaker(speaker.id, 'goal', event.target.value)} /></span><span><textarea rows={2} value={speaker.instructions} onChange={(event) => updateSpeaker(speaker.id, 'instructions', event.target.value)} placeholder="Extra personality, pacing, conflict, or behavior notes" /></span><span className="speaker-preview speaker-actions"><button type="button" onClick={() => previewVoiceMutation.mutate(speaker)} disabled={!speaker.voice || previewVoiceMutation.isPending}>Preview</button><button type="button" onClick={() => removeParticipant(speaker.id)}>Remove</button><button type="button" onClick={() => setSpeakerMenuId((current) => current === speaker.id ? '' : speaker.id)}>More</button>{speakerMenuId === speaker.id ? <div className="speaker-menu"><button type="button" onClick={() => duplicateParticipant(speaker)}>Duplicate participant</button><button type="button" onClick={() => updateSpeaker(speaker.id, 'instructions', '')}>Clear instructions</button></div> : null}</span></div>)}</div><button className="ghost-button" type="button" onClick={addParticipant}>+ Add participant</button></article>
+            <article className="podcast-card episode-setup-card">
+              <div className="card-heading-row">
+                <h3>1. Episode setup</h3>
+                <button className="ghost-button compact" type="button" onClick={resetPodcast}>New podcast</button>
+              </div>
+              <div className="episode-setup-grid">
+                <div className="podcast-field-stack">
+                  <label>Topic / Episode title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+                  <label>Episode brief<textarea rows={5} value={brief} onChange={(event) => setBrief(event.target.value)} /><small>{brief.length}/2000</small></label>
+                  <label>Audience<select value={audience} onChange={(event) => setAudience(event.target.value)}><option>Software Engineers</option><option>General Public</option><option>Executives</option><option>Students</option><option>Experts</option></select></label>
+                </div>
+                <div className="podcast-config-stack">
+                  <span className="podcast-label">Podcast format</span>
+                  <div className="format-card-grid">{formatOptions.map((option) => <button key={option.id} type="button" className={option.id === format ? 'selected' : undefined} onClick={() => setFormat(option.id)}><strong>{option.label}</strong><small>{option.description}</small></button>)}</div>
+                  <div className="podcast-select-grid"><label>Duration<select value={duration} onChange={(event) => setDuration(event.target.value)}>{durationOptions.map((option) => <option key={option}>{option}</option>)}</select></label><label>Tone<select value={tone} onChange={(event) => setTone(event.target.value)}><option>Professional</option><option>Conversational</option><option>Humorous</option></select></label><label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>English (US)</option><option>English (UK)</option></select></label></div>
+                  <div className="generation-style-panel"><span className="podcast-label">Generation Style</span>{generationStyleOptions.map((option) => <label key={option.id} className={generationStyle === option.id ? 'generation-style selected' : 'generation-style'}><input type="radio" checked={generationStyle === option.id} onChange={() => setGenerationStyle(option.id)} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}<div className="review-stop-row">{reviewStopOptions.map((option) => <label key={option.id}><input type="checkbox" disabled={generationStyle !== 'guided'} checked={manualReviewStops.includes(option.id)} onChange={() => toggleReviewStop(option.id)} />{option.label}</label>)}</div></div>
+                </div>
+              </div>
+            </article>
+
+            <article className="podcast-card">
+              <div className="card-heading-row"><h3>2. Participants and voice casting</h3><small>{voiceOptions.length ? `Loaded ${voiceOptions.length} Voice Library voice${voiceOptions.length === 1 ? '' : 's'}` : 'No Voice Library voices found'}</small></div>
+              <div className="speaker-table editable-speaker-table">
+                <div className="speaker-row speaker-header"><span>Speaker</span><span>Identity</span><span>Voice</span><span>Beliefs</span><span>Personality</span><span>Speaking style</span><span>Goal this episode</span><span>Instructions</span><span>Actions</span></div>
+                {speakers.map((speaker) => <div className="speaker-row editable-speaker-row" key={speaker.id}><span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><input value={speaker.name} onChange={(event) => updateSpeaker(speaker.id, 'name', event.target.value)} /><input value={speaker.role} onChange={(event) => updateSpeaker(speaker.id, 'role', event.target.value)} /></span></span><span><input value={speaker.identity} onChange={(event) => updateSpeaker(speaker.id, 'identity', event.target.value)} /></span><span><select aria-label={`${speaker.name} voice`} value={speaker.voice} onChange={(event) => updateSpeaker(speaker.id, 'voice', event.target.value)}>{voiceOptions.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}{!voiceOptions.length ? <option value="">No cloned voices</option> : null}</select></span><span><textarea rows={2} value={speaker.beliefs} onChange={(event) => updateSpeaker(speaker.id, 'beliefs', event.target.value)} /></span><span><textarea rows={2} value={speaker.personality} onChange={(event) => updateSpeaker(speaker.id, 'personality', event.target.value)} /></span><span><textarea rows={2} value={speaker.speakingStyle} onChange={(event) => updateSpeaker(speaker.id, 'speakingStyle', event.target.value)} /></span><span><textarea rows={2} value={speaker.goal} onChange={(event) => updateSpeaker(speaker.id, 'goal', event.target.value)} /></span><span><textarea rows={2} value={speaker.instructions} onChange={(event) => updateSpeaker(speaker.id, 'instructions', event.target.value)} placeholder="Extra personality, pacing, conflict, or behavior notes" /></span><span className="speaker-preview speaker-actions"><button type="button" onClick={() => previewVoiceMutation.mutate(speaker)} disabled={!speaker.voice || previewVoiceMutation.isPending}>Preview</button><button type="button" onClick={() => removeParticipant(speaker.id)}>Remove</button><button type="button" onClick={() => setSpeakerMenuId((current) => current === speaker.id ? '' : speaker.id)}>More</button>{speakerMenuId === speaker.id ? <div className="speaker-menu"><button type="button" onClick={() => duplicateParticipant(speaker)}>Duplicate participant</button><button type="button" onClick={() => updateSpeaker(speaker.id, 'instructions', '')}>Clear instructions</button></div> : null}</span></div>)}
+              </div>
+              <button className="ghost-button" type="button" onClick={addParticipant}>+ Add participant</button>
+            </article>
+
             <article className="podcast-card relationship-card"><h3>3. Relationships and constraints</h3><div className="relationship-layout"><div className="relationship-map"><b className="node host">H<span>{relationships.hostLabel}</span></b><b className="node guest-a">GA<span>{relationships.guestALabel}</span></b><b className="node guest-b">GB<span>{relationships.guestBLabel}</span></b><span className="line mod">{relationships.moderation}</span><span className="line respect">{relationships.respect}</span><span className="line disagree">{relationships.disagreement}</span></div><div className="relationship-config-grid"><label>Host label<input value={relationships.hostLabel} onChange={(event) => updateRelationship('hostLabel', event.target.value)} /></label><label>Guest A label<input value={relationships.guestALabel} onChange={(event) => updateRelationship('guestALabel', event.target.value)} /></label><label>Guest B label<input value={relationships.guestBLabel} onChange={(event) => updateRelationship('guestBLabel', event.target.value)} /></label><label>Moderator relation<input value={relationships.moderation} onChange={(event) => updateRelationship('moderation', event.target.value)} /></label><label>Respect relation<input value={relationships.respect} onChange={(event) => updateRelationship('respect', event.target.value)} /></label><label>Conflict relation<input value={relationships.disagreement} onChange={(event) => updateRelationship('disagreement', event.target.value)} /></label></div><div className="constraint-grid editable"><label><small>Max duration</small><strong>{durationClock(duration)}</strong></label><label><small>Citation required</small><select value={citationRequired} onChange={(event) => setCitationRequired(event.target.value)}><option>On</option><option>Off</option></select></label><label><small>Family friendly</small><select value={familyFriendly} onChange={(event) => setFamilyFriendly(event.target.value)}><option>On</option><option>Off</option></select></label><label><small>Reading level</small><select value={readingLevel} onChange={(event) => setReadingLevel(event.target.value)}><option>Grade 8</option><option>Grade 10</option><option>Expert</option></select></label><label><small>Max turn</small><select value={maxTurnSeconds} onChange={(event) => setMaxTurnSeconds(event.target.value)}><option value="20">20 sec</option><option value="45">45 sec</option><option value="60">60 sec</option><option value="90">90 sec</option></select></label><label><small>Avoid topics</small><input value={avoidTopics} onChange={(event) => setAvoidTopics(event.target.value)} /></label></div></div></article>
-            <form className="episode-action-row" onSubmit={(event) => { event.preventDefault(); if (brief.trim()) createJobMutation.mutate(); }}><button className="ghost-button" type="button" onClick={resetPodcast}>New podcast</button><button className="podcast-generate-button" type="submit" disabled={createJobMutation.isPending}>Generate live podcast</button></form><FeatureValidationMessage show={showBriefError} message="Enter an episode brief before generating a podcast." /><FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="Podcast request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.status === 'failed' ? undefined : createJobMutation.data?.id} pendingMessage="Starting voice production" successPrefix="Podcast production queued" />
+
+            <form className="episode-action-row" onSubmit={(event) => { event.preventDefault(); startGeneration(); }}><button className="ghost-button" type="button" onClick={resetPodcast}>New podcast</button><button className="podcast-generate-button" type="submit" disabled={createJobMutation.isPending}>Generate live podcast</button></form>
+            <FeatureValidationMessage show={showBriefError} message="Enter an episode brief before generating a podcast." />
+            <FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="Podcast request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.status === 'failed' ? undefined : createJobMutation.data?.id} pendingMessage="Starting voice production" successPrefix="Podcast production queued" />
           </section>
-          <section className="podcast-live-column"><article className={`podcast-card live-production-card ${liveActive ? 'streaming' : 'idle'}`}><div className="card-heading-row"><h3>Live production</h3><span className="auto-badge">{liveStatus}</span></div><div className="stage-rail">{stages.map((stage, index) => <span key={`${stage.id}-${stage.label}`} className={stage.state}>{stage.state === 'done' ? 'OK' : stage.state === 'failed' ? '!' : index + 1}<small>{stage.label}</small></span>)}</div><div className="director-note"><b>Director</b><span>{directorCollapsed ? 'Director note collapsed.' : failed ? (jobErrorMessage(connectedJob) || 'Last podcast job failed. Fix the request or regenerate to start a new live production run.') : directorNote}</span><button type="button" onClick={() => setDirectorCollapsed((value) => !value)}>{directorCollapsed ? 'Expand' : 'Collapse'}</button></div><div className={`waveform ${liveActive ? 'streaming' : 'idle'}`} aria-hidden="true">{Array.from({ length: 64 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17 + transcriptRows.length * 5) % 42)}px` }} />)}</div><section className="live-transcript-section"><div className="card-heading-row"><h4>Transcript</h4><small>{transcriptRows.length ? `${transcriptRows.length} line${transcriptRows.length === 1 ? '' : 's'}` : 'Waiting for script'}</small></div><div className="live-transcript">{transcriptRows.length ? transcriptRows.map((line) => <p key={`${line.timestamp}-${line.speaker}-${line.text}`}><time>{line.timestamp}</time><b>{line.speaker}</b><span>{line.text}</span></p>) : <div className="live-empty-state"><strong>{failed ? 'Production failed' : 'No live transcript yet'}</strong><span>{failed ? (jobErrorMessage(connectedJob) || 'The last podcast job reported a failure.') : 'Press Generate live podcast to start live production events.'}</span></div>}</div></section><div className="podcast-audio-player" aria-label="Podcast audio player"><div className="audio-player-heading"><span>{currentOutput ? currentOutput.title : 'No podcast audio yet'}</span><small>{currentOutput ? 'AUDIO READY' : 'Generate a completed podcast to enable playback'}</small></div><audio ref={audioRef} src={currentOutput?.dataUrl ?? undefined} controls preload="auto" onLoadedMetadata={(event) => setPlaybackDuration(event.currentTarget.duration || currentOutput?.duration || 0)} onCanPlay={() => currentOutput && setActionMessage(`Audio available: ${currentOutput.title}`)} onError={() => setActionMessage('The generated audio could not be loaded by the browser.')} /><div className="audio-toolbar"><label>Playback speed<select value={playbackRate} onChange={(event) => { setPlaybackRate(event.target.value); if (audioRef.current) audioRef.current.playbackRate = Number.parseFloat(event.target.value) || 1; }}><option>0.8x</option><option>1.0x</option><option>1.25x</option></select></label><small>{currentOutput ? `${formatClock(playbackDuration || currentOutput.duration)} available` : 'No audio loaded'}</small></div></div><form className="live-command" onSubmit={(event) => { event.preventDefault(); submitLiveCommand(); }}><input value={liveCommand} disabled={!liveActive} onChange={(event) => setLiveCommand(event.target.value)} placeholder={liveActive ? 'Make Guest B more skeptical' : 'Start generation to edit the live run'} /><button type="submit" disabled={!liveActive || !liveCommand.trim()}>Apply</button></form></article><article className="podcast-card podcast-output-panel live-output-panel"><h3>Podcast outputs</h3><div className="output-layout"><div className="cover-art">AI<br />EVERYDAY<br />LIFE</div><div className="output-copy"><h4>{title || 'Untitled episode'} <span>{connectedJob ? String(connectedJob.status).toUpperCase() : 'IDLE'}</span></h4><small>{formatOptions.find((option) => option.id === format)?.label} - {speakers.length} voices - {duration}</small><p>A deep dive for {audience.toLowerCase()} in a {tone.toLowerCase()} tone with transcript, citations, chapters, and downloadable audio assets.</p><b>AI</b><b>Future</b><b>Technology</b>{currentOutput ? <em>{currentOutput.title}</em> : null}</div><div className="download-grid"><button type="button" disabled={!currentOutput} onClick={() => downloadCurrentOutput('MP3')}>MP3</button><button type="button" disabled={!currentOutput} onClick={() => downloadCurrentOutput('WAV')}>WAV</button><button type="button" onClick={() => setActionMessage('Transcript export requested.')}>Transcript</button><button type="button" onClick={() => setActionMessage('Show notes export requested.')}>Show Notes</button><button type="button" className="download-all" disabled={!currentOutput} onClick={() => downloadCurrentOutput('Download all')}>Download all</button><button type="button" onClick={() => void copyEpisodeLink()}>Copy link</button><button type="button" onClick={() => createJobMutation.mutate()}>Regenerate</button></div></div></article></section>
+
+          <section className="podcast-live-column">
+            <article className={`podcast-card live-production-card ${liveActive ? 'streaming' : 'idle'}`}>
+              <div className="card-heading-row"><h3>Live production</h3><span className="auto-badge">{liveStatus}</span></div>
+              <div className="stage-rail">{stages.map((stage, index) => <span key={`${stage.id}-${stage.label}`} className={stage.state}>{stage.state === 'done' ? 'OK' : stage.state === 'failed' ? '!' : index + 1}<small>{stage.label}</small></span>)}</div>
+              <div className="director-note"><b>Director</b><span>{directorCollapsed ? 'Director note collapsed.' : failed ? (jobErrorMessage(connectedJob) || 'Last podcast job failed. Fix the request or regenerate to start a new live production run.') : directorNote}</span><button type="button" onClick={() => setDirectorCollapsed((value) => !value)}>{directorCollapsed ? 'Expand' : 'Collapse'}</button></div>
+              <div className={`waveform ${liveActive ? 'streaming' : 'idle'}`} aria-hidden="true">{Array.from({ length: 64 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17 + transcriptRows.length * 5) % 42)}px` }} />)}</div>
+              <section className="live-transcript-section"><div className="card-heading-row"><h4>Transcript</h4><small>{transcriptRows.length ? `${transcriptRows.length} line${transcriptRows.length === 1 ? '' : 's'}` : 'Waiting for script'}</small></div><div className="live-transcript">{transcriptRows.length ? transcriptRows.map((line, index) => <p key={`${line.timestamp}-${line.speaker}-${index}`}><time>{line.timestamp}</time><b title={line.speaker}>{speakerDisplayName(line.speaker)}</b><span>{line.text}</span></p>) : <div className="live-empty-state"><strong>{failed ? 'Production failed' : 'No live transcript yet'}</strong><span>{failed ? (jobErrorMessage(connectedJob) || 'The last podcast job reported a failure.') : 'Press Generate live podcast to start live production events.'}</span></div>}</div></section>
+              <div className="podcast-audio-player" aria-label="Podcast audio player"><div className="audio-player-heading"><span>{currentOutput ? currentOutput.title : streamStatus || 'No podcast audio yet'}</span><small>{currentOutput ? 'AUDIO READY' : streamStatus ? 'LIVE STREAMING' : 'Generate a completed podcast to enable playback'}</small></div>{streamStatus && !currentOutput ? <p className="streaming-note">{streamStatus}</p> : null}<audio ref={audioRef} src={currentOutput?.dataUrl ?? undefined} controls preload="auto" onLoadedMetadata={(event) => setPlaybackDuration(event.currentTarget.duration || currentOutput?.duration || 0)} onCanPlay={() => currentOutput && setActionMessage(`Audio available: ${currentOutput.title}`)} onError={() => setActionMessage('The generated audio could not be loaded by the browser.')} /><div className="audio-toolbar"><label>Playback speed<select value={playbackRate} onChange={(event) => { setPlaybackRate(event.target.value); if (audioRef.current) audioRef.current.playbackRate = Number.parseFloat(event.target.value) || 1; }}><option>0.8x</option><option>1.0x</option><option>1.25x</option></select></label><small>{currentOutput ? `${formatClock(playbackDuration || currentOutput.duration)} available` : streamStatus ? 'Live chunks play automatically while generating' : 'No audio loaded'}</small></div></div>
+              <form className="live-command" onSubmit={(event) => { event.preventDefault(); submitLiveCommand(); }}><input value={liveCommand} disabled={!liveActive} onChange={(event) => setLiveCommand(event.target.value)} placeholder={liveActive ? 'Make Guest B more skeptical' : 'Start generation to edit the live run'} /><button type="submit" disabled={!liveActive || !liveCommand.trim()}>Apply</button></form>
+            </article>
+
+            <article className="podcast-card podcast-output-panel live-output-panel"><h3>Podcast outputs</h3><div className="output-layout"><div className="cover-art">AI<br />EVERYDAY<br />LIFE</div><div className="output-copy"><h4>{title || 'Untitled episode'} <span>{connectedJob ? String(connectedJob.status).toUpperCase() : 'IDLE'}</span></h4><small>{formatOptions.find((option) => option.id === format)?.label} - {speakers.length} voices - {duration}</small><p>A deep dive for {audience.toLowerCase()} in a {tone.toLowerCase()} tone with transcript, citations, chapters, and downloadable audio assets.</p><b>AI</b><b>Future</b><b>Technology</b>{currentOutput ? <em>{currentOutput.title}</em> : null}</div><div className="download-grid"><button type="button" disabled={!currentOutput} onClick={() => downloadCurrentOutput('MP3')}>MP3</button><button type="button" disabled={!currentOutput} onClick={() => downloadCurrentOutput('WAV')}>WAV</button><button type="button" onClick={() => setActionMessage('Transcript export requested.')}>Transcript</button><button type="button" onClick={() => setActionMessage('Show notes export requested.')}>Show Notes</button><button type="button" className="download-all" disabled={!currentOutput} onClick={() => downloadCurrentOutput('Download all')}>Download all</button><button type="button" onClick={() => void copyEpisodeLink()}>Copy link</button><button type="button" onClick={startGeneration}>Regenerate</button></div></div></article>
+          </section>
+
           <aside className="podcast-sidebar"><article className="podcast-card quality-card collapsible-card"><div className="card-heading-row"><h3>Quality gates</h3><button className="collapse-toggle" type="button" onClick={() => toggleSidebarPanel('quality')}>{collapsedPanels.quality ? 'Expand' : 'Collapse'}</button></div>{!collapsedPanels.quality ? <div className="sidebar-card-body">{mockQualityGates.map((gate) => <button type="button" key={gate.label} className={gate.status === 'Warning' ? 'warning' : undefined} onClick={() => setActionMessage(`${gate.label} gate: ${gate.status}.`)}><span>{gate.label}</span><b>{gate.status}</b></button>)}</div> : null}</article><article className="podcast-card health-card collapsible-card"><div className="card-heading-row"><h3>Session health</h3><button className="collapse-toggle" type="button" onClick={() => toggleSidebarPanel('health')}>{collapsedPanels.health ? 'Expand' : 'Collapse'}</button></div>{!collapsedPanels.health ? <div className="health-grid">{mockSessionMetrics.map((metric) => <div key={metric.label}><small>{metric.label}</small><strong>{metric.value}</strong></div>)}</div> : null}</article><article className="podcast-card recent-card collapsible-card"><div className="card-heading-row"><h3>Recent jobs</h3><span className="recent-actions"><button className="collapse-toggle" type="button" onClick={() => toggleSidebarPanel('recent')}>{collapsedPanels.recent ? 'Expand' : 'Collapse'}</button><button type="button" onClick={() => setShowAllRecentJobs((value) => !value)}>{showAllRecentJobs ? 'Show fewer' : 'View all'}</button></span></div>{!collapsedPanels.recent ? <div className="recent-job-list">{recentJobs.map((job) => <p key={`${job.id}-${job.status}`}><span className="recent-job-title" title={job.name}>{job.name}</span><OmnixStatusPill>{job.status}</OmnixStatusPill><small>{job.duration}</small><button type="button" onClick={() => selectRecentJob(job.id)}>Select</button></p>)}</div> : null}</article></aside>
         </div>
+
         <section className="podcast-bottom-grid"><article className="podcast-card production-assets-panel"><h3>Production assets</h3><div>{mockProductionAssetTiles.map((asset) => <section className={`asset-tile ${asset.color}`} key={asset.label}><b>{asset.label}</b><small>{asset.status}</small><button type="button" onClick={() => setActionMessage(`${asset.label}: ${asset.action} requested.`)}>{asset.action}</button></section>)}</div></article></section>
         <p className="action-toast" role="status">{actionMessage}</p>
       </div>
