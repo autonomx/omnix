@@ -115,7 +115,7 @@ describe('PodcastWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: /Generate live podcast/i }));
 
     expect((await screen.findAllByText('Podcast audio ready: job:podcast')).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText(/Generated podcast audio/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Live preview stitched|Stitched live preview/i)).length).toBeGreaterThan(0);
     expect(screen.getByLabelText('Podcast audio player').querySelectorAll('audio')).toHaveLength(1);
     expect(screen.getByLabelText('Podcast audio player').querySelector('audio')?.getAttribute('src')).toBe(GENERATED_AUDIO_DATA_URL);
 
@@ -131,12 +131,14 @@ describe('PodcastWorkspace', () => {
           && requestBody(init).type === 'tts.multi_speaker_synthesize',
       );
       expect(previewCall?.[1]?.body).toContain('"renderer":"podcast-live-preview"');
+      expect(previewCall?.[1]?.body).toContain('"voice_mapping"');
       expect(createCall?.[1]?.body).toContain('"module":"podcast"');
       expect(createCall?.[1]?.body).toContain('"type":"tts.multi_speaker_synthesize"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
       expect(createCall?.[1]?.body).toContain('"script_segments"');
       expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
       expect(createCall?.[1]?.body).toContain('"voice_id":"resources/voice_clones/alex.wav"');
+      expect(createCall?.[1]?.body).toContain('"voice_mapping"');
       expect(createCall?.[1]?.body).toContain('"speakerInstructions"');
       expect(createCall?.[1]?.body).toContain('"maxSpeakerTurnSeconds":45');
     });
