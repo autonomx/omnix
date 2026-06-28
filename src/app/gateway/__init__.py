@@ -1,6 +1,7 @@
 """Thin FastAPI gateway foundation for the Omnix web app redesign."""
 from __future__ import annotations
 
+from importlib import import_module
 from typing import Any
 
 from .audiobook_streaming import install_audiobook_websocket_hook
@@ -12,6 +13,7 @@ __all__ = ["app", "create_gateway_app"]
 install_rpg_session_route_hook()
 install_rpg_turn_job_mirror_hook()
 install_audiobook_websocket_hook()
+import_module(".tts_streaming", __name__).install_tts_stream_hook()
 
 
 def __getattr__(name: str) -> Any:
