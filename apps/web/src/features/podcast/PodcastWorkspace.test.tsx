@@ -34,6 +34,10 @@ function requestPath(input: RequestInfo | URL): string {
   return typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
 }
 
+function requestBody(init: RequestInit | undefined): Record<string, unknown> {
+  return JSON.parse(String(init?.body || '{}'));
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -113,7 +117,9 @@ describe('PodcastWorkspace', () => {
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
-        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST',
+        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs'
+          && init?.method === 'POST'
+          && requestBody(init).type === 'tts.multi_speaker_synthesize',
       );
       expect(createCall?.[1]?.body).toContain('"module":"podcast"');
       expect(createCall?.[1]?.body).toContain('"type":"tts.multi_speaker_synthesize"');
