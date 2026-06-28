@@ -115,16 +115,22 @@ describe('PodcastWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: /Generate live podcast/i }));
 
     expect((await screen.findAllByText('Podcast audio ready: job:podcast')).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText('Generated podcast audio')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Generated podcast audio/)).length).toBeGreaterThan(0);
     expect(screen.getByLabelText('Podcast audio player').querySelectorAll('audio')).toHaveLength(1);
     expect(screen.getByLabelText('Podcast audio player').querySelector('audio')?.getAttribute('src')).toBe(GENERATED_AUDIO_DATA_URL);
 
     await waitFor(() => {
+      const previewCall = fetchMock.mock.calls.find(
+        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs'
+          && init?.method === 'POST'
+          && requestBody(init).type === 'tts.synthesize',
+      );
       const createCall = fetchMock.mock.calls.find(
         ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs'
           && init?.method === 'POST'
           && requestBody(init).type === 'tts.multi_speaker_synthesize',
       );
+      expect(previewCall?.[1]?.body).toContain('"renderer":"podcast-live-preview"');
       expect(createCall?.[1]?.body).toContain('"module":"podcast"');
       expect(createCall?.[1]?.body).toContain('"type":"tts.multi_speaker_synthesize"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
