@@ -86,7 +86,6 @@ function isTerminal(status: unknown): boolean { return terminalStatuses.includes
 function isFailed(status: unknown): boolean { return ['failed', 'error', 'cancelled', 'canceled'].includes(String(status ?? '').toLowerCase()); }
 function firstTag(value: string): string { return splitTags(value)[0] ?? 'Neutral'; }
 function speakerDisplayName(speaker: string): string { return speaker.length > 18 ? `${speaker.slice(0, 17)}…` : speaker; }
-function languageCode(language: string): string { return language.toLowerCase().startsWith('english') ? 'en' : language; }
 function stageState(status: unknown, index: number, activeIndex: number) {
   const normalized = String(status ?? '').toLowerCase();
   if (isFailed(normalized)) return 'failed';
@@ -112,9 +111,6 @@ function voiceOptionsFromAssets(assets: VoiceAsset[]) {
 function jobTitle(job: { type: string; input_payload?: unknown }): string {
   const payload = job.input_payload as any;
   return payload && typeof payload.title === 'string' ? payload.title : job.type;
-}
-function buildPodcastSegments(title: string, brief: string, audience: string, tone: string, speakers: SpeakerDraft[], duration: string) {
-  return buildConversationalPodcastSegments(title, brief, audience, speakers, duration);
 }
 function transcriptRowsFromSegments(segments: Array<{ speaker: string; text: string }>, targetSeconds: number): TranscriptRow[] {
   if (!segments.length) return [];
@@ -249,19 +245,25 @@ function selectFirstJobOutput(job: JobRecord, setSelectedOutputKey: (key: string
   if (output) setSelectedOutputKey(output.key);
 }
 function safeDownloadName(value: string): string { return value.replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'podcast-output'; }
+function sleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(resolve, ms);
+    if (signal) signal.addEventListener('abort', () => { window.clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+  });
+}
 function decodeBase64ToBytes(value: string): Uint8Array {
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
   return bytes;
 }
+function audioDataUrlToBase64(dataUrl: string): string { return dataUrl.includes(',') ? dataUrl.split(',').pop() || '' : dataUrl; }
 function decodeBase64Pcm16(value: string): Int16Array { return new Int16Array(decodeBase64ToBytes(value).buffer); }
 function decodeBase64WavPcm16(value: string): { pcm: Int16Array; sampleRate: number } | null {
   const bytes = decodeBase64ToBytes(value);
   if (bytes.length < 44) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const riff = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
-  if (riff !== 'RIFF') return null;
+  if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'RIFF') return null;
   const sampleRate = view.getUint32(24, true) || 24000;
   let offset = 12;
   while (offset + 8 <= bytes.length) {
@@ -306,32 +308,53 @@ function buildWavDataUrl(chunks: Int16Array[], sampleRate: number): { dataUrl: s
   for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
   return { dataUrl: `data:audio/wav;base64,${btoa(binary)}`, duration: pcm.length / sampleRate };
 }
-async function generateVoiceStudioTake(segment: { speaker: string; text: string }, speaker: SpeakerDraft | undefined, language: string, abortSignal: AbortSignal) {
-  const voiceId = speaker?.voice || '';
-  const voiceResponse = await fetch('/api/voice_studio/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: segment.text, voice_id: voiceId || speaker?.name || segment.speaker, speed: 1, pitch: 0, emotion: 'neutral' }),
-    signal: abortSignal,
-  });
-  if (voiceResponse.ok) {
-    const data = await voiceResponse.json().catch(() => null);
-    if (data?.success && data.audio_base64) return { audioBase64: data.audio_base64, sampleRate: Number(data.sample_rate || 24000) };
-    throw new Error(data?.error || 'Voice Studio generation failed.');
+function buildSingleSpeakerJob(segment: { speaker: string; text: string }, speaker: SpeakerDraft | undefined, title: string) {
+  const speakerName = speaker?.name || segment.speaker;
+  return {
+    module: 'podcast',
+    type: 'tts.synthesize',
+    resource_class: 'gpu:tts',
+    priority: 1,
+    input_payload: {
+      text: segment.text,
+      title: `${speakerName} live preview`,
+      provider_id: null,
+      speaker: speakerName,
+      voice_id: speaker?.voice || null,
+      script_mode: 'single_speaker',
+      script_speakers: [{ name: speakerName, count: 1 }],
+      script_segments: [{ index: 0, speaker: speakerName, text: segment.text }],
+      character_voice_assignments: [{ speaker: speakerName, voice_id: speaker?.voice || null, style: firstTag(speaker?.speakingStyle || speaker?.personality || ''), line_count: 1 }],
+      output_settings: outputSettings,
+      audio_effects: audioEffects,
+      save_output: true,
+      source: 'podcast_live_preview',
+      podcast_title: title,
+    },
+    stages: [{ id: 'preview_voice', label: 'Voice Preview', resource_class: 'gpu:tts', status: 'queued' }],
+  };
+}
+async function waitForPlayableJob(job: JobRecord, signal: AbortSignal): Promise<PlayablePodcastOutput> {
+  let current = job;
+  for (let attempt = 0; attempt < 180; attempt += 1) {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const output = extractPlayableOutputs([current])[0];
+    if (output) return output;
+    if (isFailed(current.status)) throw new Error(jobErrorMessage(current) || 'TTS job failed.');
+    await sleep(1000, signal);
+    current = await omnixApiClient.getJob(current.id);
   }
-  const fallbackResponse = await fetch('/api/tts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: segment.text, speaker: voiceId || speaker?.name || segment.speaker, language: languageCode(language) }),
-    signal: abortSignal,
-  });
-  const fallback = await fallbackResponse.json().catch(() => null);
-  if (!fallbackResponse.ok || !fallback?.success) throw new Error(fallback?.error || 'TTS generation failed.');
-  return { audioBase64: fallback.audio || fallback.audio_base64, sampleRate: Number(fallback.sample_rate || 24000) };
+  throw new Error('Timed out waiting for generated audio.');
+}
+async function generateVoicePreviewTake(segment: { speaker: string; text: string }, speaker: SpeakerDraft | undefined, title: string, abortSignal: AbortSignal) {
+  const job = await omnixApiClient.createJob(buildSingleSpeakerJob(segment, speaker, title));
+  const output = await waitForPlayableJob(job, abortSignal);
+  const base64Audio = audioDataUrlToBase64(output.dataUrl);
+  if (!base64Audio) throw new Error('TTS job completed without audio data.');
+  return { audioBase64: base64Audio, sampleRate: 24000, jobId: output.jobId, duration: output.duration };
 }
 async function streamPodcastSegments(args: {
   abortSignal: AbortSignal;
-  language: string;
   onBuffered: (output: PlayablePodcastOutput) => void;
   onChunk: (message: string) => void;
   onComplete: (output: PlayablePodcastOutput) => void;
@@ -341,7 +364,7 @@ async function streamPodcastSegments(args: {
   speakers: SpeakerDraft[];
   title: string;
 }) {
-  if (typeof window === 'undefined' || typeof fetch === 'undefined' || typeof atob === 'undefined') return false;
+  if (typeof window === 'undefined' || typeof atob === 'undefined') return false;
   const pcmChunks: Int16Array[] = [];
   let sampleRate = 24000;
   for (let index = 0; index < args.segments.length; index += 1) {
@@ -349,9 +372,9 @@ async function streamPodcastSegments(args: {
     const segment = args.segments[index];
     const speaker = args.speakers.find((entry) => entry.name === segment.speaker) ?? args.speakers[index % Math.max(args.speakers.length, 1)];
     args.onProgressStage(2);
-    args.onChunk(`Generating speaking turn ${index + 1}/${args.segments.length}: ${segment.speaker}`);
+    args.onChunk(`Queueing speaking turn ${index + 1}/${args.segments.length}: ${segment.speaker}`);
     try {
-      const result = await generateVoiceStudioTake(segment, speaker, args.language, args.abortSignal);
+      const result = await generateVoicePreviewTake(segment, speaker, args.title || 'Podcast', args.abortSignal);
       const decoded = decodeBase64WavPcm16(result.audioBase64) ?? { pcm: decodeBase64Pcm16(result.audioBase64), sampleRate: result.sampleRate };
       sampleRate = decoded.sampleRate || sampleRate || 24000;
       pcmChunks.push(decoded.pcm);
@@ -458,27 +481,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   });
 
   const previewVoiceMutation = useMutation({
-    mutationFn: (speaker: SpeakerDraft) => omnixApiClient.createJob({
-      module: 'podcast',
-      type: 'tts.synthesize',
-      resource_class: 'gpu:tts',
-      priority: 1,
-      input_payload: {
-        text: `${speaker.name}: This is a preview of ${speaker.name} for ${title}.`,
-        title: `${speaker.name} preview`,
-        provider_id: null,
-        speaker: speaker.name,
-        voice_id: speaker.voice || null,
-        script_mode: 'single_speaker',
-        script_speakers: [{ name: speaker.name, count: 1 }],
-        script_segments: [{ index: 0, speaker: speaker.name, text: `This is a preview of ${speaker.name} for ${title}.` }],
-        character_voice_assignments: [{ speaker: speaker.name, voice_id: speaker.voice || null, style: firstTag(speaker.speakingStyle), line_count: 1 }],
-        output_settings: outputSettings,
-        audio_effects: audioEffects,
-        save_output: true,
-      },
-      stages: [{ id: 'preview_voice', label: 'Voice Preview', resource_class: 'gpu:tts', status: 'queued' }],
-    }),
+    mutationFn: (speaker: SpeakerDraft) => omnixApiClient.createJob(buildSingleSpeakerJob({ speaker: speaker.name, text: `This is a preview of ${speaker.name} for ${title}.` }, speaker, title)),
     onSuccess: async (job) => {
       selectFirstJobOutput(job, setSelectedOutputKey);
       setActionMessage(isFailed(job.status) ? jobErrorMessage(job) : `Voice preview ${extractPlayableOutputs([job]).length ? 'ready' : 'queued'}: ${job.id}`);
@@ -536,7 +539,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
   function startGeneration() {
     if (!brief.trim()) return;
-    const segments = buildPodcastSegments(title, brief, audience, tone, speakers, duration);
+    const segments = buildConversationalPodcastSegments(title, brief, audience, speakers, duration);
     streamAbortRef.current?.abort();
     audioRef.current?.pause();
     const abortController = new AbortController();
@@ -547,13 +550,12 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setLiveStreamActive(true);
     setLiveStreamStage(0);
     setTranscript(transcriptRowsFromSegments(segments, durationSeconds(duration)));
-    setDirectorNote('Director started live preview. Voice turns are generated through the Voice Studio path, then the final podcast job is queued after preview generation.');
-    setStreamStatus('Preparing live voice preview...');
+    setDirectorNote('Director started live preview. Voice turns are queued through the platform job API, so the app no longer calls missing legacy /api/voice_studio or /api/tts routes.');
+    setStreamStatus('Preparing live voice preview jobs...');
     setActionMessage('Live voice preview is starting...');
     void (async () => {
       const streamed = await streamPodcastSegments({
         abortSignal: abortController.signal,
-        language,
         segments,
         speakers,
         title: title || 'Podcast',
@@ -607,7 +609,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <div>
             <p className="eyebrow">Conversation engine</p>
             <h2 id="module-title">{module.label}</h2>
-            <p>Create a podcast from a real speaker-tagged conversation, Voice Library assignments, and the same local TTS generation path used by Voice Studio.</p>
+            <p>Create a podcast from a real speaker-tagged conversation, Voice Library assignments, and platform TTS jobs.</p>
           </div>
           <code>/podcast-renderer</code>
         </header>
