@@ -133,7 +133,7 @@ describe('provider-backed feature submit feedback', () => {
     installFailingJobApiMock();
     renderWithProviders(<PodcastWorkspace module={moduleById('podcast')} />);
 
-    expect(await screen.findByRole('heading', { name: 'Episode request' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '1. Episode setup' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Episode brief/), { target: { value: 'Discuss local model routing.' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate live podcast/i }));
 
@@ -168,7 +168,8 @@ describe('provider-backed feature submit feedback', () => {
 
     expect(await screen.findByRole('heading', { name: 'Voice profile' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Profile name'), { target: { value: 'Narrator profile' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue voice profile' }));
+    fireEvent.change(screen.getByLabelText('Sample path'), { target: { value: 'resources/data/sample.wav' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create voice profile/ }));
 
     expect(await screen.findByText(/Voice profile request failed with status 500/)).toBeInTheDocument();
   });
@@ -177,21 +178,20 @@ describe('provider-backed feature submit feedback', () => {
     installFailingJobApiMock();
     renderWithProviders(<ImageGenerationWorkspace module={moduleById('image-generation')} />);
 
-    expect(await screen.findByRole('heading', { name: 'Image request' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A glowing nebula.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue image' }));
+    expect(await screen.findByText('Prompt')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A moonlit observatory.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Generate image/ }));
 
     expect(await screen.findByText(/Image request failed with status 500/)).toBeInTheDocument();
   });
 
-  it('surfaces RPG turn job failures', async () => {
+  it('surfaces RPG request failures', async () => {
     installFailingJobApiMock();
     renderWithProviders(<RpgWorkspace module={moduleById('rpg')} />);
 
-    expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Look around the tavern.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+    expect(await screen.findByText('New Campaign')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Start campaign/ }));
 
-    expect(await screen.findByText(/RPG turn request failed with status 500/)).toBeInTheDocument();
+    expect(await screen.findByText(/RPG request failed with status 500/)).toBeInTheDocument();
   });
 });
