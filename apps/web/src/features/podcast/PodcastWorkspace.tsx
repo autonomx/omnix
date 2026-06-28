@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
@@ -93,7 +93,6 @@ function buildPodcastJobPayload(args: any) {
 }
 
 export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) {
-  const queryClient = useQueryClient();
   const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: async () => { try { return await omnixApiClient.listJobs(); } catch { return { jobs: [] }; } }, retry: false, refetchInterval: false, refetchOnWindowFocus: false });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: async () => { try { return await omnixApiClient.listAssets(); } catch { return { assets: [] }; } }, retry: false, refetchInterval: false, refetchOnWindowFocus: false });
   const [title, setTitle] = useState(defaultTitle);
@@ -131,7 +130,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const createJobMutation = useMutation({
     mutationFn: (segments: Array<{ index: number; speaker: string; text: string }>) => omnixApiClient.createJob({ module: 'podcast', type: 'tts.multi_speaker_synthesize', resource_class: 'gpu:tts', priority: 0, input_payload: buildPodcastJobPayload({ title, brief, format, audience, duration, tone, language, generationStyle, reviewPolicy, speakers, voiceOptions, segments, citationRequired, familyFriendly, readingLevel, maxTurnSeconds, avoidTopics, relationships }), stages: podcastStages() }),
     onMutate: (segments) => { const rows = transcriptRowsFromSegments(segments, durationSeconds(duration)); setTranscript(rows); setSelectedOutputKey('__rendering__'); setDirectorNote('Director queued the single final podcast render. The transcript and production stages are visible now; audio will appear when the render completes.'); setActionMessage('Podcast render queued. Waiting for completed audio output.'); },
-    onSuccess: async (job) => { const output = extractPlayableOutputs([job])[0]; if (output) setSelectedOutputKey(output.key); const rows = transcriptRowsFromJob(job); if (rows.length) { setTranscript(rows); setStoredTranscripts((current) => { const next = { ...current, [job.id]: rows }; writeStoredTranscripts(next); return next; }); } if (isFailed(job.status)) { setDirectorNote(jobErrorMessage(job)); setActionMessage(jobErrorMessage(job)); } else { setDirectorNote(output ? 'Podcast audio is ready.' : 'Podcast render is queued. Audio will appear when the completed output is available.'); setActionMessage(output ? `Podcast audio ready: ${job.id}` : `Podcast production queued: ${job.id}`); } await Promise.all([queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }), queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] })]); },
+    onSuccess: (job) => { const output = extractPlayableOutputs([job])[0]; if (output) setSelectedOutputKey(output.key); const rows = transcriptRowsFromJob(job); if (rows.length) { setTranscript(rows); setStoredTranscripts((current) => { const next = { ...current, [job.id]: rows }; writeStoredTranscripts(next); return next; }); } if (isFailed(job.status)) { setDirectorNote(jobErrorMessage(job)); setActionMessage(jobErrorMessage(job)); } else { setDirectorNote(output ? 'Podcast audio is ready.' : 'Podcast render is queued. Audio will appear when the completed output is available.'); setActionMessage(output ? `Podcast audio ready: ${job.id}` : `Podcast production queued: ${job.id}`); } },
     onError: (error) => { setDirectorNote(error instanceof Error ? error.message : 'Podcast request failed.'); setActionMessage(error instanceof Error ? error.message : 'Podcast request failed.'); },
   });
 
