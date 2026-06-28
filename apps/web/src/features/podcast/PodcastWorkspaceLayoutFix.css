@@ -2,13 +2,15 @@
   max-width: 100%;
   min-width: 0;
   overflow-x: clip;
+  width: 100%;
 }
 
 .podcast-studio-grid {
   align-items: start;
-  grid-template-columns: minmax(0, 1.15fr) minmax(22rem, 0.9fr) minmax(15rem, 0.46fr);
+  grid-template-columns: minmax(52rem, 1.45fr) minmax(36rem, 1fr);
   max-width: 100%;
   min-width: 0;
+  width: 100%;
 }
 
 .podcast-studio-stack,
@@ -27,14 +29,14 @@
   overflow: hidden;
 }
 
-.podcast-live-column {
-  position: relative;
-  z-index: 0;
+.podcast-sidebar {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
 }
 
-.episode-setup-card {
-  position: relative;
-  z-index: 1;
+.episode-setup-grid {
+  grid-template-columns: minmax(22rem, 0.95fr) minmax(28rem, 1.05fr);
 }
 
 .speaker-table {
@@ -43,7 +45,12 @@
 }
 
 .speaker-row {
-  min-width: 64rem;
+  min-width: 100%;
+}
+
+.live-transcript p span {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .stage-rail {
@@ -155,14 +162,18 @@
   padding: 0.65rem 0.85rem;
 }
 
+@media (min-width: 1800px) {
+  .podcast-studio-grid {
+    grid-template-columns: minmax(64rem, 1.55fr) minmax(44rem, 1fr);
+  }
+}
+
 @media (max-width: 1400px) {
   .podcast-studio-grid,
-  .podcast-bottom-grid {
+  .podcast-bottom-grid,
+  .podcast-sidebar,
+  .episode-setup-grid {
     grid-template-columns: 1fr;
-  }
-
-  .speaker-row {
-    min-width: 58rem;
   }
 }
 
