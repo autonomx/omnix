@@ -29,6 +29,36 @@ PITCH_MIN = -5
 PITCH_MAX = 5
 
 
+def _voice_id_candidates(voice_id):
+    """Return likely voice-clone IDs for UI labels, asset paths, and raw IDs."""
+    raw = str(voice_id or "").replace(" (Custom)", "").strip()
+    candidates = []
+    for value in (
+        raw,
+        os.path.splitext(os.path.basename(raw.replace("\\", "/")))[0],
+    ):
+        value = value.strip()
+        if value and value not in candidates:
+            candidates.append(value)
+    return candidates
+
+
+def _resolve_voice_id(voice_id):
+    """Resolve Voice Library/Voice Studio identifiers to a provider speaker ID."""
+    for candidate in _voice_id_candidates(voice_id):
+        voice_clone_id = shared.custom_voices.get(candidate, {}).get("voice_clone_id")
+        if voice_clone_id:
+            return voice_clone_id
+
+    clones_dir = getattr(shared, "VOICE_CLONES_DIR", "")
+    for candidate in _voice_id_candidates(voice_id):
+        if clones_dir and os.path.exists(os.path.join(clones_dir, f"{candidate}.wav")):
+            return candidate
+
+    candidates = _voice_id_candidates(voice_id)
+    return candidates[-1] if candidates else "default"
+
+
 @voice_studio_bp.route("/api/voice_studio/generate", methods=["POST"])
 def generate_voice():
     data = request.json or {}
@@ -68,35 +98,45 @@ def generate_voice():
             pitch = emo["pitch"]
 
     try:
-        # Resolve speaker from voice_id via shared custom_voices
-        clean_speaker = voice_id.replace(" (Custom)", "").strip()
-        voice_clone_id = shared.custom_voices.get(clean_speaker, {}).get("voice_clone_id")
-        final_speaker = voice_clone_id if voice_clone_id else clean_speaker
+        # Resolve speaker from voice_id via shared custom_voices, raw clone IDs,
+        # or Voice Library asset paths such as resources/.../Maya.wav.
+        final_speaker = _resolve_voice_id(voice_id)
 
         tts_provider = shared.get_tts_provider()
         if not tts_provider:
             return jsonify({"success": False, "error": "No TTS provider available"}), 500
 
-        # Generate audio via the existing TTS provider
-        # Include speed, pitch, and emotion for providers that support them
-        gen_kwargs = {"text": text, "speaker": final_speaker, "language": "en",
-                      "speed": speed, "pitch": pitch, "emotion": emotion}
+        # Generate audio via the existing TTS provider. Prefer generate_audio
+        # because the local providers expose the full voice-clone path there;
+        # keep generate_tts as a compatibility fallback for older providers.
+        gen_kwargs = {
+            "text": text,
+            "speaker": final_speaker,
+            "language": "en",
+            "speed": speed,
+            "pitch": pitch,
+            "emotion": emotion,
+        }
 
-        if hasattr(tts_provider, "generate_tts"):
-            result = tts_provider.generate_tts(**gen_kwargs)
-        elif hasattr(tts_provider, "generate_audio"):
+        if hasattr(tts_provider, "generate_audio"):
             result = tts_provider.generate_audio(**gen_kwargs)
+        elif hasattr(tts_provider, "generate_tts"):
+            result = tts_provider.generate_tts(**gen_kwargs)
         else:
             return jsonify({"success": False, "error": "TTS provider missing generation method"}), 500
 
         if not result or not result.get("success"):
-            return jsonify({"success": False, "error": result.get("error", "TTS generation failed") if result else "TTS generation failed"}), 500
+            error = result.get("error", "TTS generation failed") if result else "TTS generation failed"
+            return jsonify({"success": False, "error": error}), 500
 
         audio_b64 = result.get("audio", "")
 
         return jsonify({
             "success": True,
             "audio_base64": audio_b64,
+            "sample_rate": result.get("sample_rate", shared.TTS_SAMPLE_RATE),
+            "duration": result.get("duration"),
+            "voice_id": final_speaker,
         })
 
     except Exception as e:
