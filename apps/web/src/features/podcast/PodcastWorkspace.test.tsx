@@ -40,10 +40,14 @@ function requestBody(init: RequestInit | undefined): Record<string, unknown> {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('PodcastWorkspace', () => {
   it('queues podcast voice generation through the Voice Studio TTS path and exposes playback audio', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
