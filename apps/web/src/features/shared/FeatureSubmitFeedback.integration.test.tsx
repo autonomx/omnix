@@ -133,7 +133,7 @@ describe('provider-backed feature submit feedback', () => {
     installFailingJobApiMock();
     renderWithProviders(<PodcastWorkspace module={moduleById('podcast')} />);
 
-    expect(await screen.findByRole('heading', { name: 'Episode request' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '1. Episode setup' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Episode brief/), { target: { value: 'Discuss local model routing.' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate live podcast/i }));
 

@@ -14,6 +14,8 @@ import './PodcastWorkspace.css';
 type VoiceAsset = AssetListResponse['assets'][number];
 type SpeakerDraft = ReturnType<typeof toSpeakerDraft>;
 
+type SidebarPanel = 'quality' | 'health' | 'recent';
+
 interface PlayablePodcastOutput {
   dataUrl: string;
   duration: number;
@@ -22,6 +24,26 @@ interface PlayablePodcastOutput {
   title: string;
 }
 
+interface RelationshipConfig {
+  hostLabel: string;
+  guestALabel: string;
+  guestBLabel: string;
+  moderation: string;
+  respect: string;
+  disagreement: string;
+}
+
+const defaultTitle = 'The Future of AI in Everyday Life';
+const defaultBrief = 'Explore how artificial intelligence is shaping our daily lives, transforming work and productivity, inspiring creativity, influencing relationships, and augmenting decision-making. We will discuss opportunities, risks, and what comes next.';
+const defaultRelationships: RelationshipConfig = {
+  hostLabel: 'Host',
+  guestALabel: 'Guest A',
+  guestBLabel: 'Guest B',
+  moderation: 'moderates',
+  respect: 'respects',
+  disagreement: 'disagrees with',
+};
+const durationOptions = ['2 min', '5 min', '10 min', '15 min', '20 min', '30 min', '45 min', '60 min'];
 const formatOptions: Array<{ id: PodcastFormat; label: string; description: string }> = [
   { id: 'debate', label: 'Debate', description: 'Two or more opposing sides' },
   { id: 'interview', label: 'Interview', description: 'Host interviews guests' },
@@ -155,7 +177,7 @@ function podcastStages(segments: Array<{ speaker: string }>) {
   ];
 }
 
-function buildPodcastJobPayload(args: { title: string; brief: string; format: PodcastFormat; audience: string; duration: string; tone: string; language: string; generationStyle: string; reviewPolicy: unknown; speakers: SpeakerDraft[]; voiceOptions: Array<{ id: string; label: string }>; segments: Array<{ index: number; speaker: string; text: string }> }) {
+function buildPodcastJobPayload(args: { title: string; brief: string; format: PodcastFormat; audience: string; duration: string; tone: string; language: string; generationStyle: string; reviewPolicy: unknown; speakers: SpeakerDraft[]; voiceOptions: Array<{ id: string; label: string }>; segments: Array<{ index: number; speaker: string; text: string }>; citationRequired: string; familyFriendly: string; readingLevel: string; maxTurnSeconds: string; avoidTopics: string; relationships: RelationshipConfig }) {
   const counts = speakerCounts(args.segments);
   const firstVoice = args.speakers.find((speaker) => speaker.voice)?.voice || args.voiceOptions[0]?.id || null;
   return {
@@ -198,7 +220,21 @@ function buildPodcastJobPayload(args: { title: string; brief: string; format: Po
       voiceMapping: { speakerId: speaker.id, voiceId: speaker.voice, voiceDisplayName: args.voiceOptions.find((voice) => voice.id === speaker.voice)?.label || speaker.voice, previewAvailable: Boolean(speaker.voice) },
     })),
     relationships: mockPodcastRelationships,
-    constraints: { maxDurationSeconds: durationSeconds(args.duration), targetDurationSeconds: durationSeconds(args.duration), maxSpeakerTurnSeconds: 45, citationRequired: true, familyFriendly: true, readingLevel: 'Grade 8', avoidTopics: ['Politics'], requiredTopics: ['practical examples', 'risks', 'future outlook'], disallowedClaims: [], tone: args.tone, audience: args.audience, language: args.language },
+    relationship_overrides: args.relationships,
+    constraints: {
+      maxDurationSeconds: durationSeconds(args.duration),
+      targetDurationSeconds: durationSeconds(args.duration),
+      maxSpeakerTurnSeconds: Number.parseInt(args.maxTurnSeconds, 10) || 45,
+      citationRequired: args.citationRequired === 'On',
+      familyFriendly: args.familyFriendly === 'On',
+      readingLevel: args.readingLevel,
+      avoidTopics: splitTags(args.avoidTopics),
+      requiredTopics: ['practical examples', 'risks', 'future outlook'],
+      disallowedClaims: [],
+      tone: args.tone,
+      audience: args.audience,
+      language: args.language,
+    },
   };
 }
 
@@ -239,8 +275,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
-  const [title, setTitle] = useState('The Future of AI in Everyday Life');
-  const [brief, setBrief] = useState('Explore how artificial intelligence is shaping our daily lives, transforming work and productivity, inspiring creativity, influencing relationships, and augmenting decision-making. We will discuss opportunities, risks, and what comes next.');
+  const [title, setTitle] = useState(defaultTitle);
+  const [brief, setBrief] = useState(defaultBrief);
   const [audience, setAudience] = useState('Software Engineers');
   const [duration, setDuration] = useState('20 min');
   const [tone, setTone] = useState('Professional');
@@ -254,12 +290,17 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [directorCollapsed, setDirectorCollapsed] = useState(false);
   const [speakerMenuId, setSpeakerMenuId] = useState('');
   const [showAllRecentJobs, setShowAllRecentJobs] = useState(false);
+  const [collapsedPanels, setCollapsedPanels] = useState<Record<SidebarPanel, boolean>>({ quality: false, health: false, recent: false });
   const [liveCommand, setLiveCommand] = useState('');
-  const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState('1.0x');
-  const [playbackTime, setPlaybackTime] = useState(0);
   const [playbackDuration, setPlaybackDuration] = useState(0);
   const [selectedOutputKey, setSelectedOutputKey] = useState('');
+  const [citationRequired, setCitationRequired] = useState('On');
+  const [familyFriendly, setFamilyFriendly] = useState('On');
+  const [readingLevel, setReadingLevel] = useState('Grade 8');
+  const [maxTurnSeconds, setMaxTurnSeconds] = useState('45');
+  const [avoidTopics, setAvoidTopics] = useState('Politics');
+  const [relationships, setRelationships] = useState<RelationshipConfig>(defaultRelationships);
   const [actionMessage, setActionMessage] = useState('Ready for automatic production.');
   const voiceOptions = useMemo(() => voiceOptionsFromAssets(assetsQuery.data?.assets ?? []), [assetsQuery.data?.assets]);
   const reviewPolicy = buildReviewPolicy(generationStyle, generationStyle === 'guided' ? manualReviewStops : []);
@@ -272,11 +313,12 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const createJobMutation = useMutation({
     mutationFn: () => {
       const segments = buildPodcastSegments(title, brief, audience, tone, speakers);
-      return omnixApiClient.createJob({ module: 'podcast', type: 'tts.multi_speaker_synthesize', resource_class: 'gpu:tts', priority: 0, input_payload: buildPodcastJobPayload({ title, brief, format, audience, duration, tone, language, generationStyle, reviewPolicy, speakers, voiceOptions, segments }), stages: podcastStages(segments) }, { timeoutMs: 120000, timeoutMessage: 'Podcast audio generation is still running.' });
+      return omnixApiClient.createJob({ module: 'podcast', type: 'tts.multi_speaker_synthesize', resource_class: 'gpu:tts', priority: 0, input_payload: buildPodcastJobPayload({ title, brief, format, audience, duration, tone, language, generationStyle, reviewPolicy, speakers, voiceOptions, segments, citationRequired, familyFriendly, readingLevel, maxTurnSeconds, avoidTopics, relationships }), stages: podcastStages(segments) }, { timeoutMs: 120000, timeoutMessage: 'Podcast audio generation is still running.' });
     },
     onMutate: () => {
       audioRef.current?.pause();
-      setIsPlaying(false);
+      setSelectedOutputKey('__pending__');
+      setPlaybackDuration(0);
       setDirectorNote('Director started production through the same local TTS path used by Voice Studio.');
       setTranscript([{ timestamp: '00:00', speaker: 'Director', text: 'Production started. Building a speaker-tagged script and queueing voice takes.' }]);
       setActionMessage('Podcast production is starting...');
@@ -304,9 +346,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const activeJob = podcastJobs.find((job) => !isTerminal(job.status));
   const connectedJob = createJobMutation.data ?? previewVoiceMutation.data ?? activeJob ?? podcastJobs[0];
   const playableOutputs = useMemo(() => extractPlayableOutputs([createJobMutation.data, previewVoiceMutation.data, ...podcastJobs]), [createJobMutation.data, podcastJobs, previewVoiceMutation.data]);
-  const currentOutput = playableOutputs.find((output) => output.key === selectedOutputKey) ?? playableOutputs[0] ?? null;
-  const effectiveDuration = playbackDuration || currentOutput?.duration || durationSeconds(duration);
-  const progressPercent = effectiveDuration ? Math.min(100, Math.max(0, (playbackTime / effectiveDuration) * 100)) : 0;
+  const selectedOutput = selectedOutputKey ? playableOutputs.find((output) => output.key === selectedOutputKey) ?? null : playableOutputs[0] ?? null;
+  const currentOutput = selectedOutputKey === '__pending__' || selectedOutputKey === '__new__' ? null : selectedOutput;
   const jobStages = connectedJob?.stages ?? [];
   const liveActive = createJobMutation.isPending || previewVoiceMutation.isPending || Boolean(connectedJob && !isTerminal(connectedJob.status));
   const liveStatus = createJobMutation.isPending || previewVoiceMutation.isPending ? 'QUEUEING' : connectedJob ? String(connectedJob.status).toUpperCase() : 'IDLE';
@@ -318,13 +359,11 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const showBriefError = brief.trim().length === 0 && createJobMutation.isIdle === false;
 
   useEffect(() => {
-    if (playableOutputs.length > 0 && !playableOutputs.some((output) => output.key === selectedOutputKey)) setSelectedOutputKey(playableOutputs[0].key);
+    if (!selectedOutputKey && playableOutputs.length > 0) setSelectedOutputKey(playableOutputs[0].key);
   }, [playableOutputs, selectedOutputKey]);
 
   useEffect(() => {
     audioRef.current?.pause();
-    setIsPlaying(false);
-    setPlaybackTime(0);
     setPlaybackDuration(currentOutput?.duration ?? 0);
   }, [currentOutput?.key]);
 
@@ -334,27 +373,25 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   function removeParticipant(id: string) { if (speakers.length <= 1) { setActionMessage('Keep at least one participant.'); return; } setSpeakers((current) => current.filter((speaker) => speaker.id !== id)); setSpeakerMenuId(''); setActionMessage('Removed participant.'); }
   function duplicateParticipant(speaker: SpeakerDraft) { setSpeakers((current) => [...current, { ...speaker, id: `${speaker.id}_copy_${current.length + 1}`, name: `${speaker.name} Copy` }]); setSpeakerMenuId(''); setActionMessage(`Duplicated ${speaker.name}.`); }
   function submitLiveCommand() { const command = liveCommand.trim(); if (!command) return; if (!liveActive) { setActionMessage('Live edits apply during an active production run.'); return; } setDirectorNote(`Director applied live note: ${command}`); setTranscript((lines) => [...lines, { timestamp: '00:28', speaker: 'Director', text: command }]); setLiveCommand(''); }
+  function updateRelationship(field: keyof RelationshipConfig, value: string) { setRelationships((current) => ({ ...current, [field]: value })); }
+  function toggleSidebarPanel(panel: SidebarPanel) { setCollapsedPanels((current) => ({ ...current, [panel]: !current[panel] })); }
 
-  async function togglePlayback() {
-    const audio = audioRef.current;
-    if (!audio || !currentOutput) { setActionMessage('Generate podcast audio before pressing play.'); return; }
-    if (isPlaying) { audio.pause(); setIsPlaying(false); return; }
-    try {
-      audio.playbackRate = Number.parseFloat(playbackRate) || 1;
-      await audio.play();
-      setIsPlaying(true);
-      setActionMessage(`Playing ${currentOutput.title}.`);
-    } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : 'Audio playback could not start.');
-    }
-  }
-
-  function seekTo(percent: string) {
-    const audio = audioRef.current;
-    if (!audio || !effectiveDuration) return;
-    const nextTime = (Number(percent) / 100) * effectiveDuration;
-    audio.currentTime = nextTime;
-    setPlaybackTime(nextTime);
+  function resetPodcast() {
+    audioRef.current?.pause();
+    setTitle('');
+    setBrief('');
+    setAudience('Software Engineers');
+    setDuration('5 min');
+    setTone('Professional');
+    setLanguage('English (US)');
+    setFormat('debate');
+    setGenerationStyle('automatic');
+    setManualReviewStops([]);
+    setTranscript([]);
+    setDirectorNote('New podcast request cleared. Add a title and brief, then generate.');
+    setSelectedOutputKey('__new__');
+    setPlaybackDuration(0);
+    setActionMessage('New podcast ready.');
   }
 
   function selectRecentJob(jobId: string) {
@@ -384,13 +421,13 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <header className="podcast-studio-header"><div><p className="eyebrow">Conversation engine</p><h2 id="module-title">{module.label}</h2><p>Create a podcast from a speaker-tagged conversation, Voice Library assignments, and the same local TTS generation path used by Voice Studio.</p></div><code>/podcast-renderer</code></header>
         <div className="podcast-studio-grid">
           <section className="podcast-studio-stack">
-            <article className="podcast-card episode-setup-card"><h3>1. Episode setup</h3><div className="episode-setup-grid"><div className="podcast-field-stack"><label>Topic / Episode title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Episode brief<textarea rows={5} value={brief} onChange={(event) => setBrief(event.target.value)} /><small>{brief.length}/2000</small></label><label>Audience<select value={audience} onChange={(event) => setAudience(event.target.value)}><option>Software Engineers</option><option>General Public</option><option>Executives</option><option>Students</option><option>Experts</option></select></label></div><div className="podcast-config-stack"><span className="podcast-label">Podcast format</span><div className="format-card-grid">{formatOptions.map((option) => <button key={option.id} type="button" className={option.id === format ? 'selected' : undefined} onClick={() => setFormat(option.id)}><strong>{option.label}</strong><small>{option.description}</small></button>)}</div><div className="podcast-select-grid"><label>Duration<select value={duration} onChange={(event) => setDuration(event.target.value)}><option>20 min</option><option>45 min</option><option>60 min</option></select></label><label>Tone<select value={tone} onChange={(event) => setTone(event.target.value)}><option>Professional</option><option>Conversational</option><option>Humorous</option></select></label><label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>English (US)</option><option>English (UK)</option></select></label></div><div className="generation-style-panel"><span className="podcast-label">Generation Style</span>{generationStyleOptions.map((option) => <label key={option.id} className={generationStyle === option.id ? 'generation-style selected' : 'generation-style'}><input type="radio" checked={generationStyle === option.id} onChange={() => setGenerationStyle(option.id)} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}<div className="review-stop-row">{reviewStopOptions.map((option) => <label key={option.id}><input type="checkbox" disabled={generationStyle !== 'guided'} checked={manualReviewStops.includes(option.id)} onChange={() => toggleReviewStop(option.id)} />{option.label}</label>)}</div></div></div></div></article>
+            <article className="podcast-card episode-setup-card"><div className="card-heading-row"><h3>1. Episode setup</h3><button className="ghost-button compact" type="button" onClick={resetPodcast}>New podcast</button></div><div className="episode-setup-grid"><div className="podcast-field-stack"><label>Topic / Episode title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Episode brief<textarea rows={5} value={brief} onChange={(event) => setBrief(event.target.value)} /><small>{brief.length}/2000</small></label><label>Audience<select value={audience} onChange={(event) => setAudience(event.target.value)}><option>Software Engineers</option><option>General Public</option><option>Executives</option><option>Students</option><option>Experts</option></select></label></div><div className="podcast-config-stack"><span className="podcast-label">Podcast format</span><div className="format-card-grid">{formatOptions.map((option) => <button key={option.id} type="button" className={option.id === format ? 'selected' : undefined} onClick={() => setFormat(option.id)}><strong>{option.label}</strong><small>{option.description}</small></button>)}</div><div className="podcast-select-grid"><label>Duration<select value={duration} onChange={(event) => setDuration(event.target.value)}>{durationOptions.map((option) => <option key={option}>{option}</option>)}</select></label><label>Tone<select value={tone} onChange={(event) => setTone(event.target.value)}><option>Professional</option><option>Conversational</option><option>Humorous</option></select></label><label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>English (US)</option><option>English (UK)</option></select></label></div><div className="generation-style-panel"><span className="podcast-label">Generation Style</span>{generationStyleOptions.map((option) => <label key={option.id} className={generationStyle === option.id ? 'generation-style selected' : 'generation-style'}><input type="radio" checked={generationStyle === option.id} onChange={() => setGenerationStyle(option.id)} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}<div className="review-stop-row">{reviewStopOptions.map((option) => <label key={option.id}><input type="checkbox" disabled={generationStyle !== 'guided'} checked={manualReviewStops.includes(option.id)} onChange={() => toggleReviewStop(option.id)} />{option.label}</label>)}</div></div></div></div></article>
             <article className="podcast-card"><div className="card-heading-row"><h3>2. Participants and voice casting</h3><small>{voiceOptions.length ? `Loaded ${voiceOptions.length} Voice Library voice${voiceOptions.length === 1 ? '' : 's'}` : 'No Voice Library voices found'}</small></div><div className="speaker-table editable-speaker-table"><div className="speaker-row speaker-header"><span>Speaker</span><span>Identity</span><span>Voice</span><span>Beliefs</span><span>Personality</span><span>Speaking style</span><span>Goal this episode</span><span>Instructions</span><span>Actions</span></div>{speakers.map((speaker) => <div className="speaker-row editable-speaker-row" key={speaker.id}><span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><input value={speaker.name} onChange={(event) => updateSpeaker(speaker.id, 'name', event.target.value)} /><input value={speaker.role} onChange={(event) => updateSpeaker(speaker.id, 'role', event.target.value)} /></span></span><span><input value={speaker.identity} onChange={(event) => updateSpeaker(speaker.id, 'identity', event.target.value)} /></span><span><select aria-label={`${speaker.name} voice`} value={speaker.voice} onChange={(event) => updateSpeaker(speaker.id, 'voice', event.target.value)}>{voiceOptions.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}{!voiceOptions.length ? <option value="">No cloned voices</option> : null}</select></span><span><textarea rows={2} value={speaker.beliefs} onChange={(event) => updateSpeaker(speaker.id, 'beliefs', event.target.value)} /></span><span><textarea rows={2} value={speaker.personality} onChange={(event) => updateSpeaker(speaker.id, 'personality', event.target.value)} /></span><span><textarea rows={2} value={speaker.speakingStyle} onChange={(event) => updateSpeaker(speaker.id, 'speakingStyle', event.target.value)} /></span><span><textarea rows={2} value={speaker.goal} onChange={(event) => updateSpeaker(speaker.id, 'goal', event.target.value)} /></span><span><textarea rows={2} value={speaker.instructions} onChange={(event) => updateSpeaker(speaker.id, 'instructions', event.target.value)} placeholder="Extra personality, pacing, conflict, or behavior notes" /></span><span className="speaker-preview speaker-actions"><button type="button" onClick={() => previewVoiceMutation.mutate(speaker)} disabled={!speaker.voice || previewVoiceMutation.isPending}>Preview</button><button type="button" onClick={() => removeParticipant(speaker.id)}>Remove</button><button type="button" onClick={() => setSpeakerMenuId((current) => current === speaker.id ? '' : speaker.id)}>More</button>{speakerMenuId === speaker.id ? <div className="speaker-menu"><button type="button" onClick={() => duplicateParticipant(speaker)}>Duplicate participant</button><button type="button" onClick={() => updateSpeaker(speaker.id, 'instructions', '')}>Clear instructions</button></div> : null}</span></div>)}</div><button className="ghost-button" type="button" onClick={addParticipant}>+ Add participant</button></article>
-            <article className="podcast-card relationship-card"><h3>3. Relationships and constraints</h3><div className="relationship-layout"><div className="relationship-map"><b className="node host">H<span>Host</span></b><b className="node guest-a">GA<span>Guest A</span></b><b className="node guest-b">GB<span>Guest B</span></b><span className="line mod">moderates</span><span className="line respect">respects</span><span className="line disagree">disagrees with</span></div><div className="constraint-grid">{[['Max duration', durationClock(duration)], ['Citation required', 'On'], ['Family friendly', 'On'], ['Reading level', 'Grade 8'], ['Max turn', '45 sec'], ['Avoid topics', 'Politics']].map(([label, value]) => <div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div></div></article>
-            <form onSubmit={(event) => { event.preventDefault(); if (brief.trim()) createJobMutation.mutate(); }}><button className="podcast-generate-button" type="submit" disabled={createJobMutation.isPending}>Generate live podcast</button></form><FeatureValidationMessage show={showBriefError} message="Enter an episode brief before generating a podcast." /><FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="Podcast request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.status === 'failed' ? undefined : createJobMutation.data?.id} pendingMessage="Starting voice production" successPrefix="Podcast production queued" />
+            <article className="podcast-card relationship-card"><h3>3. Relationships and constraints</h3><div className="relationship-layout"><div className="relationship-map"><b className="node host">H<span>{relationships.hostLabel}</span></b><b className="node guest-a">GA<span>{relationships.guestALabel}</span></b><b className="node guest-b">GB<span>{relationships.guestBLabel}</span></b><span className="line mod">{relationships.moderation}</span><span className="line respect">{relationships.respect}</span><span className="line disagree">{relationships.disagreement}</span></div><div className="relationship-config-grid"><label>Host label<input value={relationships.hostLabel} onChange={(event) => updateRelationship('hostLabel', event.target.value)} /></label><label>Guest A label<input value={relationships.guestALabel} onChange={(event) => updateRelationship('guestALabel', event.target.value)} /></label><label>Guest B label<input value={relationships.guestBLabel} onChange={(event) => updateRelationship('guestBLabel', event.target.value)} /></label><label>Moderator relation<input value={relationships.moderation} onChange={(event) => updateRelationship('moderation', event.target.value)} /></label><label>Respect relation<input value={relationships.respect} onChange={(event) => updateRelationship('respect', event.target.value)} /></label><label>Conflict relation<input value={relationships.disagreement} onChange={(event) => updateRelationship('disagreement', event.target.value)} /></label></div><div className="constraint-grid editable"><label><small>Max duration</small><strong>{durationClock(duration)}</strong></label><label><small>Citation required</small><select value={citationRequired} onChange={(event) => setCitationRequired(event.target.value)}><option>On</option><option>Off</option></select></label><label><small>Family friendly</small><select value={familyFriendly} onChange={(event) => setFamilyFriendly(event.target.value)}><option>On</option><option>Off</option></select></label><label><small>Reading level</small><select value={readingLevel} onChange={(event) => setReadingLevel(event.target.value)}><option>Grade 8</option><option>Grade 10</option><option>Expert</option></select></label><label><small>Max turn</small><select value={maxTurnSeconds} onChange={(event) => setMaxTurnSeconds(event.target.value)}><option value="20">20 sec</option><option value="45">45 sec</option><option value="60">60 sec</option><option value="90">90 sec</option></select></label><label><small>Avoid topics</small><input value={avoidTopics} onChange={(event) => setAvoidTopics(event.target.value)} /></label></div></div></article>
+            <form className="episode-action-row" onSubmit={(event) => { event.preventDefault(); if (brief.trim()) createJobMutation.mutate(); }}><button className="ghost-button" type="button" onClick={resetPodcast}>New podcast</button><button className="podcast-generate-button" type="submit" disabled={createJobMutation.isPending}>Generate live podcast</button></form><FeatureValidationMessage show={showBriefError} message="Enter an episode brief before generating a podcast." /><FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="Podcast request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.status === 'failed' ? undefined : createJobMutation.data?.id} pendingMessage="Starting voice production" successPrefix="Podcast production queued" />
           </section>
-          <section className="podcast-live-column"><article className={`podcast-card live-production-card ${liveActive ? 'streaming' : 'idle'}`}><div className="card-heading-row"><h3>Live production</h3><span className="auto-badge">{liveStatus}</span></div><div className="stage-rail">{stages.map((stage, index) => <span key={`${stage.id}-${stage.label}`} className={stage.state}>{stage.state === 'done' ? 'OK' : stage.state === 'failed' ? '!' : index + 1}<small>{stage.label}</small></span>)}</div><div className="director-note"><b>Director</b><span>{directorCollapsed ? 'Director note collapsed.' : failed ? (jobErrorMessage(connectedJob) || 'Last podcast job failed. Fix the request or regenerate to start a new live production run.') : directorNote}</span><button type="button" onClick={() => setDirectorCollapsed((value) => !value)}>{directorCollapsed ? 'Expand' : 'Collapse'}</button></div><div className={`waveform ${liveActive ? 'streaming' : 'idle'}`} aria-hidden="true">{Array.from({ length: 64 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17 + transcript.length * 5) % 42)}px` }} />)}</div><div className="live-transcript">{transcript.length ? transcript.map((line) => <p key={`${line.timestamp}-${line.speaker}-${line.text}`}><time>{line.timestamp}</time><b>{line.speaker}</b><span>{line.text}</span></p>) : <div className="live-empty-state"><strong>{failed ? 'Production failed' : 'No live transcript yet'}</strong><span>{failed ? (jobErrorMessage(connectedJob) || 'The last podcast job reported a failure.') : 'Press Generate live podcast to start live production events.'}</span></div>}</div><div className="podcast-audio-player" aria-label="Podcast audio player"><div className="audio-player-heading"><span>{currentOutput ? currentOutput.title : 'No podcast audio yet'}</span><small>{currentOutput ? 'AUDIO READY' : 'Generate a completed podcast to enable playback'}</small></div><audio ref={audioRef} src={currentOutput?.dataUrl ?? undefined} controls preload="metadata" onLoadedMetadata={(event) => setPlaybackDuration(event.currentTarget.duration || currentOutput?.duration || 0)} onTimeUpdate={(event) => setPlaybackTime(event.currentTarget.currentTime || 0)} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onError={() => setActionMessage('The generated audio could not be loaded by the browser.')} /><div className="playback-row"><button type="button" disabled={!currentOutput} onClick={() => void togglePlayback()}>{isPlaying ? 'Pause' : 'Play'}</button><input aria-label="Podcast playback position" type="range" min="0" max="100" value={progressPercent} disabled={!currentOutput} onChange={(event) => seekTo(event.target.value)} /><strong>{formatClock(playbackTime)} / {formatClock(effectiveDuration)}</strong><select value={playbackRate} onChange={(event) => { setPlaybackRate(event.target.value); if (audioRef.current) audioRef.current.playbackRate = Number.parseFloat(event.target.value) || 1; }}><option>0.8x</option><option>1.0x</option><option>1.25x</option></select><small>{liveStatus}</small></div></div><form className="live-command" onSubmit={(event) => { event.preventDefault(); submitLiveCommand(); }}><input value={liveCommand} disabled={!liveActive} onChange={(event) => setLiveCommand(event.target.value)} placeholder={liveActive ? 'Make Guest B more skeptical' : 'Start generation to edit the live run'} /><button type="submit" disabled={!liveActive || !liveCommand.trim()}>Apply</button></form></article></section>
-          <aside className="podcast-sidebar"><article className="podcast-card quality-card"><h3>Quality gates</h3>{mockQualityGates.map((gate) => <button type="button" key={gate.label} className={gate.status === 'Warning' ? 'warning' : undefined} onClick={() => setActionMessage(`${gate.label} gate: ${gate.status}.`)}><span>{gate.label}</span><b>{gate.status}</b></button>)}</article><article className="podcast-card health-card"><h3>Session health</h3>{mockSessionMetrics.map((metric) => <div key={metric.label}><small>{metric.label}</small><strong>{metric.value}</strong></div>)}</article><article className="podcast-card recent-card"><div className="card-heading-row"><h3>Recent jobs</h3><button type="button" onClick={() => setShowAllRecentJobs((value) => !value)}>{showAllRecentJobs ? 'Show fewer' : 'View all'}</button></div>{recentJobs.map((job) => <p key={`${job.name}-${job.status}`}><span>{job.name}</span><OmnixStatusPill>{job.status}</OmnixStatusPill><small>{job.duration}</small><button type="button" onClick={() => selectRecentJob(job.id)}>Select</button></p>)}</article></aside>
+          <section className="podcast-live-column"><article className={`podcast-card live-production-card ${liveActive ? 'streaming' : 'idle'}`}><div className="card-heading-row"><h3>Live production</h3><span className="auto-badge">{liveStatus}</span></div><div className="stage-rail">{stages.map((stage, index) => <span key={`${stage.id}-${stage.label}`} className={stage.state}>{stage.state === 'done' ? 'OK' : stage.state === 'failed' ? '!' : index + 1}<small>{stage.label}</small></span>)}</div><div className="director-note"><b>Director</b><span>{directorCollapsed ? 'Director note collapsed.' : failed ? (jobErrorMessage(connectedJob) || 'Last podcast job failed. Fix the request or regenerate to start a new live production run.') : directorNote}</span><button type="button" onClick={() => setDirectorCollapsed((value) => !value)}>{directorCollapsed ? 'Expand' : 'Collapse'}</button></div><div className={`waveform ${liveActive ? 'streaming' : 'idle'}`} aria-hidden="true">{Array.from({ length: 64 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17 + transcript.length * 5) % 42)}px` }} />)}</div><div className="live-transcript">{transcript.length ? transcript.map((line) => <p key={`${line.timestamp}-${line.speaker}-${line.text}`}><time>{line.timestamp}</time><b>{line.speaker}</b><span>{line.text}</span></p>) : <div className="live-empty-state"><strong>{failed ? 'Production failed' : 'No live transcript yet'}</strong><span>{failed ? (jobErrorMessage(connectedJob) || 'The last podcast job reported a failure.') : 'Press Generate live podcast to start live production events.'}</span></div>}</div><div className="podcast-audio-player" aria-label="Podcast audio player"><div className="audio-player-heading"><span>{currentOutput ? currentOutput.title : 'No podcast audio yet'}</span><small>{currentOutput ? 'AUDIO READY' : 'Generate a completed podcast to enable playback'}</small></div><audio ref={audioRef} src={currentOutput?.dataUrl ?? undefined} controls preload="metadata" onLoadedMetadata={(event) => setPlaybackDuration(event.currentTarget.duration || currentOutput?.duration || 0)} onError={() => setActionMessage('The generated audio could not be loaded by the browser.')} /><div className="audio-toolbar"><label>Playback speed<select value={playbackRate} onChange={(event) => { setPlaybackRate(event.target.value); if (audioRef.current) audioRef.current.playbackRate = Number.parseFloat(event.target.value) || 1; }}><option>0.8x</option><option>1.0x</option><option>1.25x</option></select></label><small>{currentOutput ? `${formatClock(playbackDuration || currentOutput.duration)} available` : 'No audio loaded'}</small></div></div><form className="live-command" onSubmit={(event) => { event.preventDefault(); submitLiveCommand(); }}><input value={liveCommand} disabled={!liveActive} onChange={(event) => setLiveCommand(event.target.value)} placeholder={liveActive ? 'Make Guest B more skeptical' : 'Start generation to edit the live run'} /><button type="submit" disabled={!liveActive || !liveCommand.trim()}>Apply</button></form></article></section>
+          <aside className="podcast-sidebar"><article className="podcast-card quality-card collapsible-card"><div className="card-heading-row"><h3>Quality gates</h3><button className="collapse-toggle" type="button" onClick={() => toggleSidebarPanel('quality')}>{collapsedPanels.quality ? 'Expand' : 'Collapse'}</button></div>{!collapsedPanels.quality ? <div className="sidebar-card-body">{mockQualityGates.map((gate) => <button type="button" key={gate.label} className={gate.status === 'Warning' ? 'warning' : undefined} onClick={() => setActionMessage(`${gate.label} gate: ${gate.status}.`)}><span>{gate.label}</span><b>{gate.status}</b></button>)}</div> : null}</article><article className="podcast-card health-card collapsible-card"><div className="card-heading-row"><h3>Session health</h3><button className="collapse-toggle" type="button" onClick={() => toggleSidebarPanel('health')}>{collapsedPanels.health ? 'Expand' : 'Collapse'}</button></div>{!collapsedPanels.health ? <div className="health-grid">{mockSessionMetrics.map((metric) => <div key={metric.label}><small>{metric.label}</small><strong>{metric.value}</strong></div>)}</div> : null}</article><article className="podcast-card recent-card collapsible-card"><div className="card-heading-row"><h3>Recent jobs</h3><span className="recent-actions"><button className="collapse-toggle" type="button" onClick={() => toggleSidebarPanel('recent')}>{collapsedPanels.recent ? 'Expand' : 'Collapse'}</button><button type="button" onClick={() => setShowAllRecentJobs((value) => !value)}>{showAllRecentJobs ? 'Show fewer' : 'View all'}</button></span></div>{!collapsedPanels.recent ? <div className="recent-job-list">{recentJobs.map((job) => <p key={`${job.id}-${job.status}`}><span className="recent-job-title" title={job.name}>{job.name}</span><OmnixStatusPill>{job.status}</OmnixStatusPill><small>{job.duration}</small><button type="button" onClick={() => selectRecentJob(job.id)}>Select</button></p>)}</div> : null}</article></aside>
         </div>
         <section className="podcast-bottom-grid"><article className="podcast-card production-assets-panel"><h3>Production assets</h3><div>{mockProductionAssetTiles.map((asset) => <section className={`asset-tile ${asset.color}`} key={asset.label}><b>{asset.label}</b><small>{asset.status}</small><button type="button" onClick={() => setActionMessage(`${asset.label}: ${asset.action} requested.`)}>{asset.action}</button></section>)}</div></article><article className="podcast-card podcast-output-panel"><h3>Podcast outputs</h3><div className="output-layout"><div className="cover-art">AI<br />EVERYDAY<br />LIFE</div><div className="output-copy"><h4>{title || 'Untitled episode'} <span>{connectedJob ? String(connectedJob.status).toUpperCase() : 'IDLE'}</span></h4><small>{formatOptions.find((option) => option.id === format)?.label} - {speakers.length} voices - {duration}</small><p>A deep dive for {audience.toLowerCase()} in a {tone.toLowerCase()} tone with transcript, citations, chapters, and downloadable audio assets.</p><b>AI</b><b>Future</b><b>Technology</b>{currentOutput ? <em>{currentOutput.title}</em> : null}</div><div className="download-grid"><button type="button" disabled={!currentOutput} onClick={() => downloadCurrentOutput('MP3')}>MP3</button><button type="button" disabled={!currentOutput} onClick={() => downloadCurrentOutput('WAV')}>WAV</button><button type="button" onClick={() => setActionMessage('Transcript export requested.')}>Transcript</button><button type="button" onClick={() => setActionMessage('Show notes export requested.')}>Show Notes</button><button type="button" className="download-all" disabled={!currentOutput} onClick={() => downloadCurrentOutput('Download all')}>Download all</button><button type="button" onClick={() => void copyEpisodeLink()}>Copy link</button><button type="button" onClick={() => createJobMutation.mutate()}>Regenerate</button></div></div></article></section>
         <p className="action-toast" role="status">{actionMessage}</p>
