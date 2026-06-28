@@ -10,11 +10,18 @@
   width: 100%;
 }
 
+.podcast-studio-header,
+.card-heading-row,
+.audio-player-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
 .podcast-studio-header {
   align-items: start;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
 }
 
 .podcast-studio-header h2 {
@@ -49,7 +56,11 @@
 
 .podcast-studio-stack,
 .podcast-live-column,
-.podcast-sidebar {
+.podcast-sidebar,
+.podcast-field-stack,
+.podcast-config-stack,
+.sidebar-card-body,
+.recent-job-list {
   align-content: start;
   display: grid;
   gap: 0.85rem;
@@ -69,11 +80,8 @@
 
 .podcast-card h3,
 .live-transcript-section h4 {
-  align-items: center;
   color: #f8fbff;
-  display: flex;
   font-size: 1rem;
-  gap: 0.45rem;
   margin: 0 0 0.9rem;
 }
 
@@ -81,25 +89,11 @@
   margin: 0;
 }
 
-.card-heading-row {
-  align-items: center;
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.episode-setup-grid {
+.episode-setup-grid,
+.relationship-layout {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(18rem, 0.85fr) minmax(0, 1.15fr);
-  min-width: 0;
-}
-
-.podcast-field-stack,
-.podcast-config-stack {
-  display: grid;
-  gap: 0.75rem;
+  grid-template-columns: minmax(18rem, 0.9fr) minmax(0, 1.1fr);
   min-width: 0;
 }
 
@@ -136,11 +130,25 @@
 }
 
 .format-card-grid,
-.podcast-select-grid {
+.podcast-select-grid,
+.relationship-config-grid,
+.constraint-grid,
+.health-grid,
+.download-grid {
   display: grid;
   gap: 0.55rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   min-width: 0;
+}
+
+.relationship-config-grid,
+.constraint-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.constraint-grid,
+.live-output-panel .download-grid {
+  grid-column: 1 / -1;
 }
 
 .format-card-grid button {
@@ -156,7 +164,8 @@
   text-align: left;
 }
 
-.format-card-grid button.selected {
+.format-card-grid button.selected,
+.generation-style.selected {
   background: linear-gradient(135deg, rgba(124, 92, 255, 0.38), rgba(17, 217, 232, 0.08));
   border-color: rgba(151, 114, 255, 0.75);
   box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.25), 0 0 24px rgba(124, 92, 255, 0.18);
@@ -180,10 +189,6 @@
   gap: 0.45rem !important;
   grid-template-columns: auto minmax(0, 1fr);
   padding: 0.55rem;
-}
-
-.generation-style.selected {
-  border-color: rgba(34, 211, 238, 0.45);
 }
 
 .review-stop-row {
@@ -240,15 +245,21 @@
   min-width: 0;
 }
 
-.speaker-avatar {
+.speaker-avatar,
+.node {
   align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  height: 2.2rem;
+  justify-content: center;
+  min-width: 2.2rem;
+}
+
+.speaker-avatar {
   background: rgba(34, 211, 238, 0.14);
   border: 1px solid rgba(34, 211, 238, 0.64);
-  border-radius: 999px;
   color: #4df6ff;
-  display: inline-flex;
   height: 2rem;
-  justify-content: center;
   min-width: 2rem;
 }
 
@@ -256,11 +267,6 @@
 .speaker-avatar.guest_b {
   border-color: rgba(151, 114, 255, 0.72);
   color: #c4a7ff;
-}
-
-.speaker-preview {
-  color: #9feeff;
-  letter-spacing: 0.02rem;
 }
 
 .speaker-actions {
@@ -277,7 +283,9 @@
 .recent-card button,
 .quality-card button,
 .ghost-button,
-.live-command button {
+.live-command button,
+.asset-tile button,
+.download-grid button {
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(132, 148, 196, 0.18);
   border-radius: 0.55rem;
@@ -313,23 +321,12 @@
   z-index: 5;
 }
 
-.relationship-layout {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(16rem, 0.85fr) minmax(16rem, 1fr);
-}
-
 .relationship-map {
   min-height: 12rem;
   position: relative;
 }
 
 .node {
-  align-items: center;
-  border-radius: 999px;
-  display: inline-flex;
-  height: 2.2rem;
-  justify-content: center;
   position: absolute;
   width: 2.2rem;
 }
@@ -349,17 +346,6 @@
 .line.mod { left: 15%; top: 2.7rem; }
 .line.respect { bottom: 0.3rem; left: 42%; }
 .line.disagree { color: #ff9c74; right: 15%; top: 2.3rem; }
-
-.relationship-config-grid,
-.constraint-grid {
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.constraint-grid {
-  grid-column: 1 / -1;
-}
 
 .constraint-grid label,
 .health-grid div {
@@ -475,14 +461,6 @@
   font-size: 0.82rem;
 }
 
-.director-note button {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(132, 148, 196, 0.18);
-  border-radius: 0.55rem;
-  color: #eaf3ff;
-  cursor: pointer;
-}
-
 .waveform {
   align-items: center;
   display: flex;
@@ -497,7 +475,8 @@
   opacity: 0.82;
 }
 
-.live-transcript-section {
+.live-transcript-section,
+.podcast-audio-player {
   display: grid;
   gap: 0.55rem;
 }
@@ -506,23 +485,31 @@
   background: rgba(7, 11, 24, 0.48);
   border: 1px solid rgba(132, 148, 196, 0.14);
   border-radius: 0.8rem;
-  display: grid;
-  gap: 0.1rem;
+  display: block;
   max-height: 24rem;
   overflow: auto;
   padding: 0.75rem;
 }
 
 .live-transcript p {
+  align-items: start;
+  border-top: 1px solid rgba(132, 148, 196, 0.12);
   display: grid;
-  gap: 0.55rem;
-  grid-template-columns: 3.2rem minmax(4.3rem, auto) minmax(0, 1fr);
+  gap: 0.65rem;
+  grid-template-columns: 3.2rem minmax(5rem, auto) minmax(0, 1fr);
   margin: 0;
-  min-height: 2.3rem;
+  min-height: 0;
+  padding: 0.7rem 0;
+}
+
+.live-transcript p:first-of-type {
+  border-top: 0;
+  padding-top: 0;
 }
 
 .live-transcript time {
   color: #91a1c3;
+  line-height: 1.45;
 }
 
 .live-transcript b {
@@ -532,30 +519,26 @@
   border-radius: 0.4rem;
   color: #dccdff;
   font-size: 0.74rem;
-  padding: 0.2rem 0.35rem;
+  line-height: 1.2;
+  padding: 0.25rem 0.35rem;
   text-align: center;
 }
 
 .live-transcript span {
   color: #cbd6ef;
+  display: block;
+  line-height: 1.5;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .podcast-audio-player {
   background: rgba(7, 11, 24, 0.5);
   border: 1px solid rgba(132, 148, 196, 0.14);
   border-radius: 0.8rem;
-  display: grid;
-  gap: 0.6rem;
   margin-top: 0.75rem;
   padding: 0.75rem;
-}
-
-.audio-player-heading {
-  align-items: center;
-  display: flex;
-  gap: 0.5rem;
-  justify-content: space-between;
-  min-width: 0;
 }
 
 .audio-player-heading span {
@@ -567,11 +550,21 @@
   white-space: nowrap;
 }
 
+.streaming-note {
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  border-radius: 0.55rem;
+  color: #9deff7;
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+}
+
 .podcast-audio-player audio {
   width: 100%;
 }
 
-.audio-toolbar {
+.audio-toolbar,
+.live-command {
   align-items: end;
   display: grid;
   gap: 0.75rem;
@@ -583,8 +576,6 @@
   background: rgba(7, 11, 24, 0.5);
   border: 1px solid rgba(132, 148, 196, 0.14);
   border-radius: 0.7rem;
-  display: grid !important;
-  gap: 0.45rem !important;
   grid-template-columns: minmax(0, 1fr) auto;
   margin-top: 0.75rem;
   padding: 0.4rem;
@@ -595,16 +586,14 @@
   border: 0;
 }
 
-.sidebar-card-body,
-.health-grid,
-.recent-job-list {
+.quality-card .sidebar-card-body button,
+.recent-job-list p {
+  align-items: center;
   display: grid;
   gap: 0.55rem;
 }
 
 .quality-card .sidebar-card-body button {
-  align-items: center;
-  display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   justify-items: stretch;
   padding: 0.55rem 0.65rem;
@@ -619,20 +608,13 @@
   color: #f7b55f;
 }
 
-.health-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .recent-actions {
   display: inline-flex;
   gap: 0.35rem;
 }
 
 .recent-job-list p {
-  align-items: center;
   border-top: 1px solid rgba(132, 148, 196, 0.12);
-  display: grid;
-  gap: 0.55rem;
   grid-template-columns: minmax(0, 1fr) auto auto auto;
   margin: 0;
   min-height: 2.65rem;
@@ -680,28 +662,10 @@
 .asset-tile.purple { border-color: rgba(151, 114, 255, 0.38); }
 .asset-tile.blue { border-color: rgba(96, 165, 250, 0.32); }
 
-.asset-tile button,
-.download-grid button {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(132, 148, 196, 0.18);
-  border-radius: 0.45rem;
-  color: #f1f6ff;
-  cursor: pointer;
-  min-height: 2rem;
-}
-
-.live-output-panel {
-  margin-top: 0;
-}
-
 .output-layout {
   display: grid;
   gap: 0.85rem;
   grid-template-columns: 7rem minmax(12rem, 1fr);
-}
-
-.live-output-panel .download-grid {
-  grid-column: 1 / -1;
 }
 
 .cover-art {
@@ -750,12 +714,6 @@
   padding: 0.12rem 0.35rem;
 }
 
-.download-grid {
-  display: grid;
-  gap: 0.55rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .download-grid button {
   display: grid;
   gap: 0.15rem;
@@ -797,6 +755,7 @@
     grid-template-columns: 1fr;
   }
 
+  .constraint-grid,
   .live-output-panel .download-grid {
     grid-column: auto;
   }
@@ -817,7 +776,8 @@
   .health-grid,
   .download-grid,
   .episode-action-row,
-  .audio-toolbar {
+  .audio-toolbar,
+  .live-command {
     grid-template-columns: 1fr;
   }
 
@@ -828,6 +788,14 @@
 
   .speaker-header {
     display: none;
+  }
+
+  .live-transcript p {
+    grid-template-columns: 3.1rem minmax(0, 1fr);
+  }
+
+  .live-transcript span {
+    grid-column: 1 / -1;
   }
 
   .production-assets-panel > div {
