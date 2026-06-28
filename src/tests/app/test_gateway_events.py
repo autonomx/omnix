@@ -30,6 +30,14 @@ class FakeJobStore:
         return [event for event in self._events if event.id > after_id][:limit]
 
 
+class FakeTtsProvider:
+    def generate_audio_stream(self, **kwargs: Any):
+        assert kwargs["text"] == "Hello from the podcast"
+        assert kwargs["speaker"] == "Alex"
+        assert kwargs["language"] == "en"
+        yield [0.0, 0.25, -0.25], 24000, {"chunk_index": 0}
+
+
 def test_sse_event_includes_optional_id_and_sorted_json_data():
     assert _sse_event("job.updated", {"z": 2, "a": 1}, event_id=42) == (
         'id: 42\n'
@@ -92,3 +100,23 @@ def test_finite_job_events_endpoint_emits_sse_ids_and_honors_after_id():
         'data: {"event_type": "job.completed", "id": 2, "job_id": "current"}\n\n'
     )
     assert store.after_ids == [1]
+
+
+def test_tts_stream_endpoint_emits_voice_chunks(monkeypatch):
+    from app.gateway import tts_streaming
+
+    monkeypatch.setattr(tts_streaming, "get_tts_provider", lambda: FakeTtsProvider())
+    app = create_gateway_app(job_store_factory=lambda: FakeJobStore([]))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/tts/stream/server-sent-events",
+        json={"text": "Hello from the podcast", "speaker": "Alex", "language": "en"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert ": tts-stream-open\n\n" in response.text
+    assert '"type": "chunk"' in response.text
+    assert '"sample_rate": 24000' in response.text
+    assert '"type": "done"' in response.text
