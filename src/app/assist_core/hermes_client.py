@@ -6,6 +6,7 @@ from typing import Any
 import requests
 
 from .core import AssistantRequest, AssistantResult
+from .hermes_catalog import hermes_catalog_specs
 from .hermes_contract import (
     hermes_contract_schema,
     hermes_request_from_assistant,
@@ -70,7 +71,7 @@ class HermesSidecarClient:
         return self._parse_plan(content, request)
 
     def _planner_prompt(self, request: AssistantRequest) -> str:
-        contract_request = hermes_request_from_assistant(request)
+        contract_request = hermes_request_from_assistant(request, available_tools=hermes_catalog_specs())
         return json.dumps(
             {
                 "task": "Create an Omnix execution plan. Do not execute tools.",
