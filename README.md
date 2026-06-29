@@ -82,6 +82,24 @@ pip install -r requirements.txt
 
 Legacy setup scripts may still exist while the migration is in progress, but new browser-facing development should target the shared web app.
 
+## Optional Hermes Agent sidecar setup
+
+Hermes Agent is optional and runs as a sidecar. Omnix does not install it as an in-process Python dependency.
+
+Windows PowerShell:
+
+```powershell
+.\scripts\setup_hermes.ps1
+```
+
+Linux, macOS, or WSL2:
+
+```bash
+bash scripts/setup_hermes.sh
+```
+
+The setup helper installs or refreshes Hermes Agent and writes local Omnix env defaults to `.env.local`. Leave `HERMES_ENABLED=false` until the Hermes sidecar is running and reachable. See [`docs/HERMES_SIDECAR_SETUP.md`](docs/HERMES_SIDECAR_SETUP.md).
+
 ## Web App Setup
 
 Install frontend dependencies:
