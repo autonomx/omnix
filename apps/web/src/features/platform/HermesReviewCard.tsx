@@ -9,6 +9,13 @@ export type HermesReviewCardProps = {
   state?: string;
 };
 
+const policyRows: Array<[string, string]> = [
+  ['Default', 'blocked'],
+  ['Read-only names', 'house status, Hermes status, diagnostics schema'],
+  ['Review', 'required before any future change path'],
+  ['Limits', 'small responses, bounded timeouts, feature flags off by default'],
+];
+
 export function HermesReviewCard({
   title = 'Hermes review',
   summary = 'Hermes suggestions are shown here for inspection only.',
@@ -38,6 +45,12 @@ export function HermesReviewCard({
           <dt>Details</dt>
           <dd>{details}</dd>
         </div>
+        {policyRows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
       </dl>
       <Group gap="xs">
         <Button size="xs" variant="light" disabled>
