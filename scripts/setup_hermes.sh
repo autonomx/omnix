@@ -20,8 +20,8 @@ echo "Preparing optional Hermes Agent sidecar setup."
 echo "Env file: $ENV_FILE"
 
 if [[ "$SKIP_INSTALL_VALUE" != "1" ]]; then
-  echo "Running the official Hermes Agent installer."
-  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+  echo "Running the official Hermes Agent installer without first-run prompts."
+  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --non-interactive
 else
   echo "Skipping Hermes install because OMNIX_HERMES_SKIP_INSTALL=1."
 fi
