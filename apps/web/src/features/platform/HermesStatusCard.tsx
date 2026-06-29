@@ -14,6 +14,18 @@ type HermesStatus = {
   error?: string | null;
 };
 
+type HermesDryRunResponse = {
+  ok?: boolean;
+  dry_run?: boolean;
+  result?: {
+    backend?: string;
+    result?: {
+      response?: string;
+    };
+  };
+  error?: string | null;
+};
+
 type HermesSettingsPayload = SettingsPayload & {
   hermes_status?: HermesStatus;
   hermes_commands?: Record<string, string>;
@@ -110,6 +122,29 @@ function statusView(status: HermesStatus, commands: Record<string, string>): Sta
   };
 }
 
+function dryRunText(result: HermesDryRunResponse): string {
+  const response = result.result?.result?.response;
+  const prefix = result.dry_run ? 'Dry run' : 'Test';
+  const backend = result.result?.backend ? ` via ${result.result.backend}` : '';
+  if (response) {
+    return `${prefix}${backend}: ${response}`;
+  }
+  if (result.error) {
+    return `${prefix}${backend}: ${result.error}`;
+  }
+  return `${prefix}${backend} completed.`;
+}
+
+async function fallbackDryRun(): Promise<string> {
+  const session = await omnixApiClient.createChatSession({ title: 'Hermes dry run' });
+  const result = await omnixApiClient.sendChatMessage(session.id, {
+    content: 'house status',
+    agent_mode: true,
+    dry_run: true,
+  } as never);
+  return result.session.messages?.filter((message) => message.role === 'assistant').at(-1)?.content ?? 'Dry run completed.';
+}
+
 function Details({ rows }: { rows: Array<[string, string]> }) {
   return (
     <dl className="platform-details">
@@ -147,13 +182,15 @@ export function HermesStatusCard() {
   });
   const dryRun = useMutation({
     mutationFn: async () => {
-      const session = await omnixApiClient.createChatSession({ title: 'Hermes dry run' });
-      const result = await omnixApiClient.sendChatMessage(session.id, {
-        content: 'house status',
-        agent_mode: true,
-        dry_run: true,
-      } as never);
-      return result.session.messages?.filter((message) => message.role === 'assistant').at(-1)?.content ?? 'Dry run completed.';
+      try {
+        const result = await omnixApiClient.post<Record<string, unknown>, HermesDryRunResponse>('/api/hermes/test', {
+          content: 'house status',
+          dry_run: true,
+        });
+        return dryRunText(result);
+      } catch {
+        return fallbackDryRun();
+      }
     },
   });
 
