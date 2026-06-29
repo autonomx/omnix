@@ -22,6 +22,11 @@ class HermesTestRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class HermesLookupRequest(BaseModel):
+    name: str
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get("/status", include_in_schema=False)
 def hermes_status() -> dict[str, Any]:
     return hermes_diagnostics_status_payload()
@@ -43,3 +48,11 @@ def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
 @router.get("/recent", include_in_schema=False)
 def hermes_recent() -> dict[str, Any]:
     return {"ok": True, "items": [], "count": 0, "source": "not_configured"}
+
+
+@router.post("/lookup", include_in_schema=False)
+def hermes_lookup(request: HermesLookupRequest) -> dict[str, Any]:
+    from .hermes_readouts import readout_payload
+
+    payload = readout_payload(request.name, request.args)
+    return {**payload, "dry_run": True, "mode": "lookup"}
