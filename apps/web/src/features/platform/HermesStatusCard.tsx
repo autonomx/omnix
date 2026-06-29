@@ -129,7 +129,7 @@ function NextSteps({ steps }: { steps: string[] }) {
   }
   return (
     <div>
-      <Text size="sm">Next step</Text>
+      <Text size="sm">Next steps</Text>
       <ol>
         {steps.map((step) => (
           <li key={step}>{step}</li>
