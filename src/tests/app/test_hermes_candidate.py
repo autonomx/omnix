@@ -54,6 +54,6 @@ def test_hermes_candidate_demo_route_returns_preview_only_payload() -> None:
 
 
 def test_hermes_api_router_keeps_candidate_route_hidden_from_schema() -> None:
-    schema_paths = {route.path for route in router.routes if getattr(route, "include_in_schema", True)}
+    route = next(route for route in router.routes if route.path == "/candidate/demo")
 
-    assert "/api/hermes/candidate/demo" not in schema_paths
+    assert route.include_in_schema is False
