@@ -35,6 +35,8 @@ class HermesStatus:
     enabled: bool
     reachable: bool
     base_url: str
+    state: str
+    message: str
     health: dict[str, Any] = field(default_factory=dict)
     capabilities: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
@@ -52,7 +54,13 @@ def hermes_runtime_config() -> HermesRuntimeConfig:
 def hermes_status() -> HermesStatus:
     config = hermes_runtime_config()
     if not config.enabled:
-        return HermesStatus(enabled=False, reachable=False, base_url=config.base_url, error="hermes_disabled")
+        return HermesStatus(
+            enabled=False,
+            reachable=False,
+            base_url=config.base_url,
+            state="disabled",
+            message="Installed, disabled in Omnix.",
+        )
     client = HermesSidecarClient(
         base_url=config.base_url,
         api_key=os.environ.get("HERMES_API_KEY") or None,
@@ -61,9 +69,24 @@ def hermes_status() -> HermesStatus:
     try:
         health = client.health()
         capabilities = client.capabilities()
-        return HermesStatus(enabled=True, reachable=True, base_url=config.base_url, health=health, capabilities=capabilities)
+        return HermesStatus(
+            enabled=True,
+            reachable=True,
+            base_url=config.base_url,
+            state="reachable",
+            message="Connected to Hermes sidecar.",
+            health=health,
+            capabilities=capabilities,
+        )
     except Exception as exc:
-        return HermesStatus(enabled=True, reachable=False, base_url=config.base_url, error=str(exc))
+        return HermesStatus(
+            enabled=True,
+            reachable=False,
+            base_url=config.base_url,
+            state="offline",
+            message="Enabled in Omnix, but the Hermes sidecar is unreachable.",
+            error=str(exc),
+        )
 
 
 def hermes_status_payload() -> dict[str, Any]:
@@ -71,6 +94,8 @@ def hermes_status_payload() -> dict[str, Any]:
     return {
         "enabled": status.enabled,
         "reachable": status.reachable,
+        "state": status.state,
+        "message": status.message,
         "base_url": status.base_url,
         "health": status.health,
         "capabilities": status.capabilities,
