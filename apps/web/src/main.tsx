@@ -5,6 +5,8 @@ import '@mantine/core/styles.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OmnixApp } from './app/OmnixApp';
 import { omnixTheme } from './design/theme';
+import './features/chatbot/sessionTools';
+import './features/podcast/podcastSessionGuard';
 import './styles.css';
 import './legacy-layout.css';
 import './features/chatbot/ChatbotWorkspaceTools.css';
