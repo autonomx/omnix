@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
 from typing import Any
 
 import requests
 
-from .core import AssistantRequest, AssistantResult, ToolCall
+from .core import AssistantRequest, AssistantResult
+from .hermes_contract import (
+    hermes_contract_schema,
+    hermes_request_from_assistant,
+    hermes_request_payload,
+    normalize_hermes_response,
+    tool_calls_from_hermes,
+)
 
 
 class HermesSidecarError(RuntimeError):
@@ -16,9 +22,9 @@ class HermesSidecarError(RuntimeError):
 class HermesSidecarClient:
     """Small HTTP client for the Hermes sidecar API.
 
-    The first Omnix integration asks Hermes for a structured plan and keeps
-    execution inside Omnix. This avoids handing house or RPG state mutation to
-    an external runtime before Omnix policy/dry-run/confirmation checks run.
+    Omnix asks Hermes for a structured plan and keeps execution inside Omnix.
+    This avoids handing house or RPG state mutation to an external runtime
+    before Omnix policy, dry-run, and confirmation checks run.
     """
 
     def __init__(self, base_url: str = "http://127.0.0.1:8642", api_key: str | None = None, timeout: float = 45.0):
@@ -64,15 +70,12 @@ class HermesSidecarClient:
         return self._parse_plan(content, request)
 
     def _planner_prompt(self, request: AssistantRequest) -> str:
+        contract_request = hermes_request_from_assistant(request)
         return json.dumps(
             {
                 "task": "Create an Omnix execution plan. Do not execute tools.",
-                "schema": {
-                    "domain": "chat|house|podcast|rpg|storyteller|live",
-                    "response": "short user-facing reply",
-                    "actions": [{"tool": "name", "args": {}, "risk": "low|medium|high|simulation_truth", "reason": "why"}],
-                },
-                "request": asdict(request),
+                "schema": hermes_contract_schema(),
+                "request": hermes_request_payload(contract_request),
             },
             sort_keys=True,
         )
@@ -94,19 +97,12 @@ class HermesSidecarClient:
         except json.JSONDecodeError as exc:
             raise HermesSidecarError("Hermes did not return valid planner JSON") from exc
 
-        calls = []
-        for item in plan.get("actions", []) or []:
-            calls.append(
-                ToolCall(
-                    name=str(item.get("tool", "")),
-                    args=dict(item.get("args", {}) or {}),
-                    risk=str(item.get("risk", "low")),
-                    reason=str(item.get("reason", "")),
-                )
-            )
+        normalized = normalize_hermes_response(plan, fallback_domain=request.domain)
         return AssistantResult(
-            success=True,
-            response=str(plan.get("response") or "I prepared a plan."),
-            domain=str(plan.get("domain") or request.domain),
-            tool_calls=calls,
+            success=normalized.state != "rejected" and not normalized.error,
+            response=normalized.response,
+            domain=normalized.domain,
+            tool_calls=tool_calls_from_hermes(normalized),
+            requires_confirmation=normalized.requires_review,
+            error=normalized.error,
         )
