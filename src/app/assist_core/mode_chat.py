@@ -7,6 +7,7 @@ from .core import AssistantRequest, AssistantResult
 from .hermes_client import HermesSidecarClient
 from .hermes_status import hermes_runtime_config
 from .house_plan import infer_house_plan
+from .mode_apply import apply_mode_result
 
 
 @dataclass
@@ -40,7 +41,7 @@ def detect_mode_domain(message: str) -> str:
 
 def local_mode_plan(request: AssistantRequest) -> AssistantResult:
     if request.domain == "house":
-        return infer_house_plan(request)
+        return apply_mode_result(infer_house_plan(request), dry_run=request.dry_run)
     return AssistantResult(success=True, response="Agent mode is ready. No tool plan is needed for this message.", domain=request.domain)
 
 
@@ -57,6 +58,7 @@ def plan_mode_chat(request: ModeChatRequest) -> ModeChatResponse:
     if config.enabled:
         try:
             result = HermesSidecarClient(base_url=config.base_url, timeout=config.timeout_seconds).plan(assistant_request)
+            result = apply_mode_result(result, dry_run=request.dry_run)
             return ModeChatResponse(ok=result.success, mode="agent", backend="hermes", result=asdict(result))
         except Exception as exc:
             result = local_mode_plan(assistant_request)
