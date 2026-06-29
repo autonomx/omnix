@@ -2,6 +2,8 @@ import { omnixApiClient } from '../../api/client';
 
 const INSTALLED_KEY = '__omnix_chat_session_tools__';
 const BUTTON_CLASS = 'omnix-new-chat-button';
+const MODE_BUTTON_CLASS = 'omnix-chat-mode-button';
+const MODE_STORAGE_KEY = 'omnix.chat.mode';
 
 type AnyWindow = Window & Record<string, unknown>;
 
@@ -33,6 +35,35 @@ function styleButton(button: HTMLButtonElement): void {
   button.style.padding = '0.42rem 0.7rem';
 }
 
+function readMode(): boolean {
+  try {
+    return window.localStorage.getItem(MODE_STORAGE_KEY) === 'agent';
+  } catch {
+    return false;
+  }
+}
+
+function writeMode(enabled: boolean): void {
+  try {
+    window.localStorage.setItem(MODE_STORAGE_KEY, enabled ? 'agent' : 'normal');
+  } catch {
+    // optional browser storage
+  }
+}
+
+function updateModeButton(button: HTMLButtonElement): void {
+  const enabled = readMode();
+  button.textContent = enabled ? 'Agent Chat: On' : 'Agent Chat: Off';
+  button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  button.style.border = enabled ? '1px solid rgba(94, 234, 212, 0.75)' : '1px solid rgba(255, 255, 255, 0.18)';
+  button.style.borderRadius = '999px';
+  button.style.background = enabled ? 'rgba(20, 184, 166, 0.22)' : 'rgba(255, 255, 255, 0.08)';
+  button.style.color = 'inherit';
+  button.style.cursor = 'pointer';
+  button.style.fontWeight = '700';
+  button.style.padding = '0.42rem 0.7rem';
+}
+
 function addButton(target: Element | null, label: string, prepend = false): void {
   if (!target || target.querySelector(`.${BUTTON_CLASS}`)) return;
   const button = document.createElement('button');
@@ -51,9 +82,25 @@ function addButton(target: Element | null, label: string, prepend = false): void
   else target.appendChild(button);
 }
 
+function addModeButton(target: Element | null): void {
+  if (!target || target.querySelector(`.${MODE_BUTTON_CLASS}`)) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = MODE_BUTTON_CLASS;
+  button.addEventListener('click', () => {
+    writeMode(!readMode());
+    document.querySelectorAll<HTMLButtonElement>(`.${MODE_BUTTON_CLASS}`).forEach(updateModeButton);
+  });
+  updateModeButton(button);
+  target.prepend(button);
+}
+
 function mountButtons(): void {
+  const headerActions = document.querySelector('.assistant-chat-header-actions');
   addButton(document.querySelector('.assistant-sidebar-sessions > header'), '+ New');
-  addButton(document.querySelector('.assistant-chat-header-actions'), 'New Chat', true);
+  addButton(headerActions, 'New Chat', true);
+  addModeButton(headerActions);
+  addModeButton(document.querySelector('.assistant-composer-controls'));
 }
 
 function watchButtons(): void {
