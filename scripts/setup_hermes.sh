@@ -6,6 +6,7 @@ ENV_FILE="${OMNIX_ENV_FILE:-$ROOT_DIR/.env.local}"
 HERMES_BASE_URL_VALUE="${HERMES_BASE_URL:-http://127.0.0.1:8642}"
 HERMES_TIMEOUT_SECONDS_VALUE="${HERMES_TIMEOUT_SECONDS:-45}"
 SKIP_INSTALL_VALUE="${OMNIX_HERMES_SKIP_INSTALL:-0}"
+SETUP_MODE_VALUE="${OMNIX_HERMES_SETUP_MODE:-install-only}"
 
 append_env_if_missing() {
   local key="$1"
@@ -18,10 +19,16 @@ append_env_if_missing() {
 
 echo "Preparing optional Hermes Agent sidecar setup."
 echo "Env file: $ENV_FILE"
+echo "Hermes setup mode: $SETUP_MODE_VALUE"
 
 if [[ "$SKIP_INSTALL_VALUE" != "1" ]]; then
-  echo "Running the official Hermes Agent installer without first-run prompts."
-  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --non-interactive
+  if [[ "$SETUP_MODE_VALUE" == "interactive" ]]; then
+    echo "Running the official Hermes Agent installer with first-run prompts."
+    curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+  else
+    echo "Running the official Hermes Agent installer without first-run prompts."
+    curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --non-interactive
+  fi
 else
   echo "Skipping Hermes install because OMNIX_HERMES_SKIP_INSTALL=1."
 fi
