@@ -30,10 +30,4 @@ Linux, macOS, or WSL2:
 OMNIX_SKIP_HERMES_SETUP=1 bash setup.sh
 ```
 
-To opt into the interactive Hermes wizard during setup, set:
-
-```bash
-OMNIX_HERMES_SETUP_MODE=interactive
-```
-
 The top-level setup still writes `HERMES_ENABLED=false` by default. Flip it to `true` only after the Hermes sidecar is configured, running, and reachable.
