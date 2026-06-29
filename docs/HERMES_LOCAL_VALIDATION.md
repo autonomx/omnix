@@ -1,75 +1,48 @@
-# Hermes Local Validation Pass
+# Local Validation Pass
 
-This pass records the local checks needed to validate the Hermes integration in a developer workstation environment.
+This note records local checks for a developer workstation environment.
 
 ## Preconditions
 
-- Omnix backend can start locally.
+- Backend can start locally.
 - Web app can reach the backend API.
-- Hermes sidecar can be disabled, offline, or reachable depending on the scenario.
+- Optional sidecar services can be toggled depending on the scenario.
 
 ## Scenarios
 
-### 1. Disabled
-
-Environment:
-
-```bash
-HERMES_ENABLED=false
-```
+### 1. Disabled state
 
 Expected:
 
-- Settings shows Hermes as disabled.
+- Settings shows the feature as disabled.
 - Disabled is not displayed as an error.
-- `/api/hermes/status` returns `state: disabled`.
-- `/api/hermes/test` returns `dry_run: true`.
+- Status payload reports the disabled state.
+- Smoke check reports dry-run state.
 
-### 2. Enabled but offline
+### 2. Offline state
 
-Environment:
+Expected:
 
-```bash
-HERMES_ENABLED=true
-HERMES_BASE_URL=http://127.0.0.1:8642
-```
+- Settings shows offline when a configured local service is unreachable.
+- Status payload includes the configured base URL.
+- Smoke check remains safe.
 
-Expected with no sidecar running:
+### 3. Reachable state
 
-- Settings shows offline.
-- Status payload includes base URL and error detail.
-- Dry-run result stays safe and non-mutating.
+Expected:
 
-### 3. Reachable
-
-Environment:
-
-```bash
-HERMES_ENABLED=true
-HERMES_BASE_URL=http://127.0.0.1:8642
-```
-
-Expected with sidecar running:
-
-- Settings shows reachable.
-- Status payload includes health and capabilities.
-- Dry-run result completes and reports `dry_run: true`.
+- Settings shows reachable when the local service is running.
+- Status payload includes health and capability details.
+- Smoke check completes and reports dry-run state.
 
 ### 4. Chat mode
 
 Expected:
 
-- Normal Chat remains the default provider path.
+- Normal Chat remains the default path.
 - Agent Chat remains opt-in.
 - Agent Chat surfaces backend/result state clearly.
 
 ## Result template
 
-Record local results with:
-
-- date;
-- commit SHA;
-- scenario;
-- pass/fail;
-- notes;
-- screenshots/log snippets if useful.
+Record local results with date, commit SHA, scenario, pass/fail, and notes.
