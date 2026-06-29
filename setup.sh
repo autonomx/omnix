@@ -37,6 +37,7 @@ echo "This will install all dependencies for:"
 echo "  - Main app + FLUX image generation in $RPG_FLUX_ENV"
 echo "  - Vendored Qwen3-TTS in $RPG_TTS_ENV"
 echo "  - Parakeet STT in $RPG_STT_ENV"
+echo "  - Hermes Agent sidecar setup"
 echo ""
 echo "Setup will start automatically in 3 seconds..."
 sleep 3
@@ -432,6 +433,24 @@ fi
 
 echo ""
 echo "============================================="
+echo "Installing Hermes Agent sidecar"
+echo "============================================="
+if [ "${OMNIX_SKIP_HERMES_SETUP:-0}" = "1" ]; then
+    echo "Skipping Hermes setup because OMNIX_SKIP_HERMES_SETUP=1."
+elif [ -f "$OMNIX_REPO_ROOT/scripts/setup_hermes.sh" ]; then
+    chmod +x "$OMNIX_REPO_ROOT/scripts/setup_hermes.sh"
+    "$OMNIX_REPO_ROOT/scripts/setup_hermes.sh"
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Hermes Agent sidecar setup failed"
+        error
+    fi
+else
+    echo "ERROR: scripts/setup_hermes.sh not found"
+    error
+fi
+
+echo ""
+echo "============================================="
 echo "Setup Complete!"
 echo "============================================="
 echo ""
@@ -439,6 +458,7 @@ echo "Environments:"
 echo "  - $RPG_FLUX_ENV : main app + FLUX"
 echo "  - $RPG_TTS_ENV  : vendored Qwen3-TTS"
 echo "  - $RPG_STT_ENV  : Parakeet STT only"
+echo "  - Hermes Agent sidecar : installed/configured via scripts/setup_hermes.sh"
 echo ""
 echo "Python interpreters:"
 echo "  - $RPG_FLUX_PYTHON"
