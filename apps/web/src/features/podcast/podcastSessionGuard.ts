@@ -19,6 +19,7 @@ function now(): string {
 }
 
 export function installPodcastSessionGuard(): void {
+  if (typeof window === 'undefined') return;
   const w = window as AnyWindow;
   if (w[INSTALLED_KEY]) return;
   w[INSTALLED_KEY] = true;
