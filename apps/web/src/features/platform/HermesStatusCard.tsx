@@ -1,9 +1,10 @@
 import { Button, Group, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { omnixApiClient, type SettingsPayload } from '../../api/client';
+import { getHermesStatus, runHermesTest, type HermesStatusResponse, type HermesTestResponse } from '../../api/hermesClient';
 import { OmnixStatusPill } from '../../design/primitives';
 
-type HermesStatus = {
+type HermesStatus = HermesStatusResponse & {
   enabled?: boolean;
   reachable?: boolean;
   state?: string;
@@ -11,18 +12,6 @@ type HermesStatus = {
   base_url?: string;
   health?: Record<string, unknown>;
   capabilities?: Record<string, unknown>;
-  error?: string | null;
-};
-
-type HermesDryRunResponse = {
-  ok?: boolean;
-  dry_run?: boolean;
-  result?: {
-    backend?: string;
-    result?: {
-      response?: string;
-    };
-  };
   error?: string | null;
 };
 
@@ -125,7 +114,7 @@ function statusView(status: HermesStatus, commands: Record<string, string>): Sta
   };
 }
 
-function dryRunText(result: HermesDryRunResponse): string {
+function dryRunText(result: HermesTestResponse): string {
   const response = result.result?.result?.response;
   const prefix = result.dry_run ? 'Dry run' : 'Test';
   const backend = result.result?.backend ? ` via ${result.result.backend}` : '';
@@ -139,14 +128,14 @@ function dryRunText(result: HermesDryRunResponse): string {
   return `${prefix}${backend} completed.${outcome}`;
 }
 
-async function fallbackDryRun(): Promise<string> {
-  const session = await omnixApiClient.createChatSession({ title: 'Hermes dry run' });
-  const result = await omnixApiClient.sendChatMessage(session.id, {
-    content: 'house status',
-    agent_mode: true,
-    dry_run: true,
-  } as never);
-  return result.session.messages?.filter((message) => message.role === 'assistant').at(-1)?.content ?? 'Dry run completed.';
+function routeLabel(routeStatus: { data?: HermesStatusResponse; isError: boolean; isLoading: boolean }): string {
+  if (routeStatus.isError) {
+    return 'unavailable';
+  }
+  if (routeStatus.data) {
+    return 'available';
+  }
+  return routeStatus.isLoading ? 'checking' : 'unknown';
 }
 
 function Details({ rows }: { rows: Array<[string, string]> }) {
@@ -184,23 +173,27 @@ export function HermesStatusCard() {
     queryKey: ['platform', 'settings'],
     queryFn: () => omnixApiClient.getSettings() as Promise<HermesSettingsPayload>,
   });
+  const routeStatus = useQuery({
+    queryKey: ['platform', 'hermes-status'],
+    queryFn: () => getHermesStatus(),
+    retry: false,
+  });
   const dryRun = useMutation({
     mutationFn: async () => {
       try {
-        const result = await omnixApiClient.post<Record<string, unknown>, HermesDryRunResponse>('/api/hermes/test', {
-          content: 'house status',
-          dry_run: true,
-        });
+        const result = await runHermesTest({ content: 'house status', dry_run: true });
         return dryRunText(result);
-      } catch {
-        return fallbackDryRun();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Hermes test route unavailable.';
+        return `Dry-run route unavailable: ${message}`;
       }
     },
   });
 
-  const status = query.data?.hermes_status ?? {};
+  const status = (routeStatus.data as HermesStatus | undefined) ?? query.data?.hermes_status ?? {};
   const commands = query.data?.hermes_commands ?? {};
   const view = statusView(status, commands);
+  const rows: Array<[string, string]> = [['Route', routeLabel(routeStatus)], ...view.rows];
 
   return (
     <section className="platform-section platform-section-wide">
@@ -209,14 +202,22 @@ export function HermesStatusCard() {
           <Title order={4}>Hermes Agent</Title>
           <Text size="sm">Sidecar status, setup commands, and a safe dry-run Agent Chat smoke test.</Text>
         </div>
-        <OmnixStatusPill>{query.isLoading ? 'loading' : view.badge}</OmnixStatusPill>
+        <OmnixStatusPill>{query.isLoading || routeStatus.isLoading ? 'loading' : view.badge}</OmnixStatusPill>
       </Group>
       {query.isError ? <Text role="alert">Hermes status failed: {query.error.message}</Text> : null}
+      {routeStatus.isError ? <Text role="alert">Hermes route unavailable: {routeStatus.error.message}</Text> : null}
       <Text size="sm">{view.message}</Text>
-      <Details rows={view.rows} />
+      <Details rows={rows} />
       <NextSteps steps={view.nextSteps} />
       <Group gap="xs">
-        <Button size="xs" variant="light" onClick={() => queryClient.invalidateQueries({ queryKey: ['platform', 'settings'] })}>
+        <Button
+          size="xs"
+          variant="light"
+          onClick={() => {
+            queryClient.invalidateQueries({ queryKey: ['platform', 'settings'] });
+            queryClient.invalidateQueries({ queryKey: ['platform', 'hermes-status'] });
+          }}
+        >
           Refresh
         </Button>
         <Button size="xs" variant="light" loading={dryRun.isPending} onClick={() => dryRun.mutate()}>
