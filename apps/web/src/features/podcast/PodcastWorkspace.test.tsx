@@ -7,6 +7,7 @@ import { omnixTheme } from '../../design/theme';
 import { PodcastWorkspace } from './PodcastWorkspace';
 
 const GENERATED_AUDIO_DATA_URL = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
+const STITCHED_AUDIO_BLOB_URL = 'blob:stitched-podcast-preview';
 
 function renderPodcast() {
   const queryClient = new QueryClient({
@@ -38,6 +39,15 @@ function requestBody(init: RequestInit | undefined): Record<string, unknown> {
   return JSON.parse(String(init?.body || '{}'));
 }
 
+function responseFromDataUrl(value: string): Response {
+  const [, metadata = '', payload = ''] = value.match(/^data:([^,]*),(.*)$/) ?? [];
+  const isBase64 = metadata.includes(';base64');
+  const binary = isBase64 ? atob(payload) : decodeURIComponent(payload);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const mimeType = metadata.split(';')[0] || 'application/octet-stream';
+  return new Response(bytes, { headers: { 'Content-Type': mimeType } });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -47,8 +57,14 @@ describe('PodcastWorkspace', () => {
   it('queues podcast voice generation through the Voice Studio TTS path and exposes playback audio', async () => {
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue(STITCHED_AUDIO_BLOB_URL);
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (typeof input === 'string' && input.startsWith('data:audio/')) {
+        return responseFromDataUrl(input);
+      }
+
       const path = requestPath(input);
 
       if (path === '/api/assets') {
@@ -117,16 +133,18 @@ describe('PodcastWorkspace', () => {
     expect((await screen.findAllByText('Podcast audio ready: job:podcast')).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Live preview stitched|Stitched live preview/i)).length).toBeGreaterThan(0);
     expect(screen.getByLabelText('Podcast audio player').querySelectorAll('audio')).toHaveLength(1);
-    expect(screen.getByLabelText('Podcast audio player').querySelector('audio')?.getAttribute('src')).toBe(GENERATED_AUDIO_DATA_URL);
+    await waitFor(() => expect(screen.getByLabelText('Podcast audio player').querySelector('audio')?.getAttribute('src')).toBe(STITCHED_AUDIO_BLOB_URL));
 
     await waitFor(() => {
       const previewCall = fetchMock.mock.calls.find(
-        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs'
+        ([input, init]) => typeof input === 'string'
+          && requestPath(input as RequestInfo | URL) === '/api/jobs'
           && init?.method === 'POST'
           && requestBody(init).type === 'tts.synthesize',
       );
       const createCall = fetchMock.mock.calls.find(
-        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs'
+        ([input, init]) => typeof input === 'string'
+          && requestPath(input as RequestInfo | URL) === '/api/jobs'
           && init?.method === 'POST'
           && requestBody(init).type === 'tts.multi_speaker_synthesize',
       );
