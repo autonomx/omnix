@@ -8,8 +8,9 @@ See root app.py for the main FastAPI application entry point.
 """
 
 from contextlib import asynccontextmanager
+from typing import Any
 
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 
 
 @asynccontextmanager
@@ -23,6 +24,19 @@ async def lifespan(app: FastAPI):
         print(f"[APP-STARTUP] Failed to validate FLUX runtime: {e}")
 
     yield
+
+
+def _hermes_test_request(payload: dict[str, Any] | None):
+    from app.assist_core.hermes_diagnostics import HermesDiagnosticsTestRequest
+
+    data = payload if isinstance(payload, dict) else {}
+    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    return HermesDiagnosticsTestRequest(
+        content=str(data.get("content") or "house status"),
+        session_id=str(data.get("session_id") or "diagnostics"),
+        domain=str(data.get("domain") or "chat"),
+        metadata=dict(metadata),
+    )
 
 
 def create_fastapi_app() -> FastAPI:
@@ -43,6 +57,18 @@ def create_fastapi_app() -> FastAPI:
         title="Omnix API",
         lifespan=lifespan,
     )
+
+    @app.get("/api/hermes/status")
+    def hermes_status() -> dict[str, Any]:
+        from app.assist_core.hermes_diagnostics import hermes_diagnostics_status_payload
+
+        return hermes_diagnostics_status_payload()
+
+    @app.post("/api/hermes/test")
+    def hermes_test(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
+        from app.assist_core.hermes_diagnostics import hermes_diagnostics_test_payload
+
+        return hermes_diagnostics_test_payload(_hermes_test_request(payload))
 
     # Register all FastAPI routers
     app.include_router(creator_bp)
