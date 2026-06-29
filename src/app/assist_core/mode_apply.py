@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .core import AssistantResult, ToolResult
 from .house_mock import apply_house_mock
+from .mode_review import hold_for_review, review_call
 
 
 def apply_mode_result(result: AssistantResult, *, dry_run: bool) -> AssistantResult:
@@ -9,6 +10,9 @@ def apply_mode_result(result: AssistantResult, *, dry_run: bool) -> AssistantRes
         return result
     rows: list[ToolResult] = []
     for call in result.tool_calls:
+        decision = review_call(call)
+        if decision.requires_confirmation and not dry_run:
+            return hold_for_review(result, call, dry_run=dry_run)
         try:
             rows.append(apply_house_mock(call, dry_run=dry_run))
         except Exception as exc:
