@@ -1,7 +1,7 @@
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
+import { HermesReviewCard } from './HermesReviewCard';
 import { HermesStatusCard } from './HermesStatusCard';
-import { InfoCard } from './InfoCard';
 import { PlatformModuleWorkspace } from './PlatformModuleWorkspace';
 
 export function SettingsWorkspace({ module }: { module: OmnixModuleDefinition }) {
@@ -9,12 +9,7 @@ export function SettingsWorkspace({ module }: { module: OmnixModuleDefinition })
     <>
       <WorkspacePanel>
         <HermesStatusCard />
-        <InfoCard
-          title="Setup"
-          summary="Check the suggested setup guidance before continuing."
-          area="Settings"
-          state="pending"
-        />
+        <HermesReviewCard />
       </WorkspacePanel>
       <PlatformModuleWorkspace module={module} />
     </>
