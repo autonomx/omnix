@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Button, Group, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
-import { getHermesCandidateDemo } from '../../api/hermesClient';
+import { approveHermesCandidate, getHermesCandidateDemo } from '../../api/hermesClient';
 
 export type HermesReviewCardProps = {
   title?: string;
@@ -30,12 +31,36 @@ export function HermesReviewCard({
   details = 'Read-only preview mode is active for this card.',
   state = 'preview-only',
 }: HermesReviewCardProps) {
+  const [candidateVisible, setCandidateVisible] = useState(true);
+  const [approvalState, setApprovalState] = useState('approvals disabled');
+  const [approvalBusy, setApprovalBusy] = useState(false);
   const query = useQuery({
     queryKey: ['platform', 'hermes-candidate-demo'],
     queryFn: () => getHermesCandidateDemo(),
     retry: false,
   });
-  const candidate = query.data?.candidate;
+  const candidate = candidateVisible ? query.data?.candidate : undefined;
+
+  const handleApproval = async () => {
+    if (!candidate || approvalBusy) {
+      return;
+    }
+    setApprovalBusy(true);
+    setApprovalState('checking approval gate');
+    try {
+      const payload = await approveHermesCandidate({ candidate, preview_only: true });
+      setApprovalState(payload.error ?? 'approvals disabled');
+    } catch (error) {
+      setApprovalState(error instanceof Error ? error.message : 'approval unavailable');
+    } finally {
+      setApprovalBusy(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setCandidateVisible(false);
+    setApprovalState('preview cleared locally');
+  };
 
   return (
     <section className="platform-section">
@@ -79,6 +104,10 @@ export function HermesReviewCard({
           <dt>Preview only</dt>
           <dd>{String(query.data?.preview_only ?? true)}</dd>
         </div>
+        <div>
+          <dt>Approval</dt>
+          <dd>{approvalBusy ? 'checking' : approvalState}</dd>
+        </div>
         {policyRows.map(([label, value]) => (
           <div key={label}>
             <dt>{label}</dt>
@@ -87,11 +116,11 @@ export function HermesReviewCard({
         ))}
       </dl>
       <Group gap="xs">
-        <Button size="xs" variant="light" disabled>
-          Preview only
+        <Button size="xs" variant="light" onClick={handleApproval} disabled={!candidate || approvalBusy}>
+          Approve
         </Button>
-        <Button size="xs" variant="subtle" disabled>
-          Close preview
+        <Button size="xs" variant="subtle" onClick={handleCancel} disabled={!candidateVisible}>
+          Cancel preview
         </Button>
       </Group>
     </section>
