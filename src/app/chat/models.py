@@ -48,6 +48,8 @@ class SendChatMessageRequest(BaseModel):
     content: str = Field(min_length=1)
     provider_id: str | None = None
     model_id: str | None = None
+    agent_mode: bool = False
+    dry_run: bool = False
 
 
 class SendChatMessageResponse(BaseModel):

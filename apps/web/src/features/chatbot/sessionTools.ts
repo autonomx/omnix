@@ -7,32 +7,13 @@ const MODE_STORAGE_KEY = 'omnix.chat.mode';
 
 type AnyWindow = Window & Record<string, unknown>;
 
+type ClientPatch = {
+  listChatSessions: typeof omnixApiClient.listChatSessions;
+  sendChatMessage: typeof omnixApiClient.sendChatMessage;
+};
+
 function shouldShowSession(session: { title?: string | null }): boolean {
   return !String(session.title ?? '').trim().startsWith('Podcast script:');
-}
-
-function patchSessionList(): void {
-  const client = omnixApiClient as unknown as { listChatSessions: typeof omnixApiClient.listChatSessions };
-  const original = client.listChatSessions.bind(omnixApiClient);
-  client.listChatSessions = async () => {
-    const payload = await original();
-    return { ...payload, sessions: payload.sessions.filter(shouldShowSession) };
-  };
-}
-
-async function startBlankChat(): Promise<void> {
-  await omnixApiClient.createChatSession({ title: 'New chat' });
-  window.location.assign('/chatbot');
-}
-
-function styleButton(button: HTMLButtonElement): void {
-  button.style.border = '1px solid rgba(160, 132, 255, 0.55)';
-  button.style.borderRadius = '999px';
-  button.style.background = 'rgba(105, 72, 210, 0.24)';
-  button.style.color = 'inherit';
-  button.style.cursor = 'pointer';
-  button.style.fontWeight = '700';
-  button.style.padding = '0.42rem 0.7rem';
 }
 
 function readMode(): boolean {
@@ -49,6 +30,39 @@ function writeMode(enabled: boolean): void {
   } catch {
     // optional browser storage
   }
+}
+
+function patchSessionList(): void {
+  const client = omnixApiClient as unknown as ClientPatch;
+  const original = client.listChatSessions.bind(omnixApiClient);
+  client.listChatSessions = async () => {
+    const payload = await original();
+    return { ...payload, sessions: payload.sessions.filter(shouldShowSession) };
+  };
+}
+
+function patchSendMessage(): void {
+  const client = omnixApiClient as unknown as ClientPatch;
+  const original = client.sendChatMessage.bind(omnixApiClient);
+  client.sendChatMessage = async (sessionId, request) => {
+    if (!readMode()) return original(sessionId, request);
+    return original(sessionId, { ...(request as Record<string, unknown>), agent_mode: true, dry_run: false } as never);
+  };
+}
+
+async function startBlankChat(): Promise<void> {
+  await omnixApiClient.createChatSession({ title: 'New chat' });
+  window.location.assign('/chatbot');
+}
+
+function styleButton(button: HTMLButtonElement): void {
+  button.style.border = '1px solid rgba(160, 132, 255, 0.55)';
+  button.style.borderRadius = '999px';
+  button.style.background = 'rgba(105, 72, 210, 0.24)';
+  button.style.color = 'inherit';
+  button.style.cursor = 'pointer';
+  button.style.fontWeight = '700';
+  button.style.padding = '0.42rem 0.7rem';
 }
 
 function updateModeButton(button: HTMLButtonElement): void {
@@ -115,6 +129,7 @@ export function installSessionTools(): void {
   if (w[INSTALLED_KEY]) return;
   w[INSTALLED_KEY] = true;
   patchSessionList();
+  patchSendMessage();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchButtons, { once: true });
   else watchButtons();
 }

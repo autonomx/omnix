@@ -108,11 +108,11 @@ class ChatSessionStore:
                 role="user",
                 content=request.content.strip(),
                 created_at=now,
-                metadata={"generation_status": "running"},
+                metadata={"generation_status": "running", "agent_mode": request.agent_mode},
             )
             provider_id = request.provider_id or session.provider_id
             model_id = request.model_id or session.model_id
-            answer = self._generate_reply(session, message, provider_id=provider_id, model_id=model_id)
+            answer = self._generate_reply(session, message, provider_id=provider_id, model_id=model_id, request=request)
             assistant_message = ChatMessage(
                 id=f"msg:{uuid.uuid4().hex}",
                 role="assistant",
@@ -136,6 +136,50 @@ class ChatSessionStore:
         return None
 
     def _generate_reply(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+        request: SendChatMessageRequest,
+    ) -> dict[str, Any]:
+        if request.agent_mode:
+            return self._generate_mode_reply(session, user_message, request=request)
+        return self._generate_provider_reply(session, user_message, provider_id=provider_id, model_id=model_id)
+
+    def _generate_mode_reply(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        *,
+        request: SendChatMessageRequest,
+    ) -> dict[str, Any]:
+        from app.assist_core.mode_chat import ModeChatRequest, plan_mode_chat
+
+        result = plan_mode_chat(
+            ModeChatRequest(
+                content=user_message.content,
+                session_id=session.id,
+                dry_run=request.dry_run,
+                metadata={"source": "chat_session_store"},
+            )
+        )
+        payload = result.result
+        content = str(payload.get("response") or "Agent mode did not produce a response.").strip()
+        return {
+            "content": content,
+            "metadata": {
+                "generation_status": "completed",
+                "agent_mode": True,
+                "dry_run": request.dry_run,
+                "backend": result.backend,
+                "mode_result": payload,
+                "error": result.error,
+            },
+        }
+
+    def _generate_provider_reply(
         self,
         session: ChatSession,
         user_message: ChatMessage,
