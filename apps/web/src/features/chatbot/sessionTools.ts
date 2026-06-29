@@ -39,13 +39,12 @@ function addButton(target: Element | null, label: string, prepend = false): void
   button.type = 'button';
   button.className = BUTTON_CLASS;
   button.textContent = label;
-  button.title = 'Start a clean chat';
+  button.title = 'Start a new chat';
   styleButton(button);
   button.addEventListener('click', () => {
     button.setAttribute('disabled', 'true');
-    void startBlankChat().catch((error) => {
+    void startBlankChat().catch(() => {
       button.removeAttribute('disabled');
-      console.error('[Omnix] New chat failed', error);
     });
   });
   if (prepend) target.prepend(button);
@@ -65,7 +64,7 @@ function watchButtons(): void {
 
 export function installSessionTools(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  const w = window as AnyWindow;
+  const w = window as unknown as AnyWindow;
   if (w[INSTALLED_KEY]) return;
   w[INSTALLED_KEY] = true;
   patchSessionList();
