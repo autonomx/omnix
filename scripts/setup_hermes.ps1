@@ -26,7 +26,7 @@ Write-Host "Env file: $EnvPath"
 if (-not $SkipInstall) {
   Write-Host "Running the official Hermes Agent installer."
   $installer = Invoke-RestMethod "https://hermes-agent.nousresearch.com/install.ps1"
-  Invoke-Expression $installer
+  Invoke-Expression "& { $installer } -SkipSetup"
 } else {
   Write-Host "Skipping Hermes install because -SkipInstall was passed."
 }
