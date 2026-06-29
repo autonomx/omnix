@@ -24,6 +24,19 @@ export type HermesCandidatePreviewResponse = {
   preview_only?: boolean;
 };
 
+export type HermesApprovalRequest = {
+  candidate?: HermesCandidatePreview | null;
+  preview_only?: boolean;
+};
+
+export type HermesApprovalResponse = {
+  ok?: boolean;
+  approved?: boolean;
+  error?: string | null;
+  mode?: string;
+  request?: Record<string, unknown>;
+};
+
 export type HermesTestRequest = {
   content?: string;
   session_id?: string;
@@ -54,6 +67,10 @@ export function getHermesRecent(): Promise<HermesRecentResponse> {
 
 export function getHermesCandidateDemo(): Promise<HermesCandidatePreviewResponse> {
   return omnixApiClient.get<HermesCandidatePreviewResponse>('/api/hermes/candidate/demo');
+}
+
+export function approveHermesCandidate(request: HermesApprovalRequest): Promise<HermesApprovalResponse> {
+  return omnixApiClient.post<HermesApprovalRequest, HermesApprovalResponse>('/api/hermes/approve', request);
 }
 
 export function runHermesTest(request: HermesTestRequest = { content: 'house status', dry_run: true }): Promise<HermesTestResponse> {
