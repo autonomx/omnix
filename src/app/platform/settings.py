@@ -70,9 +70,13 @@ def _hermes_status_payload() -> dict[str, Any]:
 def _hermes_commands_payload() -> dict[str, str]:
     return {
         "configure": "hermes setup && hermes model",
+        "setup": "hermes setup",
+        "model": "hermes model",
+        "start_sidecar": "hermes serve",
         "enable_env": "HERMES_ENABLED=true",
         "disable_env": "HERMES_ENABLED=false",
         "base_url_env": "HERMES_BASE_URL=http://127.0.0.1:8642",
+        "restart_backend": "Restart Omnix backend after changing Hermes env values.",
     }
 
 
