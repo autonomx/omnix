@@ -9,6 +9,7 @@ def test_hermes_gateway_routes_are_registered() -> None:
 
     assert "/api/hermes/status" in paths
     assert "/api/hermes/test" in paths
+    assert "/api/hermes/recent" in paths
 
 
 def test_hermes_gateway_routes_are_hidden_from_openapi() -> None:
@@ -16,3 +17,4 @@ def test_hermes_gateway_routes_are_hidden_from_openapi() -> None:
 
     assert "/api/hermes/status" not in schema_paths
     assert "/api/hermes/test" not in schema_paths
+    assert "/api/hermes/recent" not in schema_paths
