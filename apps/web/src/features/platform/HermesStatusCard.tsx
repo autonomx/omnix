@@ -69,11 +69,11 @@ function objectSummary(value: Record<string, unknown> | undefined): string {
 
 function setupSteps(commands: Record<string, string>): string[] {
   return [
-    'Run hermes setup',
-    'Run hermes model',
-    'Start Hermes sidecar',
+    `Run ${valueText(commands.setup ?? 'hermes setup')}`,
+    `Run ${valueText(commands.model ?? 'hermes model')}`,
+    `Start sidecar: ${valueText(commands.start_sidecar ?? 'hermes serve')}`,
     `Set ${valueText(commands.enable_env)}`,
-    'Restart Omnix backend',
+    valueText(commands.restart_backend ?? 'Restart Omnix backend'),
   ];
 }
 
@@ -88,7 +88,9 @@ function statusView(status: HermesStatus, commands: Record<string, string>): Sta
       rows: [
         ['Base URL', valueText(status.base_url)],
         ['Status', 'Installed, disabled in Omnix'],
-        ['Configure later', valueText(commands.configure)],
+        ['Setup', valueText(commands.setup ?? commands.configure)],
+        ['Model', valueText(commands.model)],
+        ['Start sidecar', valueText(commands.start_sidecar)],
         ['Enable env', valueText(commands.enable_env)],
       ],
       nextSteps: setupSteps(commands),
@@ -116,6 +118,7 @@ function statusView(status: HermesStatus, commands: Record<string, string>): Sta
       ['Base URL', valueText(status.base_url)],
       ['Status', 'Enabled in Omnix, sidecar unreachable'],
       ['Error', valueText(status.error)],
+      ['Start sidecar', valueText(commands.start_sidecar)],
       ['Base URL env', valueText(commands.base_url_env)],
     ],
     nextSteps: [],
