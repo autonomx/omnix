@@ -23,6 +23,16 @@ async function startBlankChat(): Promise<void> {
   window.location.assign('/chatbot');
 }
 
+function styleButton(button: HTMLButtonElement): void {
+  button.style.border = '1px solid rgba(160, 132, 255, 0.55)';
+  button.style.borderRadius = '999px';
+  button.style.background = 'rgba(105, 72, 210, 0.24)';
+  button.style.color = 'inherit';
+  button.style.cursor = 'pointer';
+  button.style.fontWeight = '700';
+  button.style.padding = '0.42rem 0.7rem';
+}
+
 function addButton(target: Element | null, label: string, prepend = false): void {
   if (!target || target.querySelector(`.${BUTTON_CLASS}`)) return;
   const button = document.createElement('button');
@@ -30,6 +40,7 @@ function addButton(target: Element | null, label: string, prepend = false): void
   button.className = BUTTON_CLASS;
   button.textContent = label;
   button.title = 'Start a clean chat';
+  styleButton(button);
   button.addEventListener('click', () => {
     button.setAttribute('disabled', 'true');
     void startBlankChat().catch((error) => {
@@ -53,6 +64,7 @@ function watchButtons(): void {
 }
 
 export function installSessionTools(): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
   const w = window as AnyWindow;
   if (w[INSTALLED_KEY]) return;
   w[INSTALLED_KEY] = true;
