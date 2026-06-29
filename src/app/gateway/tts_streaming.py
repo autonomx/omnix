@@ -10,10 +10,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.assist_core.hermes_api import router as hermes_router
 from app.shared import get_tts_provider, remove_emojis
 
 _ROUTE_SENTINEL = "_omnix_tts_sse_registered"
 _HOOK_SENTINEL = "_omnix_tts_sse_hook_installed"
+_HERMES_ROUTE_SENTINEL = "_omnix_hermes_routes_registered"
 DEFAULT_SAMPLE_RATE = 24_000
 
 
@@ -27,6 +29,14 @@ class TtsStreamRequest(BaseModel):
     temperature: float = Field(default=0.9, ge=0.0, le=2.0)
     top_k: int = Field(default=50, ge=0)
     repetition_penalty: float = Field(default=1.05, ge=0.0)
+
+
+def register_hermes_routes(gateway: FastAPI) -> None:
+    """Register Hermes gateway routes once."""
+    if getattr(gateway.state, _HERMES_ROUTE_SENTINEL, False):
+        return
+    gateway.include_router(hermes_router)
+    setattr(gateway.state, _HERMES_ROUTE_SENTINEL, True)
 
 
 def register_tts_stream_routes(gateway: FastAPI) -> None:
@@ -69,6 +79,7 @@ def install_tts_stream_hook() -> None:
     def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
         original_init(self, *args, **kwargs)
         if kwargs.get("title") == "Omnix Web Gateway" or (args and args[0] == "Omnix Web Gateway"):
+            register_hermes_routes(self)
             register_tts_stream_routes(self)
 
     FastAPI.__init__ = patched_init  # type: ignore[method-assign]

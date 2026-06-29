@@ -22,12 +22,12 @@ class HermesTestRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-@router.get("/status")
+@router.get("/status", include_in_schema=False)
 def hermes_status() -> dict[str, Any]:
     return hermes_diagnostics_status_payload()
 
 
-@router.post("/test")
+@router.post("/test", include_in_schema=False)
 def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
     payload = request or HermesTestRequest()
     return hermes_diagnostics_test_payload(
