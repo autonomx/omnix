@@ -56,6 +56,17 @@ def hermes_candidate_demo(note: str = "ready") -> dict[str, Any]:
     return hermes_demo_candidate(note=note)
 
 
+@router.post("/approve", include_in_schema=False)
+def hermes_approve(request: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "error": "approvals_disabled",
+        "approved": False,
+        "mode": "blocked",
+        "request": request or {},
+    }
+
+
 @router.post("/lookup", include_in_schema=False)
 def hermes_lookup(request: HermesLookupRequest) -> dict[str, Any]:
     from .hermes_readouts import readout_payload
