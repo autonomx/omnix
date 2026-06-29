@@ -140,13 +140,7 @@ function dryRunText(result: HermesDryRunResponse): string {
 }
 
 async function fallbackDryRun(): Promise<string> {
-  const session = await omnixApiClient.createChatSession({ title: 'Hermes dry run' });
-  const result = await omnixApiClient.sendChatMessage(session.id, {
-    content: 'house status',
-    agent_mode: true,
-    dry_run: true,
-  } as never);
-  return result.session.messages?.filter((message) => message.role === 'assistant').at(-1)?.content ?? 'Dry run completed.';
+  return 'Dry-run test failed. Check that the Hermes API module is mounted by the active backend.';
 }
 
 function Details({ rows }: { rows: Array<[string, string]> }) {
