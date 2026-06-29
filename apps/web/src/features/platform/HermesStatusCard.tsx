@@ -139,16 +139,6 @@ function dryRunText(result: HermesDryRunResponse): string {
   return `${prefix}${backend} completed.${outcome}`;
 }
 
-async function fallbackDryRun(): Promise<string> {
-  const session = await omnixApiClient.createChatSession({ title: 'Hermes dry run' });
-  const result = await omnixApiClient.sendChatMessage(session.id, {
-    content: 'house status',
-    agent_mode: true,
-    dry_run: true,
-  } as never);
-  return result.session.messages?.filter((message) => message.role === 'assistant').at(-1)?.content ?? 'Dry run completed.';
-}
-
 function Details({ rows }: { rows: Array<[string, string]> }) {
   return (
     <dl className="platform-details">
@@ -186,15 +176,11 @@ export function HermesStatusCard() {
   });
   const dryRun = useMutation({
     mutationFn: async () => {
-      try {
-        const result = await omnixApiClient.post<Record<string, unknown>, HermesDryRunResponse>('/api/hermes/test', {
-          content: 'house status',
-          dry_run: true,
-        });
-        return dryRunText(result);
-      } catch {
-        return fallbackDryRun();
-      }
+      const result = await omnixApiClient.post<Record<string, unknown>, HermesDryRunResponse>('/api/hermes/test', {
+        content: 'house status',
+        dry_run: true,
+      });
+      return dryRunText(result);
     },
   });
 
