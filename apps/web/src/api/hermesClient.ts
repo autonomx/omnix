@@ -2,6 +2,13 @@ import { omnixApiClient } from './client';
 
 export type HermesStatusResponse = Record<string, unknown>;
 
+export type HermesRecentResponse = {
+  ok?: boolean;
+  items?: Array<Record<string, unknown>>;
+  count?: number;
+  source?: string;
+};
+
 export type HermesTestRequest = {
   content?: string;
   session_id?: string;
@@ -24,6 +31,10 @@ export type HermesTestResponse = {
 
 export function getHermesStatus(): Promise<HermesStatusResponse> {
   return omnixApiClient.get<HermesStatusResponse>('/api/hermes/status');
+}
+
+export function getHermesRecent(): Promise<HermesRecentResponse> {
+  return omnixApiClient.get<HermesRecentResponse>('/api/hermes/recent');
 }
 
 export function runHermesTest(request: HermesTestRequest = { content: 'house status', dry_run: true }): Promise<HermesTestResponse> {
