@@ -38,3 +38,8 @@ def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
             metadata={**payload.metadata, "api_dry_run_only": True},
         )
     )
+
+
+@router.get("/recent", include_in_schema=False)
+def hermes_recent() -> dict[str, Any]:
+    return {"ok": True, "items": [], "count": 0, "source": "not_configured"}
