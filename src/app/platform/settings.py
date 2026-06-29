@@ -15,6 +15,8 @@ class SettingsPayload(BaseModel):
     image_enabled: bool
     rpg_visual_enabled: bool
     worker_urls: dict[str, str] = Field(default_factory=dict)
+    hermes_status: dict[str, Any] = Field(default_factory=dict)
+    hermes_commands: dict[str, str] = Field(default_factory=dict)
     settings: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -56,6 +58,24 @@ def _masked_api_key(api_key: str) -> str:
     return f"***{api_key[-4:]}" if len(api_key) > 4 else "****"
 
 
+def _hermes_status_payload() -> dict[str, Any]:
+    try:
+        from app.assist_core.hermes_status import hermes_status_payload
+
+        return hermes_status_payload()
+    except Exception as exc:
+        return {"enabled": False, "reachable": False, "base_url": "http://127.0.0.1:8642", "error": str(exc)}
+
+
+def _hermes_commands_payload() -> dict[str, str]:
+    return {
+        "configure": "hermes setup && hermes model",
+        "enable_env": "HERMES_ENABLED=true",
+        "disable_env": "HERMES_ENABLED=false",
+        "base_url_env": "HERMES_BASE_URL=http://127.0.0.1:8642",
+    }
+
+
 def get_legacy_settings_payload() -> dict[str, Any]:
     from app.shared import load_secrets, load_settings
 
@@ -92,6 +112,8 @@ def get_settings_payload() -> SettingsPayload:
             "stt": str(settings.get("stt_worker_url") or ""),
             "image": str(settings.get("image_worker_url") or ""),
         },
+        hermes_status=_hermes_status_payload(),
+        hermes_commands=_hermes_commands_payload(),
         settings=get_legacy_settings_payload(),
     )
 
