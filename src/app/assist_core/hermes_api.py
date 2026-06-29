@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from .hermes_candidate import hermes_demo_candidate
 from .hermes_diagnostics import (
     HermesDiagnosticsTestRequest,
     hermes_diagnostics_status_payload,
@@ -48,6 +49,11 @@ def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
 @router.get("/recent", include_in_schema=False)
 def hermes_recent() -> dict[str, Any]:
     return {"ok": True, "items": [], "count": 0, "source": "not_configured"}
+
+
+@router.get("/candidate/demo", include_in_schema=False)
+def hermes_candidate_demo(note: str = "ready") -> dict[str, Any]:
+    return hermes_demo_candidate(note=note)
 
 
 @router.post("/lookup", include_in_schema=False)
