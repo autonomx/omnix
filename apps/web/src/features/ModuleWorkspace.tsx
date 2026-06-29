@@ -4,6 +4,7 @@ import { ChatbotWorkspace } from './chatbot/ChatbotWorkspace';
 import { ImageGenerationWorkspace } from './image-generation/ImageGenerationWorkspace';
 import { PodcastWorkspace } from './podcast/PodcastWorkspace';
 import { isPlatformModule, PlatformModuleWorkspace } from './platform/PlatformModuleWorkspace';
+import { SettingsWorkspace } from './platform/SettingsWorkspace';
 import { RpgWorkspace } from './rpg/RpgWorkspace';
 import { SttWorkspace } from './stt/SttWorkspace';
 import { StorytellerWorkspace } from './storyteller/StorytellerWorkspace';
@@ -59,6 +60,10 @@ export function ModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
   if (module.id === 'storyteller') {
     return <StorytellerWorkspace module={module} />;
+  }
+
+  if (module.id === 'settings') {
+    return <SettingsWorkspace module={module} />;
   }
 
   if (isPlatformModule(module.id)) {
