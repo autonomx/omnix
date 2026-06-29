@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 from .core import AssistantResult, ToolResult
+from .hermes_readouts import READOUT_NAMES, readout_payload
 from .house_mock import apply_house_mock
 from .mode_review import hold_for_review, review_call
 
 
 def apply_mode_result(result: AssistantResult, *, dry_run: bool) -> AssistantResult:
-    if result.domain != "house" or not result.tool_calls:
+    if not result.tool_calls:
         return result
     rows: list[ToolResult] = []
     for call in result.tool_calls:
+        if call.name in READOUT_NAMES:
+            row = readout_payload(call.name, call.args)
+            rows.append(ToolResult(name=call.name, ok=bool(row.get("ok")), output=row, executed=False, error=str(row.get("error")) if row.get("error") else None))
+            continue
+        if result.domain != "house":
+            continue
         decision = review_call(call)
         if decision.requires_confirmation and not dry_run:
             return hold_for_review(result, call, dry_run=dry_run)
@@ -17,6 +24,8 @@ def apply_mode_result(result: AssistantResult, *, dry_run: bool) -> AssistantRes
             rows.append(apply_house_mock(call, dry_run=dry_run))
         except Exception as exc:
             rows.append(ToolResult(name=call.name, ok=False, error=str(exc), executed=False))
+    if not rows:
+        return result
     result.tool_results = rows
     result.success = all(item.ok for item in rows)
     if result.success and rows and dry_run:
