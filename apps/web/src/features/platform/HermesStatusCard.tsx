@@ -55,7 +55,7 @@ export function HermesStatusCard() {
         agent_mode: true,
         dry_run: true,
       } as never);
-      return result.session.messages.filter((message) => message.role === 'assistant').at(-1)?.content ?? 'Dry run completed.';
+      return result.session.messages?.filter((message) => message.role === 'assistant').at(-1)?.content ?? 'Dry run completed.';
     },
   });
 
