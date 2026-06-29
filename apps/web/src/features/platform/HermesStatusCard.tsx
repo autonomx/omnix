@@ -126,13 +126,14 @@ function dryRunText(result: HermesDryRunResponse): string {
   const response = result.result?.result?.response;
   const prefix = result.dry_run ? 'Dry run' : 'Test';
   const backend = result.result?.backend ? ` via ${result.result.backend}` : '';
+  const outcome = result.ok === undefined ? '' : ` Trace: ok=${String(result.ok)}, dry_run=${String(Boolean(result.dry_run))}.`;
   if (response) {
-    return `${prefix}${backend}: ${response}`;
+    return `${prefix}${backend}: ${response}${outcome}`;
   }
   if (result.error) {
-    return `${prefix}${backend}: ${result.error}`;
+    return `${prefix}${backend}: ${result.error}${outcome}`;
   }
-  return `${prefix}${backend} completed.`;
+  return `${prefix}${backend} completed.${outcome}`;
 }
 
 async function fallbackDryRun(): Promise<string> {
