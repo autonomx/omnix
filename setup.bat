@@ -36,6 +36,7 @@ echo This will install all dependencies for:
 echo   - Main app + FLUX image generation in %RPG_FLUX_ENV%
 echo   - Vendored Qwen3-TTS in %RPG_TTS_ENV%
 echo   - Parakeet STT in %RPG_STT_ENV%
+echo   - Hermes Agent sidecar setup
 echo.
 echo Setup will start automatically in 3 seconds...
 ping 127.0.0.1 -n 3 -w 1000 >nul
@@ -135,7 +136,7 @@ if not exist "src\app\providers\vendor\qwen_tts\__init__.py" (
 echo [1/9][FLUX] Upgrading pip/setuptools/wheel...
 "%RPG_FLUX_PYTHON%" -m pip install --upgrade pip
 
-REM Pin wheel to avoid packaging>=24 requirement (deepfilternet requires <24)
+REM Pin wheel to avoid packaging>=24 requirement (deepfilternet requires ^<24)
 "%RPG_FLUX_PYTHON%" -m pip install wheel==0.43.0
 if errorlevel 1 (
     echo ERROR: Failed to pin wheel
@@ -406,6 +407,20 @@ if errorlevel 1 (
 
 echo.
 echo =============================================
+echo Installing Hermes Agent sidecar
+echo =============================================
+if /I "%OMNIX_SKIP_HERMES_SETUP%"=="1" (
+    echo Skipping Hermes setup because OMNIX_SKIP_HERMES_SETUP=1.
+) else if exist "%OMNIX_REPO_ROOT%\scripts\setup_hermes.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%OMNIX_REPO_ROOT%\scripts\setup_hermes.ps1"
+    if errorlevel 1 goto :error
+) else (
+    echo ERROR: scripts\setup_hermes.ps1 not found
+    goto :error
+)
+
+echo.
+echo =============================================
 echo Setup Complete!
 echo =============================================
 echo.
@@ -413,6 +428,7 @@ echo Environments:
 echo   - %RPG_FLUX_ENV% : main app + FLUX
 echo   - %RPG_TTS_ENV%  : vendored Qwen3-TTS
 echo   - %RPG_STT_ENV%  : Parakeet STT only
+echo   - Hermes Agent sidecar : installed/configured via scripts\setup_hermes.ps1
 echo.
 echo Python interpreters:
 echo   - %RPG_FLUX_PYTHON%
@@ -426,6 +442,7 @@ echo   - start_all.bat must use exact interpreter paths
 echo.
 pause
 endlocal
+exit /b 0
 
 :error
 echo.
