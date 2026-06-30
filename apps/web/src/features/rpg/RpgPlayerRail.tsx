@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query';
+import { getHermesRpgSuggestions } from '../../api/hermesClient';
 import type {
   RpgGearPreview,
   RpgHeroSummaryPreview,
@@ -9,6 +11,7 @@ import type {
 import './RpgVisualAssets.css';
 
 const HERO_ART_SRC = '/rpg/hero-alyndra.svg';
+const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
 
 interface RpgPlayerRailProps {
   activeQuests: RpgQuestPreview[];
@@ -21,9 +24,29 @@ interface RpgPlayerRailProps {
   survival: RpgSurvivalPreview;
 }
 
+function readStoredRpgSessionId(): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  try {
+    return window.localStorage.getItem(RPG_SELECTED_SESSION_STORAGE_KEY)?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats, heroSummary, onSelectCommand, partyMembers, survival }: RpgPlayerRailProps) {
   const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
   const heroAvatarClassName = heroSummary.source === 'preview' ? 'rpg-avatar rpg-hero-avatar rpg-hero-avatar-art' : 'rpg-avatar rpg-hero-avatar';
+  const selectedSessionId = readStoredRpgSessionId();
+  const hermesSuggestionsQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'hermes-suggestions', selectedSessionId],
+    queryFn: () => getHermesRpgSuggestions({ session_id: selectedSessionId }),
+    enabled: Boolean(selectedSessionId),
+    retry: false,
+  });
+  const hermesSuggestions = hermesSuggestionsQuery.data?.suggestions ?? [];
 
   return (
     <aside className={railClassName} aria-label="Player, party, and quests">
@@ -67,6 +90,41 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
             <strong>{heroSummary.renown}</strong>
           </div>
         </div>
+      </section>
+
+      <section className="rpg-card" aria-label="Hermes suggested actions">
+        <div className="rpg-section-heading">
+          <p className="eyebrow">Hermes suggestions</p>
+          <span>{hermesSuggestionsQuery.isLoading ? 'loading' : `${hermesSuggestions.length}`}</span>
+        </div>
+        {!selectedSessionId ? <p className="rpg-empty-state">Select or create a live RPG session to get Hermes suggestions.</p> : null}
+        {hermesSuggestionsQuery.isError ? <p className="rpg-empty-state">Hermes suggestions unavailable.</p> : null}
+        {selectedSessionId && !hermesSuggestionsQuery.isLoading && !hermesSuggestions.length ? (
+          <p className="rpg-empty-state">No Hermes suggestions for this session yet.</p>
+        ) : null}
+        <div className="rpg-list-stack">
+          {hermesSuggestions.map((suggestion) => {
+            const command = suggestion.command?.trim() ?? '';
+            return (
+              <article className="rpg-list-row" key={suggestion.id ?? suggestion.label ?? command}>
+                <span className="rpg-icon-tile" aria-hidden="true">✦</span>
+                <div>
+                  <strong>{suggestion.label ?? command}</strong>
+                  <span>{suggestion.reason ?? suggestion.kind ?? 'Prepared by Hermes as a player command.'}</span>
+                </div>
+                <button
+                  className="rpg-secondary-button"
+                  disabled={!command || !onSelectCommand}
+                  onClick={() => command && onSelectCommand?.(command)}
+                  type="button"
+                >
+                  Use
+                </button>
+              </article>
+            );
+          })}
+        </div>
+        <small>Hermes only fills the command box; the RPG runtime still processes the turn after you submit.</small>
       </section>
 
       <section className="rpg-card rpg-survival-card" aria-label="Survival status">
