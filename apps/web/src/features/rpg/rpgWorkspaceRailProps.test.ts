@@ -31,6 +31,32 @@ describe('createRpgWorkspaceRailProps', () => {
     expect(props.hermesTurnReadoutState).toBe('idle');
   });
 
+  it('maps pending query flags into loading rail states', () => {
+    const props = createRpgWorkspaceRailProps({
+      enabled: true,
+      suggestionsPending: true,
+      modePending: true,
+      readoutPending: true,
+    });
+
+    expect(props.hermesSuggestionState).toBe('loading');
+    expect(props.hermesRouteDecisionState).toBe('loading');
+    expect(props.hermesTurnReadoutState).toBe('loading');
+  });
+
+  it('maps failed query flags into error rail states', () => {
+    const props = createRpgWorkspaceRailProps({
+      enabled: true,
+      suggestionsFailed: true,
+      modeFailed: true,
+      readoutFailed: true,
+    });
+
+    expect(props.hermesSuggestionState).toBe('error');
+    expect(props.hermesRouteDecisionState).toBe('error');
+    expect(props.hermesTurnReadoutState).toBe('error');
+  });
+
   it('normalizes query failure flags for workspace callers', () => {
     expect(failedRpgWorkspaceRailPayload({ ok: true }, { isError: false })).toBe(false);
     expect(failedRpgWorkspaceRailPayload({ ok: false }, { isError: false })).toBe(true);
