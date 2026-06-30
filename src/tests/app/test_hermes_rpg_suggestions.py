@@ -21,6 +21,14 @@ def test_hermes_rpg_suggestions_are_safe_player_inputs() -> None:
     assert payload["ok"] is True
     assert payload["read_only"] is True
     assert payload["source"] == "rpg_context"
+    assert payload["mode"] == "rpg"
+    assert payload["adapter"] == {
+        "kind": "suggest",
+        "items": [],
+        "review_required": False,
+        "owner": "rpg_sim",
+    }
+    assert payload["policy"]["hermes_capabilities"] == ["observe", "suggest", "critique"]
     suggestions = payload["suggestions"]
     assert suggestions
     ids = {item["id"] for item in suggestions}

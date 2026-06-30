@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from .hermes_adapter_contract import hermes_adapter_preview_payload
 from .hermes_rpg_context import hermes_rpg_context_payload
+from .omnix_mode_policy import omnix_mode_policy
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -135,10 +137,21 @@ def hermes_rpg_suggestions_from_context(context: dict[str, Any]) -> dict[str, An
             reason="Player progression fields are visible in context.",
         )
 
+    adapter = hermes_adapter_preview_payload(
+        {
+            "mode": "rpg",
+            "intent": "suggest_next_action",
+            "context": {"location": location, "active_npc": active_npc, "state_flags": flags},
+        }
+    )
+    policy = omnix_mode_policy("rpg")
     return {
         "ok": True,
         "read_only": True,
         "source": "rpg_context",
+        "mode": "rpg",
+        "adapter": adapter.get("response_contract"),
+        "policy": policy,
         "suggestions": suggestions[:6],
         "count": min(len(suggestions), 6),
     }
