@@ -32,4 +32,24 @@ describe('RpgPlayerRail status cards', () => {
     expect(screen.getByRole('region', { name: 'Hermes route decision' })).toHaveTextContent('unavailable');
     expect(screen.getByRole('region', { name: 'Hermes turn readout' })).toHaveTextContent('loading');
   });
+
+  it('shows freshness labels for suggestions and readouts', () => {
+    renderWithTheme(
+      <RpgPlayerRail
+        activeQuests={activeQuests}
+        equippedGear={equippedGear}
+        heroStats={previewHeroStats}
+        heroSummary={previewHeroSummary}
+        hermesSuggestionFreshnessLabel="current session"
+        hermesSuggestionState="empty"
+        hermesTurnReadoutFreshnessLabel="latest turn"
+        hermesTurnReadoutState="empty"
+        partyMembers={partyMembers}
+        survival={previewSurvival}
+      />
+    );
+
+    expect(screen.getByRole('region', { name: 'Hermes suggested actions' })).toHaveTextContent('current session');
+    expect(screen.getByRole('region', { name: 'Hermes turn readout' })).toHaveTextContent('latest turn');
+  });
 });
