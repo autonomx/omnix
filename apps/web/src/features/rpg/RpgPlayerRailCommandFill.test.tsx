@@ -36,4 +36,29 @@ describe('RpgPlayerRail command fill', () => {
     expect(onSelectCommand).toHaveBeenCalledTimes(1);
     expect(onSelectCommand).toHaveBeenCalledWith('ask at the tavern');
   });
+
+  it('does not submit a surrounding form when a prepared action is used', () => {
+    const onSelectCommand = vi.fn();
+    const onSubmit = vi.fn((event) => event.preventDefault());
+    renderWithTheme(
+      <form onSubmit={onSubmit}>
+        <RpgPlayerRail
+          activeQuests={activeQuests}
+          equippedGear={equippedGear}
+          heroStats={previewHeroStats}
+          heroSummary={previewHeroSummary}
+          hermesSuggestionState="ready"
+          hermesSuggestions={[{ id: 'one', label: 'Look', command: 'look around' }]}
+          onSelectCommand={onSelectCommand}
+          partyMembers={partyMembers}
+          survival={previewSurvival}
+        />
+      </form>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use' }));
+
+    expect(onSelectCommand).toHaveBeenCalledWith('look around');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });
