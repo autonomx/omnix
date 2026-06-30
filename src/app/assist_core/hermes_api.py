@@ -16,6 +16,7 @@ from .hermes_rpg_context import hermes_rpg_context_payload
 from .hermes_rpg_suggestions import hermes_rpg_suggestions_payload
 from .hermes_rpg_turn_readout import hermes_rpg_turn_readout_payload
 from .omnix_mode_policy import omnix_mode_policy_payload
+from .omnix_route_decision import omnix_route_decision_payload
 
 router = APIRouter(prefix="/api/hermes", tags=["hermes"])
 
@@ -87,6 +88,11 @@ def hermes_adapter_preview(request: HermesAdapterPreviewRequest) -> dict[str, An
 @router.get("/capabilities", include_in_schema=False)
 def hermes_capabilities(mode: str | None = None) -> dict[str, Any]:
     return omnix_mode_policy_payload(mode)
+
+
+@router.get("/route-decision", include_in_schema=False)
+def hermes_route_decision(mode: str | None = None) -> dict[str, Any]:
+    return omnix_route_decision_payload(mode)
 
 
 @router.get("/candidate/demo", include_in_schema=False)
