@@ -44,9 +44,11 @@ interface RpgPlayerRailProps {
   heroSummary: RpgHeroSummaryPreview;
   hermesRouteDecision?: RpgRouteDecisionPreview;
   hermesRouteDecisionState?: RpgRailPanelState;
+  hermesSuggestionFreshnessLabel?: string;
   hermesSuggestionState?: RpgRailPanelState;
   hermesSuggestions?: HermesRpgSuggestion[];
   hermesTurnReadout?: RpgTurnReadoutPreview;
+  hermesTurnReadoutFreshnessLabel?: string;
   hermesTurnReadoutState?: RpgRailPanelState;
   onSelectCommand?: (command: string) => void;
   partyMembers: RpgPartyMemberPreview[];
@@ -57,6 +59,10 @@ function panelStatusLabel(state: RpgRailPanelState, readyLabel = 'ready') {
   return state === 'ready' ? readyLabel : state;
 }
 
+function freshnessPrefix(label: string | undefined) {
+  return label ? `${label} • ` : '';
+}
+
 export function RpgPlayerRail({
   activeQuests,
   className,
@@ -65,9 +71,11 @@ export function RpgPlayerRail({
   heroSummary,
   hermesRouteDecision = DEFAULT_RPG_ROUTE_DECISION,
   hermesRouteDecisionState = 'ready',
+  hermesSuggestionFreshnessLabel,
   hermesSuggestionState = 'idle',
   hermesSuggestions = [],
   hermesTurnReadout,
+  hermesTurnReadoutFreshnessLabel,
   hermesTurnReadoutState,
   onSelectCommand,
   partyMembers,
@@ -179,7 +187,7 @@ export function RpgPlayerRail({
             );
           })}
         </div>
-        <small>Hermes only fills the command box; the RPG runtime still processes the turn after you submit.</small>
+        <small>{freshnessPrefix(hermesSuggestionFreshnessLabel)}Hermes only fills the command box; the RPG runtime still processes the turn after you submit.</small>
       </section>
 
       <section className="rpg-card" aria-label="Hermes turn readout">
@@ -208,7 +216,7 @@ export function RpgPlayerRail({
             <strong>{hermesTurnReadout?.systems?.length ?? 0}</strong>
           </div>
         </div>
-        <small>{hermesTurnReadout?.systems?.join(', ') ?? 'Turn readout data is supplied by the Hermes RPG turn readout route.'}</small>
+        <small>{freshnessPrefix(hermesTurnReadoutFreshnessLabel)}{hermesTurnReadout?.systems?.join(', ') ?? 'Turn readout data is supplied by the Hermes RPG turn readout route.'}</small>
       </section>
 
       <section className="rpg-card rpg-survival-card" aria-label="Survival status">
