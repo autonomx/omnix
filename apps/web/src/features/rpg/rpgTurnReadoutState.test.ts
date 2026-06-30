@@ -17,6 +17,21 @@ describe('createRpgTurnReadoutPreview', () => {
     });
   });
 
+  it('preserves empty but successful readout details', () => {
+    expect(createRpgTurnReadoutPreview({
+      ok: true,
+      turn: { category: 'general' },
+      systems: [],
+      effect_count: 0,
+      grounding_status: 'not_reported',
+    })).toEqual({
+      category: 'general',
+      systems: [],
+      effectCount: 0,
+      groundingStatus: 'not_reported',
+    });
+  });
+
   it('hides failed or missing readouts', () => {
     expect(createRpgTurnReadoutPreview(undefined)).toBeUndefined();
     expect(createRpgTurnReadoutPreview({ ok: false, error: 'missing_turn' })).toBeUndefined();
