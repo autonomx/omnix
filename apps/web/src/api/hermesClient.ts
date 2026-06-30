@@ -37,6 +37,18 @@ export type HermesApprovalResponse = {
   request?: Record<string, unknown>;
 };
 
+export type HermesRouteDecisionResponse = {
+  ok?: boolean;
+  source?: string;
+  mode?: string;
+  role?: string;
+  owner?: string;
+  review_required?: boolean;
+  capabilities?: string[];
+  boundary?: string;
+  error?: string | null;
+};
+
 export type HermesRpgSuggestion = {
   id?: string;
   label?: string;
@@ -117,6 +129,10 @@ export function getHermesRecent(): Promise<HermesRecentResponse> {
 
 export function getHermesCandidateDemo(): Promise<HermesCandidatePreviewResponse> {
   return omnixApiClient.get<HermesCandidatePreviewResponse>('/api/hermes/candidate/demo');
+}
+
+export function getHermesRouteDecision(mode = 'rpg'): Promise<HermesRouteDecisionResponse> {
+  return omnixApiClient.get<HermesRouteDecisionResponse>(`/api/hermes/route-decision?mode=${encodeURIComponent(mode)}`);
 }
 
 export function approveHermesCandidate(request: HermesApprovalRequest): Promise<HermesApprovalResponse> {
