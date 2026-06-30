@@ -7,6 +7,10 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _safe_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _safe_str(value: Any) -> str:
     if value is None:
         return ""
@@ -23,12 +27,41 @@ def _first_text(*values: Any) -> str:
     return ""
 
 
+def _first_dict(*values: Any) -> dict[str, Any]:
+    for value in values:
+        candidate = _safe_dict(value)
+        if candidate:
+            return candidate
+    return {}
+
+
 def _entry_count(value: Any) -> int:
     if isinstance(value, dict):
         return len(value)
     if isinstance(value, list):
         return len(value)
     return 0
+
+
+def _session_turns(session: dict[str, Any]) -> list[dict[str, Any]]:
+    session_data = _safe_dict(session)
+    state = _first_dict(session_data.get("state"), session_data.get("game"), session_data.get("simulation_state"))
+    runtime_state = _safe_dict(session_data.get("runtime_state"))
+    turns = (
+        state.get("recent_turns")
+        or state.get("turns")
+        or runtime_state.get("recent_turns")
+        or runtime_state.get("turns")
+        or session_data.get("recent_turns")
+        or session_data.get("turns")
+        or []
+    )
+    return [_safe_dict(item) for item in _safe_list(turns) if _safe_dict(item)]
+
+
+def _latest_turn_from_session(session: dict[str, Any]) -> dict[str, Any]:
+    turns = _session_turns(session)
+    return turns[-1] if turns else {}
 
 
 def _category_for(command: str, turn: dict[str, Any]) -> str:
@@ -76,7 +109,15 @@ def _systems_for(category: str, turn: dict[str, Any], *, entry_count: int, has_g
 
 def hermes_rpg_turn_readout_payload(request: dict[str, Any]) -> dict[str, Any]:
     data = _safe_dict(request)
+    session_id = _safe_str(data.get("session_id")).strip()
     turn = _safe_dict(data.get("turn") or data.get("latest_turn"))
+    if not turn and session_id:
+        from app.rpg.session.service import load_session
+
+        session = load_session(session_id)
+        if not session:
+            return {"ok": False, "error": "session_not_found", "session_id": session_id, "read_only": True, "source": "rpg_turn"}
+        turn = _latest_turn_from_session(session)
     if not turn:
         return {"ok": False, "error": "missing_turn", "read_only": True, "source": "rpg_turn"}
 
@@ -91,7 +132,7 @@ def hermes_rpg_turn_readout_payload(request: dict[str, Any]) -> dict[str, Any]:
         "ok": True,
         "read_only": True,
         "source": "rpg_turn",
-        "session_id": _safe_str(data.get("session_id")).strip() or None,
+        "session_id": session_id or None,
         "turn": {
             "turn_id": turn.get("turn") or turn.get("turn_id") or turn.get("index") or None,
             "command": command,
