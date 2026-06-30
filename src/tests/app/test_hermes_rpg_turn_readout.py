@@ -33,6 +33,32 @@ def test_hermes_rpg_turn_readout_reports_systems_and_effects() -> None:
     assert payload["grounding_status"] == "checked"
 
 
+def test_hermes_rpg_turn_readout_can_read_latest_session_turn(monkeypatch) -> None:
+    from app.rpg.session import service
+
+    def fake_load_session(session_id: str) -> dict[str, object]:
+        assert session_id == "session-2"
+        return {
+            "state": {
+                "turns": [
+                    {"turn": 1, "command": "check inventory"},
+                    {"turn": 2, "command": "travel down the road", "effects": ["moved"]},
+                ]
+            }
+        }
+
+    monkeypatch.setattr(service, "load_session", fake_load_session)
+
+    payload = hermes_rpg_turn_readout_payload({"session_id": "session-2"})
+
+    assert payload["ok"] is True
+    assert payload["session_id"] == "session-2"
+    assert payload["turn"]["turn_id"] == 2
+    assert payload["turn"]["category"] == "travel"
+    assert "travel_gate" in payload["systems"]
+    assert payload["effect_count"] == 1
+
+
 def test_hermes_rpg_turn_readout_requires_turn() -> None:
     payload = hermes_rpg_turn_readout_payload({})
 
