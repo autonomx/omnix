@@ -63,6 +63,30 @@ export type HermesRpgSuggestionsResponse = {
   error?: string | null;
 };
 
+export type HermesRpgTurnReadoutRequest = {
+  session_id?: string;
+  turn?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+};
+
+export type HermesRpgTurnReadoutResponse = {
+  ok?: boolean;
+  read_only?: boolean;
+  source?: string;
+  session_id?: string | null;
+  turn?: {
+    turn_id?: string | number | null;
+    command?: string;
+    category?: string;
+    narration_present?: boolean;
+  };
+  systems?: string[];
+  effect_count?: number;
+  grounding_status?: string;
+  notes?: string[];
+  error?: string | null;
+};
+
 export type HermesTestRequest = {
   content?: string;
   session_id?: string;
@@ -101,6 +125,10 @@ export function approveHermesCandidate(request: HermesApprovalRequest): Promise<
 
 export function getHermesRpgSuggestions(request: HermesRpgSuggestionsRequest): Promise<HermesRpgSuggestionsResponse> {
   return omnixApiClient.post<HermesRpgSuggestionsRequest, HermesRpgSuggestionsResponse>('/api/hermes/rpg/suggestions', request);
+}
+
+export function readHermesRpgTurn(request: HermesRpgTurnReadoutRequest): Promise<HermesRpgTurnReadoutResponse> {
+  return omnixApiClient.post<HermesRpgTurnReadoutRequest, HermesRpgTurnReadoutResponse>('/api/hermes/rpg/turn-readout', request);
 }
 
 export function runHermesTest(request: HermesTestRequest = { content: 'house status', dry_run: true }): Promise<HermesTestResponse> {
