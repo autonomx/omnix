@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from .hermes_adapter_contract import hermes_adapter_preview_payload
 from .hermes_candidate import hermes_demo_candidate
 from .hermes_diagnostics import (
     HermesDiagnosticsTestRequest,
@@ -29,6 +30,13 @@ class HermesTestRequest(BaseModel):
 class HermesLookupRequest(BaseModel):
     name: str
     args: dict[str, Any] = Field(default_factory=dict)
+
+
+class HermesAdapterPreviewRequest(BaseModel):
+    mode: str = ""
+    intent: str = "preview"
+    context: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class HermesRpgContextRequest(BaseModel):
@@ -68,6 +76,11 @@ def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
 @router.get("/recent", include_in_schema=False)
 def hermes_recent() -> dict[str, Any]:
     return {"ok": True, "items": [], "count": 0, "source": "not_configured"}
+
+
+@router.post("/adapter/preview", include_in_schema=False)
+def hermes_adapter_preview(request: HermesAdapterPreviewRequest) -> dict[str, Any]:
+    return hermes_adapter_preview_payload(request.model_dump())
 
 
 @router.get("/candidate/demo", include_in_schema=False)

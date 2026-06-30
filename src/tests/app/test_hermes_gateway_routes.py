@@ -7,6 +7,7 @@ HERMES_HIDDEN_ROUTES = {
     "/api/hermes/status",
     "/api/hermes/test",
     "/api/hermes/recent",
+    "/api/hermes/adapter/preview",
     "/api/hermes/candidate/demo",
     "/api/hermes/rpg/context",
     "/api/hermes/rpg/suggestions",
