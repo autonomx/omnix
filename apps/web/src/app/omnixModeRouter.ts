@@ -21,3 +21,8 @@ const MODE_ROUTES: Record<OmnixModeId, OmnixModeRoute> = {
 export function getOmnixModeRoute(mode: OmnixModeId): OmnixModeRoute {
   return MODE_ROUTES[mode];
 }
+
+export function usesExistingOmnixPath(mode: OmnixModeId): boolean {
+  const route = getOmnixModeRoute(mode);
+  return route.path === 'direct' || route.path === 'live';
+}
