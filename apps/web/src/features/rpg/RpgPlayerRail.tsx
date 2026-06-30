@@ -11,6 +11,8 @@ import './RpgVisualAssets.css';
 
 const HERO_ART_SRC = '/rpg/hero-alyndra.svg';
 
+type RpgRailPanelState = 'idle' | 'loading' | 'ready' | 'error' | 'empty';
+
 interface RpgTurnReadoutPreview {
   category?: string;
   systems?: string[];
@@ -41,12 +43,18 @@ interface RpgPlayerRailProps {
   heroStats: RpgStatPreview[];
   heroSummary: RpgHeroSummaryPreview;
   hermesRouteDecision?: RpgRouteDecisionPreview;
-  hermesSuggestionState?: 'idle' | 'loading' | 'ready' | 'error' | 'empty';
+  hermesRouteDecisionState?: RpgRailPanelState;
+  hermesSuggestionState?: RpgRailPanelState;
   hermesSuggestions?: HermesRpgSuggestion[];
   hermesTurnReadout?: RpgTurnReadoutPreview;
+  hermesTurnReadoutState?: RpgRailPanelState;
   onSelectCommand?: (command: string) => void;
   partyMembers: RpgPartyMemberPreview[];
   survival: RpgSurvivalPreview;
+}
+
+function panelStatusLabel(state: RpgRailPanelState, readyLabel = 'ready') {
+  return state === 'ready' ? readyLabel : state;
 }
 
 export function RpgPlayerRail({
@@ -56,15 +64,18 @@ export function RpgPlayerRail({
   heroStats,
   heroSummary,
   hermesRouteDecision = DEFAULT_RPG_ROUTE_DECISION,
+  hermesRouteDecisionState = 'ready',
   hermesSuggestionState = 'idle',
   hermesSuggestions = [],
   hermesTurnReadout,
+  hermesTurnReadoutState,
   onSelectCommand,
   partyMembers,
   survival,
 }: RpgPlayerRailProps) {
   const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
   const heroAvatarClassName = heroSummary.source === 'preview' ? 'rpg-avatar rpg-hero-avatar rpg-hero-avatar-art' : 'rpg-avatar rpg-hero-avatar';
+  const turnReadoutState = hermesTurnReadoutState ?? (hermesTurnReadout ? 'ready' : 'empty');
 
   return (
     <aside className={railClassName} aria-label="Player, party, and quests">
@@ -113,8 +124,10 @@ export function RpgPlayerRail({
       <section className="rpg-card" aria-label="Hermes route decision">
         <div className="rpg-section-heading">
           <p className="eyebrow">Hermes route</p>
-          <span>{hermesRouteDecision.mode}</span>
+          <span>{panelStatusLabel(hermesRouteDecisionState, hermesRouteDecision.mode)}</span>
         </div>
+        {hermesRouteDecisionState === 'loading' ? <p className="rpg-empty-state">Loading Hermes route metadata.</p> : null}
+        {hermesRouteDecisionState === 'error' ? <p className="rpg-empty-state">Hermes route metadata unavailable; using the safe RPG boundary.</p> : null}
         <div className="rpg-resource-grid">
           <div>
             <span>Role</span>
@@ -172,8 +185,11 @@ export function RpgPlayerRail({
       <section className="rpg-card" aria-label="Hermes turn readout">
         <div className="rpg-section-heading">
           <p className="eyebrow">Hermes turn readout</p>
-          <span>{hermesTurnReadout ? 'ready' : 'preview'}</span>
+          <span>{panelStatusLabel(turnReadoutState)}</span>
         </div>
+        {turnReadoutState === 'loading' ? <p className="rpg-empty-state">Loading latest turn readout.</p> : null}
+        {turnReadoutState === 'error' ? <p className="rpg-empty-state">Turn readout unavailable.</p> : null}
+        {turnReadoutState === 'empty' ? <p className="rpg-empty-state">No turn readout has been reported for this session yet.</p> : null}
         <div className="rpg-resource-grid">
           <div>
             <span>Category</span>
