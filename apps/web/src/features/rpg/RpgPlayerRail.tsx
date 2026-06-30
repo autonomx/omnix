@@ -11,6 +11,13 @@ import './RpgVisualAssets.css';
 
 const HERO_ART_SRC = '/rpg/hero-alyndra.svg';
 
+interface RpgTurnReadoutPreview {
+  category?: string;
+  systems?: string[];
+  effectCount?: number;
+  groundingStatus?: string;
+}
+
 interface RpgPlayerRailProps {
   activeQuests: RpgQuestPreview[];
   className?: string;
@@ -19,6 +26,7 @@ interface RpgPlayerRailProps {
   heroSummary: RpgHeroSummaryPreview;
   hermesSuggestionState?: 'idle' | 'loading' | 'ready' | 'error' | 'empty';
   hermesSuggestions?: HermesRpgSuggestion[];
+  hermesTurnReadout?: RpgTurnReadoutPreview;
   onSelectCommand?: (command: string) => void;
   partyMembers: RpgPartyMemberPreview[];
   survival: RpgSurvivalPreview;
@@ -32,6 +40,7 @@ export function RpgPlayerRail({
   heroSummary,
   hermesSuggestionState = 'idle',
   hermesSuggestions = [],
+  hermesTurnReadout,
   onSelectCommand,
   partyMembers,
   survival,
@@ -114,6 +123,32 @@ export function RpgPlayerRail({
           })}
         </div>
         <small>Hermes only fills the command box; the RPG runtime still processes the turn after you submit.</small>
+      </section>
+
+      <section className="rpg-card" aria-label="Hermes turn readout">
+        <div className="rpg-section-heading">
+          <p className="eyebrow">Hermes turn readout</p>
+          <span>{hermesTurnReadout ? 'ready' : 'preview'}</span>
+        </div>
+        <div className="rpg-resource-grid">
+          <div>
+            <span>Category</span>
+            <strong>{hermesTurnReadout?.category ?? 'not selected'}</strong>
+          </div>
+          <div>
+            <span>Effects</span>
+            <strong>{hermesTurnReadout?.effectCount ?? 0}</strong>
+          </div>
+          <div>
+            <span>Grounding</span>
+            <strong>{hermesTurnReadout?.groundingStatus ?? 'not reported'}</strong>
+          </div>
+          <div>
+            <span>Systems</span>
+            <strong>{hermesTurnReadout?.systems?.length ?? 0}</strong>
+          </div>
+        </div>
+        <small>{hermesTurnReadout?.systems?.join(', ') ?? 'Turn readout data is supplied by the Hermes RPG turn readout route.'}</small>
       </section>
 
       <section className="rpg-card rpg-survival-card" aria-label="Survival status">
