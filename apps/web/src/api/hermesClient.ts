@@ -37,6 +37,32 @@ export type HermesApprovalResponse = {
   request?: Record<string, unknown>;
 };
 
+export type HermesRpgSuggestion = {
+  id?: string;
+  label?: string;
+  command?: string;
+  kind?: string;
+  risk?: string;
+  requires_user_click?: boolean;
+  direct_state_write?: boolean;
+  processed_by?: string;
+  reason?: string;
+};
+
+export type HermesRpgSuggestionsRequest = {
+  session_id?: string;
+  context?: Record<string, unknown>;
+};
+
+export type HermesRpgSuggestionsResponse = {
+  ok?: boolean;
+  read_only?: boolean;
+  source?: string;
+  suggestions?: HermesRpgSuggestion[];
+  count?: number;
+  error?: string | null;
+};
+
 export type HermesTestRequest = {
   content?: string;
   session_id?: string;
@@ -71,6 +97,10 @@ export function getHermesCandidateDemo(): Promise<HermesCandidatePreviewResponse
 
 export function approveHermesCandidate(request: HermesApprovalRequest): Promise<HermesApprovalResponse> {
   return omnixApiClient.post<HermesApprovalRequest, HermesApprovalResponse>('/api/hermes/approve', request);
+}
+
+export function getHermesRpgSuggestions(request: HermesRpgSuggestionsRequest): Promise<HermesRpgSuggestionsResponse> {
+  return omnixApiClient.post<HermesRpgSuggestionsRequest, HermesRpgSuggestionsResponse>('/api/hermes/rpg/suggestions', request);
 }
 
 export function runHermesTest(request: HermesTestRequest = { content: 'house status', dry_run: true }): Promise<HermesTestResponse> {

@@ -1,3 +1,4 @@
+import type { HermesRpgSuggestion } from '../../api/hermesClient';
 import type {
   RpgGearPreview,
   RpgHeroSummaryPreview,
@@ -16,12 +17,25 @@ interface RpgPlayerRailProps {
   equippedGear: RpgGearPreview[];
   heroStats: RpgStatPreview[];
   heroSummary: RpgHeroSummaryPreview;
+  hermesSuggestionState?: 'idle' | 'loading' | 'ready' | 'error' | 'empty';
+  hermesSuggestions?: HermesRpgSuggestion[];
   onSelectCommand?: (command: string) => void;
   partyMembers: RpgPartyMemberPreview[];
   survival: RpgSurvivalPreview;
 }
 
-export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats, heroSummary, onSelectCommand, partyMembers, survival }: RpgPlayerRailProps) {
+export function RpgPlayerRail({
+  activeQuests,
+  className,
+  equippedGear,
+  heroStats,
+  heroSummary,
+  hermesSuggestionState = 'idle',
+  hermesSuggestions = [],
+  onSelectCommand,
+  partyMembers,
+  survival,
+}: RpgPlayerRailProps) {
   const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
   const heroAvatarClassName = heroSummary.source === 'preview' ? 'rpg-avatar rpg-hero-avatar rpg-hero-avatar-art' : 'rpg-avatar rpg-hero-avatar';
 
@@ -67,6 +81,39 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
             <strong>{heroSummary.renown}</strong>
           </div>
         </div>
+      </section>
+
+      <section className="rpg-card" aria-label="Hermes suggested actions">
+        <div className="rpg-section-heading">
+          <p className="eyebrow">Hermes suggestions</p>
+          <span>{hermesSuggestionState === 'loading' ? 'loading' : `${hermesSuggestions.length}`}</span>
+        </div>
+        {hermesSuggestionState === 'idle' ? <p className="rpg-empty-state">Select or create a live RPG session to get Hermes suggestions.</p> : null}
+        {hermesSuggestionState === 'error' ? <p className="rpg-empty-state">Hermes suggestions unavailable.</p> : null}
+        {hermesSuggestionState === 'empty' ? <p className="rpg-empty-state">No Hermes suggestions for this session yet.</p> : null}
+        <div className="rpg-list-stack">
+          {hermesSuggestions.map((suggestion) => {
+            const command = suggestion.command?.trim() ?? '';
+            return (
+              <article className="rpg-list-row" key={suggestion.id ?? suggestion.label ?? command}>
+                <span className="rpg-icon-tile" aria-hidden="true">✦</span>
+                <div>
+                  <strong>{suggestion.label ?? command}</strong>
+                  <span>{suggestion.reason ?? suggestion.kind ?? 'Prepared by Hermes as a player command.'}</span>
+                </div>
+                <button
+                  className="rpg-secondary-button"
+                  disabled={!command || !onSelectCommand}
+                  onClick={() => command && onSelectCommand?.(command)}
+                  type="button"
+                >
+                  Use
+                </button>
+              </article>
+            );
+          })}
+        </div>
+        <small>Hermes only fills the command box; the RPG runtime still processes the turn after you submit.</small>
       </section>
 
       <section className="rpg-card rpg-survival-card" aria-label="Survival status">
