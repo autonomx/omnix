@@ -11,6 +11,7 @@ from .hermes_diagnostics import (
     hermes_diagnostics_status_payload,
     hermes_diagnostics_test_payload,
 )
+from .hermes_rpg_context import hermes_rpg_context_payload
 
 router = APIRouter(prefix="/api/hermes", tags=["hermes"])
 
@@ -26,6 +27,11 @@ class HermesTestRequest(BaseModel):
 class HermesLookupRequest(BaseModel):
     name: str
     args: dict[str, Any] = Field(default_factory=dict)
+
+
+class HermesRpgContextRequest(BaseModel):
+    session_id: str = ""
+    include_recent_turns: bool = True
 
 
 @router.get("/status", include_in_schema=False)
@@ -54,6 +60,11 @@ def hermes_recent() -> dict[str, Any]:
 @router.get("/candidate/demo", include_in_schema=False)
 def hermes_candidate_demo(note: str = "ready") -> dict[str, Any]:
     return hermes_demo_candidate(note=note)
+
+
+@router.post("/rpg/context", include_in_schema=False)
+def hermes_rpg_context(request: HermesRpgContextRequest) -> dict[str, Any]:
+    return hermes_rpg_context_payload(request.model_dump())
 
 
 @router.post("/approve", include_in_schema=False)
