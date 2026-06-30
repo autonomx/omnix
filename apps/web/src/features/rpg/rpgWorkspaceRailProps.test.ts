@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRpgWorkspaceRailProps } from './rpgWorkspaceRailProps';
+import { createRpgWorkspaceRailProps, failedRpgWorkspaceRailPayload } from './rpgWorkspaceRailProps';
 
 describe('createRpgWorkspaceRailProps', () => {
   it('combines live route suggestions and readout props', () => {
@@ -29,5 +29,11 @@ describe('createRpgWorkspaceRailProps', () => {
 
     expect(props.hermesSuggestionState).toBe('idle');
     expect(props.hermesTurnReadoutState).toBe('idle');
+  });
+
+  it('normalizes query failure flags for workspace callers', () => {
+    expect(failedRpgWorkspaceRailPayload({ ok: true }, { isError: false })).toBe(false);
+    expect(failedRpgWorkspaceRailPayload({ ok: false }, { isError: false })).toBe(true);
+    expect(failedRpgWorkspaceRailPayload({ ok: true }, { isError: true })).toBe(true);
   });
 });
