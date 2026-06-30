@@ -15,6 +15,15 @@ export interface RpgWorkspaceRailPropsInput {
   readoutFailed?: boolean;
 }
 
+export interface RpgWorkspaceRailQueryFlags {
+  isPending?: boolean;
+  isError?: boolean;
+}
+
+export function failedRpgWorkspaceRailPayload(payload: { ok?: boolean } | undefined, flags: RpgWorkspaceRailQueryFlags): boolean {
+  return Boolean(flags.isError || payload?.ok === false);
+}
+
 export function createRpgWorkspaceRailProps(input: RpgWorkspaceRailPropsInput) {
   const suggestions = input.suggestions ?? [];
   const suggestionState: RpgAssistState = input.enabled
