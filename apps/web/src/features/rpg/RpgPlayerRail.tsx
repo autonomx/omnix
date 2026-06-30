@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
-import { getHermesRpgSuggestions } from '../../api/hermesClient';
+import type { HermesRpgSuggestion } from '../../api/hermesClient';
 import type {
   RpgGearPreview,
   RpgHeroSummaryPreview,
@@ -11,7 +10,6 @@ import type {
 import './RpgVisualAssets.css';
 
 const HERO_ART_SRC = '/rpg/hero-alyndra.svg';
-const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
 
 interface RpgPlayerRailProps {
   activeQuests: RpgQuestPreview[];
@@ -19,34 +17,27 @@ interface RpgPlayerRailProps {
   equippedGear: RpgGearPreview[];
   heroStats: RpgStatPreview[];
   heroSummary: RpgHeroSummaryPreview;
+  hermesSuggestionState?: 'idle' | 'loading' | 'ready' | 'error' | 'empty';
+  hermesSuggestions?: HermesRpgSuggestion[];
   onSelectCommand?: (command: string) => void;
   partyMembers: RpgPartyMemberPreview[];
   survival: RpgSurvivalPreview;
 }
 
-function readStoredRpgSessionId(): string {
-  if (typeof window === 'undefined') {
-    return '';
-  }
-
-  try {
-    return window.localStorage.getItem(RPG_SELECTED_SESSION_STORAGE_KEY)?.trim() ?? '';
-  } catch {
-    return '';
-  }
-}
-
-export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats, heroSummary, onSelectCommand, partyMembers, survival }: RpgPlayerRailProps) {
+export function RpgPlayerRail({
+  activeQuests,
+  className,
+  equippedGear,
+  heroStats,
+  heroSummary,
+  hermesSuggestionState = 'idle',
+  hermesSuggestions = [],
+  onSelectCommand,
+  partyMembers,
+  survival,
+}: RpgPlayerRailProps) {
   const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
   const heroAvatarClassName = heroSummary.source === 'preview' ? 'rpg-avatar rpg-hero-avatar rpg-hero-avatar-art' : 'rpg-avatar rpg-hero-avatar';
-  const selectedSessionId = readStoredRpgSessionId();
-  const hermesSuggestionsQuery = useQuery({
-    queryKey: ['feature', 'rpg', 'hermes-suggestions', selectedSessionId],
-    queryFn: () => getHermesRpgSuggestions({ session_id: selectedSessionId }),
-    enabled: Boolean(selectedSessionId),
-    retry: false,
-  });
-  const hermesSuggestions = hermesSuggestionsQuery.data?.suggestions ?? [];
 
   return (
     <aside className={railClassName} aria-label="Player, party, and quests">
@@ -95,13 +86,11 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
       <section className="rpg-card" aria-label="Hermes suggested actions">
         <div className="rpg-section-heading">
           <p className="eyebrow">Hermes suggestions</p>
-          <span>{hermesSuggestionsQuery.isLoading ? 'loading' : `${hermesSuggestions.length}`}</span>
+          <span>{hermesSuggestionState === 'loading' ? 'loading' : `${hermesSuggestions.length}`}</span>
         </div>
-        {!selectedSessionId ? <p className="rpg-empty-state">Select or create a live RPG session to get Hermes suggestions.</p> : null}
-        {hermesSuggestionsQuery.isError ? <p className="rpg-empty-state">Hermes suggestions unavailable.</p> : null}
-        {selectedSessionId && !hermesSuggestionsQuery.isLoading && !hermesSuggestions.length ? (
-          <p className="rpg-empty-state">No Hermes suggestions for this session yet.</p>
-        ) : null}
+        {hermesSuggestionState === 'idle' ? <p className="rpg-empty-state">Select or create a live RPG session to get Hermes suggestions.</p> : null}
+        {hermesSuggestionState === 'error' ? <p className="rpg-empty-state">Hermes suggestions unavailable.</p> : null}
+        {hermesSuggestionState === 'empty' ? <p className="rpg-empty-state">No Hermes suggestions for this session yet.</p> : null}
         <div className="rpg-list-stack">
           {hermesSuggestions.map((suggestion) => {
             const command = suggestion.command?.trim() ?? '';
