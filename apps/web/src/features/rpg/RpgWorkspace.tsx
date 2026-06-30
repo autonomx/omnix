@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ApiTimeoutError, omnixApiClient, type JobRecord, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
-import { getHermesRouteDecision, getHermesRpgSuggestions } from '../../api/hermesClient';
+import { getHermesRouteDecision, getHermesRpgSuggestions, readHermesRpgTurn } from '../../api/hermesClient';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
@@ -18,6 +18,7 @@ import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { RpgWorldRail } from './RpgWorldRail';
 import { createRpgCombatSurfaceState } from './rpgCombatState';
 import { rpgAssistStateFromItems } from './rpgAssistState';
+import { createRpgTurnReadoutPreview } from './rpgTurnReadoutState';
 import { createRpgWorkspaceState, type RpgStoryMessagePreview } from './rpgUiState';
 import './RpgWorkspace.css';
 import './RpgResponsivePolish.css';
@@ -317,6 +318,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     })
     .sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0];
   const latestCompletedTurnJobId = latestCompletedTurnJob?.id;
+  const hermesTurnReadoutQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'hermes-turn-readout', selectedLiveSessionId, latestCompletedTurnJobId],
+    queryFn: () => readHermesRpgTurn({ session_id: selectedLiveSessionId ?? '' }),
+    enabled: Boolean(selectedLiveSessionId),
+  });
+  const hermesTurnReadout = createRpgTurnReadoutPreview(hermesTurnReadoutQuery.data);
   const refetchSelectedSession = selectedSessionQuery.refetch;
   const refetchInventory = inventoryQuery.refetch;
   useEffect(() => {
@@ -327,6 +334,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       refetchInventory(),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-suggestions', selectedLiveSessionId] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-route-decision', 'rpg'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-turn-readout', selectedLiveSessionId] }),
     ]);
   }, [latestCompletedTurnJobId, queryClient, refetchInventory, refetchSelectedSession, selectedLiveSessionId]);
   const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && ACTIVE_JOB_STATUSES.has(job.status));
@@ -433,6 +441,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-suggestions'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-route-decision'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-turn-readout'] }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'reports'] }),
@@ -505,6 +514,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       jobsQuery.refetch(),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-suggestions', selectedLiveSessionId] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-route-decision', 'rpg'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-turn-readout', selectedLiveSessionId] }),
     ]);
   }, [jobsQuery, queryClient, refetchInventory, refetchSelectedSession, selectedLiveSessionId, submittedTurnJobFromQuery]);
   const createCheckpointMutation = useMutation({
@@ -691,6 +701,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             hermesRouteDecision={hermesRouteDecision}
             hermesSuggestionState={hermesSuggestionState}
             hermesSuggestions={hermesSuggestions}
+            hermesTurnReadout={hermesTurnReadout}
             onSelectCommand={selectCommand}
             partyMembers={partyMembers}
             survival={survival}
