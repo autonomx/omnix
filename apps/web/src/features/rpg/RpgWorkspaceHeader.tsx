@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
+import { createOmnixModePreview } from '../../app/omnixModePreview';
 import { OmnixStatusPill } from '../../design/primitives';
 import type { RpgSessionSummaryPreview } from './rpgUiState';
 import './RpgPlayFocus.css';
@@ -30,6 +31,7 @@ export function RpgWorkspaceHeader({
   submitStatus,
 }: RpgWorkspaceHeaderProps) {
   const [isHidden, setIsHidden] = useState(false);
+  const routePreview = createOmnixModePreview('rpg');
 
   useEffect(() => {
     document.documentElement.classList.toggle(RPG_PLAY_FOCUS_CLASS, isHidden);
@@ -45,7 +47,9 @@ export function RpgWorkspaceHeader({
         <div className="rpg-header-pills" aria-label="RPG runtime status">
           <OmnixStatusPill>Engine: {submitStatus}</OmnixStatusPill>
           <OmnixStatusPill>Session: {selectedSessionSummary.title}</OmnixStatusPill>
-          <OmnixStatusPill>Replay-preserving</OmnixStatusPill>
+          <OmnixStatusPill>Route: {routePreview.path}</OmnixStatusPill>
+          <OmnixStatusPill>Owner: {routePreview.owner}</OmnixStatusPill>
+          <OmnixStatusPill>{routePreview.statusLabel}</OmnixStatusPill>
           <code>{module.route}</code>
         </div>
       )}
