@@ -47,9 +47,8 @@ export function RpgWorkspaceHeader({
         <div className="rpg-header-pills" aria-label="RPG runtime status">
           <OmnixStatusPill>Engine: {submitStatus}</OmnixStatusPill>
           <OmnixStatusPill>Session: {selectedSessionSummary.title}</OmnixStatusPill>
+          <OmnixStatusPill>Replay-preserving</OmnixStatusPill>
           <OmnixStatusPill>Route: {routePreview.path}</OmnixStatusPill>
-          <OmnixStatusPill>Owner: {routePreview.owner}</OmnixStatusPill>
-          <OmnixStatusPill>{routePreview.statusLabel}</OmnixStatusPill>
           <code>{module.route}</code>
         </div>
       )}
