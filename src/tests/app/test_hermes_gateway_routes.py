@@ -9,6 +9,7 @@ HERMES_HIDDEN_ROUTES = {
     "/api/hermes/recent",
     "/api/hermes/candidate/demo",
     "/api/hermes/rpg/context",
+    "/api/hermes/rpg/suggestions",
     "/api/hermes/approve",
 }
 
