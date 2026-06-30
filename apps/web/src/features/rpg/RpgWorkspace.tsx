@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ApiTimeoutError, omnixApiClient, type JobRecord, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
-import { getHermesRpgSuggestions } from '../../api/hermesClient';
+import { getHermesRouteDecision, getHermesRpgSuggestions } from '../../api/hermesClient';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
@@ -285,6 +285,19 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       hermesSuggestionsQuery.isError || hermesSuggestionsQuery.data?.ok === false,
     )
     : 'idle';
+  const hermesRouteDecisionQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'hermes-route-decision', 'rpg'],
+    queryFn: () => getHermesRouteDecision('rpg'),
+  });
+  const hermesRouteDecision = hermesRouteDecisionQuery.data?.ok
+    ? {
+      mode: hermesRouteDecisionQuery.data.mode ?? 'rpg',
+      hermesRole: hermesRouteDecisionQuery.data.role ?? 'suggest',
+      owner: hermesRouteDecisionQuery.data.owner ?? 'rpg_sim',
+      reviewRequired: Boolean(hermesRouteDecisionQuery.data.review_required),
+      boundary: hermesRouteDecisionQuery.data.boundary ?? 'RPG simulation validates truth before state is accepted.',
+    }
+    : undefined;
   useEffect(() => {
     if (selectedLiveSessionId && selectedLiveSessionIsIndexed) {
       writeStoredRpgSessionId(selectedLiveSessionId);
@@ -662,6 +675,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             equippedGear={equippedGear}
             heroStats={heroStats}
             heroSummary={heroSummary}
+            hermesRouteDecision={hermesRouteDecision}
             hermesSuggestionState={hermesSuggestionState}
             hermesSuggestions={hermesSuggestions}
             onSelectCommand={selectCommand}
