@@ -15,7 +15,7 @@ function renderWithTheme(element: ReactElement) {
 }
 
 describe('RpgPlayerRail', () => {
-  it('renders hero vitals, equipment, party, and quests', () => {
+  it('renders hero vitals, equipment, party, quests, and Hermes route decision', () => {
     const onSelectCommand = vi.fn();
     renderWithTheme(
       <RpgPlayerRail
@@ -34,6 +34,9 @@ describe('RpgPlayerRail', () => {
     expect(screen.getByLabelText('HP 86 / 110')).toBeInTheDocument();
     expect(screen.getByLabelText('XP 7,450 / 12,000')).toBeInTheDocument();
     expect(screen.getByLabelText('XP 7,450 / 12,000').closest('.rpg-stat-row')).toHaveTextContent('XP7,450 / 12,000');
+    expect(screen.getByRole('region', { name: 'Hermes route decision' })).toHaveTextContent('Role');
+    expect(screen.getByRole('region', { name: 'Hermes route decision' })).toHaveTextContent('suggest');
+    expect(screen.getByRole('region', { name: 'Hermes route decision' })).toHaveTextContent('rpg_sim');
     expect(screen.getByText('Longbow of the Boreal Wind')).toBeInTheDocument();
     expect(screen.getByText('Thorin Ironfist')).toBeInTheDocument();
     expect(screen.getByText('3 / 4')).toBeInTheDocument();
