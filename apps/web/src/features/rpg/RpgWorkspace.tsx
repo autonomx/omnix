@@ -322,8 +322,13 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   useEffect(() => {
     if (!latestCompletedTurnJobId || refreshedTurnJobRef.current === latestCompletedTurnJobId) return;
     refreshedTurnJobRef.current = latestCompletedTurnJobId;
-    void Promise.all([refetchSelectedSession(), refetchInventory()]);
-  }, [latestCompletedTurnJobId, refetchInventory, refetchSelectedSession]);
+    void Promise.all([
+      refetchSelectedSession(),
+      refetchInventory(),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-suggestions', selectedLiveSessionId] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-route-decision', 'rpg'] }),
+    ]);
+  }, [latestCompletedTurnJobId, queryClient, refetchInventory, refetchSelectedSession, selectedLiveSessionId]);
   const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && ACTIVE_JOB_STATUSES.has(job.status));
   const hasLiveSessions = (inventoryQuery.data?.sessions?.length ?? 0) > 0;
   const liveDataStatusCards: RpgLiveDataStatusCard[] = [
@@ -426,6 +431,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const invalidateRpgWorkspaceQueries = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-suggestions'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-route-decision'] }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'reports'] }),
@@ -492,8 +499,14 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       return;
     }
     refreshedTurnJobRef.current = submittedTurnJobFromQuery.id;
-    void Promise.all([refetchSelectedSession(), refetchInventory(), jobsQuery.refetch()]);
-  }, [jobsQuery, refetchInventory, refetchSelectedSession, submittedTurnJobFromQuery]);
+    void Promise.all([
+      refetchSelectedSession(),
+      refetchInventory(),
+      jobsQuery.refetch(),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-suggestions', selectedLiveSessionId] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-route-decision', 'rpg'] }),
+    ]);
+  }, [jobsQuery, queryClient, refetchInventory, refetchSelectedSession, selectedLiveSessionId, submittedTurnJobFromQuery]);
   const createCheckpointMutation = useMutation({
     mutationFn: () =>
       omnixApiClient.createReplayCheckpoint({
