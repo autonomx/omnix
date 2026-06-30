@@ -18,12 +18,29 @@ interface RpgTurnReadoutPreview {
   groundingStatus?: string;
 }
 
+interface RpgRouteDecisionPreview {
+  mode: string;
+  hermesRole: string;
+  owner: string;
+  reviewRequired: boolean;
+  boundary: string;
+}
+
+const DEFAULT_RPG_ROUTE_DECISION: RpgRouteDecisionPreview = {
+  mode: 'rpg',
+  hermesRole: 'suggest',
+  owner: 'rpg_sim',
+  reviewRequired: false,
+  boundary: 'RPG simulation validates truth before state is accepted.',
+};
+
 interface RpgPlayerRailProps {
   activeQuests: RpgQuestPreview[];
   className?: string;
   equippedGear: RpgGearPreview[];
   heroStats: RpgStatPreview[];
   heroSummary: RpgHeroSummaryPreview;
+  hermesRouteDecision?: RpgRouteDecisionPreview;
   hermesSuggestionState?: 'idle' | 'loading' | 'ready' | 'error' | 'empty';
   hermesSuggestions?: HermesRpgSuggestion[];
   hermesTurnReadout?: RpgTurnReadoutPreview;
@@ -38,6 +55,7 @@ export function RpgPlayerRail({
   equippedGear,
   heroStats,
   heroSummary,
+  hermesRouteDecision = DEFAULT_RPG_ROUTE_DECISION,
   hermesSuggestionState = 'idle',
   hermesSuggestions = [],
   hermesTurnReadout,
@@ -90,6 +108,32 @@ export function RpgPlayerRail({
             <strong>{heroSummary.renown}</strong>
           </div>
         </div>
+      </section>
+
+      <section className="rpg-card" aria-label="Hermes route decision">
+        <div className="rpg-section-heading">
+          <p className="eyebrow">Hermes route</p>
+          <span>{hermesRouteDecision.mode}</span>
+        </div>
+        <div className="rpg-resource-grid">
+          <div>
+            <span>Role</span>
+            <strong>{hermesRouteDecision.hermesRole}</strong>
+          </div>
+          <div>
+            <span>Owner</span>
+            <strong>{hermesRouteDecision.owner}</strong>
+          </div>
+          <div>
+            <span>Review</span>
+            <strong>{hermesRouteDecision.reviewRequired ? 'required' : 'not required'}</strong>
+          </div>
+          <div>
+            <span>Mode</span>
+            <strong>{hermesRouteDecision.mode}</strong>
+          </div>
+        </div>
+        <small>{hermesRouteDecision.boundary}</small>
       </section>
 
       <section className="rpg-card" aria-label="Hermes suggested actions">
