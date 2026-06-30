@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ApiTimeoutError, omnixApiClient, type JobRecord, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
+import { getHermesRpgSuggestions } from '../../api/hermesClient';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
@@ -16,6 +17,7 @@ import { RpgStoryScene } from './RpgStoryScene';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { RpgWorldRail } from './RpgWorldRail';
 import { createRpgCombatSurfaceState } from './rpgCombatState';
+import { rpgAssistStateFromItems } from './rpgAssistState';
 import { createRpgWorkspaceState, type RpgStoryMessagePreview } from './rpgUiState';
 import './RpgWorkspace.css';
 import './RpgResponsivePolish.css';
@@ -270,6 +272,19 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const selectedLiveSessionIsIndexed = Boolean(
     selectedLiveSessionId && sessionSummaries.some((session) => session.source === 'live' && session.id === selectedLiveSessionId),
   );
+  const hermesSuggestionsQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'hermes-suggestions', selectedLiveSessionId],
+    queryFn: () => getHermesRpgSuggestions({ session_id: selectedLiveSessionId ?? '' }),
+    enabled: Boolean(selectedLiveSessionId),
+  });
+  const hermesSuggestions = hermesSuggestionsQuery.data?.suggestions ?? [];
+  const hermesSuggestionState = selectedLiveSessionId
+    ? rpgAssistStateFromItems(
+      hermesSuggestions,
+      hermesSuggestionsQuery.isPending,
+      hermesSuggestionsQuery.isError || hermesSuggestionsQuery.data?.ok === false,
+    )
+    : 'idle';
   useEffect(() => {
     if (selectedLiveSessionId && selectedLiveSessionIsIndexed) {
       writeStoredRpgSessionId(selectedLiveSessionId);
@@ -647,6 +662,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             equippedGear={equippedGear}
             heroStats={heroStats}
             heroSummary={heroSummary}
+            hermesSuggestionState={hermesSuggestionState}
+            hermesSuggestions={hermesSuggestions}
             onSelectCommand={selectCommand}
             partyMembers={partyMembers}
             survival={survival}
