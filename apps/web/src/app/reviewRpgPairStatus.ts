@@ -2,9 +2,8 @@ export interface ReviewRpgPairStatus {
   reviewVisible: boolean;
   rpgVisible: boolean;
   label: string;
-  hasControls: false;
-  submits: false;
-  executes: false;
+  readOnly: true;
+  passive: true;
 }
 
 export function createReviewRpgPairStatus(input: {
@@ -17,8 +16,7 @@ export function createReviewRpgPairStatus(input: {
     reviewVisible,
     rpgVisible,
     label: reviewVisible && rpgVisible ? 'Review and RPG proposal ready' : 'Awaiting review context',
-    hasControls: false,
-    submits: false,
-    executes: false,
+    readOnly: true,
+    passive: true,
   };
 }
