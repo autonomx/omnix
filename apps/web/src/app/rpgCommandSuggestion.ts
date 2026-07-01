@@ -3,8 +3,15 @@ export interface PlanStepLike {
   description?: string;
 }
 
+export interface RpgSuggestionProvenance {
+  source: 'planner';
+  reviewRequired: true;
+  simulationValidates: true;
+}
+
 export interface RpgCommandSuggestion {
   commandText: string;
+  provenance: RpgSuggestionProvenance;
   submits: false;
   executes: false;
 }
@@ -16,6 +23,11 @@ export function createRpgCommandSuggestion(step: PlanStepLike): RpgCommandSugges
     .join(': ');
   return {
     commandText: text,
+    provenance: {
+      source: 'planner',
+      reviewRequired: true,
+      simulationValidates: true,
+    },
     submits: false,
     executes: false,
   };
