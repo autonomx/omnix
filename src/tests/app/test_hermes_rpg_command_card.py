@@ -27,12 +27,14 @@ def test_hermes_rpg_command_card_rejects_empty_command() -> None:
 def test_hermes_rpg_command_summary_counts_cards() -> None:
     payload = hermes_rpg_command_summary(
         [
-            {"fills_input": True, "submits": False},
-            {"fills_input": False, "submits": False},
+            {"fills_input": True, "submits": False, "state_changed": False},
+            {"fills_input": False, "submits": False, "state_changed": False},
         ]
     )
 
     assert payload["count"] == 2
     assert payload["fillable_count"] == 1
     assert payload["submits_count"] == 0
+    assert payload["changed_count"] == 0
+    assert payload["clear"] is True
     assert payload["state_changed"] is False
