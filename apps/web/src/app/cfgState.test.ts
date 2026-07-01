@@ -1,12 +1,17 @@
 import { expect, test } from 'vitest';
+import { cfgLine } from './cfgLine';
 import { cfgState } from './cfgState';
 
 test('cfg false', () => {
-  expect(cfgState()).toEqual({ active: false, ready: false, readOnly: true, passive: true });
+  const state = cfgState();
+  expect(state).toEqual({ active: false, ready: false, readOnly: true, passive: true });
+  expect(cfgLine(state)).toBe('Waiting');
 });
 
 test('cfg true', () => {
-  expect(cfgState(true, true)).toEqual({ active: true, ready: true, readOnly: true, passive: true });
+  const state = cfgState(true, true);
+  expect(state).toEqual({ active: true, ready: true, readOnly: true, passive: true });
+  expect(cfgLine(state)).toBe('Ready');
 });
 
 test('cfg holds ready until active', () => {
