@@ -10,6 +10,10 @@ PLAN_PARTS = (
     "validate",
     "ticket",
     "trace",
+    "ticket_match",
+    "command_card",
+    "command_bundle",
+    "command_summary",
 )
 
 
