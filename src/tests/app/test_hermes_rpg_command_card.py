@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.assist_core.hermes_rpg_command_card import hermes_rpg_command_card
+from app.assist_core.hermes_rpg_command_summary import hermes_rpg_command_summary
 
 
 def test_hermes_rpg_command_card_fills_input_only() -> None:
@@ -20,4 +21,18 @@ def test_hermes_rpg_command_card_rejects_empty_command() -> None:
     assert payload["ok"] is False
     assert payload["fills_input"] is False
     assert payload["submits"] is False
+    assert payload["state_changed"] is False
+
+
+def test_hermes_rpg_command_summary_counts_cards() -> None:
+    payload = hermes_rpg_command_summary(
+        [
+            {"fills_input": True, "submits": False},
+            {"fills_input": False, "submits": False},
+        ]
+    )
+
+    assert payload["count"] == 2
+    assert payload["fillable_count"] == 1
+    assert payload["submits_count"] == 0
     assert payload["state_changed"] is False
