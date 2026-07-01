@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.assist_core.hermes_rpg_plan import hermes_rpg_plan_payload
 from app.assist_core.hermes_rpg_plan_request import request_hermes_rpg_plan
-from app.assist_core.hermes_rpg_ticket import hermes_rpg_ticket_payload
+from app.assist_core.hermes_rpg_ticket import hermes_rpg_ticket_match, hermes_rpg_ticket_payload
 from app.assist_core.hermes_rpg_validator import validate_hermes_rpg_proposal
 from app.gateway.main import create_gateway_app
 
@@ -133,6 +133,30 @@ def test_hermes_rpg_ticket_is_stable_and_not_ready() -> None:
     assert first["needs_user_step"] is True
     assert first["ready"] is False
     assert first["state_changed"] is False
+
+
+def test_hermes_rpg_ticket_match_accepts_matching_valid_ticket() -> None:
+    ticket = hermes_rpg_ticket_payload(
+        {"ok": True, "plan": {"proposal": {"command": "check inventory"}}, "validation": {"valid": True}}
+    )
+
+    payload = hermes_rpg_ticket_match(ticket, ticket["ticket_id"])
+
+    assert payload["ok"] is True
+    assert payload["matched"] is True
+    assert payload["command"] == "check inventory"
+    assert payload["state_changed"] is False
+
+
+def test_hermes_rpg_ticket_match_rejects_wrong_ticket() -> None:
+    ticket = {"ticket_id": "abc", "command": "check inventory", "valid": True}
+
+    payload = hermes_rpg_ticket_match(ticket, "different")
+
+    assert payload["ok"] is False
+    assert payload["error"] == "ticket_mismatch"
+    assert payload["matched"] is False
+    assert payload["state_changed"] is False
 
 
 def test_hermes_rpg_plan_payload_returns_valid_review_plan() -> None:
