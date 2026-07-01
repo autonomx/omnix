@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.assist_core.hermes_rpg_plan import hermes_rpg_plan_payload
 from app.assist_core.hermes_rpg_plan_request import request_hermes_rpg_plan
+from app.assist_core.hermes_rpg_ticket import hermes_rpg_ticket_payload
 from app.assist_core.hermes_rpg_validator import validate_hermes_rpg_proposal
 from app.gateway.main import create_gateway_app
 
@@ -121,6 +122,19 @@ def test_hermes_rpg_validator_rejects_missing_objective() -> None:
     assert payload["error"] == "objective_unavailable"
 
 
+def test_hermes_rpg_ticket_is_stable_and_not_ready() -> None:
+    payload = {"ok": True, "plan": {"proposal": {"command": "check inventory"}}, "validation": {"valid": True}}
+
+    first = hermes_rpg_ticket_payload(payload)
+    second = hermes_rpg_ticket_payload(payload)
+
+    assert first["ticket_id"] == second["ticket_id"]
+    assert first["command"] == "check inventory"
+    assert first["needs_user_step"] is True
+    assert first["ready"] is False
+    assert first["state_changed"] is False
+
+
 def test_hermes_rpg_plan_payload_returns_valid_review_plan() -> None:
     payload = hermes_rpg_plan_payload(
         {
@@ -136,6 +150,7 @@ def test_hermes_rpg_plan_payload_returns_valid_review_plan() -> None:
     assert payload["mode"] == "review_required"
     assert payload["plan"]["proposal"]["command"] == "check inventory"
     assert payload["validation"]["valid"] is True
+    assert payload["ticket"]["ready"] is False
     assert payload["state_changed"] is False
 
 
