@@ -13,6 +13,10 @@ function isResultPayload(value: unknown): value is ResultPayloadSummary {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function missingResultFields(payload: ResultPayloadSummary): string[] {
+  return ['ok', 'item_id', 'summary', 'review'].filter((field) => !(field in payload));
+}
+
 export function createResultDisplayState(payload?: unknown): ResultDisplayState {
   if (!isResultPayload(payload)) {
     return {
@@ -35,4 +39,22 @@ export function createResultDisplayState(payload?: unknown): ResultDisplayState 
     readOnly: review.readOnly,
     executes: review.executes,
   };
+}
+
+export function createValidatedResultDisplayState(payload?: unknown): ResultDisplayState {
+  if (!isResultPayload(payload)) {
+    return createResultDisplayState(payload);
+  }
+  const missing = missingResultFields(payload);
+  if (missing.length > 0) {
+    return {
+      title: 'Needs review',
+      detail: `Missing result fields: ${missing.join(', ')}`,
+      status: 'unavailable',
+      reviewRequired: true,
+      readOnly: true,
+      executes: false,
+    };
+  }
+  return createResultDisplayState(payload);
 }
