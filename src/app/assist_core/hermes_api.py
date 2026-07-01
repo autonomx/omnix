@@ -13,6 +13,7 @@ from .hermes_diagnostics import (
     hermes_diagnostics_test_payload,
 )
 from .hermes_rpg_context import hermes_rpg_context_payload
+from .hermes_rpg_plan import hermes_rpg_plan_payload
 from .hermes_rpg_suggestions import hermes_rpg_suggestions_payload
 from .hermes_rpg_turn_readout import hermes_rpg_turn_readout_payload
 from .omnix_mode_policy import omnix_mode_policy_payload
@@ -55,6 +56,14 @@ class HermesRpgTurnReadoutRequest(BaseModel):
     session_id: str = ""
     turn: dict[str, Any] = Field(default_factory=dict)
     context: dict[str, Any] = Field(default_factory=dict)
+
+
+class HermesRpgPlanRequest(BaseModel):
+    session_id: str = ""
+    turn_id: int | str | None = None
+    context_hash: str | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool | None = None
 
 
 @router.get("/status", include_in_schema=False)
@@ -113,6 +122,11 @@ def hermes_rpg_suggestions(request: HermesRpgSuggestionsRequest) -> dict[str, An
 @router.post("/rpg/turn-readout", include_in_schema=False)
 def hermes_rpg_turn_readout(request: HermesRpgTurnReadoutRequest) -> dict[str, Any]:
     return hermes_rpg_turn_readout_payload(request.model_dump())
+
+
+@router.post("/plan", include_in_schema=False)
+def hermes_rpg_plan(request: HermesRpgPlanRequest) -> dict[str, Any]:
+    return hermes_rpg_plan_payload(request.model_dump())
 
 
 @router.post("/approve", include_in_schema=False)
