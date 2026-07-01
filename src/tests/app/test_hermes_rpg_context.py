@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.assist_core.hermes_planner_context import hermes_planner_context_from_session
 from app.assist_core.hermes_rpg_context import hermes_rpg_context_from_session, hermes_rpg_context_payload
 
 
@@ -55,3 +56,25 @@ def test_hermes_rpg_context_payload_requires_session_id() -> None:
         "read_only": True,
         "source": "rpg_session",
     }
+
+
+def test_hermes_planner_context_adds_commands_and_hash() -> None:
+    session = {
+        "state": {
+            "current_location": "Rusty Flagon Tavern",
+            "active_npc": "Bran",
+            "player": {"name": "Aria", "inventory": [{"name": "Torch"}]},
+            "recent_turns": [{"turn": 4, "action": "look around", "category": "general"}],
+            "service_state": {"active": True},
+        }
+    }
+
+    payload = hermes_planner_context_from_session("session-1", session)
+    repeated = hermes_planner_context_from_session("session-1", session)
+
+    assert payload["planner_ready"] is True
+    assert payload["turn_id"] == 4
+    assert len(payload["context_hash"]) == 16
+    assert payload["context_hash"] == repeated["context_hash"]
+    assert "buy" in payload["context"]["available_commands"]
+    assert "travel" in payload["context"]["available_commands"]
