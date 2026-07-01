@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.assist_core.hermes_rpg_plan_request import request_hermes_rpg_plan
+from app.assist_core.hermes_rpg_validator import validate_hermes_rpg_proposal
 
 
 class FakePlanClient:
@@ -61,3 +62,56 @@ def test_hermes_rpg_plan_request_rejects_malformed_response() -> None:
     assert payload["ok"] is False
     assert payload["error"] == "empty_command"
     assert payload["state_changed"] is False
+
+
+def test_hermes_rpg_validator_accepts_service_command_in_service() -> None:
+    payload = validate_hermes_rpg_proposal(
+        {"state_flags": {"in_service": True}, "player": {"currency": {"silver": 5}}},
+        {"proposal": {"command": "buy two rations"}},
+    )
+
+    assert payload["ok"] is True
+    assert payload["valid"] is True
+    assert payload["command"] == "buy two rations"
+    assert payload["state_changed"] is False
+
+
+def test_hermes_rpg_validator_rejects_service_without_service_state() -> None:
+    payload = validate_hermes_rpg_proposal(
+        {"state_flags": {"in_service": False}, "player": {"currency": {"silver": 5}}},
+        {"proposal": {"command": "buy two rations"}},
+    )
+
+    assert payload["ok"] is False
+    assert payload["error"] == "service_unavailable"
+    assert payload["state_changed"] is False
+
+
+def test_hermes_rpg_validator_rejects_combat_command_outside_combat() -> None:
+    payload = validate_hermes_rpg_proposal(
+        {"state_flags": {"in_combat": False}},
+        {"proposal": {"command": "attack the bandit"}},
+    )
+
+    assert payload["ok"] is False
+    assert payload["error"] == "combat_unavailable"
+
+
+def test_hermes_rpg_validator_rejects_travel_during_combat() -> None:
+    payload = validate_hermes_rpg_proposal(
+        {"state_flags": {"in_combat": True}},
+        {"proposal": {"command": "travel north"}},
+    )
+
+    assert payload["ok"] is False
+    assert payload["error"] == "travel_blocked_by_combat"
+
+
+def test_hermes_rpg_validator_rejects_missing_objective() -> None:
+    payload = validate_hermes_rpg_proposal(
+        {"state_flags": {}, "objectives": []},
+        {"proposal": {"command": "focus on the objective"}},
+    )
+
+    assert payload["ok"] is False
+    assert payload["error"] == "objective_unavailable"
