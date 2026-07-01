@@ -34,6 +34,14 @@ export function createPlanRequestPayload(
   };
 }
 
+export function planRequestScopeKey(scope = 'default'): string {
+  return scope.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'default';
+}
+
+export function planRequestQueryKey(scope = 'default'): readonly ['plan-request', string] {
+  return ['plan-request', planRequestScopeKey(scope)] as const;
+}
+
 export function canRequestPlan(options: PlanRequestOptions = {}): boolean {
   return options.manualTrigger === true;
 }
