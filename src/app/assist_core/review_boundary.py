@@ -8,7 +8,7 @@ def review_boundary_payload(decision: dict[str, Any], runner_available: bool = F
     return {
         "ok": accepted,
         "decision": decision.get("decision", "pending"),
-        "ready_for_execution": accepted and runner_available,
+        "ready_for_runner": accepted and runner_available,
         "review_required": True,
         "read_only": True,
         "executes": False,
