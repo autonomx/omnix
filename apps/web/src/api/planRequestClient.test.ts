@@ -3,6 +3,8 @@ import {
   canRequestPlan,
   createPlanRequestPayload,
   planRequestPath,
+  planRequestQueryKey,
+  planRequestScopeKey,
   requestPlanProposal,
 } from './planRequestClient';
 
@@ -28,4 +30,10 @@ test('plan request is manual-trigger gated by default', () => {
   expect(canRequestPlan()).toBe(false);
   expect(requestPlanProposal(payload)).toBeNull();
   expect(canRequestPlan({ manualTrigger: true })).toBe(true);
+});
+
+test('plan request query keys use stable scope instead of raw objective', () => {
+  expect(planRequestScopeKey(' RPG Session 1 ')).toBe('rpg-session-1');
+  expect(planRequestScopeKey('')).toBe('default');
+  expect(planRequestQueryKey(' RPG Session 1 ')).toEqual(['plan-request', 'rpg-session-1']);
 });
