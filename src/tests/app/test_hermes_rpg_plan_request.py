@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from fastapi.testclient import TestClient
+
+from app.assist_core.hermes_rpg_plan import hermes_rpg_plan_payload
 from app.assist_core.hermes_rpg_plan_request import request_hermes_rpg_plan
 from app.assist_core.hermes_rpg_validator import validate_hermes_rpg_proposal
+from app.gateway.main import create_gateway_app
 
 
 class FakePlanClient:
@@ -115,3 +119,32 @@ def test_hermes_rpg_validator_rejects_missing_objective() -> None:
 
     assert payload["ok"] is False
     assert payload["error"] == "objective_unavailable"
+
+
+def test_hermes_rpg_plan_payload_returns_valid_review_plan() -> None:
+    payload = hermes_rpg_plan_payload(
+        {
+            "session_id": "s1",
+            "context_hash": "abc",
+            "enabled": True,
+            "context": {"state_flags": {}, "player": {}, "available_commands": ["check"]},
+        },
+        client=FakePlanClient({"command": "check inventory", "risk": "low"}),
+    )
+
+    assert payload["ok"] is True
+    assert payload["mode"] == "review_required"
+    assert payload["plan"]["proposal"]["command"] == "check inventory"
+    assert payload["validation"]["valid"] is True
+    assert payload["state_changed"] is False
+
+
+def test_hermes_plan_route_defaults_to_disabled_without_state_change() -> None:
+    client = TestClient(create_gateway_app())
+    response = client.post("/api/hermes/plan", json={"context": {"state_flags": {}}})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["error"] == "hermes_disabled"
+    assert payload["state_changed"] is False

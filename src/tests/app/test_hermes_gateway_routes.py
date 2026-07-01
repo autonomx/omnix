@@ -12,6 +12,7 @@ HERMES_HIDDEN_ROUTES = {
     "/api/hermes/rpg/context",
     "/api/hermes/rpg/suggestions",
     "/api/hermes/rpg/turn-readout",
+    "/api/hermes/plan",
     "/api/hermes/approve",
 }
 
