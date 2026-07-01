@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-READOUT_NAMES = {"get_house_status", "get_hermes_status", "get_hermes_diagnostics_schema"}
+READOUT_NAMES = {
+    "get_house_status",
+    "get_hermes_status",
+    "get_hermes_diagnostics_schema",
+    "get_hermes_rpg_plan_summary",
+}
 
 
 def readout_payload(name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -20,4 +25,8 @@ def readout_payload(name: str, args: dict[str, Any] | None = None) -> dict[str, 
         from .hermes_diagnostics import hermes_diagnostics_schema
 
         return {"ok": True, "name": clean, "payload": hermes_diagnostics_schema()}
+    if clean == "get_hermes_rpg_plan_summary":
+        from .hermes_rpg_plan_summary import hermes_rpg_plan_summary_payload
+
+        return {"ok": True, "name": clean, "payload": hermes_rpg_plan_summary_payload()}
     return {"ok": False, "name": clean, "error": "unknown_readout"}

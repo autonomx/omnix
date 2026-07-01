@@ -73,6 +73,14 @@ def test_unknown_readout_is_rejected_without_payload() -> None:
     assert payload == {"ok": False, "name": "unknown", "error": "unknown_readout"}
 
 
+def test_plan_summary_readout_returns_dry_shape() -> None:
+    payload = readout_payload("get_hermes_rpg_plan_summary")
+
+    assert payload["ok"] is True
+    assert payload["payload"]["writes_state"] is False
+    assert payload["payload"]["default_enabled"] is False
+
+
 def test_hermes_schema_marks_diagnostics_as_dry_run_only() -> None:
     schema = hermes_diagnostics_schema()
 
