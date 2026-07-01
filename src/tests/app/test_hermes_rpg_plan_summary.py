@@ -23,3 +23,4 @@ def test_hermes_rpg_plan_summary_lists_parts_without_writes() -> None:
     assert payload["writes_state"] is False
     assert payload["default_enabled"] is False
     assert payload["user_step"] is True
+    assert payload["command_surface_clear"] is True
