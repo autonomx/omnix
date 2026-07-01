@@ -8,6 +8,7 @@ class OmnixModeSurface(TypedDict):
     path: str
     read_only: bool
     executes: bool
+    requires_review: bool
 
 
 def omnix_mode_surfaces() -> list[OmnixModeSurface]:
@@ -17,5 +18,20 @@ def omnix_mode_surfaces() -> list[OmnixModeSurface]:
             "path": "modes_metadata",
             "read_only": True,
             "executes": False,
-        }
+            "requires_review": False,
+        },
+        {
+            "method": "POST",
+            "path": "agent_plan",
+            "read_only": True,
+            "executes": False,
+            "requires_review": True,
+        },
+        {
+            "method": "GET",
+            "path": "agent_plan_status",
+            "read_only": True,
+            "executes": False,
+            "requires_review": True,
+        },
     ]
