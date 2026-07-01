@@ -26,4 +26,5 @@ def hermes_rpg_plan_summary_payload() -> dict[str, Any]:
         "writes_state": False,
         "default_enabled": False,
         "user_step": True,
+        "command_surface_clear": True,
     }
