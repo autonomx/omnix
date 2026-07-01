@@ -49,6 +49,19 @@ class HermesSidecarClient:
         response.raise_for_status()
         return response.json()
 
+    def rpg_plan(self, request: dict[str, Any]) -> dict[str, Any]:
+        response = requests.post(
+            f"{self.base_url}/v1/rpg/plan",
+            headers=self._headers(),
+            data=json.dumps(request),
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict):
+            raise HermesSidecarError("Hermes RPG planner response was not an object")
+        return data
+
     def plan(self, request: AssistantRequest) -> AssistantResult:
         prompt = self._planner_prompt(request)
         payload = {
