@@ -22,6 +22,8 @@ def test_hermes_planner_contract_accepts_single_known_command() -> None:
             "confidence": 0.8,
             "risk": "low",
             "expected_effect": "new dialogue clue",
+            "planner": "test",
+            "kind": "dialogue",
         }
     )
 
@@ -30,6 +32,14 @@ def test_hermes_planner_contract_accepts_single_known_command() -> None:
     assert payload["proposal"]["confidence"] == 0.8
     assert payload["proposal"]["requires_review"] is True
     assert payload["proposal"]["direct_state_write"] is False
+    assert payload["metadata"] == {"planner": "test", "raw_kind": "dialogue"}
+
+
+def test_hermes_planner_contract_normalizes_alias_prefixes() -> None:
+    payload = normalize_hermes_planner_response({"command": "purchase two rations"})
+
+    assert payload["ok"] is True
+    assert payload["proposal"]["command"] == "buy two rations"
 
 
 def test_hermes_planner_contract_rejects_empty_command() -> None:
@@ -51,3 +61,10 @@ def test_hermes_planner_contract_rejects_unknown_command() -> None:
 
     assert payload["ok"] is False
     assert payload["error"] == "unknown_command"
+
+
+def test_hermes_planner_contract_rejects_multi_command_bundle() -> None:
+    payload = normalize_hermes_planner_response({"command": "check inventory then buy rations"})
+
+    assert payload["ok"] is False
+    assert payload["error"] == "multi_command_not_allowed"
