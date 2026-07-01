@@ -24,7 +24,15 @@ _ALLOWED_PREFIXES = (
     "focus",
     "journal",
 )
+_ALIAS_PREFIXES = {
+    "examine": "inspect",
+    "inventory": "check inventory",
+    "move": "travel",
+    "purchase": "buy",
+    "speak": "talk",
+}
 _MUTATION_KEYS = {"state_patch", "state_changes", "mutation", "before", "after", "delta"}
+_MULTI_COMMAND_MARKERS = ("\n", ";", " and then ", " then ")
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -68,9 +76,11 @@ def normalize_hermes_planner_response(payload: Any) -> dict[str, Any]:
     if mutation_keys:
         return _rejected("state_mutation_not_allowed", mutation_keys=mutation_keys)
 
-    command = _safe_str(proposal.get("command") or proposal.get("command_text")).strip()
+    command = _normalize_command(_safe_str(proposal.get("command") or proposal.get("command_text")).strip())
     if not command:
         return _rejected("empty_command")
+    if _has_multiple_commands(command):
+        return _rejected("multi_command_not_allowed", command=command)
     if not _known_command(command):
         return _rejected("unknown_command", command=command)
 
@@ -87,7 +97,28 @@ def normalize_hermes_planner_response(payload: Any) -> dict[str, Any]:
             "requires_review": True,
             "direct_state_write": False,
         },
+        "metadata": {
+            "planner": _safe_str(proposal.get("planner") or data.get("planner")).strip() or None,
+            "raw_kind": _safe_str(proposal.get("kind") or data.get("kind")).strip() or None,
+        },
     }
+
+
+def _normalize_command(command: str) -> str:
+    if not command:
+        return ""
+    parts = command.split(maxsplit=1)
+    head = parts[0].lower()
+    tail = parts[1] if len(parts) > 1 else ""
+    alias = _ALIAS_PREFIXES.get(head)
+    if alias is None:
+        return command
+    return f"{alias} {tail}".strip()
+
+
+def _has_multiple_commands(command: str) -> bool:
+    lowered = command.lower()
+    return any(marker in lowered for marker in _MULTI_COMMAND_MARKERS)
 
 
 def _known_command(command: str) -> bool:
