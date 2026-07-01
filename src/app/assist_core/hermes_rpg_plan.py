@@ -4,6 +4,7 @@ from typing import Any
 
 from .hermes_planner_context import hermes_planner_context_from_session
 from .hermes_rpg_plan_request import HermesRpgPlanClient, request_hermes_rpg_plan
+from .hermes_rpg_ticket import hermes_rpg_ticket_payload
 from .hermes_rpg_validator import validate_hermes_rpg_proposal
 
 
@@ -19,7 +20,7 @@ def hermes_rpg_plan_payload(request: dict[str, Any], *, client: HermesRpgPlanCli
     if plan.get("ok") is not True:
         return {**plan, "planner_context": _context_meta(planner_context), "state_changed": False}
     validation = validate_hermes_rpg_proposal(planner_context["context"], plan)
-    return {
+    payload = {
         "ok": validation.get("ok") is True,
         "source": "hermes_rpg_plan",
         "mode": "review_required",
@@ -28,6 +29,7 @@ def hermes_rpg_plan_payload(request: dict[str, Any], *, client: HermesRpgPlanCli
         "validation": validation,
         "state_changed": False,
     }
+    return {**payload, "ticket": hermes_rpg_ticket_payload(payload)}
 
 
 def _planner_context(request: dict[str, Any]) -> dict[str, Any]:
