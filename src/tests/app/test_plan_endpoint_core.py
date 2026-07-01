@@ -49,7 +49,7 @@ def test_plan_endpoint_payload_disabled_config_does_not_send() -> None:
 def test_plan_endpoint_payload_disabled_config_returns_safe_status() -> None:
     payload = plan_endpoint_payload(
         "  review  ",
-        None,
+        {},
         config=HermesSidecarConfig(False, "http://local", 5),
     )
 
@@ -65,6 +65,30 @@ def test_plan_endpoint_payload_disabled_config_returns_safe_status() -> None:
             "requires_review": True,
         },
     }
+    assert payload["review_required"] is True
+    assert payload["read_only"] is True
+    assert payload["executes"] is False
+
+
+def test_plan_endpoint_payload_rejects_blank_objective_safely() -> None:
+    payload = plan_endpoint_payload("   ", {"mode": "rpg"})
+
+    assert payload["ok"] is False
+    assert payload["status"] == "invalid_request"
+    assert payload["sent"] is False
+    assert payload["review_required"] is True
+    assert payload["read_only"] is True
+    assert payload["executes"] is False
+
+
+def test_plan_endpoint_payload_rejects_missing_context_safely() -> None:
+    payload = plan_endpoint_payload("review", None)
+
+    assert payload["ok"] is False
+    assert payload["status"] == "invalid_request"
+    assert payload["sent"] is False
+    assert payload["request"]["objective"] == "review"
+    assert payload["request"]["context"] == {}
     assert payload["review_required"] is True
     assert payload["read_only"] is True
     assert payload["executes"] is False
