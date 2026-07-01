@@ -44,3 +44,27 @@ def test_plan_endpoint_payload_disabled_config_does_not_send() -> None:
     assert payload["review_required"] is True
     assert payload["read_only"] is True
     assert payload["executes"] is False
+
+
+def test_plan_endpoint_payload_disabled_config_returns_safe_status() -> None:
+    payload = plan_endpoint_payload(
+        "  review  ",
+        None,
+        config=HermesSidecarConfig(False, "http://local", 5),
+    )
+
+    assert payload["ok"] is False
+    assert payload["status"] == "disabled"
+    assert payload["sent"] is False
+    assert payload["request"] == {
+        "mode": "agent_mode",
+        "objective": "review",
+        "context": {},
+        "constraints": {
+            "no_execution": True,
+            "requires_review": True,
+        },
+    }
+    assert payload["review_required"] is True
+    assert payload["read_only"] is True
+    assert payload["executes"] is False
