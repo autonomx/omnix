@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { getHermesRpgApprovedFlowConfig, runHermesRpgApprovedFlow } from '../../api/hermesRpgApprovedFlowClient';
+import { getHermesRpgApprovedFlowConfig, runHermesRpgApprovedFlow, type HermesRpgApprovedFlowResponse } from '../../api/hermesRpgApprovedFlowClient';
 import type { HermesRpgSuggestion } from '../../api/hermesClient';
 import type {
   RpgGearPreview,
@@ -54,7 +54,7 @@ interface RpgPlayerRailProps {
   hermesTurnReadout?: RpgTurnReadoutPreview;
   hermesTurnReadoutFreshnessLabel?: string;
   hermesTurnReadoutState?: RpgRailPanelState;
-  onApprovedFlowAccepted?: () => void | Promise<void>;
+  onApprovedFlowAccepted?: (result: HermesRpgApprovedFlowResponse) => void | Promise<void>;
   onSelectCommand?: (command: string) => void;
   partyMembers: RpgPartyMemberPreview[];
   survival: RpgSurvivalPreview;
@@ -79,6 +79,37 @@ function readSelectedSessionId(): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'request_failed';
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function clipText(value: string, maxLength = 150): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+}
+
+function approvedFlowOutcomeLabel(result: HermesRpgApprovedFlowResponse): string {
+  const flow = recordValue(result.flow);
+  const flowResult = recordValue(flow.result);
+  const rpgResult = recordValue(flowResult.rpg_result);
+  const readout = recordValue(result.readout);
+  const turn = rpgResult.turn ?? rpgResult.turn_id ?? readout.turn;
+  const narration = firstString(rpgResult.narration, rpgResult.response, rpgResult.summary);
+  const status = firstString(readout.status) ?? 'accepted';
+  const prefix = turn !== undefined && turn !== null
+    ? `Hermes command ${status}. Turn ${turn}`
+    : `Hermes command ${status}`;
+  return narration ? `${prefix}: ${clipText(narration)}` : `${prefix}. RPG state refreshed.`;
 }
 
 export function RpgPlayerRail({
@@ -131,8 +162,8 @@ export function RpgPlayerRail({
         context: { session_id: sessionId, context_hash: `ui:${sessionId}:${command}` },
       });
       if (result.ok) {
-        await onApprovedFlowAccepted?.();
-        setApprovedFlowStatus('Hermes command accepted by the approved RPG flow. RPG state is refreshing now.');
+        await onApprovedFlowAccepted?.(result);
+        setApprovedFlowStatus(approvedFlowOutcomeLabel(result));
       } else {
         setApprovedFlowStatus(`Hermes command blocked: ${result.error ?? 'approved_flow_not_ok'}`);
       }

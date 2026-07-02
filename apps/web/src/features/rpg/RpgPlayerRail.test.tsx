@@ -90,10 +90,23 @@ describe('RpgPlayerRail', () => {
     expect(runHermesRpgApprovedFlow).not.toHaveBeenCalled();
   });
 
-  it('posts reviewed commands when config is enabled and refreshes after acceptance', async () => {
+  it('posts reviewed commands when config is enabled and shows the accepted turn result', async () => {
+    const result = {
+      ok: true,
+      state_changed: true,
+      readout: { status: 'accepted' },
+      flow: {
+        result: {
+          rpg_result: {
+            turn: 12,
+            narration: 'You look around and the lantern light reveals a narrow stone archway.',
+          },
+        },
+      },
+    };
     const onApprovedFlowAccepted = vi.fn();
     vi.mocked(getHermesRpgApprovedFlowConfig).mockResolvedValue({ ok: true, enabled: true });
-    vi.mocked(runHermesRpgApprovedFlow).mockResolvedValue({ ok: true, state_changed: true });
+    vi.mocked(runHermesRpgApprovedFlow).mockResolvedValue(result);
     window.localStorage.setItem('omnix:rpg:selected-session-id', 'session-1');
 
     renderWithTheme(
@@ -116,8 +129,9 @@ describe('RpgPlayerRail', () => {
       });
     });
     await waitFor(() => {
-      expect(onApprovedFlowAccepted).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole('status')).toHaveTextContent('RPG state is refreshing now');
+      expect(onApprovedFlowAccepted).toHaveBeenCalledWith(result);
+      expect(screen.getByRole('status')).toHaveTextContent('Turn 12');
+      expect(screen.getByRole('status')).toHaveTextContent('narrow stone archway');
     });
   });
 });
