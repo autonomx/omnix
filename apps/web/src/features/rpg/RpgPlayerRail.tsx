@@ -323,7 +323,7 @@ export function RpgPlayerRail({
         </div>
         <div className="rpg-list-stack">
           {activeQuests.map((quest) => (
-            <article className="rpg-list-row" key={quest.id}>
+            <article className="rpg-list-row" key={quest.title}>
               <span className="rpg-icon-tile" aria-hidden="true">{quest.icon}</span>
               <div>
                 <strong>{quest.title}</strong>
@@ -347,7 +347,7 @@ export function RpgPlayerRail({
                 <strong>{member.name}</strong>
                 <span>{member.role}</span>
               </div>
-              <span className="rpg-pill">{member.status}</span>
+              <span className="rpg-pill">{member.hp}</span>
             </article>
           ))}
         </div>
@@ -364,7 +364,7 @@ export function RpgPlayerRail({
               <span className="rpg-icon-tile" aria-hidden="true">{item.icon}</span>
               <div>
                 <strong>{item.name}</strong>
-                <span>{item.detail}</span>
+                <span>{item.slot}</span>
               </div>
             </article>
           ))}
