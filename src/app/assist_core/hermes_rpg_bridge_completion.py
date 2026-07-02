@@ -35,6 +35,8 @@ ACTIVE_INTEGRATION_CHECKS = (
     "approved_ledger_route",
     "hermes_sequence_contract",
     "hermes_sequence_validation",
+    "hermes_sequence_preview_ui",
+    "hermes_sequence_preview_tests",
     "active_integration_audit",
 )
 
@@ -54,7 +56,7 @@ def hermes_rpg_active_integration_completion_payload() -> dict[str, Any]:
     return {
         "ok": True,
         "source": "hermes_rpg_active_integration_completion",
-        "phases": list(range(201, 216)),
+        "phases": list(range(201, 217)),
         "checks": list(ACTIVE_INTEGRATION_CHECKS),
         "bridge": hermes_rpg_bridge_completion_payload(),
         "active_integration_ready": True,
