@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { runHermesRpgApprovedFlow } from '../../api/hermesRpgApprovedFlowClient';
+import { getHermesRpgApprovedFlowConfig, runHermesRpgApprovedFlow } from '../../api/hermesRpgApprovedFlowClient';
 import type { HermesRpgSuggestion } from '../../api/hermesClient';
 import type {
   RpgGearPreview,
@@ -54,6 +54,7 @@ interface RpgPlayerRailProps {
   hermesTurnReadout?: RpgTurnReadoutPreview;
   hermesTurnReadoutFreshnessLabel?: string;
   hermesTurnReadoutState?: RpgRailPanelState;
+  onApprovedFlowAccepted?: () => void | Promise<void>;
   onSelectCommand?: (command: string) => void;
   partyMembers: RpgPartyMemberPreview[];
   survival: RpgSurvivalPreview;
@@ -94,6 +95,7 @@ export function RpgPlayerRail({
   hermesTurnReadout,
   hermesTurnReadoutFreshnessLabel,
   hermesTurnReadoutState,
+  onApprovedFlowAccepted,
   onSelectCommand,
   partyMembers,
   survival,
@@ -112,8 +114,16 @@ export function RpgPlayerRail({
     }
 
     setPendingApprovedCommand(command);
-    setApprovedFlowStatus('Reviewing Hermes command against the RPG turn boundary…');
+    setApprovedFlowStatus('Checking Hermes RPG approved-flow configuration…');
     try {
+      const config = await getHermesRpgApprovedFlowConfig();
+      if (config.enabled !== true) {
+        const flag = config.feature_flag ?? 'HERMES_RPG_APPROVED_FLOW_ENABLED';
+        setApprovedFlowStatus(`Hermes approved RPG flow is disabled by config. Set ${flag}=1 to enable reviewed apply.`);
+        return;
+      }
+
+      setApprovedFlowStatus('Reviewing Hermes command against the RPG turn boundary…');
       const result = await runHermesRpgApprovedFlow({
         enabled: true,
         user_step: { ready: true, command_text: command },
@@ -121,7 +131,8 @@ export function RpgPlayerRail({
         context: { session_id: sessionId, context_hash: `ui:${sessionId}:${command}` },
       });
       if (result.ok) {
-        setApprovedFlowStatus('Hermes command accepted by the approved RPG flow. Refreshing will show the resulting turn.');
+        await onApprovedFlowAccepted?.();
+        setApprovedFlowStatus('Hermes command accepted by the approved RPG flow. RPG state is refreshing now.');
       } else {
         setApprovedFlowStatus(`Hermes command blocked: ${result.error ?? 'approved_flow_not_ok'}`);
       }
