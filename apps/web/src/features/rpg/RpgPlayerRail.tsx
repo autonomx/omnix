@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { runHermesRpgApprovedFlow } from '../../api/hermesRpgApprovedFlowClient';
 import type { HermesRpgSuggestion } from '../../api/hermesClient';
 import type {
   RpgGearPreview,
@@ -10,6 +12,8 @@ import type {
 import './RpgVisualAssets.css';
 
 const HERO_ART_SRC = '/rpg/hero-alyndra.svg';
+const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
+const RPG_PARTY_CAPACITY = 4;
 
 type RpgRailPanelState = 'idle' | 'loading' | 'ready' | 'error' | 'empty';
 
@@ -63,6 +67,19 @@ function freshnessPrefix(label: string | undefined) {
   return label ? `${label} • ` : '';
 }
 
+function readSelectedSessionId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return window.localStorage.getItem(RPG_SELECTED_SESSION_STORAGE_KEY)?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'request_failed';
+}
+
 export function RpgPlayerRail({
   activeQuests,
   className,
@@ -81,9 +98,39 @@ export function RpgPlayerRail({
   partyMembers,
   survival,
 }: RpgPlayerRailProps) {
+  const [approvedFlowStatus, setApprovedFlowStatus] = useState<string | null>(null);
+  const [pendingApprovedCommand, setPendingApprovedCommand] = useState<string | null>(null);
   const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
   const heroAvatarClassName = heroSummary.source === 'preview' ? 'rpg-avatar rpg-hero-avatar rpg-hero-avatar-art' : 'rpg-avatar rpg-hero-avatar';
   const turnReadoutState = hermesTurnReadoutState ?? (hermesTurnReadout ? 'ready' : 'empty');
+
+  const reviewAndApplyHermesCommand = async (command: string) => {
+    const sessionId = readSelectedSessionId();
+    if (!sessionId) {
+      setApprovedFlowStatus('Select or create a live RPG session before applying a Hermes command.');
+      return;
+    }
+
+    setPendingApprovedCommand(command);
+    setApprovedFlowStatus('Reviewing Hermes command against the RPG turn boundary…');
+    try {
+      const result = await runHermesRpgApprovedFlow({
+        enabled: true,
+        user_step: { ready: true, command_text: command },
+        replay_entry: { ok: true, command_text: command },
+        context: { session_id: sessionId, context_hash: `ui:${sessionId}:${command}` },
+      });
+      if (result.ok) {
+        setApprovedFlowStatus('Hermes command accepted by the approved RPG flow. Refreshing will show the resulting turn.');
+      } else {
+        setApprovedFlowStatus(`Hermes command blocked: ${result.error ?? 'approved_flow_not_ok'}`);
+      }
+    } catch (error) {
+      setApprovedFlowStatus(`Hermes approved flow failed: ${errorMessage(error)}`);
+    } finally {
+      setPendingApprovedCommand(null);
+    }
+  };
 
   return (
     <aside className={railClassName} aria-label="Player, party, and quests">
@@ -168,6 +215,7 @@ export function RpgPlayerRail({
         <div className="rpg-list-stack">
           {hermesSuggestions.map((suggestion) => {
             const command = suggestion.command?.trim() ?? '';
+            const isApplying = pendingApprovedCommand === command;
             return (
               <article className="rpg-list-row" key={suggestion.id ?? suggestion.label ?? command}>
                 <span className="rpg-icon-tile" aria-hidden="true">✦</span>
@@ -183,11 +231,20 @@ export function RpgPlayerRail({
                 >
                   Use
                 </button>
+                <button
+                  className="rpg-secondary-button"
+                  disabled={!command || Boolean(pendingApprovedCommand)}
+                  onClick={() => command && void reviewAndApplyHermesCommand(command)}
+                  type="button"
+                >
+                  {isApplying ? 'Applying…' : 'Review & apply'}
+                </button>
               </article>
             );
           })}
         </div>
-        <small>{freshnessPrefix(hermesSuggestionFreshnessLabel)}Hermes only fills the command box; the RPG runtime still processes the turn after you submit.</small>
+        {approvedFlowStatus ? <p className="rpg-empty-state" role="status">{approvedFlowStatus}</p> : null}
+        <small>{freshnessPrefix(hermesSuggestionFreshnessLabel)}Hermes can fill the command box or, after review, submit through the approved RPG flow. The RPG runtime still owns state.</small>
       </section>
 
       <section className="rpg-card" aria-label="Hermes turn readout">
@@ -260,81 +317,66 @@ export function RpgPlayerRail({
         <small>Actions prepare a deterministic turn command.</small>
       </section>
 
-      <section className="rpg-card">
+      <section className="rpg-card" aria-label="Active quests">
         <div className="rpg-section-heading">
-          <p className="eyebrow">Equipped gear</p>
+          <p className="eyebrow">Objectives</p>
+          <span>{activeQuests.length}</span>
         </div>
         <div className="rpg-list-stack">
-          {equippedGear.length ? (
-            equippedGear.map((item) => (
-              <article className="rpg-list-row" key={item.name}>
-                <span className="rpg-icon-tile" aria-hidden="true">
-                  {item.icon}
-                </span>
-                <div>
-                  <strong>{item.name}</strong>
-                  <span>{item.slot}</span>
-                </div>
-              </article>
-            ))
-          ) : (
-            <p className="rpg-empty-state">No equipped gear.</p>
-          )}
+          {activeQuests.map((quest) => (
+            <article className="rpg-list-row" key={quest.title}>
+              <span className="rpg-icon-tile" aria-hidden="true">{quest.icon}</span>
+              <div>
+                <strong>{quest.title}</strong>
+                <span>{quest.detail}</span>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
-      <section className="rpg-card">
+      <section className="rpg-card" aria-label="Party members">
         <div className="rpg-section-heading">
           <p className="eyebrow">Party</p>
-          <span>{partyMembers.length} / 4</span>
+          <span>{partyMembers.length} / {RPG_PARTY_CAPACITY}</span>
         </div>
         <div className="rpg-list-stack">
-          {partyMembers.length ? (
-            partyMembers.map((member) => (
-              <article className="rpg-party-row" key={member.name}>
-                <span className="rpg-avatar rpg-avatar-small" aria-hidden="true">
-                  {member.avatar}
-                </span>
-                <div className="rpg-party-member-copy">
-                  <strong>{member.name}</strong>
-                  <span>{member.role}</span>
-                </div>
-                <div className="rpg-party-member-status">
-                  <span className="rpg-party-health">
-                    <span style={{ width: `${member.percent}%` }} />
-                  </span>
-                  <small>{member.hp}</small>
-                </div>
-              </article>
-            ))
-          ) : (
-            <p className="rpg-empty-state">No companions have joined this campaign.</p>
-          )}
+          {partyMembers.map((member) => (
+            <article className="rpg-list-row" key={member.name}>
+              <span className="rpg-icon-tile" aria-hidden="true">{member.avatar}</span>
+              <div>
+                <strong>{member.name}</strong>
+                <span>{member.role}</span>
+              </div>
+              <span className="rpg-pill">{member.hp}</span>
+            </article>
+          ))}
         </div>
-        <button className="rpg-secondary-button" type="button">
+        <button
+          className="rpg-secondary-button"
+          disabled={!onSelectCommand || partyMembers.length >= RPG_PARTY_CAPACITY}
+          onClick={() => onSelectCommand?.('Ask a trusted companion to join the party.')}
+          type="button"
+        >
           + Add companion
         </button>
       </section>
 
-      <section className="rpg-card">
-        <p className="eyebrow">Active quests</p>
+      <section className="rpg-card" aria-label="Equipped gear">
+        <div className="rpg-section-heading">
+          <p className="eyebrow">Gear</p>
+          <span>{equippedGear.length}</span>
+        </div>
         <div className="rpg-list-stack">
-          {activeQuests.length ? (
-            activeQuests.map((quest) => (
-              <article className="rpg-quest-row" key={quest.title}>
-                <span className="rpg-quest-icon" aria-hidden="true">
-                  {quest.icon}
-                </span>
-                <div>
-                  <strong>{quest.title}</strong>
-                  <span>{quest.detail}</span>
-                </div>
-                <span aria-hidden="true">›</span>
-              </article>
-            ))
-          ) : (
-            <p className="rpg-empty-state">No active quests.</p>
-          )}
+          {equippedGear.map((item) => (
+            <article className="rpg-list-row" key={item.name}>
+              <span className="rpg-icon-tile" aria-hidden="true">{item.icon}</span>
+              <div>
+                <strong>{item.name}</strong>
+                <span>{item.slot}</span>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
     </aside>

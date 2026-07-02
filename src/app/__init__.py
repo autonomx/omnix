@@ -41,6 +41,8 @@ def _hermes_test_request(payload: dict[str, Any] | None):
 
 def create_fastapi_app() -> FastAPI:
     """Create and configure the complete FastAPI application with all routers."""
+    from app.assist_core.hermes_rpg_approved_routes import hermes_rpg_approved_bp
+
     from .rpg.api.rpg_adventure_routes import rpg_adventure_bp
     from .rpg.api.rpg_debug_routes import rpg_debug_bp
     from .rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
@@ -82,6 +84,7 @@ def create_fastapi_app() -> FastAPI:
     app.include_router(rpg_inspection_bp)
     app.include_router(rpg_session_bp)
     app.include_router(rpg_presentation_bp)
+    app.include_router(hermes_rpg_approved_bp)
 
     return app
 

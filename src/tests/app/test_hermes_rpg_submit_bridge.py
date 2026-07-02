@@ -17,7 +17,18 @@ def test_hermes_rpg_submit_bridge_calls_submitter_when_ready() -> None:
         submitter,
     )
 
-    assert seen == [{"session_id": "s1", "command_text": "check inventory"}]
+    assert seen == [
+        {
+            "ok": True,
+            "source": "hermes_rpg_submit_adapter",
+            "session_id": "s1",
+            "command_text": "check inventory",
+            "input": "check inventory",
+            "context_hash": None,
+            "canonical_path": "rpg_turn_execute",
+            "state_changed": False,
+        }
+    ]
     assert payload["ok"] is True
     assert payload["rpg_result"] == {"ok": True, "turn_id": 9}
     assert payload["state_changed"] is True
