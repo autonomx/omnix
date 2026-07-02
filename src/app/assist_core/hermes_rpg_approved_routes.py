@@ -11,6 +11,7 @@ from .hermes_rpg_approved_config import (
 )
 from .hermes_rpg_approved_flow import hermes_rpg_approved_flow
 from .hermes_rpg_canonical_submitter import hermes_rpg_canonical_submitter
+from .hermes_rpg_execution_ledger import hermes_rpg_execution_ledger_recent, hermes_rpg_execution_ledger_record
 from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
 from .hermes_rpg_submit_bridge import RpgSubmitter
 
@@ -52,13 +53,16 @@ def hermes_rpg_approved_flow_route_payload(
         context,
         submitter or hermes_rpg_canonical_submitter,
     )
+    readout = hermes_rpg_flow_readout(flow)
+    ledger_entry = hermes_rpg_execution_ledger_record(payload=data, config=config, flow=flow, readout=readout)
     return {
         "ok": flow.get("ok") is True,
         "source": "hermes_rpg_approved_flow_route",
         "enabled": True,
         "config": config,
         "flow": flow,
-        "readout": hermes_rpg_flow_readout(flow),
+        "readout": readout,
+        "ledger_entry": ledger_entry,
         "state_changed": flow.get("state_changed") is True,
     }
 
@@ -71,3 +75,8 @@ def hermes_rpg_approved_flow_route(payload: dict[str, Any] | None = Body(default
 @hermes_rpg_approved_bp.get("/api/hermes/rpg/approved-flow/config")
 def hermes_rpg_approved_flow_config_route() -> dict[str, object]:
     return hermes_rpg_approved_flow_config_payload()
+
+
+@hermes_rpg_approved_bp.get("/api/hermes/rpg/approved-flow/ledger")
+def hermes_rpg_approved_flow_ledger_route(limit: int = 20) -> dict[str, object]:
+    return hermes_rpg_execution_ledger_recent(limit)
