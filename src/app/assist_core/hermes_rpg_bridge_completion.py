@@ -31,6 +31,8 @@ ACTIVE_INTEGRATION_CHECKS = (
     "approved_real_session_e2e",
     "runtime_noncombat_intent_guard",
     "approved_turn_result_ux",
+    "approved_execution_ledger",
+    "approved_ledger_route",
     "active_integration_audit",
 )
 
@@ -50,7 +52,7 @@ def hermes_rpg_active_integration_completion_payload() -> dict[str, Any]:
     return {
         "ok": True,
         "source": "hermes_rpg_active_integration_completion",
-        "phases": list(range(201, 214)),
+        "phases": list(range(201, 215)),
         "checks": list(ACTIVE_INTEGRATION_CHECKS),
         "bridge": hermes_rpg_bridge_completion_payload(),
         "active_integration_ready": True,
