@@ -23,6 +23,8 @@ ACTIVE_INTEGRATION_CHECKS = (
     "replay_determinism_fixture",
     "feature_flag_config",
     "approved_flow_happy_path",
+    "approved_route_config_gate",
+    "approved_route_readout",
     "active_integration_audit",
 )
 
