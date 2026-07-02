@@ -14,6 +14,8 @@ from .hermes_rpg_canonical_submitter import hermes_rpg_canonical_submitter
 from .hermes_rpg_execution_ledger import hermes_rpg_execution_ledger_recent, hermes_rpg_execution_ledger_record
 from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
 from .hermes_rpg_submit_bridge import RpgSubmitter
+from .hermes_sequence_contract import hermes_sequence_contract_validate
+from .hermes_sequence_gate import hermes_sequence_apply_gate
 
 hermes_rpg_approved_bp = APIRouter()
 
@@ -67,6 +69,21 @@ def hermes_rpg_approved_flow_route_payload(
     }
 
 
+def hermes_rpg_sequence_review_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    data = payload if isinstance(payload, dict) else {}
+    checked = hermes_sequence_contract_validate(data)
+    sequence = checked["sequence"]
+    gate = hermes_sequence_apply_gate(sequence) if checked["ok"] else None
+    return {
+        "ok": checked["ok"] and bool(gate and gate.get("allowed") is True),
+        "source": "hermes_rpg_sequence_review_route",
+        "validation": checked,
+        "sequence": sequence,
+        "gate": gate,
+        "state_changed": False,
+    }
+
+
 @hermes_rpg_approved_bp.post("/api/hermes/rpg/approved-flow")
 def hermes_rpg_approved_flow_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
     return hermes_rpg_approved_flow_route_payload(payload)
@@ -80,3 +97,8 @@ def hermes_rpg_approved_flow_config_route() -> dict[str, object]:
 @hermes_rpg_approved_bp.get("/api/hermes/rpg/approved-flow/ledger")
 def hermes_rpg_approved_flow_ledger_route(limit: int = 20) -> dict[str, object]:
     return hermes_rpg_execution_ledger_recent(limit)
+
+
+@hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/review")
+def hermes_rpg_sequence_review_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+    return hermes_rpg_sequence_review_payload(payload)
