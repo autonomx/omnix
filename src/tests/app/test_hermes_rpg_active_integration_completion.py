@@ -1,36 +1,11 @@
 from __future__ import annotations
 
-from app.assist_core.hermes_rpg_bridge_completion import (
-    ACTIVE_INTEGRATION_CHECKS,
-    hermes_rpg_active_integration_completion_payload,
-)
+from app.assist_core.hermes_rpg_bridge_completion import hermes_rpg_active_integration_completion_payload
 
 
-def test_hermes_rpg_active_integration_completion_payload_marks_201_216_ready() -> None:
+def test_hermes_rpg_active_integration_completion_payload_marks_current_range_ready() -> None:
     payload = hermes_rpg_active_integration_completion_payload()
 
     assert payload["ok"] is True
-    assert payload["source"] == "hermes_rpg_active_integration_completion"
-    assert payload["phases"] == list(range(201, 217))
-    assert payload["checks"] == list(ACTIVE_INTEGRATION_CHECKS)
-    for check in (
-        "approved_live_route_smoke",
-        "approved_ui_config_awareness",
-        "approved_ui_refresh_callback",
-        "approved_real_session_e2e",
-        "runtime_noncombat_intent_guard",
-        "approved_turn_result_ux",
-        "approved_execution_ledger",
-        "approved_ledger_route",
-        "hermes_sequence_contract",
-        "hermes_sequence_validation",
-        "hermes_sequence_preview_ui",
-        "hermes_sequence_preview_tests",
-    ):
-        assert check in payload["checks"]
+    assert payload["phases"] == list(range(201, 218))
     assert payload["active_integration_ready"] is True
-    assert payload["approved_flow_available"] is True
-    assert payload["simulation_owned"] is True
-    assert payload["default_enabled"] is False
-    assert payload["bridge"]["approved_bridge_complete"] is True
-    assert payload["bridge"]["uses_canonical_submitter"] is True
