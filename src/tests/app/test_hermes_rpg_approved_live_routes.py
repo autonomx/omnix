@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app import create_fastapi_app
 from app.assist_core.hermes_rpg_approved_config import FEATURE_FLAG
 from app.assist_core import hermes_rpg_approved_routes as approved_routes
+from app.assist_core.hermes_rpg_execution_ledger import hermes_rpg_execution_ledger_reset
 from app.rpg.pipeline import create_new_game, delete_game, load_game, save_game
 
 
@@ -49,6 +50,7 @@ def test_hermes_rpg_approved_flow_live_post_is_disabled_by_default(monkeypatch: 
 
 
 def test_hermes_rpg_approved_flow_live_post_uses_canonical_submitter_when_enabled(monkeypatch: Any) -> None:
+    hermes_rpg_execution_ledger_reset()
     submitted: list[dict[str, Any]] = []
 
     def submitter(payload: dict[str, Any]) -> dict[str, Any]:
@@ -99,7 +101,16 @@ def test_hermes_rpg_approved_flow_live_post_uses_canonical_submitter_when_enable
     assert payload["readout"]["session_id"] == "session-211"
     assert payload["readout"]["command_text"] == "look around"
     assert payload["flow"]["result"]["rpg_result"]["source"] == "fake_live_rpg_submitter"
+    assert payload["ledger_entry"]["session_id"] == "session-211"
+    assert payload["ledger_entry"]["command_text"] == "look around"
+    assert payload["ledger_entry"]["state_changed"] is True
     assert payload["state_changed"] is True
+
+    ledger = client.get("/api/hermes/rpg/approved-flow/ledger")
+    assert ledger.status_code == 200
+    ledger_payload = ledger.json()
+    assert ledger_payload["count"] == 1
+    assert ledger_payload["items"][0]["session_id"] == "session-211"
 
 
 def test_hermes_rpg_approved_flow_live_post_advances_real_rpg_session(monkeypatch: Any) -> None:
@@ -132,6 +143,7 @@ def test_hermes_rpg_approved_flow_live_post_advances_real_rpg_session(monkeypatc
     assert payload["flow"]["result"]["rpg_result"]["source"] == "hermes_rpg_canonical_submitter"
     assert payload["flow"]["result"]["rpg_result"]["success"] is True
     assert payload["flow"]["result"]["rpg_result"]["narration"]
+    assert payload["ledger_entry"]["session_id"] == session_id
     assert loaded is session
     assert loaded.world.time == starting_time + 1
     assert payload["state_changed"] is True
