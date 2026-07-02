@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { hSeqHasGate, hSeqTone } from './hSeqTone';
+import { hSeqHasRows, hSeqItemCount } from './hSeqTone';
 
-describe('hSeqTone', () => {
-  it('maps levels to tones', () => {
-    expect(hSeqTone({ risk: 'low' })).toBe('quiet');
-    expect(hSeqTone({ risk: 'medium' })).toBe('warn');
-    expect(hSeqTone({ risk: 'high' })).toBe('danger');
+describe('hSeq item count', () => {
+  it('counts rows', () => {
+    expect(hSeqItemCount(null)).toBe(0);
+    expect(hSeqItemCount({ items: [{ statement: 'inspect room' }, { statement: 'listen' }] })).toBe(2);
   });
 
-  it('detects gated rows', () => {
-    expect(hSeqHasGate(null)).toBe(false);
-    expect(hSeqHasGate({ items: [{ user_gate: false }] })).toBe(false);
-    expect(hSeqHasGate({ items: [{ user_gate: true }] })).toBe(true);
+  it('reports whether rows exist', () => {
+    expect(hSeqHasRows({ items: [] })).toBe(false);
+    expect(hSeqHasRows({ items: [{ statement: 'inspect room' }] })).toBe(true);
   });
 });
