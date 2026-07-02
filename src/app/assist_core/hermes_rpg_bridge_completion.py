@@ -25,6 +25,9 @@ ACTIVE_INTEGRATION_CHECKS = (
     "approved_flow_happy_path",
     "approved_route_config_gate",
     "approved_route_readout",
+    "approved_live_route_smoke",
+    "approved_ui_config_awareness",
+    "approved_ui_refresh_callback",
     "active_integration_audit",
 )
 
@@ -44,7 +47,7 @@ def hermes_rpg_active_integration_completion_payload() -> dict[str, Any]:
     return {
         "ok": True,
         "source": "hermes_rpg_active_integration_completion",
-        "phases": list(range(201, 211)),
+        "phases": list(range(201, 212)),
         "checks": list(ACTIVE_INTEGRATION_CHECKS),
         "bridge": hermes_rpg_bridge_completion_payload(),
         "active_integration_ready": True,
