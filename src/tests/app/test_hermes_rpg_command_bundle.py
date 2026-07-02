@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.assist_core.hermes_rpg_audit_entry import hermes_rpg_audit_entry
 from app.assist_core.hermes_rpg_command_bundle import hermes_rpg_command_bundle
 from app.assist_core.hermes_rpg_intent_guard import hermes_rpg_intent_guard
 from app.assist_core.hermes_rpg_user_step import hermes_rpg_user_step
@@ -52,3 +53,16 @@ def test_hermes_rpg_user_step_requires_confirmation() -> None:
     assert ready["ready"] is True
     assert ready["command_text"] == "check inventory"
     assert ready["state_changed"] is False
+
+
+def test_hermes_rpg_audit_entry_records_command_metadata() -> None:
+    payload = hermes_rpg_audit_entry(
+        {"ticket_id": "t1", "context_hash": "abc", "command_text": "check inventory", "confirmed": True}
+    )
+
+    assert payload["ok"] is True
+    assert payload["ticket_id"] == "t1"
+    assert payload["context_hash"] == "abc"
+    assert payload["command_text"] == "check inventory"
+    assert payload["confirmed"] is True
+    assert payload["state_changed"] is False
