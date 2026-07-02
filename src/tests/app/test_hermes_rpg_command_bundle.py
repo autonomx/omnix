@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.assist_core.hermes_rpg_command_bundle import hermes_rpg_command_bundle
 from app.assist_core.hermes_rpg_intent_guard import hermes_rpg_intent_guard
+from app.assist_core.hermes_rpg_user_step import hermes_rpg_user_step
 
 
 def test_hermes_rpg_command_bundle_returns_card_for_matching_ticket() -> None:
@@ -37,3 +38,17 @@ def test_hermes_rpg_intent_guard_requires_user_approval() -> None:
     assert payload["requires_user_approval"] is True
     assert payload["armed"] is False
     assert payload["state_changed"] is False
+
+
+def test_hermes_rpg_user_step_requires_confirmation() -> None:
+    intent = hermes_rpg_intent_guard(
+        hermes_rpg_command_bundle({"ticket_id": "t1", "command": "check inventory", "valid": True}, "t1")
+    )
+
+    blocked = hermes_rpg_user_step(intent, confirmed=False)
+    ready = hermes_rpg_user_step(intent, confirmed=True)
+
+    assert blocked["ready"] is False
+    assert ready["ready"] is True
+    assert ready["command_text"] == "check inventory"
+    assert ready["state_changed"] is False
