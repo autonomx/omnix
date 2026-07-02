@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app import create_fastapi_app
 from app.assist_core.hermes_rpg_approved_config import FEATURE_FLAG
 from app.assist_core import hermes_rpg_approved_routes as approved_routes
+from app.rpg.pipeline import create_new_game, delete_game, load_game, save_game
 
 
 def test_hermes_rpg_approved_flow_live_config_route_defaults_off(monkeypatch: Any) -> None:
@@ -99,3 +100,39 @@ def test_hermes_rpg_approved_flow_live_post_uses_canonical_submitter_when_enable
     assert payload["readout"]["command_text"] == "look around"
     assert payload["flow"]["result"]["rpg_result"]["source"] == "fake_live_rpg_submitter"
     assert payload["state_changed"] is True
+
+
+def test_hermes_rpg_approved_flow_live_post_advances_real_rpg_session(monkeypatch: Any) -> None:
+    session_id = "session-212-real"
+    delete_game(session_id)
+    session = create_new_game(seed=212, player_name="Phase 212 Hero")
+    starting_time = session.world.time
+    save_game(session, session_id)
+    monkeypatch.setenv(FEATURE_FLAG, "1")
+    client = TestClient(create_fastapi_app())
+
+    response = client.post(
+        "/api/hermes/rpg/approved-flow",
+        json={
+            "enabled": True,
+            "user_step": {"ready": True, "command_text": "look around"},
+            "replay_entry": {"ok": True, "command_text": "look around"},
+            "context": {"session_id": session_id, "context_hash": "ctx-212"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    loaded = load_game(session_id)
+    assert payload["ok"] is True
+    assert payload["config"]["enabled"] is True
+    assert payload["readout"]["status"] == "accepted"
+    assert payload["readout"]["session_id"] == session_id
+    assert payload["readout"]["command_text"] == "look around"
+    assert payload["flow"]["result"]["rpg_result"]["source"] == "hermes_rpg_canonical_submitter"
+    assert payload["flow"]["result"]["rpg_result"]["success"] is True
+    assert payload["flow"]["result"]["rpg_result"]["narration"]
+    assert loaded is session
+    assert loaded.world.time == starting_time + 1
+    assert payload["state_changed"] is True
+    delete_game(session_id)

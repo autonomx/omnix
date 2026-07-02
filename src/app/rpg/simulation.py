@@ -1,9 +1,23 @@
+def _intent_action(intent):
+    action = str(intent.get("action") or "").strip().lower()
+    if action:
+        return action
+
+    raw_intent = str(intent.get("intent") or intent.get("command") or "").strip().lower()
+    if any(word in raw_intent for word in ("attack", "fight", "strike", "hit")):
+        return "attack"
+    if any(word in raw_intent for word in ("look", "observe", "inspect", "wait", "rest", "inventory")):
+        return "observe"
+    return "noop"
+
+
 def process(session, intent):
     events = []
 
     source = intent.get("source", "player")
+    action = _intent_action(intent)
 
-    if intent["action"] == "attack":
+    if action == "attack":
         target = find_target(session, intent.get("target"))
 
         if not target:
