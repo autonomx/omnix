@@ -13,6 +13,7 @@ import './RpgVisualAssets.css';
 
 const HERO_ART_SRC = '/rpg/hero-alyndra.svg';
 const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
+const RPG_PARTY_CAPACITY = 4;
 
 type RpgRailPanelState = 'idle' | 'loading' | 'ready' | 'error' | 'empty';
 
@@ -337,7 +338,7 @@ export function RpgPlayerRail({
       <section className="rpg-card" aria-label="Party members">
         <div className="rpg-section-heading">
           <p className="eyebrow">Party</p>
-          <span>{partyMembers.length}</span>
+          <span>{partyMembers.length} / {RPG_PARTY_CAPACITY}</span>
         </div>
         <div className="rpg-list-stack">
           {partyMembers.map((member) => (
@@ -351,6 +352,14 @@ export function RpgPlayerRail({
             </article>
           ))}
         </div>
+        <button
+          className="rpg-secondary-button"
+          disabled={!onSelectCommand || partyMembers.length >= RPG_PARTY_CAPACITY}
+          onClick={() => onSelectCommand?.('Ask a trusted companion to join the party.')}
+          type="button"
+        >
+          + Add companion
+        </button>
       </section>
 
       <section className="rpg-card" aria-label="Equipped gear">
