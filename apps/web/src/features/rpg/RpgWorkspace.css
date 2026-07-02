@@ -321,6 +321,32 @@
   padding: 0.65rem;
 }
 
+.rpg-hermes-sequence-alert {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(251, 113, 133, 0.25);
+  border-radius: 0.7rem;
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.65rem;
+}
+
+.rpg-hermes-sequence-alert strong {
+  color: #fecdd3;
+}
+
+.rpg-hermes-sequence-alert span,
+.rpg-hermes-sequence-issues {
+  color: #fda4af;
+  font-size: 0.82rem;
+}
+
+.rpg-hermes-sequence-issues {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
 .rpg-survival-card {
   gap: 0.75rem;
 }

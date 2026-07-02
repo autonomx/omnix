@@ -5,6 +5,8 @@ describe('preview model mapper', () => {
   it('maps populated input', () => {
     const result = hermesSequencePreviewModel({
       ok: true,
+      validation: { ok: true, errors: [] },
+      gate: { allowed: true, blocked_count: 0, decisions: [{ item_id: 'item-1', allowed: true }] },
       sequence: {
         sequence_id: 'seq-1',
         objective: 'Room details',
@@ -16,8 +18,47 @@ describe('preview model mapper', () => {
     });
 
     expect(result?.sequence_id).toBe('seq-1');
+    expect(result?.review_status).toBe('ready');
+    expect(result?.validation_status).toBe('valid');
+    expect(result?.gate_status).toBe('ready');
+    expect(result?.first_usable_command).toBe('inspect room');
     expect(result?.items?.[0]?.statement).toBe('inspect room');
     expect(result?.items?.[0]?.user_gate).toBe(false);
+  });
+
+  it('maps blocked gate decisions', () => {
+    const result = hermesSequencePreviewModel({
+      ok: false,
+      validation: { ok: true, errors: [] },
+      gate: {
+        allowed: false,
+        blocked_count: 1,
+        decisions: [{ item_id: 'item-1', allowed: false, reason: 'stateful_statement' }],
+      },
+      sequence: {
+        sequence_id: 'seq-1',
+        objective: 'Buy rope',
+        items: [{ item_id: 'item-1', statement: 'buy rope', user_gate: false }],
+      },
+    });
+
+    expect(result?.review_status).toBe('blocked');
+    expect(result?.blocked_reason).toBe('stateful_statement');
+    expect(result?.items?.[0]?.gate_allowed).toBe(false);
+    expect(result?.items?.[0]?.gate_reason).toBe('stateful_statement');
+  });
+
+  it('maps invalid sequences with validation errors', () => {
+    const result = hermesSequencePreviewModel({
+      ok: false,
+      validation: { ok: false, errors: ['missing_objective', 'missing_items'] },
+      sequence: { sequence_id: 'seq-1', items: [] },
+      gate: null,
+    });
+
+    expect(result?.review_status).toBe('invalid');
+    expect(result?.validation_status).toBe('2 issues');
+    expect(result?.validation_errors).toEqual(['missing_objective', 'missing_items']);
   });
 
   it('returns null for empty input', () => {

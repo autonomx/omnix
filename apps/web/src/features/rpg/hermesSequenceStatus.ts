@@ -17,6 +17,11 @@ export function hermesSequenceStatusLabel(response: HermesRpgSequenceResponse | 
   if (errors > 0) return `${errors} validation issue${errors === 1 ? '' : 's'}`;
   const blocked = numberValue(gate.blocked_count);
   if (blocked > 0) return `${blocked} gated item${blocked === 1 ? '' : 's'}`;
+  const sequence = recordValue(response.sequence);
+  if (Object.keys(sequence).length > 0) {
+    const items = Array.isArray(sequence.items) ? sequence.items : [];
+    if (items.length === 0) return 'empty';
+  }
   return 'not ready';
 }
 
