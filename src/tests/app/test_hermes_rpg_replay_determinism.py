@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.assist_core.hermes_rpg_approved_config import FEATURE_FLAG
 from app.assist_core.hermes_rpg_approved_routes import hermes_rpg_approved_flow_route_payload
 
 
@@ -26,9 +27,10 @@ def test_hermes_rpg_approved_flow_replays_same_canonical_submit_payload() -> Non
         "replay_entry": {"ok": True, "command_text": "look around"},
         "context": {"session_id": "s1", "context_hash": "ctx-1"},
     }
+    environ = {FEATURE_FLAG: "true"}
 
-    first = hermes_rpg_approved_flow_route_payload(request, submitter=submitter)
-    second = hermes_rpg_approved_flow_route_payload(request, submitter=submitter)
+    first = hermes_rpg_approved_flow_route_payload(request, submitter=submitter, environ=environ)
+    second = hermes_rpg_approved_flow_route_payload(request, submitter=submitter, environ=environ)
 
     assert first["ok"] is True
     assert second["ok"] is True
@@ -45,6 +47,7 @@ def test_hermes_rpg_approved_flow_replays_same_canonical_submit_payload() -> Non
         "canonical_path": "rpg_turn_execute",
         "state_changed": False,
     }
+    assert first["readout"] == second["readout"]
     assert first["flow"]["result"]["rpg_result"] == second["flow"]["result"]["rpg_result"]
     assert first["flow"]["packet"]["ready_for_rpg_pipeline"] is True
     assert first["flow"]["packet"]["session_id"] == "s1"
