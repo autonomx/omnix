@@ -6,23 +6,28 @@ from app.assist_core.hermes_rpg_bridge_completion import (
 )
 
 
-def test_hermes_rpg_active_integration_completion_payload_marks_201_215_ready() -> None:
+def test_hermes_rpg_active_integration_completion_payload_marks_201_216_ready() -> None:
     payload = hermes_rpg_active_integration_completion_payload()
 
     assert payload["ok"] is True
     assert payload["source"] == "hermes_rpg_active_integration_completion"
-    assert payload["phases"] == list(range(201, 216))
+    assert payload["phases"] == list(range(201, 217))
     assert payload["checks"] == list(ACTIVE_INTEGRATION_CHECKS)
-    assert "approved_live_route_smoke" in payload["checks"]
-    assert "approved_ui_config_awareness" in payload["checks"]
-    assert "approved_ui_refresh_callback" in payload["checks"]
-    assert "approved_real_session_e2e" in payload["checks"]
-    assert "runtime_noncombat_intent_guard" in payload["checks"]
-    assert "approved_turn_result_ux" in payload["checks"]
-    assert "approved_execution_ledger" in payload["checks"]
-    assert "approved_ledger_route" in payload["checks"]
-    assert "hermes_sequence_contract" in payload["checks"]
-    assert "hermes_sequence_validation" in payload["checks"]
+    for check in (
+        "approved_live_route_smoke",
+        "approved_ui_config_awareness",
+        "approved_ui_refresh_callback",
+        "approved_real_session_e2e",
+        "runtime_noncombat_intent_guard",
+        "approved_turn_result_ux",
+        "approved_execution_ledger",
+        "approved_ledger_route",
+        "hermes_sequence_contract",
+        "hermes_sequence_validation",
+        "hermes_sequence_preview_ui",
+        "hermes_sequence_preview_tests",
+    ):
+        assert check in payload["checks"]
     assert payload["active_integration_ready"] is True
     assert payload["approved_flow_available"] is True
     assert payload["simulation_owned"] is True
