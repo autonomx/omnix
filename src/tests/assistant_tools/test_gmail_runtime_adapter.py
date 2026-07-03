@@ -6,7 +6,8 @@ from app.assistant_tools.config_store import (
     default_assistant_tools_config,
     save_assistant_tools_config,
 )
-from app.assistant_tools.gmail_adapter import FakeGmailRuntimeAdapter, GmailMessageRecord, run_gmail_tool_request
+from app.assistant_tools.credentials import AssistantToolCredentialRecord
+from app.assistant_tools.gmail_adapter import FakeGmailRuntimeAdapter, GmailMessageRecord, GoogleGmailRuntimeAdapter, run_gmail_tool_request
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.models import AssistantToolRequest
 from app.gateway.main import create_gateway_app
@@ -55,6 +56,38 @@ def test_gmail_read_request_runs_through_runtime_adapter():
     assert result.state_changed is False
     assert result.result_summary == "Found 1 Gmail message."
     assert result.output["messages"][0]["id"] == "m1"
+
+
+def test_connected_gmail_adapter_reads_messages_through_google_api(monkeypatch):
+    calls: list[str] = []
+
+    def fake_gmail_json(method, url, access_token, body=None):
+        calls.append(url)
+        assert access_token == "access-token"
+        if url.startswith("https://gmail.googleapis.com/gmail/v1/users/me/messages?"):
+            return {"messages": [{"id": "msg-1"}]}
+        return {
+            "id": "msg-1",
+            "threadId": "thread-1",
+            "snippet": "Hello from Gmail",
+            "payload": {"headers": [{"name": "From", "value": "ada@example.com"}, {"name": "Subject", "value": "Hello"}]},
+        }
+
+    monkeypatch.setattr("app.assistant_tools.gmail_adapter._gmail_json", fake_gmail_json)
+    adapter = GoogleGmailRuntimeAdapter(
+        AssistantToolCredentialRecord(
+            tool_id="gmail",
+            provider="Google",
+            access_token="access-token",
+            account_email="ada@example.com",
+            updated_at="2026-07-03T00:00:00+00:00",
+        )
+    )
+
+    messages = adapter.search_messages("hello")
+
+    assert calls
+    assert messages == [GmailMessageRecord(id="msg-1", sender="ada@example.com", subject="Hello", snippet="Hello from Gmail", thread_id="thread-1")]
 
 
 def test_gmail_draft_request_runs_through_hermes_when_approved(monkeypatch, tmp_path):

@@ -11,12 +11,29 @@ export type AssistantToolConfigRecord = {
   tool_id: string;
   enabled: boolean;
   connection_status: ToolConfig['connectionStatus'];
+  account_label?: string | null;
+  account_email?: string | null;
+  connected_at?: string | null;
   approval_policy?: ApprovalPolicy | null;
   actions: AssistantActionConfigRecord[];
 };
 
 export type AssistantToolsConfigPayload = {
   tools: AssistantToolConfigRecord[];
+};
+
+export type AssistantToolConnectionStartPayload = {
+  tool_id: string;
+  provider?: string | null;
+  configured: boolean;
+  auth_url?: string | null;
+  redirect_uri?: string | null;
+  message: string;
+};
+
+export type AssistantToolOAuthClientPayload = {
+  client_id: string;
+  client_secret: string;
 };
 
 export type AssistantToolLedgerEntry = {
@@ -79,6 +96,22 @@ export async function fetchAssistantToolsConfig(): Promise<AssistantToolsConfigP
 export async function saveAssistantToolsConfig(payload: AssistantToolsConfigPayload): Promise<AssistantToolsConfigPayload> {
   return readJsonResponse<AssistantToolsConfigPayload>(
     await fetch('/api/assistant/tools/config', {
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    }),
+  );
+}
+
+export async function startAssistantToolConnection(toolId: string): Promise<AssistantToolConnectionStartPayload> {
+  return readJsonResponse<AssistantToolConnectionStartPayload>(
+    await fetch(`/api/assistant/tools/connect/${encodeURIComponent(toolId)}`),
+  );
+}
+
+export async function saveAssistantToolOAuthClient(toolId: string, payload: AssistantToolOAuthClientPayload): Promise<AssistantToolConnectionStartPayload> {
+  return readJsonResponse<AssistantToolConnectionStartPayload>(
+    await fetch(`/api/assistant/tools/connect/${encodeURIComponent(toolId)}/oauth-client`, {
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',

@@ -125,6 +125,123 @@
   white-space: nowrap;
 }
 
+.assistant-tool-detail-header,
+.assistant-tool-connection-panel > header {
+  align-items: center;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.assistant-tool-detail-header h2,
+.assistant-tool-connection-panel h3,
+.assistant-tool-action-row h4 {
+  color: var(--omnix-text);
+  margin: 0;
+}
+
+.assistant-tool-connection-panel {
+  background: rgba(12, 18, 34, 0.72);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.assistant-tool-connection-panel p,
+.assistant-tool-action-row p,
+.assistant-tool-action-row small {
+  color: var(--omnix-muted);
+  margin: 0;
+}
+
+.assistant-tool-config-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.assistant-tool-config-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.assistant-tool-oauth-form {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 1fr) auto;
+}
+
+.assistant-tool-oauth-form label {
+  color: var(--omnix-muted);
+  display: grid;
+  font-weight: 700;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.assistant-tool-oauth-form input {
+  background: rgba(12, 18, 34, 0.92);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.55rem;
+  color: var(--omnix-text);
+  min-height: 2.75rem;
+  min-width: 0;
+  padding: 0 0.8rem;
+}
+
+.assistant-tool-action-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.assistant-tool-action-row {
+  align-items: center;
+  background: rgba(12, 18, 34, 0.72);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(9rem, auto) auto;
+  padding: 1rem;
+}
+
+.assistant-tool-action-row > div {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.assistant-tool-action-row > strong {
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid rgba(151, 114, 255, 0.32);
+  border-radius: 999px;
+  color: #e7ddff;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.65rem;
+  white-space: nowrap;
+}
+
+.assistant-tool-toggle,
+.assistant-tool-policy-select {
+  align-items: center;
+  color: #dbe4ff;
+  display: inline-grid;
+  gap: 0.35rem;
+}
+
+.assistant-tool-policy-select select {
+  background: rgba(12, 18, 34, 0.92);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.55rem;
+  color: var(--omnix-text);
+  min-height: 2.4rem;
+  padding: 0 0.7rem;
+}
+
 .assistant-settings-list {
   display: grid;
   gap: 0.75rem;
@@ -225,46 +342,67 @@
   position: static !important;
 }
 
-.assistant-chat-main .assistant-composer > .assistant-composer-controls {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  display: grid !important;
-  gap: 0.45rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  left: clamp(13rem, 22vw, 18rem) !important;
-  max-width: none;
-  overflow: hidden;
-  padding: 0;
-  position: absolute !important;
-  right: clamp(8.5rem, 15vw, 13rem) !important;
-  top: 1rem !important;
-  z-index: 6;
-}
-
-.assistant-chat-main .assistant-composer > .assistant-composer-controls > label,
-.assistant-chat-main .assistant-composer > .assistant-composer-controls > .assistant-composer-chip:last-child {
-  display: none !important;
-}
-
-.assistant-chat-main .assistant-composer > .assistant-composer-controls > .assistant-composer-chip {
-  min-height: 2.65rem;
-  min-width: 0;
-  overflow: hidden;
-  padding-inline: 0.7rem;
-}
-
-.assistant-chat-main .assistant-composer > .assistant-composer-controls > .assistant-composer-chip > span,
-.assistant-chat-main .assistant-composer > .assistant-composer-controls > .assistant-composer-chip > strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .assistant-chat-main .assistant-chat-header {
   min-height: 4.65rem;
   padding-top: 0 !important;
+}
+
+.assistant-chat-main .assistant-chat-header {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.assistant-chat-main .assistant-chat-header > div:first-child {
+  flex: 1 1 14rem;
+}
+
+.assistant-chat-main .assistant-chat-header > .assistant-chat-header-actions:not(.assistant-chat-integrated-actions) {
+  display: none !important;
+}
+
+.assistant-chat-integrated-actions {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: min(100%, 18rem);
+}
+
+.assistant-chat-integrated-actions .assistant-header-pill {
+  align-items: center;
+  background: linear-gradient(135deg, #6544d9, #7c5cff);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.65rem;
+  color: #fff;
+  display: inline-flex;
+  font-weight: 750;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 2.55rem;
+  min-width: 0;
+  padding: 0 1rem;
+  white-space: nowrap;
+}
+
+.assistant-chat-integrated-actions .assistant-header-icon {
+  padding: 0;
+  width: 2.55rem;
+}
+
+.assistant-chat-integrated-actions .assistant-header-pill:hover,
+.assistant-chat-integrated-actions .assistant-header-pill:focus-visible,
+.assistant-chat-integrated-actions .assistant-header-pill.active {
+  filter: brightness(1.08);
+  outline: none;
+}
+
+.assistant-chat-integrated-actions .assistant-header-pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.assistant-chat-main .assistant-composer > .assistant-composer-controls {
+  display: none !important;
+  position: static !important;
 }
 
 .assistant-chat-main .assistant-chat-messages {
@@ -278,12 +416,6 @@
 }
 
 @media (max-width: 1100px) {
-  .assistant-chat-main .assistant-composer > .assistant-composer-controls {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    left: clamp(10rem, 18vw, 14rem) !important;
-    right: 7.5rem !important;
-  }
-
   .assistant-chat-main .assistant-chat-messages {
     padding-top: 1rem;
   }
@@ -294,12 +426,11 @@
     grid-template-columns: 1fr;
   }
 
-  .assistant-chat-main .assistant-composer > .assistant-composer-controls {
-    gap: 0.35rem;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    left: 0.75rem !important;
-    right: 0.75rem !important;
-    top: 4.25rem !important;
+  .assistant-tool-detail-header,
+  .assistant-tool-connection-panel > header,
+  .assistant-tool-oauth-form,
+  .assistant-tool-action-row {
+    grid-template-columns: 1fr;
   }
 
   .assistant-chat-main .assistant-chat-header {

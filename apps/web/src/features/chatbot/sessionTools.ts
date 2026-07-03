@@ -56,33 +56,35 @@ async function startBlankChat(): Promise<void> {
 }
 
 function styleButton(button: HTMLButtonElement): void {
-  button.style.border = '1px solid rgba(160, 132, 255, 0.55)';
-  button.style.borderRadius = '999px';
-  button.style.background = 'rgba(105, 72, 210, 0.24)';
-  button.style.color = 'inherit';
+  button.style.border = '1px solid rgba(255, 255, 255, 0.16)';
+  button.style.borderRadius = '0.65rem';
+  button.style.background = 'linear-gradient(135deg, #6544d9, #7c5cff)';
+  button.style.color = '#fff';
   button.style.cursor = 'pointer';
-  button.style.fontWeight = '700';
-  button.style.padding = '0.42rem 0.7rem';
+  button.style.fontWeight = '750';
+  button.style.minHeight = '2.55rem';
+  button.style.padding = '0 1rem';
 }
 
 function updateModeButton(button: HTMLButtonElement): void {
   const enabled = readMode();
   button.textContent = enabled ? 'Agent Chat: On' : 'Agent Chat: Off';
   button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-  button.style.border = enabled ? '1px solid rgba(94, 234, 212, 0.75)' : '1px solid rgba(255, 255, 255, 0.18)';
-  button.style.borderRadius = '999px';
-  button.style.background = enabled ? 'rgba(20, 184, 166, 0.22)' : 'rgba(255, 255, 255, 0.08)';
-  button.style.color = 'inherit';
+  button.style.border = '1px solid rgba(255, 255, 255, 0.16)';
+  button.style.borderRadius = '0.65rem';
+  button.style.background = 'linear-gradient(135deg, #6544d9, #7c5cff)';
+  button.style.color = '#fff';
   button.style.cursor = 'pointer';
-  button.style.fontWeight = '700';
-  button.style.padding = '0.42rem 0.7rem';
+  button.style.fontWeight = '750';
+  button.style.minHeight = '2.55rem';
+  button.style.padding = '0 1rem';
 }
 
 function addButton(target: Element | null, label: string, prepend = false): void {
   if (!target || target.querySelector(`.${BUTTON_CLASS}`)) return;
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = BUTTON_CLASS;
+  button.className = `${BUTTON_CLASS} assistant-header-pill`;
   button.textContent = label;
   button.title = 'Start a new chat';
   styleButton(button);
@@ -100,7 +102,7 @@ function addModeButton(target: Element | null): void {
   if (!target || target.querySelector(`.${MODE_BUTTON_CLASS}`)) return;
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = MODE_BUTTON_CLASS;
+  button.className = `${MODE_BUTTON_CLASS} assistant-header-pill`;
   button.addEventListener('click', () => {
     writeMode(!readMode());
     document.querySelectorAll<HTMLButtonElement>(`.${MODE_BUTTON_CLASS}`).forEach(updateModeButton);
@@ -110,11 +112,10 @@ function addModeButton(target: Element | null): void {
 }
 
 function mountButtons(): void {
-  const headerActions = document.querySelector('.assistant-chat-header-actions');
+  const headerActions = document.querySelector('.assistant-chat-integrated-actions, .assistant-chat-header-actions');
   addButton(document.querySelector('.assistant-sidebar-sessions > header'), '+ New');
   addButton(headerActions, 'New Chat', true);
   addModeButton(headerActions);
-  addModeButton(document.querySelector('.assistant-composer-controls'));
 }
 
 function watchButtons(): void {

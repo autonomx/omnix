@@ -7,6 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from .credentials import delete_tool_credential
 from .models import ApprovalPolicy, ConnectionStatus
 from .registry import default_assistant_tools
 
@@ -23,6 +24,9 @@ class AssistantToolConfigRecord(BaseModel):
     tool_id: str
     enabled: bool = False
     connection_status: ConnectionStatus = "not_configured"
+    account_label: str | None = None
+    account_email: str | None = None
+    connected_at: str | None = None
     approval_policy: ApprovalPolicy | None = None
     actions: list[AssistantActionConfigRecord] = Field(default_factory=list)
 
@@ -78,6 +82,9 @@ def _merge_known_config(payload: AssistantToolsConfigPayload) -> AssistantToolsC
                 tool_id=default_tool.tool_id,
                 enabled=incoming_tool.enabled,
                 connection_status=incoming_tool.connection_status,
+                account_label=incoming_tool.account_label,
+                account_email=incoming_tool.account_email,
+                connected_at=incoming_tool.connected_at,
                 approval_policy=incoming_tool.approval_policy,
                 actions=merged_actions,
             )
@@ -99,6 +106,10 @@ def load_assistant_tools_config(path: Path | None = None) -> AssistantToolsConfi
 def save_assistant_tools_config(payload: AssistantToolsConfigPayload, path: Path | None = None) -> AssistantToolsConfigPayload:
     config_path = path or assistant_tool_config_path()
     normalized = _merge_known_config(payload)
+    if path is None:
+        for tool in normalized.tools:
+            if tool.connection_status != "connected":
+                delete_tool_credential(tool.tool_id)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(normalized.model_dump_json(indent=2), encoding="utf-8")
     return normalized
