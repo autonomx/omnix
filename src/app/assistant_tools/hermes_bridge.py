@@ -5,7 +5,7 @@ from .gate import review_assistant_tool_request
 from .gmail_adapter import run_gmail_tool_request
 from .hermes_payloads import HermesAssistantToolExecutePayload, HermesAssistantToolReviewPayload
 from .ledger import AssistantToolLedgerEntry, append_assistant_tool_ledger_entry, summarize_tool_input
-from .models import AssistantToolRequest, AssistantToolResult
+from .models import AssistantToolRequest, AssistantToolResult, ToolRiskLevel
 
 
 def hermes_assistant_tool_review_payload(user_request: str, request: AssistantToolRequest) -> HermesAssistantToolReviewPayload:
@@ -19,16 +19,16 @@ def hermes_assistant_tool_review_payload(user_request: str, request: AssistantTo
     )
 
 
-def _run_assistant_tool_request(request: AssistantToolRequest, risk_level: str) -> AssistantToolResult:
+def _run_assistant_tool_request(request: AssistantToolRequest, risk_level: ToolRiskLevel) -> AssistantToolResult:
     if request.tool_id == "gmail":
         result = run_gmail_tool_request(request)
-        result.risk_level = risk_level  # type: ignore[misc]
+        result.risk_level = risk_level
         return result
     return AssistantToolResult(
         tool_id=request.tool_id,
         action_id=request.action_id,
         session_id=request.session_id,
-        risk_level=risk_level,  # type: ignore[arg-type]
+        risk_level=risk_level,
         state_changed=False,
         result_summary="Assistant tool bridge accepted the governed request; runtime adapter dispatch is pending.",
         output={"adapter_status": "pending"},
