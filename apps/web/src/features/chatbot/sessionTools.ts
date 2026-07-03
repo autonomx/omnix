@@ -56,14 +56,19 @@ async function startBlankChat(): Promise<void> {
 }
 
 function styleButton(button: HTMLButtonElement): void {
+  const compact = button.textContent === '+ New';
   button.style.border = '1px solid rgba(255, 255, 255, 0.16)';
-  button.style.borderRadius = '0.65rem';
+  button.style.borderRadius = compact ? '999px' : '0.65rem';
   button.style.background = 'linear-gradient(135deg, #6544d9, #7c5cff)';
   button.style.color = '#fff';
   button.style.cursor = 'pointer';
   button.style.fontWeight = '750';
-  button.style.minHeight = '2.55rem';
-  button.style.padding = '0 1rem';
+  button.style.height = compact ? '2rem' : '2.55rem';
+  button.style.minHeight = compact ? '2rem' : '2.55rem';
+  button.style.minWidth = compact ? '4.2rem' : '';
+  button.style.padding = compact ? '0 0.75rem' : '0 1rem';
+  button.style.whiteSpace = 'nowrap';
+  button.style.width = 'auto';
 }
 
 function updateModeButton(button: HTMLButtonElement): void {

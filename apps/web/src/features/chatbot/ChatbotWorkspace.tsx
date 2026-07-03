@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { CSSProperties, KeyboardEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
@@ -43,6 +44,7 @@ type UtilityPanel = 'voice' | 'tools';
 type VoiceCaptureMode = 'idle' | 'listening' | 'recording' | 'transcribing' | 'error';
 type VoiceProfileAsset = AssetListResponse['assets'][number];
 type PersonalityId = 'default' | 'concise' | 'coach' | 'technical' | 'creative' | 'custom';
+type AssistantMessageFeedback = 'liked' | 'disliked';
 
 type ChatMessage = {
   id: string;
@@ -136,12 +138,16 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [activeView, setActiveView] = useState<AssistantView>(() => assistantToolReturn.toolId ? 'tools' : 'chats');
   const [activeUtilityPanel, setActiveUtilityPanel] = useState<UtilityPanel>('voice');
   const [audioStatus, setAudioStatus] = useState<string | null>(null);
+  const [assistantMessageFeedback, setAssistantMessageFeedback] = useState<Record<string, AssistantMessageFeedback>>({});
+  const [openMessageActionMenuId, setOpenMessageActionMenuId] = useState<string | null>(null);
+  const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState<string | null>(null);
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
   const [callElapsedMs, setCallElapsedMs] = useState(0);
   const [voiceCaptureMode, setVoiceCaptureMode] = useState<VoiceCaptureMode>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [liveInterimTranscript, setLiveInterimTranscript] = useState('');
+  const [clearedVoiceTranscriptMessageIds, setClearedVoiceTranscriptMessageIds] = useState<Record<string, true>>({});
   const [autoSpeakResponses, setAutoSpeakResponses] = useState(true);
   const [spokenMessageIds, setSpokenMessageIds] = useState<Record<string, true>>({});
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -160,7 +166,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const assetsQuery = useQuery({
     queryKey: ['platform', 'assets', 'chatbot-settings'],
     queryFn: () => omnixApiClient.listAssets(),
-    enabled: activeView === 'settings',
+    enabled: activeView === 'chats' || activeView === 'settings',
   });
   const sessionQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'session', selectedSessionId],
@@ -234,18 +240,20 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
   const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
   const recentMessages = activeSession?.messages?.slice(-4) ?? [];
+  const visibleVoiceTranscriptMessages = recentMessages.filter((message) => !clearedVoiceTranscriptMessageIds[message.id]);
   const latestAssistantMessage = getLatestAssistantMessage(activeSession?.messages ?? []);
   const toolExecutionRows = useMemo(() => createToolExecutionRows(activityEvents), [activityEvents]);
   const enabledToolCount = runtimeConfig.features.toolExecution ? Math.max(toolExecutionRows.length, 3) : 0;
   const liveVoiceActive = callStartedAt !== null;
   const liveVoiceState = liveVoiceActive ? voiceCaptureLabel(voiceCaptureMode) : voiceCaptureMode === 'error' ? 'Error' : 'Idle';
   const liveConnectionLabel = liveVoiceActive ? 'Connected' : 'Disconnected';
+  const liveVoiceVisualMode = isAssistantSpeaking ? 'speaking' : liveVoiceActive ? 'listening' : voiceCaptureMode === 'error' ? 'error' : 'idle';
   const liveCallTimerLabel = formatCallDuration(callElapsedMs);
   const liveDraftText = [liveTranscript, liveInterimTranscript].filter(Boolean).join(' ').trim();
   const activeVoiceId = assistantSettings.voiceId || runtimeConfig.ttsVoice || '';
   const activeVoiceLabel = voiceLabelForId(activeVoiceId, voiceProfiles);
   const selectedPersonalityLabel = personalityLabel(assistantSettings.personalityId);
-  const speechInputLabel = getSpeechRecognitionConstructor() ? 'Browser speech-to-text' : runtimeConfig.sttServiceUrl ? 'STT service recording' : 'No STT input configured';
+  const speechInputLabel = runtimeConfig.sttServiceUrl ? 'STT service recording' : getSpeechRecognitionConstructor() ? 'Browser speech-to-text' : 'No STT input configured';
   const ttsOutputLabel = `${runtimeConfig.ttsServiceUrl ? 'TTS service' : 'Voice Studio TTS job'}${activeVoiceLabel ? ` · ${activeVoiceLabel}` : ''}`;
 
   useEffect(() => {
@@ -316,6 +324,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setActiveUtilityPanel('voice');
     setCallStartedAt(Date.now());
     setCallElapsedMs(0);
+    if (shouldUseStreamingLiveVoice()) {
+      setAudioStatus('Live voice call started.');
+      return;
+    }
     await startVoiceInput();
   }
 
@@ -331,6 +343,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setActiveUtilityPanel('voice');
     setLiveTranscript('');
     setLiveInterimTranscript('');
+    if (runtimeConfig.sttServiceUrl) {
+      await startSttRecordingFallback();
+      return;
+    }
     const Recognition = getSpeechRecognitionConstructor();
     if (Recognition) {
       try {
@@ -471,7 +487,15 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   function clearVoiceTranscript(): void {
     setLiveTranscript('');
     setLiveInterimTranscript('');
+    setClearedVoiceTranscriptMessageIds((current) => {
+      const next = { ...current };
+      recentMessages.forEach((message) => {
+        next[message.id] = true;
+      });
+      return next;
+    });
     setValue('content', '', { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+    document.querySelectorAll('.assistant-voice-transcript p[data-live-voice-id]').forEach((row) => row.remove());
     setAudioStatus('Voice transcript cleared.');
   }
 
@@ -482,6 +506,29 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       return;
     }
     sendMutation.mutate({ content, providerId: selectedProviderId, modelId: selectedModelId });
+  }
+
+  function handleComposerTextareaKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.nativeEvent.isComposing) return;
+
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  }
+
+  function toggleAssistantMessageFeedback(messageId: string, feedback: AssistantMessageFeedback): void {
+    setAssistantMessageFeedback((current) => {
+      const next = { ...current };
+      if (next[messageId] === feedback) delete next[messageId];
+      else next[messageId] = feedback;
+      return next;
+    });
+    setAudioStatus(feedback === 'liked' ? 'Response marked as helpful.' : 'Response marked for review.');
+  }
+
+  async function copyAssistantResponse(message: ChatMessage): Promise<void> {
+    const copied = await copyTextToClipboard(message.content);
+    setAudioStatus(copied ? 'Assistant response copied.' : 'Copy failed. Select the message text and copy it manually.');
+    setOpenMessageActionMenuId(null);
   }
 
   async function playAssistantResponseAudio(text: string): Promise<void> {
@@ -496,9 +543,14 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         ? await synthesizeWithTtsService(spokenText)
         : await synthesizeWithVoiceJob(spokenText);
       const audio = new Audio(audioSource);
+      const clearSpeakingState = () => setIsAssistantSpeaking(false);
+      audio.addEventListener('ended', clearSpeakingState, { once: true });
+      audio.addEventListener('pause', clearSpeakingState, { once: true });
+      setIsAssistantSpeaking(true);
       await audio.play();
       setAudioStatus(activeVoiceId ? 'Playing cloned response voice.' : 'Playing response voice.');
     } catch (error) {
+      setIsAssistantSpeaking(false);
       setAudioStatus(error instanceof Error ? error.message : 'Response audio playback failed.');
     }
   }
@@ -600,12 +652,14 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <header className="assistant-chat-header">
                 <div><p className="eyebrow">Current chat</p><h2>{activeSession?.title ?? 'Hey! How are you today?'}</h2></div>
                 <div className="assistant-chat-header-actions assistant-chat-integrated-actions">
-                  <button className="assistant-header-pill" type="button" onClick={() => void playAssistantResponseAudio(latestAssistantMessage?.content ?? '')} disabled={!latestAssistantMessage}>Voice</button>
+                  <label className="assistant-header-voice-select">
+                    <span>Voice</span>
+                    <select aria-label="Cloned voice" value={assistantSettings.voiceId} onChange={(event) => updateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}>
+                      <option value="">{runtimeConfig.ttsVoice ? `Default (${runtimeConfig.ttsVoice})` : 'Default voice'}</option>
+                      {voiceProfiles.map((asset) => <option key={asset.id} value={voiceProfileId(asset)}>{voiceProfileLabel(asset)}</option>)}
+                    </select>
+                  </label>
                   <button className="assistant-header-pill" type="button" onClick={() => showAssistantView('settings')}>Personality</button>
-                  <button className="assistant-header-pill" type="button" onClick={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }}>Tools {runtimeConfig.features.toolExecution ? enabledToolCount : 0}</button>
-                  <button className="assistant-header-pill" type="button">Share</button>
-                  <button className="assistant-header-pill assistant-header-icon" type="button" aria-label="Star conversation">*</button>
-                  <button className="assistant-header-pill assistant-header-icon" type="button" aria-label="More actions">...</button>
                 </div>
               </header>
               <div className="assistant-chat-messages" role="log" aria-live="polite">
@@ -615,7 +669,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                     <div className="assistant-chat-bubble">
                       <header><strong>{message.role === 'assistant' ? 'Omnix Assistant' : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
                       <p>{message.content}</p>
-                      {message.role === 'assistant' ? <div className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" aria-label="Like response">♡</button><button type="button" aria-label="Dislike response">↯</button><button type="button" aria-label="Copy response">□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" aria-label="More response actions">⋮</button></div> : null}
+                      {message.role === 'assistant' ? <div className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" className={assistantMessageFeedback[message.id] === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={assistantMessageFeedback[message.id] === 'liked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'liked')}>♡</button><button type="button" className={assistantMessageFeedback[message.id] === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={assistantMessageFeedback[message.id] === 'disliked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'disliked')}>↯</button><button type="button" aria-label="Copy response" onClick={() => void copyAssistantResponse(message)}>□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" aria-label="More response actions" aria-expanded={openMessageActionMenuId === message.id} onClick={() => setOpenMessageActionMenuId((current) => current === message.id ? null : message.id)}>⋮</button>{openMessageActionMenuId === message.id ? <div className="assistant-message-action-menu" role="menu"><button type="button" role="menuitem" onClick={() => void copyAssistantResponse(message)}>Copy text</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); void playAssistantResponseAudio(message.content); }}>Play audio</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`); }}>Continue</button></div> : null}</div> : null}
                     </div>
                   </article>
                 )) : <div className="platform-empty" role="status">No chat messages yet.</div>}
@@ -633,7 +687,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <button type="button" className="assistant-composer-chip" onClick={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }}><span>Tools</span><strong>{runtimeConfig.features.toolExecution ? `${enabledToolCount} Active` : 'Off'}</strong></button>
                   <button type="button" className="assistant-composer-chip" onClick={refreshActivityPanel}><span>Context</span><strong>{activeMessageCount > 0 ? 'Project Brief' : 'Ready'}</strong></button>
                 </div>
-                <label className="assistant-message-input"><span>Message</span><textarea rows={3} aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant, or use the microphone…" {...register('content', { required: true })} /></label>
+                <label className="assistant-message-input"><span>Message</span><textarea rows={3} aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant, or use the microphone…" onKeyDown={handleComposerTextareaKeyDown} {...register('content', { required: true })} /></label>
                 <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Generating response' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>{sendMutation.isPending ? 'Generating response…' : 'Send message'}</button></div>
               </form>
             </>
@@ -676,12 +730,21 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             <section className="assistant-live-card">
               <header><div><p className="eyebrow">Live Voice</p></div><strong>{liveConnectionLabel}</strong></header>
               <div className="assistant-live-state" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>
-              <div className="assistant-voice-orb" aria-hidden="true"><span /></div>
+              <div className="assistant-voice-orb" data-voice-mode={liveVoiceVisualMode} aria-hidden="true">
+                <div className="assistant-voice-meter assistant-voice-meter-left">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`left-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
+                <div className="assistant-voice-core"><span className="assistant-voice-pulse" /><span className="assistant-voice-mic" /></div>
+                <div className="assistant-voice-meter assistant-voice-meter-right">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`right-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
+              </div>
+              <div className="assistant-voice-input-indicator" aria-live="polite">
+                <span>Mic input</span>
+                <strong className="assistant-voice-input-status">{liveVoiceActive ? 'Listening' : 'Idle'}</strong>
+                <i aria-hidden="true"><b /></i>
+              </div>
               <time className="assistant-call-timer" dateTime={`PT${Math.floor(callElapsedMs / 1000)}S`}>{liveCallTimerLabel}</time>
               <div className="assistant-voice-controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveVoiceActive ? 'danger' : undefined} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || !(liveDraftText || composerContent).trim()}>Send text</button></div>
               <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => setAutoSpeakResponses(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
               <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
-              <div className="assistant-voice-transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{recentMessages.length ? recentMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>) : <p className="muted">Voice transcript will appear here during live calls.</p>}</div>
+              <div className="assistant-voice-transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.length ? visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>) : <p className="muted">Voice transcript will appear here during live calls.</p>}</div>
               <div className="assistant-audio-devices"><header><h3>Audio Services</h3><button type="button" onClick={() => void startVoiceInput()}>Test input</button></header><div><span>Input</span><strong>{speechInputLabel}</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>{ttsOutputLabel}</strong><i aria-hidden="true" /></div></div>
               <footer className="assistant-voice-status"><span>Voice Status</span><strong>{liveVoiceState}</strong></footer>
             </section>
@@ -724,6 +787,7 @@ function formatSessionTime(session: ApiChatSession): string { const timestamp = 
 function mergeTranscript(current: string, next: string): string { return [current.trim(), next.trim()].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(); }
 function voiceCaptureLabel(mode: VoiceCaptureMode): string { if (mode === 'recording') return 'Recording'; if (mode === 'transcribing') return 'Transcribing'; if (mode === 'error') return 'Error'; if (mode === 'listening') return 'Listening'; return 'Ready'; }
 function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | undefined { if (typeof window === 'undefined') return undefined; const speechWindow = window as SpeechRecognitionWindow; return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition; }
+function shouldUseStreamingLiveVoice(): boolean { if (typeof window === 'undefined' || typeof document === 'undefined') return false; const liveWindow = window as Window & typeof globalThis & { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }; return Boolean(document.querySelector('.assistant-live-card') && (liveWindow.AudioContext || liveWindow.webkitAudioContext) && window.WebSocket && navigator.mediaDevices?.getUserMedia); }
 function getVoiceJobAudioSource(job: JobRecord): string | null { const refs = Array.isArray(job.output_refs) ? job.output_refs : []; for (const ref of refs) { const output = ref as VoiceJobOutputRef; if (isFallbackVoiceOutput(output)) continue; if (typeof output.data_url === 'string' && output.data_url.startsWith('data:audio/')) return output.data_url; if (typeof output.audio_url === 'string' && output.audio_url.trim()) return output.audio_url; } return null; }
 function isFallbackVoiceOutput(ref: VoiceJobOutputRef): boolean { if (ref.provider_fallback === true || ref.provider_success === false) return true; const segments = Array.isArray(ref.segments) ? ref.segments : []; return segments.some((segment) => { const row = segment as { provider_fallback?: unknown; provider_success?: unknown } | null; return row?.provider_fallback === true || row?.provider_success === false; }); }
 function voiceJobErrorMessage(job: JobRecord): string { if (job.status !== 'failed') return ''; const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio TTS job failed.'; }
@@ -733,6 +797,7 @@ function voiceProfileId(asset: VoiceProfileAsset): string { const metadata = asR
 function voiceProfileLabel(asset: VoiceProfileAsset): string { const metadata = asRecord(asset.metadata); return stringMetadata(metadata.profile_name) || stringMetadata(metadata.name) || stringMetadata(metadata.voice_name) || asset.storage_path.split(/[\\/]/).pop() || asset.id; }
 function voiceLabelForId(voiceId: string, voiceProfiles: VoiceProfileAsset[]): string { if (!voiceId) return ''; const profile = voiceProfiles.find((asset) => voiceProfileId(asset) === voiceId || asset.id === voiceId); return profile ? voiceProfileLabel(profile) : voiceId; }
 function stringMetadata(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
+async function copyTextToClipboard(text: string): Promise<boolean> { try { if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } if (typeof document === 'undefined') return false; const textarea = document.createElement('textarea'); textarea.value = text; textarea.setAttribute('readonly', 'true'); textarea.style.position = 'fixed'; textarea.style.left = '-9999px'; document.body.appendChild(textarea); textarea.select(); const copied = document.execCommand('copy'); textarea.remove(); return copied; } catch { return false; } }
 function defaultAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { return { voiceId: config.ttsVoice ?? '', personalityId: 'default', customPersonality: '' }; }
 function loadAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { const fallback = defaultAssistantSettings(config); try { if (typeof window === 'undefined') return fallback; const raw = window.localStorage.getItem(ASSISTANT_SETTINGS_STORAGE_KEY); if (!raw) return fallback; const parsed = JSON.parse(raw) as Partial<AssistantSettings>; return { voiceId: typeof parsed.voiceId === 'string' ? parsed.voiceId : fallback.voiceId, personalityId: isPersonalityId(parsed.personalityId) ? parsed.personalityId : fallback.personalityId, customPersonality: typeof parsed.customPersonality === 'string' ? parsed.customPersonality : fallback.customPersonality }; } catch { return fallback; } }
 function saveAssistantSettings(settings: AssistantSettings): void { try { if (typeof window !== 'undefined') window.localStorage.setItem(ASSISTANT_SETTINGS_STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore local storage failures */ } }

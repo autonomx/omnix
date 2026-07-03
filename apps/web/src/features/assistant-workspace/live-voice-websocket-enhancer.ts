@@ -5,6 +5,7 @@ import {
   type StreamingSttConnectionStatus,
   type StreamingSttWebSocketCtor,
 } from './live-voice-websocket';
+import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 
 type LiveVoiceWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
@@ -15,13 +16,19 @@ type LiveVoiceDomSession = {
   card: HTMLElement;
   stream: MediaStream;
   audioContext: AudioContext;
-  processor: ScriptProcessorNode;
+  audioPipeline: LiveVoiceAudioPipeline | null;
   source: MediaStreamAudioSourceNode;
   client: StreamingSttWebSocketClient;
   muted: boolean;
   speechDetected: boolean;
   finalRequested: boolean;
   silenceTimer: ReturnType<typeof setTimeout> | null;
+  voiceLevel: number;
+};
+
+type LiveVoiceAudioPipeline = {
+  node: AudioNode;
+  cleanup: () => void;
 };
 
 type AssistantUtilityPanel = 'voice' | 'tools';
@@ -197,9 +204,9 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
     });
     const audioContext = new AudioContextCtor({ latencyHint: 'interactive' });
     const source = audioContext.createMediaStreamSource(stream);
-    const processor = audioContext.createScriptProcessor(1024, 1, 1);
+    const runtimeConfig = createAssistantWorkspaceRuntimeConfig();
     const client = new StreamingSttWebSocketClient({
-      url: getDefaultStreamingSttWebSocketUrl(window.location),
+      url: getDefaultStreamingSttWebSocketUrl(window.location, runtimeConfig.sttServiceUrl),
       webSocketCtor: WebSocketCtor,
       onStatusChange: (status) => setPanelStatus(card, status),
       onPartialTranscript: (text) => renderTranscript(card, 'You', text, 'draft'),
@@ -211,19 +218,20 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       card,
       stream,
       audioContext,
-      processor,
+      audioPipeline: null,
       source,
       client,
       muted: false,
       speechDetected: false,
       finalRequested: false,
       silenceTimer: null,
+      voiceLevel: 0,
     };
 
     activeSession = session;
-    processor.onaudioprocess = (event) => processAudioFrame(session, event);
-    source.connect(processor);
-    processor.connect(audioContext.destination);
+    const audioPipeline = await createLiveVoiceAudioPipeline(audioContext, (audio) => processAudioFrame(session, audio));
+    session.audioPipeline = audioPipeline;
+    source.connect(audioPipeline.node);
 
     await client.connect();
     setPanelStatus(card, 'connected');
@@ -234,11 +242,70 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
   }
 }
 
-function processAudioFrame(session: LiveVoiceDomSession, event: AudioProcessingEvent): void {
+async function createLiveVoiceAudioPipeline(audioContext: AudioContext, onAudioFrame: (audio: Float32Array) => void): Promise<LiveVoiceAudioPipeline> {
+  if ('audioWorklet' in audioContext && typeof AudioWorkletNode !== 'undefined') {
+    try {
+      await ensureLiveVoiceWorklet(audioContext);
+      const node = new AudioWorkletNode(audioContext, 'omnix-live-voice-processor');
+      const silentOutput = audioContext.createGain();
+      silentOutput.gain.value = 0;
+      node.port.onmessage = (event: MessageEvent<Float32Array>) => onAudioFrame(new Float32Array(event.data));
+      node.connect(silentOutput);
+      silentOutput.connect(audioContext.destination);
+      return {
+        node,
+        cleanup: () => {
+          node.port.onmessage = null;
+          node.disconnect();
+          silentOutput.disconnect();
+        },
+      };
+    } catch {
+      // Keep the older path available for browsers that reject dynamic worklet modules.
+    }
+  }
+
+  const processor = audioContext.createScriptProcessor(1024, 1, 1);
+  processor.onaudioprocess = (event) => onAudioFrame(new Float32Array(event.inputBuffer.getChannelData(0)));
+  processor.connect(audioContext.destination);
+  return {
+    node: processor,
+    cleanup: () => {
+      processor.onaudioprocess = null;
+      processor.disconnect();
+    },
+  };
+}
+
+let liveVoiceWorkletModuleUrl: string | null = null;
+const liveVoiceWorkletContexts = new WeakSet<AudioContext>();
+
+async function ensureLiveVoiceWorklet(audioContext: AudioContext): Promise<void> {
+  if (liveVoiceWorkletContexts.has(audioContext)) return;
+
+  liveVoiceWorkletModuleUrl ??= URL.createObjectURL(new Blob([`
+class OmnixLiveVoiceProcessor extends AudioWorkletProcessor {
+  process(inputs) {
+    const channel = inputs[0] && inputs[0][0];
+    if (channel && channel.length) {
+      const audio = new Float32Array(channel);
+      this.port.postMessage(audio, [audio.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor('omnix-live-voice-processor', OmnixLiveVoiceProcessor);
+`], { type: 'text/javascript' }));
+
+  await audioContext.audioWorklet.addModule(liveVoiceWorkletModuleUrl);
+  liveVoiceWorkletContexts.add(audioContext);
+}
+
+function processAudioFrame(session: LiveVoiceDomSession, audio: Float32Array): void {
   if (session.finalRequested || session.muted) return;
 
-  const audio = new Float32Array(event.inputBuffer.getChannelData(0));
   const rms = calculateRms(audio);
+  updateVoiceVisualizer(session, rms);
 
   if (rms >= SPEECH_RMS_THRESHOLD) {
     session.speechDetected = true;
@@ -254,6 +321,40 @@ function processAudioFrame(session: LiveVoiceDomSession, event: AudioProcessingE
   }
 
   session.client.sendAudio(audio, session.audioContext.sampleRate);
+}
+
+function updateVoiceVisualizer(session: LiveVoiceDomSession, rms: number): void {
+  const rawLevel = clamp(rms / 0.12, 0, 1);
+  session.voiceLevel = session.voiceLevel * 0.72 + rawLevel * 0.28;
+  const barScale = 0.22 + session.voiceLevel * 0.9;
+  const ambientScale = 0.92 + session.voiceLevel * 0.24;
+  const coreScale = 1 + session.voiceLevel * 0.08;
+  const inputScale = Math.max(0.08, session.voiceLevel);
+  session.card.style.setProperty('--voice-level', session.voiceLevel.toFixed(3));
+  session.card.style.setProperty('--voice-bar-scale', barScale.toFixed(3));
+  session.card.style.setProperty('--voice-ambient-scale', ambientScale.toFixed(3));
+  session.card.style.setProperty('--voice-core-scale', coreScale.toFixed(3));
+  session.card.style.setProperty('--voice-input-scale', inputScale.toFixed(3));
+  session.card.dataset.voiceInput = session.voiceLevel >= 0.14 ? 'active' : 'listening';
+  const inputStatus = session.card.querySelector<HTMLElement>('.assistant-voice-input-status');
+  if (inputStatus) inputStatus.textContent = session.voiceLevel >= 0.14 ? 'Hearing you' : 'Listening';
+  const orb = session.card.querySelector<HTMLElement>('.assistant-voice-orb');
+  orb?.setAttribute('data-voice-mode', session.muted ? 'idle' : 'listening');
+}
+
+function resetVoiceVisualizer(card: HTMLElement): void {
+  card.style.removeProperty('--voice-level');
+  card.style.removeProperty('--voice-bar-scale');
+  card.style.removeProperty('--voice-ambient-scale');
+  card.style.removeProperty('--voice-core-scale');
+  card.style.removeProperty('--voice-input-scale');
+  card.dataset.voiceInput = 'idle';
+  const inputStatus = card.querySelector<HTMLElement>('.assistant-voice-input-status');
+  if (inputStatus) inputStatus.textContent = 'Idle';
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function handleFinalTranscript(card: HTMLElement, text: string): void {
@@ -292,12 +393,13 @@ function stopLiveVoice(nextStatus: StreamingSttConnectionStatus = 'idle'): void 
     clearTimeout(session.silenceTimer);
   }
 
-  session.processor.disconnect();
+  session.audioPipeline?.cleanup();
   session.source.disconnect();
   session.audioContext.close().catch(() => {});
   session.stream.getTracks().forEach((track) => track.stop());
   session.client.disconnect();
   setPanelStatus(session.card, nextStatus);
+  resetVoiceVisualizer(session.card);
   activeSession = null;
 }
 
@@ -322,6 +424,15 @@ function setPanelStatus(card: HTMLElement, status: StreamingSttConnectionStatus)
     callButton.disabled = status === 'connecting';
   }
   card.dataset.liveVoiceStatus = status;
+  card.dataset.voiceInput = status === 'connected' ? 'listening' : status === 'connecting' ? 'connecting' : status === 'error' ? 'error' : 'idle';
+  const inputStatus = card.querySelector<HTMLElement>('.assistant-voice-input-status');
+  if (inputStatus) {
+    inputStatus.textContent = status === 'connected' ? 'Listening' : status === 'connecting' ? 'Connecting' : status === 'error' ? 'Input error' : 'Idle';
+  }
+  const orb = card.querySelector<HTMLElement>('.assistant-voice-orb');
+  if (orb) {
+    orb.setAttribute('data-voice-mode', status === 'connected' ? 'listening' : status === 'error' ? 'error' : 'idle');
+  }
 }
 
 function renderTranscript(card: HTMLElement, speaker: 'You' | 'Omnix', text: string, mode: 'draft' | 'final'): void {

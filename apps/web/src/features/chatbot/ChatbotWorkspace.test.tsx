@@ -56,6 +56,23 @@ function providerPayload() {
   };
 }
 
+function assetPayload() {
+  return {
+    assets: [
+      {
+        id: 'voice-profile-1',
+        type: 'voice_profile',
+        module: 'voice-cloning',
+        title: 'Ari Clone',
+        storage_path: 'resources/voice_clones/ari-clone.json',
+        metadata: { voice_id: 'ari-clone', profile_name: 'Ari Clone' },
+        created_at: '2026-06-14T00:00:00Z',
+        updated_at: '2026-06-14T00:00:00Z',
+      },
+    ],
+  };
+}
+
 afterEach(() => {
   window.localStorage.clear();
   vi.useRealTimers();
@@ -69,7 +86,9 @@ describe('ChatbotWorkspace', () => {
     vi.stubEnv('VITE_ASSISTANT_TTS_VOICE', 'narrator-clone');
     const playMock = vi.fn().mockResolvedValue(undefined);
     const audioCtor = vi.fn().mockImplementation((src: string) => ({ src, play: playMock }));
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('Audio', audioCtor);
+    Object.assign(navigator, { clipboard: { writeText: writeTextMock } });
 
     let session: {
       id: string;
@@ -95,6 +114,10 @@ describe('ChatbotWorkspace', () => {
 
       if (path === '/api/providers') {
         return Response.json(providerPayload());
+      }
+
+      if (path === '/api/assets') {
+        return Response.json(assetPayload());
       }
 
       if (path === '/synthesize') {
@@ -162,7 +185,19 @@ describe('ChatbotWorkspace', () => {
 
     expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
     expect(await screen.findByText('OpenAI compatible')).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Ari Clone' })).toBeInTheDocument();
+    expect(screen.getByText('Mic input')).toBeInTheDocument();
+    const chatHeader = screen.getByRole('heading', { name: 'Hey! How are you today?' }).closest('header');
+    expect(chatHeader).not.toBeNull();
+    expect(within(chatHeader as HTMLElement).queryByRole('button', { name: /Tools/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Star conversation' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument();
     expect(screen.getByText('Workspace activity')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Cloned voice'), { target: { value: 'ari-clone' } });
+    expect(screen.getByLabelText('Cloned voice')).toHaveValue('ari-clone');
+    expect(JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') ?? '{}')).toMatchObject({ voiceId: 'ari-clone' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Tell me a fun fact' }));
     expect(screen.getByLabelText('Message')).toHaveValue('Tell me a fun fact');
@@ -176,8 +211,21 @@ describe('ChatbotWorkspace', () => {
     expect(await screen.findByText('Source: assistant_message')).toBeInTheDocument();
     const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('You'));
     expect(transcriptMessage ?? screen.getByText('Hello Omnix')).toBeTruthy();
+    const voiceTranscript = screen.getByText('Transcript').closest('.assistant-voice-transcript');
+    expect(voiceTranscript).not.toBeNull();
+    expect(within(voiceTranscript as HTMLElement).getByText('Provider reply from the selected model.')).toBeInTheDocument();
+    fireEvent.click(within(voiceTranscript as HTMLElement).getByRole('button', { name: 'Clear' }));
+    expect(within(voiceTranscript as HTMLElement).queryByText('Provider reply from the selected model.')).not.toBeInTheDocument();
+    expect(within(voiceTranscript as HTMLElement).getByText('Voice transcript will appear here during live calls.')).toBeInTheDocument();
 
     expect(screen.getAllByRole('button', { name: 'Play response audio' }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Like response' })[0]);
+    expect(screen.getAllByRole('button', { name: 'Like response' })[0]).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Copy response' })[0]);
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledWith('Provider reply from the selected model.'));
+    fireEvent.click(screen.getAllByRole('button', { name: 'More response actions' })[0]);
+    expect(screen.getByRole('menuitem', { name: 'Copy text' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Play audio' })).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: 'Play response audio' })[0]);
 
     await waitFor(() => {
@@ -214,6 +262,10 @@ describe('ChatbotWorkspace', () => {
         return Response.json(providerPayload());
       }
 
+      if (path === '/api/assets') {
+        return Response.json(assetPayload());
+      }
+
       if (path === '/api/chat/sessions') {
         return Response.json({ sessions: [] });
       }
@@ -247,12 +299,95 @@ describe('ChatbotWorkspace', () => {
     expect(screen.getByText('Live voice call ended.')).toBeInTheDocument();
   });
 
+  it('submits the composer with Enter and preserves Shift+Enter for new lines', async () => {
+    let session = {
+      id: 'chat:enter',
+      title: 'Keyboard submit',
+      provider_id: 'openai',
+      model_id: 'gpt-mini',
+      message_count: 0,
+      messages: [] as Array<{ id: string; role: 'system' | 'user' | 'assistant'; content: string; created_at: string }>,
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:00:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') {
+        return Response.json(providerPayload());
+      }
+
+      if (path === '/api/assets') {
+        return Response.json(assetPayload());
+      }
+
+      if (path === '/api/chat/sessions' && init?.method === 'POST') {
+        return Response.json(session);
+      }
+
+      if (path === '/api/chat/sessions') {
+        return Response.json({ sessions: [] });
+      }
+
+      if (path === '/api/chat/sessions/chat%3Aenter/messages') {
+        session = {
+          ...session,
+          message_count: 2,
+          messages: [
+            { id: 'msg:keyboard-user', role: 'user', content: 'Send from keyboard', created_at: '2026-06-14T00:00:01Z' },
+            { id: 'msg:keyboard-assistant', role: 'assistant', content: 'Keyboard response.', created_at: '2026-06-14T00:00:02Z' },
+          ],
+        };
+        return Response.json({
+          generation_status: 'queued',
+          session,
+          user_message: session.messages[0],
+          job: {
+            id: 'job:keyboard',
+            module: 'chatbot',
+            type: 'chat.generate',
+            status: 'queued',
+            resource_class: 'gpu:llm',
+            created_at: '2026-06-14T00:00:01Z',
+            updated_at: '2026-06-14T00:00:01Z',
+            priority: 0,
+          },
+        });
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    const messageInput = await screen.findByLabelText('Message');
+    fireEvent.change(messageInput, { target: { value: 'Send from keyboard' } });
+    fireEvent.keyDown(messageInput, { key: 'Enter', shiftKey: true });
+
+    expect(fetchMock.mock.calls.some(([input, init]) => requestPath(input as RequestInfo | URL) === '/api/chat/sessions' && init?.method === 'POST')).toBe(false);
+
+    fireEvent.keyDown(messageInput, { key: 'Enter' });
+
+    expect(await screen.findByText('Generation completed: job:keyboard')).toBeInTheDocument();
+    await waitFor(() => {
+      const messageCall = fetchMock.mock.calls.find(
+        ([input, init]) => requestPath(input as RequestInfo | URL).endsWith('/messages') && init?.method === 'POST',
+      );
+      expect(messageCall?.[1]?.body).toContain('"content":"Send from keyboard"');
+    });
+  });
+
   it('surfaces gateway failures in the replayable activity stream', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
       if (path === '/api/providers') {
         return Response.json(providerPayload());
+      }
+
+      if (path === '/api/assets') {
+        return Response.json(assetPayload());
       }
 
       if (path === '/api/chat/sessions' && init?.method === 'POST') {

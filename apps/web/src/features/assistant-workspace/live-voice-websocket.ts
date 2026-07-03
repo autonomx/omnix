@@ -37,10 +37,37 @@ const TARGET_STT_SAMPLE_RATE = 16_000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 const DEFAULT_RECONNECT_DELAY_MS = 300;
 const DEFAULT_MAX_PENDING_CHUNKS = 250;
+const DEFAULT_STT_WEBSOCKET_PORT = '5201';
 
-export function getDefaultStreamingSttWebSocketUrl(locationLike: Pick<Location, 'protocol' | 'hostname'> = globalThis.location): string {
+export function getDefaultStreamingSttWebSocketUrl(
+  locationLike: Pick<Location, 'protocol' | 'hostname'> = globalThis.location,
+  sttServiceUrl?: string,
+): string {
+  if (sttServiceUrl?.trim()) {
+    return toStreamingSttWebSocketUrl(sttServiceUrl, locationLike);
+  }
+
   const wsProtocol = locationLike.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${wsProtocol}//${locationLike.hostname}:8000/ws/transcribe`;
+  return `${wsProtocol}//${locationLike.hostname}:${DEFAULT_STT_WEBSOCKET_PORT}/ws/transcribe`;
+}
+
+function toStreamingSttWebSocketUrl(value: string, locationLike: Pick<Location, 'protocol' | 'hostname'>): string {
+  const baseUrl = `${locationLike.protocol}//${locationLike.hostname}`;
+  const url = new URL(value.trim(), baseUrl);
+  url.protocol = url.protocol === 'https:' || url.protocol === 'wss:' ? 'wss:' : 'ws:';
+  const normalizedPath = url.pathname.replace(/\/+$/, '');
+
+  if (normalizedPath.endsWith('/ws/transcribe')) {
+    url.pathname = normalizedPath;
+  } else if (normalizedPath.endsWith('/transcribe')) {
+    url.pathname = `${normalizedPath.slice(0, -'/transcribe'.length)}/ws/transcribe`;
+  } else {
+    url.pathname = `${normalizedPath}/ws/transcribe`.replace(/\/{2,}/g, '/');
+  }
+
+  url.search = '';
+  url.hash = '';
+  return url.toString();
 }
 
 export function downsampleFloat32To16Khz(
