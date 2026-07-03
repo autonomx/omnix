@@ -95,6 +95,10 @@ def _blocked_reason(review_payload: dict[str, Any], sequence: dict[str, Any]) ->
         if text:
             return text
     gate = _mapping(review_payload.get("gate"))
+    checkpoint = _mapping(review_payload.get("checkpoint"))
+    reason = _text(checkpoint.get("reason"))
+    if reason:
+        return reason
     for decision in _list(gate.get("decisions")):
         mapping = _mapping(decision)
         if mapping.get("allowed") is False:

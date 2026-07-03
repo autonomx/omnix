@@ -17,6 +17,7 @@ export type HermesRpgSequenceResponse = {
   validation?: Record<string, unknown>;
   sequence?: Record<string, unknown>;
   gate?: Record<string, unknown> | null;
+  checkpoint?: Record<string, unknown> | null;
   sequence_state?: Record<string, unknown> | null;
   state_changed?: boolean;
 };

@@ -15,6 +15,7 @@ from .hermes_rpg_execution_ledger import hermes_rpg_execution_ledger_recent, her
 from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
 from .hermes_rpg_submit_bridge import RpgSubmitter
 from .hermes_sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
+from .hermes_sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
 from .hermes_sequence_contract import hermes_sequence_contract_validate
 from .hermes_sequence_gate import hermes_sequence_apply_gate
 from .hermes_sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
@@ -76,12 +77,14 @@ def hermes_rpg_sequence_review_payload(payload: dict[str, Any] | None) -> dict[s
     checked = hermes_sequence_contract_validate(data)
     sequence = checked["sequence"]
     gate = hermes_sequence_apply_gate(sequence) if checked["ok"] else None
+    checkpoint = hermes_sequence_checkpoint_policy(sequence) if checked["ok"] else None
     result = {
-        "ok": checked["ok"] and bool(gate and gate.get("allowed") is True),
+        "ok": checked["ok"] and bool(gate and gate.get("allowed") is True) and not bool(checkpoint and checkpoint.get("requires_checkpoint")),
         "source": "hermes_rpg_sequence_review_route",
         "validation": checked,
         "sequence": sequence,
         "gate": gate,
+        "checkpoint": checkpoint,
         "state_changed": False,
     }
     session_id = data.get("session_id")
