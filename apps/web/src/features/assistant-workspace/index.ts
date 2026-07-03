@@ -267,8 +267,8 @@ export type {
   ToolExecutionRow,
   ToolExecutionStatus,
 } from './tool-execution-view';
-export { ToolExecutionPanel } from './ToolExecutionPanel';
-export type { ToolExecutionPanelProps } from './ToolExecutionPanel';
+export { ToolExecutionPanel } from './LedgerToolExecutionPanel';
+export type { ToolExecutionPanelProps } from './LedgerToolExecutionPanel';
 
 export {
   DEFAULT_ASSISTANT_WORKSPACE_PREFERENCES,
