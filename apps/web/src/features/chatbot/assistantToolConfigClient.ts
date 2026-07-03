@@ -19,9 +19,26 @@ export type AssistantToolsConfigPayload = {
   tools: AssistantToolConfigRecord[];
 };
 
+export type AssistantToolLedgerEntry = {
+  execution_id: string;
+  session_id?: string | null;
+  tool_id: string;
+  action_id: string;
+  approval_source: string;
+  input_summary: string;
+  result_summary: string;
+  state_changed: boolean;
+  error?: string | null;
+  created_at: string;
+};
+
+export type AssistantToolLedgerPayload = {
+  entries: AssistantToolLedgerEntry[];
+};
+
 async function readJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    throw new Error(`Assistant tool config request failed: ${response.status}`);
+    throw new Error(`Assistant tool request failed: ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
@@ -38,4 +55,8 @@ export async function saveAssistantToolsConfig(payload: AssistantToolsConfigPayl
       method: 'POST',
     }),
   );
+}
+
+export async function fetchAssistantToolLedger(): Promise<AssistantToolLedgerPayload> {
+  return readJsonResponse<AssistantToolLedgerPayload>(await fetch('/api/assistant/tools/ledger'));
 }
