@@ -72,6 +72,21 @@ class AssistantToolRequest(BaseModel):
     approved: bool = False
 
 
+class AssistantToolReviewDecision(BaseModel):
+    """Approval-gate decision for an assistant tool request."""
+
+    tool_id: str
+    action_id: str
+    session_id: str | None = None
+    allowed: bool = False
+    executable: bool = False
+    approval_required: bool = False
+    risk_level: ToolRiskLevel = "low"
+    state_changed: bool = False
+    reason: str | None = None
+    result_summary: str = ""
+
+
 class AssistantToolResult(BaseModel):
     """Canonical result envelope returned by assistant tool execution."""
 
