@@ -36,7 +36,12 @@ def test_realtime_socket_accepts_text_and_creates_response() -> None:
         assert channel.receive_json()["type"] == "conversation.item.created"
 
         channel.send_json({"type": "response.create"})
-        seen = [channel.receive_json()["type"] for _ in range(5)]
+        seen: list[str] = []
+        for _ in range(8):
+            event_type = channel.receive_json()["type"]
+            seen.append(event_type)
+            if event_type == "response.done":
+                break
         assert "response.created" in seen
         assert "response.output_audio.delta" in seen
         assert "response.done" in seen
