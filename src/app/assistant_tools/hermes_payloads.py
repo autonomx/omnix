@@ -1,9 +1,14 @@
 """Payload shells for Hermes assistant capability routes."""
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .models import AssistantToolRequest, AssistantToolResult, AssistantToolReviewDecision
+
+
+class HermesAssistantToolRequestEnvelope(BaseModel):
+    user_request: str = ""
+    request: AssistantToolRequest = Field(default_factory=lambda: AssistantToolRequest(tool_id="", action_id=""))
 
 
 class HermesAssistantToolReviewPayload(BaseModel):
