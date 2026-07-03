@@ -16,6 +16,7 @@ from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
 from .hermes_rpg_submit_bridge import RpgSubmitter
 from .hermes_assist_mode import hermes_assist_mode_policy
 from .hermes_rpg_context_pack import build_hermes_rpg_context_pack
+from .hermes_sequence_planner_loop import hermes_sequence_planner_loop
 from .hermes_sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
 from .hermes_sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
 from .hermes_sequence_contract import hermes_sequence_contract_validate
@@ -148,3 +149,11 @@ def hermes_rpg_context_pack_route(payload: dict[str, Any] | None = Body(default=
     item_limit = int(data.get("item_limit") or 8)
     char_budget = int(data.get("char_budget") or 4000)
     return build_hermes_rpg_context_pack(session, item_limit=item_limit, char_budget=char_budget)
+
+
+@hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/plan")
+def hermes_rpg_sequence_plan_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+    data = payload if isinstance(payload, dict) else {}
+    sequence = data.get("sequence") if isinstance(data.get("sequence"), dict) else data
+    context_pack = data.get("context_pack") if isinstance(data.get("context_pack"), dict) else {}
+    return hermes_sequence_planner_loop(sequence, context_pack)
