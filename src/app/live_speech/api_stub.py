@@ -28,6 +28,8 @@ def create_live_speech_router() -> APIRouter:
                 for evt in dispatch_client_event(service, message):
                     await channel.send_json(evt.wire())
             except Exception as exc:
+                if exc.__class__.__name__.endswith("Disconnect"):
+                    return
                 await channel.send_json(
                     error_event(
                         session_id=service.session_id,
