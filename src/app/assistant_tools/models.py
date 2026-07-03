@@ -54,6 +54,13 @@ class AssistantToolSpec(BaseModel):
     actions: list[AssistantToolAction] = Field(default_factory=list)
 
 
+class AssistantToolRegistryPayload(BaseModel):
+    """Serializable backend mirror of assistant tools and actions."""
+
+    tools: list[AssistantToolSpec]
+    actions: list[AssistantToolAction]
+
+
 class AssistantToolRequest(BaseModel):
     """Canonical request envelope required before any tool action can run."""
 
