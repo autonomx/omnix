@@ -13,6 +13,7 @@ import { RpgCombatSurface } from './RpgCombatSurface';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
 import { RpgHermesExecutionHistory } from './RpgHermesExecutionHistory';
 import { RpgHermesExecutionResult } from './RpgHermesExecutionResult';
+import { RpgHermesSequenceJobPanel } from './RpgHermesSequenceJobPanel';
 import { RpgHermesSequenceReviewPanel } from './RpgHermesSequenceReviewPanel';
 import { RpgLiveDataStatus, type RpgLiveDataStatusCard } from './RpgLiveDataStatus';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
@@ -615,6 +616,39 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       await invalidateRpgWorkspaceQueries();
     },
   });
+  const activeHermesSequenceJob = rpgJobs
+    .filter((job) => job.type === 'rpg.hermes.sequence.execute')
+    .sort((left, right) => timestampMs(right.created_at) - timestampMs(left.created_at))[0];
+  const hermesSequenceJobMutation = useMutation({
+    mutationFn: (action: 'start' | 'pause' | 'resume' | 'cancel') => {
+      if (action === 'cancel' && activeHermesSequenceJob) {
+        return omnixApiClient.cancelJob(activeHermesSequenceJob.id, 'Canceled from Hermes sequence job controls.');
+      }
+      return omnixApiClient.createJob({
+        module: 'rpg',
+        type: action === 'start' ? 'rpg.hermes.sequence.execute' : 'rpg.hermes.sequence.control',
+        resource_class: 'cpu',
+        priority: 0,
+        input_ref: selectedLiveSessionId ? { session_id: selectedLiveSessionId } : null,
+        input_payload: {
+          action,
+          sequence_id: hermesSequencePreview?.sequence_id,
+          current_item_index: 0,
+          item_count: hermesSequencePreview?.items?.length ?? 0,
+          source: 'rpg-workspace',
+        },
+        stages: [
+          { id: 'load-sequence', label: 'Load Hermes sequence state', resource_class: 'cpu', status: 'queued' },
+          { id: 'execute-approved-step', label: 'Execute approved RPG step', resource_class: 'cpu', status: 'queued' },
+          { id: 'persist-progress', label: 'Persist sequence progress', resource_class: 'cpu', status: 'queued' },
+          { id: 'refresh-ui', label: 'Refresh RPG workspace', resource_class: 'cpu', status: 'queued' },
+        ],
+      });
+    },
+    onSuccess: async () => {
+      await invalidateRpgWorkspaceQueries();
+    },
+  });
   const recoveredSubmittedTurnJob = (() => {
     const pending = pendingTurnSubmissionRef.current;
     if (!pending) return undefined;
@@ -791,6 +825,14 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             sequence={hermesSequencePreview}
           />
           <RpgHermesExecutionResult result={latestHermesExecutionResult} />
+          <RpgHermesSequenceJobPanel
+            activeJob={activeHermesSequenceJob}
+            isPending={hermesSequenceJobMutation.isPending}
+            onCancel={() => hermesSequenceJobMutation.mutate('cancel')}
+            onPause={() => hermesSequenceJobMutation.mutate('pause')}
+            onResume={() => hermesSequenceJobMutation.mutate('resume')}
+            onStart={() => hermesSequenceJobMutation.mutate('start')}
+          />
           <RpgHermesExecutionHistory
             isLoading={hermesExecutionLedgerQuery.isPending}
             items={hermesExecutionLedgerQuery.data?.items ?? []}
