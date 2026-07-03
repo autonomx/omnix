@@ -1,12 +1,14 @@
 """Bridge helpers for Hermes assistant capability routes."""
 from __future__ import annotations
 
+from .calendar_adapter import run_calendar_tool_request
 from .contacts_adapter import run_contacts_tool_request
 from .gate import review_assistant_tool_request
 from .gmail_adapter import run_gmail_tool_request
 from .hermes_payloads import HermesAssistantToolExecutePayload, HermesAssistantToolReviewPayload
 from .ledger import AssistantToolLedgerEntry, append_assistant_tool_ledger_entry, summarize_tool_input
 from .models import AssistantToolRequest, AssistantToolResult, ToolRiskLevel
+from .repo_adapter import run_repository_tool_request
 
 
 def hermes_assistant_tool_review_payload(user_request: str, request: AssistantToolRequest) -> HermesAssistantToolReviewPayload:
@@ -25,8 +27,16 @@ def _run_assistant_tool_request(request: AssistantToolRequest, risk_level: ToolR
         result = run_gmail_tool_request(request)
         result.risk_level = risk_level
         return result
+    if request.tool_id == "calendar":
+        result = run_calendar_tool_request(request)
+        result.risk_level = risk_level
+        return result
     if request.tool_id == "contacts":
         result = run_contacts_tool_request(request)
+        result.risk_level = risk_level
+        return result
+    if request.tool_id == "github":
+        result = run_repository_tool_request(request)
         result.risk_level = risk_level
         return result
     return AssistantToolResult(
