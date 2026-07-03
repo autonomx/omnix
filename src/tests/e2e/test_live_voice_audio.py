@@ -154,6 +154,10 @@ def _headed_mode(request: pytest.FixtureRequest) -> bool:
         return False
 
 
+def _is_chat_message_request(url: str, method: str) -> bool:
+    return method == "POST" and urlparse(url).path.endswith("/messages")
+
+
 @pytest.mark.e2e
 @pytest.mark.skipif(
     not RUN_LIVE_TEST,
@@ -189,26 +193,30 @@ def test_live_voice_uses_spoken_audio_as_fake_microphone(
         live_card = page.locator(".assistant-live-card")
         expect(live_card).to_be_visible(timeout=30_000)
 
-        live_card.get_by_role("button", name="Start Call").click()
-        expect(live_card.locator("header strong")).to_have_text("Connected", timeout=15_000)
+        with page.expect_request(
+            lambda candidate: _is_chat_message_request(candidate.url, candidate.method),
+            timeout=120_000,
+        ) as message_request_info:
+            live_card.get_by_role("button", name="Start Call").click()
+            expect(live_card.locator("header strong")).to_have_text("Connected", timeout=15_000)
 
-        page.wait_for_function(
-            """() => {
-                const card = document.querySelector('.assistant-live-card');
-                if (!card) return false;
-                const level = Number.parseFloat(card.style.getPropertyValue('--voice-level') || '0');
-                return card.dataset.voiceInput === 'active' || level >= 0.14;
-            }""",
-            timeout=20_000,
-        )
+            page.wait_for_function(
+                """() => {
+                    const card = document.querySelector('.assistant-live-card');
+                    if (!card) return false;
+                    const level = Number.parseFloat(card.style.getPropertyValue('--voice-level') || '0');
+                    return card.dataset.voiceInput === 'active' || level >= 0.14;
+                }""",
+                timeout=20_000,
+            )
 
-        user_transcript = live_card.locator(".assistant-voice-transcript p.user").last
-        expect(user_transcript).to_be_visible(timeout=120_000)
-        transcript_text = user_transcript.inner_text().lower()
+        message_request = message_request_info.value
+        message_payload = message_request.post_data_json
+        transcript_text = str(message_payload.get("content", "")).lower()
         normalized = re.sub(r"[^a-z0-9]+", " ", transcript_text).strip()
-        assert "going" in normalized, f"Expected 'going' in live transcript, got: {transcript_text!r}"
+        assert "going" in normalized, f"Expected 'going' in automatically sent transcript, got: {transcript_text!r}"
         assert "how" in normalized or "hows" in normalized, (
-            f"Expected 'how' in live transcript, got: {transcript_text!r}"
+            f"Expected 'how' in automatically sent transcript, got: {transcript_text!r}"
         )
 
         live_card.get_by_role("button", name="End Call").click()
