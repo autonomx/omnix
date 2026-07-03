@@ -14,6 +14,7 @@ from .hermes_rpg_canonical_submitter import hermes_rpg_canonical_submitter
 from .hermes_rpg_execution_ledger import hermes_rpg_execution_ledger_recent, hermes_rpg_execution_ledger_record
 from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
 from .hermes_rpg_submit_bridge import RpgSubmitter
+from .hermes_sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
 from .hermes_sequence_contract import hermes_sequence_contract_validate
 from .hermes_sequence_gate import hermes_sequence_apply_gate
 from .hermes_sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
@@ -112,3 +113,8 @@ def hermes_rpg_sequence_review_route(payload: dict[str, Any] | None = Body(defau
 @hermes_rpg_approved_bp.get("/api/hermes/rpg/sequence/state")
 def hermes_rpg_sequence_state_route(session_id: str = "") -> dict[str, object]:
     return latest_hermes_sequence_state(session_id=session_id)
+
+
+@hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/execute-step")
+def hermes_rpg_sequence_execute_step_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+    return hermes_rpg_sequence_execute_step_payload(payload)

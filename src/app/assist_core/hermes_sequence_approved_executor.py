@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+from copy import deepcopy
+from typing import Any
+
+from .hermes_rpg_approved_config import hermes_rpg_approved_flow_config_payload
+from .hermes_rpg_approved_flow import hermes_rpg_approved_flow
+from .hermes_rpg_canonical_submitter import hermes_rpg_canonical_submitter
+from .hermes_rpg_execution_ledger import hermes_rpg_execution_ledger_record
+from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
+from .hermes_rpg_submit_bridge import RpgSubmitter
+from .hermes_sequence_state import (
+    apply_hermes_sequence_item_result,
+    latest_hermes_sequence_state,
+    write_hermes_sequence_state,
+)
+
+StateLoader = Callable[[str], dict[str, Any]]
+StateWriter = Callable[[dict[str, Any]], dict[str, Any]]
+
+
+def _text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _list(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, list) else []
+
+
+def _default_loader(session_id: str) -> dict[str, Any]:
+    return latest_hermes_sequence_state(session_id=session_id)
+
+
+def _default_writer(state: dict[str, Any]) -> dict[str, Any]:
+    return write_hermes_sequence_state(state)
+
+
+def _next_preview(items: list[dict[str, Any]], current_item_index: int) -> dict[str, Any] | None:
+    if 0 <= current_item_index < len(items):
+        return deepcopy(items[current_item_index])
+    return None
+
+
+def _approved_flow_payload(
+    *,
+    command_text: str,
+    context_hash: str,
+    session_id: str,
+    submitter: RpgSubmitter | None,
+    environ: Mapping[str, str] | None,
+) -> dict[str, Any]:
+    config = hermes_rpg_approved_flow_config_payload(environ)
+    if config.get("enabled") is not True:
+        return {
+            "ok": False,
+            "source": "hermes_rpg_approved_flow_route",
+            "error": "hermes_rpg_approved_flow_disabled",
+            "enabled": False,
+            "config": config,
+            "state_changed": False,
+        }
+    payload = {
+        "enabled": True,
+        "user_step": {"ready": True, "command_text": command_text},
+        "replay_entry": {"ok": True, "command_text": command_text},
+        "context": {"session_id": session_id, "context_hash": context_hash},
+    }
+    flow = hermes_rpg_approved_flow(
+        payload["user_step"],
+        payload["replay_entry"],
+        payload["context"],
+        submitter or hermes_rpg_canonical_submitter,
+    )
+    readout = hermes_rpg_flow_readout(flow)
+    ledger_entry = hermes_rpg_execution_ledger_record(payload=payload, config=config, flow=flow, readout=readout)
+    return {
+        "ok": flow.get("ok") is True,
+        "source": "hermes_rpg_approved_flow_route",
+        "enabled": True,
+        "config": config,
+        "flow": flow,
+        "readout": readout,
+        "ledger_entry": ledger_entry,
+        "state_changed": flow.get("state_changed") is True,
+    }
+
+
+def hermes_rpg_sequence_execute_step_payload(
+    payload: dict[str, Any] | None,
+    *,
+    submitter: RpgSubmitter | None = None,
+    environ: Mapping[str, str] | None = None,
+    state_loader: StateLoader = _default_loader,
+    state_writer: StateWriter = _default_writer,
+) -> dict[str, Any]:
+    data = payload if isinstance(payload, dict) else {}
+    session_id = _text(data.get("session_id"))
+    if not session_id:
+        return {"ok": False, "source": "hermes_sequence_approved_executor", "error": "missing_session_id", "state_changed": False}
+
+    loaded = state_loader(session_id)
+    state = _mapping(loaded.get("state"))
+    if not state:
+        return {"ok": False, "source": "hermes_sequence_approved_executor", "error": "sequence_state_not_found", "state_changed": False}
+
+    sequence = _mapping(state.get("sequence"))
+    items = [_mapping(item) for item in _list(sequence.get("items"))]
+    item_index = int(state.get("current_item_index") or 0)
+    if item_index >= len(items):
+        return {
+            "ok": True,
+            "source": "hermes_sequence_approved_executor",
+            "status": "completed",
+            "sequence_state": state,
+            "state_changed": False,
+            "next_item_preview": None,
+        }
+
+    item = items[item_index]
+    command_text = _text(item.get("statement"))
+    if not command_text:
+        return {"ok": False, "source": "hermes_sequence_approved_executor", "error": "missing_command_text", "item_index": item_index, "state_changed": False}
+
+    flow = _approved_flow_payload(
+        command_text=command_text,
+        context_hash=f"sequence:{state.get('sequence_id')}:{item.get('item_id')}:{item_index}",
+        session_id=session_id,
+        submitter=submitter,
+        environ=environ,
+    )
+    updated = apply_hermes_sequence_item_result(state, item_index=item_index, result=flow)
+    saved = state_writer(updated)
+    saved_sequence = _mapping(saved.get("sequence"))
+    saved_items = [_mapping(saved_item) for saved_item in _list(saved_sequence.get("items"))]
+    accepted = flow.get("ok") is True
+    return {
+        "ok": accepted,
+        "source": "hermes_sequence_approved_executor",
+        "status": "accepted" if accepted else "blocked",
+        "item_index": item_index,
+        "command_text": command_text,
+        "rpg_turn_result": _mapping(_mapping(_mapping(flow.get("flow")).get("result")).get("rpg_result")),
+        "approved_flow": flow,
+        "sequence_state": saved,
+        "state_changed": flow.get("state_changed") is True,
+        "next_item_preview": _next_preview(saved_items, int(saved.get("current_item_index") or 0)),
+    }

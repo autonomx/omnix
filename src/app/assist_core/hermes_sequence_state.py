@@ -53,6 +53,19 @@ def _write_store(path: Path, states: list[dict[str, Any]]) -> None:
     path.write_text(json.dumps({"version": STATE_VERSION, "items": states[-MAX_STATES:]}, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def write_hermes_sequence_state(state: dict[str, Any], *, path: Path | None = None) -> dict[str, Any]:
+    store_path = path or _default_store_path()
+    states = _read_store(store_path)
+    session_id = _text(state.get("session_id")) or "default"
+    sequence_id = _text(state.get("sequence_id")) or "hermes-sequence-draft"
+    state = deepcopy(state)
+    state["updated_at"] = _now()
+    states = [item for item in states if not (item.get("session_id") == session_id and item.get("sequence_id") == sequence_id)]
+    states.append(state)
+    _write_store(store_path, states)
+    return deepcopy(state)
+
+
 def _current_item_index(items: list[dict[str, Any]]) -> int:
     for index, item in enumerate(items):
         if item.get("status") not in {"done", "completed", "blocked"}:
@@ -148,3 +161,27 @@ def latest_hermes_sequence_state(*, session_id: str, path: Path | None = None) -
     if not candidates:
         return {"ok": False, "source": SOURCE, "state": None, "error": "sequence_state_not_found"}
     return {"ok": True, "source": SOURCE, "state": deepcopy(candidates[-1])}
+
+
+def apply_hermes_sequence_item_result(
+    state: dict[str, Any],
+    *,
+    item_index: int,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    updated = deepcopy(state)
+    sequence = _mapping(updated.get("sequence"))
+    items = [_mapping(item) for item in _list(sequence.get("items"))]
+    accepted = result.get("ok") is True
+    if 0 <= item_index < len(items):
+        items[item_index]["status"] = "done" if accepted else "blocked"
+        sequence["items"] = items
+    updated["sequence"] = sequence
+    updated["item_statuses"] = _item_statuses(items)
+    updated["current_item_index"] = _current_item_index(items)
+    updated["last_result"] = deepcopy(result)
+    updated["blocked_reason"] = "" if accepted else _text(result.get("error")) or "execution_blocked"
+    updated["status"] = "completed" if accepted and updated["current_item_index"] >= len(items) else "running" if accepted else "blocked"
+    updated["ok"] = accepted
+    updated["updated_at"] = _now()
+    return updated
