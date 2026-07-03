@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from .compat import compatibility_payload
 from .protocol import dispatch_client_event
 from .realtime import LiveSpeechRealtimeService
 
@@ -12,7 +13,7 @@ def create_live_speech_router() -> APIRouter:
 
     @router.get("/api/live-speech/protocol")
     async def protocol() -> dict:
-        return {"ok": True, "socket_path": "/v1/realtime", "contract": "omnix_live_speech_realtime_v1"}
+        return {"ok": True, **compatibility_payload()}
 
     return router
 
