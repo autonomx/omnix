@@ -212,14 +212,58 @@
   accent-color: #7c5cff;
 }
 
+.assistant-chat-main {
+  position: relative;
+}
+
+.assistant-suggestion-row {
+  display: none !important;
+}
+
+.assistant-chat-main .assistant-composer-controls {
+  background: linear-gradient(180deg, rgba(11, 17, 32, 0.98), rgba(9, 13, 25, 0.96));
+  border-bottom: 1px solid rgba(132, 148, 196, 0.18);
+  border-top: 1px solid rgba(132, 148, 196, 0.12);
+  box-shadow: 0 0.9rem 2.2rem rgba(0, 0, 0, 0.18);
+  left: 0;
+  padding: 0.65rem 1rem;
+  position: absolute;
+  right: 0;
+  top: 3.8rem;
+  z-index: 3;
+}
+
+.assistant-chat-main .assistant-chat-messages {
+  padding-top: 5.65rem;
+}
+
+.assistant-chat-main .assistant-composer {
+  padding-top: 0.7rem;
+}
+
 @media (max-width: 1500px) {
   .assistant-composer-controls {
     grid-template-columns: repeat(6, minmax(8.5rem, 1fr));
   }
 }
 
+@media (max-width: 1100px) {
+  .assistant-chat-main .assistant-composer-controls {
+    grid-template-columns: repeat(3, minmax(8.5rem, 1fr));
+    max-height: 8rem;
+  }
+
+  .assistant-chat-main .assistant-chat-messages {
+    padding-top: 9.5rem;
+  }
+}
+
 @media (max-width: 820px) {
   .assistant-voice-controls {
     grid-template-columns: 1fr;
+  }
+
+  .assistant-chat-main .assistant-composer-controls {
+    grid-template-columns: repeat(2, minmax(8.5rem, 1fr));
   }
 }
