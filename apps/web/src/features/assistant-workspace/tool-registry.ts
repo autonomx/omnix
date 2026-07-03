@@ -169,7 +169,7 @@ export const DEFAULT_ASSISTANT_TOOLS = [
     actions: DEFAULT_GMAIL_TOOL_ACTIONS,
   }),
   createConnectionBackedTool({
-    id: 'google_calendar',
+    id: 'calendar',
     category: 'productivity',
     metadata: {
       name: 'Google Calendar',
@@ -180,7 +180,7 @@ export const DEFAULT_ASSISTANT_TOOLS = [
     actions: DEFAULT_CALENDAR_TOOL_ACTIONS,
   }),
   createConnectionBackedTool({
-    id: 'google_contacts',
+    id: 'contacts',
     category: 'productivity',
     metadata: {
       name: 'Google Contacts',
