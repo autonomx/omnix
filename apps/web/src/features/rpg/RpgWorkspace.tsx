@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ApiTimeoutError, omnixApiClient, type JobRecord, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
+import { getHermesRpgExecutionLedger } from '../../api/hermesRpgApprovedFlowClient';
 import { getHermesRouteDecision, getHermesRpgSuggestions, readHermesRpgTurn } from '../../api/hermesClient';
 import { checkHermesRpgSequence } from '../../api/hermesRpgSequenceClient';
 import type { OmnixModuleDefinition } from '../../app/modules';
@@ -10,6 +11,7 @@ import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/Featu
 import { RpgActionComposer } from './RpgActionComposer';
 import { RpgCombatSurface } from './RpgCombatSurface';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
+import { RpgHermesExecutionHistory } from './RpgHermesExecutionHistory';
 import { RpgHermesSequenceReviewPanel } from './RpgHermesSequenceReviewPanel';
 import { RpgLiveDataStatus, type RpgLiveDataStatusCard } from './RpgLiveDataStatus';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
@@ -292,6 +294,11 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     mutationFn: () => checkHermesRpgSequence(hermesSequenceReviewRequest),
   });
   const hermesSequencePreview = hermesSequencePreviewModel(hermesSequenceReviewMutation.data);
+  const hermesExecutionLedgerQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'hermes-execution-ledger', selectedLiveSessionId],
+    queryFn: () => getHermesRpgExecutionLedger({ limit: 10, sessionId: selectedLiveSessionId ?? undefined }),
+    enabled: Boolean(selectedLiveSessionId),
+  });
   const hermesSuggestionState = selectedLiveSessionId
     ? rpgAssistStateFromItems(
       hermesSuggestions,
@@ -770,6 +777,10 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             onReview={() => hermesSequenceReviewMutation.mutate()}
             onUseFirstItem={selectCommand}
             sequence={hermesSequencePreview}
+          />
+          <RpgHermesExecutionHistory
+            isLoading={hermesExecutionLedgerQuery.isPending}
+            items={hermesExecutionLedgerQuery.data?.items ?? []}
           />
 
           <RpgCombatSurface combat={combatSurface} onSelectCommand={selectCommand} />

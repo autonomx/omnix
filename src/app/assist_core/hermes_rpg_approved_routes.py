@@ -110,8 +110,8 @@ def hermes_rpg_approved_flow_config_route() -> dict[str, object]:
 
 
 @hermes_rpg_approved_bp.get("/api/hermes/rpg/approved-flow/ledger")
-def hermes_rpg_approved_flow_ledger_route(limit: int = 20) -> dict[str, object]:
-    return hermes_rpg_execution_ledger_recent(limit)
+def hermes_rpg_approved_flow_ledger_route(limit: int = 20, session_id: str = "", sequence_id: str = "") -> dict[str, object]:
+    return hermes_rpg_execution_ledger_recent(limit, session_id=session_id or None, sequence_id=sequence_id or None)
 
 
 @hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/review")

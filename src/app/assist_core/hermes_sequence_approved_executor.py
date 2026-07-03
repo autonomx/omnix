@@ -69,7 +69,13 @@ def _approved_flow_payload(
         "enabled": True,
         "user_step": {"ready": True, "command_text": command_text},
         "replay_entry": {"ok": True, "command_text": command_text},
-        "context": {"session_id": session_id, "context_hash": context_hash},
+        "context": {
+            "session_id": session_id,
+            "context_hash": context_hash,
+            "approval_source": "sequence_step",
+            "sequence_id": context_hash.split(":")[1] if context_hash.startswith("sequence:") and len(context_hash.split(":")) > 1 else None,
+            "item_id": context_hash.split(":")[2] if context_hash.startswith("sequence:") and len(context_hash.split(":")) > 2 else None,
+        },
     }
     flow = hermes_rpg_approved_flow(
         payload["user_step"],
