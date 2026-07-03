@@ -7,6 +7,7 @@ import {
 describe('createAssistantWorkspaceRuntimeConfig', () => {
   it('uses durable defaults when env values are absent', () => {
     expect(createAssistantWorkspaceRuntimeConfig({})).toEqual(DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG);
+    expect(createAssistantWorkspaceRuntimeConfig({}).sttServiceUrl).toBe('http://127.0.0.1:5201');
   });
 
   it('reads workspace services, defaults, and feature flags from Vite env values', () => {
@@ -50,6 +51,7 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
 
     expect(config.workspaceId).toBe(DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.workspaceId);
     expect(config.defaultProviderId).toBeUndefined();
+    expect(config.sttServiceUrl).toBe(DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.sttServiceUrl);
     expect(config.features.liveAssistant).toBe(DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.features.liveAssistant);
   });
 });
