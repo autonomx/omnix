@@ -21,6 +21,7 @@ export type AssistantWorkspaceRuntimeEnv = Record<string, string | boolean | num
 export const DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG: AssistantWorkspaceRuntimeConfig = {
   workspaceId: 'workspace:default',
   projectId: 'project:chatbot',
+  sttServiceUrl: 'http://127.0.0.1:5201',
   eventStorageKey: 'omnix.assistantWorkspace.events',
   features: {
     liveAssistant: true,
@@ -37,7 +38,7 @@ export function createAssistantWorkspaceRuntimeConfig(
     projectId: readString(env, 'VITE_ASSISTANT_PROJECT_ID') ?? DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.projectId,
     defaultProviderId: readString(env, 'VITE_ASSISTANT_PROVIDER_ID'),
     defaultModelId: readString(env, 'VITE_ASSISTANT_MODEL_ID'),
-    sttServiceUrl: readString(env, 'VITE_ASSISTANT_STT_URL'),
+    sttServiceUrl: readString(env, 'VITE_ASSISTANT_STT_URL') ?? DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.sttServiceUrl,
     ttsServiceUrl: readString(env, 'VITE_ASSISTANT_TTS_URL'),
     ttsVoice: readString(env, 'VITE_ASSISTANT_TTS_VOICE'),
     eventStorageKey:
