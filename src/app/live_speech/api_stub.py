@@ -15,11 +15,11 @@ from .status import live_speech_status_payload
 def create_live_speech_router() -> APIRouter:
     router = APIRouter(tags=["live-speech"])
 
-    @router.get("/api/live-speech/protocol")
+    @router.get("/api/live-speech/protocol", include_in_schema=False)
     async def protocol() -> dict:
         return {"ok": True, **compatibility_payload()}
 
-    @router.get("/api/live-speech/status")
+    @router.get("/api/live-speech/status", include_in_schema=False)
     async def status() -> dict:
         return live_speech_status_payload()
 
