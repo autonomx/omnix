@@ -22,6 +22,7 @@ describe('buildHermesSequenceReviewRequest', () => {
     });
 
     expect(request.sequence_id).toBe('ui-session-1-review');
+    expect(request.session_id).toBe('session-1');
     expect(request.objective).toContain('Glimmerdeep Pass');
     expect(request.items).toEqual([
       {

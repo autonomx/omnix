@@ -49,6 +49,7 @@ export function buildHermesSequenceReviewRequest({
 
   const items = (suggestionItems.length ? suggestionItems : fallbackItems).slice(0, 5);
   return {
+    session_id: selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : undefined,
     sequence_id: `ui-${selectedSessionSummary.id || 'preview'}-review`,
     objective: `Review next RPG actions for ${selectedSessionSummary.location || selectedSessionSummary.title || 'the current session'}`,
     domain: 'rpg',

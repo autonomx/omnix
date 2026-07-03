@@ -8,6 +8,7 @@ from app.assist_core.hermes_rpg_approved_routes import hermes_rpg_sequence_revie
 
 def sample_payload() -> dict:
     return {
+        "session_id": "session-1",
         "sequence_id": "seq-1",
         "objective": "Review room details",
         "domain": "rpg",
@@ -18,11 +19,12 @@ def sample_payload() -> dict:
 
 
 def test_sequence_payload_ok() -> None:
-    payload = hermes_rpg_sequence_review_payload(sample_payload())
+    payload = hermes_rpg_sequence_review_payload({key: value for key, value in sample_payload().items() if key != "session_id"})
 
     assert payload["ok"] is True
     assert payload["validation"]["ok"] is True
     assert payload["gate"]["allowed"] is True
+    assert "sequence_state" not in payload
 
 
 def test_sequence_payload_invalid() -> None:
@@ -34,7 +36,10 @@ def test_sequence_payload_invalid() -> None:
 
 
 def test_sequence_live_route_ok() -> None:
-    response = TestClient(create_fastapi_app()).post("/api/hermes/rpg/sequence/review", json=sample_payload())
+    response = TestClient(create_fastapi_app()).post(
+        "/api/hermes/rpg/sequence/review",
+        json={key: value for key, value in sample_payload().items() if key != "session_id"},
+    )
 
     assert response.status_code == 200
     assert response.json()["ok"] is True

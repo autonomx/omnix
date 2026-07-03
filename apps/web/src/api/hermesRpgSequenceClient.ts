@@ -1,6 +1,7 @@
 import { omnixApiClient } from './client';
 
 export type HermesRpgSequenceRequest = {
+  session_id?: string;
   sequence_id?: string;
   objective?: string;
   domain?: string;
@@ -16,7 +17,15 @@ export type HermesRpgSequenceResponse = {
   validation?: Record<string, unknown>;
   sequence?: Record<string, unknown>;
   gate?: Record<string, unknown> | null;
+  sequence_state?: Record<string, unknown> | null;
   state_changed?: boolean;
+};
+
+export type HermesRpgSequenceStateResponse = {
+  ok?: boolean;
+  source?: string;
+  state?: Record<string, unknown> | null;
+  error?: string | null;
 };
 
 export function checkHermesRpgSequence(
@@ -26,4 +35,9 @@ export function checkHermesRpgSequence(
     '/api/hermes/rpg/sequence/review',
     request,
   );
+}
+
+export function getHermesRpgSequenceState(sessionId = ''): Promise<HermesRpgSequenceStateResponse> {
+  const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
+  return omnixApiClient.get<HermesRpgSequenceStateResponse>(`/api/hermes/rpg/sequence/state${query}`);
 }

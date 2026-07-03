@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 _LEDGER: list[dict[str, Any]] = []
@@ -41,7 +41,7 @@ def hermes_rpg_execution_ledger_record(
         "ok": flow.get("ok") is True,
         "source": "hermes_rpg_execution_ledger",
         "execution_id": f"hermes-rpg-{len(_LEDGER) + 1}",
-        "created_at": datetime.now(UTC).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "session_id": session_id,
         "context_hash": context_hash,
         "command_text": command_text,
