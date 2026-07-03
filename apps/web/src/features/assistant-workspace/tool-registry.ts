@@ -131,11 +131,34 @@ export function createConfiguredConnectionResult(config: ToolConfig, label: stri
   });
 }
 
-export function createUnavailableToolExecutor(toolLabel: string) {
-  return async (): Promise<ToolExecutionResult> => ({
-    status: 'failed',
-    error: `${toolLabel} execution is not connected to a runtime adapter yet.`,
+export async function executeAssistantToolRequest(request: ToolExecutionRequest, config: ToolConfig): Promise<ToolExecutionResult> {
+  if (!config.enabled || config.connectionStatus !== 'connected') {
+    return { status: 'denied', error: 'Tool is not connected.' };
+  }
+  if (typeof fetch !== 'function') {
+    return { status: 'failed', error: 'Backend tool execution endpoint is unavailable.' };
+  }
+  const response = await fetch('/api/hermes/assistant/tools/execute', {
+    body: JSON.stringify({
+      user_request: '',
+      request: {
+        tool_id: request.toolId,
+        action_id: request.actionId,
+        approved: request.approved ?? false,
+        input: request.input ?? {},
+      },
+    }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
   });
+  if (!response.ok) {
+    return { status: 'failed', error: `Backend tool execution failed: ${response.status}` };
+  }
+  const payload = (await response.json()) as { execution_result?: { error?: string | null; output?: unknown } };
+  if (payload.execution_result?.error) {
+    return { status: 'failed', error: payload.execution_result.error };
+  }
+  return { status: 'completed', output: payload.execution_result?.output };
 }
 
 function createConnectionBackedTool(input: {
@@ -152,7 +175,7 @@ function createConnectionBackedTool(input: {
     },
     validateConfig: validateConnectionBackedToolConfig,
     testConnection: (config) => createConfiguredConnectionResult(config, input.metadata.name),
-    execute: createUnavailableToolExecutor(input.metadata.name),
+    execute: executeAssistantToolRequest,
   };
 }
 
