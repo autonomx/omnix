@@ -48,7 +48,13 @@ export function getDefaultStreamingSttWebSocketUrl(
   }
 
   const wsProtocol = locationLike.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${wsProtocol}//${locationLike.hostname}:${DEFAULT_STT_WEBSOCKET_PORT}/ws/transcribe`;
+  const hostname = localServiceHostname(locationLike.hostname);
+  return `${wsProtocol}//${hostname}:${DEFAULT_STT_WEBSOCKET_PORT}/ws/transcribe`;
+}
+
+function localServiceHostname(hostname: string): string {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === 'localhost' || normalized === '::1' || normalized === '[::1]' ? '127.0.0.1' : hostname;
 }
 
 function toStreamingSttWebSocketUrl(value: string, locationLike: Pick<Location, 'protocol' | 'hostname'>): string {
