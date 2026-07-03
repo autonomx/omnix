@@ -220,20 +220,30 @@
   display: none !important;
 }
 
-.assistant-chat-main .assistant-composer-controls {
-  background: linear-gradient(180deg, rgba(11, 17, 32, 0.98), rgba(9, 13, 25, 0.96));
-  border-bottom: 1px solid rgba(132, 148, 196, 0.18);
-  border-top: 1px solid rgba(132, 148, 196, 0.12);
-  box-shadow: 0 0.9rem 2.2rem rgba(0, 0, 0, 0.18);
-  left: 0;
-  padding: 0.65rem 1rem;
-  position: absolute;
-  right: 0;
-  top: 0;
-  z-index: 3;
+.assistant-chat-main .assistant-composer {
+  position: static !important;
 }
 
-.assistant-chat-main .assistant-composer-controls > label {
+.assistant-chat-main .assistant-composer > .assistant-composer-controls {
+  background: linear-gradient(180deg, rgba(11, 17, 32, 0.98), rgba(9, 13, 25, 0.96));
+  border: 1px solid rgba(132, 148, 196, 0.18);
+  border-radius: 0.85rem;
+  box-shadow: 0 0.9rem 2.2rem rgba(0, 0, 0, 0.18);
+  display: grid !important;
+  gap: 0.55rem;
+  grid-template-columns: repeat(3, minmax(8.5rem, 1fr)) !important;
+  left: 1.25rem !important;
+  max-width: min(46rem, calc(100% - 2.5rem));
+  overflow: hidden;
+  padding: 0.65rem 0.75rem;
+  position: absolute !important;
+  right: auto !important;
+  top: 1rem !important;
+  z-index: 5;
+}
+
+.assistant-chat-main .assistant-composer > .assistant-composer-controls > label,
+.assistant-chat-main .assistant-composer > .assistant-composer-controls > .assistant-composer-chip:last-child {
   display: none !important;
 }
 
@@ -256,9 +266,9 @@
 }
 
 @media (max-width: 1100px) {
-  .assistant-chat-main .assistant-composer-controls {
-    grid-template-columns: repeat(2, minmax(8.5rem, 1fr));
-    max-height: 8rem;
+  .assistant-chat-main .assistant-composer > .assistant-composer-controls {
+    grid-template-columns: repeat(2, minmax(8.5rem, 1fr)) !important;
+    max-width: min(34rem, calc(100% - 2.5rem));
   }
 
   .assistant-chat-main .assistant-chat-header {
@@ -275,7 +285,12 @@
     grid-template-columns: 1fr;
   }
 
-  .assistant-chat-main .assistant-composer-controls {
-    grid-template-columns: repeat(2, minmax(8.5rem, 1fr));
+  .assistant-chat-main .assistant-composer > .assistant-composer-controls {
+    grid-template-columns: 1fr !important;
+    max-width: calc(100% - 2.5rem);
+  }
+
+  .assistant-chat-main .assistant-chat-header {
+    padding-top: 12.25rem;
   }
 }
