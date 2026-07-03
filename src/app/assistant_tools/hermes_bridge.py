@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from .gate import review_assistant_tool_request
 from .hermes_payloads import HermesAssistantToolExecutePayload, HermesAssistantToolReviewPayload
+from .ledger import AssistantToolLedgerEntry, append_assistant_tool_ledger_entry, summarize_tool_input
 from .models import AssistantToolRequest, AssistantToolResult
 
 
@@ -39,6 +40,18 @@ def hermes_assistant_tool_execute_payload(user_request: str, request: AssistantT
             result_summary=decision.result_summary,
             error=decision.reason or "not_executable",
         )
+    append_assistant_tool_ledger_entry(
+        AssistantToolLedgerEntry(
+            session_id=request.session_id,
+            tool_id=request.tool_id,
+            action_id=request.action_id,
+            approval_source="user" if request.approved else "policy",
+            input_summary=summarize_tool_input(request.input),
+            result_summary=result.result_summary,
+            state_changed=result.state_changed,
+            error=result.error,
+        )
+    )
     return HermesAssistantToolExecutePayload(
         user_request=user_request,
         selected_tool_id=request.tool_id,
