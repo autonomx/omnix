@@ -1,21 +1,17 @@
-"""End-to-end live voice test using a bundled spoken MP3 fixture.
+"""End-to-end Live Voice test using spoken audio as the microphone source.
 
-Run the local Parakeet STT service, gateway, and Vite web app, then execute:
+Start the local Parakeet STT service, gateway, and Vite web app, then run:
 
-    set OMNIX_RUN_LIVE_VOICE_AUDIO=1
-    set OMNIX_BASE_URL=http://127.0.0.1:5173
-    set OMNIX_STT_URL=http://127.0.0.1:5201
     python run_playwright_tests.py --suite live_voice --headed --no-report
 
-The test decodes ``hows-it-going.mp3.b64``, converts it to a Chromium-compatible
-WAV microphone source, starts a real Live Voice call, verifies the input meter
-reacts, and waits for a user transcript containing "How's it going?".
+By default on Windows, the test synthesizes "How's it going?" with the local
+System.Speech voice and feeds the resulting WAV into Chromium as a microphone.
+To use a specific MP3 or WAV instead, pass ``--live-voice-audio PATH`` to the
+runner or set ``OMNIX_LIVE_VOICE_AUDIO`` before invoking pytest directly.
 """
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import json
 import os
 import re
@@ -23,30 +19,78 @@ import shutil
 import subprocess
 import urllib.error
 import urllib.request
+import wave
 from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
 from playwright.sync_api import Playwright, expect
 
-AUDIO_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "audio" / "hows-it-going.mp3.b64"
-AUDIO_SHA256 = "493cb931c93f7fd6d90f31180e171ccebc924a17290fa8a744d3ec978d86a919"
 RUN_LIVE_TEST = os.environ.get("OMNIX_RUN_LIVE_VOICE_AUDIO", "0") == "1"
+TEST_PHRASE = "How's it going?"
 
 
-def _load_mp3_fixture() -> bytes:
-    encoded = "".join(AUDIO_FIXTURE.read_text(encoding="ascii").split())
-    return base64.b64decode(encoded, validate=True)
+def _synthesize_windows_audio(tmp_path: Path) -> Path:
+    powershell = (
+        shutil.which("powershell")
+        or shutil.which("powershell.exe")
+        or shutil.which("pwsh")
+    )
+    if not powershell:
+        pytest.fail(
+            "No audio file was supplied and PowerShell is unavailable. "
+            "Pass --live-voice-audio PATH to the test runner."
+        )
+
+    output_path = tmp_path / "hows-it-going-sapi.wav"
+    escaped_path = str(output_path.resolve()).replace("'", "''")
+    escaped_phrase = TEST_PHRASE.replace("'", "''")
+    script = (
+        "Add-Type -AssemblyName System.Speech; "
+        "$voice = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+        f"$voice.SetOutputToWaveFile('{escaped_path}'); "
+        f"$voice.Speak('{escaped_phrase}'); "
+        "$voice.Dispose();"
+    )
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.fail(f"Windows speech synthesis failed: {result.stderr.strip()}")
+    if not output_path.exists() or output_path.stat().st_size <= 44:
+        pytest.fail("Windows speech synthesis did not create a valid WAV file")
+    return output_path
 
 
-def _prepare_fake_microphone_wav(tmp_path: Path) -> Path:
+def _pad_pcm_wav(source_path: Path, output_path: Path) -> Path:
+    try:
+        with wave.open(str(source_path), "rb") as source:
+            params = source.getparams()
+            frames = source.readframes(source.getnframes())
+    except (wave.Error, OSError) as exc:
+        pytest.fail(f"Could not read WAV microphone source {source_path}: {exc}")
+
+    frame_width = params.sampwidth * params.nchannels
+    leading_silence = b"\0" * int(params.framerate * 0.75) * frame_width
+    trailing_silence = b"\0" * int(params.framerate * 2.0) * frame_width
+    with wave.open(str(output_path), "wb") as output:
+        output.setparams(params)
+        output.writeframes(leading_silence)
+        output.writeframes(frames)
+        output.writeframes(trailing_silence)
+    return output_path
+
+
+def _convert_audio_with_ffmpeg(source_path: Path, output_path: Path) -> Path:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
-        pytest.fail("ffmpeg is required to convert the MP3 fixture into Chromium fake microphone WAV input")
-
-    mp3_path = tmp_path / "hows-it-going.mp3"
-    wav_path = tmp_path / "hows-it-going-fake-mic.wav"
-    mp3_path.write_bytes(_load_mp3_fixture())
+        pytest.fail(
+            f"ffmpeg is required to use {source_path.suffix or 'this audio format'} as test input. "
+            "Install ffmpeg or pass a PCM WAV file."
+        )
 
     result = subprocess.run(
         [
@@ -56,16 +100,16 @@ def _prepare_fake_microphone_wav(tmp_path: Path) -> Path:
             "-loglevel",
             "error",
             "-i",
-            str(mp3_path),
+            str(source_path),
             "-af",
-            "atempo=0.9,adelay=500:all=1,apad=pad_dur=2",
+            "adelay=750:all=1,apad=pad_dur=2",
             "-ar",
             "48000",
             "-ac",
             "1",
             "-c:a",
             "pcm_s16le",
-            str(wav_path),
+            str(output_path),
         ],
         capture_output=True,
         text=True,
@@ -73,9 +117,21 @@ def _prepare_fake_microphone_wav(tmp_path: Path) -> Path:
     )
     if result.returncode != 0:
         pytest.fail(f"ffmpeg could not prepare fake microphone audio: {result.stderr.strip()}")
-    if not wav_path.exists() or wav_path.stat().st_size <= 44:
+    if not output_path.exists() or output_path.stat().st_size <= 44:
         pytest.fail("ffmpeg produced an empty fake microphone WAV file")
-    return wav_path
+    return output_path
+
+
+def _prepare_fake_microphone_wav(tmp_path: Path) -> Path:
+    configured_path = os.environ.get("OMNIX_LIVE_VOICE_AUDIO", "").strip()
+    source_path = Path(configured_path).expanduser() if configured_path else _synthesize_windows_audio(tmp_path)
+    if not source_path.exists():
+        pytest.fail(f"Live Voice audio input does not exist: {source_path}")
+
+    output_path = tmp_path / "hows-it-going-fake-mic.wav"
+    if source_path.suffix.lower() == ".wav" and not shutil.which("ffmpeg"):
+        return _pad_pcm_wav(source_path, output_path)
+    return _convert_audio_with_ffmpeg(source_path, output_path)
 
 
 def _assert_stt_ready(stt_base_url: str) -> None:
@@ -98,19 +154,12 @@ def _headed_mode(request: pytest.FixtureRequest) -> bool:
         return False
 
 
-def test_hows_it_going_audio_fixture_is_stable() -> None:
-    audio = _load_mp3_fixture()
-    assert audio.startswith(b"ID3")
-    assert len(audio) == 5840
-    assert hashlib.sha256(audio).hexdigest() == AUDIO_SHA256
-
-
 @pytest.mark.e2e
 @pytest.mark.skipif(
     not RUN_LIVE_TEST,
-    reason="Set OMNIX_RUN_LIVE_VOICE_AUDIO=1 to run the real microphone/STT browser test",
+    reason="Run through --suite live_voice or set OMNIX_RUN_LIVE_VOICE_AUDIO=1",
 )
-def test_live_voice_uses_mp3_as_fake_microphone(
+def test_live_voice_uses_spoken_audio_as_fake_microphone(
     playwright: Playwright,
     request: pytest.FixtureRequest,
     tmp_path: Path,

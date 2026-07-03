@@ -17,24 +17,23 @@ Usage:
     # Run only frontend JS tests
     python run_playwright_tests.py --suite frontend
 
-    # Run the opt-in fake-microphone Live Voice test
-    set OMNIX_RUN_LIVE_VOICE_AUDIO=1
-    set OMNIX_BASE_URL=http://127.0.0.1:5173
+    # Run the Live Voice test with Windows speech synthesis
     python run_playwright_tests.py --suite live_voice --headed --no-report
+
+    # Run the Live Voice test with a specific MP3 or WAV
+    python run_playwright_tests.py --suite live_voice --headed --no-report --live-voice-audio hows-it-going.mp3
 
     # Run only JS static analysis (no browser/server needed)
     python run_playwright_tests.py --suite js_analysis
 
     # Run with headed browser (visible)
     python run_playwright_tests.py --headed
-
-    # Generate report only
-    python run_playwright_tests.py --report-only
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -75,6 +74,21 @@ def main():
     parser.add_argument("-k", "--keyword", type=str, help="Only run tests matching keyword expression")
     parser.add_argument("--no-report", action="store_true", help="Skip HTML report generation")
     parser.add_argument("--verbose", action="store_true", help="Extra verbose output")
+    parser.add_argument(
+        "--live-voice-audio",
+        type=str,
+        help="MP3 or WAV file to inject as the Live Voice microphone source",
+    )
+    parser.add_argument(
+        "--app-url",
+        type=str,
+        help="Override the Live Voice web app URL (default: http://127.0.0.1:5173)",
+    )
+    parser.add_argument(
+        "--stt-url",
+        type=str,
+        help="Override the Parakeet STT URL (default: http://127.0.0.1:5201)",
+    )
 
     args = parser.parse_args()
 
@@ -84,36 +98,48 @@ def main():
         "-c", str(TESTS_DIR / "pytest.ini"),
     ]
 
-    # Add test targets
     targets = SUITE_MAP[args.suite]
     cmd.extend(targets.split())
 
-    # Playwright options
     if args.headed:
         cmd.append("--headed")
     if args.slow_mo:
         cmd.extend(["--slowmo", str(args.slow_mo)])
 
-    # Pytest options
     if args.verbose:
         cmd.append("-vv")
     if args.keyword:
         cmd.extend(["-k", args.keyword])
 
-    # Report plugin
     if not args.no_report:
         cmd.extend(["-p", "reports.html_report"])
+
+    run_env = os.environ.copy()
+    if args.suite == "live_voice":
+        run_env["OMNIX_RUN_LIVE_VOICE_AUDIO"] = "1"
+        run_env.setdefault("OMNIX_BASE_URL", "http://127.0.0.1:5173")
+        run_env.setdefault("OMNIX_STT_URL", "http://127.0.0.1:5201")
+    if args.live_voice_audio:
+        run_env["OMNIX_LIVE_VOICE_AUDIO"] = str(Path(args.live_voice_audio).expanduser().resolve())
+    if args.app_url:
+        run_env["OMNIX_BASE_URL"] = args.app_url
+    if args.stt_url:
+        run_env["OMNIX_STT_URL"] = args.stt_url
 
     print("=" * 70)
     print("  🧪  Omnix Playwright Test Runner")
     print("=" * 70)
     print(f"  Suite  : {args.suite}")
     print(f"  Headed : {args.headed}")
+    if args.suite == "live_voice":
+        print(f"  App    : {run_env['OMNIX_BASE_URL']}")
+        print(f"  STT    : {run_env['OMNIX_STT_URL']}")
+        print(f"  Audio  : {run_env.get('OMNIX_LIVE_VOICE_AUDIO', 'Windows System.Speech')}")
     print(f"  Command: {' '.join(cmd)}")
     print("=" * 70)
     print()
 
-    result = subprocess.run(cmd, cwd=str(TESTS_DIR))
+    result = subprocess.run(cmd, cwd=str(TESTS_DIR), env=run_env)
 
     report_path = TESTS_DIR / "reports" / "report.html"
     if report_path.exists() and not args.no_report:
