@@ -1,5 +1,6 @@
 """Assistant tool runtime contracts and governance helpers."""
 
+from .gate import review_assistant_tool_request
 from .models import (
     ApprovalPolicy,
     AssistantToolAction,
@@ -7,6 +8,7 @@ from .models import (
     AssistantToolRegistryPayload,
     AssistantToolRequest,
     AssistantToolResult,
+    AssistantToolReviewDecision,
     AssistantToolSpec,
     AssistantToolValidationResult,
     ConnectionStatus,
@@ -26,6 +28,7 @@ __all__ = [
     "AssistantToolRegistryPayload",
     "AssistantToolRequest",
     "AssistantToolResult",
+    "AssistantToolReviewDecision",
     "AssistantToolSpec",
     "AssistantToolValidationResult",
     "ConnectionStatus",
@@ -38,5 +41,6 @@ __all__ = [
     "install_assistant_tools_openapi_filter",
     "is_valid_action_id",
     "is_valid_tool_id",
+    "review_assistant_tool_request",
     "validate_assistant_tool_request",
 ]
