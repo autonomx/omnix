@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from .capability_dashboard import AssistantCapabilityDashboard, build_assistant_capability_dashboard
 from .config_store import AssistantToolsConfigPayload, load_assistant_tools_config, save_assistant_tools_config
 from .gate import review_assistant_tool_request
 from .hermes_bridge import hermes_assistant_tool_execute_payload, hermes_assistant_tool_review_payload
@@ -22,6 +23,7 @@ _ASSISTANT_TOOL_ROUTE_NAMES = {
     "save_assistant_tools_config_endpoint",
     "review_assistant_tool_endpoint",
     "assistant_tool_intent_endpoint",
+    "assistant_tool_dashboard_endpoint",
     "assistant_tool_ledger_endpoint",
     "hermes_assistant_tool_review_endpoint",
     "hermes_assistant_tool_execute_endpoint",
@@ -51,6 +53,10 @@ def register_assistant_tool_routes(app: FastAPI) -> None:
     @app.post("/api/assistant/tools/intent", response_model=AssistantToolIntent, tags=["assistant-tools"])
     async def assistant_tool_intent_endpoint(request: AssistantToolIntentRequest) -> AssistantToolIntent:
         return detect_assistant_tool_intent(request.message)
+
+    @app.get("/api/assistant/tools/dashboard", response_model=AssistantCapabilityDashboard, tags=["assistant-tools"])
+    async def assistant_tool_dashboard_endpoint() -> AssistantCapabilityDashboard:
+        return build_assistant_capability_dashboard()
 
     @app.get("/api/assistant/tools/ledger", response_model=AssistantToolLedgerPayload, tags=["assistant-tools"])
     async def assistant_tool_ledger_endpoint(limit: int = 100) -> AssistantToolLedgerPayload:
