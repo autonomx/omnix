@@ -9,6 +9,7 @@ from .hermes_payloads import HermesAssistantToolExecutePayload, HermesAssistantT
 from .ledger import AssistantToolLedgerEntry, append_assistant_tool_ledger_entry, summarize_tool_input
 from .models import AssistantToolRequest, AssistantToolResult, ToolRiskLevel
 from .repo_adapter import run_repository_tool_request
+from .result_context import tool_result_to_chat_context
 
 
 def hermes_assistant_tool_review_payload(user_request: str, request: AssistantToolRequest) -> HermesAssistantToolReviewPayload:
@@ -64,7 +65,7 @@ def hermes_assistant_tool_execute_payload(user_request: str, request: AssistantT
             result_summary=decision.result_summary,
             error=decision.reason or "not_executable",
         )
-    append_assistant_tool_ledger_entry(
+    entry = append_assistant_tool_ledger_entry(
         AssistantToolLedgerEntry(
             session_id=request.session_id,
             tool_id=request.tool_id,
@@ -82,5 +83,6 @@ def hermes_assistant_tool_execute_payload(user_request: str, request: AssistantT
         selected_action_id=request.action_id,
         approval_decision=decision,
         execution_result=result,
+        result_context=tool_result_to_chat_context(result, entry),
         state_changed=result.state_changed,
     )
