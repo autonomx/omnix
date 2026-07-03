@@ -347,6 +347,19 @@
   padding-left: 1.1rem;
 }
 
+.rpg-hermes-sequence-review {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.rpg-hermes-sequence-toolbar {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(151, 114, 255, 0.16);
+  border-radius: 0.7rem;
+  padding: 0.65rem 0.75rem;
+}
+
 .rpg-survival-card {
   gap: 0.75rem;
 }

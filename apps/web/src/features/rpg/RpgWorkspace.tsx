@@ -3,12 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ApiTimeoutError, omnixApiClient, type JobRecord, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
 import { getHermesRouteDecision, getHermesRpgSuggestions, readHermesRpgTurn } from '../../api/hermesClient';
+import { checkHermesRpgSequence } from '../../api/hermesRpgSequenceClient';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import { RpgActionComposer } from './RpgActionComposer';
 import { RpgCombatSurface } from './RpgCombatSurface';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
+import { RpgHermesSequenceReviewPanel } from './RpgHermesSequenceReviewPanel';
 import { RpgLiveDataStatus, type RpgLiveDataStatusCard } from './RpgLiveDataStatus';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { RpgNarrativeTabs } from './RpgNarrativeTabs';
@@ -18,6 +20,8 @@ import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { RpgWorldRail } from './RpgWorldRail';
 import { createRpgCombatSurfaceState } from './rpgCombatState';
 import { rpgAssistStateFromItems } from './rpgAssistState';
+import { hermesSequencePreviewModel } from './hermesSequencePreviewModel';
+import { buildHermesSequenceReviewRequest } from './hermesSequenceReviewRequest';
 import { createRpgTurnReadoutPreview } from './rpgTurnReadoutState';
 import { createRpgWorkspaceState, type RpgStoryMessagePreview } from './rpgUiState';
 import './RpgWorkspace.css';
@@ -279,6 +283,15 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     enabled: Boolean(selectedLiveSessionId),
   });
   const hermesSuggestions = hermesSuggestionsQuery.data?.suggestions ?? [];
+  const hermesSequenceReviewRequest = buildHermesSequenceReviewRequest({
+    quickActions,
+    selectedSessionSummary,
+    suggestions: hermesSuggestions,
+  });
+  const hermesSequenceReviewMutation = useMutation({
+    mutationFn: () => checkHermesRpgSequence(hermesSequenceReviewRequest),
+  });
+  const hermesSequencePreview = hermesSequencePreviewModel(hermesSequenceReviewMutation.data);
   const hermesSuggestionState = selectedLiveSessionId
     ? rpgAssistStateFromItems(
       hermesSuggestions,
@@ -750,6 +763,14 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               successPrefix="RPG turn job queued"
             />
           </RpgStoryScene>
+
+          <RpgHermesSequenceReviewPanel
+            error={hermesSequenceReviewMutation.error}
+            isPending={hermesSequenceReviewMutation.isPending}
+            onReview={() => hermesSequenceReviewMutation.mutate()}
+            onUseFirstItem={selectCommand}
+            sequence={hermesSequencePreview}
+          />
 
           <RpgCombatSurface combat={combatSurface} onSelectCommand={selectCommand} />
 
