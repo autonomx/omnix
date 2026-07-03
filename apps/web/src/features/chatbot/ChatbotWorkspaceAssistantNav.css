@@ -39,7 +39,7 @@
 }
 
 .assistant-composer-controls {
-  grid-template-columns: repeat(6, minmax(7.25rem, 1fr));
+  grid-template-columns: repeat(4, minmax(7.25rem, 1fr));
   overflow-x: auto;
   scrollbar-width: thin;
 }
@@ -229,12 +229,20 @@
   padding: 0.65rem 1rem;
   position: absolute;
   right: 0;
-  top: 3.8rem;
+  top: 0;
   z-index: 3;
 }
 
+.assistant-chat-main .assistant-composer-controls > label {
+  display: none !important;
+}
+
+.assistant-chat-main .assistant-chat-header {
+  padding-top: 5.15rem;
+}
+
 .assistant-chat-main .assistant-chat-messages {
-  padding-top: 5.65rem;
+  padding-top: 1rem;
 }
 
 .assistant-chat-main .assistant-composer {
@@ -243,18 +251,22 @@
 
 @media (max-width: 1500px) {
   .assistant-composer-controls {
-    grid-template-columns: repeat(6, minmax(8.5rem, 1fr));
+    grid-template-columns: repeat(4, minmax(8.5rem, 1fr));
   }
 }
 
 @media (max-width: 1100px) {
   .assistant-chat-main .assistant-composer-controls {
-    grid-template-columns: repeat(3, minmax(8.5rem, 1fr));
+    grid-template-columns: repeat(2, minmax(8.5rem, 1fr));
     max-height: 8rem;
   }
 
+  .assistant-chat-main .assistant-chat-header {
+    padding-top: 8.75rem;
+  }
+
   .assistant-chat-main .assistant-chat-messages {
-    padding-top: 9.5rem;
+    padding-top: 1rem;
   }
 }
 
