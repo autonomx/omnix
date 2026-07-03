@@ -24,6 +24,7 @@ export type HermesRpgApprovedFlowResponse = {
   config?: HermesRpgApprovedFlowConfig;
   flow?: Record<string, unknown>;
   readout?: Record<string, unknown>;
+  ledger_entry?: Record<string, unknown>;
   error?: string | null;
   state_changed?: boolean;
 };

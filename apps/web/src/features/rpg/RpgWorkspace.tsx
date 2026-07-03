@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ApiTimeoutError, omnixApiClient, type JobRecord, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
-import { getHermesRpgExecutionLedger } from '../../api/hermesRpgApprovedFlowClient';
+import { getHermesRpgExecutionLedger, type HermesRpgApprovedFlowResponse } from '../../api/hermesRpgApprovedFlowClient';
 import { getHermesRouteDecision, getHermesRpgSuggestions, readHermesRpgTurn } from '../../api/hermesClient';
 import { checkHermesRpgSequence } from '../../api/hermesRpgSequenceClient';
 import type { OmnixModuleDefinition } from '../../app/modules';
@@ -12,6 +12,7 @@ import { RpgActionComposer } from './RpgActionComposer';
 import { RpgCombatSurface } from './RpgCombatSurface';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
 import { RpgHermesExecutionHistory } from './RpgHermesExecutionHistory';
+import { RpgHermesExecutionResult } from './RpgHermesExecutionResult';
 import { RpgHermesSequenceReviewPanel } from './RpgHermesSequenceReviewPanel';
 import { RpgLiveDataStatus, type RpgLiveDataStatusCard } from './RpgLiveDataStatus';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
@@ -172,6 +173,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [isWorldRailCollapsed, setIsWorldRailCollapsed] = useState(false);
   const [isLiveDataExpanded, setIsLiveDataExpanded] = useState(false);
   const [campaignMenuHost, setCampaignMenuHost] = useState<HTMLElement | null>(null);
+  const [latestHermesExecutionResult, setLatestHermesExecutionResult] = useState<HermesRpgApprovedFlowResponse | null>(null);
   const inventoryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'replay-inventory'],
     queryFn: () => omnixApiClient.getReplayPersistenceInventory(),
@@ -462,6 +464,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-suggestions'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-route-decision'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-turn-readout'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-execution-ledger'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-sequence-state'] }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'reports'] }),
@@ -722,6 +726,10 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             hermesSuggestionState={hermesSuggestionState}
             hermesSuggestions={hermesSuggestions}
             hermesTurnReadout={hermesTurnReadout}
+            onApprovedFlowAccepted={async (result) => {
+              setLatestHermesExecutionResult(result);
+              await invalidateRpgWorkspaceQueries();
+            }}
             onSelectCommand={selectCommand}
             partyMembers={partyMembers}
             survival={survival}
@@ -778,6 +786,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             onUseFirstItem={selectCommand}
             sequence={hermesSequencePreview}
           />
+          <RpgHermesExecutionResult result={latestHermesExecutionResult} />
           <RpgHermesExecutionHistory
             isLoading={hermesExecutionLedgerQuery.isPending}
             items={hermesExecutionLedgerQuery.data?.items ?? []}
