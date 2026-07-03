@@ -12,6 +12,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.assistant_tools import AssistantToolRegistryPayload, assistant_tool_registry_payload
 from app.assets import (
     AssetLegacyImportDryRun,
     AssetListResponse,
@@ -297,6 +298,10 @@ def create_gateway_app(
     @gateway.get("/api/compatibility/legacy", response_model=CompatibilityHandoffPayload, tags=["compatibility"])
     async def compatibility_handoff() -> CompatibilityHandoffPayload:
         return _compatibility_handoff()
+
+    @gateway.get("/api/assistant/tools", response_model=AssistantToolRegistryPayload, tags=["assistant-tools"])
+    async def assistant_tools() -> AssistantToolRegistryPayload:
+        return assistant_tool_registry_payload()
 
     @gateway.get("/api/chat/sessions", response_model=ChatSessionListResponse, tags=["chat"])
     async def chat_sessions() -> ChatSessionListResponse:
