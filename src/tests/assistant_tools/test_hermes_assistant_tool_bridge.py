@@ -58,20 +58,68 @@ def test_hermes_execute_payload_keeps_non_approved_write_from_running(monkeypatc
     assert payload.state_changed is False
 
 
-def test_hermes_execute_payload_records_approved_state_change(monkeypatch, tmp_path):
+def test_hermes_execute_payload_records_approved_gmail_state_change(monkeypatch, tmp_path):
     path = tmp_path / "assistant_tools_config.json"
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
     save_assistant_tools_config(_connected_config("gmail"), path)
 
     payload = hermes_assistant_tool_execute_payload(
-        "Email Ada",
-        AssistantToolRequest(tool_id="gmail", action_id="gmail.send_email", session_id="chat:1", approved=True),
+        "Draft Ada",
+        AssistantToolRequest(
+            tool_id="gmail",
+            action_id="gmail.create_draft",
+            session_id="chat:1",
+            approved=True,
+            input={"to": "ada@example.com", "subject": "Hello", "body": "Hi Ada"},
+        ),
     )
 
     assert payload.approval_decision.executable is True
     assert payload.execution_result.error is None
-    assert payload.execution_result.output["adapter_status"] == "pending"
+    assert payload.execution_result.output["draft"]["to"] == "ada@example.com"
     assert payload.state_changed is True
+
+
+def test_hermes_execute_payload_dispatches_calendar_adapter(monkeypatch, tmp_path):
+    path = tmp_path / "assistant_tools_config.json"
+    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
+    save_assistant_tools_config(_connected_config("calendar"), path)
+
+    payload = hermes_assistant_tool_execute_payload(
+        "Check my morning",
+        AssistantToolRequest(
+            tool_id="calendar",
+            action_id="calendar.read_availability",
+            session_id="chat:1",
+            input={"start_time": "2026-07-03T08:30:00", "end_time": "2026-07-03T09:30:00"},
+        ),
+    )
+
+    assert payload.approval_decision.executable is True
+    assert payload.execution_result.error is None
+    assert payload.execution_result.output["events"][0]["title"] == "Focus block"
+    assert payload.state_changed is False
+
+
+def test_hermes_execute_payload_dispatches_repository_adapter(monkeypatch, tmp_path):
+    path = tmp_path / "assistant_tools_config.json"
+    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
+    save_assistant_tools_config(_connected_config("github"), path)
+
+    payload = hermes_assistant_tool_execute_payload(
+        "Read repo status",
+        AssistantToolRequest(
+            tool_id="github",
+            action_id="github.read_repo",
+            session_id="chat:1",
+            input={"repository": "autonomx/omnix"},
+        ),
+    )
+
+    assert payload.approval_decision.executable is True
+    assert payload.execution_result.error is None
+    assert payload.execution_result.output["repository"] == "autonomx/omnix"
+    assert payload.state_changed is False
 
 
 def test_hermes_assistant_routes_are_separate_from_rpg_routes(monkeypatch, tmp_path):
