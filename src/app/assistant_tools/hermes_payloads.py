@@ -4,6 +4,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from .models import AssistantToolRequest, AssistantToolResult, AssistantToolReviewDecision
+from .result_context import AssistantToolResultContext
 
 
 class HermesAssistantToolRequestEnvelope(BaseModel):
@@ -25,4 +26,5 @@ class HermesAssistantToolExecutePayload(BaseModel):
     selected_action_id: str
     approval_decision: AssistantToolReviewDecision
     execution_result: AssistantToolResult
+    result_context: AssistantToolResultContext | None = None
     state_changed: bool = False
