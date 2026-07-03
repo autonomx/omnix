@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from .cancel_scope import CancelScope
 from .events import LiveSpeechEvent, LiveSpeechSessionConfig, error_event, event
+from .llm import EchoTextGenerator, StreamingTextGenerator
 from .metrics import LiveSpeechMetrics
 from .stt import BufferedStreamingTranscriber, StreamingTranscriber
 from .tts import DeterministicSpeechSynthesizer, StreamingSpeechSynthesizer, split_text_for_tts
@@ -24,6 +25,7 @@ class LiveSpeechRealtimeService:
     cancel_scope: CancelScope = field(default_factory=CancelScope)
     transcriber: StreamingTranscriber = field(default_factory=BufferedStreamingTranscriber)
     synthesizer: StreamingSpeechSynthesizer = field(default_factory=DeterministicSpeechSynthesizer)
+    text_generator: StreamingTextGenerator = field(default_factory=EchoTextGenerator)
     vad: EnergyVad | None = None
     metrics: LiveSpeechMetrics = field(default_factory=LiveSpeechMetrics)
     turn_id: str = field(default_factory=lambda: _new_id("turn"))
@@ -162,8 +164,7 @@ class LiveSpeechRealtimeService:
         self.response_active = True
         self.response_id = _new_id("resp")
         generation = self.generation
-        prompt_text = instructions or self.last_transcript or "Hello."
-        response_text = self._compose_response(prompt_text)
+        prompt_text = self.last_transcript or "Hello."
         self.metrics.mark("response_created")
         events: list[LiveSpeechEvent] = [
             event(
@@ -176,43 +177,51 @@ class LiveSpeechRealtimeService:
             )
         ]
 
-        for index, text_chunk in enumerate(split_text_for_tts(response_text, max_chars=140)):
+        transcript_parts: list[str] = []
+        text_index = 0
+        for generated in self.text_generator.generate(prompt_text, instructions=instructions or self.config.instructions, generation=generation):
             if self.cancel_scope.should_drop(generation):
                 self.metrics.drop_stale_chunk()
                 continue
-            self.metrics.mark("first_text_delta")
-            events.append(
-                event(
-                    "response.text.delta",
-                    session_id=self.session_id,
-                    turn_id=self.turn_id,
-                    response_id=self.response_id,
-                    generation=generation,
-                    delta=text_chunk,
-                    index=index,
-                )
-            )
-            self.metrics.queued_text_chunks += 1
-            for audio in self.synthesizer.synthesize(text_chunk, voice=self.config.voice, generation=generation):
+            transcript_parts.append(generated)
+            for text_chunk in split_text_for_tts(generated, max_chars=140):
                 if self.cancel_scope.should_drop(generation):
                     self.metrics.drop_stale_chunk()
                     continue
-                self.metrics.mark("first_audio_delta")
-                self.metrics.queued_audio_chunks += 1
+                self.metrics.mark("first_text_delta")
                 events.append(
                     event(
-                        "response.output_audio.delta",
+                        "response.text.delta",
                         session_id=self.session_id,
                         turn_id=self.turn_id,
                         response_id=self.response_id,
                         generation=generation,
-                        delta=audio.b64(),
-                        sample_rate=audio.sample_rate,
-                        sequence=audio.sequence,
+                        delta=text_chunk,
+                        index=text_index,
                     )
                 )
+                text_index += 1
+                self.metrics.queued_text_chunks += 1
+                for audio in self.synthesizer.synthesize(text_chunk, voice=self.config.voice, generation=generation):
+                    if self.cancel_scope.should_drop(generation):
+                        self.metrics.drop_stale_chunk()
+                        continue
+                    self.metrics.mark("first_audio_delta")
+                    self.metrics.queued_audio_chunks += 1
+                    events.append(
+                        event(
+                            "response.output_audio.delta",
+                            session_id=self.session_id,
+                            turn_id=self.turn_id,
+                            response_id=self.response_id,
+                            generation=generation,
+                            delta=audio.b64(),
+                            sample_rate=audio.sample_rate,
+                            sequence=audio.sequence,
+                        )
+                    )
 
-        events.extend(self.finish_response(status="completed", generation=generation, transcript=response_text))
+        events.extend(self.finish_response(status="completed", generation=generation, transcript="".join(transcript_parts)))
         return events
 
     def cancel_response(self, reason: str = "client_cancelled") -> list[LiveSpeechEvent]:
@@ -221,13 +230,7 @@ class LiveSpeechRealtimeService:
         self.metrics.mark("cancelled")
         self.response_active = False
         return [
-            event(
-                "response.output_audio.done",
-                session_id=self.session_id,
-                turn_id=self.turn_id,
-                response_id=previous_response_id,
-                generation=next_generation,
-            ),
+            event("response.output_audio.done", session_id=self.session_id, turn_id=self.turn_id, response_id=previous_response_id, generation=next_generation),
             event(
                 "response.done",
                 session_id=self.session_id,
@@ -256,7 +259,3 @@ class LiveSpeechRealtimeService:
         self.response_id = None
         self.metrics = LiveSpeechMetrics(session_started_ms=self.metrics.session_started_ms)
         return events
-
-    def _compose_response(self, prompt_text: str) -> str:
-        clean = " ".join(prompt_text.split())[: self.config.max_response_text_chars]
-        return f"I heard: {clean}" if clean else "I am ready."
