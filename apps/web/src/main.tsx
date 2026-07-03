@@ -12,7 +12,7 @@ import './legacy-layout.css';
 import './features/chatbot/ChatbotWorkspaceTools.css';
 import './features/chatbot/ChatbotWorkspaceSidePanelFix.css';
 import './features/chatbot/ChatbotWorkspaceUtilityToggle.css';
-import './features/assistant-workspace/live-voice-websocket-enhancer';
+import './features/assistant-workspace/live-voice-controller';
 import './features/storyteller/StorytellerWorkspace.css';
 import './features/storyteller/StorytellerSidebar.css';
 import './features/storyteller/StoryMode.css';
