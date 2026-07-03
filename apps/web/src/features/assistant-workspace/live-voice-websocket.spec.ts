@@ -8,7 +8,8 @@ import {
 
 describe('live voice websocket helpers', () => {
   it('builds the local transcription websocket URL from the browser location', () => {
-    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: 'localhost' })).toBe('ws://localhost:5201/ws/transcribe');
+    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: 'localhost' })).toBe('ws://127.0.0.1:5201/ws/transcribe');
+    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: '::1' })).toBe('ws://127.0.0.1:5201/ws/transcribe');
     expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'https:', hostname: 'omnix.local' })).toBe('wss://omnix.local:5201/ws/transcribe');
   });
 
