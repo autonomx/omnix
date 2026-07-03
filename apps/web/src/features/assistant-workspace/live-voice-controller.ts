@@ -1,0 +1,525 @@
+import {
+  StreamingSttWebSocketClient,
+  calculateRms,
+  getDefaultStreamingSttWebSocketUrl,
+  type StreamingSttConnectionStatus,
+  type StreamingSttWebSocketCtor,
+} from './live-voice-websocket';
+import { liveVoiceVisualScales, smoothLiveVoiceLevel } from './live-voice-level';
+import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
+
+type LiveVoiceWindow = Window & typeof globalThis & {
+  AudioContext?: typeof AudioContext;
+  webkitAudioContext?: typeof AudioContext;
+};
+
+type LiveVoiceAudioPipeline = {
+  node: AudioNode;
+  cleanup: () => void;
+};
+
+type LiveVoiceSession = {
+  card: HTMLElement;
+  stream: MediaStream;
+  audioContext: AudioContext;
+  source: MediaStreamAudioSourceNode;
+  audioPipeline: LiveVoiceAudioPipeline;
+  client: StreamingSttWebSocketClient;
+  speechDetected: boolean;
+  finalRequested: boolean;
+  silenceTimer: ReturnType<typeof setTimeout> | null;
+  finalResponseTimer: ReturnType<typeof setTimeout> | null;
+  voiceLevel: number;
+};
+
+type PendingStart = {
+  card: HTMLElement;
+  token: number;
+};
+
+const SPEECH_RMS_THRESHOLD = 0.015;
+const SILENCE_FINALIZE_MS = 650;
+const FINAL_RESPONSE_TIMEOUT_MS = 8_000;
+const preparedCards = new WeakSet<HTMLElement>();
+const panelStatuses = new WeakMap<HTMLElement, StreamingSttConnectionStatus>();
+let activeSession: LiveVoiceSession | null = null;
+let pendingStart: PendingStart | null = null;
+let startToken = 0;
+let initialized = false;
+let liveVoiceWorkletModuleUrl: string | null = null;
+const liveVoiceWorkletContexts = new WeakSet<AudioContext>();
+
+export function initializeLiveVoiceController(root: ParentNode = document): void {
+  if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return;
+  initialized = true;
+
+  prepareCards(root);
+  document.addEventListener('click', handleDocumentClick, true);
+
+  const observer = new MutationObserver(() => prepareCards(root));
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
+function prepareCards(root: ParentNode): void {
+  root.querySelectorAll<HTMLElement>('.assistant-live-card').forEach((card) => {
+    if (!preparedCards.has(card)) {
+      preparedCards.add(card);
+      const stateButton = card.querySelector<HTMLElement>('.assistant-live-state');
+      stateButton?.setAttribute('role', 'button');
+      stateButton?.setAttribute('tabindex', '0');
+      stateButton?.setAttribute('aria-label', 'Start live voice streaming');
+      stateButton?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        if (!isCardStartingOrActive(card)) void startLiveVoice(card);
+      });
+      panelStatuses.set(card, 'idle');
+    }
+    renderPanelStatus(card, panelStatuses.get(card) ?? 'idle');
+  });
+}
+
+function handleDocumentClick(event: MouseEvent): void {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  const stateButton = target.closest<HTMLElement>('.assistant-live-state');
+  if (stateButton) {
+    const card = stateButton.closest<HTMLElement>('.assistant-live-card');
+    if (card && !isCardStartingOrActive(card)) void startLiveVoice(card);
+    return;
+  }
+
+  const button = target.closest<HTMLButtonElement>('button');
+  if (!button) return;
+
+  if (button.classList.contains('assistant-mic-button')) {
+    const card = document.querySelector<HTMLElement>('.assistant-live-card');
+    if (card) toggleLiveVoice(card);
+    return;
+  }
+
+  const label = button.textContent?.trim().toLowerCase() ?? '';
+  const isCallButton = label === 'start call' || label === 'end call';
+  const isVoiceContext = Boolean(
+    button.closest('.assistant-live-card')
+    || button.closest('.assistant-view-panel[aria-label="Voice Sessions view"]'),
+  );
+  if (!isCallButton || !isVoiceContext) return;
+
+  const card = button.closest<HTMLElement>('.assistant-live-card')
+    ?? document.querySelector<HTMLElement>('.assistant-live-card');
+  if (card) toggleLiveVoice(card);
+}
+
+function toggleLiveVoice(card: HTMLElement): void {
+  if (isCardStartingOrActive(card)) {
+    stopLiveVoice(card, 'idle');
+    return;
+  }
+  void startLiveVoice(card);
+}
+
+function isCardStartingOrActive(card: HTMLElement): boolean {
+  return activeSession?.card === card || pendingStart?.card === card;
+}
+
+async function startLiveVoice(card: HTMLElement): Promise<void> {
+  if (isCardStartingOrActive(card)) return;
+  if (activeSession) stopLiveVoice(activeSession.card, 'idle');
+
+  const token = ++startToken;
+  pendingStart = { card, token };
+  setPanelStatus(card, 'connecting');
+
+  let audioContext: AudioContext | null = null;
+  let stream: MediaStream | null = null;
+  let source: MediaStreamAudioSourceNode | null = null;
+  let audioPipeline: LiveVoiceAudioPipeline | null = null;
+
+  try {
+    const liveWindow = window as LiveVoiceWindow;
+    const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
+    const WebSocketCtor = liveWindow.WebSocket as unknown as StreamingSttWebSocketCtor | undefined;
+    if (!AudioContextCtor || !WebSocketCtor) {
+      throw new Error('Live voice requires browser AudioContext and WebSocket support.');
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Live voice requires browser microphone access.');
+    }
+
+    // Create and resume the context while this call still belongs to the user gesture.
+    // A suspended context produces no processor frames, leaving the meter frozen at idle.
+    audioContext = new AudioContextCtor({ latencyHint: 'interactive' });
+    await ensureAudioContextRunning(audioContext);
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false,
+    });
+
+    if (!isCurrentStart(card, token)) {
+      closePendingResources(stream, audioContext, source, audioPipeline);
+      return;
+    }
+
+    source = audioContext.createMediaStreamSource(stream);
+    const runtimeConfig = createAssistantWorkspaceRuntimeConfig();
+    const client = new StreamingSttWebSocketClient({
+      url: getDefaultStreamingSttWebSocketUrl(window.location, runtimeConfig.sttServiceUrl),
+      webSocketCtor: WebSocketCtor,
+      onStatusChange: (status) => {
+        if (activeSession?.card === card || pendingStart?.card === card) setPanelStatus(card, status);
+      },
+      onPartialTranscript: (text) => renderTranscript(card, 'You', text, 'draft'),
+      onFinalTranscript: (text) => handleFinalTranscript(card, text),
+      onError: (message) => showLiveVoiceError(card, message),
+    });
+
+    const sessionShell = {
+      card,
+      stream,
+      audioContext,
+      source,
+      client,
+      speechDetected: false,
+      finalRequested: false,
+      silenceTimer: null,
+      finalResponseTimer: null,
+      voiceLevel: 0,
+    };
+    audioPipeline = await createLiveVoiceAudioPipeline(audioContext, (audio) => {
+      const session = activeSession;
+      if (session?.card === card) processAudioFrame(session, audio);
+    });
+    source.connect(audioPipeline.node);
+    await ensureAudioContextRunning(audioContext);
+
+    const session: LiveVoiceSession = { ...sessionShell, audioPipeline };
+    activeSession = session;
+    pendingStart = null;
+    await client.connect();
+
+    if (activeSession !== session || token !== startToken) {
+      cleanupSession(session);
+      return;
+    }
+    setPanelStatus(card, 'connected');
+  } catch (error) {
+    if (activeSession?.card === card) {
+      const session = activeSession;
+      activeSession = null;
+      cleanupSession(session);
+    } else {
+      closePendingResources(stream, audioContext, source, audioPipeline);
+    }
+    if (pendingStart?.token === token) pendingStart = null;
+    const message = error instanceof Error ? error.message : 'Could not start live voice.';
+    showLiveVoiceError(card, message);
+  }
+}
+
+function isCurrentStart(card: HTMLElement, token: number): boolean {
+  return pendingStart?.card === card && pendingStart.token === token && startToken === token;
+}
+
+async function ensureAudioContextRunning(audioContext: AudioContext): Promise<void> {
+  if (audioContext.state === 'closed') throw new Error('Microphone audio processing closed before capture started.');
+  if (audioContext.state !== 'running') await audioContext.resume();
+  if (audioContext.state !== 'running') {
+    throw new Error('Microphone audio processing is suspended. Allow audio playback and try again.');
+  }
+}
+
+async function createLiveVoiceAudioPipeline(
+  audioContext: AudioContext,
+  onAudioFrame: (audio: Float32Array) => void,
+): Promise<LiveVoiceAudioPipeline> {
+  if ('audioWorklet' in audioContext && typeof AudioWorkletNode !== 'undefined') {
+    try {
+      await ensureLiveVoiceWorklet(audioContext);
+      const node = new AudioWorkletNode(audioContext, 'omnix-live-voice-processor');
+      const silentOutput = audioContext.createGain();
+      silentOutput.gain.value = 0;
+      node.port.onmessage = (event: MessageEvent<Float32Array>) => onAudioFrame(new Float32Array(event.data));
+      node.connect(silentOutput);
+      silentOutput.connect(audioContext.destination);
+      return {
+        node,
+        cleanup: () => {
+          node.port.onmessage = null;
+          node.disconnect();
+          silentOutput.disconnect();
+        },
+      };
+    } catch {
+      // Fall through to ScriptProcessor for browsers that reject dynamic worklets.
+    }
+  }
+
+  const processor = audioContext.createScriptProcessor(1024, 1, 1);
+  const silentOutput = audioContext.createGain();
+  silentOutput.gain.value = 0;
+  processor.onaudioprocess = (event) => onAudioFrame(new Float32Array(event.inputBuffer.getChannelData(0)));
+  processor.connect(silentOutput);
+  silentOutput.connect(audioContext.destination);
+  return {
+    node: processor,
+    cleanup: () => {
+      processor.onaudioprocess = null;
+      processor.disconnect();
+      silentOutput.disconnect();
+    },
+  };
+}
+
+async function ensureLiveVoiceWorklet(audioContext: AudioContext): Promise<void> {
+  if (liveVoiceWorkletContexts.has(audioContext)) return;
+  liveVoiceWorkletModuleUrl ??= URL.createObjectURL(new Blob([`
+class OmnixLiveVoiceProcessor extends AudioWorkletProcessor {
+  process(inputs) {
+    const channel = inputs[0] && inputs[0][0];
+    if (channel && channel.length) {
+      const audio = new Float32Array(channel);
+      this.port.postMessage(audio, [audio.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor('omnix-live-voice-processor', OmnixLiveVoiceProcessor);
+`], { type: 'text/javascript' }));
+  await audioContext.audioWorklet.addModule(liveVoiceWorkletModuleUrl);
+  liveVoiceWorkletContexts.add(audioContext);
+}
+
+function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void {
+  const orb = session.card.querySelector<HTMLElement>('.assistant-voice-orb');
+  const assistantSpeaking = orb?.dataset.voiceMode === 'speaking';
+  const rms = calculateRms(audio);
+
+  if (!assistantSpeaking) updateVoiceVisualizer(session, rms);
+  if (assistantSpeaking || session.finalRequested) return;
+
+  if (rms >= SPEECH_RMS_THRESHOLD) {
+    session.speechDetected = true;
+    if (session.silenceTimer) {
+      clearTimeout(session.silenceTimer);
+      session.silenceTimer = null;
+    }
+  } else if (session.speechDetected && !session.silenceTimer) {
+    session.silenceTimer = setTimeout(() => requestFinalTranscript(session), SILENCE_FINALIZE_MS);
+  }
+
+  session.client.sendAudio(audio, session.audioContext.sampleRate);
+}
+
+function requestFinalTranscript(session: LiveVoiceSession): void {
+  session.silenceTimer = null;
+  if (activeSession !== session || session.finalRequested) return;
+  session.finalRequested = true;
+  session.client.sendFinal();
+  session.finalResponseTimer = setTimeout(() => {
+    if (activeSession !== session) return;
+    resetTurnState(session);
+    setPanelStatus(session.card, 'connected');
+  }, FINAL_RESPONSE_TIMEOUT_MS);
+}
+
+function updateVoiceVisualizer(session: LiveVoiceSession, rms: number): void {
+  session.voiceLevel = smoothLiveVoiceLevel(session.voiceLevel, rms);
+  const scales = liveVoiceVisualScales(session.voiceLevel);
+  session.card.style.setProperty('--voice-level', session.voiceLevel.toFixed(3));
+  session.card.style.setProperty('--voice-bar-scale', scales.barScale.toFixed(3));
+  session.card.style.setProperty('--voice-ambient-scale', scales.ambientScale.toFixed(3));
+  session.card.style.setProperty('--voice-core-scale', scales.coreScale.toFixed(3));
+  session.card.style.setProperty('--voice-input-scale', scales.inputScale.toFixed(3));
+  session.card.dataset.voiceInput = session.voiceLevel >= 0.14 ? 'active' : 'listening';
+  setText(session.card.querySelector('.assistant-voice-input-status'), session.voiceLevel >= 0.14 ? 'Hearing you' : 'Listening');
+  const orb = session.card.querySelector<HTMLElement>('.assistant-voice-orb');
+  if (orb?.dataset.voiceMode !== 'speaking') orb?.setAttribute('data-voice-mode', 'listening');
+}
+
+function handleFinalTranscript(card: HTMLElement, text: string): void {
+  const session = activeSession;
+  if (!session || session.card !== card) return;
+  resetTurnState(session);
+  const transcript = text.trim();
+  if (!transcript) {
+    setPanelStatus(card, 'connected');
+    return;
+  }
+
+  renderTranscript(card, 'You', transcript, 'final');
+  populateComposer(transcript);
+  submitComposer();
+  setPanelStatus(card, 'connected');
+}
+
+function resetTurnState(session: LiveVoiceSession): void {
+  if (session.silenceTimer) clearTimeout(session.silenceTimer);
+  if (session.finalResponseTimer) clearTimeout(session.finalResponseTimer);
+  session.silenceTimer = null;
+  session.finalResponseTimer = null;
+  session.speechDetected = false;
+  session.finalRequested = false;
+}
+
+function stopLiveVoice(card: HTMLElement, nextStatus: StreamingSttConnectionStatus): void {
+  startToken += 1;
+  if (pendingStart?.card === card) pendingStart = null;
+  const session = activeSession;
+  if (session?.card === card) {
+    activeSession = null;
+    cleanupSession(session);
+  }
+  setPanelStatus(card, nextStatus);
+  resetVoiceVisualizer(card);
+}
+
+function cleanupSession(session: LiveVoiceSession): void {
+  resetTurnState(session);
+  session.audioPipeline.cleanup();
+  session.source.disconnect();
+  session.stream.getTracks().forEach((track) => track.stop());
+  session.client.disconnect();
+  void session.audioContext.close().catch(() => undefined);
+}
+
+function closePendingResources(
+  stream: MediaStream | null,
+  audioContext: AudioContext | null,
+  source: MediaStreamAudioSourceNode | null,
+  audioPipeline: LiveVoiceAudioPipeline | null,
+): void {
+  audioPipeline?.cleanup();
+  source?.disconnect();
+  stream?.getTracks().forEach((track) => track.stop());
+  if (audioContext) void audioContext.close().catch(() => undefined);
+}
+
+function setPanelStatus(card: HTMLElement, status: StreamingSttConnectionStatus): void {
+  panelStatuses.set(card, status);
+  renderPanelStatus(card, status);
+  queueMicrotask(() => renderPanelStatus(card, panelStatuses.get(card) ?? status));
+}
+
+function renderPanelStatus(card: HTMLElement, status: StreamingSttConnectionStatus): void {
+  const active = isCardStartingOrActive(card);
+  const stateText = status === 'connected'
+    ? 'Listening'
+    : status === 'connecting'
+      ? 'Connecting'
+      : status === 'disconnected'
+        ? 'Reconnecting'
+        : status === 'error'
+          ? 'Error'
+          : 'Idle';
+  const connectionText = status === 'connected'
+    ? 'Connected'
+    : status === 'connecting' || status === 'disconnected'
+      ? 'Connecting'
+      : 'Disconnected';
+  const inputText = status === 'connected'
+    ? 'Listening'
+    : status === 'connecting'
+      ? 'Requesting mic'
+      : status === 'disconnected'
+        ? 'Reconnecting'
+        : status === 'error'
+          ? 'Input error'
+          : 'Idle';
+
+  setText(card.querySelector('header strong'), connectionText);
+  setText(card.querySelector('.assistant-live-state span:first-child'), stateText);
+  setText(card.querySelector('.assistant-voice-status strong'), stateText);
+  setText(card.querySelector('.assistant-voice-input-status'), inputText);
+  card.dataset.liveVoiceStatus = status;
+  card.dataset.voiceInput = status === 'connected' ? 'listening' : status;
+
+  const callButton = findCallButton(card);
+  if (callButton) {
+    setText(callButton, active ? 'End Call' : 'Start Call');
+    callButton.classList.toggle('danger', active);
+    callButton.disabled = status === 'connecting';
+  }
+
+  const orb = card.querySelector<HTMLElement>('.assistant-voice-orb');
+  if (orb && !(status === 'connected' && orb.dataset.voiceMode === 'speaking')) {
+    orb.dataset.voiceMode = status === 'connected' ? 'listening' : status === 'error' ? 'error' : 'idle';
+  }
+}
+
+function findCallButton(card: HTMLElement): HTMLButtonElement | undefined {
+  return Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find((button) => {
+    const label = button.textContent?.trim().toLowerCase() ?? '';
+    return label === 'start call' || label === 'end call';
+  });
+}
+
+function resetVoiceVisualizer(card: HTMLElement): void {
+  card.style.removeProperty('--voice-level');
+  card.style.removeProperty('--voice-bar-scale');
+  card.style.removeProperty('--voice-ambient-scale');
+  card.style.removeProperty('--voice-core-scale');
+  card.style.removeProperty('--voice-input-scale');
+}
+
+function renderTranscript(card: HTMLElement, speaker: 'You' | 'Omnix', text: string, mode: 'draft' | 'final'): void {
+  const transcript = text.trim();
+  if (!transcript) return;
+  const container = card.querySelector<HTMLElement>('.assistant-voice-transcript');
+  if (!container) return;
+
+  let row = container.querySelector<HTMLParagraphElement>('p[data-live-voice-id="live-voice-draft"]');
+  if (!row || mode === 'draft' && row.classList.contains('assistant')) {
+    row = document.createElement('p');
+    row.className = speaker === 'Omnix' ? 'assistant' : 'user';
+    row.dataset.liveVoiceId = mode === 'draft' ? 'live-voice-draft' : `live-voice-${Date.now()}`;
+    const header = document.createElement('span');
+    const name = document.createElement('strong');
+    name.textContent = speaker;
+    const time = document.createElement('time');
+    const now = new Date();
+    time.dateTime = now.toISOString();
+    time.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    header.append(name, time);
+    row.append(header, document.createTextNode(transcript));
+    container.append(row);
+  } else {
+    const textNode = Array.from(row.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
+    if (textNode) textNode.textContent = transcript;
+    else row.append(document.createTextNode(transcript));
+  }
+
+  if (mode === 'final') row.dataset.liveVoiceId = `live-voice-${Date.now()}`;
+}
+
+function showLiveVoiceError(card: HTMLElement, message: string): void {
+  renderTranscript(card, 'Omnix', message, 'final');
+  setPanelStatus(card, 'error');
+}
+
+function populateComposer(text: string): void {
+  const textarea = document.querySelector<HTMLTextAreaElement>('.assistant-message-input textarea');
+  if (!textarea) return;
+  textarea.value = text;
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function submitComposer(): void {
+  const form = document.querySelector<HTMLFormElement>('.assistant-composer');
+  if (!form) return;
+  if (typeof form.requestSubmit === 'function') form.requestSubmit();
+  else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+}
+
+function setText(element: Element | null, value: string): void {
+  if (element && element.textContent !== value) element.textContent = value;
+}
+
+if (typeof window !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => initializeLiveVoiceController(), { once: true });
+  } else {
+    initializeLiveVoiceController();
+  }
+}
