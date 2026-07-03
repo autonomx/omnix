@@ -7,12 +7,14 @@ from .config_store import AssistantToolsConfigPayload, load_assistant_tools_conf
 from .gate import review_assistant_tool_request
 from .hermes_bridge import hermes_assistant_tool_execute_payload, hermes_assistant_tool_review_payload
 from .hermes_payloads import HermesAssistantToolExecutePayload, HermesAssistantToolRequestEnvelope, HermesAssistantToolReviewPayload
+from .ledger import AssistantToolLedgerPayload, load_assistant_tool_ledger
 from .models import AssistantToolRequest, AssistantToolReviewDecision
 
 _ASSISTANT_TOOL_ROUTE_NAMES = {
     "assistant_tools_config",
     "save_assistant_tools_config_endpoint",
     "review_assistant_tool_endpoint",
+    "assistant_tool_ledger_endpoint",
     "hermes_assistant_tool_review_endpoint",
     "hermes_assistant_tool_execute_endpoint",
 }
@@ -37,6 +39,10 @@ def register_assistant_tool_routes(app: FastAPI) -> None:
     @app.post("/api/assistant/tools/review", response_model=AssistantToolReviewDecision, tags=["assistant-tools"])
     async def review_assistant_tool_endpoint(request: AssistantToolRequest) -> AssistantToolReviewDecision:
         return review_assistant_tool_request(request)
+
+    @app.get("/api/assistant/tools/ledger", response_model=AssistantToolLedgerPayload, tags=["assistant-tools"])
+    async def assistant_tool_ledger_endpoint(limit: int = 100) -> AssistantToolLedgerPayload:
+        return load_assistant_tool_ledger(limit=limit)
 
     @app.post("/api/hermes/assistant/tools/review", response_model=HermesAssistantToolReviewPayload, tags=["hermes-assistant-tools"])
     async def hermes_assistant_tool_review_endpoint(request: HermesAssistantToolRequestEnvelope) -> HermesAssistantToolReviewPayload:
