@@ -43,6 +43,7 @@ export function hermesSequencePreviewModel(response: HermesRpgSequenceResponse |
   const validation = recordValue(response.validation);
   const gate = recordValue(response.gate);
   const checkpoint = recordValue(response.checkpoint);
+  const loopGuard = recordValue(response.loop_guard);
   const hasGate = Object.keys(gate).length > 0;
   const validationErrors = stringList(validation.errors);
   const gateDecisions = Array.isArray(gate.decisions)
@@ -56,6 +57,7 @@ export function hermesSequencePreviewModel(response: HermesRpgSequenceResponse |
   const items = Array.isArray(sequence.items) ? sequence.items.map((item) => itemValue(item, gateDecisions)) : [];
   const blockedReasons = items.map((item) => item.gate_reason).filter((reason): reason is string => Boolean(reason));
   const checkpointReason = stringValue(checkpoint.reason);
+  const loopStopReason = stringValue(loopGuard.stop_reason);
   const gateBlockedCount = numberValue(gate.blocked_count);
   const firstUsableCommand = items.find((item) => item.gate_allowed !== false && item.statement?.trim())?.statement?.trim();
   const reviewStatus = validationErrors.length
@@ -64,7 +66,7 @@ export function hermesSequencePreviewModel(response: HermesRpgSequenceResponse |
       ? 'empty'
       : response.ok
         ? 'ready'
-        : gateBlockedCount > 0 || blockedReasons.length || checkpointReason
+        : gateBlockedCount > 0 || blockedReasons.length || checkpointReason || loopStopReason
           ? 'blocked'
           : 'invalid';
   return {
@@ -79,7 +81,7 @@ export function hermesSequencePreviewModel(response: HermesRpgSequenceResponse |
     validation_status: validationErrors.length ? `${validationErrors.length} issue${validationErrors.length === 1 ? '' : 's'}` : validation.ok === true ? 'valid' : 'not checked',
     validation_errors: validationErrors,
     gate_status: gate.allowed === true ? 'ready' : gateBlockedCount > 0 ? `${gateBlockedCount} blocked` : hasGate ? 'blocked' : 'not checked',
-    blocked_reason: validationErrors[0] ?? checkpointReason ?? blockedReasons[0],
+    blocked_reason: validationErrors[0] ?? checkpointReason ?? loopStopReason ?? blockedReasons[0],
     first_usable_command: firstUsableCommand,
     items,
   };

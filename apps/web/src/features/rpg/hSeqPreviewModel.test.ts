@@ -65,6 +65,23 @@ describe('preview model mapper', () => {
     expect(result?.blocked_reason).toBe('combat_action');
   });
 
+  it('maps loop guard stop reasons', () => {
+    const result = hermesSequencePreviewModel({
+      ok: false,
+      validation: { ok: true, errors: [] },
+      gate: { allowed: true, blocked_count: 0, decisions: [] },
+      loop_guard: { ok: false, stop_reason: 'duplicate_command' },
+      sequence: {
+        sequence_id: 'seq-1',
+        objective: 'Loop',
+        items: [{ item_id: 'item-1', statement: 'look around', user_gate: false }],
+      },
+    });
+
+    expect(result?.review_status).toBe('blocked');
+    expect(result?.blocked_reason).toBe('duplicate_command');
+  });
+
   it('maps invalid sequences with validation errors', () => {
     const result = hermesSequencePreviewModel({
       ok: false,

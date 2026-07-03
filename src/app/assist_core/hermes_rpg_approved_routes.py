@@ -18,6 +18,7 @@ from .hermes_sequence_approved_executor import hermes_rpg_sequence_execute_step_
 from .hermes_sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
 from .hermes_sequence_contract import hermes_sequence_contract_validate
 from .hermes_sequence_gate import hermes_sequence_apply_gate
+from .hermes_sequence_loop_guard import hermes_sequence_loop_guard
 from .hermes_sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
 
 hermes_rpg_approved_bp = APIRouter()
@@ -78,13 +79,18 @@ def hermes_rpg_sequence_review_payload(payload: dict[str, Any] | None) -> dict[s
     sequence = checked["sequence"]
     gate = hermes_sequence_apply_gate(sequence) if checked["ok"] else None
     checkpoint = hermes_sequence_checkpoint_policy(sequence) if checked["ok"] else None
+    loop_guard = hermes_sequence_loop_guard(sequence) if checked["ok"] else None
     result = {
-        "ok": checked["ok"] and bool(gate and gate.get("allowed") is True) and not bool(checkpoint and checkpoint.get("requires_checkpoint")),
+        "ok": checked["ok"]
+        and bool(gate and gate.get("allowed") is True)
+        and not bool(checkpoint and checkpoint.get("requires_checkpoint"))
+        and not bool(loop_guard and loop_guard.get("ok") is False),
         "source": "hermes_rpg_sequence_review_route",
         "validation": checked,
         "sequence": sequence,
         "gate": gate,
         "checkpoint": checkpoint,
+        "loop_guard": loop_guard,
         "state_changed": False,
     }
     session_id = data.get("session_id")

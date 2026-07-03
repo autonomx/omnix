@@ -15,6 +15,7 @@ from .hermes_sequence_state import (
     latest_hermes_sequence_state,
     write_hermes_sequence_state,
 )
+from .hermes_sequence_loop_guard import hermes_sequence_loop_guard
 
 StateLoader = Callable[[str], dict[str, Any]]
 StateWriter = Callable[[dict[str, Any]], dict[str, Any]]
@@ -110,6 +111,21 @@ def hermes_rpg_sequence_execute_step_payload(
 
     sequence = _mapping(state.get("sequence"))
     items = [_mapping(item) for item in _list(sequence.get("items"))]
+    loop_guard = hermes_sequence_loop_guard(sequence, state)
+    if loop_guard.get("ok") is False:
+        blocked_state = dict(state)
+        blocked_state["status"] = "blocked"
+        blocked_state["blocked_reason"] = loop_guard.get("stop_reason")
+        saved = state_writer(blocked_state)
+        return {
+            "ok": False,
+            "source": "hermes_sequence_approved_executor",
+            "status": "blocked",
+            "stop_reason": loop_guard.get("stop_reason"),
+            "sequence_state": saved,
+            "state_changed": False,
+            "next_item_preview": _next_preview(items, int(saved.get("current_item_index") or 0)),
+        }
     item_index = int(state.get("current_item_index") or 0)
     if item_index >= len(items):
         return {
@@ -133,15 +149,19 @@ def hermes_rpg_sequence_execute_step_payload(
         submitter=submitter,
         environ=environ,
     )
-    updated = apply_hermes_sequence_item_result(state, item_index=item_index, result=flow)
+    result_for_state = flow
+    if flow.get("ok") is True and flow.get("state_changed") is not True:
+        result_for_state = {**flow, "ok": False, "error": "no_progress"}
+    updated = apply_hermes_sequence_item_result(state, item_index=item_index, result=result_for_state)
     saved = state_writer(updated)
     saved_sequence = _mapping(saved.get("sequence"))
     saved_items = [_mapping(saved_item) for saved_item in _list(saved_sequence.get("items"))]
-    accepted = flow.get("ok") is True
+    accepted = result_for_state.get("ok") is True
     return {
         "ok": accepted,
         "source": "hermes_sequence_approved_executor",
         "status": "accepted" if accepted else "blocked",
+        "stop_reason": None if accepted else result_for_state.get("error") or "execution_blocked",
         "item_index": item_index,
         "command_text": command_text,
         "rpg_turn_result": _mapping(_mapping(_mapping(flow.get("flow")).get("result")).get("rpg_result")),
