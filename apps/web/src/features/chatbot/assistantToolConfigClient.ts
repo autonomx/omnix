@@ -36,6 +36,35 @@ export type AssistantToolLedgerPayload = {
   entries: AssistantToolLedgerEntry[];
 };
 
+export type AssistantToolIntent = {
+  detected: boolean;
+  tool_id?: string | null;
+  action_id?: string | null;
+  confidence: number;
+  preview_title: string;
+  preview_summary: string;
+  input: Record<string, unknown>;
+};
+
+export type AssistantCapabilityStatus = {
+  tool_id: string;
+  name: string;
+  enabled: boolean;
+  connection_status: ToolConfig['connectionStatus'];
+  action_count: number;
+  enabled_action_count: number;
+  recent_execution_count: number;
+  recent_error_count: number;
+};
+
+export type AssistantCapabilityDashboard = {
+  tools: AssistantCapabilityStatus[];
+  total_tools: number;
+  enabled_tools: number;
+  recent_execution_count: number;
+  recent_error_count: number;
+};
+
 async function readJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     throw new Error(`Assistant tool request failed: ${response.status}`);
@@ -59,4 +88,18 @@ export async function saveAssistantToolsConfig(payload: AssistantToolsConfigPayl
 
 export async function fetchAssistantToolLedger(): Promise<AssistantToolLedgerPayload> {
   return readJsonResponse<AssistantToolLedgerPayload>(await fetch('/api/assistant/tools/ledger'));
+}
+
+export async function detectAssistantToolIntent(message: string): Promise<AssistantToolIntent> {
+  return readJsonResponse<AssistantToolIntent>(
+    await fetch('/api/assistant/tools/intent', {
+      body: JSON.stringify({ message }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    }),
+  );
+}
+
+export async function fetchAssistantCapabilityDashboard(): Promise<AssistantCapabilityDashboard> {
+  return readJsonResponse<AssistantCapabilityDashboard>(await fetch('/api/assistant/tools/dashboard'));
 }
