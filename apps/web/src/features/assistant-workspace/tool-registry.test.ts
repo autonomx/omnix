@@ -1,15 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { canExecuteToolAction } from './tool-actions';
-import { createDefaultAssistantToolRegistry } from './tool-registry';
+import { createDefaultAssistantToolRegistry, executeAssistantToolRequest } from './tool-registry';
 
 describe('assistant workspace tool registry', () => {
   it('registers default assistant tools by category', () => {
     const registry = createDefaultAssistantToolRegistry();
     const tools = registry.list();
 
-    expect(tools.map((tool) => tool.id)).toEqual(['gmail', 'google_calendar', 'google_contacts', 'github']);
+    expect(tools.map((tool) => tool.id)).toEqual(['gmail', 'calendar', 'contacts', 'github']);
     expect(registry.get('github')?.category).toBe('development');
     expect(registry.get('gmail')?.category).toBe('communication');
+    expect(registry.get('calendar')?.category).toBe('productivity');
+    expect(registry.get('contacts')?.category).toBe('productivity');
   });
 
   it('discovers actions across registered tools', () => {
@@ -40,5 +42,25 @@ describe('assistant workspace tool registry', () => {
       messages: ['Tool must be connected before actions can run.'],
     });
     expect(gmail?.validateConfig({ enabled: true, connectionStatus: 'connected' }).valid).toBe(true);
+  });
+
+  it('routes execution requests through the backend endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ execution_result: { output: { messages: [] } } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeAssistantToolRequest(
+      { toolId: 'gmail', actionId: 'gmail.read_email', input: { query: 'receipt' } },
+      { enabled: true, connectionStatus: 'connected' },
+    );
+
+    expect(result.status).toBe('completed');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/hermes/assistant/tools/execute',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    vi.unstubAllGlobals();
   });
 });

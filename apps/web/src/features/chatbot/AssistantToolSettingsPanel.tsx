@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   canExecuteToolAction,
-  updateToolActionApprovalPolicy,
-  updateToolActionEnabled,
   type ApprovalPolicy,
   type ToolAction,
 } from '../assistant-workspace/tool-actions';
 import { createDefaultAssistantToolRegistry, type AssistantTool, type ToolConfig } from '../assistant-workspace/tool-registry';
+import {
+  fetchAssistantToolsConfig,
+  saveAssistantToolsConfig,
+  type AssistantToolsConfigPayload,
+} from './assistantToolConfigClient';
 
 export type AssistantToolSettingsPanelProps = {
   enabledToolCount: number;
@@ -14,8 +18,7 @@ export type AssistantToolSettingsPanelProps = {
   onShowExecutionPanel: () => void;
 };
 
-type ToolConfigState = Record<string, ToolConfig>;
-type ToolActionState = Record<string, ToolAction[]>;
+const assistantToolConfigQueryKey = ['assistant-tools', 'config'] as const;
 
 const approvalPolicies: Array<{ value: ApprovalPolicy; label: string }> = [
   { value: 'allow_automatic', label: 'Allow automatic' },
@@ -26,47 +29,50 @@ const approvalPolicies: Array<{ value: ApprovalPolicy; label: string }> = [
 
 export function AssistantToolSettingsPanel({ enabledToolCount, onShowExecutionPanel, toolExecutionRows }: AssistantToolSettingsPanelProps) {
   const registry = useMemo(() => createDefaultAssistantToolRegistry(), []);
-  const tools = registry.list();
+  const tools = useMemo(() => registry.list(), [registry]);
+  const queryClient = useQueryClient();
   const [activeToolId, setActiveToolId] = useState(tools[0]?.id ?? '');
-  const [toolConfigs, setToolConfigs] = useState<ToolConfigState>(() =>
-    Object.fromEntries(tools.map((tool) => [tool.id, tool.defaultConfig])),
-  );
-  const [toolActions, setToolActions] = useState<ToolActionState>(() =>
-    Object.fromEntries(tools.map((tool) => [tool.id, [...tool.actions]])),
-  );
 
+  const configQuery = useQuery({
+    queryKey: assistantToolConfigQueryKey,
+    queryFn: fetchAssistantToolsConfig,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: saveAssistantToolsConfig,
+    onSuccess(saved) {
+      queryClient.setQueryData(assistantToolConfigQueryKey, saved);
+    },
+  });
+
+  const configPayload = configQuery.data ?? createFallbackConfigPayload(tools);
   const activeTool = registry.get(activeToolId) ?? tools[0];
-  const activeConfig = activeTool ? toolConfigs[activeTool.id] ?? activeTool.defaultConfig : undefined;
-  const activeActions = activeTool ? toolActions[activeTool.id] ?? [...activeTool.actions] : [];
+  const activeToolRecord = activeTool ? getToolRecord(configPayload, activeTool) : undefined;
+  const activeConfig = activeTool && activeToolRecord ? toToolConfig(activeToolRecord) : undefined;
+  const activeActions = activeTool && activeToolRecord ? mergeActionConfig(activeTool, activeToolRecord) : [];
   const enabledActions = activeActions.filter((action) => action.enabled).length;
 
+  function persistConfig(updater: (payload: AssistantToolsConfigPayload) => AssistantToolsConfigPayload): void {
+    const basePayload = configQuery.data ?? createFallbackConfigPayload(tools);
+    const nextPayload = updater(basePayload);
+    queryClient.setQueryData(assistantToolConfigQueryKey, nextPayload);
+    saveMutation.mutate(nextPayload);
+  }
+
   function setToolEnabled(tool: AssistantTool, enabled: boolean): void {
-    setToolConfigs((current) => ({
-      ...current,
-      [tool.id]: {
-        ...(current[tool.id] ?? tool.defaultConfig),
-        enabled,
-        connectionStatus: enabled ? 'connected' : 'not_configured',
-      },
-    }));
+    persistConfig((payload) => updateToolRecord(payload, tool.id, (record) => ({
+      ...record,
+      enabled,
+      connection_status: enabled ? 'connected' : 'not_configured',
+    })));
   }
 
   function setActionEnabled(tool: AssistantTool, action: ToolAction, enabled: boolean): void {
-    setToolActions((current) => ({
-      ...current,
-      [tool.id]: (current[tool.id] ?? [...tool.actions]).map((candidate) =>
-        candidate.id === action.id ? updateToolActionEnabled(candidate, enabled) : candidate,
-      ),
-    }));
+    persistConfig((payload) => updateActionRecord(payload, tool.id, action.id, (record) => ({ ...record, enabled })));
   }
 
   function setActionPolicy(tool: AssistantTool, action: ToolAction, approvalPolicy: ApprovalPolicy): void {
-    setToolActions((current) => ({
-      ...current,
-      [tool.id]: (current[tool.id] ?? [...tool.actions]).map((candidate) =>
-        candidate.id === action.id ? updateToolActionApprovalPolicy(candidate, approvalPolicy) : candidate,
-      ),
-    }));
+    persistConfig((payload) => updateActionRecord(payload, tool.id, action.id, (record) => ({ ...record, approval_policy: approvalPolicy })));
   }
 
   return (
@@ -74,11 +80,13 @@ export function AssistantToolSettingsPanel({ enabledToolCount, onShowExecutionPa
       <p className="eyebrow">Omnix Assistant</p>
       <h2>Tools</h2>
       <p>Configure assistant-only tool access, action approval, and connection readiness. Every action is governed before it can become an executable capability.</p>
+      {configQuery.isError ? <p className="assistant-view-note">Tool configuration could not be loaded. Safe local defaults are shown until the backend is reachable.</p> : null}
       <div className="assistant-tool-settings-layout">
         <div className="assistant-tool-config-list" aria-label="Registered assistant tools">
           {tools.map((tool) => {
-            const config = toolConfigs[tool.id] ?? tool.defaultConfig;
-            const actions = toolActions[tool.id] ?? [...tool.actions];
+            const record = getToolRecord(configPayload, tool);
+            const config = toToolConfig(record);
+            const actions = mergeActionConfig(tool, record);
             return (
               <ToolConfigCard
                 actionCount={actions.length}
@@ -108,6 +116,7 @@ export function AssistantToolSettingsPanel({ enabledToolCount, onShowExecutionPa
               <div><dt>Category</dt><dd>{activeTool.category.replace('_', ' ')}</dd></div>
               <div><dt>Connection</dt><dd>{activeConfig.connectionStatus.replace('_', ' ')}</dd></div>
               <div><dt>Enabled actions</dt><dd>{enabledActions}/{activeActions.length}</dd></div>
+              <div><dt>Persistence</dt><dd>{saveMutation.isPending ? 'Saving' : configQuery.isLoading ? 'Loading' : 'Backend saved'}</dd></div>
             </dl>
             <div className="assistant-tool-config-actions">
               <button type="button" onClick={() => setToolEnabled(activeTool, !activeConfig.enabled)}>{activeConfig.enabled ? 'Disable tool' : 'Enable tool'}</button>
@@ -145,6 +154,62 @@ export function AssistantToolSettingsPanel({ enabledToolCount, onShowExecutionPa
       <p className="assistant-view-note">{enabledToolCount} tools active · {toolExecutionRows} replayed execution rows</p>
     </section>
   );
+}
+
+function createFallbackConfigPayload(tools: AssistantTool[]): AssistantToolsConfigPayload {
+  return {
+    tools: tools.map((tool) => ({
+      actions: tool.actions.map((action) => ({
+        action_id: action.id,
+        enabled: action.enabled,
+        approval_policy: action.approvalPolicy,
+      })),
+      connection_status: tool.defaultConfig.connectionStatus,
+      enabled: tool.defaultConfig.enabled,
+      tool_id: tool.id,
+    })),
+  };
+}
+
+function getToolRecord(payload: AssistantToolsConfigPayload, tool: AssistantTool) {
+  return payload.tools.find((record) => record.tool_id === tool.id) ?? createFallbackConfigPayload([tool]).tools[0];
+}
+
+function toToolConfig(record: ReturnType<typeof getToolRecord>): ToolConfig {
+  return {
+    enabled: record.enabled,
+    connectionStatus: record.connection_status,
+  };
+}
+
+function mergeActionConfig(tool: AssistantTool, record: ReturnType<typeof getToolRecord>): ToolAction[] {
+  const actionConfig = new Map(record.actions.map((action) => [action.action_id, action]));
+  return tool.actions.map((action) => {
+    const config = actionConfig.get(action.id);
+    return config ? { ...action, enabled: config.enabled, approvalPolicy: config.approval_policy } : action;
+  });
+}
+
+function updateToolRecord(
+  payload: AssistantToolsConfigPayload,
+  toolId: string,
+  updater: (record: AssistantToolsConfigPayload['tools'][number]) => AssistantToolsConfigPayload['tools'][number],
+): AssistantToolsConfigPayload {
+  return {
+    tools: payload.tools.map((record) => (record.tool_id === toolId ? updater(record) : record)),
+  };
+}
+
+function updateActionRecord(
+  payload: AssistantToolsConfigPayload,
+  toolId: string,
+  actionId: string,
+  updater: (record: AssistantToolsConfigPayload['tools'][number]['actions'][number]) => AssistantToolsConfigPayload['tools'][number]['actions'][number],
+): AssistantToolsConfigPayload {
+  return updateToolRecord(payload, toolId, (toolRecord) => ({
+    ...toolRecord,
+    actions: toolRecord.actions.map((action) => (action.action_id === actionId ? updater(action) : action)),
+  }));
 }
 
 function ToolConfigCard({ actionCount, active, config, enabledActionCount, onConfigure, onToggle, tool }: { actionCount: number; active: boolean; config: ToolConfig; enabledActionCount: number; onConfigure: () => void; onToggle: (enabled: boolean) => void; tool: AssistantTool }) {
