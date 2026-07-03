@@ -7,9 +7,11 @@ describe('assistant workspace tool registry', () => {
     const registry = createDefaultAssistantToolRegistry();
     const tools = registry.list();
 
-    expect(tools.map((tool) => tool.id)).toEqual(['gmail', 'google_calendar', 'google_contacts', 'github']);
+    expect(tools.map((tool) => tool.id)).toEqual(['gmail', 'calendar', 'contacts', 'github']);
     expect(registry.get('github')?.category).toBe('development');
     expect(registry.get('gmail')?.category).toBe('communication');
+    expect(registry.get('calendar')?.category).toBe('productivity');
+    expect(registry.get('contacts')?.category).toBe('productivity');
   });
 
   it('discovers actions across registered tools', () => {
