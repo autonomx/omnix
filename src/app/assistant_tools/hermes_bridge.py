@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .gate import review_assistant_tool_request
+from .gmail_adapter import run_gmail_tool_request
 from .hermes_payloads import HermesAssistantToolExecutePayload, HermesAssistantToolReviewPayload
 from .ledger import AssistantToolLedgerEntry, append_assistant_tool_ledger_entry, summarize_tool_input
 from .models import AssistantToolRequest, AssistantToolResult
@@ -18,18 +19,26 @@ def hermes_assistant_tool_review_payload(user_request: str, request: AssistantTo
     )
 
 
+def _run_assistant_tool_request(request: AssistantToolRequest, risk_level: str) -> AssistantToolResult:
+    if request.tool_id == "gmail":
+        result = run_gmail_tool_request(request)
+        result.risk_level = risk_level  # type: ignore[misc]
+        return result
+    return AssistantToolResult(
+        tool_id=request.tool_id,
+        action_id=request.action_id,
+        session_id=request.session_id,
+        risk_level=risk_level,  # type: ignore[arg-type]
+        state_changed=False,
+        result_summary="Assistant tool bridge accepted the governed request; runtime adapter dispatch is pending.",
+        output={"adapter_status": "pending"},
+    )
+
+
 def hermes_assistant_tool_execute_payload(user_request: str, request: AssistantToolRequest) -> HermesAssistantToolExecutePayload:
     decision = review_assistant_tool_request(request)
     if decision.executable:
-        result = AssistantToolResult(
-            tool_id=request.tool_id,
-            action_id=request.action_id,
-            session_id=request.session_id,
-            risk_level=decision.risk_level,
-            state_changed=decision.state_changed,
-            result_summary="Assistant tool bridge accepted the governed request; runtime adapter dispatch is pending.",
-            output={"adapter_status": "pending"},
-        )
+        result = _run_assistant_tool_request(request, decision.risk_level)
     else:
         result = AssistantToolResult(
             tool_id=request.tool_id,
