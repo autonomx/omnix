@@ -17,6 +17,11 @@ Usage:
     # Run only frontend JS tests
     python run_playwright_tests.py --suite frontend
 
+    # Run the opt-in fake-microphone Live Voice test
+    set OMNIX_RUN_LIVE_VOICE_AUDIO=1
+    set OMNIX_BASE_URL=http://127.0.0.1:5173
+    python run_playwright_tests.py --suite live_voice --headed --no-report
+
     # Run only JS static analysis (no browser/server needed)
     python run_playwright_tests.py --suite js_analysis
 
@@ -50,6 +55,7 @@ SUITE_MAP = {
     ]),
     "healthcheck": str(TESTS_DIR / "api" / "healthcheck" / "test_health_responses.py"),
     "frontend": str(TESTS_DIR / "e2e" / "test_frontend.py"),
+    "live_voice": str(TESTS_DIR / "e2e" / "test_live_voice_audio.py"),
     "js_analysis": str(TESTS_DIR / "e2e" / "test_js_variables.py"),
     "console": str(TESTS_DIR / "e2e" / "test_js_console.py"),
 }
