@@ -9,6 +9,7 @@ from .compat import compatibility_payload
 from .events import error_event
 from .protocol import dispatch_client_event
 from .realtime import LiveSpeechRealtimeService
+from .status import live_speech_status_payload
 
 
 def create_live_speech_router() -> APIRouter:
@@ -17,6 +18,10 @@ def create_live_speech_router() -> APIRouter:
     @router.get("/api/live-speech/protocol")
     async def protocol() -> dict:
         return {"ok": True, **compatibility_payload()}
+
+    @router.get("/api/live-speech/status")
+    async def status() -> dict:
+        return live_speech_status_payload()
 
     async def realtime_endpoint(channel: Any) -> None:
         await channel.accept()
