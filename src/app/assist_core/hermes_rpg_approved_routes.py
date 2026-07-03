@@ -14,6 +14,7 @@ from .hermes_rpg_canonical_submitter import hermes_rpg_canonical_submitter
 from .hermes_rpg_execution_ledger import hermes_rpg_execution_ledger_recent, hermes_rpg_execution_ledger_record
 from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
 from .hermes_rpg_submit_bridge import RpgSubmitter
+from .hermes_assist_mode import hermes_assist_mode_policy
 from .hermes_sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
 from .hermes_sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
 from .hermes_sequence_contract import hermes_sequence_contract_validate
@@ -80,17 +81,27 @@ def hermes_rpg_sequence_review_payload(payload: dict[str, Any] | None) -> dict[s
     gate = hermes_sequence_apply_gate(sequence) if checked["ok"] else None
     checkpoint = hermes_sequence_checkpoint_policy(sequence) if checked["ok"] else None
     loop_guard = hermes_sequence_loop_guard(sequence) if checked["ok"] else None
-    result = {
-        "ok": checked["ok"]
+    assist_mode = hermes_assist_mode_policy(
+        data.get("assist_mode"),
+        checkpoint_reason=checkpoint.get("reason") if isinstance(checkpoint, dict) else None,
+        high_risk=sequence.get("risk") == "high",
+    ) if checked["ok"] else None
+    review_ok = (
+        checked["ok"]
         and bool(gate and gate.get("allowed") is True)
         and not bool(checkpoint and checkpoint.get("requires_checkpoint"))
-        and not bool(loop_guard and loop_guard.get("ok") is False),
+        and not bool(loop_guard and loop_guard.get("ok") is False)
+        and not bool(assist_mode and assist_mode.get("review_allowed") is False)
+    )
+    result = {
+        "ok": review_ok,
         "source": "hermes_rpg_sequence_review_route",
         "validation": checked,
         "sequence": sequence,
         "gate": gate,
         "checkpoint": checkpoint,
         "loop_guard": loop_guard,
+        "assist_mode": assist_mode,
         "state_changed": False,
     }
     session_id = data.get("session_id")

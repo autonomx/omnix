@@ -17,12 +17,14 @@ describe('buildHermesSequenceReviewRequest', () => {
   it('builds a sequence from Hermes suggestions first', () => {
     const request = buildHermesSequenceReviewRequest({
       selectedSessionSummary,
+      assistMode: 'auto_low_risk',
       quickActions: [{ icon: 'L', label: 'Look', command: 'look around' }],
       suggestions: [{ id: 'ask', label: 'Ask Bran', command: 'ask Bran about the pass', reason: 'Gather local context.' }],
     });
 
     expect(request.sequence_id).toBe('ui-session-1-review');
     expect(request.session_id).toBe('session-1');
+    expect(request.assist_mode).toBe('auto_low_risk');
     expect(request.objective).toContain('Glimmerdeep Pass');
     expect(request.items).toEqual([
       {

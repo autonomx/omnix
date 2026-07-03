@@ -23,6 +23,22 @@ describe('RpgHermesSequenceReviewPanel', () => {
     expect(onReview).toHaveBeenCalledTimes(1);
   });
 
+  it('changes assist mode', () => {
+    const onAssistModeChange = vi.fn();
+    renderWithTheme(
+      <RpgHermesSequenceReviewPanel
+        assistMode="review_each_step"
+        onAssistModeChange={onAssistModeChange}
+        onReview={vi.fn()}
+        onUseFirstItem={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'auto_low_risk' }));
+
+    expect(onAssistModeChange).toHaveBeenCalledWith('auto_low_risk');
+  });
+
   it('fills the command box from the reviewed first item', () => {
     const onUseFirstItem = vi.fn();
     renderWithTheme(

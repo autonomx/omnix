@@ -3,6 +3,7 @@ import type { HermesRpgSuggestion } from '../../api/hermesClient';
 import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiState';
 
 interface BuildHermesSequenceReviewRequestInput {
+  assistMode?: string;
   quickActions: RpgQuickActionPreview[];
   selectedSessionSummary: RpgSessionSummaryPreview;
   suggestions: HermesRpgSuggestion[];
@@ -20,6 +21,7 @@ export function buildHermesSequenceReviewRequest({
   quickActions,
   selectedSessionSummary,
   suggestions,
+  assistMode = 'review_each_step',
 }: BuildHermesSequenceReviewRequestInput): HermesRpgSequenceRequest {
   const suggestionItems = suggestions
     .map((suggestion, index) => {
@@ -50,6 +52,7 @@ export function buildHermesSequenceReviewRequest({
   const items = (suggestionItems.length ? suggestionItems : fallbackItems).slice(0, 5);
   return {
     session_id: selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : undefined,
+    assist_mode: assistMode,
     sequence_id: `ui-${selectedSessionSummary.id || 'preview'}-review`,
     objective: `Review next RPG actions for ${selectedSessionSummary.location || selectedSessionSummary.title || 'the current session'}`,
     domain: 'rpg',

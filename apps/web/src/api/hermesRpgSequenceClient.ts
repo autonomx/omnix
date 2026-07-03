@@ -2,6 +2,7 @@ import { omnixApiClient } from './client';
 
 export type HermesRpgSequenceRequest = {
   session_id?: string;
+  assist_mode?: string;
   sequence_id?: string;
   objective?: string;
   domain?: string;
@@ -19,6 +20,7 @@ export type HermesRpgSequenceResponse = {
   gate?: Record<string, unknown> | null;
   checkpoint?: Record<string, unknown> | null;
   loop_guard?: Record<string, unknown> | null;
+  assist_mode?: Record<string, unknown> | null;
   sequence_state?: Record<string, unknown> | null;
   state_changed?: boolean;
 };

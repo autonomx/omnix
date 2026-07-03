@@ -174,6 +174,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [isLiveDataExpanded, setIsLiveDataExpanded] = useState(false);
   const [campaignMenuHost, setCampaignMenuHost] = useState<HTMLElement | null>(null);
   const [latestHermesExecutionResult, setLatestHermesExecutionResult] = useState<HermesRpgApprovedFlowResponse | null>(null);
+  const [hermesAssistMode, setHermesAssistMode] = useState('review_each_step');
   const inventoryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'replay-inventory'],
     queryFn: () => omnixApiClient.getReplayPersistenceInventory(),
@@ -288,6 +289,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   });
   const hermesSuggestions = hermesSuggestionsQuery.data?.suggestions ?? [];
   const hermesSequenceReviewRequest = buildHermesSequenceReviewRequest({
+    assistMode: hermesAssistMode,
     quickActions,
     selectedSessionSummary,
     suggestions: hermesSuggestions,
@@ -780,8 +782,10 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           </RpgStoryScene>
 
           <RpgHermesSequenceReviewPanel
+            assistMode={hermesAssistMode}
             error={hermesSequenceReviewMutation.error}
             isPending={hermesSequenceReviewMutation.isPending}
+            onAssistModeChange={setHermesAssistMode}
             onReview={() => hermesSequenceReviewMutation.mutate()}
             onUseFirstItem={selectCommand}
             sequence={hermesSequencePreview}

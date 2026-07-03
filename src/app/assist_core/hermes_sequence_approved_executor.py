@@ -10,6 +10,7 @@ from .hermes_rpg_canonical_submitter import hermes_rpg_canonical_submitter
 from .hermes_rpg_execution_ledger import hermes_rpg_execution_ledger_record
 from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
 from .hermes_rpg_submit_bridge import RpgSubmitter
+from .hermes_assist_mode import hermes_assist_mode_policy
 from .hermes_sequence_state import (
     apply_hermes_sequence_item_result,
     latest_hermes_sequence_state,
@@ -109,6 +110,15 @@ def hermes_rpg_sequence_execute_step_payload(
     session_id = _text(data.get("session_id"))
     if not session_id:
         return {"ok": False, "source": "hermes_sequence_approved_executor", "error": "missing_session_id", "state_changed": False}
+    mode = hermes_assist_mode_policy(data.get("assist_mode"))
+    if mode.get("execution_allowed") is not True:
+        return {
+            "ok": False,
+            "source": "hermes_sequence_approved_executor",
+            "error": mode.get("blocked_reason") or "assist_mode_blocks_execution",
+            "assist_mode": mode,
+            "state_changed": False,
+        }
 
     loaded = state_loader(session_id)
     state = _mapping(loaded.get("state"))
