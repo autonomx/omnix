@@ -21,10 +21,18 @@ class AssistantContextService:
 
     def build(self, request: AssistantContextChatRequest) -> AssistantContextBuildResult:
         items = []
+        current_image = request.desktop_current_image_data_url or request.desktop_image_data_url
+        desktop_requested = bool(
+            current_image
+            or request.desktop_history_image_data_url
+            or request.desktop_combined_image_data_url
+        )
         diagnostics: dict[str, object] = {
             "web_search_mode": request.web_search_mode,
             "web_search_requested": request.web_search_requested,
-            "desktop_requested": bool(request.desktop_image_data_url),
+            "desktop_requested": desktop_requested,
+            "desktop_capture_mode": request.desktop_capture_mode,
+            "desktop_history_frames": len(request.desktop_history_timestamps),
         }
 
         search_needed = request.web_search_mode == "automatic" and should_search_automatically(request.content)
@@ -43,17 +51,26 @@ class AssistantContextService:
         else:
             diagnostics["web_search_status"] = "skipped"
 
-        if request.desktop_image_data_url:
+        if desktop_requested:
             started = time.perf_counter()
             try:
+                if not current_image:
+                    raise ValueError("desktop temporal context requires a current image")
                 observation = self.desktop_vision_factory().describe(
-                    request.desktop_image_data_url,
+                    current_image,
                     request.desktop_question or request.content,
                     request.vision_model_id or request.model_id,
+                    history_image_data_url=request.desktop_history_image_data_url,
+                    combined_image_data_url=request.desktop_combined_image_data_url,
+                    history_timestamps=request.desktop_history_timestamps,
+                    capture_mode=request.desktop_capture_mode,
                 )
                 items.append(observation)
                 diagnostics["desktop_status"] = "completed"
                 diagnostics["desktop_model"] = observation.metadata.get("model")
+                diagnostics["desktop_fallback_mode"] = observation.metadata.get("fallback_mode")
+                diagnostics["desktop_image_count"] = observation.metadata.get("image_count")
+                diagnostics["desktop_fallback_errors"] = observation.metadata.get("fallback_errors", [])
             except Exception as exc:
                 diagnostics["desktop_status"] = "failed"
                 diagnostics["desktop_error"] = f"{type(exc).__name__}: {exc}"
