@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { assistantContextControlsMissing } from './assistant-context-controller';
+type AssistantContextTestWindow = Window & typeof globalThis & {
+  __omnixAssistantContextInitialized?: boolean;
+};
+
+(window as AssistantContextTestWindow).__omnixAssistantContextInitialized = true;
+const { assistantContextControlsMissing } = await import('./assistant-context-controller');
 
 describe('assistant context control mounting', () => {
   it('requests injection only while a target is missing its Omnix control', () => {
