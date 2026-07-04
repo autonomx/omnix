@@ -31,9 +31,13 @@ def test_generated_gateway_openapi_schema_is_current() -> None:
     generated_path = repo_root / "apps" / "web" / "src" / "api" / "generated" / "openapi.json"
 
     generated_schema = _normalize_openapi(_route_surface(json.loads(generated_path.read_text(encoding="utf-8"))))
-    current_schema = _normalize_openapi(_route_surface(create_gateway_app().openapi()))
+    current_openapi = create_gateway_app().openapi()
+    current_schema = _normalize_openapi(_route_surface(current_openapi))
 
     if generated_schema != current_schema:
+        print("OMNIX_OPENAPI_SCHEMA_BEGIN")
+        print(json.dumps(current_openapi, indent=2, sort_keys=True))
+        print("OMNIX_OPENAPI_SCHEMA_END")
         print(
             "Generated gateway OpenAPI route surface is stale. "
             "Run `npm --workspace @omnix/web run api:schema` and commit the result.",
