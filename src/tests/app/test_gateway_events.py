@@ -42,9 +42,21 @@ class FakeTtsProvider:
         assert kwargs["repetition_penalty"] == 1.0
         assert kwargs["append_silence"] is False
         assert kwargs["max_new_tokens"] == 180
-        assert kwargs["non_streaming_mode"] is True
+        assert kwargs["non_streaming_mode"] is False
         assert kwargs["parity_mode"] is True
         yield [0.0, 0.25, -0.25], 24000, {"chunk_index": 0}
+
+
+class BufferingFakeTtsProvider:
+    def __init__(self):
+        self.generated_chunks = 0
+
+    def generate_audio_stream(self, **kwargs: Any):
+        assert kwargs["non_streaming_mode"] is False
+        for chunk_index in range(4):
+            self.generated_chunks += 1
+            # Two mono samples at 4 Hz represent 0.5 seconds per chunk.
+            yield [0.25, -0.25], 4, {"chunk_index": chunk_index}
 
 
 def test_sse_event_includes_optional_id_and_sorted_json_data():
@@ -109,6 +121,25 @@ def test_finite_job_events_endpoint_emits_sse_ids_and_honors_after_id():
         'data: {"event_type": "job.completed", "id": 2, "job_id": "current"}\n\n'
     )
     assert store.after_ids == [1]
+
+
+def test_tts_stream_buffers_startup_audio_before_first_chunk():
+    from app.gateway import tts_streaming
+
+    provider = BufferingFakeTtsProvider()
+    request = tts_streaming.TtsStreamRequest(text="Buffered hello", non_streaming_mode=True)
+    stream = tts_streaming._tts_sse_stream(provider, request, "Buffered hello")
+
+    assert next(stream) == ": tts-stream-open\n\n"
+    first_chunk = next(stream)
+
+    # The first two 0.5-second chunks are generated before either is released,
+    # giving the browser enough scheduled audio to ride out model jitter.
+    assert provider.generated_chunks == 2
+    assert '"chunk_index": 0' in first_chunk
+    assert '"type": "chunk"' in first_chunk
+    assert '"chunk_index": 1' in next(stream)
+    assert provider.generated_chunks == 2
 
 
 def test_tts_stream_endpoint_emits_voice_chunks(monkeypatch):

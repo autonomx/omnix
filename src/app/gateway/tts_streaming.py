@@ -17,6 +17,8 @@ _ROUTE_SENTINEL = "_omnix_tts_sse_registered"
 _HOOK_SENTINEL = "_omnix_tts_sse_hook_installed"
 _HERMES_ROUTE_SENTINEL = "_omnix_hermes_routes_registered"
 DEFAULT_SAMPLE_RATE = 24_000
+STREAM_START_BUFFER_SECONDS = 0.75
+STREAM_START_BUFFER_MAX_CHUNKS = 4
 
 
 class TtsStreamRequest(BaseModel):
@@ -100,13 +102,20 @@ def _tts_sse_stream(provider: Any, request: TtsStreamRequest, text: str) -> Iter
         "top_p": request.top_p,
         "repetition_penalty": request.repetition_penalty,
         "append_silence": request.append_silence,
+        # This route exists specifically for incremental playback. Some clients
+        # previously sent True here, which made the provider wait for the entire
+        # waveform and silently turned the stream into a high-latency batch job.
+        "non_streaming_mode": False,
     }
     if request.max_new_tokens is not None:
         stream_kwargs["max_new_tokens"] = request.max_new_tokens
-    if request.non_streaming_mode is not None:
-        stream_kwargs["non_streaming_mode"] = request.non_streaming_mode
     if request.parity_mode is not None:
         stream_kwargs["parity_mode"] = request.parity_mode
+
+    startup_events: list[str] = []
+    startup_buffer_seconds = 0.0
+    stream_started = False
+
     try:
         for chunk_index, (audio_chunk, sample_rate, timing) in enumerate(
             provider.generate_audio_stream(
@@ -119,18 +128,46 @@ def _tts_sse_stream(provider: Any, request: TtsStreamRequest, text: str) -> Iter
             pcm_bytes = _audio_chunk_to_pcm16_bytes(audio_chunk)
             if not pcm_bytes:
                 continue
-            yield _sse_data(
+            effective_sample_rate = int(sample_rate or DEFAULT_SAMPLE_RATE)
+            event = _sse_data(
                 {
                     "type": "chunk",
                     "chunk_index": chunk_index,
                     "audio_b64": base64.b64encode(pcm_bytes).decode("utf-8"),
-                    "sample_rate": int(sample_rate or DEFAULT_SAMPLE_RATE),
+                    "sample_rate": effective_sample_rate,
                     "timing": timing if isinstance(timing, dict) else {},
                 }
             )
+
+            if not stream_started:
+                startup_events.append(event)
+                startup_buffer_seconds += _pcm16_duration_seconds(pcm_bytes, effective_sample_rate)
+                if (
+                    startup_buffer_seconds < STREAM_START_BUFFER_SECONDS
+                    and len(startup_events) < STREAM_START_BUFFER_MAX_CHUNKS
+                ):
+                    continue
+                yield from startup_events
+                startup_events.clear()
+                stream_started = True
+                continue
+
+            yield event
+
+        # Short responses may finish before reaching the target buffer. They
+        # still need to be flushed instead of waiting for a nonexistent chunk.
+        if startup_events:
+            yield from startup_events
         yield _sse_data({"type": "done"})
     except Exception as exc:  # pragma: no cover - provider failures are surfaced to the browser.
         yield _sse_data({"type": "error", "message": str(exc) or "TTS stream failed."})
+
+
+def _pcm16_duration_seconds(pcm_bytes: bytes, sample_rate: int) -> float:
+    """Return mono PCM16 duration, guarding invalid provider sample rates."""
+    if sample_rate <= 0:
+        return 0.0
+    return len(pcm_bytes) / 2 / sample_rate
 
 
 def _audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
