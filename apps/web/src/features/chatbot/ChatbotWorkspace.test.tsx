@@ -285,6 +285,10 @@ describe('ChatbotWorkspace', () => {
 
     expect(screen.getByText('Connected')).toBeInTheDocument();
     expect(screen.queryByText('Live voice call started.') ?? screen.queryByText(/Browser speech recognition/)).toBeTruthy();
+    act(() => {
+      window.dispatchEvent(new CustomEvent('omnix:assistant-voice-interrupt'));
+    });
+    expect(screen.getByText('Interrupted. Listening for your next message.')).toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(65_000);

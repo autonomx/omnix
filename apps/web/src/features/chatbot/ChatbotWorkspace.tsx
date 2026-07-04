@@ -98,6 +98,42 @@ const suggestedPrompts = ['Tell me a fun fact', 'Recommend a movie', 'Give me pr
 const CALL_TIMER_TICK_MS = 1_000;
 const DEFAULT_SPEECH_LANGUAGE = 'en-US';
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
+const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
+const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
+const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
+const STREAMING_TTS_SAMPLE_RATE = 24_000;
+const STREAMING_TTS_START_DELAY_SECONDS = 0.03;
+
+type VoicePerformanceStage = {
+  stage?: unknown;
+  turnId?: unknown;
+  transcriptChars?: unknown;
+  sttFinalizeMs?: unknown;
+};
+
+type VoiceTurnPerformance = {
+  turnId: string;
+  sttFinalReceivedAt: number;
+  transcriptChars?: number;
+  sttFinalizeMs?: number;
+  chatSubmitStartedAt?: number;
+  chatResponseReceivedAt?: number;
+  ttsStartedAt?: number;
+  ttsReadyAt?: number;
+  audioPlayStartedAt?: number;
+};
+
+type StreamingTtsPlayback = {
+  audioContext: AudioContext;
+  abortController: AbortController;
+  sources: AudioBufferSourceNode[];
+  closed: boolean;
+};
+
+type StreamingTtsWindow = Window & typeof globalThis & {
+  AudioContext?: typeof AudioContext;
+  webkitAudioContext?: typeof AudioContext;
+};
 
 const personalityOptions: Array<{ id: PersonalityId; label: string; prompt: string }> = [
   {
@@ -153,6 +189,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const assistantAudioRef = useRef<HTMLAudioElement | null>(null);
+  const streamingTtsRef = useRef<StreamingTtsPlayback | null>(null);
+  const assistantPlaybackTokenRef = useRef(0);
+  const voiceTurnPerformanceRef = useRef<VoiceTurnPerformance | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const queryClient = useQueryClient();
   const runtimeConfig = useMemo(() => createAssistantWorkspaceRuntimeConfig(), []);
@@ -208,7 +248,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       }
       return omnixApiClient.sendChatMessage(sessionId, { content: values.content, provider_id: providerId, model_id: modelId });
     },
+    onMutate: () => {
+      markVoiceTurnPerformance('chatSubmitStartedAt');
+    },
     onSuccess: async (_result, values) => {
+      markVoiceTurnPerformance('chatResponseReceivedAt');
       reset({ content: '', providerId: values.providerId, modelId: values.modelId });
       setLiveTranscript('');
       setLiveInterimTranscript('');
@@ -282,7 +326,37 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }, [activeSession, eventStore, runtimeConfig]);
 
   useEffect(() => {
-    return () => stopVoiceInput();
+    return () => {
+      dispatchLiveVoiceStop();
+      stopVoiceInput();
+      stopAssistantResponseAudio();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleInterrupt = () => stopAssistantResponseAudio('Interrupted. Listening for your next message.');
+    window.addEventListener(LIVE_VOICE_INTERRUPT_EVENT, handleInterrupt);
+    return () => window.removeEventListener(LIVE_VOICE_INTERRUPT_EVENT, handleInterrupt);
+  }, []);
+
+  useEffect(() => {
+    const handlePerfEvent = (event: Event) => {
+      const detail = (event as CustomEvent<VoicePerformanceStage>).detail;
+      if (detail?.stage !== 'stt_final_received' || typeof detail.turnId !== 'string') return;
+      voiceTurnPerformanceRef.current = {
+        turnId: detail.turnId,
+        sttFinalReceivedAt: performance.now(),
+        transcriptChars: typeof detail.transcriptChars === 'number' ? detail.transcriptChars : undefined,
+        sttFinalizeMs: typeof detail.sttFinalizeMs === 'number' ? detail.sttFinalizeMs : undefined,
+      };
+      console.info('[Omnix Voice Perf] voice turn accepted', {
+        turnId: detail.turnId,
+        transcriptChars: voiceTurnPerformanceRef.current.transcriptChars,
+        sttFinalizeMs: voiceTurnPerformanceRef.current.sttFinalizeMs,
+      });
+    };
+    window.addEventListener(LIVE_VOICE_PERF_EVENT, handlePerfEvent);
+    return () => window.removeEventListener(LIVE_VOICE_PERF_EVENT, handlePerfEvent);
   }, []);
 
   useEffect(() => {
@@ -333,7 +407,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   function stopLiveCall(): void {
     if (callStartedAt === null) return;
+    dispatchLiveVoiceStop();
     stopVoiceInput();
+    stopAssistantResponseAudio();
     setCallStartedAt(null);
     setCallElapsedMs(0);
     setAudioStatus('Live voice call ended.');
@@ -537,22 +613,201 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       setAudioStatus('No assistant response is ready to play.');
       return;
     }
+    const playbackToken = assistantPlaybackTokenRef.current + 1;
+    assistantPlaybackTokenRef.current = playbackToken;
     try {
+      markVoiceTurnPerformance('ttsStartedAt');
       setAudioStatus(activeVoiceId ? `Synthesizing ${activeVoiceLabel || activeVoiceId} voice…` : 'Synthesizing response voice…');
+      if (liveVoiceActive && canUseStreamingTts()) {
+        try {
+          stopAssistantResponseAudio(undefined, { cancelPending: false });
+          await playStreamingAssistantResponseAudio(spokenText, playbackToken);
+          setAudioStatus(activeVoiceId ? 'Streaming cloned response voice.' : 'Streaming response voice.');
+          return;
+        } catch (streamError) {
+          stopStreamingTtsPlayback();
+          if (assistantPlaybackTokenRef.current !== playbackToken) return;
+          console.info('[Omnix Voice Perf] streaming TTS fallback', {
+            reason: streamError instanceof Error ? streamError.message : 'Streaming TTS failed.',
+          });
+        }
+      }
+      if (assistantPlaybackTokenRef.current !== playbackToken) return;
       const audioSource = runtimeConfig.ttsServiceUrl
         ? await synthesizeWithTtsService(spokenText)
         : await synthesizeWithVoiceJob(spokenText);
+      if (assistantPlaybackTokenRef.current !== playbackToken) return;
+      markVoiceTurnPerformance('ttsReadyAt');
+      stopAssistantResponseAudio(undefined, { cancelPending: false });
       const audio = new Audio(audioSource);
-      const clearSpeakingState = () => setIsAssistantSpeaking(false);
-      audio.addEventListener('ended', clearSpeakingState, { once: true });
-      audio.addEventListener('pause', clearSpeakingState, { once: true });
+      assistantAudioRef.current = audio;
+      const clearSpeakingState = () => {
+        if (assistantAudioRef.current === audio) assistantAudioRef.current = null;
+        setIsAssistantSpeaking(false);
+      };
+      if (typeof audio.addEventListener === 'function') {
+        audio.addEventListener('ended', clearSpeakingState, { once: true });
+        audio.addEventListener('pause', clearSpeakingState, { once: true });
+      }
       setIsAssistantSpeaking(true);
       await audio.play();
+      if (assistantPlaybackTokenRef.current !== playbackToken) return;
+      markVoiceTurnPerformance('audioPlayStartedAt');
+      logVoiceTurnPerformance();
       setAudioStatus(activeVoiceId ? 'Playing cloned response voice.' : 'Playing response voice.');
     } catch (error) {
+      assistantAudioRef.current = null;
       setIsAssistantSpeaking(false);
       setAudioStatus(error instanceof Error ? error.message : 'Response audio playback failed.');
     }
+  }
+
+  function stopAssistantResponseAudio(status?: string, options: { cancelPending?: boolean } = {}): void {
+    if (options.cancelPending !== false) assistantPlaybackTokenRef.current += 1;
+    const audio = assistantAudioRef.current;
+    assistantAudioRef.current = null;
+    stopStreamingTtsPlayback();
+    if (audio) {
+      try { audio.pause(); } catch { /* ignore playback cleanup failures */ }
+      try { audio.currentTime = 0; } catch { /* ignore playback cleanup failures */ }
+    }
+    setIsAssistantSpeaking(false);
+    if (status) setAudioStatus(status);
+  }
+
+  async function playStreamingAssistantResponseAudio(text: string, playbackToken: number): Promise<void> {
+    const liveWindow = window as StreamingTtsWindow;
+    const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
+    if (!AudioContextCtor || typeof window.fetch !== 'function' || typeof window.ReadableStream === 'undefined') throw new Error('Streaming TTS requires browser streaming fetch and AudioContext support.');
+
+    const audioContext = new AudioContextCtor({ latencyHint: 'interactive', sampleRate: STREAMING_TTS_SAMPLE_RATE });
+    if (audioContext.state !== 'running') await audioContext.resume();
+    const abortController = new AbortController();
+    const streamingUrl = '/api/tts/stream/server-sent-events';
+    console.info('[Omnix Voice Perf] streaming TTS connect', { url: streamingUrl });
+    const playback: StreamingTtsPlayback = { audioContext, abortController, sources: [], closed: false };
+    streamingTtsRef.current = playback;
+    setIsAssistantSpeaking(true);
+
+    let nextStartAt = audioContext.currentTime + STREAMING_TTS_START_DELAY_SECONDS;
+    let firstAudioScheduled = false;
+
+    const response = await fetch(streamingUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        speaker: activeVoiceId || null,
+        language: 'English',
+        chunk_size: 12,
+        temperature: 0.6,
+        top_k: 20,
+        top_p: 0.85,
+        repetition_penalty: 1.0,
+        append_silence: false,
+        max_new_tokens: 180,
+        non_streaming_mode: true,
+        parity_mode: true,
+      }),
+      signal: abortController.signal,
+    });
+    if (!response.ok || !response.body) throw new Error(`Streaming TTS SSE failed with status ${response.status}.`);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = '';
+
+    while (!playback.closed) {
+      const { value, done } = await reader.read();
+      if (assistantPlaybackTokenRef.current !== playbackToken) return;
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      const events = pending.split(/\n\n/);
+      pending = events.pop() ?? '';
+
+      for (const eventText of events) {
+        const message = parseStreamingTtsSseEvent(eventText);
+        if (!message) continue;
+        if (message.type === 'error') throw new Error(message.message || 'Streaming TTS failed.');
+        if (message.type === 'done') return;
+        if (message.type !== 'chunk' || typeof message.audio_b64 !== 'string') continue;
+
+        const pcm = base64ToArrayBuffer(message.audio_b64);
+        if (!pcm.byteLength) continue;
+        const sampleRate = typeof message.sample_rate === 'number' && message.sample_rate > 0 ? message.sample_rate : STREAMING_TTS_SAMPLE_RATE;
+        const audioBuffer = pcm16ArrayBufferToAudioBuffer(audioContext, pcm, sampleRate);
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        const startAt = Math.max(nextStartAt, audioContext.currentTime + 0.01);
+        source.start(startAt);
+        playback.sources.push(source);
+        nextStartAt = startAt + audioBuffer.duration;
+        source.addEventListener('ended', () => {
+          playback.sources = playback.sources.filter((entry) => entry !== source);
+          if (playback.sources.length === 0 && streamingTtsRef.current === playback) {
+            setIsAssistantSpeaking(false);
+          }
+        }, { once: true });
+
+        if (!firstAudioScheduled) {
+          firstAudioScheduled = true;
+          if (assistantPlaybackTokenRef.current !== playbackToken) return;
+          markVoiceTurnPerformance('ttsReadyAt');
+          markVoiceTurnPerformance('audioPlayStartedAt');
+          logVoiceTurnPerformance();
+        }
+      }
+    }
+  }
+
+  function stopStreamingTtsPlayback(): void {
+    const playback = streamingTtsRef.current;
+    streamingTtsRef.current = null;
+    if (!playback) return;
+    playback.closed = true;
+    try { playback.abortController.abort(); } catch { /* ignore stream cleanup failures */ }
+    playback.sources.forEach((source) => {
+      try { source.stop(); } catch { /* ignore stream cleanup failures */ }
+      try { source.disconnect(); } catch { /* ignore stream cleanup failures */ }
+    });
+    void playback.audioContext.close().catch(() => undefined);
+  }
+
+  function dispatchLiveVoiceStop(): void {
+    window.dispatchEvent(new CustomEvent(LIVE_VOICE_STOP_EVENT));
+  }
+
+  function markVoiceTurnPerformance(stage: keyof Omit<VoiceTurnPerformance, 'turnId' | 'sttFinalReceivedAt' | 'transcriptChars' | 'sttFinalizeMs'>): void {
+    const current = voiceTurnPerformanceRef.current;
+    if (!current) return;
+    current[stage] = performance.now();
+  }
+
+  function logVoiceTurnPerformance(): void {
+    const current = voiceTurnPerformanceRef.current;
+    if (!current?.audioPlayStartedAt) return;
+
+    const totalMs = Math.round(current.audioPlayStartedAt - current.sttFinalReceivedAt);
+    const rows = [
+      { segment: 'STT finalize request -> final transcript', ms: current.sttFinalizeMs ?? null },
+      { segment: 'Final transcript -> chat submit', ms: elapsedMs(current.sttFinalReceivedAt, current.chatSubmitStartedAt) },
+      { segment: 'Chat submit -> chat response', ms: elapsedMs(current.chatSubmitStartedAt, current.chatResponseReceivedAt) },
+      { segment: 'Chat response -> TTS start', ms: elapsedMs(current.chatResponseReceivedAt, current.ttsStartedAt) },
+      { segment: 'TTS synth/output ready', ms: elapsedMs(current.ttsStartedAt, current.ttsReadyAt) },
+      { segment: 'Audio ready -> playback started', ms: elapsedMs(current.ttsReadyAt, current.audioPlayStartedAt) },
+      { segment: 'Total final transcript -> audio playback', ms: totalMs },
+    ];
+
+    console.info('[Omnix Voice Perf] voice audio turnaround', {
+      turnId: current.turnId,
+      totalMs,
+      targetMs: 1000,
+      withinTarget: totalMs < 1000,
+      transcriptChars: current.transcriptChars,
+    });
+    console.table(rows);
+    voiceTurnPerformanceRef.current = null;
   }
 
   async function synthesizeWithTtsService(text: string): Promise<string> {
@@ -785,9 +1040,14 @@ function isPinnedSession(session: ApiChatSession): boolean { const metadata = 'm
 function sessionTitle(session: ApiChatSession): string { return session.title?.trim() || 'Untitled chat'; }
 function formatSessionTime(session: ApiChatSession): string { const timestamp = session.updated_at || session.created_at; if (!timestamp) return 'Recent'; return timestamp.includes('T') ? formatMessageTime(timestamp) : timestamp; }
 function mergeTranscript(current: string, next: string): string { return [current.trim(), next.trim()].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(); }
+function elapsedMs(start: number | undefined, end: number | undefined): number | null { return start === undefined || end === undefined ? null : Math.round(end - start); }
 function voiceCaptureLabel(mode: VoiceCaptureMode): string { if (mode === 'recording') return 'Recording'; if (mode === 'transcribing') return 'Transcribing'; if (mode === 'error') return 'Error'; if (mode === 'listening') return 'Listening'; return 'Ready'; }
 function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | undefined { if (typeof window === 'undefined') return undefined; const speechWindow = window as SpeechRecognitionWindow; return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition; }
 function shouldUseStreamingLiveVoice(): boolean { if (typeof window === 'undefined' || typeof document === 'undefined') return false; const liveWindow = window as Window & typeof globalThis & { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }; return Boolean(document.querySelector('.assistant-live-card') && (liveWindow.AudioContext || liveWindow.webkitAudioContext) && window.WebSocket && navigator.mediaDevices?.getUserMedia); }
+function canUseStreamingTts(): boolean { if (typeof window === 'undefined') return false; const liveWindow = window as StreamingTtsWindow; return Boolean((liveWindow.AudioContext || liveWindow.webkitAudioContext) && typeof window.fetch === 'function' && typeof window.ReadableStream !== 'undefined'); }
+function parseStreamingTtsSseEvent(value: string): { type?: string; message?: string; audio_b64?: string; sample_rate?: number } | null { const line = value.split(/\r?\n/).find((entry) => entry.startsWith('data:')); if (!line) return null; try { return JSON.parse(line.slice(5).trim()) as { type?: string; message?: string; audio_b64?: string; sample_rate?: number }; } catch { return null; } }
+function base64ToArrayBuffer(value: string): ArrayBuffer { const binary = window.atob(value); const bytes = new Uint8Array(binary.length); for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index); return bytes.buffer; }
+function pcm16ArrayBufferToAudioBuffer(audioContext: AudioContext, pcm: ArrayBuffer, sampleRate: number): AudioBuffer { const input = new Int16Array(pcm); const buffer = audioContext.createBuffer(1, input.length, sampleRate); const channel = buffer.getChannelData(0); for (let index = 0; index < input.length; index += 1) channel[index] = input[index] / 32768; return buffer; }
 function getVoiceJobAudioSource(job: JobRecord): string | null { const refs = Array.isArray(job.output_refs) ? job.output_refs : []; for (const ref of refs) { const output = ref as VoiceJobOutputRef; if (isFallbackVoiceOutput(output)) continue; if (typeof output.data_url === 'string' && output.data_url.startsWith('data:audio/')) return output.data_url; if (typeof output.audio_url === 'string' && output.audio_url.trim()) return output.audio_url; } return null; }
 function isFallbackVoiceOutput(ref: VoiceJobOutputRef): boolean { if (ref.provider_fallback === true || ref.provider_success === false) return true; const segments = Array.isArray(ref.segments) ? ref.segments : []; return segments.some((segment) => { const row = segment as { provider_fallback?: unknown; provider_success?: unknown } | null; return row?.provider_fallback === true || row?.provider_success === false; }); }
 function voiceJobErrorMessage(job: JobRecord): string { if (job.status !== 'failed') return ''; const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio TTS job failed.'; }

@@ -159,15 +159,27 @@ export class StreamingSttWebSocketClient {
     await new Promise<void>((resolve, reject) => {
       const socket = new this.options.webSocketCtor(this.options.url);
       this.socket = socket;
-      const timeout = setTimeout(() => {
+      let opened = false;
+      let settled = false;
+      const failInitialConnection = (message: string) => {
+        if (settled) return;
+        settled = true;
         this.connecting = false;
+        this.autoReconnect = false;
+        this.pendingAudio = [];
         this.setStatus('error');
-        socket.close();
-        reject(new Error('WebSocket connection timeout'));
+        try { socket.close(); } catch { /* ignore cleanup failures */ }
+        reject(new Error(message));
+      };
+      const timeout = setTimeout(() => {
+        failInitialConnection('WebSocket connection timeout');
       }, this.options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS);
 
       socket.onopen = () => {
+        if (settled) return;
         clearTimeout(timeout);
+        opened = true;
+        settled = true;
         this.connecting = false;
         this.autoReconnect = true;
         this.setStatus('connected');
@@ -177,15 +189,23 @@ export class StreamingSttWebSocketClient {
 
       socket.onerror = () => {
         clearTimeout(timeout);
+        this.options.onError?.('Live voice WebSocket failed.');
+        if (!opened) {
+          failInitialConnection('Live voice WebSocket failed.');
+          return;
+        }
         this.connecting = false;
         this.setStatus('error');
-        this.options.onError?.('Live voice WebSocket failed.');
       };
 
       socket.onclose = () => {
         clearTimeout(timeout);
         this.connecting = false;
         this.socket = null;
+        if (!opened) {
+          failInitialConnection('Live voice WebSocket closed before connecting.');
+          return;
+        }
         this.setStatus('disconnected');
         this.scheduleReconnect();
       };

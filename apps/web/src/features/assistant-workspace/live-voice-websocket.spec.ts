@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  StreamingSttWebSocketClient,
   calculateRms,
   downsampleFloat32To16Khz,
   encodePcm16Base64,
   getDefaultStreamingSttWebSocketUrl,
+  type StreamingSttSocketLike,
 } from './live-voice-websocket';
 
 describe('live voice websocket helpers', () => {
@@ -34,4 +36,47 @@ describe('live voice websocket helpers', () => {
     expect(calculateRms(new Float32Array([0, 0, 0]))).toBe(0);
     expect(calculateRms(new Float32Array([1, -1]))).toBe(1);
   });
+
+  it('rejects an initial websocket failure instead of leaving a half-open session', async () => {
+    const sockets: TestStreamingSocket[] = [];
+    const statuses: string[] = [];
+    const onError = vi.fn();
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+
+    const client = new StreamingSttWebSocketClient({
+      url: 'ws://127.0.0.1:5201/ws/transcribe',
+      webSocketCtor: TestWebSocket,
+      onStatusChange: (status) => statuses.push(status),
+      onError,
+    });
+
+    const connection = client.connect();
+    sockets[0].onerror?.({});
+
+    await expect(connection).rejects.toThrow('Live voice WebSocket failed.');
+    expect(onError).toHaveBeenCalledWith('Live voice WebSocket failed.');
+    expect(statuses).toEqual(['connecting', 'error']);
+    expect(sockets[0].close).toHaveBeenCalledOnce();
+  });
 });
+
+class TestStreamingSocket implements StreamingSttSocketLike {
+  readyState = 0;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onerror: ((event: unknown) => void) | null = null;
+  onclose: (() => void) | null = null;
+  send = vi.fn();
+  close = vi.fn(() => {
+    this.onclose?.();
+  });
+
+  constructor(readonly url: string) {}
+}

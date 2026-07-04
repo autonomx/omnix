@@ -30,6 +30,8 @@ type LiveVoiceSession = {
   silenceTimer: ReturnType<typeof setTimeout> | null;
   finalResponseTimer: ReturnType<typeof setTimeout> | null;
   voiceLevel: number;
+  perfTurnId: string | null;
+  sttFinalRequestedAt: number | null;
 };
 
 type PendingStart = {
@@ -40,6 +42,9 @@ type PendingStart = {
 const SPEECH_RMS_THRESHOLD = 0.015;
 const SILENCE_FINALIZE_MS = 650;
 const FINAL_RESPONSE_TIMEOUT_MS = 8_000;
+const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
+const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
+const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const preparedCards = new WeakSet<HTMLElement>();
 const panelStatuses = new WeakMap<HTMLElement, StreamingSttConnectionStatus>();
 let activeSession: LiveVoiceSession | null = null;
@@ -55,6 +60,7 @@ export function initializeLiveVoiceController(root: ParentNode = document): void
 
   prepareCards(root);
   document.addEventListener('click', handleDocumentClick, true);
+  window.addEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
 
   const observer = new MutationObserver(() => prepareCards(root));
   observer.observe(document.body, { childList: true, subtree: true, characterData: true });
@@ -186,6 +192,8 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       silenceTimer: null,
       finalResponseTimer: null,
       voiceLevel: 0,
+      perfTurnId: null,
+      sttFinalRequestedAt: null,
     };
     audioPipeline = await createLiveVoiceAudioPipeline(audioContext, (audio) => {
       const session = activeSession;
@@ -297,9 +305,14 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
   const rms = calculateRms(audio);
 
   if (!assistantSpeaking) updateVoiceVisualizer(session, rms);
-  if (assistantSpeaking || session.finalRequested) return;
+  if (session.finalRequested) return;
 
-  if (rms >= SPEECH_RMS_THRESHOLD) {
+  const speechStarted = rms >= SPEECH_RMS_THRESHOLD;
+  if (assistantSpeaking && speechStarted && !session.speechDetected) {
+    dispatchAssistantVoiceInterrupt(session.card);
+  }
+
+  if (speechStarted) {
     session.speechDetected = true;
     if (session.silenceTimer) {
       clearTimeout(session.silenceTimer);
@@ -309,13 +322,39 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
     session.silenceTimer = setTimeout(() => requestFinalTranscript(session), SILENCE_FINALIZE_MS);
   }
 
+  if (assistantSpeaking && !session.speechDetected) return;
   session.client.sendAudio(audio, session.audioContext.sampleRate);
+}
+
+function handleExternalStop(): void {
+  if (activeSession) stopLiveVoice(activeSession.card, 'idle');
+  else if (pendingStart) {
+    pendingStart = null;
+    startToken += 1;
+  }
+}
+
+function dispatchAssistantVoiceInterrupt(card: HTMLElement): void {
+  window.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
+    detail: {
+      source: 'live-voice',
+      status: panelStatuses.get(card) ?? 'connected',
+      timestamp: new Date().toISOString(),
+    },
+  }));
 }
 
 function requestFinalTranscript(session: LiveVoiceSession): void {
   session.silenceTimer = null;
   if (activeSession !== session || session.finalRequested) return;
   session.finalRequested = true;
+  session.perfTurnId = `voice-turn:${Date.now()}`;
+  session.sttFinalRequestedAt = performance.now();
+  dispatchLiveVoicePerfEvent({
+    stage: 'stt_final_requested',
+    turnId: session.perfTurnId,
+    timestamp: new Date().toISOString(),
+  });
   session.client.sendFinal();
   session.finalResponseTimer = setTimeout(() => {
     if (activeSession !== session) return;
@@ -341,8 +380,18 @@ function updateVoiceVisualizer(session: LiveVoiceSession, rms: number): void {
 function handleFinalTranscript(card: HTMLElement, text: string): void {
   const session = activeSession;
   if (!session || session.card !== card) return;
-  resetTurnState(session);
+  const sttFinalReceivedAt = performance.now();
   const transcript = text.trim();
+  if (transcript) {
+    dispatchLiveVoicePerfEvent({
+      stage: 'stt_final_received',
+      turnId: session.perfTurnId ?? `voice-turn:${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      transcriptChars: transcript.length,
+      sttFinalizeMs: session.sttFinalRequestedAt === null ? undefined : Math.round(sttFinalReceivedAt - session.sttFinalRequestedAt),
+    });
+  }
+  resetTurnState(session);
   if (!transcript) {
     setPanelStatus(card, 'connected');
     return;
@@ -361,6 +410,8 @@ function resetTurnState(session: LiveVoiceSession): void {
   session.finalResponseTimer = null;
   session.speechDetected = false;
   session.finalRequested = false;
+  session.perfTurnId = null;
+  session.sttFinalRequestedAt = null;
 }
 
 function stopLiveVoice(card: HTMLElement, nextStatus: StreamingSttConnectionStatus): void {
@@ -510,6 +561,11 @@ function submitComposer(): void {
   if (!form) return;
   if (typeof form.requestSubmit === 'function') form.requestSubmit();
   else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+}
+
+function dispatchLiveVoicePerfEvent(detail: Record<string, unknown>): void {
+  window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, { detail }));
+  console.info('[Omnix Voice Perf]', detail);
 }
 
 function setText(element: Element | null, value: string): void {

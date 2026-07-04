@@ -141,3 +141,34 @@ def test_generate_audio_returns_reference_fallback_when_model_unavailable(monkey
     decoded = base64.b64decode(out["audio_base64"])
     assert decoded[:4] == b"RIFF"
     assert out["sample_rate"] == sample_rate
+
+
+def test_generate_audio_retries_graph_capture_failure_in_parity_mode(monkeypatch, tmp_path):
+    from app.providers import faster_qwen3_tts_provider as provider_module
+    from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+
+    sample_rate = 12000
+    preview_audio = np.sin(np.linspace(0, 20, sample_rate, dtype=np.float32)) * 0.1
+    sf.write(tmp_path / "Jinx.wav", preview_audio, sample_rate)
+    monkeypatch.setattr(provider_module, "VOICE_CLONES_DIR", str(tmp_path))
+
+    class GraphFlakyModel:
+        def __init__(self) -> None:
+            self.calls: list[bool] = []
+
+        def generate_voice_clone(self, **kwargs):
+            self.calls.append(bool(kwargs.get("parity_mode")))
+            if not kwargs.get("parity_mode"):
+                raise RuntimeError("Offset increment outside graph capture encountered unexpectedly.")
+            return [preview_audio], sample_rate
+
+    model = GraphFlakyModel()
+    provider = FasterQwen3TTSProvider(config={"device": "cpu"})
+    monkeypatch.setattr(provider, "_get_model", lambda: model)
+
+    out = provider.generate_audio(text="hello world", speaker="Jinx", language="en")
+
+    assert out["success"] is True
+    assert model.calls == [False, True]
+    decoded = base64.b64decode(out["audio_base64"])
+    assert decoded[:4] == b"RIFF"

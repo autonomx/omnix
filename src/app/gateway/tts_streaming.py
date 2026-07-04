@@ -28,7 +28,12 @@ class TtsStreamRequest(BaseModel):
     chunk_size: int = Field(default=12, ge=1, le=256)
     temperature: float = Field(default=0.9, ge=0.0, le=2.0)
     top_k: int = Field(default=50, ge=0)
+    top_p: float = Field(default=1.0, ge=0.0, le=1.0)
     repetition_penalty: float = Field(default=1.05, ge=0.0)
+    append_silence: bool = True
+    max_new_tokens: int | None = Field(default=None, ge=1)
+    non_streaming_mode: bool | None = None
+    parity_mode: bool | None = None
 
 
 def register_hermes_routes(gateway: FastAPI) -> None:
@@ -88,16 +93,27 @@ def install_tts_stream_hook() -> None:
 
 def _tts_sse_stream(provider: Any, request: TtsStreamRequest, text: str) -> Iterator[str]:
     yield _sse_comment("tts-stream-open")
+    stream_kwargs: dict[str, Any] = {
+        "chunk_size": request.chunk_size,
+        "temperature": request.temperature,
+        "top_k": request.top_k,
+        "top_p": request.top_p,
+        "repetition_penalty": request.repetition_penalty,
+        "append_silence": request.append_silence,
+    }
+    if request.max_new_tokens is not None:
+        stream_kwargs["max_new_tokens"] = request.max_new_tokens
+    if request.non_streaming_mode is not None:
+        stream_kwargs["non_streaming_mode"] = request.non_streaming_mode
+    if request.parity_mode is not None:
+        stream_kwargs["parity_mode"] = request.parity_mode
     try:
         for chunk_index, (audio_chunk, sample_rate, timing) in enumerate(
             provider.generate_audio_stream(
                 text=text,
                 speaker=request.speaker,
                 language=request.language or "en",
-                chunk_size=request.chunk_size,
-                temperature=request.temperature,
-                top_k=request.top_k,
-                repetition_penalty=request.repetition_penalty,
+                **stream_kwargs,
             )
         ):
             pcm_bytes = _audio_chunk_to_pcm16_bytes(audio_chunk)

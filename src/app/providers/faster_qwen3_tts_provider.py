@@ -81,6 +81,16 @@ def _resolve_qwen3_model_name(config: Optional[Dict[str, Any]] = None) -> str:
     return DEFAULT_QWEN3_TTS_MODEL_REPO
 
 
+def _is_cuda_graph_generation_error(error: BaseException) -> bool:
+    message = str(error).casefold()
+    return (
+        "graph capture" in message
+        or "cuda graph" in message
+        or "outside graph" in message
+        or "offset increment" in message
+    )
+
+
 # ---------------------------------------------------------------------------
 # Audio hardening helpers  (Issue 3 – prevent stream corruption)
 # ---------------------------------------------------------------------------
@@ -602,10 +612,22 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'xvec_only': kwargs.get('xvec_only', self._model_config.get('xvec_only', True)),
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
+                'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', False)),
             }
             
             # Generate audio (non-streaming)
-            audio_list, sample_rate = model.generate_voice_clone(**gen_kwargs)
+            try:
+                audio_list, sample_rate = model.generate_voice_clone(**gen_kwargs)
+            except Exception as exc:
+                if not _is_cuda_graph_generation_error(exc) or gen_kwargs.get('parity_mode') is True:
+                    raise
+                logger.warning(
+                    "[TTS] CUDA graph generation failed; retrying once with parity_mode=True: %s",
+                    exc,
+                )
+                retry_kwargs = dict(gen_kwargs)
+                retry_kwargs['parity_mode'] = True
+                audio_list, sample_rate = model.generate_voice_clone(**retry_kwargs)
             
             if not audio_list or len(audio_list) == 0:
                 return {
@@ -717,6 +739,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'xvec_only': kwargs.get('xvec_only', self._model_config.get('xvec_only', True)),
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
+                'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', False)),
             }
             
             # Stream generation – validate each chunk before yielding

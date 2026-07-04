@@ -966,6 +966,7 @@ class FasterQwen3TTS:
         xvec_only: bool = True,
         non_streaming_mode: bool = True,
         append_silence: bool = True,
+        parity_mode: bool = False,
     ) -> Tuple[list, int]:
         """
         Generate speech with voice cloning using reference audio.
@@ -986,6 +987,7 @@ class FasterQwen3TTS:
                 This prevents phoneme bleed-through from the reference and allows clean
                 language switching. Set to False for full ICL mode (reference audio in context).
             non_streaming_mode: Match upstream non-streaming prompt layout. Default True for better non-streaming quality.
+            parity_mode: When True, disables CUDA graph decode and uses the dynamic generation path.
 
         Returns:
             Tuple of ([audio_waveform], sample_rate)
@@ -1018,6 +1020,7 @@ class FasterQwen3TTS:
             top_p=top_p,
             do_sample=do_sample,
             repetition_penalty=repetition_penalty,
+            parity_mode=parity_mode,
         )
 
         if codec_ids is None:

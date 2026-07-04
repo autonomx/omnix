@@ -34,7 +34,16 @@ class FakeTtsProvider:
     def generate_audio_stream(self, **kwargs: Any):
         assert kwargs["text"] == "Hello from the podcast"
         assert kwargs["speaker"] == "Alex"
-        assert kwargs["language"] == "en"
+        assert kwargs["language"] == "English"
+        assert kwargs["chunk_size"] == 12
+        assert kwargs["temperature"] == 0.6
+        assert kwargs["top_k"] == 20
+        assert kwargs["top_p"] == 0.85
+        assert kwargs["repetition_penalty"] == 1.0
+        assert kwargs["append_silence"] is False
+        assert kwargs["max_new_tokens"] == 180
+        assert kwargs["non_streaming_mode"] is True
+        assert kwargs["parity_mode"] is True
         yield [0.0, 0.25, -0.25], 24000, {"chunk_index": 0}
 
 
@@ -111,7 +120,20 @@ def test_tts_stream_endpoint_emits_voice_chunks(monkeypatch):
 
     response = client.post(
         "/api/tts/stream/server-sent-events",
-        json={"text": "Hello from the podcast", "speaker": "Alex", "language": "en"},
+        json={
+            "text": "Hello from the podcast",
+            "speaker": "Alex",
+            "language": "English",
+            "chunk_size": 12,
+            "temperature": 0.6,
+            "top_k": 20,
+            "top_p": 0.85,
+            "repetition_penalty": 1.0,
+            "append_silence": False,
+            "max_new_tokens": 180,
+            "non_streaming_mode": True,
+            "parity_mode": True,
+        },
     )
 
     assert response.status_code == 200
