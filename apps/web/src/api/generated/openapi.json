@@ -235,6 +235,835 @@
         "title": "AssetType",
         "type": "string"
       },
+      "AssistantActionConfigRecord": {
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "approval_policy": {
+            "default": "allow_automatic",
+            "enum": [
+              "allow_automatic",
+              "ask_sensitive",
+              "always_ask",
+              "disabled"
+            ],
+            "title": "Approval Policy",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action_id"
+        ],
+        "title": "AssistantActionConfigRecord",
+        "type": "object"
+      },
+      "AssistantCapabilityDashboard": {
+        "properties": {
+          "enabled_tools": {
+            "default": 0,
+            "title": "Enabled Tools",
+            "type": "integer"
+          },
+          "recent_error_count": {
+            "default": 0,
+            "title": "Recent Error Count",
+            "type": "integer"
+          },
+          "recent_execution_count": {
+            "default": 0,
+            "title": "Recent Execution Count",
+            "type": "integer"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantCapabilityStatus"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "total_tools": {
+            "default": 0,
+            "title": "Total Tools",
+            "type": "integer"
+          }
+        },
+        "title": "AssistantCapabilityDashboard",
+        "type": "object"
+      },
+      "AssistantCapabilityStatus": {
+        "properties": {
+          "action_count": {
+            "default": 0,
+            "title": "Action Count",
+            "type": "integer"
+          },
+          "connection_status": {
+            "default": "not_configured",
+            "title": "Connection Status",
+            "type": "string"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "enabled_action_count": {
+            "default": 0,
+            "title": "Enabled Action Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "recent_error_count": {
+            "default": 0,
+            "title": "Recent Error Count",
+            "type": "integer"
+          },
+          "recent_execution_count": {
+            "default": 0,
+            "title": "Recent Execution Count",
+            "type": "integer"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
+          "name"
+        ],
+        "title": "AssistantCapabilityStatus",
+        "type": "object"
+      },
+      "AssistantToolAction": {
+        "description": "Backend-owned action definition for an assistant tool.",
+        "properties": {
+          "approval_policy": {
+            "default": "allow_automatic",
+            "enum": [
+              "allow_automatic",
+              "ask_sensitive",
+              "always_ask",
+              "disabled"
+            ],
+            "title": "Approval Policy",
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "read",
+              "write",
+              "delete",
+              "execute"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_destructive": {
+            "default": false,
+            "title": "Is Destructive",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "requires_confirmation": {
+            "default": false,
+            "title": "Requires Confirmation",
+            "type": "boolean"
+          },
+          "requires_connection": {
+            "default": true,
+            "title": "Requires Connection",
+            "type": "boolean"
+          },
+          "risk_level": {
+            "default": "low",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tool_id",
+          "label",
+          "description",
+          "category"
+        ],
+        "title": "AssistantToolAction",
+        "type": "object"
+      },
+      "AssistantToolConfigRecord": {
+        "properties": {
+          "account_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Email"
+          },
+          "account_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Label"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantActionConfigRecord"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "approval_policy": {
+            "anyOf": [
+              {
+                "enum": [
+                  "allow_automatic",
+                  "ask_sensitive",
+                  "always_ask",
+                  "disabled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Policy"
+          },
+          "connected_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected At"
+          },
+          "connection_status": {
+            "default": "not_configured",
+            "enum": [
+              "not_configured",
+              "connected",
+              "error"
+            ],
+            "title": "Connection Status",
+            "type": "string"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id"
+        ],
+        "title": "AssistantToolConfigRecord",
+        "type": "object"
+      },
+      "AssistantToolConnectionStartPayload": {
+        "properties": {
+          "auth_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Url"
+          },
+          "configured": {
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Uri"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id"
+        ],
+        "title": "AssistantToolConnectionStartPayload",
+        "type": "object"
+      },
+      "AssistantToolIntent": {
+        "properties": {
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "confidence": {
+            "default": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "detected": {
+            "default": false,
+            "title": "Detected",
+            "type": "boolean"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "preview_summary": {
+            "default": "",
+            "title": "Preview Summary",
+            "type": "string"
+          },
+          "preview_title": {
+            "default": "",
+            "title": "Preview Title",
+            "type": "string"
+          },
+          "tool_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Id"
+          }
+        },
+        "title": "AssistantToolIntent",
+        "type": "object"
+      },
+      "AssistantToolIntentRequest": {
+        "properties": {
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "title": "AssistantToolIntentRequest",
+        "type": "object"
+      },
+      "AssistantToolLedgerEntry": {
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "approval_source": {
+            "default": "system",
+            "title": "Approval Source",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "execution_id": {
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "input_summary": {
+            "default": "",
+            "title": "Input Summary",
+            "type": "string"
+          },
+          "result_summary": {
+            "default": "",
+            "title": "Result Summary",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "state_changed": {
+            "default": false,
+            "title": "State Changed",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
+          "action_id"
+        ],
+        "title": "AssistantToolLedgerEntry",
+        "type": "object"
+      },
+      "AssistantToolLedgerPayload": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolLedgerEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "title": "AssistantToolLedgerPayload",
+        "type": "object"
+      },
+      "AssistantToolOAuthClientPayload": {
+        "properties": {
+          "client_id": {
+            "default": "",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "client_secret": {
+            "default": "",
+            "title": "Client Secret",
+            "type": "string"
+          }
+        },
+        "title": "AssistantToolOAuthClientPayload",
+        "type": "object"
+      },
+      "AssistantToolRegistryPayload": {
+        "description": "Serializable backend mirror of assistant tools and actions.",
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolAction"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolSpec"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools",
+          "actions"
+        ],
+        "title": "AssistantToolRegistryPayload",
+        "type": "object"
+      },
+      "AssistantToolRequest": {
+        "description": "Canonical request envelope required before any tool action can run.",
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "approval_policy": {
+            "anyOf": [
+              {
+                "enum": [
+                  "allow_automatic",
+                  "ask_sensitive",
+                  "always_ask",
+                  "disabled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Policy"
+          },
+          "approved": {
+            "default": false,
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
+          "action_id"
+        ],
+        "title": "AssistantToolRequest",
+        "type": "object"
+      },
+      "AssistantToolResult": {
+        "description": "Canonical result envelope returned by assistant tool execution.",
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "output": {
+            "additionalProperties": true,
+            "title": "Output",
+            "type": "object"
+          },
+          "result_summary": {
+            "default": "",
+            "title": "Result Summary",
+            "type": "string"
+          },
+          "risk_level": {
+            "default": "low",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "state_changed": {
+            "default": false,
+            "title": "State Changed",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
+          "action_id"
+        ],
+        "title": "AssistantToolResult",
+        "type": "object"
+      },
+      "AssistantToolResultContext": {
+        "properties": {
+          "ledger_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ledger Ref"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "sensitive_summary": {
+            "default": "",
+            "title": "Sensitive Summary",
+            "type": "string"
+          },
+          "state_changed": {
+            "default": false,
+            "title": "State Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "AssistantToolResultContext",
+        "type": "object"
+      },
+      "AssistantToolReviewDecision": {
+        "description": "Approval-gate decision for an assistant tool request.",
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "allowed": {
+            "default": false,
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "approval_required": {
+            "default": false,
+            "title": "Approval Required",
+            "type": "boolean"
+          },
+          "executable": {
+            "default": false,
+            "title": "Executable",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "result_summary": {
+            "default": "",
+            "title": "Result Summary",
+            "type": "string"
+          },
+          "risk_level": {
+            "default": "low",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "state_changed": {
+            "default": false,
+            "title": "State Changed",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
+          "action_id"
+        ],
+        "title": "AssistantToolReviewDecision",
+        "type": "object"
+      },
+      "AssistantToolSpec": {
+        "description": "Backend-owned assistant tool metadata and actions.",
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolAction"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "connection_status": {
+            "default": "not_configured",
+            "enum": [
+              "not_configured",
+              "connected",
+              "error"
+            ],
+            "title": "Connection Status",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "category"
+        ],
+        "title": "AssistantToolSpec",
+        "type": "object"
+      },
+      "AssistantToolsConfigPayload": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AssistantToolsConfigPayload",
+        "type": "object"
+      },
       "CancelJobRequest": {
         "properties": {
           "reason": {
@@ -767,6 +1596,24 @@
         "title": "CreateJobRequest",
         "type": "object"
       },
+      "DeleteChatSessionResponse": {
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "DeleteChatSessionResponse",
+        "type": "object"
+      },
       "DiagnosticsPayload": {
         "properties": {
           "event_stream": {
@@ -924,6 +1771,97 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HermesAssistantToolExecutePayload": {
+        "properties": {
+          "approval_decision": {
+            "$ref": "#/components/schemas/AssistantToolReviewDecision"
+          },
+          "execution_result": {
+            "$ref": "#/components/schemas/AssistantToolResult"
+          },
+          "result_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssistantToolResultContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected_action_id": {
+            "title": "Selected Action Id",
+            "type": "string"
+          },
+          "selected_tool_id": {
+            "title": "Selected Tool Id",
+            "type": "string"
+          },
+          "state_changed": {
+            "default": false,
+            "title": "State Changed",
+            "type": "boolean"
+          },
+          "user_request": {
+            "default": "",
+            "title": "User Request",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selected_tool_id",
+          "selected_action_id",
+          "approval_decision",
+          "execution_result"
+        ],
+        "title": "HermesAssistantToolExecutePayload",
+        "type": "object"
+      },
+      "HermesAssistantToolRequestEnvelope": {
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/AssistantToolRequest"
+          },
+          "user_request": {
+            "default": "",
+            "title": "User Request",
+            "type": "string"
+          }
+        },
+        "title": "HermesAssistantToolRequestEnvelope",
+        "type": "object"
+      },
+      "HermesAssistantToolReviewPayload": {
+        "properties": {
+          "approval_decision": {
+            "$ref": "#/components/schemas/AssistantToolReviewDecision"
+          },
+          "selected_action_id": {
+            "title": "Selected Action Id",
+            "type": "string"
+          },
+          "selected_tool_id": {
+            "title": "Selected Tool Id",
+            "type": "string"
+          },
+          "tool_request": {
+            "$ref": "#/components/schemas/AssistantToolRequest"
+          },
+          "user_request": {
+            "default": "",
+            "title": "User Request",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selected_tool_id",
+          "selected_action_id",
+          "tool_request",
+          "approval_decision"
+        ],
+        "title": "HermesAssistantToolReviewPayload",
         "type": "object"
       },
       "JobError": {
@@ -2343,6 +3281,7 @@
         "type": "object"
       },
       "RpgNewGameRequest": {
+        "additionalProperties": true,
         "properties": {
           "background": {
             "anyOf": [
@@ -2597,10 +3536,20 @@
       },
       "SendChatMessageRequest": {
         "properties": {
+          "agent_mode": {
+            "default": false,
+            "title": "Agent Mode",
+            "type": "boolean"
+          },
           "content": {
             "minLength": 1,
             "title": "Content",
             "type": "string"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
           },
           "model_id": {
             "anyOf": [
@@ -2666,6 +3615,18 @@
           "audio_provider_tts": {
             "title": "Audio Provider Tts",
             "type": "string"
+          },
+          "hermes_commands": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Hermes Commands",
+            "type": "object"
+          },
+          "hermes_status": {
+            "additionalProperties": true,
+            "title": "Hermes Status",
+            "type": "object"
           },
           "image_enabled": {
             "title": "Image Enabled",
@@ -3133,6 +4094,46 @@
       }
     },
     "/api/chat/sessions/{session_id}": {
+      "delete": {
+        "operationId": "delete_chat_session_api_chat_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteChatSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Chat Session",
+        "tags": [
+          "chat"
+        ]
+      },
       "get": {
         "operationId": "chat_session_api_chat_sessions__session_id__get",
         "parameters": [
@@ -3221,6 +4222,56 @@
           }
         },
         "summary": "Send Chat Message",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/chat/sessions/{session_id}/messages/stream": {
+      "post": {
+        "operationId": "stream_chat_message_api_chat_sessions__session_id__messages_stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendChatMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Chat Message",
         "tags": [
           "chat"
         ]
