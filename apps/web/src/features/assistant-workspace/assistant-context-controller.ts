@@ -21,6 +21,7 @@ type DisplayMediaDevices = MediaDevices & {
 
 const CONTEXT_STORAGE_KEY = 'omnix.chatbot.contextSettings';
 const CONTEXT_CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
+const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages$/;
 const assistantContextWindow = window as AssistantContextWindow;
 
@@ -34,9 +35,24 @@ export function initializeAssistantContextController(root: ParentNode = document
   assistantContextWindow.__omnixAssistantContextInitialized = true;
   installFetchInterceptor();
   injectControls(root);
-  const observer = new MutationObserver(() => injectControls(root));
-  observer.observe(document.body, { childList: true, subtree: true });
+  const observer = new MutationObserver(() => {
+    if (assistantContextControlsMissing(root)) injectControls(root);
+  });
+  const observeTarget = root instanceof Document ? root.documentElement : root;
+  observer.observe(observeTarget, { childList: true, subtree: true });
   window.addEventListener('beforeunload', () => stopDesktopShare(), { once: true });
+}
+
+export function assistantContextControlsMissing(root: ParentNode = document): boolean {
+  const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
+  const audioDevices = root.querySelector<HTMLElement>('.assistant-audio-devices');
+  const composerMissing = Boolean(
+    composerControls && !composerControls.querySelector(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`),
+  );
+  const desktopStatusMissing = Boolean(
+    audioDevices && !audioDevices.querySelector(`[${DESKTOP_STATUS_ATTRIBUTE}]`),
+  );
+  return composerMissing || desktopStatusMissing;
 }
 
 export function isAssistantMessageRequest(url: string, method: string): boolean {
@@ -174,9 +190,9 @@ function injectControls(root: ParentNode): void {
   }
 
   const audioDevices = root.querySelector<HTMLElement>('.assistant-audio-devices');
-  if (audioDevices && !audioDevices.querySelector('[data-omnix-desktop-status]')) {
+  if (audioDevices && !audioDevices.querySelector(`[${DESKTOP_STATUS_ATTRIBUTE}]`)) {
     const row = document.createElement('div');
-    row.setAttribute('data-omnix-desktop-status', 'true');
+    row.setAttribute(DESKTOP_STATUS_ATTRIBUTE, 'true');
     const label = document.createElement('span');
     label.textContent = 'Desktop';
     const value = document.createElement('strong');
