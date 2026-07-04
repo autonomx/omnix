@@ -1,8 +1,11 @@
+import { DesktopTemporalCapture } from './desktop-temporal-capture';
+
 type WebSearchMode = 'automatic' | 'manual' | 'disabled';
 
 type DesktopShareSession = {
   stream: MediaStream;
   video: HTMLVideoElement;
+  capture: DesktopTemporalCapture;
 };
 
 type AssistantContextWindow = Window & typeof globalThis & {
@@ -75,11 +78,13 @@ function installFetchInterceptor(): void {
       return originalFetch(input, init);
     }
 
-    let desktopImageDataUrl: string | undefined;
+    let desktopPayload: Awaited<ReturnType<DesktopTemporalCapture['buildPayload']>> | undefined;
     if (desktopShare) {
       try {
-        desktopImageDataUrl = captureDesktopFrame(desktopShare);
-        desktopStatus = 'Frame attached';
+        desktopPayload = await desktopShare.capture.buildPayload();
+        desktopStatus = desktopPayload.captureMode === 'temporal'
+          ? `${desktopPayload.selectedHistoryFrames} history + current`
+          : 'Current frame attached';
       } catch (error) {
         desktopStatus = error instanceof Error ? error.message : 'Capture failed';
         stopDesktopShare();
@@ -99,7 +104,11 @@ function installFetchInterceptor(): void {
         ...payload,
         web_search_mode: webSearchMode,
         web_search_requested: webSearchMode === 'manual' && manualSearchRequested,
-        desktop_image_data_url: desktopImageDataUrl,
+        desktop_current_image_data_url: desktopPayload?.currentImageDataUrl,
+        desktop_history_image_data_url: desktopPayload?.historyImageDataUrl,
+        desktop_combined_image_data_url: desktopPayload?.combinedImageDataUrl,
+        desktop_history_timestamps: desktopPayload?.historyTimestamps ?? [],
+        desktop_capture_mode: desktopPayload?.captureMode ?? 'single',
       }),
     });
     if (enhancedResponse.status === 404) return originalFetch(input, init);
@@ -225,8 +234,10 @@ async function toggleDesktopShare(): Promise<void> {
     video.srcObject = stream;
     await video.play();
     await waitForVideoDimensions(video);
-    desktopShare = { stream, video };
-    desktopStatus = 'Shared for each turn';
+    const capture = new DesktopTemporalCapture(video);
+    capture.start();
+    desktopShare = { stream, video, capture };
+    desktopStatus = 'Buffering recent frames';
     stream.getVideoTracks()[0]?.addEventListener('ended', () => {
       stopDesktopShare();
       renderControls();
@@ -243,26 +254,10 @@ async function toggleDesktopShare(): Promise<void> {
 function stopDesktopShare(): void {
   const current = desktopShare;
   desktopShare = null;
+  current?.capture.stop();
   current?.stream.getTracks().forEach((track) => track.stop());
   if (current) current.video.srcObject = null;
-  if (desktopStatus === 'Shared for each turn' || desktopStatus === 'Frame attached') desktopStatus = 'Off';
-}
-
-function captureDesktopFrame(session: DesktopShareSession): string {
-  const sourceWidth = session.video.videoWidth;
-  const sourceHeight = session.video.videoHeight;
-  if (!sourceWidth || !sourceHeight) throw new Error('Desktop frame is not ready');
-  const maxWidth = 1280;
-  const scale = Math.min(1, maxWidth / sourceWidth);
-  const width = Math.max(1, Math.round(sourceWidth * scale));
-  const height = Math.max(1, Math.round(sourceHeight * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('Desktop capture canvas is unavailable');
-  context.drawImage(session.video, 0, 0, width, height);
-  return canvas.toDataURL('image/jpeg', 0.82);
+  desktopStatus = 'Off';
 }
 
 function waitForVideoDimensions(video: HTMLVideoElement): Promise<void> {
