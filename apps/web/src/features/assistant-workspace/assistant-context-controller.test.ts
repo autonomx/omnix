@@ -12,11 +12,10 @@ describe('assistant context control mounting', () => {
 
     expect(assistantContextControlsMissing(root)).toBe(true);
 
-    root.querySelector('.assistant-composer-controls')?.append(
-      Object.assign(document.createElement('div'), {
-        dataset: { omnixContextControls: 'true' },
-      }),
-    );
+    const contextControls = document.createElement('div');
+    contextControls.setAttribute('data-omnix-context-controls', 'true');
+    root.querySelector('.assistant-composer-controls')?.append(contextControls);
+
     const desktopStatus = document.createElement('div');
     desktopStatus.setAttribute('data-omnix-desktop-status', 'true');
     root.querySelector('.assistant-audio-devices')?.append(desktopStatus);
