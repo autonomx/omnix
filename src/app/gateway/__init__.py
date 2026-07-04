@@ -4,6 +4,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
+from .assistant_context_routes import install_assistant_context_route_hook
 from .audiobook_streaming import install_audiobook_websocket_hook
 from .hermes_routes import install_hermes_route_hook
 from .realtime_routes import install_realtime_route_hook
@@ -12,6 +13,7 @@ from .rpg_turn_job_mirror import install_rpg_turn_job_mirror_hook
 
 __all__ = ["app", "create_gateway_app"]
 
+install_assistant_context_route_hook()
 install_rpg_session_route_hook()
 install_rpg_turn_job_mirror_hook()
 install_audiobook_websocket_hook()
