@@ -35,7 +35,7 @@ class FakeAudioContext {
     return {
       duration: length / sampleRate,
       getChannelData: () => new Float32Array(length),
-    } as AudioBuffer;
+    } as unknown as AudioBuffer;
   }
 
   createBufferSource(): AudioBufferSourceNode {
