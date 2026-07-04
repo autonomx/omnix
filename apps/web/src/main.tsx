@@ -12,6 +12,8 @@ import './legacy-layout.css';
 import './features/chatbot/ChatbotWorkspaceTools.css';
 import './features/chatbot/ChatbotWorkspaceSidePanelFix.css';
 import './features/chatbot/ChatbotWorkspaceUtilityToggle.css';
+import './features/assistant-workspace/assistant-context-controller.css';
+import './features/assistant-workspace/assistant-context-controller';
 import './features/assistant-workspace/live-voice-form-sync';
 import './features/assistant-workspace/live-voice-controller';
 import './features/storyteller/StorytellerWorkspace.css';
