@@ -1,0 +1,33 @@
+.assistant-context-controls {
+  display: contents;
+}
+
+.assistant-context-mode {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 8.5rem;
+}
+
+.assistant-context-mode span {
+  color: var(--mantine-color-dimmed, #9ca3af);
+  font-size: 0.72rem;
+}
+
+.assistant-context-mode select {
+  min-height: 2.35rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.72);
+  color: inherit;
+  padding: 0 0.7rem;
+}
+
+.assistant-context-manual.active,
+.assistant-context-desktop.active {
+  border-color: rgba(96, 165, 250, 0.75);
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.3);
+}
+
+.assistant-context-manual[hidden] {
+  display: none !important;
+}
