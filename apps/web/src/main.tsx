@@ -13,7 +13,6 @@ import './features/chatbot/ChatbotWorkspaceTools.css';
 import './features/chatbot/ChatbotWorkspaceSidePanelFix.css';
 import './features/chatbot/ChatbotWorkspaceUtilityToggle.css';
 import './features/assistant-workspace/assistant-context-controller.css';
-import './features/assistant-workspace/assistant-context-controller';
 import './features/assistant-workspace/live-voice-form-sync';
 import './features/assistant-workspace/live-voice-controller';
 import './features/storyteller/StorytellerWorkspace.css';
@@ -44,3 +43,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     </MantineProvider>
   </React.StrictMode>,
 );
+
+window.setTimeout(() => {
+  void import('./features/assistant-workspace/assistant-context-controller').catch((error: unknown) => {
+    console.error('Assistant context controls failed to initialize', error);
+  });
+}, 0);
