@@ -35,7 +35,7 @@ def test_generated_gateway_openapi_schema_is_current() -> None:
     current_schema = _normalize_openapi(_route_surface(current_openapi))
 
     if generated_schema != current_schema:
-        # Emit the exact generator output once so the stale base artifact can be repaired.
+        # Emit the generator output once so the stale base artifact can be repaired exactly.
         print("OMNIX_OPENAPI_SCHEMA_BEGIN")
         print(json.dumps(current_openapi, indent=2, sort_keys=True))
         print("OMNIX_OPENAPI_SCHEMA_END")
