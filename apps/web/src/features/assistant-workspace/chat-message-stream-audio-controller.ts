@@ -36,8 +36,9 @@ export function initializeChatMessageStreamAudioController(root: ParentNode = do
   installedRoots.add(root);
 
   injectStreamAudioButtons(root);
-  const eventTarget = root instanceof Document ? root : root.ownerDocument ?? document;
-  const observerTarget = root instanceof Document ? root.documentElement : root as Node;
+  const rootNode = root as Node;
+  const eventTarget = root instanceof Document ? root : rootNode.ownerDocument ?? document;
+  const observerTarget = root instanceof Document ? root.documentElement : rootNode;
   const observer = new MutationObserver(() => injectStreamAudioButtons(root));
   observer.observe(observerTarget, { childList: true, subtree: true });
 
