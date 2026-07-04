@@ -25,6 +25,11 @@ export type SendChatMessageResponse = components['schemas']['SendChatMessageResp
 export type SettingsPayload = components['schemas']['SettingsPayload'];
 export type SettingsSaveResponse = components['schemas']['SettingsSaveResponse'];
 
+export interface DeleteChatSessionResponse {
+  ok: boolean;
+  session_id: string;
+}
+
 export interface AssetContentResponse {
   asset: AssetListResponse['assets'][number];
   content: string;
@@ -277,6 +282,10 @@ export class OmnixApiClient {
 
   async getChatSession(sessionId: string): Promise<ChatSession> {
     return this.get<ChatSession>(`/api/chat/sessions/${encodeURIComponent(sessionId)}`);
+  }
+
+  async deleteChatSession(sessionId: string): Promise<DeleteChatSessionResponse> {
+    return this.request<DeleteChatSessionResponse>(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
   }
 
   async sendChatMessage(sessionId: string, request: SendChatMessageRequest): Promise<SendChatMessageResponse> {

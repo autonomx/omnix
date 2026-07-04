@@ -25,6 +25,7 @@ from .audio_base import (
 from .vendor.qwen3_tts import (
     ensure_vendored_qwen3_tts_available,
     get_or_create_tts_model,
+    reset_tts_model_cache,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,9 +87,52 @@ def _is_cuda_graph_generation_error(error: BaseException) -> bool:
     return (
         "graph capture" in message
         or "cuda graph" in message
+        or "during capture" in message
+        or "stream is capturing" in message
         or "outside graph" in message
         or "offset increment" in message
     )
+
+
+def _is_retryable_generation_error(error: BaseException) -> bool:
+    message = str(error).casefold()
+    return (
+        _is_cuda_graph_generation_error(error)
+        or ("size of tensor" in message and "must match the size of tensor" in message)
+    )
+
+
+def _reset_cached_model_after_generation_error(error: BaseException) -> None:
+    global _model_loader
+
+    with _model_loader.lock:
+        _model_loader.model = None
+        _model_loader.initialized = False
+        _model_loader.last_error = str(error)
+        _model_loader.last_error_type = type(error).__name__
+        _model_loader.last_error_at = datetime.now(timezone.utc).isoformat()
+        try:
+            reset_tts_model_cache()
+        except Exception as reset_exc:
+            logger.warning("Failed to reset FasterQwen3TTS model cache after generation error: %s", reset_exc)
+
+
+def _generate_audio_with_streaming_fallback(model: Any, gen_kwargs: dict[str, Any]) -> tuple[list[Any], int]:
+    stream_kwargs = dict(gen_kwargs)
+    stream_kwargs["parity_mode"] = True
+    stream_kwargs["non_streaming_mode"] = False
+
+    chunks: list[np.ndarray] = []
+    sample_rate = 0
+    for audio_chunk, sr, _timing in model.generate_voice_clone_streaming(**stream_kwargs):
+        if not _is_valid_audio(audio_chunk):
+            continue
+        chunks.append(np.asarray(audio_chunk, dtype=np.float32))
+        sample_rate = int(sr or sample_rate or 24_000)
+
+    if not chunks:
+        return [], sample_rate or 24_000
+    return [np.concatenate(chunks)], sample_rate or 24_000
 
 
 # ---------------------------------------------------------------------------
@@ -612,22 +656,55 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'xvec_only': kwargs.get('xvec_only', self._model_config.get('xvec_only', True)),
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
-                'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', False)),
+                'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', True)),
             }
             
             # Generate audio (non-streaming)
             try:
                 audio_list, sample_rate = model.generate_voice_clone(**gen_kwargs)
             except Exception as exc:
-                if not _is_cuda_graph_generation_error(exc) or gen_kwargs.get('parity_mode') is True:
+                if not _is_retryable_generation_error(exc):
                     raise
-                logger.warning(
-                    "[TTS] CUDA graph generation failed; retrying once with parity_mode=True: %s",
-                    exc,
-                )
-                retry_kwargs = dict(gen_kwargs)
-                retry_kwargs['parity_mode'] = True
-                audio_list, sample_rate = model.generate_voice_clone(**retry_kwargs)
+
+                retry_attempts: list[tuple[str, dict[str, Any]]] = []
+                if gen_kwargs.get('parity_mode') is True:
+                    retry_attempts.append(("fresh parity model", dict(gen_kwargs)))
+                else:
+                    retry_kwargs = dict(gen_kwargs)
+                    retry_kwargs['parity_mode'] = True
+                    retry_attempts.append(("parity_mode=True", retry_kwargs))
+
+                if gen_kwargs.get('non_streaming_mode') is True:
+                    retry_kwargs = dict(gen_kwargs)
+                    retry_kwargs['parity_mode'] = True
+                    retry_kwargs['non_streaming_mode'] = False
+                    retry_attempts.append(("parity_mode=True, non_streaming_mode=False", retry_kwargs))
+
+                last_error: BaseException = exc
+                for retry_label, retry_kwargs in retry_attempts:
+                    logger.warning(
+                        "[TTS] retryable generation failure; resetting model cache and retrying with %s: %s",
+                        retry_label,
+                        last_error,
+                    )
+                    _reset_cached_model_after_generation_error(last_error)
+                    model = self._get_model()
+                    try:
+                        audio_list, sample_rate = model.generate_voice_clone(**retry_kwargs)
+                        gen_kwargs = retry_kwargs
+                        break
+                    except Exception as retry_exc:
+                        if not _is_retryable_generation_error(retry_exc):
+                            raise
+                        last_error = retry_exc
+                else:
+                    logger.warning(
+                        "[TTS] batch generation retries failed; resetting model cache and stitching streaming fallback: %s",
+                        last_error,
+                    )
+                    _reset_cached_model_after_generation_error(last_error)
+                    model = self._get_model()
+                    audio_list, sample_rate = _generate_audio_with_streaming_fallback(model, gen_kwargs)
             
             if not audio_list or len(audio_list) == 0:
                 return {
@@ -739,22 +816,71 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'xvec_only': kwargs.get('xvec_only', self._model_config.get('xvec_only', True)),
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
-                'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', False)),
+                'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', True)),
             }
             
             # Stream generation – validate each chunk before yielding
             chunk_idx = 0
-            for audio_chunk, sr, timing in model.generate_voice_clone_streaming(**gen_kwargs):
-                if not _is_valid_audio(audio_chunk):
-                    logger.warning("[TTS] Skipping corrupt streaming chunk %d", chunk_idx)
+            try:
+                for audio_chunk, sr, timing in model.generate_voice_clone_streaming(**gen_kwargs):
+                    if not _is_valid_audio(audio_chunk):
+                        logger.warning("[TTS] Skipping corrupt streaming chunk %d", chunk_idx)
+                        chunk_idx += 1
+                        continue
+                    logger.info("[TTS] streaming chunk=%d size=%d samples", chunk_idx, len(audio_chunk))
+                    yield audio_chunk, sr, timing
                     chunk_idx += 1
-                    continue
-                logger.info("[TTS] streaming chunk=%d size=%d samples", chunk_idx, len(audio_chunk))
-                yield audio_chunk, sr, timing
-                chunk_idx += 1
+            except Exception as stream_exc:
+                if not _is_retryable_generation_error(stream_exc):
+                    raise
+                if chunk_idx > 0:
+                    logger.warning(
+                        "[TTS] CUDA graph streaming failed after %d chunks; not retrying partial stream: %s",
+                        chunk_idx,
+                        stream_exc,
+                    )
+                    _reset_cached_model_after_generation_error(stream_exc)
+                    raise
+
+                retry_kwargs = dict(gen_kwargs)
+                retry_kwargs["parity_mode"] = True
+                logger.warning(
+                    "[TTS] CUDA graph streaming failed before first chunk; resetting cache and retrying with parity_mode=True: %s",
+                    stream_exc,
+                )
+                _reset_cached_model_after_generation_error(stream_exc)
+                model = self._get_model()
+                try:
+                    for audio_chunk, sr, timing in model.generate_voice_clone_streaming(**retry_kwargs):
+                        if not _is_valid_audio(audio_chunk):
+                            logger.warning("[TTS] Skipping corrupt streaming retry chunk %d", chunk_idx)
+                            chunk_idx += 1
+                            continue
+                        logger.info("[TTS] streaming retry chunk=%d size=%d samples", chunk_idx, len(audio_chunk))
+                        yield audio_chunk, sr, timing
+                        chunk_idx += 1
+                except Exception as retry_exc:
+                    if not _is_retryable_generation_error(retry_exc):
+                        raise
+                    logger.warning(
+                        "[TTS] CUDA graph streaming parity retry failed; resetting model cache and retrying once: %s",
+                        retry_exc,
+                    )
+                    _reset_cached_model_after_generation_error(retry_exc)
+                    model = self._get_model()
+                    for audio_chunk, sr, timing in model.generate_voice_clone_streaming(**retry_kwargs):
+                        if not _is_valid_audio(audio_chunk):
+                            logger.warning("[TTS] Skipping corrupt streaming fresh retry chunk %d", chunk_idx)
+                            chunk_idx += 1
+                            continue
+                        logger.info("[TTS] streaming fresh retry chunk=%d size=%d samples", chunk_idx, len(audio_chunk))
+                        yield audio_chunk, sr, timing
+                        chunk_idx += 1
                 
         except Exception as e:
             logger.error(f"Error in generate_audio_stream: {e}", exc_info=True)
+            if _is_retryable_generation_error(e):
+                _reset_cached_model_after_generation_error(e)
             raise
     
     def voice_clone(

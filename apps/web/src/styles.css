@@ -53,6 +53,11 @@ button, input, textarea, select { font: inherit; }
 .assistant-sidebar-list button span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .assistant-sidebar-list button small, .assistant-sidebar-list button time { color: var(--omnix-muted); font-size: 0.78rem; }
 .assistant-sidebar-list button:hover, .assistant-sidebar-list button:focus-visible, .assistant-sidebar-list button.active { background: linear-gradient(135deg, rgba(124, 92, 255, 0.36), rgba(124, 92, 255, 0.12)); border-color: rgba(151, 114, 255, 0.18); outline: none; }
+.assistant-sidebar-session-row { align-items: center; display: grid; gap: 0.25rem; grid-template-columns: minmax(0, 1fr) 1.75rem; }
+.assistant-sidebar-session-row > button:first-child { min-width: 0; }
+.assistant-sidebar-session-row.active > button:first-child { background: linear-gradient(135deg, rgba(124, 92, 255, 0.36), rgba(124, 92, 255, 0.12)); border-color: rgba(151, 114, 255, 0.18); }
+.assistant-sidebar-list button.assistant-sidebar-delete { display: inline-grid; grid-template-columns: 1fr; justify-content: center; min-height: 1.75rem; padding: 0; text-align: center; }
+.assistant-sidebar-list button.assistant-sidebar-delete:hover, .assistant-sidebar-list button.assistant-sidebar-delete:focus-visible { background: rgba(244, 114, 182, 0.18); border-color: rgba(244, 114, 182, 0.34); color: #ffd7e8; }
 .assistant-workspace-usage { background: linear-gradient(180deg, rgba(24, 32, 57, 0.92), rgba(14, 20, 37, 0.92)); border: 1px solid rgba(132, 148, 196, 0.18); border-radius: 0.55rem; display: grid; gap: 0.7rem; margin-top: 0.75rem; padding: 1rem; }
 .assistant-workspace-usage p { color: #a9d7e8; font-size: 0.86rem; margin: 0; }
 .assistant-workspace-usage meter { appearance: none; background: rgba(132, 148, 196, 0.22); border: 0; border-radius: 999px; height: 0.45rem; overflow: hidden; width: 100%; }

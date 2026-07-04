@@ -6,7 +6,9 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from app.chat.store import ChatSessionStore
 from app.gateway.main import create_gateway_app, _live_job_event_stream, _parse_event_id, _sse_comment, _sse_event
+from app.providers import ChatResponse
 
 
 @dataclass
@@ -31,11 +33,35 @@ class FakeJobStore:
 
 
 class FakeTtsProvider:
-    def generate_audio_stream(self, **kwargs: Any):
+    def __init__(self):
+        self.batch_calls: list[dict[str, Any]] = []
+        self.stream_calls: list[dict[str, Any]] = []
+
+    def generate_audio(self, **kwargs: Any):
+        self.batch_calls.append(kwargs)
         assert kwargs["text"] == "Hello from the podcast"
         assert kwargs["speaker"] == "Alex"
         assert kwargs["language"] == "English"
-        assert kwargs["chunk_size"] == 12
+        assert kwargs["temperature"] == 0.6
+        assert kwargs["top_k"] == 20
+        assert kwargs["top_p"] == 0.85
+        assert kwargs["repetition_penalty"] == 1.0
+        assert kwargs["append_silence"] is False
+        assert kwargs["max_new_tokens"] == 180
+        assert kwargs["non_streaming_mode"] is False
+        assert kwargs["parity_mode"] is True
+        return {
+            "success": True,
+            "audio_base64": "AAD//w==",
+            "sample_rate": 24000,
+        }
+
+    def generate_audio_stream(self, **kwargs: Any):
+        self.stream_calls.append(kwargs)
+        assert kwargs["text"] == "Hello from the podcast"
+        assert kwargs["speaker"] == "Alex"
+        assert kwargs["language"] == "English"
+        assert kwargs["chunk_size"] == 8
         assert kwargs["temperature"] == 0.6
         assert kwargs["top_k"] == 20
         assert kwargs["top_p"] == 0.85
@@ -55,8 +81,14 @@ class BufferingFakeTtsProvider:
         assert kwargs["non_streaming_mode"] is False
         for chunk_index in range(4):
             self.generated_chunks += 1
-            # Two mono samples at 4 Hz represent 0.5 seconds per chunk.
-            yield [0.25, -0.25], 4, {"chunk_index": chunk_index}
+            yield [0.25, -0.25] * 1024, 24000, {"chunk_index": chunk_index}
+
+
+class PartialFailureTtsProvider:
+    def generate_audio_stream(self, **kwargs: Any):
+        assert kwargs["non_streaming_mode"] is False
+        yield [0.25, -0.25] * 2048, 24000, {"chunk_index": 0}
+        raise RuntimeError("provider failed after first audio")
 
 
 def test_sse_event_includes_optional_id_and_sorted_json_data():
@@ -123,29 +155,81 @@ def test_finite_job_events_endpoint_emits_sse_ids_and_honors_after_id():
     assert store.after_ids == [1]
 
 
-def test_tts_stream_buffers_startup_audio_before_first_chunk():
+def test_tts_stream_releases_first_startup_chunk_promptly():
     from app.gateway import tts_streaming
 
     provider = BufferingFakeTtsProvider()
-    request = tts_streaming.TtsStreamRequest(text="Buffered hello", non_streaming_mode=True)
+    request = tts_streaming.TtsStreamRequest(text="Buffered hello", non_streaming_mode=False)
     stream = tts_streaming._tts_sse_stream(provider, request, "Buffered hello")
 
     assert next(stream) == ": tts-stream-open\n\n"
     first_chunk = next(stream)
 
-    # The first two 0.5-second chunks are generated before either is released,
-    # giving the browser enough scheduled audio to ride out model jitter.
-    assert provider.generated_chunks == 2
+    assert provider.generated_chunks == 1
     assert '"chunk_index": 0' in first_chunk
     assert '"type": "chunk"' in first_chunk
     assert '"chunk_index": 1' in next(stream)
     assert provider.generated_chunks == 2
 
 
+def test_tts_stream_reblocks_pcm16_without_altering_boundaries():
+    from app.gateway import tts_streaming
+
+    def pcm16(samples: list[int]) -> bytes:
+        return b"".join(sample.to_bytes(2, "little", signed=True) for sample in samples)
+
+    chunks = iter(
+        [
+            (pcm16([1000, 1000, 1000]), 1000, {"chunk_index": 0}),
+            (pcm16([-1000, -1000, -1000]), 1000, {"chunk_index": 1}),
+        ]
+    )
+
+    blocks = list(tts_streaming._stream_pcm16_blocks(chunks, block_samples=4, silence_threshold=0, preroll_ms=0))
+    samples = [
+        int.from_bytes(chunk[index : index + 2], "little", signed=True)
+        for chunk, _sample_rate, _timing in blocks
+        for index in range(0, len(chunk), 2)
+    ]
+
+    assert len(blocks) == 2
+    assert samples == [1000, 1000, 1000, -1000, -1000, -1000, 0, 0]
+
+
+def test_tts_stream_trims_initial_silence_with_preroll():
+    from app.gateway import tts_streaming
+
+    def pcm16(samples: list[int]) -> bytes:
+        return b"".join(sample.to_bytes(2, "little", signed=True) for sample in samples)
+
+    chunks = iter([(pcm16([0, 0, 0, 0, 1000, 1000, 1000, 1000]), 1000, {})])
+
+    blocks = list(tts_streaming._stream_pcm16_blocks(chunks, block_samples=4, silence_threshold=0.01, preroll_ms=2))
+    samples = [
+        int.from_bytes(chunk[index : index + 2], "little", signed=True)
+        for chunk, _sample_rate, _timing in blocks
+        for index in range(0, len(chunk), 2)
+    ]
+
+    assert samples == [0, 0, 1000, 1000, 1000, 1000, 0, 0]
+
+
+def test_tts_stream_finishes_partial_audio_when_provider_fails_after_first_chunk():
+    from app.gateway import tts_streaming
+
+    request = tts_streaming.TtsStreamRequest(text="Partial audio", non_streaming_mode=False)
+    events = list(tts_streaming._tts_sse_stream(PartialFailureTtsProvider(), request, "Partial audio"))
+
+    assert any('"type": "chunk"' in event for event in events)
+    assert any('"type": "done"' in event and '"partial": true' in event for event in events)
+    assert not any('"type": "error"' in event for event in events)
+
+
 def test_tts_stream_endpoint_emits_voice_chunks(monkeypatch):
     from app.gateway import tts_streaming
 
-    monkeypatch.setattr(tts_streaming, "get_tts_provider", lambda: FakeTtsProvider())
+    provider = FakeTtsProvider()
+    monkeypatch.setattr(tts_streaming, "get_tts_provider", lambda: provider)
     app = create_gateway_app(job_store_factory=lambda: FakeJobStore([]))
     client = TestClient(app)
 
@@ -155,7 +239,7 @@ def test_tts_stream_endpoint_emits_voice_chunks(monkeypatch):
             "text": "Hello from the podcast",
             "speaker": "Alex",
             "language": "English",
-            "chunk_size": 12,
+            "chunk_size": 8,
             "temperature": 0.6,
             "top_k": 20,
             "top_p": 0.85,
@@ -173,3 +257,88 @@ def test_tts_stream_endpoint_emits_voice_chunks(monkeypatch):
     assert '"type": "chunk"' in response.text
     assert '"sample_rate": 24000' in response.text
     assert '"type": "done"' in response.text
+    assert provider.batch_calls == []
+    assert len(provider.stream_calls) == 1
+
+
+def test_tts_stream_endpoint_keeps_parity_mode_streaming_when_not_batch(monkeypatch):
+    from app.gateway import tts_streaming
+
+    provider = FakeTtsProvider()
+    monkeypatch.setattr(tts_streaming, "get_tts_provider", lambda: provider)
+    app = create_gateway_app(job_store_factory=lambda: FakeJobStore([]))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/tts/stream/server-sent-events",
+        json={
+            "text": "Hello from the podcast",
+            "speaker": "Alex",
+            "language": "English",
+            "chunk_size": 8,
+            "temperature": 0.6,
+            "top_k": 20,
+            "top_p": 0.85,
+            "repetition_penalty": 1.0,
+            "append_silence": False,
+            "max_new_tokens": 180,
+            "non_streaming_mode": False,
+            "parity_mode": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert '"type": "chunk"' in response.text
+    assert '"type": "done"' in response.text
+    assert provider.batch_calls == []
+    assert len(provider.stream_calls) == 1
+
+
+def test_chat_session_delete_endpoint_removes_session(tmp_path):
+    store = ChatSessionStore(tmp_path / "chat.json")
+    first = store.create_session(type("Request", (), {"title": "First", "provider_id": "fake", "model_id": "fake-model", "system_prompt": None})())
+    second = store.create_session(type("Request", (), {"title": "Second", "provider_id": "fake", "model_id": "fake-model", "system_prompt": None})())
+    app = create_gateway_app(job_store_factory=lambda: FakeJobStore([]), chat_store_factory=lambda: store)
+    client = TestClient(app)
+
+    response = client.delete(f"/api/chat/sessions/{first.id}")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "session_id": first.id}
+    assert store.get_session(first.id) is None
+    assert store.get_session(second.id) is not None
+    listing = client.get("/api/chat/sessions")
+    assert first.id not in listing.text
+    assert second.id in listing.text
+    assert client.delete(f"/api/chat/sessions/{first.id}").status_code == 404
+
+
+def test_chat_stream_endpoint_emits_sentence_chunks_and_persists_session(monkeypatch, tmp_path):
+    from app import shared
+
+    class FakeChatProvider:
+        def chat_completion(self, **_: Any):
+            yield ChatResponse(content="Hello there. ", model="fake-model")
+            yield ChatResponse(content="I can hear you now.", model="fake-model")
+
+    store = ChatSessionStore(tmp_path / "chat.json")
+    session = store.create_session(type("Request", (), {"title": "Voice", "provider_id": "fake", "model_id": "fake-model", "system_prompt": None})())
+    monkeypatch.setattr(shared, "get_provider", lambda _provider_name=None: FakeChatProvider())
+
+    app = create_gateway_app(job_store_factory=lambda: FakeJobStore([]), chat_store_factory=lambda: store)
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/chat/sessions/{session.id}/messages/stream",
+        json={"content": "Can you hear me?", "provider_id": "fake", "model_id": "fake-model"},
+    )
+
+    assert response.status_code == 200
+    assert '"type": "user_message"' in response.text
+    assert '"text": "Hello there."' in response.text
+    assert '"text": "I can hear you now."' in response.text
+    assert '"type": "session"' in response.text
+    saved = store.get_session(session.id)
+    assert saved is not None
+    assert saved.messages[-1].role == "assistant"
+    assert saved.messages[-1].content == "Hello there. I can hear you now."

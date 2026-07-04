@@ -613,6 +613,7 @@ class FasterQwen3TTS:
         xvec_only: bool = True,
         non_streaming_mode: bool = False,
         append_silence: bool = True,
+        skip_warmup: bool = False,
     ):
         """Prepare inputs for generation (shared by streaming and non-streaming).
 
@@ -674,7 +675,7 @@ class FasterQwen3TTS:
             non_streaming_mode=non_streaming_mode,
         )
 
-        if not self._warmed_up:
+        if not skip_warmup and not self._warmed_up:
             self._warmup(tie.shape[1])
 
         talker = m.talker
@@ -1002,6 +1003,7 @@ class FasterQwen3TTS:
             xvec_only=xvec_only,
             non_streaming_mode=non_streaming_mode,
             append_silence=append_silence,
+            skip_warmup=parity_mode,
         )
 
         codec_ids, timing = fast_generate(
@@ -1122,6 +1124,7 @@ class FasterQwen3TTS:
             xvec_only=xvec_only,
             non_streaming_mode=non_streaming_mode,
             append_silence=append_silence,
+            skip_warmup=parity_mode,
         )
 
         speech_tokenizer = m.speech_tokenizer

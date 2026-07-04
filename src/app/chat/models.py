@@ -37,6 +37,11 @@ class ChatSessionListResponse(BaseModel):
     sessions: list[ChatSessionSummary]
 
 
+class DeleteChatSessionResponse(BaseModel):
+    ok: bool = True
+    session_id: str
+
+
 class CreateChatSessionRequest(BaseModel):
     title: str | None = None
     provider_id: str | None = None

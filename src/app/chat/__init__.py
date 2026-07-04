@@ -5,6 +5,7 @@ from .models import (
     ChatSessionListResponse,
     ChatSessionSummary,
     CreateChatSessionRequest,
+    DeleteChatSessionResponse,
     SendChatMessageRequest,
     SendChatMessageResponse,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "ChatSessionStore",
     "ChatSessionSummary",
     "CreateChatSessionRequest",
+    "DeleteChatSessionResponse",
     "SendChatMessageRequest",
     "SendChatMessageResponse",
     "default_chat_store",

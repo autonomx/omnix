@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -129,6 +130,14 @@ class ChatSessionStore:
                 return session
         return None
 
+    def delete_session(self, session_id: str) -> bool:
+        sessions = self._load_sessions()
+        remaining = [session for session in sessions if session.id != session_id]
+        if len(remaining) == len(sessions):
+            return False
+        self._save_sessions(remaining)
+        return True
+
     def append_user_message(
         self,
         session_id: str,
@@ -196,6 +205,126 @@ class ChatSessionStore:
 
         return None
 
+    def begin_user_message(
+        self,
+        session_id: str,
+        request: SendChatMessageRequest,
+        *,
+        context_items: list[dict[str, Any]] | None = None,
+        context_diagnostics: dict[str, Any] | None = None,
+    ) -> tuple[ChatSession, ChatMessage] | None:
+        sessions = self._load_sessions()
+        now = _utcnow()
+        turn_context = context_items or []
+        context_sources = _context_source_summaries(turn_context)
+        for index, session in enumerate(sessions):
+            if session.id != session_id:
+                continue
+            message_metadata: dict[str, Any] = {
+                "generation_status": "running",
+                "agent_mode": request.agent_mode,
+            }
+            if context_sources:
+                message_metadata["context_sources"] = context_sources
+            if context_diagnostics:
+                message_metadata["context_diagnostics"] = context_diagnostics
+            message = ChatMessage(
+                id=f"msg:{uuid.uuid4().hex}",
+                role="user",
+                content=request.content.strip(),
+                created_at=now,
+                metadata=message_metadata,
+            )
+            session.messages.append(message)
+            session.provider_id = request.provider_id or session.provider_id
+            session.model_id = request.model_id or session.model_id
+            session.message_count = len(session.messages)
+            if session.title.strip().lower() in {"new chat", "new chat..."}:
+                session.title = message.content[:48] or "New chat"
+            session.updated_at = now
+            sessions[index] = session
+            self._save_sessions(sessions)
+            return session, message
+        return None
+
+    def stream_provider_reply_chunks(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+        context_items: list[dict[str, Any]] | None = None,
+    ):
+        from app import shared
+
+        provider_name = _provider_key(provider_id)
+        provider = shared.get_provider(provider_name)
+        if provider is None:
+            raise RuntimeError("Chat provider is not available")
+
+        messages = self._provider_messages(session, user_message, context_items or [])
+        model_name = _model_key(model_id)
+        response = provider.chat_completion(messages=messages, model=model_name, stream=True)
+        pending = ""
+        full_text = ""
+        resolved_model = model_name
+        usage = None
+        for chunk in response:
+            text = (getattr(chunk, "content", "") or "")
+            if not text:
+                continue
+            resolved_model = getattr(chunk, "model", None) or resolved_model
+            usage = getattr(chunk, "usage", None) or usage
+            full_text += text
+            pending += text
+            ready, pending = _pop_ready_sentences(pending)
+            for sentence in ready:
+                yield {"type": "text_chunk", "text": sentence}
+        if pending.strip():
+            yield {"type": "text_chunk", "text": pending.strip()}
+        yield {
+            "type": "complete",
+            "content": full_text.strip(),
+            "metadata": {
+                "generation_status": "completed",
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "resolved_model": resolved_model,
+                **({"usage": usage} if usage else {}),
+            },
+        }
+
+    def complete_streamed_reply(
+        self,
+        session_id: str,
+        user_message_id: str,
+        content: str,
+        metadata: dict[str, Any],
+    ) -> ChatSession | None:
+        sessions = self._load_sessions()
+        for index, session in enumerate(sessions):
+            if session.id != session_id:
+                continue
+            for message in session.messages:
+                if message.id == user_message_id:
+                    message.metadata["generation_status"] = "completed"
+                    break
+            assistant_message = ChatMessage(
+                id=f"msg:{uuid.uuid4().hex}",
+                role="assistant",
+                content=content.strip(),
+                created_at=_utcnow(),
+                metadata=metadata,
+            )
+            session.messages.append(assistant_message)
+            session.message_count = len(session.messages)
+            session.updated_at = assistant_message.created_at
+            sessions[index] = session
+            self._save_sessions(sessions)
+            return session
+        return None
+
     def _generate_reply(
         self,
         session: ChatSession,
@@ -258,19 +387,13 @@ class ChatSessionStore:
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
         from app import shared
-        from app.providers import ChatMessage as ProviderMessage
 
         provider_name = _provider_key(provider_id)
         provider = shared.get_provider(provider_name)
         if provider is None:
             raise RuntimeError("Chat provider is not available")
 
-        messages: list[ProviderMessage] = []
-        if not any(message.role == "system" for message in session.messages):
-            messages.append(ProviderMessage(role="system", content=shared.get_global_system_prompt()))
-        for message in session.messages:
-            messages.append(ProviderMessage(role=message.role, content=message.content))
-        messages.append(ProviderMessage(role="user", content=_format_turn_context(user_message.content, context_items)))
+        messages = self._provider_messages(session, user_message, context_items)
 
         model_name = _model_key(model_id)
         response = provider.chat_completion(messages=messages, model=model_name, stream=False)
@@ -290,6 +413,25 @@ class ChatSessionStore:
         if thinking:
             metadata["thinking"] = thinking
         return {"content": content, "metadata": metadata}
+
+    def _provider_messages(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        context_items: list[dict[str, Any]],
+    ):
+        from app import shared
+        from app.providers import ChatMessage as ProviderMessage
+
+        messages: list[ProviderMessage] = []
+        if not any(message.role == "system" for message in session.messages):
+            messages.append(ProviderMessage(role="system", content=shared.get_global_system_prompt()))
+        for message in session.messages:
+            if message.id == user_message.id:
+                continue
+            messages.append(ProviderMessage(role=message.role, content=message.content))
+        messages.append(ProviderMessage(role="user", content=_format_turn_context(user_message.content, context_items)))
+        return messages
 
     def _load_sessions(self) -> list[ChatSession]:
         if not self.path.exists():
@@ -316,3 +458,14 @@ class ChatSessionStore:
 
 def default_chat_store() -> ChatSessionStore:
     return ChatSessionStore()
+
+
+def _pop_ready_sentences(text: str) -> tuple[list[str], str]:
+    ready: list[str] = []
+    start = 0
+    for match in re.finditer(r"(?<=[.!?])\s+", text):
+        sentence = text[start:match.end()].strip()
+        if sentence:
+            ready.append(sentence)
+        start = match.end()
+    return ready, text[start:]

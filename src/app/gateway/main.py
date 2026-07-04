@@ -26,6 +26,7 @@ from app.chat import (
     ChatSessionListResponse,
     ChatSessionStore,
     CreateChatSessionRequest,
+    DeleteChatSessionResponse,
     SendChatMessageRequest,
     SendChatMessageResponse,
     default_chat_store,
@@ -318,6 +319,12 @@ def create_gateway_app(
             raise HTTPException(status_code=404, detail="chat session not found")
         return session
 
+    @gateway.delete("/api/chat/sessions/{session_id}", response_model=DeleteChatSessionResponse, tags=["chat"])
+    async def delete_chat_session(session_id: str) -> DeleteChatSessionResponse:
+        if not get_chat_store().delete_session(session_id):
+            raise HTTPException(status_code=404, detail="chat session not found")
+        return DeleteChatSessionResponse(session_id=session_id)
+
     @gateway.post("/api/chat/sessions/{session_id}/messages", response_model=SendChatMessageResponse, tags=["chat"])
     async def send_chat_message(session_id: str, request: SendChatMessageRequest) -> SendChatMessageResponse:
         appended = get_chat_store().append_user_message(session_id, request)
@@ -339,6 +346,38 @@ def create_gateway_app(
             )
         )
         return SendChatMessageResponse(session=session, user_message=user_message, job=job)
+
+    @gateway.post("/api/chat/sessions/{session_id}/messages/stream", tags=["chat"])
+    async def stream_chat_message(session_id: str, request: SendChatMessageRequest) -> StreamingResponse:
+        chat_store = get_chat_store()
+        appended = chat_store.begin_user_message(session_id, request)
+        if appended is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+        session, user_message = appended
+
+        def generate():
+            yield f"data: {json.dumps({'type': 'user_message', 'message': user_message.model_dump(mode='json')}, sort_keys=True)}\n\n"
+            content = ""
+            metadata: dict[str, Any] = {"generation_status": "completed"}
+            try:
+                for event in chat_store.stream_provider_reply_chunks(
+                    session,
+                    user_message,
+                    provider_id=request.provider_id or session.provider_id,
+                    model_id=request.model_id or session.model_id,
+                ):
+                    if event.get("type") == "complete":
+                        content = str(event.get("content") or "").strip()
+                        metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else metadata
+                    yield f"data: {json.dumps(event, sort_keys=True)}\n\n"
+                completed = chat_store.complete_streamed_reply(session.id, user_message.id, content, metadata)
+                if completed is not None:
+                    yield f"data: {json.dumps({'type': 'session', 'session': completed.model_dump(mode='json')}, sort_keys=True)}\n\n"
+                yield f"data: {json.dumps({'type': 'done'}, sort_keys=True)}\n\n"
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(exc) or 'Chat stream failed.'}, sort_keys=True)}\n\n"
+
+        return StreamingResponse(generate(), media_type="text/event-stream")
 
     @gateway.get("/api/providers", response_model=ProviderFacadePayload, tags=["providers"])
     async def providers() -> ProviderFacadePayload:

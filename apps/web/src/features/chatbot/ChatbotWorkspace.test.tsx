@@ -81,6 +81,57 @@ afterEach(() => {
 });
 
 describe('ChatbotWorkspace', () => {
+  it('opens an existing chat scrolled to the latest message', async () => {
+    const scrollIntoViewMock = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoViewMock,
+    });
+    const session = {
+      id: 'chat:scroll',
+      title: 'Long chat',
+      provider_id: 'openai',
+      model_id: 'gpt-mini',
+      message_count: 3,
+      messages: [
+        { id: 'msg:old', role: 'user', content: 'Oldest message', created_at: '2026-06-14T00:00:01Z' },
+        { id: 'msg:middle', role: 'assistant', content: 'Middle message', created_at: '2026-06-14T00:00:02Z' },
+        { id: 'msg:latest', role: 'assistant', content: 'Newest message', created_at: '2026-06-14T00:00:03Z' },
+      ],
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:00:03Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') {
+        return Response.json(providerPayload());
+      }
+
+      if (path === '/api/assets') {
+        return Response.json(assetPayload());
+      }
+
+      if (path === '/api/chat/sessions') {
+        return Response.json({ sessions: [session] });
+      }
+
+      if (path === '/api/chat/sessions/chat%3Ascroll') {
+        return Response.json(session);
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    expect((await screen.findAllByText('Newest message')).length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'end', behavior: 'auto' });
+    });
+  });
+
   it('uses provider/model selectors and renders the assistant response with activity events', async () => {
     vi.stubEnv('VITE_ASSISTANT_TTS_URL', 'http://tts.local');
     vi.stubEnv('VITE_ASSISTANT_TTS_VOICE', 'narrator-clone');
@@ -206,7 +257,7 @@ describe('ChatbotWorkspace', () => {
     fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Hello Omnix' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
-    expect(await screen.findByText('Generation completed: job:1')).toBeInTheDocument();
+    expect(await screen.findByText('Response ready: job:1')).toBeInTheDocument();
     expect((await screen.findAllByText('Provider reply from the selected model.')).length).toBeGreaterThan(0);
     expect(await screen.findByText('Source: assistant_message')).toBeInTheDocument();
     const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('You'));
@@ -303,6 +354,110 @@ describe('ChatbotWorkspace', () => {
     expect(screen.getByText('Live voice call ended.')).toBeInTheDocument();
   });
 
+  it('auto-sends finalized live speech into the chat stream', async () => {
+    let recognitionInstance: {
+      continuous: boolean;
+      interimResults: boolean;
+      lang: string;
+      onresult: ((event: unknown) => void) | null;
+      onerror: ((event: unknown) => void) | null;
+      onend: (() => void) | null;
+      start: ReturnType<typeof vi.fn>;
+      stop: ReturnType<typeof vi.fn>;
+      abort: ReturnType<typeof vi.fn>;
+    } | null = null;
+
+    class FakeSpeechRecognition {
+      continuous = false;
+      interimResults = false;
+      lang = '';
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      onend: (() => void) | null = null;
+      start = vi.fn();
+      stop = vi.fn();
+      abort = vi.fn();
+
+      constructor() {
+        recognitionInstance = this;
+      }
+    }
+
+    vi.stubGlobal('SpeechRecognition', FakeSpeechRecognition);
+
+    let session = {
+      id: 'chat:voice-auto',
+      title: 'Voice command',
+      provider_id: 'openai',
+      model_id: 'gpt-mini',
+      message_count: 0,
+      messages: [] as Array<{ id: string; role: 'system' | 'user' | 'assistant'; content: string; created_at: string }>,
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:00:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions' && init?.method === 'POST') return Response.json(session);
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      if (path === '/api/chat/sessions/chat%3Avoice-auto/messages/stream') {
+        session = {
+          ...session,
+          message_count: 2,
+          messages: [
+            { id: 'msg:voice-user', role: 'user', content: 'open the pod bay doors', created_at: '2026-06-14T00:00:01Z' },
+            { id: 'msg:voice-assistant', role: 'assistant', content: 'Opening them now.', created_at: '2026-06-14T00:00:02Z' },
+          ],
+        };
+        return new Response(
+          [
+            'data: {"type":"text_chunk","text":"Opening them now."}\n\n',
+            `data: ${JSON.stringify({ type: 'session', session })}\n\n`,
+            'data: {"type":"done"}\n\n',
+          ].join(''),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        );
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    await screen.findByText('No chat messages yet.');
+    fireEvent.click(screen.getByLabelText('Auto-speak assistant replies'));
+    fireEvent.click(screen.getByRole('button', { name: 'Start Call' }));
+
+    await waitFor(() => expect(recognitionInstance).not.toBeNull());
+
+    act(() => {
+      recognitionInstance?.onresult?.({
+        resultIndex: 0,
+        results: {
+          length: 1,
+          0: { isFinal: true, 0: { transcript: 'open the pod bay doors' } },
+        },
+      });
+    });
+
+    expect(screen.getByText('open the pod bay doors')).toBeInTheDocument();
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 950));
+    });
+
+    await waitFor(() => {
+      const streamCall = fetchMock.mock.calls.find(
+        ([input, init]) => requestPath(input as RequestInfo | URL).endsWith('/messages/stream') && init?.method === 'POST',
+      );
+      expect(streamCall?.[1]?.body).toContain('"content":"open the pod bay doors"');
+    });
+    expect((await screen.findAllByText('Opening them now.')).length).toBeGreaterThan(0);
+  });
+
   it('submits the composer with Enter and preserves Shift+Enter for new lines', async () => {
     let session = {
       id: 'chat:enter',
@@ -373,7 +528,7 @@ describe('ChatbotWorkspace', () => {
 
     fireEvent.keyDown(messageInput, { key: 'Enter' });
 
-    expect(await screen.findByText('Generation completed: job:keyboard')).toBeInTheDocument();
+    expect(await screen.findByText('Response ready: job:keyboard')).toBeInTheDocument();
     await waitFor(() => {
       const messageCall = fetchMock.mock.calls.find(
         ([input, init]) => requestPath(input as RequestInfo | URL).endsWith('/messages') && init?.method === 'POST',
