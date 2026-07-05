@@ -105,7 +105,7 @@ afterEach(() => {
 });
 
 describe('assistant PCM stream player', () => {
-  it('uses the selected voice and lower-latency Qwen streaming contract', async () => {
+  it('uses the selected voice without imposing a fixed audio-token truncation cap', async () => {
     installAudioWorkletFakes();
     const fetchMock = vi.fn().mockResolvedValue(streamResponse([chunk(new Int16Array([0, 0]))]));
     vi.stubGlobal('fetch', fetchMock);
@@ -115,17 +115,19 @@ describe('assistant PCM stream player', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/tts/stream/server-sent-events');
-    expect(JSON.parse(String(init.body))).toMatchObject({
+    const requestBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(requestBody).toMatchObject({
       text: 'Stream this reply.',
       speaker: 'ari-clone',
       chunk_size: 8,
       non_streaming_mode: false,
       parity_mode: true,
     });
+    expect(requestBody).not.toHaveProperty('max_new_tokens');
     await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
   });
 
-  it('uses one worklet with stable rebuffer and smoothed transition reserves', async () => {
+  it('uses larger adaptive startup and recovery reserves', async () => {
     installAudioWorkletFakes();
     const block = new Int16Array(2_048);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse(
@@ -137,8 +139,9 @@ describe('assistant PCM stream player', () => {
     await waitFor(() => expect(FakeAudioWorkletNode.nodes).toHaveLength(1));
     const [node] = FakeAudioWorkletNode.nodes;
     expect(node.options.processorOptions).toMatchObject({
-      startBufferSamples: 36_000,
-      rebufferSamples: 24_000,
+      startBufferSamples: 48_000,
+      rebufferSamples: 36_000,
+      maxRebufferSamples: 72_000,
       transitionFadeSamples: 192,
     });
     expect(node.connect).toHaveBeenCalledTimes(1);

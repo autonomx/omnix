@@ -2,8 +2,9 @@ import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 
 const STREAM_AUDIO_STATUS_ATTRIBUTE = 'data-omnix-stream-audio-status';
 const STREAMING_TTS_SAMPLE_RATE = 24_000;
-const STREAMING_TTS_START_BUFFER_SECONDS = 1.5;
-const STREAMING_TTS_REBUFFER_SECONDS = 1.0;
+const STREAMING_TTS_START_BUFFER_SECONDS = 2.0;
+const STREAMING_TTS_REBUFFER_SECONDS = 1.5;
+const STREAMING_TTS_MAX_REBUFFER_SECONDS = 3.0;
 const STREAMING_TTS_TRANSITION_FADE_SECONDS = 0.008;
 const STREAMING_TTS_URL = '/api/tts/stream/server-sent-events';
 const STREAMING_TTS_CHUNK_SIZE = 8;
@@ -92,7 +93,6 @@ export async function startAssistantPcmStream(
         top_p: 0.85,
         repetition_penalty: 1.0,
         append_silence: false,
-        max_new_tokens: 180,
         non_streaming_mode: false,
         parity_mode: true,
       }),
@@ -162,6 +162,9 @@ async function createContinuousPcmSink(
     processorOptions: {
       startBufferSamples: Math.round(playback.audioContext.sampleRate * STREAMING_TTS_START_BUFFER_SECONDS),
       rebufferSamples: Math.round(playback.audioContext.sampleRate * STREAMING_TTS_REBUFFER_SECONDS),
+      maxRebufferSamples: Math.round(
+        playback.audioContext.sampleRate * STREAMING_TTS_MAX_REBUFFER_SECONDS,
+      ),
       transitionFadeSamples: Math.round(
         playback.audioContext.sampleRate * STREAMING_TTS_TRANSITION_FADE_SECONDS,
       ),
@@ -241,8 +244,13 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const settings = options.processorOptions || {};
-    this.startBufferSamples = Math.max(1, Number(settings.startBufferSamples) || sampleRate);
-    this.rebufferSamples = Math.max(1, Number(settings.rebufferSamples) || sampleRate);
+    this.startBufferSamples = Math.max(1, Number(settings.startBufferSamples) || sampleRate * 2);
+    this.rebufferSamples = Math.max(1, Number(settings.rebufferSamples) || sampleRate * 1.5);
+    this.maxRebufferSamples = Math.max(
+      this.rebufferSamples,
+      Number(settings.maxRebufferSamples) || sampleRate * 3,
+    );
+    this.currentRebufferSamples = this.rebufferSamples;
     this.transitionFadeSamples = Math.max(
       1,
       Number(settings.transitionFadeSamples) || Math.round(sampleRate * 0.008),
@@ -256,6 +264,7 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
     this.stopped = false;
     this.drained = false;
     this.fadeInRemaining = 0;
+    this.underrunCount = 0;
     this.port.onmessage = (event) => {
       const message = event.data || {};
       if (message.type === 'push' && message.samples) {
@@ -293,7 +302,7 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
     if (
       this.started
       && this.waitingForBuffer
-      && (this.queuedSamples >= this.rebufferSamples || this.inputEnded)
+      && (this.queuedSamples >= this.currentRebufferSamples || this.inputEnded)
     ) {
       this.waitingForBuffer = false;
       this.beginFadeIn();
@@ -321,6 +330,21 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
       const gain = 0.5 * (1 + Math.cos(Math.PI * progress));
       channel[start + index] *= gain;
     }
+  }
+
+  beginRebuffering() {
+    this.waitingForBuffer = true;
+    this.underrunCount += 1;
+    const multiplier = 1 + (Math.max(0, this.underrunCount - 1) * 0.5);
+    this.currentRebufferSamples = Math.min(
+      this.maxRebufferSamples,
+      Math.round(this.rebufferSamples * multiplier),
+    );
+    this.port.postMessage({
+      type: 'underrun',
+      buffered_samples: this.queuedSamples,
+      target_samples: this.currentRebufferSamples,
+    });
   }
 
   signalDrained() {
@@ -362,8 +386,7 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
     if (this.queuedSamples === 0) {
       this.applyFadeOut(channel, written);
       if (this.inputEnded) return this.signalDrained();
-      this.waitingForBuffer = true;
-      this.port.postMessage({ type: 'underrun' });
+      this.beginRebuffering();
     }
     return true;
   }
