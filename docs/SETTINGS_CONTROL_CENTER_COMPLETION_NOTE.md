@@ -72,18 +72,36 @@ Delivered:
 
 Both required workflows passed on the exact implementation head, including web typecheck, full web unit tests, and the representative deterministic RPG smoke.
 
-## Next recommended slice
-
 ### SCC-F1.2b — Voice Studio tuning and effects adoption
 
-Initialize the combined Voice Studio synthesis and embedded clone forms from the central TTS provider, output tuning, effects, cloning language, and cloning quality defaults. Add explicit reset-to-default actions while preserving script, speaker, voice, and per-job overrides.
+- Implementation PR: #1216 — SCC-F1.2b Voice Studio default adoption
+- Implementation head verified: `3bf257737bfbd50f68c719842a34e329b437fafe`
+- Squash merge SHA on `rpg`: `36af23c3742c449ab2ffa21456c7623b8efb968b`
+- Status: complete
+
+Delivered:
+
+- Voice Studio synthesis and preview jobs inherit the central TTS provider and language
+- output stability, similarity, style, speed, pitch, and volume initialize from central settings
+- enabled audio effects initialize from the central effects list rather than a hard-coded all-enabled state
+- the embedded voice-profile form inherits central provider, language, and quality defaults
+- settings revisions hydrate untouched controls without erasing scripts, assignments, or in-progress form edits
+- Reset tuning, Reset effects, and Reset defaults actions restore the effective central profile
+- the existing Voice Studio component regression covers hydration, reset behavior, and the submitted synthesis payload
+
+The branch was replayed on the latest `rpg` base before verification. Both required workflows passed on the exact rebased head, including file limits, web typecheck, full web unit tests, and the representative deterministic RPG smoke.
+
+## Next recommended slice
+
+### SCC-F1.3 — Chatbot new-session provider and model defaults
+
+Initialize newly created Chatbot sessions from the central LLM provider and chat-model role while preserving existing session selections and explicit per-session overrides. Keep assistant personality and voice compatibility mirrors intact until the new-session path has focused regression coverage.
 
 Remaining follow-up sequence:
 
-1. SCC-F1.2b Voice Studio tuning/effects and embedded-clone defaults
-2. SCC-F1.3 Chatbot new-session provider/model defaults
-3. SCC-F1.4 Storyteller and Podcast job metadata defaults
-4. SCC-F1.5 RPG campaign-wizard request initialization
-5. SCC-F1.6 compatibility-reader removal after every owning workspace has regression coverage
+1. SCC-F1.3 Chatbot new-session provider/model defaults
+2. SCC-F1.4 Storyteller and Podcast job metadata defaults
+3. SCC-F1.5 RPG campaign-wizard request initialization
+4. SCC-F1.6 compatibility-reader removal after every owning workspace has regression coverage
 
 Each adoption PR must preserve editable session/job overrides and pass the existing architecture and deterministic gates on its exact head.
