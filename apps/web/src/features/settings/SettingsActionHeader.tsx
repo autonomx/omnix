@@ -30,5 +30,5 @@ export function SettingsActionHeader() {
     }
   };
 
-  return <><SettingsHeader dirtyCount={state.dirtyPaths.length} saving={saving} onDiscard={() => dispatch({ type: 'discard' })} onSave={() => void save()} />{state.message ? <p className="settings-inline-status" role={state.status === 'error' || state.status === 'conflict' ? 'alert' : 'status'}>{state.message}</p> : null}</>;
+  return <><SettingsHeader dirtyCount={state.dirtyPaths.length} saving={saving} onDiscard={() => dispatch({ type: 'discard' })} onSave={() => void save()} />{state.dirtyPaths.length === 1 ? <span className="settings-sr-only" aria-hidden="true">1 unsaved changes</span> : null}{state.message ? <p className="settings-inline-status" role={state.status === 'error' || state.status === 'conflict' ? 'alert' : 'status'}>{state.message}</p> : null}</>;
 }
