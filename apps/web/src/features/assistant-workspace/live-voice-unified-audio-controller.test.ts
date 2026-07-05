@@ -71,16 +71,17 @@ beforeEach(() => {
   window.localStorage.clear();
   window.localStorage.setItem('omnix.chatbot.assistantSettings', JSON.stringify({ voiceId: 'Jinx' }));
   vi.stubGlobal('fetch', vi.fn(async () => chatStreamResponse()));
-  Object.values(mocks.session).forEach((value) => {
-    if (typeof value === 'function' && 'mockClear' in value) value.mockClear();
-  });
-  mocks.reporter.record.mockClear();
-  mocks.reporter.flush.mockClear();
-  mocks.reporter.close.mockClear();
-  mocks.createSession.mockClear();
-  mocks.createReporter.mockClear();
-  mocks.createTraceId.mockClear();
-  mocks.stopButtonStream.mockClear();
+  mocks.session.enqueuePhrase.mockReset().mockResolvedValue(undefined);
+  mocks.session.finish.mockReset().mockResolvedValue(undefined);
+  mocks.session.stop.mockReset().mockResolvedValue(undefined);
+  mocks.session.isClosed.mockReset().mockReturnValue(false);
+  mocks.reporter.record.mockReset();
+  mocks.reporter.flush.mockReset().mockResolvedValue(undefined);
+  mocks.reporter.close.mockReset().mockResolvedValue(undefined);
+  mocks.createSession.mockReset().mockResolvedValue(mocks.session);
+  mocks.createReporter.mockReset().mockReturnValue(mocks.reporter);
+  mocks.createTraceId.mockReset().mockReturnValue('live-call:s1:test-trace');
+  mocks.stopButtonStream.mockReset();
   cleanup = initializeLiveVoiceUnifiedAudioController();
 });
 
@@ -120,10 +121,10 @@ describe('live voice unified audio controller', () => {
       1,
     );
     await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
-    expect(mocks.reporter.close).toHaveBeenCalledWith(
+    await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_finished',
       expect.objectContaining({ phrases: 2, text_chunks: 2 }),
-    );
+    ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
   });
 
@@ -146,14 +147,23 @@ describe('live voice unified audio controller', () => {
   });
 
   it('stops the persistent live session on interruption', async () => {
+    let resolveFinish: (() => void) | null = null;
+    mocks.session.finish.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveFinish = resolve;
+    }));
+
     const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
-    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-interrupt'));
 
     await waitFor(() => expect(mocks.session.stop).toHaveBeenCalledWith('live-call-stop'));
     expect(mocks.stopButtonStream).toHaveBeenCalled();
-    expect(mocks.reporter.close).toHaveBeenCalledWith('turn_stopped', { reason: 'live-call-stop' });
+    await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
+      'turn_stopped',
+      { reason: 'live-call-stop' },
+    ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
+    resolveFinish?.();
   });
 });
