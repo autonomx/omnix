@@ -30,7 +30,7 @@ def register_tts_runtime_routes(gateway: FastAPI) -> None:
             return
         await asyncio.to_thread(warm_tts_runtime, "startup")
 
-    gateway.add_event_handler("startup", startup)
+    gateway.router.add_event_handler("startup", startup)
 
     @gateway.get("/api/tts/runtime/status", include_in_schema=False)
     async def status() -> dict[str, Any]:
