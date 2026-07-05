@@ -1,10 +1,12 @@
 import { Button, Group, Progress, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { imageGenerationDefaults } from '../settings/moduleDefaults';
+import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 
 interface ImageGenerationFormValues {
@@ -28,14 +30,23 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
     queryKey: ['platform', 'assets'],
     queryFn: () => omnixApiClient.listAssets(),
   });
+  const settingsQuery = useQuery({
+    queryKey: ['settings', 'profile'],
+    queryFn: loadSettingsProfile,
+  });
+  const moduleDefaults = useMemo(() => imageGenerationDefaults(settingsQuery.data?.profile), [settingsQuery.data?.profile]);
   const {
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<ImageGenerationFormValues>({
     defaultValues: { providerId: '', prompt: '', width: '768', height: '768' },
   });
+  useEffect(() => {
+    if (!settingsQuery.data || isDirty) return;
+    reset({ providerId: moduleDefaults.providerId, prompt: '', width: String(moduleDefaults.width), height: String(moduleDefaults.height) });
+  }, [isDirty, moduleDefaults, reset, settingsQuery.data]);
   const imageProviders = useMemo(() => imageCapableProviders(providersQuery.data), [providersQuery.data]);
   const imageJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'image-generation' || job.module === 'image') ?? [];
   const imageAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'image') ?? [];
@@ -49,8 +60,9 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
         input_payload: {
           prompt: values.prompt,
           provider_id: values.providerId || null,
-          width: Number.parseInt(values.width, 10) || 768,
-          height: Number.parseInt(values.height, 10) || 768,
+          width: Number.parseInt(values.width, 10) || moduleDefaults.width,
+          height: Number.parseInt(values.height, 10) || moduleDefaults.height,
+          unload_after_generation: moduleDefaults.unloadAfterGeneration,
         },
         stages: [
           { id: 'generate-image', label: 'Generate image', resource_class: 'gpu:image', status: 'queued' },

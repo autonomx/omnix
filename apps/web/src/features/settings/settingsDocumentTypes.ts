@@ -1,0 +1,22 @@
+export const SETTINGS_SCHEMA_VERSION = 1 as const;
+
+export type ProviderDefaults = { llm: string; tts: string; stt: string; image: string; voiceCloning: string };
+export type ModelDefaults = { chat: string; fast: string; quality: string; background: string; embedding: string; imagePrompt: string };
+export type RoutingDefaults = { fallbackBehavior: 'next-available' | 'fail'; taskOverrides: Record<string, { providerId: string; modelId: string }> };
+
+export type SettingsDocument = {
+  schemaVersion: number;
+  revision: string;
+  global: { providers: ProviderDefaults; models: ModelDefaults; routing: RoutingDefaults };
+  appearance: { mode: 'system' | 'light' | 'dark'; density: 'comfortable' | 'compact'; reduceMotion: boolean; liveCaptions: boolean };
+  assistant: { personalityId: string; customPersonality: string; voiceId: string; autoSpeakReplies: boolean; speechLanguage: string; streamingAudio: boolean };
+  voice: { language: string; stability: number; similarity: number; style: number; speed: number; pitch: number; volume: number; effects: string[]; streaming: boolean; cloningLanguage: string; cloningQuality: string };
+  storyteller: { providerId: string; modelId: string; tone: string; writingStyle: string; readSpeed: number; pauseParagraphMs: number; pauseChapterMs: number; readChapterTitles: boolean; readStylePreset: string; pronunciation: Record<string, string> };
+  podcast: { providerId: string; modelId: string; format: string; durationMinutes: number; tone: string; language: string; generationStyle: string; autoplay: boolean; playbackRate: number; stability: number; similarity: number; effects: string[] };
+  rpg: { difficulty: 'story' | 'normal' | 'harsh'; worldActivity: 'quiet' | 'standard' | 'living_world'; economyPressure: 'relaxed' | 'normal' | 'strict'; combatLethality: 'safe' | 'normal' | 'deadly'; companions: boolean; permadeath: boolean; autosave: boolean; validator: boolean; backgroundSoftAudit: boolean; llmNarration: boolean; imageGeneration: boolean; tts: boolean; stt: boolean; campaignDefaults: Record<string, unknown>; hermesAssistMode: string };
+  image: { width: number; height: number; aspectRatio: string; portraitPreset: string; scenePreset: string; unloadAfterGeneration: boolean };
+  stt: { language: string; alignment: boolean; saveTranscript: boolean; microphoneDeviceId: string; noiseSuppression: boolean; echoCancellation: boolean };
+  storage: { saveOutputByDefault: boolean; retentionDays: number; temporaryAssetCleanup: boolean };
+};
+
+export type SettingsNamespace = Exclude<keyof SettingsDocument, 'schemaVersion' | 'revision'>;

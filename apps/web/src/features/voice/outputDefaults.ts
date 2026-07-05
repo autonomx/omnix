@@ -1,3 +1,5 @@
+import type { SettingsDocument } from '../settings/settingsDocumentTypes';
+
 export interface OutputDefaults {
   stability: number;
   similarity: number;
@@ -15,3 +17,12 @@ export const DEFAULT_OUTPUT_SETTINGS: OutputDefaults = {
   pitch: 0,
   volume: 0,
 };
+
+export function resolveOutputDefaults(overrides: Partial<OutputDefaults> = {}): OutputDefaults {
+  return { ...DEFAULT_OUTPUT_SETTINGS, ...overrides };
+}
+
+export function profileOutputDefaults(document: SettingsDocument): OutputDefaults {
+  const value = document.voice;
+  return resolveOutputDefaults({ stability: value.stability, similarity: value.similarity, style: value.style, speed: value.speed, pitch: value.pitch, volume: value.volume });
+}

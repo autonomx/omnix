@@ -1,0 +1,27 @@
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_SETTINGS_DOCUMENT } from './settingsDefaults';
+import { createSettingsSaveRequest, loadSettingsProfile, saveSettingsProfile, type SettingsFetch } from './settingsApi';
+import { migrateSettingsDocument } from './settingsMerge';
+
+function response(body: unknown, ok = true, status = 200): Response {
+  return { ok, status, json: async () => body } as Response;
+}
+
+describe('settings API adapter', () => {
+  it('loads and migrates the embedded profile', async () => {
+    const fetcher: SettingsFetch = async () => response({ success: true, provider: 'lmstudio', audio_provider_tts: '', audio_provider_stt: '', settings: { settings_control_center: { revision: 'r1', appearance: { mode: 'dark' } } } });
+    const result = await loadSettingsProfile(fetcher);
+    expect(result.profile.appearance.mode).toBe('dark');
+    expect(result.profile.voice.speed).toBe(1);
+  });
+
+  it('builds and saves only changed namespaces', async () => {
+    const base = migrateSettingsDocument(DEFAULT_SETTINGS_DOCUMENT);
+    const draft = migrateSettingsDocument({ ...base, assistant: { ...base.assistant, autoSpeakReplies: true } });
+    const request = createSettingsSaveRequest(base, draft);
+    let sent = '';
+    const fetcher: SettingsFetch = async (_input, init) => { sent = String(init?.body || ''); return response({ success: true }); };
+    await saveSettingsProfile(request, fetcher);
+    expect(JSON.parse(sent).settings_profile_patch).toEqual({ assistant: draft.assistant });
+  });
+});
