@@ -54,15 +54,33 @@ Delivered:
 
 Both required workflows passed on the exact implementation head, including web typecheck, full web unit tests, and the representative deterministic RPG smoke.
 
+### SCC-F1.2a — Standalone voice profile default adoption
+
+- Implementation PR: #1213 — SCC-F1.2a voice profile default adoption
+- Implementation head verified: `3b5edde5120ff25cdec11fa875854fa79d5f4f54`
+- Squash merge SHA on `rpg`: `daf4e62a07334cf462f90c02827f29daa88ffbe8`
+- Status: complete
+
+Delivered:
+
+- the standalone voice profile form initializes from the central cloning provider, language, and quality defaults
+- TTS provider fallback is used when a dedicated cloning provider is not configured
+- settings revisions hydrate untouched forms without erasing in-progress job edits
+- Reset defaults restores central values and clears transient job fields
+- submitted jobs preserve explicit provider, language, quality, sample, profile-name, and reference-text overrides
+- pure helper tests and the existing workspace component test cover initialization, reset, and payload precedence
+
+Both required workflows passed on the exact implementation head, including web typecheck, full web unit tests, and the representative deterministic RPG smoke.
+
 ## Next recommended slice
 
-### SCC-F1.2 — Voice Studio and voice-cloning default adoption
+### SCC-F1.2b — Voice Studio tuning and effects adoption
 
-Initialize Voice Studio and voice-cloning forms from the central voice profile, tuning, effects, language, and quality defaults. Preserve all per-job edits and add reset-to-default behavior backed by focused regression tests.
+Initialize the combined Voice Studio synthesis and embedded clone forms from the central TTS provider, output tuning, effects, cloning language, and cloning quality defaults. Add explicit reset-to-default actions while preserving script, speaker, voice, and per-job overrides.
 
 Remaining follow-up sequence:
 
-1. SCC-F1.2 Voice Studio and voice-cloning initialization/reset-to-default behavior
+1. SCC-F1.2b Voice Studio tuning/effects and embedded-clone defaults
 2. SCC-F1.3 Chatbot new-session provider/model defaults
 3. SCC-F1.4 Storyteller and Podcast job metadata defaults
 4. SCC-F1.5 RPG campaign-wizard request initialization
