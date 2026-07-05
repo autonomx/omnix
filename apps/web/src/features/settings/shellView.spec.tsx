@@ -15,5 +15,8 @@ describe('settings shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Images & Speech Input/ }));
     expect(screen.getByRole('heading', { name: 'Images & Speech Input' })).toBeInTheDocument();
     expect(screen.getByLabelText('Width')).toBeInTheDocument();
+    const categoryButtons = screen.getByLabelText('Settings categories').querySelectorAll('nav button');
+    fireEvent.click(categoryButtons[9]!);
+    expect(screen.getByText('Configuration ownership')).toBeInTheDocument();
   });
 });
