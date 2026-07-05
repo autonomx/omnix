@@ -7,6 +7,7 @@ import { OmnixApp } from './app/OmnixApp';
 import { omnixTheme } from './design/theme';
 import './features/chatbot/sessionTools';
 import './features/podcast/podcastSessionGuard';
+import './features/voice/voiceJobListGuard';
 import './styles.css';
 import './legacy-layout.css';
 import './features/chatbot/ChatbotWorkspaceTools.css';
