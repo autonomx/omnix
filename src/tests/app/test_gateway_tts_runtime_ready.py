@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any
 
 from fastapi import FastAPI
@@ -99,6 +101,34 @@ def test_startup_warmup_env_can_enable_or_disable(monkeypatch) -> None:
     assert tts_runtime_state.startup_warmup_enabled() is True
     monkeypatch.setenv("OMNIX_TTS_STARTUP_WARMUP", "0")
     assert tts_runtime_state.startup_warmup_enabled() is False
+
+
+def test_startup_warmup_runs_in_background(monkeypatch) -> None:
+    reset_state()
+    app = FastAPI(title="Lifecycle Test")
+    calls: list[str] = []
+
+    def slow_warmup(trigger: str) -> dict[str, Any]:
+        calls.append(trigger)
+        time.sleep(0.05)
+        return {"status": "ready"}
+
+    monkeypatch.setattr(tts_runtime_routes, "startup_warmup_enabled", lambda: True)
+    monkeypatch.setattr(tts_runtime_routes, "warm_tts_runtime", slow_warmup)
+    tts_runtime_routes.register_tts_runtime_routes(app)
+
+    async def run_startup() -> float:
+        started = time.perf_counter()
+        await app.router.on_startup[0]()
+        elapsed = time.perf_counter() - started
+        task = getattr(app.state, "_omnix_tts_startup_warmup_task")
+        await task
+        return elapsed
+
+    elapsed = asyncio.run(run_startup())
+
+    assert elapsed < 0.04
+    assert calls == ["startup"]
 
 
 def test_runtime_routes_register_once() -> None:

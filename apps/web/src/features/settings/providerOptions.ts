@@ -2,16 +2,31 @@ import type { ProviderFacadePayload } from '../../api/client';
 
 export type ProviderOption = { id: string; label: string };
 
+function settingsProviderId(id: string, family: string): string {
+  const prefix = `${family}:`;
+  return id.startsWith(prefix) ? id.slice(prefix.length) : id;
+}
+
 export function providerOptions(payload: ProviderFacadePayload | undefined, capability: string): ProviderOption[] {
-  return (payload?.providers ?? [])
-    .filter((provider) => provider.capabilities.some((item) => item === capability) || provider.family === capability)
-    .map((provider) => ({ id: provider.id, label: provider.label || provider.id }))
+  const options = new Map<string, ProviderOption>();
+  for (const provider of payload?.providers ?? []) {
+    if (!(provider.capabilities.some((item) => item === capability) || provider.family === capability)) continue;
+    const id = settingsProviderId(provider.id, provider.family);
+    if (!options.has(id)) {
+      options.set(id, { id, label: provider.label || id });
+    }
+  }
+  return [...options.values()]
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
 export function modelOptions(payload: ProviderFacadePayload | undefined, providerId: string, capability = 'chat'): ProviderOption[] {
   return (payload?.models ?? [])
-    .filter((model) => (!providerId || model.provider_id === providerId) && model.capabilities.some((item) => item === capability))
+    .filter((model) => {
+      const normalizedProviderId = settingsProviderId(model.provider_id, model.provider_id.split(':', 1)[0] ?? '');
+      const providerMatches = !providerId || model.provider_id === providerId || normalizedProviderId === providerId;
+      return providerMatches && model.capabilities.some((item) => item === capability);
+    })
     .map((model) => ({ id: model.id, label: model.label || model.id }))
     .sort((left, right) => left.label.localeCompare(right.label));
 }

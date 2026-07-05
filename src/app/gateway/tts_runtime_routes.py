@@ -28,7 +28,8 @@ def register_tts_runtime_routes(gateway: FastAPI) -> None:
                 STATE.update(status="disabled", trigger="startup")
             stream_log(WARMUP_STREAM_ID, "lifecycle", "startup_warmup_disabled")
             return
-        await asyncio.to_thread(warm_tts_runtime, "startup")
+        task = asyncio.create_task(asyncio.to_thread(warm_tts_runtime, "startup"))
+        setattr(gateway.state, "_omnix_tts_startup_warmup_task", task)
 
     gateway.router.add_event_handler("startup", startup)
 

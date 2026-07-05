@@ -136,6 +136,14 @@ describe('live voice PCM session', () => {
     expect(FakeAudioContext.instances).toHaveLength(1);
     expect(FakeAudioWorkletNode.instances).toHaveLength(1);
     expect(FakeWebSocket.instances).toHaveLength(2);
+    const firstRequest = JSON.parse(FakeWebSocket.instances[0].sent[0]) as {
+      non_streaming_mode?: boolean;
+      parity_mode?: boolean;
+      diagnostics_stream_id?: string;
+    };
+    expect(firstRequest.non_streaming_mode).toBe(false);
+    expect(firstRequest.parity_mode).toBe(true);
+    expect(firstRequest.diagnostics_stream_id).toContain('chat-live-');
     const messages = FakeAudioWorkletNode.instances[0].port.messages;
     expect(messages.filter((message) => (message as { type?: string }).type === 'push')).toHaveLength(2);
     expect(messages.filter((message) => (message as { type?: string }).type === 'end')).toHaveLength(1);

@@ -64,6 +64,46 @@ def test_gateway_jobs_are_durable_across_clients(tmp_path: Path) -> None:
     assert payload["stages"][0]["id"] == "run"
 
 
+def test_gateway_job_list_uses_bounded_browser_safe_summaries(tmp_path: Path) -> None:
+    client = _client(tmp_path / "jobs.sqlite")
+    audio = "data:audio/wav;base64," + ("A" * 8_000)
+    first = client.post(
+        "/api/jobs",
+        json={
+            "module": "voice",
+            "type": "tts.synthesize",
+            "resource_class": "gpu:tts",
+            "input_payload": {"text": "hello", "sample_audio_base64": "B" * 8_000},
+        },
+    ).json()
+    second = _create_job(client, module="diagnostics", job_type="diagnostics.echo", resource_class="cpu")
+    completed = client.post(
+        f"/api/jobs/{first['id']}/complete",
+        json={"output_refs": [{"data_url": audio, "oversized_note": "N" * 8_000}]},
+    )
+    assert completed.status_code == 200
+
+    response = client.get("/api/jobs", params={"limit": 1})
+
+    assert response.status_code == 200
+    jobs = response.json()["jobs"]
+    assert [job["id"] for job in jobs] == [second["id"]]
+
+    response = client.get("/api/jobs", params={"limit": 10})
+    jobs_by_id = {job["id"]: job for job in response.json()["jobs"]}
+    projected = jobs_by_id[first["id"]]
+    assert "sample_audio_base64" not in projected["input_payload"]
+    assert projected["input_payload"]["sample_audio_base64_omitted"] is True
+    assert "data_url" not in projected["output_refs"][0]
+    assert projected["output_refs"][0]["data_url_omitted"] is True
+    assert "oversized_note" not in projected["output_refs"][0]
+    assert projected["output_refs"][0]["oversized_note_omitted"] is True
+
+    full = client.get("/api/jobs", params={"limit": 10, "full": True}).json()["jobs"]
+    full_by_id = {job["id"]: job for job in full}
+    assert full_by_id[first["id"]]["output_refs"][0]["data_url"] == audio
+
+
 @pytest.mark.asyncio
 async def test_slow_rpg_compat_request_does_not_block_job_acknowledgement(monkeypatch, tmp_path: Path) -> None:
     from app.gateway import main as gateway_main

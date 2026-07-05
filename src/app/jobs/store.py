@@ -161,11 +161,14 @@ class SQLiteJobStore:
             self._append_event(conn, job.id, "job.created", job.model_dump(mode="json"))
         return job
 
-    def list_jobs(self) -> list[JobRecord]:
+    def list_jobs(self, limit: int | None = None) -> list[JobRecord]:
+        query = "SELECT * FROM jobs ORDER BY created_at DESC, id DESC"
+        params: tuple[Any, ...] = ()
+        if limit is not None:
+            query += " LIMIT ?"
+            params = (max(0, limit),)
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM jobs ORDER BY created_at DESC, id DESC"
-            ).fetchall()
+            rows = conn.execute(query, params).fetchall()
         return [self._row_to_job(row) for row in rows]
 
     def get_job(self, job_id: str) -> JobRecord | None:

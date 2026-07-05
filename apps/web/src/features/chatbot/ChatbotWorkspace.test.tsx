@@ -73,6 +73,14 @@ function assetPayload() {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
+
 afterEach(() => {
   window.localStorage.clear();
   vi.useRealTimers();
@@ -81,6 +89,40 @@ afterEach(() => {
 });
 
 describe('ChatbotWorkspace', () => {
+  it('shows chat loading states instead of empty states while sessions are pending', async () => {
+    const sessions = deferred<Response>();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') {
+        return Response.json(providerPayload());
+      }
+
+      if (path === '/api/assets') {
+        return Response.json(assetPayload());
+      }
+
+      if (path === '/api/chat/sessions') {
+        return sessions.promise;
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    expect(await screen.findByText('Loading chat sessions...')).toBeInTheDocument();
+    expect(screen.getByText('Loading chat messages...')).toBeInTheDocument();
+    expect(screen.queryByText('No chat sessions yet.')).not.toBeInTheDocument();
+    expect(screen.queryByText('No chat messages yet.')).not.toBeInTheDocument();
+
+    sessions.resolve(Response.json({ sessions: [] }));
+
+    expect(await screen.findByText('No chat sessions yet.')).toBeInTheDocument();
+    expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
+  });
+
   it('opens an existing chat scrolled to the latest message', async () => {
     const scrollIntoViewMock = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -249,6 +291,12 @@ describe('ChatbotWorkspace', () => {
     fireEvent.change(screen.getByLabelText('Cloned voice'), { target: { value: 'ari-clone' } });
     expect(screen.getByLabelText('Cloned voice')).toHaveValue('ari-clone');
     expect(JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') ?? '{}')).toMatchObject({ voiceId: 'ari-clone' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Settings view' }));
+    expect(screen.getByLabelText('Live mic sensitivity')).toHaveValue('55');
+    fireEvent.change(screen.getByLabelText('Live mic sensitivity'), { target: { value: '35' } });
+    expect(JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') ?? '{}')).toMatchObject({ liveVoiceSensitivity: 35 });
+    fireEvent.click(screen.getByRole('button', { name: 'Open Chats view' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Tell me a fun fact' }));
     expect(screen.getByLabelText('Message')).toHaveValue('Tell me a fun fact');

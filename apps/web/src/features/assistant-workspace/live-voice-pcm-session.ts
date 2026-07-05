@@ -190,7 +190,7 @@ export async function createLiveVoicePcmSession(
         repetition_penalty: 1.0,
         append_silence: false,
         non_streaming_mode: false,
-        parity_mode: false,
+        parity_mode: true,
         diagnostics_stream_id: phraseStreamId,
       }));
     }, { once: true });

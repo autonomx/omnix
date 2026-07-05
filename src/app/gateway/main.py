@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -48,6 +48,7 @@ from app.jobs import (
     default_job_store,
     default_model_residency_store,
 )
+from app.gateway.job_summaries import summarize_job
 from app.platform import (
     DiagnosticsPayload,
     LegacyGenerateTitleRequest,
@@ -603,8 +604,11 @@ def create_gateway_app(
         return get_job_store().create_job(request)
 
     @gateway.get("/api/jobs", response_model=JobListResponse, tags=["jobs"])
-    def list_jobs() -> JobListResponse:
-        return JobListResponse(jobs=get_job_store().list_jobs())
+    def list_jobs(limit: int = Query(default=100, ge=1, le=500), full: bool = False) -> JobListResponse:
+        jobs = get_job_store().list_jobs(limit=limit)
+        if full:
+            return JobListResponse(jobs=jobs)
+        return JobListResponse(jobs=[summarize_job(job) for job in jobs])
 
     @gateway.get("/events", include_in_schema=False)
     async def events(after_id: int = 0, last_event_id: str | None = Header(default=None, alias="Last-Event-ID")) -> StreamingResponse:

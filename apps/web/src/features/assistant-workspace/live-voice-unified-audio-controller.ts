@@ -210,9 +210,10 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
   });
 }
 
-function stopLiveVoiceUnifiedAudio(): void {
+function stopLiveVoiceUnifiedAudio(event?: Event): void {
+  const reason = event?.type === LIVE_VOICE_INTERRUPT_EVENT ? 'voice-interrupt' : 'live-call-stop';
   playbackGeneration += 1;
-  void stopActiveTurn('live-call-stop');
+  void stopActiveTurn(reason);
   stopAssistantPcmStream(document);
   setVoiceSpeaking(false);
 }

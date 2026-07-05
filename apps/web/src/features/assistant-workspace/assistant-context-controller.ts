@@ -21,6 +21,7 @@ type DisplayMediaDevices = MediaDevices & {
 
 const CONTEXT_STORAGE_KEY = 'omnix.chatbot.contextSettings';
 const CONTEXT_CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
+const DESKTOP_ACTION_ATTRIBUTE = 'data-omnix-desktop-action';
 const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages$/;
 const assistantContextWindow = window as AssistantContextWindow;
@@ -45,14 +46,18 @@ export function initializeAssistantContextController(root: ParentNode = document
 
 export function assistantContextControlsMissing(root: ParentNode = document): boolean {
   const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
+  const composerActions = root.querySelector<HTMLElement>('.assistant-composer-actions');
   const audioDevices = root.querySelector<HTMLElement>('.assistant-audio-devices');
   const composerMissing = Boolean(
     composerControls && !composerControls.querySelector(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`),
   );
+  const desktopActionMissing = Boolean(
+    composerActions && !composerActions.querySelector(`[${DESKTOP_ACTION_ATTRIBUTE}]`),
+  );
   const desktopStatusMissing = Boolean(
     audioDevices && !audioDevices.querySelector(`[${DESKTOP_STATUS_ATTRIBUTE}]`),
   );
-  return composerMissing || desktopStatusMissing;
+  return composerMissing || desktopActionMissing || desktopStatusMissing;
 }
 
 export function isAssistantMessageRequest(url: string, method: string): boolean {
@@ -72,6 +77,10 @@ export function webSearchModeLabel(mode: WebSearchMode, requested = false): stri
   if (mode === 'automatic') return 'Automatic';
   if (mode === 'manual') return requested ? 'Next turn armed' : 'Manual';
   return 'Disabled';
+}
+
+export function desktopStatusLabel(isSharing: boolean, status: string): string {
+  return isSharing || status !== 'Off' ? status : 'Off';
 }
 
 function installFetchInterceptor(): void {
@@ -103,7 +112,7 @@ function installFetchInterceptor(): void {
           : 'Current frame attached';
       } catch (error) {
         desktopStatus = error instanceof Error ? error.message : 'Capture failed';
-        stopDesktopShare();
+        stopDesktopShare({ resetStatus: false });
       }
       renderControls();
     }
@@ -189,6 +198,16 @@ function injectControls(root: ParentNode): void {
     composerControls.append(container);
   }
 
+  const composerActions = root.querySelector<HTMLElement>('.assistant-composer-actions');
+  if (composerActions && !composerActions.querySelector(`[${DESKTOP_ACTION_ATTRIBUTE}]`)) {
+    const desktopAction = document.createElement('button');
+    desktopAction.type = 'button';
+    desktopAction.className = 'assistant-context-desktop-inline assistant-context-desktop';
+    desktopAction.setAttribute(DESKTOP_ACTION_ATTRIBUTE, 'true');
+    desktopAction.addEventListener('click', () => void toggleDesktopShare());
+    composerActions.prepend(desktopAction);
+  }
+
   const audioDevices = root.querySelector<HTMLElement>('.assistant-audio-devices');
   if (audioDevices && !audioDevices.querySelector(`[${DESKTOP_STATUS_ATTRIBUTE}]`)) {
     const row = document.createElement('div');
@@ -221,7 +240,7 @@ function renderControls(): void {
     button.innerHTML = `<span>Desktop</span><strong>${active ? 'Sharing' : 'Off'}</strong>`;
   });
   document.querySelectorAll<HTMLElement>('.assistant-desktop-status-value').forEach((element) => {
-    element.textContent = desktopShare ? desktopStatus : 'Off';
+    element.textContent = desktopStatusLabel(desktopShare !== null, desktopStatus);
   });
 }
 
@@ -262,18 +281,18 @@ async function toggleDesktopShare(): Promise<void> {
     desktopStatus = error instanceof Error && error.name === 'NotAllowedError'
       ? 'Sharing cancelled'
       : error instanceof Error ? error.message : 'Could not share desktop';
-    stopDesktopShare();
+    stopDesktopShare({ resetStatus: false });
   }
   renderControls();
 }
 
-function stopDesktopShare(): void {
+function stopDesktopShare(options: { resetStatus?: boolean } = {}): void {
   const current = desktopShare;
   desktopShare = null;
   current?.capture.stop();
   current?.stream.getTracks().forEach((track) => track.stop());
   if (current) current.video.srcObject = null;
-  desktopStatus = 'Off';
+  if (options.resetStatus !== false) desktopStatus = 'Off';
 }
 
 function waitForVideoDimensions(video: HTMLVideoElement): Promise<void> {

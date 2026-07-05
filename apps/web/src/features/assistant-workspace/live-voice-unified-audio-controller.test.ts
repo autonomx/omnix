@@ -154,11 +154,11 @@ describe('live voice unified audio controller', () => {
     await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-interrupt'));
 
-    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalledWith('live-call-stop'));
+    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalledWith('voice-interrupt'));
     expect(mocks.stopButtonStream).toHaveBeenCalled();
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_stopped',
-      { reason: 'live-call-stop' },
+      { reason: 'voice-interrupt' },
     ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
     finishResolve();

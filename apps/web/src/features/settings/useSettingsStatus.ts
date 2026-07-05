@@ -13,7 +13,6 @@ export type SettingsStatusSnapshot = {
 };
 
 const initialStatus: SettingsStatusSnapshot = { gateway: 'Checking', llm: 'Checking', tts: 'Checking', stt: 'Checking', image: 'Checking', hermes: 'Checking', activeJobs: 0, loadedModels: 0 };
-const terminal = new Set(['completed', 'complete', 'succeeded', 'success', 'done', 'failed', 'error', 'cancelled', 'canceled']);
 
 function familyStatus(payload: ProviderFacadePayload | undefined, family: string): string {
   const provider = payload?.providers.find((entry) => entry.family === family || entry.capabilities.some((capability) => capability === family));
@@ -27,16 +26,15 @@ export function useSettingsStatus() {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    const [runtime, providers, jobs, residency] = await Promise.allSettled([
+    const [runtime, providers, residency] = await Promise.allSettled([
       omnixApiClient.get<Record<string, unknown>>('/api/runtime/status'),
       omnixApiClient.listProviders(),
-      omnixApiClient.listJobs(),
       omnixApiClient.getModelResidency(),
     ]);
     const providerPayload = providers.status === 'fulfilled' ? providers.value : undefined;
-    const jobRows = jobs.status === 'fulfilled' ? jobs.value.jobs : [];
     const residencyRows = residency.status === 'fulfilled' ? residency.value.records ?? [] : [];
     const runtimeValue = runtime.status === 'fulfilled' ? runtime.value : {};
+    const activeJobs = Number(runtimeValue.active_jobs ?? runtimeValue.activeJobs ?? 0);
     setStatus({
       gateway: runtime.status === 'fulfilled' ? String(runtimeValue.status ?? (runtimeValue.ok ? 'Ready' : 'Degraded')) : 'Offline',
       llm: familyStatus(providerPayload, 'llm'),
@@ -44,10 +42,10 @@ export function useSettingsStatus() {
       stt: familyStatus(providerPayload, 'stt'),
       image: familyStatus(providerPayload, 'image'),
       hermes: String((runtimeValue.compatibility as Record<string, unknown> | undefined)?.hermes ?? 'Disabled'),
-      activeJobs: jobRows.filter((job) => !terminal.has(String(job.status).toLowerCase())).length,
+      activeJobs: Number.isFinite(activeJobs) ? activeJobs : 0,
       loadedModels: Array.isArray(residencyRows) ? residencyRows.length : 0,
     });
-    const failure = [runtime, providers, jobs, residency].find((result) => result.status === 'rejected');
+    const failure = [runtime, providers, residency].find((result) => result.status === 'rejected');
     setLastError(failure?.status === 'rejected' ? String(failure.reason instanceof Error ? failure.reason.message : failure.reason) : '');
     setRefreshing(false);
   }, []);

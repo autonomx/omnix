@@ -31,3 +31,38 @@
 .assistant-context-manual[hidden] {
   display: none !important;
 }
+
+.assistant-context-desktop-inline {
+  align-items: center;
+  background: rgba(17, 24, 39, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  color: #f8fafc;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  font: inherit;
+  gap: 0.05rem;
+  justify-content: center;
+  min-height: 3.15rem;
+  min-width: 5.75rem;
+  padding: 0.45rem 0.75rem;
+}
+
+.assistant-context-desktop-inline span {
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.assistant-context-desktop-inline strong {
+  color: #ffffff;
+  font-size: 0.84rem;
+  line-height: 1.1;
+  max-width: 4.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

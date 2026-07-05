@@ -30,6 +30,7 @@ type LiveVoiceSession = {
   silenceTimer: ReturnType<typeof setTimeout> | null;
   finalResponseTimer: ReturnType<typeof setTimeout> | null;
   voiceLevel: number;
+  speechFrameCount: number;
   perfTurnId: string | null;
   sttFinalRequestedAt: number | null;
 };
@@ -39,7 +40,11 @@ type PendingStart = {
   token: number;
 };
 
-const SPEECH_RMS_THRESHOLD = 0.015;
+const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
+const DEFAULT_LIVE_VOICE_SENSITIVITY = 55;
+const MIN_SPEECH_RMS_THRESHOLD = 0.012;
+const MAX_SPEECH_RMS_THRESHOLD = 0.06;
+const INTERRUPT_CONFIRMATION_FRAMES = 3;
 const SILENCE_FINALIZE_MS = 650;
 const FINAL_RESPONSE_TIMEOUT_MS = 8_000;
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
@@ -192,6 +197,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       silenceTimer: null,
       finalResponseTimer: null,
       voiceLevel: 0,
+      speechFrameCount: 0,
       perfTurnId: null,
       sttFinalRequestedAt: null,
     };
@@ -304,15 +310,17 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
   const assistantSpeaking = orb?.dataset.voiceMode === 'speaking';
   const rms = calculateRms(audio);
 
-  if (!assistantSpeaking) updateVoiceVisualizer(session, rms);
+  updateVoiceVisualizer(session, rms);
   if (session.finalRequested) return;
 
-  const speechStarted = rms >= SPEECH_RMS_THRESHOLD;
-  if (assistantSpeaking && speechStarted && !session.speechDetected) {
+  const speechStarted = rms >= liveVoiceSpeechThreshold();
+  session.speechFrameCount = speechStarted ? session.speechFrameCount + 1 : 0;
+  const confirmedSpeech = session.speechFrameCount >= INTERRUPT_CONFIRMATION_FRAMES;
+  if (assistantSpeaking && confirmedSpeech && !session.speechDetected) {
     dispatchAssistantVoiceInterrupt(session.card);
   }
 
-  if (speechStarted) {
+  if (confirmedSpeech) {
     session.speechDetected = true;
     if (session.silenceTimer) {
       clearTimeout(session.silenceTimer);
@@ -409,9 +417,34 @@ function resetTurnState(session: LiveVoiceSession): void {
   session.silenceTimer = null;
   session.finalResponseTimer = null;
   session.speechDetected = false;
+  session.speechFrameCount = 0;
   session.finalRequested = false;
   session.perfTurnId = null;
   session.sttFinalRequestedAt = null;
+}
+
+export function liveVoiceSpeechThreshold(): number {
+  const sensitivity = readLiveVoiceSensitivity();
+  const normalized = (sensitivity - 1) / 99;
+  return MAX_SPEECH_RMS_THRESHOLD - normalized * (MAX_SPEECH_RMS_THRESHOLD - MIN_SPEECH_RMS_THRESHOLD);
+}
+
+function readLiveVoiceSensitivity(): number {
+  try {
+    if (typeof window === 'undefined') return DEFAULT_LIVE_VOICE_SENSITIVITY;
+    const raw = window.localStorage.getItem(ASSISTANT_SETTINGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_LIVE_VOICE_SENSITIVITY;
+    const parsed = JSON.parse(raw) as { liveVoiceSensitivity?: unknown };
+    return clampSensitivity(parsed.liveVoiceSensitivity);
+  } catch {
+    return DEFAULT_LIVE_VOICE_SENSITIVITY;
+  }
+}
+
+function clampSensitivity(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_LIVE_VOICE_SENSITIVITY;
+  return Math.min(100, Math.max(1, Math.round(parsed)));
 }
 
 function stopLiveVoice(card: HTMLElement, nextStatus: StreamingSttConnectionStatus): void {
