@@ -14,8 +14,20 @@ class FakeMessagePort {
 
   postMessage(message: unknown): void {
     this.messages.push(message);
-    if ((message as { type?: string })?.type === 'end') {
-      queueMicrotask(() => this.onmessage?.({ data: { type: 'drained' } } as MessageEvent));
+    const messageType = (message as { type?: string })?.type;
+    if (messageType === 'push') {
+      const samples = (message as { samples?: Float32Array }).samples;
+      queueMicrotask(() => this.onmessage?.({
+        data: {
+          type: 'buffered',
+          incoming_samples: samples?.length ?? 0,
+          buffered_samples: samples?.length ?? 0,
+        },
+      } as MessageEvent));
+    }
+    if (messageType === 'end') {
+      queueMicrotask(() => this.onmessage?.({ data: { type: 'input_ended', buffered_samples: 0 } } as MessageEvent));
+      queueMicrotask(() => this.onmessage?.({ data: { type: 'drained', buffered_samples: 0 } } as MessageEvent));
     }
   }
 
@@ -45,6 +57,8 @@ class FakeAudioContext {
   static contexts: FakeAudioContext[] = [];
   state: AudioContextState = 'running';
   sampleRate = 24_000;
+  baseLatency = 0.01;
+  outputLatency = 0.02;
   destination = {} as AudioDestinationNode;
   audioWorklet = { addModule: vi.fn().mockResolvedValue(undefined) };
   resume = vi.fn().mockResolvedValue(undefined);
@@ -65,13 +79,19 @@ class FakeWebSocket {
 
   readonly url: string;
   binaryType: BinaryType = 'blob';
+  bufferedAmount = 0;
+  readyState = 0;
   sent: string[] = [];
   private listeners = new Map<string, SocketListener[]>();
+  private streamStarted = false;
 
   constructor(url: string | URL) {
     this.url = String(url);
     FakeWebSocket.instances.push(this);
-    queueMicrotask(() => this.emit('open', new Event('open')));
+    queueMicrotask(() => {
+      this.readyState = 1;
+      this.emit('open', new Event('open'));
+    });
   }
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject | null): void {
@@ -83,18 +103,40 @@ class FakeWebSocket {
   }
 
   send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
-    this.sent.push(String(data));
+    const text = String(data);
+    this.sent.push(text);
+    let message: { type?: string } = {};
+    try { message = JSON.parse(text) as { type?: string }; } catch { /* no-op */ }
+    if (message.type === 'diagnostic' || this.streamStarted) return;
+    this.streamStarted = true;
     queueMicrotask(() => {
-      this.emit('message', { data: JSON.stringify({ type: 'start', sample_rate: 24_000 }) } as MessageEvent);
+      this.emit('message', {
+        data: JSON.stringify({
+          type: 'start',
+          stream_id: 'server-stream-id',
+          sample_rate: 24_000,
+          diagnostics_log: 'resources/logs/tts-streaming.log',
+        }),
+      } as MessageEvent);
       FakeWebSocket.frames.forEach((frame) => {
         this.emit('message', { data: frame } as MessageEvent);
       });
-      this.emit('message', { data: JSON.stringify({ type: 'done' }) } as MessageEvent);
+      this.emit('message', { data: JSON.stringify({ type: 'done', stream_id: 'server-stream-id' }) } as MessageEvent);
     });
   }
 
-  close(): void {
-    this.emit('close', new Event('close'));
+  close(code = 1000, reason = ''): void {
+    if (this.readyState === 3) return;
+    this.readyState = 3;
+    this.emit('close', {
+      code,
+      reason,
+      wasClean: true,
+    } as CloseEvent);
+  }
+
+  parsedMessages(): Array<Record<string, unknown>> {
+    return this.sent.map((value) => JSON.parse(value) as Record<string, unknown>);
   }
 
   private emit(type: string, event: Event | MessageEvent): void {
@@ -139,17 +181,18 @@ afterEach(() => {
 });
 
 describe('assistant PCM stream player', () => {
-  it('uses binary websocket PCM without imposing a fixed audio-token cap', async () => {
+  it('correlates binary websocket PCM with structured diagnostics', async () => {
     installAudioFakes([pcmFrame(new Int16Array([0, 0]))]);
 
     fireEvent.click(renderMessage());
 
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
     const [socket] = FakeWebSocket.instances;
-    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
     expect(new URL(socket.url).pathname).toBe('/api/tts/stream/websocket');
     expect(socket.binaryType).toBe('arraybuffer');
-    const requestBody = JSON.parse(socket.sent[0]) as Record<string, unknown>;
+    const messages = socket.parsedMessages();
+    const requestBody = messages.find((message) => message.type !== 'diagnostic');
     expect(requestBody).toMatchObject({
       text: 'Stream this reply.',
       speaker: 'ari-clone',
@@ -157,8 +200,15 @@ describe('assistant PCM stream player', () => {
       non_streaming_mode: false,
       parity_mode: true,
     });
+    expect(requestBody).toHaveProperty('diagnostics_stream_id');
     expect(requestBody).not.toHaveProperty('max_new_tokens');
-    await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
+    const diagnosticEvents = messages
+      .filter((message) => message.type === 'diagnostic')
+      .map((message) => message.event);
+    expect(diagnosticEvents).toContain('websocket_opened');
+    expect(diagnosticEvents).toContain('network_frame_received');
+    expect(diagnosticEvents).toContain('worklet_buffered');
+    expect(diagnosticEvents).toContain('playback_finished');
   });
 
   it('keeps the adaptive AudioWorklet startup and recovery reserves', async () => {
