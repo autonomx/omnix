@@ -1,3 +1,4 @@
+export * from './moduleDefaults';
 export * from './settingsApi';
 export * from './settingsDefaults';
 export * from './settingsDocumentTypes';
