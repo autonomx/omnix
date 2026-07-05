@@ -1,18 +1,14 @@
 import { Button, Group, Progress, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { speechInputDefaults } from '../settings/moduleDefaults';
+import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback } from '../shared/FeatureSubmitFeedback';
-
-interface SttFormValues {
-  providerId: string;
-  audioAssetId: string;
-  sourcePath: string;
-  language: string;
-}
+import { buildSttInputPayload, buildSttStages, type SttJobFormValues } from './sttJobDefaults';
 
 export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -28,31 +24,42 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
     queryKey: ['platform', 'assets'],
     queryFn: () => omnixApiClient.listAssets(),
   });
-  const { register, handleSubmit, reset } = useForm<SttFormValues>({
+  const settingsQuery = useQuery({
+    queryKey: ['settings', 'profile'],
+    queryFn: () => loadSettingsProfile(),
+  });
+  const moduleDefaults = useMemo(() => speechInputDefaults(settingsQuery.data?.profile), [settingsQuery.data?.profile]);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { isDirty },
+  } = useForm<SttJobFormValues>({
     defaultValues: { providerId: '', audioAssetId: '', sourcePath: '', language: '' },
   });
+  useEffect(() => {
+    if (!settingsQuery.data || isDirty) return;
+    reset({
+      providerId: moduleDefaults.providerId,
+      audioAssetId: '',
+      sourcePath: '',
+      language: moduleDefaults.language,
+    });
+  }, [isDirty, moduleDefaults, reset, settingsQuery.data]);
   const sttProviders = useMemo(() => sttCapableProviders(providersQuery.data), [providersQuery.data]);
   const audioAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'audio' || asset.type === 'voice_sample') ?? [];
   const transcriptAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'transcript') ?? [];
   const sttJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'stt') ?? [];
   const createJobMutation = useMutation({
-    mutationFn: (values: SttFormValues) =>
+    mutationFn: (values: SttJobFormValues) =>
       omnixApiClient.createJob({
         module: 'stt',
         type: 'stt.transcribe',
         resource_class: 'gpu:stt',
         priority: 0,
         input_ref: values.audioAssetId ? { asset_id: values.audioAssetId } : null,
-        input_payload: {
-          source_path: values.sourcePath || null,
-          provider_id: values.providerId || null,
-          language: values.language || null,
-        },
-        stages: [
-          { id: 'transcribe', label: 'Transcribe audio', resource_class: 'gpu:stt', status: 'queued' },
-          { id: 'align', label: 'Align transcript', resource_class: 'cpu', status: 'queued' },
-          { id: 'store-transcript', label: 'Store transcript asset', resource_class: 'cpu', status: 'queued' },
-        ],
+        input_payload: buildSttInputPayload(values, moduleDefaults),
+        stages: buildSttStages(moduleDefaults),
       }),
     onSuccess: async (_job, values) => {
       reset({ providerId: values.providerId, audioAssetId: values.audioAssetId, sourcePath: '', language: values.language });
