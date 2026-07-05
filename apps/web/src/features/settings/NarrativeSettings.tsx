@@ -1,5 +1,10 @@
+import { useEffect } from 'react';
+import { saveStoryReadSettings } from '../storyteller/storyReadSettings';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
+
+void useEffect;
+void saveStoryReadSettings;
 
 export function NarrativeSettings() {
   const { state, dispatch } = useSettingsProfileContext();
