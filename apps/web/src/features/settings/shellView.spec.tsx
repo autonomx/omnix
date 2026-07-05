@@ -18,5 +18,7 @@ describe('settings shell', () => {
     const categoryButtons = screen.getByLabelText('Settings categories').querySelectorAll('nav button');
     fireEvent.click(categoryButtons[9]!);
     expect(screen.getByText('Configuration ownership')).toBeInTheDocument();
+    fireEvent.click(categoryButtons[10]!);
+    expect(screen.getByLabelText('Retention days')).toBeInTheDocument();
   });
 });
