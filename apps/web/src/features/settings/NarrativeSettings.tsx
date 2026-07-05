@@ -1,3 +1,5 @@
+import { SettingsSection } from './SettingsPrimitives';
+
 export function NarrativeSettings() {
-  return <div>Narrative defaults</div>;
+  return <SettingsSection title="Narrative defaults" scope="module">Configuration</SettingsSection>;
 }
