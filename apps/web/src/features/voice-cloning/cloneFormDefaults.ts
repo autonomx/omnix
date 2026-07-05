@@ -23,3 +23,13 @@ export function cloneFormDefaults(defaults: CloneModuleDefaults): CloneFormValue
     quality: defaults.quality,
   };
 }
+
+export function buildProfileInput(values: CloneFormValues, defaults: CloneModuleDefaults) {
+  return {
+    provider_id: values.providerId || defaults.providerId || null,
+    profile_name: values.profileName,
+    reference_text: values.referenceText || null,
+    language: values.language || defaults.language || null,
+    quality: values.quality || defaults.quality || null,
+  };
+}
