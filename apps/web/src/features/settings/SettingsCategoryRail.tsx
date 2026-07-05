@@ -17,8 +17,9 @@ export function SettingsCategoryRail({ activeCategory, query, onQueryChange, onS
   return (
     <aside className="settings-category-rail" aria-label="Settings categories">
       <div className="settings-category-heading">Settings</div>
-      <label className="settings-rail-search"><span aria-hidden="true">⌕</span><input aria-label="Search settings categories" value={query} onChange={(event) => onQueryChange(event.currentTarget.value)} placeholder="Search settings…" /></label>
-      <nav>{categories.map((category) => <button key={category.id} className={category.id === activeCategory ? 'active' : undefined} type="button" aria-current={category.id === activeCategory ? 'page' : undefined} onClick={() => onSelect(category.id)}><span className="settings-category-icon" aria-hidden="true">{categoryGlyphs[category.id]}</span><span>{category.label}</span></button>)}</nav>
+      <label className="settings-rail-search"><span aria-hidden="true">⌕</span><input type="search" aria-label="Search settings categories" value={query} onChange={(event) => onQueryChange(event.currentTarget.value)} placeholder="Search settings…" /></label>
+      <span className="settings-search-result-count" aria-live="polite">{normalized ? `${categories.length} matching categories` : `${categories.length} categories`}</span>
+      <nav aria-label="Settings category list">{categories.map((category) => <button key={category.id} className={category.id === activeCategory ? 'active' : undefined} type="button" aria-current={category.id === activeCategory ? 'page' : undefined} onClick={() => onSelect(category.id)}><span className="settings-category-icon" aria-hidden="true">{categoryGlyphs[category.id]}</span><span>{category.label}</span></button>)}</nav>
       {!categories.length ? <p className="settings-rail-empty">No matching settings.</p> : null}
     </aside>
   );
