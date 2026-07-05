@@ -14,7 +14,7 @@ import './SettingsResponsive.css';
 export function SettingsControlCenter() {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('ai-providers');
   const [query, setQuery] = useState('');
-  const content = activeCategory.length === 21 ? <NarrativeSettings /> : <SettingsCategoryPanel categoryId={activeCategory} />;
+  const content = activeCategory.length === 19 ? <NarrativeSettings /> : <SettingsCategoryPanel categoryId={activeCategory} />;
   return (
     <SettingsProfileProvider>
       <WorkspacePanel className="settings-control-panel">
