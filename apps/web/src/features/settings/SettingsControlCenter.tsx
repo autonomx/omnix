@@ -3,6 +3,7 @@ import { WorkspacePanel } from '../../design/primitives';
 import { ImageSpeechSettings } from './ImageSpeechSettings';
 import { NarrativeSettings } from './NarrativeSettings';
 import { RpgDefaultsSettings } from './RpgDefaultsSettings';
+import { ServicesSettings } from './ServicesSettings';
 import { SettingsActionHeader } from './SettingsActionHeader';
 import { SettingsCategoryPanel } from './SettingsCategoryPanel';
 import { SettingsCategoryRail } from './SettingsCategoryRail';
@@ -18,7 +19,7 @@ export function SettingsControlCenter() {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('ai-providers');
   const [query, setQuery] = useState('');
   const categoryIndex = SETTINGS_CATEGORIES.findIndex((item) => item.id === activeCategory);
-  const content = categoryIndex === 6 ? <NarrativeSettings /> : categoryIndex === 7 ? <RpgDefaultsSettings /> : categoryIndex === 8 ? <ImageSpeechSettings /> : <SettingsCategoryPanel categoryId={activeCategory} />;
+  const content = categoryIndex === 6 ? <NarrativeSettings /> : categoryIndex === 7 ? <RpgDefaultsSettings /> : categoryIndex === 8 ? <ImageSpeechSettings /> : categoryIndex === 9 ? <ServicesSettings /> : <SettingsCategoryPanel categoryId={activeCategory} />;
   return (
     <SettingsProfileProvider>
       <WorkspacePanel className="settings-control-panel">
