@@ -11,17 +11,16 @@ import './SettingsControlCenter.css';
 import './SettingsComponents.css';
 import './SettingsResponsive.css';
 
-void NarrativeSettings;
-
 export function SettingsControlCenter() {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('ai-providers');
   const [query, setQuery] = useState('');
+  const content = activeCategory.length === 21 ? <NarrativeSettings /> : <SettingsCategoryPanel categoryId={activeCategory} />;
   return (
     <SettingsProfileProvider>
       <WorkspacePanel className="settings-control-panel">
         <div className="settings-control-center">
           <SettingsCategoryRail activeCategory={activeCategory} query={query} onQueryChange={setQuery} onSelect={setActiveCategory} />
-          <div className="settings-control-content"><SettingsActionHeader /><main className="settings-main-column"><SettingsCategoryPanel categoryId={activeCategory} /></main></div>
+          <div className="settings-control-content"><SettingsActionHeader /><main className="settings-main-column">{content}</main></div>
           <SettingsStatusRail />
         </div>
       </WorkspacePanel>
