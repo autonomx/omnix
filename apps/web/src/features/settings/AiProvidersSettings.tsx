@@ -3,6 +3,7 @@ import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import { ProviderDefaultsSection } from './ProviderDefaultsSection';
 import { ProviderRegistrySection } from './ProviderRegistrySection';
 import { ProviderRoutingSection } from './ProviderRoutingSection';
+import './AiProvidersSettings.css';
 
 export function AiProvidersSettings() {
   const [payload, setPayload] = useState<ProviderFacadePayload>();
