@@ -16,6 +16,7 @@ import './features/assistant-workspace/assistant-context-controller.css';
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
 import './features/assistant-workspace/live-voice-form-sync';
 import './features/assistant-workspace/live-voice-controller';
+import './features/assistant-workspace/live-voice-unified-audio-controller';
 import './features/storyteller/StorytellerWorkspace.css';
 import './features/storyteller/StorytellerSidebar.css';
 import './features/storyteller/StoryMode.css';
