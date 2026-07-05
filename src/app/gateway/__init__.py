@@ -10,6 +10,7 @@ from .hermes_routes import install_hermes_route_hook
 from .realtime_routes import install_realtime_route_hook
 from .rpg_session_routes import install_rpg_session_route_hook
 from .rpg_turn_job_mirror import install_rpg_turn_job_mirror_hook
+from .tts_pcm_websocket import install_tts_pcm_websocket_hook
 
 __all__ = ["app", "create_gateway_app"]
 
@@ -19,6 +20,7 @@ install_rpg_turn_job_mirror_hook()
 install_audiobook_websocket_hook()
 install_hermes_route_hook()
 install_realtime_route_hook()
+install_tts_pcm_websocket_hook()
 import_module(".tts_streaming", __name__).install_tts_stream_hook()
 
 
