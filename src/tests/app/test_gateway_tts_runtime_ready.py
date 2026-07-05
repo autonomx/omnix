@@ -60,7 +60,7 @@ def test_warmup_loads_model_and_executes_fast_stream_chunk(monkeypatch) -> None:
     provider = FakeProvider()
     monkeypatch.setattr(tts_runtime_actions, "get_tts_provider", lambda: provider)
     monkeypatch.setattr(tts_runtime_actions, "stream_log", lambda *args, **kwargs: None)
-    monkeypatch.setattr(tts_runtime_state, "configured_speaker", lambda: None)
+    monkeypatch.setattr(tts_runtime_actions, "configured_speaker", lambda: None)
 
     result = tts_runtime_actions.warm_tts_runtime("test")
 
@@ -82,7 +82,7 @@ def test_unload_clears_provider_and_vendored_cache(monkeypatch) -> None:
     provider.started = 1
     reset_calls: list[bool] = []
     monkeypatch.setattr(tts_runtime_actions, "get_tts_provider", lambda: provider)
-    monkeypatch.setattr(tts_runtime_actions, "reset_tts_model_cache", lambda: reset_calls.append(True))
+    monkeypatch.setattr(tts_runtime_actions, "_reset_cached_model", lambda: reset_calls.append(True))
     monkeypatch.setattr(tts_runtime_actions, "stream_log", lambda *args, **kwargs: None)
 
     result = tts_runtime_actions.unload_tts_runtime("test")
