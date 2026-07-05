@@ -58,6 +58,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
   const response = await fetchImpl(input, init);
   if (!shouldUseUnifiedLiveVoiceAudio(input, init) || !response.body || !response.ok) return response;
 
+  stopAssistantPcmStream(document);
   const [applicationBranch, audioBranch] = response.body.tee();
   const generation = ++playbackGeneration;
   speechQueue = Promise.resolve();
@@ -67,10 +68,12 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
     setVoiceSpeaking(false);
   });
 
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
   return new Response(filterLegacyAudioTextChunks(applicationBranch), {
     status: response.status,
     statusText: response.statusText,
-    headers: response.headers,
+    headers,
   });
 }
 
@@ -265,5 +268,3 @@ function readStoredVoiceId(): string {
     return '';
   }
 }
-
-if (typeof window !== 'undefined' && typeof document !== 'undefined') initializeLiveVoiceUnifiedAudioController();
