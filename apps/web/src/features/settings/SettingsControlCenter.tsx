@@ -6,6 +6,8 @@ import { SettingsHeader } from './SettingsHeader';
 import { SettingsStatusRail } from './SettingsStatusRail';
 import type { SettingsCategoryId } from './settingsTypes';
 import './SettingsControlCenter.css';
+import './SettingsComponents.css';
+import './SettingsResponsive.css';
 
 export function SettingsControlCenter() {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('ai-providers');
