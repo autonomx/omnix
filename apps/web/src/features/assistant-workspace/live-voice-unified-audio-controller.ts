@@ -248,10 +248,18 @@ function shouldFlushPhrase(text: string): boolean {
 }
 
 function ensureVoiceSelectionBridge(): void {
-  const existing = document.querySelector<HTMLSelectElement>('select[aria-label="Cloned voice"]');
-  if (existing) return;
+  const mountedSettingsSelect = document.querySelector<HTMLSelectElement>(
+    'select[aria-label="Cloned voice"]:not([data-omnix-live-voice-bridge])',
+  );
+  if (mountedSettingsSelect) {
+    hiddenVoiceSelect?.remove();
+    return;
+  }
   const voiceId = readStoredVoiceId();
-  if (!voiceId) return;
+  if (!voiceId) {
+    hiddenVoiceSelect?.remove();
+    return;
+  }
   hiddenVoiceSelect ??= document.createElement('select');
   hiddenVoiceSelect.hidden = true;
   hiddenVoiceSelect.setAttribute('aria-label', 'Cloned voice');
