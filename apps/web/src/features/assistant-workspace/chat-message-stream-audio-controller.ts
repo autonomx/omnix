@@ -2,7 +2,7 @@ import {
   isAssistantPcmStreamActive,
   startAssistantPcmStream,
   stopAssistantPcmStream,
-} from './assistant-pcm-stream-player';
+} from './assistant-pcm-stream-websocket-player';
 
 const STREAM_AUDIO_BUTTON_ATTRIBUTE = 'data-omnix-stream-audio';
 const installedRoots = new WeakSet<ParentNode>();
