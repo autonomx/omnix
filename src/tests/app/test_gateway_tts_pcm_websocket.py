@@ -5,6 +5,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
+from app.gateway.tts_streaming import TtsStreamRequest, estimate_chat_stream_max_new_tokens
 
 
 class FakeTtsProvider:
@@ -19,6 +20,39 @@ class FakeTtsProvider:
 class EmptyJobStore:
     def list_events(self, after_id: int, limit: int):
         return []
+
+
+def test_chat_stream_policy_uses_fast_mode_and_text_relative_token_budget() -> None:
+    captured_text = (
+        "Hello again! It's going great, thanks for asking! I feel very positive and ready to chat "
+        "with you.  How is everything looking on your side right now?"
+    )
+    request = TtsStreamRequest.model_validate(
+        {
+            "text": captured_text,
+            "parity_mode": True,
+            "diagnostics_stream_id": "chat-captured-example",
+        }
+    )
+
+    assert len(captured_text) == 149
+    assert estimate_chat_stream_max_new_tokens(captured_text) == 235
+    assert request.max_new_tokens == 235
+    assert request.parity_mode is False
+
+
+def test_non_chat_stream_preserves_explicit_runtime_settings() -> None:
+    request = TtsStreamRequest.model_validate(
+        {
+            "text": "Diagnostic parity request",
+            "max_new_tokens": 333,
+            "parity_mode": True,
+            "diagnostics_stream_id": "manual-diagnostic",
+        }
+    )
+
+    assert request.max_new_tokens == 333
+    assert request.parity_mode is True
 
 
 def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkeypatch) -> None:
@@ -54,7 +88,7 @@ def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkey
                 "append_silence": False,
                 "non_streaming_mode": False,
                 "parity_mode": True,
-                "diagnostics_stream_id": "test-stream-1",
+                "diagnostics_stream_id": "chat-test-stream-1",
             }
         )
 
@@ -64,7 +98,7 @@ def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkey
         websocket.send_json(
             {
                 "type": "diagnostic",
-                "stream_id": "test-stream-1",
+                "stream_id": "chat-test-stream-1",
                 "event": "playback_finished",
                 "details": {"underruns": 1, "network_frames": 1},
             }
@@ -72,7 +106,7 @@ def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkey
 
     assert start == {
         "type": "start",
-        "stream_id": "test-stream-1",
+        "stream_id": "chat-test-stream-1",
         "sample_rate": 24_000,
         "sample_format": "pcm_s16le",
         "channels": 1,
@@ -80,13 +114,14 @@ def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkey
         "diagnostics_log": "/tmp/tts-streaming.log",
     }
     assert len(frame) == 4_800
-    assert done == {"type": "done", "stream_id": "test-stream-1", "partial": False}
+    assert done == {"type": "done", "stream_id": "chat-test-stream-1", "partial": False}
     assert len(provider.calls) == 1
     assert provider.calls[0]["text"] == "Hello from the websocket"
     assert provider.calls[0]["speaker"] == "Alex"
     assert provider.calls[0]["chunk_size"] == 8
     assert provider.calls[0]["non_streaming_mode"] is False
-    assert "max_new_tokens" not in provider.calls[0]
+    assert provider.calls[0]["parity_mode"] is False
+    assert provider.calls[0]["max_new_tokens"] == 192
 
     event_names = [event for _stream_id, _source, event, _details in logged_events]
     assert "request_received" in event_names

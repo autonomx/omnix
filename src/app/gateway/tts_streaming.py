@@ -11,7 +11,7 @@ from typing import Any, Callable, Iterator
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.assist_core.hermes_api import router as hermes_router
 from app.shared import get_tts_provider, remove_emojis
@@ -25,10 +25,20 @@ STREAM_START_BUFFER_MAX_CHUNKS = 1
 STREAM_OUTPUT_BLOCK_SAMPLES = 2048
 STREAM_INITIAL_SILENCE_THRESHOLD = 0.01
 STREAM_INITIAL_PREROLL_MS = 40.0
+CHAT_STREAM_MIN_NEW_TOKENS = 192
+CHAT_STREAM_MAX_NEW_TOKENS = 1_024
+CHAT_STREAM_TOKEN_OVERHEAD = 48
+
+
+def estimate_chat_stream_max_new_tokens(text: str) -> int:
+    """Bound chat speech length while leaving generous room to finish the text."""
+    normalized = remove_emojis(text or "").strip()
+    estimated = ((len(normalized) * 5) + 3) // 4 + CHAT_STREAM_TOKEN_OVERHEAD
+    return max(CHAT_STREAM_MIN_NEW_TOKENS, min(CHAT_STREAM_MAX_NEW_TOKENS, estimated))
 
 
 class TtsStreamRequest(BaseModel):
-    """Browser-facing TTS SSE request payload."""
+    """Browser-facing TTS streaming request payload."""
 
     text: str = ""
     speaker: str | None = None
@@ -43,6 +53,18 @@ class TtsStreamRequest(BaseModel):
     non_streaming_mode: bool | None = None
     parity_mode: bool | None = None
     request_id: str | None = None
+    diagnostics_stream_id: str | None = None
+
+    @model_validator(mode="after")
+    def apply_chat_stream_runtime_policy(self) -> "TtsStreamRequest":
+        """Use CUDA graphs and a text-relative completion bound for chat playback."""
+        stream_id = (self.diagnostics_stream_id or "").strip()
+        if not stream_id.startswith("chat-"):
+            return self
+        self.parity_mode = False
+        if self.max_new_tokens is None:
+            self.max_new_tokens = estimate_chat_stream_max_new_tokens(self.text)
+        return self
 
 
 def register_hermes_routes(gateway: FastAPI) -> None:
