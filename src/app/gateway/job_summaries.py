@@ -11,6 +11,8 @@ from typing import Any
 from app.jobs import JobRecord
 
 MAX_SUMMARY_STRING_CHARS = 2_048
+MAX_VOICE_INLINE_AUDIO_CHARS = 12_000_000
+MAX_VOICE_INLINE_OUTPUT_JOBS = 2
 INLINE_PAYLOAD_KEYS = {
     "audio",
     "audio_base64",
@@ -21,12 +23,12 @@ INLINE_PAYLOAD_KEYS = {
 }
 
 
-def summarize_job(job: JobRecord) -> JobRecord:
-    """Return a browser-safe job projection without embedded media payloads."""
+def summarize_job(job: JobRecord, *, keep_output_refs: bool = False) -> JobRecord:
+    """Return a browser-safe job projection with optional bounded playback data."""
     return job.model_copy(
         update={
             "input_payload": summarize_value(job.input_payload),
-            "output_refs": [summarize_mapping(ref) for ref in job.output_refs],
+            "output_refs": job.output_refs if keep_output_refs else [summarize_mapping(ref) for ref in job.output_refs],
             "logs": [summarize_mapping(log) for log in job.logs[-20:]],
             "stages": [
                 stage.model_copy(
@@ -39,6 +41,36 @@ def summarize_job(job: JobRecord) -> JobRecord:
             ],
         }
     )
+
+
+def voice_job_projections(jobs: list[JobRecord]) -> list[JobRecord]:
+    """Keep only a small recent inline-audio window for the Voice Studio list."""
+    projected: list[JobRecord] = []
+    remaining_chars = MAX_VOICE_INLINE_AUDIO_CHARS
+    retained_output_jobs = 0
+    for job in jobs:
+        inline_chars = inline_payload_chars(job.output_refs)
+        keep_output_refs = bool(
+            inline_chars
+            and retained_output_jobs < MAX_VOICE_INLINE_OUTPUT_JOBS
+            and inline_chars <= remaining_chars
+        )
+        projected.append(summarize_job(job, keep_output_refs=keep_output_refs))
+        if keep_output_refs:
+            retained_output_jobs += 1
+            remaining_chars -= inline_chars
+    return projected
+
+
+def inline_payload_chars(value: Any) -> int:
+    if isinstance(value, dict):
+        return sum(
+            len(item) if isinstance(item, str) and _should_omit_string(key, item) else inline_payload_chars(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return sum(inline_payload_chars(item) for item in value)
+    return 0
 
 
 def summarize_value(value: Any) -> Any:
