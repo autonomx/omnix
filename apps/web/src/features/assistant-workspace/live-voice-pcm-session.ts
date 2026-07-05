@@ -83,14 +83,12 @@ export async function createLiveVoicePcmSession(
   let activeSocket: WebSocket | null = null;
   let drained = false;
   let drainResolve: (() => void) | null = null;
-  let drainReject: ((error: Error) => void) | null = null;
   let totalFrames = 0;
   let totalReceivedSamples = 0;
   let underruns = 0;
   let resumes = 0;
-  const drainPromise = new Promise<void>((resolve, reject) => {
+  const drainPromise = new Promise<void>((resolve) => {
     drainResolve = resolve;
-    drainReject = reject;
   });
 
   const node = new AudioWorkletNodeCtor(audioContext, LIVE_VOICE_PCM_WORKLET_NAME, {
@@ -179,7 +177,7 @@ export async function createLiveVoicePcmSession(
         phrase_index: phraseIndex,
         phrase_stream_id: phraseStreamId,
         text_length: text.length,
-        queue_delay_ms: phraseStartedAtMs - startedAtMs,
+        turn_elapsed_ms: phraseStartedAtMs - startedAtMs,
       }, 'pcm_session');
       socket.send(JSON.stringify({
         text,
@@ -216,8 +214,9 @@ export async function createLiveVoicePcmSession(
         stats.receivedSamples += sourceSamples;
         totalFrames += 1;
         totalReceivedSamples += sourceSamples;
+        const evenBytes = event.data.byteLength - (event.data.byteLength % 2);
         const converted = pcm16ToFloat32(
-          new Int16Array(event.data.slice(0, event.data.byteLength - (event.data.byteLength % 2))),
+          new Int16Array(event.data.slice(0, evenBytes)),
           stats.sampleRate,
           audioContext.sampleRate,
         );
@@ -259,8 +258,9 @@ export async function createLiveVoicePcmSession(
           socket.send(JSON.stringify({
             type: 'diagnostic',
             stream_id: phraseStreamId,
-            event: 'phrase_buffered',
+            event: 'playback_finished',
             details: {
+              completion_scope: 'phrase_buffered_into_live_turn',
               phrase_index: phraseIndex,
               frames: stats.frameCount,
               received_samples: stats.receivedSamples,
@@ -272,6 +272,7 @@ export async function createLiveVoicePcmSession(
           // The separate live-call log still records completion.
         }
         resolve();
+        try { socket.close(1000, 'phrase-buffered'); } catch { /* ignore close failures */ }
       }
     });
 
@@ -325,7 +326,7 @@ export async function createLiveVoicePcmSession(
     try { node.port.postMessage({ type: 'stop' }); } catch { /* ignore cleanup failures */ }
     try { node.disconnect(); } catch { /* ignore cleanup failures */ }
     await audioContext.close().catch(() => undefined);
-    if (!drained) drainReject?.(new Error(`Live voice PCM session closed: ${reason}`));
+    if (!drained) drainResolve?.();
   };
 
   const finish = async (): Promise<void> => {
