@@ -7,13 +7,24 @@ import {
 
 type SourceListener = () => void;
 
+class FakeAudioParam {
+  setValueAtTime = vi.fn((_value: number, _time: number) => undefined);
+  linearRampToValueAtTime = vi.fn((_value: number, _time: number) => undefined);
+}
+
+class FakeGainNode {
+  gain = new FakeAudioParam();
+  connect = vi.fn();
+  disconnect = vi.fn();
+}
+
 class FakeAudioBufferSource {
   buffer: AudioBuffer | null = null;
   private endedListener: SourceListener | null = null;
   connect = vi.fn();
   disconnect = vi.fn();
   stop = vi.fn();
-  start = vi.fn(() => queueMicrotask(() => this.endedListener?.()));
+  start = vi.fn((_when?: number) => queueMicrotask(() => this.endedListener?.()));
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
     if (type !== 'ended') return;
@@ -25,6 +36,7 @@ class FakeAudioBufferSource {
 
 class FakeAudioContext {
   static sources: FakeAudioBufferSource[] = [];
+  static gains: FakeGainNode[] = [];
   state: AudioContextState = 'running';
   currentTime = 0;
   destination = {} as AudioDestinationNode;
@@ -42,6 +54,12 @@ class FakeAudioContext {
     const source = new FakeAudioBufferSource();
     FakeAudioContext.sources.push(source);
     return source as unknown as AudioBufferSourceNode;
+  }
+
+  createGain(): GainNode {
+    const gain = new FakeGainNode();
+    FakeAudioContext.gains.push(gain);
+    return gain as unknown as GainNode;
   }
 }
 
@@ -61,9 +79,14 @@ function renderAssistantMessage(text = 'Stream this assistant reply.'): void {
   `;
 }
 
+function pcmChunkBase64(sampleCount: number): string {
+  return window.btoa(String.fromCharCode(...new Uint8Array(sampleCount * 2)));
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
   FakeAudioContext.sources = [];
+  FakeAudioContext.gains = [];
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -100,8 +123,40 @@ describe('chat message streaming audio controller', () => {
     });
 
     await waitFor(() => expect(FakeAudioContext.sources[0]?.start).toHaveBeenCalled());
+    expect(FakeAudioContext.gains[0]?.gain.linearRampToValueAtTime).toHaveBeenCalled();
     await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
     expect(document.querySelector('button[aria-label="Stream response audio"]')).not.toBeNull();
+    cleanup();
+  });
+
+  it('buffers startup and crossfades adjacent PCM chunks', async () => {
+    renderAssistantMessage();
+    vi.stubGlobal('AudioContext', FakeAudioContext as unknown as typeof AudioContext);
+    vi.stubGlobal('ReadableStream', ReadableStream);
+    const chunk = pcmChunkBase64(2_400);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response([
+      `data: {"type":"chunk","audio_b64":"${chunk}","sample_rate":24000}`,
+      '',
+      `data: {"type":"chunk","audio_b64":"${chunk}","sample_rate":24000}`,
+      '',
+      'data: {"type":"done"}',
+      '',
+    ].join('\n'), { status: 200, headers: { 'Content-Type': 'text/event-stream' } })));
+
+    const cleanup = initializeChatMessageStreamAudioController();
+    fireEvent.click(document.querySelector('button[aria-label="Stream response audio"]') as HTMLButtonElement);
+
+    await waitFor(() => expect(FakeAudioContext.sources).toHaveLength(2));
+    const firstStart = FakeAudioContext.sources[0].start.mock.calls[0][0] ?? 0;
+    const secondStart = FakeAudioContext.sources[1].start.mock.calls[0][0] ?? 0;
+    const firstGainCalls = FakeAudioContext.gains[0].gain.linearRampToValueAtTime.mock.calls;
+    const firstFadeOutAt = firstGainCalls[firstGainCalls.length - 1][1];
+    const secondFadeIn = FakeAudioContext.gains[1].gain.linearRampToValueAtTime.mock.calls[0];
+    expect(firstStart).toBeCloseTo(0.18, 4);
+    expect(secondStart).toBeCloseTo(0.272, 4);
+    expect(firstFadeOutAt).toBeCloseTo(0.28, 4);
+    expect(secondFadeIn[0]).toBe(1);
+    expect(secondFadeIn[1]).toBeCloseTo(0.28, 4);
     cleanup();
   });
 
