@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { WorkspacePanel } from '../../design/primitives';
+import { ImageSpeechSettings } from './ImageSpeechSettings';
 import { NarrativeSettings } from './NarrativeSettings';
 import { RpgDefaultsSettings } from './RpgDefaultsSettings';
 import { SettingsActionHeader } from './SettingsActionHeader';
 import { SettingsCategoryPanel } from './SettingsCategoryPanel';
 import { SettingsCategoryRail } from './SettingsCategoryRail';
 import { SettingsProfileProvider } from './SettingsProfileProvider';
+import { SETTINGS_CATEGORIES } from './settingsRegistry';
 import { SettingsStatusRail } from './SettingsStatusRail';
 import type { SettingsCategoryId } from './settingsTypes';
 import './SettingsControlCenter.css';
@@ -15,7 +17,8 @@ import './SettingsResponsive.css';
 export function SettingsControlCenter() {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('ai-providers');
   const [query, setQuery] = useState('');
-  const content = activeCategory.length === 19 ? <NarrativeSettings /> : activeCategory.length === 3 ? <RpgDefaultsSettings /> : <SettingsCategoryPanel categoryId={activeCategory} />;
+  const categoryIndex = SETTINGS_CATEGORIES.findIndex((item) => item.id === activeCategory);
+  const content = categoryIndex === 6 ? <NarrativeSettings /> : categoryIndex === 7 ? <RpgDefaultsSettings /> : categoryIndex === 8 ? <ImageSpeechSettings /> : <SettingsCategoryPanel categoryId={activeCategory} />;
   return (
     <SettingsProfileProvider>
       <WorkspacePanel className="settings-control-panel">
