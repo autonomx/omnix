@@ -125,7 +125,7 @@ describe('assistant PCM stream player', () => {
     await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
   });
 
-  it('uses one continuously clocked AudioWorklet with startup and rebuffer reserves', async () => {
+  it('uses one worklet with stable rebuffer and smoothed transition reserves', async () => {
     installAudioWorkletFakes();
     const block = new Int16Array(2_048);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse(
@@ -138,7 +138,8 @@ describe('assistant PCM stream player', () => {
     const [node] = FakeAudioWorkletNode.nodes;
     expect(node.options.processorOptions).toMatchObject({
       startBufferSamples: 36_000,
-      rebufferSamples: 12_000,
+      rebufferSamples: 24_000,
+      transitionFadeSamples: 192,
     });
     expect(node.connect).toHaveBeenCalledTimes(1);
     expect(FakeAudioContext.contexts[0].audioWorklet.addModule).toHaveBeenCalledTimes(1);
