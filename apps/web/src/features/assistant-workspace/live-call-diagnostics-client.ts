@@ -17,7 +17,7 @@ export type LiveCallDiagnosticsReporter = {
 
 export function createLiveCallDiagnosticsReporter(traceId: string): LiveCallDiagnosticsReporter {
   let queue: LiveCallDiagnosticEvent[] = [];
-  let flushTimer: number | null = null;
+  let flushTimer: ReturnType<typeof window.setTimeout> | null = null;
   let closed = false;
   let pendingFlush: Promise<void> = Promise.resolve();
 
