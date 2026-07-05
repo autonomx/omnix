@@ -27,7 +27,8 @@ export class SettingsProfileApiError extends Error {
 
 export type SettingsFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-export async function loadSettingsProfile(fetcher: SettingsFetch = fetch): Promise<SettingsProfileEnvelope> {
+export async function loadSettingsProfile(fetcherOrContext?: SettingsFetch | unknown): Promise<SettingsProfileEnvelope> {
+  const fetcher = typeof fetcherOrContext === 'function' ? fetcherOrContext as SettingsFetch : fetch;
   const response = await fetcher('/api/settings');
   if (!response.ok) throw new SettingsProfileApiError('Settings request failed.', response.status);
   const legacy = await response.json() as SettingsApiPayload;
