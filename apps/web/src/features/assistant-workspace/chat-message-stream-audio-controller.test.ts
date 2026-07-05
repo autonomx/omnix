@@ -8,8 +8,8 @@ import {
 type SourceListener = () => void;
 
 class FakeAudioParam {
-  setValueAtTime = vi.fn();
-  linearRampToValueAtTime = vi.fn();
+  setValueAtTime = vi.fn((_value: number, _time: number) => undefined);
+  linearRampToValueAtTime = vi.fn((_value: number, _time: number) => undefined);
 }
 
 class FakeGainNode {
@@ -24,7 +24,7 @@ class FakeAudioBufferSource {
   connect = vi.fn();
   disconnect = vi.fn();
   stop = vi.fn();
-  start = vi.fn(() => queueMicrotask(() => this.endedListener?.()));
+  start = vi.fn((_when?: number) => queueMicrotask(() => this.endedListener?.()));
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
     if (type !== 'ended') return;
@@ -147,11 +147,11 @@ describe('chat message streaming audio controller', () => {
     fireEvent.click(document.querySelector('button[aria-label="Stream response audio"]') as HTMLButtonElement);
 
     await waitFor(() => expect(FakeAudioContext.sources).toHaveLength(2));
-    const firstStart = FakeAudioContext.sources[0].start.mock.calls[0][0] as number;
-    const secondStart = FakeAudioContext.sources[1].start.mock.calls[0][0] as number;
+    const firstStart = FakeAudioContext.sources[0].start.mock.calls[0][0] ?? 0;
+    const secondStart = FakeAudioContext.sources[1].start.mock.calls[0][0] ?? 0;
     const firstGainCalls = FakeAudioContext.gains[0].gain.linearRampToValueAtTime.mock.calls;
-    const firstFadeOutAt = firstGainCalls[firstGainCalls.length - 1][1] as number;
-    const secondFadeIn = FakeAudioContext.gains[1].gain.linearRampToValueAtTime.mock.calls[0] as [number, number];
+    const firstFadeOutAt = firstGainCalls[firstGainCalls.length - 1][1];
+    const secondFadeIn = FakeAudioContext.gains[1].gain.linearRampToValueAtTime.mock.calls[0];
     expect(firstStart).toBeCloseTo(0.18, 4);
     expect(secondStart).toBeCloseTo(0.272, 4);
     expect(firstFadeOutAt).toBeCloseTo(0.28, 4);
