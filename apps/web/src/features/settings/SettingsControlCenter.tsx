@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { WorkspacePanel } from '../../design/primitives';
 import { NarrativeSettings } from './NarrativeSettings';
+import { RpgDefaultsSettings } from './RpgDefaultsSettings';
 import { SettingsActionHeader } from './SettingsActionHeader';
 import { SettingsCategoryPanel } from './SettingsCategoryPanel';
 import { SettingsCategoryRail } from './SettingsCategoryRail';
@@ -14,7 +15,7 @@ import './SettingsResponsive.css';
 export function SettingsControlCenter() {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('ai-providers');
   const [query, setQuery] = useState('');
-  const content = activeCategory.length === 19 ? <NarrativeSettings /> : <SettingsCategoryPanel categoryId={activeCategory} />;
+  const content = activeCategory.length === 19 ? <NarrativeSettings /> : activeCategory.length === 3 ? <RpgDefaultsSettings /> : <SettingsCategoryPanel categoryId={activeCategory} />;
   return (
     <SettingsProfileProvider>
       <WorkspacePanel className="settings-control-panel">
