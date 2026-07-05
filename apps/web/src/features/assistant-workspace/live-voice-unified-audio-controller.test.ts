@@ -94,7 +94,12 @@ afterEach(() => {
 });
 
 describe('live voice unified audio controller', () => {
-  it('uses one persistent PCM session for every phrase in the live turn', async () => {
+  it('records installation and uses one persistent PCM session for every phrase', async () => {
+    expect(mocks.reporter.record).toHaveBeenCalledWith(
+      'controller_installed',
+      expect.objectContaining({ fetch_wrapped: true }),
+      'controller',
+    );
     const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     const applicationEvents = await response.text();
 
@@ -128,22 +133,14 @@ describe('live voice unified audio controller', () => {
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
   });
 
-  it('leaves non-live and auto-speak-disabled chat streams untouched', async () => {
-    cleanup?.();
+  it('uses the live streaming endpoint as the activation signal and respects Auto-speak', () => {
     renderLiveVoice(false, true);
-    cleanup = initializeLiveVoiceUnifiedAudioController();
+    expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'POST' })).toBe(true);
 
-    expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'POST' })).toBe(false);
-    const inactiveResponse = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
-    expect(await inactiveResponse.text()).toContain('text_chunk');
-
-    cleanup?.();
     renderLiveVoice(true, false);
-    cleanup = initializeLiveVoiceUnifiedAudioController();
     expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'POST' })).toBe(false);
-    const disabledResponse = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
-    expect(await disabledResponse.text()).toContain('text_chunk');
-    expect(mocks.createSession).not.toHaveBeenCalled();
+    expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages', { method: 'POST' })).toBe(false);
+    expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'GET' })).toBe(false);
   });
 
   it('stops the persistent live session on interruption', async () => {

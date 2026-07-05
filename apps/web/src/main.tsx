@@ -36,6 +36,8 @@ const queryClient = new QueryClient({
   },
 });
 
+initializeLiveVoiceUnifiedAudioController();
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
@@ -48,7 +50,6 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 
 window.setTimeout(() => {
   initializeChatMessageStreamAudioController();
-  initializeLiveVoiceUnifiedAudioController();
   void import('./features/assistant-workspace/assistant-context-controller').catch((error: unknown) => {
     console.error('Assistant context controls failed to initialize', error);
   });

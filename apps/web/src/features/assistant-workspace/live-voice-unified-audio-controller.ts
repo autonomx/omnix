@@ -50,6 +50,12 @@ export function initializeLiveVoiceUnifiedAudioController(): () => void {
   window.addEventListener(LIVE_VOICE_INTERRUPT_EVENT, stopLiveVoiceUnifiedAudio);
   window.addEventListener(LIVE_VOICE_STOP_EVENT, stopLiveVoiceUnifiedAudio);
   window.addEventListener('beforeunload', stopLiveVoiceUnifiedAudio);
+  const installedReporter = createLiveCallDiagnosticsReporter('live-call:controller');
+  installedReporter.record('controller_installed', {
+    location: window.location.href,
+    fetch_wrapped: window.fetch === interceptLiveVoiceFetch,
+  }, 'controller');
+  void installedReporter.close('controller_install_confirmed');
 
   return () => {
     if (originalFetch) window.fetch = originalFetch;
@@ -121,7 +127,7 @@ export function shouldUseUnifiedLiveVoiceAudio(input: RequestInfo | URL, init?: 
   if (method !== 'POST') return false;
   const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
   const url = new URL(rawUrl, window.location.origin);
-  return CHAT_STREAM_PATH.test(url.pathname) && isLiveVoiceActive() && isAutoSpeakEnabled();
+  return CHAT_STREAM_PATH.test(url.pathname) && isAutoSpeakEnabled();
 }
 
 async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: ActiveLiveTurn): Promise<void> {
@@ -224,15 +230,6 @@ async function stopActiveTurn(reason: string): Promise<void> {
   const session = await turn.sessionPromise.catch(() => null);
   await session?.stop(reason);
   await turn.reporter.close('turn_stopped', { reason });
-}
-
-function isLiveVoiceActive(): boolean {
-  const card = document.querySelector<HTMLElement>('.assistant-live-card');
-  if (!card) return false;
-  if (card.dataset.liveVoiceStatus === 'connected') return true;
-  return Array.from(card.querySelectorAll<HTMLButtonElement>('button')).some(
-    (button) => button.textContent?.trim().toLowerCase() === 'end call',
-  );
 }
 
 function isAutoSpeakEnabled(): boolean {
