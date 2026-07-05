@@ -4,6 +4,8 @@ import { initializeChatMessageStreamAudioController } from './chat-message-strea
 
 let cleanupController: (() => void) | null = null;
 
+type SocketListener = (event: Event | MessageEvent) => void;
+
 class FakeMessagePort {
   onmessage: ((event: MessageEvent) => void) | null = null;
   messages: unknown[] = [];
@@ -57,6 +59,49 @@ class FakeAudioContext {
   }
 }
 
+class FakeWebSocket {
+  static instances: FakeWebSocket[] = [];
+  static frames: ArrayBuffer[] = [];
+
+  readonly url: string;
+  binaryType: BinaryType = 'blob';
+  sent: string[] = [];
+  private listeners = new Map<string, SocketListener[]>();
+
+  constructor(url: string | URL) {
+    this.url = String(url);
+    FakeWebSocket.instances.push(this);
+    queueMicrotask(() => this.emit('open', new Event('open')));
+  }
+
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject | null): void {
+    if (!listener) return;
+    const callback: SocketListener = typeof listener === 'function'
+      ? listener as SocketListener
+      : (event) => listener.handleEvent(event);
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), callback]);
+  }
+
+  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+    this.sent.push(String(data));
+    queueMicrotask(() => {
+      this.emit('message', { data: JSON.stringify({ type: 'start', sample_rate: 24_000 }) } as MessageEvent);
+      FakeWebSocket.frames.forEach((frame) => {
+        this.emit('message', { data: frame } as MessageEvent);
+      });
+      this.emit('message', { data: JSON.stringify({ type: 'done' }) } as MessageEvent);
+    });
+  }
+
+  close(): void {
+    this.emit('close', new Event('close'));
+  }
+
+  private emit(type: string, event: Event | MessageEvent): void {
+    (this.listeners.get(type) ?? []).forEach((listener) => listener(event));
+  }
+}
+
 function renderMessage(): HTMLButtonElement {
   document.body.innerHTML = `
     <select aria-label="Cloned voice"><option value="ari-clone" selected>Ari</option></select>
@@ -70,28 +115,15 @@ function renderMessage(): HTMLButtonElement {
   return document.querySelector('button[aria-label="Stream response audio"]') as HTMLButtonElement;
 }
 
-function encodePcm(samples: Int16Array): string {
-  const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
-  let binary = '';
-  bytes.forEach((value) => { binary += String.fromCharCode(value); });
-  return window.btoa(binary);
+function pcmFrame(samples: Int16Array): ArrayBuffer {
+  return samples.buffer.slice(samples.byteOffset, samples.byteOffset + samples.byteLength) as ArrayBuffer;
 }
 
-function chunk(samples: Int16Array): string {
-  return `data: {"type":"chunk","audio_b64":"${encodePcm(samples)}","sample_rate":24000}`;
-}
-
-function streamResponse(events: string[]): Response {
-  return new Response([...events, 'data: {"type":"done"}', ''].join('\n\n'), {
-    status: 200,
-    headers: { 'Content-Type': 'text/event-stream' },
-  });
-}
-
-function installAudioWorkletFakes(): void {
+function installAudioFakes(frames: ArrayBuffer[]): void {
+  FakeWebSocket.frames = frames;
   vi.stubGlobal('AudioContext', FakeAudioContext as unknown as typeof AudioContext);
   vi.stubGlobal('AudioWorkletNode', FakeAudioWorkletNode as unknown as typeof AudioWorkletNode);
-  vi.stubGlobal('ReadableStream', ReadableStream);
+  vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
 }
 
 afterEach(() => {
@@ -100,22 +132,24 @@ afterEach(() => {
   document.body.innerHTML = '';
   FakeAudioContext.contexts = [];
   FakeAudioWorkletNode.nodes = [];
+  FakeWebSocket.instances = [];
+  FakeWebSocket.frames = [];
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('assistant PCM stream player', () => {
-  it('uses the selected voice without imposing a fixed audio-token truncation cap', async () => {
-    installAudioWorkletFakes();
-    const fetchMock = vi.fn().mockResolvedValue(streamResponse([chunk(new Int16Array([0, 0]))]));
-    vi.stubGlobal('fetch', fetchMock);
+  it('uses binary websocket PCM without imposing a fixed audio-token cap', async () => {
+    installAudioFakes([pcmFrame(new Int16Array([0, 0]))]);
 
     fireEvent.click(renderMessage());
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('/api/tts/stream/server-sent-events');
-    const requestBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const [socket] = FakeWebSocket.instances;
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    expect(new URL(socket.url).pathname).toBe('/api/tts/stream/websocket');
+    expect(socket.binaryType).toBe('arraybuffer');
+    const requestBody = JSON.parse(socket.sent[0]) as Record<string, unknown>;
     expect(requestBody).toMatchObject({
       text: 'Stream this reply.',
       speaker: 'ari-clone',
@@ -127,12 +161,8 @@ describe('assistant PCM stream player', () => {
     await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
   });
 
-  it('uses larger adaptive startup and recovery reserves', async () => {
-    installAudioWorkletFakes();
-    const block = new Int16Array(2_048);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse(
-      Array.from({ length: 8 }, () => chunk(block)),
-    )));
+  it('keeps the adaptive AudioWorklet startup and recovery reserves', async () => {
+    installAudioFakes(Array.from({ length: 8 }, () => pcmFrame(new Int16Array(2_400))));
 
     fireEvent.click(renderMessage());
 
@@ -148,12 +178,11 @@ describe('assistant PCM stream player', () => {
     expect(FakeAudioContext.contexts[0].audioWorklet.addModule).toHaveBeenCalledTimes(1);
   });
 
-  it('posts every PCM sample to the continuous queue in exact order', async () => {
-    installAudioWorkletFakes();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse([
-      chunk(new Int16Array([1_000, -1_000])),
-      chunk(new Int16Array([2_000, -2_000])),
-    ])));
+  it('posts every binary PCM sample to the continuous queue in exact order', async () => {
+    installAudioFakes([
+      pcmFrame(new Int16Array([1_000, -1_000])),
+      pcmFrame(new Int16Array([2_000, -2_000])),
+    ]);
 
     fireEvent.click(renderMessage());
 
