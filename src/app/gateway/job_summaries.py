@@ -21,20 +21,21 @@ INLINE_PAYLOAD_KEYS = {
     "sample_audio_base64",
     "video_base64",
 }
+RETAINABLE_AUDIO_KEYS = {"audio", "audio_base64", "data_url"}
 
 
-def summarize_job(job: JobRecord, *, keep_output_refs: bool = False) -> JobRecord:
+def summarize_job(job: JobRecord, *, keep_output_audio: bool = False) -> JobRecord:
     """Return a browser-safe job projection with optional bounded playback data."""
     return job.model_copy(
         update={
             "input_payload": summarize_value(job.input_payload),
-            "output_refs": job.output_refs if keep_output_refs else [summarize_mapping(ref) for ref in job.output_refs],
+            "output_refs": project_output_refs(job.output_refs, keep_inline_audio=keep_output_audio),
             "logs": [summarize_mapping(log) for log in job.logs[-20:]],
             "stages": [
                 stage.model_copy(
                     update={
                         "checkpoint_ref": summarize_value(stage.checkpoint_ref),
-                        "output_refs": [summarize_mapping(ref) for ref in stage.output_refs],
+                        "output_refs": project_output_refs(stage.output_refs, keep_inline_audio=False),
                     }
                 )
                 for stage in job.stages
@@ -50,22 +51,44 @@ def voice_job_projections(jobs: list[JobRecord]) -> list[JobRecord]:
     retained_output_jobs = 0
     for job in jobs:
         inline_chars = inline_payload_chars(job.output_refs)
-        keep_output_refs = bool(
+        keep_output_audio = bool(
             inline_chars
             and retained_output_jobs < MAX_VOICE_INLINE_OUTPUT_JOBS
             and inline_chars <= remaining_chars
         )
-        projected.append(summarize_job(job, keep_output_refs=keep_output_refs))
-        if keep_output_refs:
+        projected.append(summarize_job(job, keep_output_audio=keep_output_audio))
+        if keep_output_audio:
             retained_output_jobs += 1
             remaining_chars -= inline_chars
     return projected
 
 
+def project_output_refs(refs: list[dict[str, Any]], *, keep_inline_audio: bool) -> list[dict[str, Any]]:
+    return [project_output_mapping(ref, keep_inline_audio=keep_inline_audio) for ref in refs]
+
+
+def project_output_mapping(value: dict[str, Any], *, keep_inline_audio: bool) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    for key, item in value.items():
+        if (
+            keep_inline_audio
+            and key.lower() in RETAINABLE_AUDIO_KEYS
+            and isinstance(item, str)
+            and (item.startswith("data:audio/") or key.lower() != "data_url")
+        ):
+            summary[key] = item
+            continue
+        if isinstance(item, str) and _should_omit_string(key, item):
+            _add_omission_marker(summary, key, item)
+            continue
+        summary[key] = summarize_value(item)
+    return summary
+
+
 def inline_payload_chars(value: Any) -> int:
     if isinstance(value, dict):
         return sum(
-            len(item) if isinstance(item, str) and _should_omit_string(key, item) else inline_payload_chars(item)
+            len(item) if isinstance(item, str) and _is_inline_audio(key, item) else inline_payload_chars(item)
             for key, item in value.items()
         )
     if isinstance(value, (list, tuple)):
@@ -89,12 +112,23 @@ def summarize_mapping(value: dict[str, Any]) -> dict[str, Any]:
     summary: dict[str, Any] = {}
     for key, item in value.items():
         if isinstance(item, str) and _should_omit_string(key, item):
-            summary[f"{key}_omitted"] = True
-            summary[f"{key}_chars"] = len(item)
-            summary[f"{key}_bytes_estimate"] = _decoded_bytes_estimate(item)
+            _add_omission_marker(summary, key, item)
             continue
         summary[key] = summarize_value(item)
     return summary
+
+
+def _add_omission_marker(summary: dict[str, Any], key: str, value: str) -> None:
+    summary[f"{key}_omitted"] = True
+    summary[f"{key}_chars"] = len(value)
+    summary[f"{key}_bytes_estimate"] = _decoded_bytes_estimate(value)
+
+
+def _is_inline_audio(key: str, value: str) -> bool:
+    normalized_key = key.lower()
+    return normalized_key in RETAINABLE_AUDIO_KEYS and (
+        normalized_key != "data_url" or value.startswith("data:audio/")
+    )
 
 
 def _should_omit_string(key: str, value: str) -> bool:
