@@ -20,5 +20,7 @@ describe('settings shell', () => {
     expect(screen.getByText('Configuration ownership')).toBeInTheDocument();
     fireEvent.click(categoryButtons[10]!);
     expect(screen.getByLabelText('Retention days')).toBeInTheDocument();
+    fireEvent.click(categoryButtons[11]!);
+    expect(screen.getByRole('heading', { name: 'Runtime details' })).toBeInTheDocument();
   });
 });
