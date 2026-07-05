@@ -2,13 +2,21 @@ import { AiProvidersSettings } from './AiProvidersSettings';
 import { AppearanceSettings } from './AppearanceSettings';
 import { AssistantChatSettings } from './AssistantChatSettings';
 import { SETTINGS_CATEGORIES } from './settingsRegistry';
-import { SettingsSection } from './SettingsPrimitives';
+import { SettingsField, SettingsSection } from './SettingsPrimitives';
+import { useSettingsProfileContext } from './SettingsProfileContext';
 import type { SettingsCategoryId } from './settingsTypes';
+
+function VoiceAudioSettings() {
+  const { state, dispatch } = useSettingsProfileContext();
+  const value = state.draft.voice;
+  return <div><h2>Voice & Audio</h2><p>Defaults for synthesis, playback, effects, and voice cloning.</p><SettingsSection title="Output tuning" scope="module"><div className="settings-form-grid"><SettingsField label="Language"><input value={value.language} onChange={(event) => dispatch({ type: 'update', path: 'voice.language', value: event.currentTarget.value })} /></SettingsField><SettingsField label="Speed"><input type="number" min="0.5" max="2" step="0.05" value={value.speed} onChange={(event) => dispatch({ type: 'update', path: 'voice.speed', value: Number(event.currentTarget.value) })} /></SettingsField><SettingsField label="Stability"><input type="number" min="0" max="1" step="0.01" value={value.stability} onChange={(event) => dispatch({ type: 'update', path: 'voice.stability', value: Number(event.currentTarget.value) })} /></SettingsField><SettingsField label="Similarity"><input type="number" min="0" max="1" step="0.01" value={value.similarity} onChange={(event) => dispatch({ type: 'update', path: 'voice.similarity', value: Number(event.currentTarget.value) })} /></SettingsField><SettingsField label="Pitch"><input type="number" value={value.pitch} onChange={(event) => dispatch({ type: 'update', path: 'voice.pitch', value: Number(event.currentTarget.value) })} /></SettingsField><SettingsField label="Volume"><input type="number" value={value.volume} onChange={(event) => dispatch({ type: 'update', path: 'voice.volume', value: Number(event.currentTarget.value) })} /></SettingsField></div><div className="settings-toggle-list"><label><input type="checkbox" checked={value.streaming} onChange={(event) => dispatch({ type: 'update', path: 'voice.streaming', value: event.currentTarget.checked })} /><span>Stream generated speech</span></label></div></SettingsSection><SettingsSection title="Cloning defaults" scope="module"><div className="settings-form-grid"><SettingsField label="Language"><input value={value.cloningLanguage} onChange={(event) => dispatch({ type: 'update', path: 'voice.cloningLanguage', value: event.currentTarget.value })} /></SettingsField><SettingsField label="Quality"><select value={value.cloningQuality} onChange={(event) => dispatch({ type: 'update', path: 'voice.cloningQuality', value: event.currentTarget.value })}><option>Draft</option><option>Standard</option><option>High</option></select></SettingsField></div></SettingsSection></div>;
+}
 
 export function SettingsCategoryPanel({ categoryId }: { categoryId: SettingsCategoryId }) {
   if (categoryId === 'ai-providers') return <AiProvidersSettings />;
   if (categoryId === 'appearance-accessibility') return <AppearanceSettings />;
   if (categoryId === 'assistant-chat') return <AssistantChatSettings />;
+  if (categoryId === 'voice-audio') return <VoiceAudioSettings />;
   const category = SETTINGS_CATEGORIES.find((item) => item.id === categoryId) ?? SETTINGS_CATEGORIES[0]!;
   return <div><h2>{category.label}</h2><SettingsSection title="Configuration" scope="module">Planned.</SettingsSection></div>;
 }
