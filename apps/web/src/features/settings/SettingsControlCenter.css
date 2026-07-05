@@ -1,14 +1,19 @@
-.settings-control-panel{padding:0;overflow:hidden}
+.settings-control-panel{padding:0;overflow:hidden;position:relative}
+.settings-skip-link{position:absolute;left:12px;top:8px;z-index:20;transform:translateY(-160%);padding:8px 12px;border-radius:7px;background:var(--mantine-color-blue-7);color:#fff;text-decoration:none}
+.settings-skip-link:focus{transform:translateY(0)}
 .settings-control-center{display:grid;grid-template-columns:244px minmax(0,1fr) 300px;min-height:calc(100vh - 96px)}
 .settings-category-rail{padding:22px 14px;border-right:1px solid var(--mantine-color-dark-4)}
 .settings-category-heading{text-transform:uppercase;letter-spacing:.12em;font-size:.72rem;margin:0 8px 16px}
-.settings-rail-search{display:flex;align-items:center;gap:8px;margin:0 4px 16px;padding:9px 10px;border:1px solid var(--mantine-color-dark-4);border-radius:9px}
+.settings-rail-search{display:flex;align-items:center;gap:8px;margin:0 4px 8px;padding:9px 10px;border:1px solid var(--mantine-color-dark-4);border-radius:9px}
 .settings-rail-search input{width:100%;border:0;outline:0;background:transparent;color:inherit}
+.settings-search-result-count{display:block;margin:0 8px 12px;font-size:.7rem;opacity:.65}
 .settings-category-rail nav{display:grid;gap:4px}
 .settings-category-rail nav button{display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;width:100%;padding:10px 12px;border:1px solid transparent;border-radius:8px;background:transparent;color:inherit;text-align:left}
 .settings-category-rail nav button:hover{background:var(--mantine-color-dark-6)}
 .settings-category-rail nav button.active{border-color:var(--mantine-color-blue-7);background:var(--mantine-color-dark-6);color:var(--mantine-color-blue-3)}
+.settings-category-rail nav button:focus-visible,.settings-save-actions button:focus-visible,.settings-run-tests:focus-visible{outline:2px solid var(--mantine-color-blue-4);outline-offset:2px}
 .settings-control-content{min-width:0;padding:24px 28px 40px}
+.settings-main-column:focus{outline:none}
 .settings-control-header{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;padding-bottom:20px}
 .settings-title-block p{margin:0 0 8px}.settings-title-block p span{color:var(--mantine-color-blue-4)}
 .settings-title-block h1{margin:0;font-size:1.7rem}.settings-title-block small{display:block;margin-top:6px;opacity:.72}
