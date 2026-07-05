@@ -4,7 +4,6 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from app.providers.vendor.qwen3_tts import reset_tts_model_cache
 from app.shared import get_tts_provider
 
 from .tts_runtime_state import (
@@ -16,6 +15,12 @@ from .tts_runtime_state import (
     utc_now,
 )
 from .tts_stream_diagnostics import stream_log
+
+
+def _reset_cached_model() -> None:
+    from app.providers.vendor.qwen3_tts import reset_tts_model_cache
+
+    reset_tts_model_cache()
 
 
 def _select_speaker(provider: Any) -> str | None:
@@ -149,7 +154,7 @@ def unload_tts_runtime(trigger: str = "manual") -> dict[str, Any]:
         provider = get_tts_provider()
         if provider is None or not hasattr(provider, "stop") or not provider.stop():
             raise RuntimeError("tts_provider_unload_failed")
-        reset_tts_model_cache()
+        _reset_cached_model()
         with STATE_LOCK:
             STATE.update(
                 status="unloaded",
