@@ -3,7 +3,8 @@ import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 const STREAM_AUDIO_STATUS_ATTRIBUTE = 'data-omnix-stream-audio-status';
 const STREAMING_TTS_SAMPLE_RATE = 24_000;
 const STREAMING_TTS_START_BUFFER_SECONDS = 1.5;
-const STREAMING_TTS_REBUFFER_SECONDS = 0.5;
+const STREAMING_TTS_REBUFFER_SECONDS = 1.0;
+const STREAMING_TTS_TRANSITION_FADE_SECONDS = 0.008;
 const STREAMING_TTS_URL = '/api/tts/stream/server-sent-events';
 const STREAMING_TTS_CHUNK_SIZE = 8;
 const STREAMING_TTS_WORKLET_NAME = 'omnix-assistant-pcm-stream';
@@ -161,6 +162,9 @@ async function createContinuousPcmSink(
     processorOptions: {
       startBufferSamples: Math.round(playback.audioContext.sampleRate * STREAMING_TTS_START_BUFFER_SECONDS),
       rebufferSamples: Math.round(playback.audioContext.sampleRate * STREAMING_TTS_REBUFFER_SECONDS),
+      transitionFadeSamples: Math.round(
+        playback.audioContext.sampleRate * STREAMING_TTS_TRANSITION_FADE_SECONDS,
+      ),
     },
   });
   node.port.onmessage = (event: MessageEvent<WorkletStatusEvent>) => {
@@ -238,7 +242,11 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
     super();
     const settings = options.processorOptions || {};
     this.startBufferSamples = Math.max(1, Number(settings.startBufferSamples) || sampleRate);
-    this.rebufferSamples = Math.max(1, Number(settings.rebufferSamples) || Math.round(sampleRate * 0.5));
+    this.rebufferSamples = Math.max(1, Number(settings.rebufferSamples) || sampleRate);
+    this.transitionFadeSamples = Math.max(
+      1,
+      Number(settings.transitionFadeSamples) || Math.round(sampleRate * 0.008),
+    );
     this.queue = [];
     this.headOffset = 0;
     this.queuedSamples = 0;
@@ -247,6 +255,7 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
     this.inputEnded = false;
     this.stopped = false;
     this.drained = false;
+    this.fadeInRemaining = 0;
     this.port.onmessage = (event) => {
       const message = event.data || {};
       if (message.type === 'push' && message.samples) {
@@ -269,10 +278,15 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
     };
   }
 
+  beginFadeIn() {
+    this.fadeInRemaining = this.transitionFadeSamples;
+  }
+
   maybeStartOrResume() {
     if (!this.started && (this.queuedSamples >= this.startBufferSamples || (this.inputEnded && this.queuedSamples > 0))) {
       this.started = true;
       this.waitingForBuffer = false;
+      this.beginFadeIn();
       this.port.postMessage({ type: 'started', buffered_samples: this.queuedSamples });
       return;
     }
@@ -282,7 +296,30 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
       && (this.queuedSamples >= this.rebufferSamples || this.inputEnded)
     ) {
       this.waitingForBuffer = false;
+      this.beginFadeIn();
       this.port.postMessage({ type: 'resumed', buffered_samples: this.queuedSamples });
+    }
+  }
+
+  applyFadeIn(channel, written) {
+    let index = 0;
+    while (index < written && this.fadeInRemaining > 0) {
+      const elapsed = this.transitionFadeSamples - this.fadeInRemaining + 1;
+      const progress = Math.min(1, elapsed / this.transitionFadeSamples);
+      const gain = 0.5 * (1 - Math.cos(Math.PI * progress));
+      channel[index] *= gain;
+      this.fadeInRemaining -= 1;
+      index += 1;
+    }
+  }
+
+  applyFadeOut(channel, written) {
+    const fadeSamples = Math.min(written, this.transitionFadeSamples);
+    const start = written - fadeSamples;
+    for (let index = 0; index < fadeSamples; index += 1) {
+      const progress = (index + 1) / fadeSamples;
+      const gain = 0.5 * (1 + Math.cos(Math.PI * progress));
+      channel[start + index] *= gain;
     }
   }
 
@@ -321,7 +358,9 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
       }
     }
 
-    if (written < channel.length && this.queuedSamples === 0) {
+    this.applyFadeIn(channel, written);
+    if (this.queuedSamples === 0) {
+      this.applyFadeOut(channel, written);
       if (this.inputEnded) return this.signalDrained();
       this.waitingForBuffer = true;
       this.port.postMessage({ type: 'underrun' });
