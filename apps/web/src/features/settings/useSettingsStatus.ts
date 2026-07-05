@@ -35,7 +35,7 @@ export function useSettingsStatus() {
     ]);
     const providerPayload = providers.status === 'fulfilled' ? providers.value : undefined;
     const jobRows = jobs.status === 'fulfilled' ? jobs.value.jobs : [];
-    const residencyRows = residency.status === 'fulfilled' ? residency.value.loaded_models ?? [] : [];
+    const residencyRows = residency.status === 'fulfilled' ? residency.value.records ?? [] : [];
     const runtimeValue = runtime.status === 'fulfilled' ? runtime.value : {};
     setStatus({
       gateway: runtime.status === 'fulfilled' ? String(runtimeValue.status ?? (runtimeValue.ok ? 'Ready' : 'Degraded')) : 'Offline',
