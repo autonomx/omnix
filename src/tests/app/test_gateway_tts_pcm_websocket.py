@@ -21,11 +21,22 @@ class EmptyJobStore:
         return []
 
 
-def test_tts_pcm_websocket_emits_binary_100ms_frames(monkeypatch) -> None:
+def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkeypatch) -> None:
     from app.gateway import tts_pcm_websocket
 
     provider = FakeTtsProvider()
+    logged_events: list[tuple[str, str, str, dict[str, Any]]] = []
     monkeypatch.setattr(tts_pcm_websocket, "get_tts_provider", lambda: provider)
+    monkeypatch.setattr(tts_pcm_websocket, "diagnostics_log_path", lambda: "/tmp/tts-streaming.log")
+    monkeypatch.setattr(
+        tts_pcm_websocket,
+        "stream_log",
+        lambda stream_id, source, event, **details: logged_events.append(
+            (stream_id, source, event, details)
+        ),
+    )
+    monkeypatch.setattr(tts_pcm_websocket, "begin_stream", lambda stream_id, **details: 1)
+    monkeypatch.setattr(tts_pcm_websocket, "end_stream", lambda stream_id, **details: 0)
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
     client = TestClient(app)
 
@@ -43,25 +54,46 @@ def test_tts_pcm_websocket_emits_binary_100ms_frames(monkeypatch) -> None:
                 "append_silence": False,
                 "non_streaming_mode": False,
                 "parity_mode": True,
+                "diagnostics_stream_id": "test-stream-1",
             }
         )
 
         start = websocket.receive_json()
         frame = websocket.receive_bytes()
         done = websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "diagnostic",
+                "stream_id": "test-stream-1",
+                "event": "playback_finished",
+                "details": {"underruns": 1, "network_frames": 1},
+            }
+        )
 
     assert start == {
         "type": "start",
+        "stream_id": "test-stream-1",
         "sample_rate": 24_000,
         "sample_format": "pcm_s16le",
         "channels": 1,
         "frame_samples": 2_400,
+        "diagnostics_log": "/tmp/tts-streaming.log",
     }
     assert len(frame) == 4_800
-    assert done == {"type": "done"}
+    assert done == {"type": "done", "stream_id": "test-stream-1", "partial": False}
     assert len(provider.calls) == 1
     assert provider.calls[0]["text"] == "Hello from the websocket"
     assert provider.calls[0]["speaker"] == "Alex"
     assert provider.calls[0]["chunk_size"] == 8
     assert provider.calls[0]["non_streaming_mode"] is False
     assert "max_new_tokens" not in provider.calls[0]
+
+    event_names = [event for _stream_id, _source, event, _details in logged_events]
+    assert "request_received" in event_names
+    assert "provider_resolved" in event_names
+    assert "raw_chunk_received" in event_names
+    assert "network_frame_queued" in event_names
+    assert "network_frame_sent" in event_names
+    assert "done_control_sent" in event_names
+    assert "playback_finished" in event_names
+    assert "route_cleanup" in event_names
