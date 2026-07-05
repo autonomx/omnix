@@ -5,10 +5,10 @@ export type SettingsProfileContextValue = {
   state: SettingsDraftState;
   dispatch: Dispatch<SettingsDraftAction>;
   loading: boolean;
-  saving: boolean;
   loadError: string;
-  save: () => Promise<void>;
-  reload: () => Promise<void>;
+  saving?: boolean;
+  save?: () => Promise<void>;
+  reload?: () => Promise<void>;
 };
 
 export const SettingsProfileContext = createContext<SettingsProfileContextValue | null>(null);
