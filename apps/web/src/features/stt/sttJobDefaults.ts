@@ -24,12 +24,12 @@ export function buildSttInputPayload(values: SttJobFormValues, defaults: SttModu
 
 export function buildSttStages(defaults: SttModuleDefaults) {
   return [
-    { id: 'transcribe', label: 'Transcribe audio', resource_class: 'gpu:stt', status: 'queued' as const },
+    { id: 'transcribe', label: 'Transcribe audio', resource_class: 'gpu:stt' as const, status: 'queued' as const },
     ...(defaults.alignment
-      ? [{ id: 'align', label: 'Align transcript', resource_class: 'cpu', status: 'queued' as const }]
+      ? [{ id: 'align', label: 'Align transcript', resource_class: 'cpu' as const, status: 'queued' as const }]
       : []),
     ...(defaults.saveTranscript
-      ? [{ id: 'store-transcript', label: 'Store transcript asset', resource_class: 'cpu', status: 'queued' as const }]
+      ? [{ id: 'store-transcript', label: 'Store transcript asset', resource_class: 'cpu' as const, status: 'queued' as const }]
       : []),
   ];
 }
