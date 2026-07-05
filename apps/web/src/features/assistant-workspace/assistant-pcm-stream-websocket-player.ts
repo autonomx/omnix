@@ -21,11 +21,36 @@ type StreamingTtsControlEvent = {
   type?: string;
   message?: string;
   sample_rate?: number;
+  stream_id?: string;
+  diagnostics_log?: string;
+  partial?: boolean;
 };
 
 type WorkletStatusEvent = {
   type?: string;
   buffered_samples?: number;
+  incoming_samples?: number;
+  target_samples?: number;
+  rendered_samples?: number;
+  render_clock_samples?: number;
+  played_samples?: number;
+  underrun_count?: number;
+  current_rebuffer_samples?: number;
+  waiting_for_buffer?: boolean;
+  input_ended?: boolean;
+};
+
+type StreamStats = {
+  websocketOpenedAtMs: number | null;
+  firstFrameAtMs: number | null;
+  lastFrameAtMs: number | null;
+  networkFrames: number;
+  receivedBytes: number;
+  receivedSamples: number;
+  convertedSamples: number;
+  workletEvents: number;
+  underruns: number;
+  resumes: number;
 };
 
 type MessageStreamPlayback = {
@@ -36,6 +61,9 @@ type MessageStreamPlayback = {
   sampleRate: number;
   serverDone: boolean;
   closed: boolean;
+  streamId: string;
+  startedAtMs: number;
+  stats: StreamStats;
 };
 
 let activePlayback: MessageStreamPlayback | null = null;
@@ -68,6 +96,20 @@ export async function startAssistantPcmStream(
     sampleRate: STREAMING_TTS_SAMPLE_RATE,
     serverDone: false,
     closed: false,
+    streamId: createStreamId(),
+    startedAtMs: performance.now(),
+    stats: {
+      websocketOpenedAtMs: null,
+      firstFrameAtMs: null,
+      lastFrameAtMs: null,
+      networkFrames: 0,
+      receivedBytes: 0,
+      receivedSamples: 0,
+      convertedSamples: 0,
+      workletEvents: 0,
+      underruns: 0,
+      resumes: 0,
+    },
   };
   activePlayback = playback;
   setButtonStreaming(button, true);
@@ -80,7 +122,10 @@ export async function startAssistantPcmStream(
     await streamPcmWebSocket(playback, WebSocketCtor, text);
   } catch (error) {
     if (playback.closed || activePlayback !== playback) return;
-    terminatePlayback(playback);
+    sendDiagnostic(playback, 'playback_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    terminatePlayback(playback, 'failed');
     if (activePlayback === playback) activePlayback = null;
     setButtonStreaming(button, false);
     setStreamAudioStatus(root, error instanceof Error ? error.message : 'Streaming response audio failed.');
@@ -91,7 +136,8 @@ export function stopAssistantPcmStream(root: ParentNode, status?: string): void 
   const playback = activePlayback;
   activePlayback = null;
   if (!playback) return;
-  terminatePlayback(playback);
+  sendDiagnostic(playback, 'playback_stopped', { requested_status: status ?? null });
+  terminatePlayback(playback, 'stopped');
   setButtonStreaming(playback.button, false);
   if (status) setStreamAudioStatus(root, status);
 }
@@ -102,7 +148,8 @@ function streamPcmWebSocket(
   text: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocketCtor(streamingTtsWebSocketUrl());
+    const socketUrl = streamingTtsWebSocketUrl();
+    const socket = new WebSocketCtor(socketUrl);
     playback.socket = socket;
     socket.binaryType = 'arraybuffer';
 
@@ -111,9 +158,11 @@ function streamPcmWebSocket(
         socket.close();
         return;
       }
+      playback.stats.websocketOpenedAtMs = performance.now();
+      const voice = selectedVoiceId();
       socket.send(JSON.stringify({
         text,
-        speaker: selectedVoiceId(),
+        speaker: voice,
         language: 'English',
         chunk_size: STREAMING_TTS_CHUNK_SIZE,
         temperature: 0.6,
@@ -123,18 +172,74 @@ function streamPcmWebSocket(
         append_silence: false,
         non_streaming_mode: false,
         parity_mode: true,
+        diagnostics_stream_id: playback.streamId,
       }));
+      const audioContextWithLatency = playback.audioContext as AudioContext & { outputLatency?: number };
+      const navigatorWithMemory = navigator as Navigator & { deviceMemory?: number };
+      sendDiagnostic(playback, 'websocket_opened', {
+        websocket_url: socketUrl,
+        text_length: text.length,
+        text_preview: text.slice(0, 300),
+        speaker: voice,
+        browser_user_agent: navigator.userAgent,
+        hardware_concurrency: navigator.hardwareConcurrency,
+        device_memory_gb: navigatorWithMemory.deviceMemory ?? null,
+        document_visibility: document.visibilityState,
+        audio_context_state: playback.audioContext.state,
+        audio_context_sample_rate: playback.audioContext.sampleRate,
+        audio_context_base_latency_ms: playback.audioContext.baseLatency * 1000,
+        audio_context_output_latency_ms: (audioContextWithLatency.outputLatency ?? 0) * 1000,
+      });
     }, { once: true });
 
     socket.addEventListener('message', (event: MessageEvent<string | ArrayBuffer>) => {
       if (playback.closed) return;
       if (event.data instanceof ArrayBuffer) {
-        enqueuePcmBytes(playback, event.data);
+        const now = performance.now();
+        const previousFrameAtMs = playback.stats.lastFrameAtMs;
+        if (playback.stats.firstFrameAtMs === null) playback.stats.firstFrameAtMs = now;
+        playback.stats.lastFrameAtMs = now;
+        const frameIndex = playback.stats.networkFrames;
+        const sourceSamples = Math.floor(event.data.byteLength / 2);
+        playback.stats.networkFrames += 1;
+        playback.stats.receivedBytes += event.data.byteLength;
+        playback.stats.receivedSamples += sourceSamples;
+        sendDiagnostic(playback, 'network_frame_received', {
+          frame_index: frameIndex,
+          bytes: event.data.byteLength,
+          source_samples: sourceSamples,
+          source_sample_rate: playback.sampleRate,
+          interval_since_previous_frame_ms: previousFrameAtMs === null ? null : now - previousFrameAtMs,
+          cumulative_received_audio_ms: playback.stats.receivedSamples * 1000 / playback.sampleRate,
+          receive_elapsed_ms: now - playback.startedAtMs,
+          receive_rtf: playback.stats.receivedSamples > 0
+            ? ((now - playback.startedAtMs) / (playback.stats.receivedSamples * 1000 / playback.sampleRate))
+            : null,
+        });
+        const convertedSamples = enqueuePcmBytes(playback, event.data);
+        playback.stats.convertedSamples += convertedSamples;
+        sendDiagnostic(playback, 'network_frame_enqueued', {
+          frame_index: frameIndex,
+          converted_samples: convertedSamples,
+          cumulative_converted_samples: playback.stats.convertedSamples,
+        });
         return;
       }
       if (typeof event.data !== 'string') return;
       const message = parseStreamingTtsControlEvent(event.data);
-      if (!message) return;
+      if (!message) {
+        sendDiagnostic(playback, 'control_message_invalid', { raw_length: event.data.length });
+        return;
+      }
+      sendDiagnostic(playback, 'control_message_received', {
+        control_type: message.type ?? null,
+        server_stream_id: message.stream_id ?? null,
+        server_stream_id_matches: message.stream_id ? message.stream_id === playback.streamId : null,
+        sample_rate: message.sample_rate ?? null,
+        partial: message.partial ?? null,
+        message: message.message ?? null,
+        diagnostics_log: message.diagnostics_log ?? null,
+      });
       if (message.type === 'start' || message.type === 'format') {
         if (typeof message.sample_rate === 'number' && message.sample_rate > 0) {
           playback.sampleRate = message.sample_rate;
@@ -152,9 +257,15 @@ function streamPcmWebSocket(
     });
 
     socket.addEventListener('error', () => {
+      sendDiagnostic(playback, 'websocket_error');
       if (!playback.closed && !playback.serverDone) reject(new Error('Streaming TTS connection failed.'));
     });
-    socket.addEventListener('close', () => {
+    socket.addEventListener('close', (event: CloseEvent) => {
+      sendDiagnostic(playback, 'websocket_closed', {
+        close_code: event.code,
+        close_reason: event.reason,
+        clean: event.wasClean,
+      });
       if (!playback.closed && !playback.serverDone) reject(new Error('Streaming TTS connection closed before completion.'));
     });
   });
@@ -171,6 +282,7 @@ async function createContinuousPcmSink(
   } finally {
     moduleUrl.revoke();
   }
+  sendDiagnostic(playback, 'worklet_module_loaded');
 
   const node = new AudioWorkletNodeCtor(playback.audioContext, STREAMING_TTS_WORKLET_NAME, {
     numberOfInputs: 0,
@@ -189,55 +301,126 @@ async function createContinuousPcmSink(
   });
   node.port.onmessage = (event: MessageEvent<WorkletStatusEvent>) => {
     if (playback.closed || activePlayback !== playback) return;
-    if (event.data?.type === 'started' || event.data?.type === 'resumed') {
+    playback.stats.workletEvents += 1;
+    const eventType = event.data?.type ?? 'unknown';
+    if (eventType === 'underrun') playback.stats.underruns += 1;
+    if (eventType === 'resumed') playback.stats.resumes += 1;
+    sendDiagnostic(playback, `worklet_${eventType}`, { ...event.data });
+    if (eventType === 'started' || eventType === 'resumed') {
       setStreamAudioStatus(root, 'Streaming response audio…');
       return;
     }
-    if (event.data?.type === 'underrun') {
+    if (eventType === 'underrun') {
       setStreamAudioStatus(root, 'Rebuffering streaming response audio…');
       return;
     }
-    if (event.data?.type === 'drained' && playback.serverDone) finishPlayback(root, playback);
+    if (eventType === 'drained' && playback.serverDone) finishPlayback(root, playback);
   };
   node.connect(playback.audioContext.destination);
+  sendDiagnostic(playback, 'worklet_connected', {
+    start_buffer_samples: Math.round(playback.audioContext.sampleRate * STREAMING_TTS_START_BUFFER_SECONDS),
+    rebuffer_samples: Math.round(playback.audioContext.sampleRate * STREAMING_TTS_REBUFFER_SECONDS),
+    max_rebuffer_samples: Math.round(playback.audioContext.sampleRate * STREAMING_TTS_MAX_REBUFFER_SECONDS),
+    transition_fade_samples: Math.round(playback.audioContext.sampleRate * STREAMING_TTS_TRANSITION_FADE_SECONDS),
+  });
   return node;
 }
 
-function enqueuePcmBytes(playback: MessageStreamPlayback, buffer: ArrayBuffer): void {
-  if (playback.closed || !playback.node || buffer.byteLength < 2) return;
+function enqueuePcmBytes(playback: MessageStreamPlayback, buffer: ArrayBuffer): number {
+  if (playback.closed || !playback.node || buffer.byteLength < 2) return 0;
   const evenByteLength = buffer.byteLength - (buffer.byteLength % 2);
   const samples = new Int16Array(buffer.slice(0, evenByteLength));
   const floatSamples = pcm16ToFloat32(samples, playback.sampleRate, playback.audioContext.sampleRate);
+  const convertedSamples = floatSamples.length;
   playback.node.port.postMessage(
     { type: 'push', samples: floatSamples },
     [floatSamples.buffer],
   );
+  return convertedSamples;
 }
 
 function markServerDone(playback: MessageStreamPlayback): void {
   if (playback.closed || playback.serverDone) return;
   playback.serverDone = true;
+  sendDiagnostic(playback, 'server_done_marked');
   playback.node?.port.postMessage({ type: 'end' });
 }
 
 function finishPlayback(root: ParentNode, playback: MessageStreamPlayback): void {
   if (playback.closed) return;
+  sendDiagnostic(playback, 'playback_finished', finalDiagnostics(playback));
   playback.closed = true;
   if (activePlayback === playback) activePlayback = null;
   setButtonStreaming(playback.button, false);
-  try { playback.socket?.close(); } catch { /* ignore connection cleanup failures */ }
+  try { playback.socket?.close(1000, 'playback-finished'); } catch { /* ignore connection cleanup failures */ }
   try { playback.node?.disconnect(); } catch { /* ignore browser cleanup failures */ }
   void playback.audioContext.close().catch(() => undefined);
   setStreamAudioStatus(root, 'Streaming response audio finished.');
 }
 
-function terminatePlayback(playback: MessageStreamPlayback): void {
+function terminatePlayback(playback: MessageStreamPlayback, reason: string): void {
   if (playback.closed) return;
+  sendDiagnostic(playback, 'playback_cleanup', { reason, ...finalDiagnostics(playback) });
   playback.closed = true;
-  try { playback.socket?.close(); } catch { /* ignore connection cleanup failures */ }
+  try { playback.socket?.close(1000, reason.slice(0, 120)); } catch { /* ignore connection cleanup failures */ }
   try { playback.node?.port.postMessage({ type: 'stop' }); } catch { /* ignore browser cleanup failures */ }
   try { playback.node?.disconnect(); } catch { /* ignore browser cleanup failures */ }
   void playback.audioContext.close().catch(() => undefined);
+}
+
+function sendDiagnostic(playback: MessageStreamPlayback, event: string, details: Record<string, unknown> = {}): void {
+  const socket = playback.socket;
+  if (!socket || socket.readyState !== 1) return;
+  try {
+    socket.send(JSON.stringify({
+      type: 'diagnostic',
+      stream_id: playback.streamId,
+      event,
+      details: {
+        client_elapsed_ms: performance.now() - playback.startedAtMs,
+        audio_context_state: playback.audioContext.state,
+        websocket_buffered_amount: socket.bufferedAmount,
+        document_visibility: document.visibilityState,
+        network_frames: playback.stats.networkFrames,
+        received_samples: playback.stats.receivedSamples,
+        converted_samples: playback.stats.convertedSamples,
+        underruns: playback.stats.underruns,
+        resumes: playback.stats.resumes,
+        ...details,
+      },
+    }));
+  } catch {
+    // Diagnostics must never interrupt audio playback.
+  }
+}
+
+function finalDiagnostics(playback: MessageStreamPlayback): Record<string, unknown> {
+  return {
+    total_elapsed_ms: performance.now() - playback.startedAtMs,
+    server_done: playback.serverDone,
+    source_sample_rate: playback.sampleRate,
+    network_frames: playback.stats.networkFrames,
+    received_bytes: playback.stats.receivedBytes,
+    received_samples: playback.stats.receivedSamples,
+    received_audio_ms: playback.stats.receivedSamples * 1000 / playback.sampleRate,
+    converted_samples: playback.stats.convertedSamples,
+    worklet_events: playback.stats.workletEvents,
+    underruns: playback.stats.underruns,
+    resumes: playback.stats.resumes,
+    first_frame_delay_ms: playback.stats.firstFrameAtMs === null
+      ? null
+      : playback.stats.firstFrameAtMs - playback.startedAtMs,
+    websocket_open_delay_ms: playback.stats.websocketOpenedAtMs === null
+      ? null
+      : playback.stats.websocketOpenedAtMs - playback.startedAtMs,
+  };
+}
+
+function createStreamId(): string {
+  const cryptoWithUuid = globalThis.crypto as Crypto & { randomUUID?: () => string };
+  const suffix = cryptoWithUuid?.randomUUID?.()
+    ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `chat-${suffix}`;
 }
 
 function streamingTtsWebSocketUrl(): string {
@@ -275,6 +458,7 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
       1,
       Number(settings.transitionFadeSamples) || Math.round(sampleRate * 0.008),
     );
+    this.progressIntervalSamples = Math.max(128, Math.round(sampleRate * 0.5));
     this.queue = [];
     this.headOffset = 0;
     this.queuedSamples = 0;
@@ -285,6 +469,9 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
     this.drained = false;
     this.fadeInRemaining = 0;
     this.underrunCount = 0;
+    this.renderClockSamples = 0;
+    this.playedSamples = 0;
+    this.lastProgressSamples = 0;
     this.port.onmessage = (event) => {
       const message = event.data || {};
       if (message.type === 'push' && message.samples) {
@@ -294,16 +481,44 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
         if (samples.length > 0) {
           this.queue.push(samples);
           this.queuedSamples += samples.length;
+          this.port.postMessage({
+            type: 'buffered',
+            buffered_samples: this.queuedSamples,
+            incoming_samples: samples.length,
+            target_samples: this.waitingForBuffer ? this.currentRebufferSamples : this.startBufferSamples,
+            waiting_for_buffer: this.waitingForBuffer,
+            input_ended: this.inputEnded,
+            underrun_count: this.underrunCount,
+            render_clock_samples: this.renderClockSamples,
+            played_samples: this.playedSamples,
+          });
           this.maybeStartOrResume();
         }
         return;
       }
       if (message.type === 'end') {
         this.inputEnded = true;
+        this.port.postMessage({
+          type: 'input_ended',
+          buffered_samples: this.queuedSamples,
+          waiting_for_buffer: this.waitingForBuffer,
+          underrun_count: this.underrunCount,
+          render_clock_samples: this.renderClockSamples,
+          played_samples: this.playedSamples,
+        });
         this.maybeStartOrResume();
         return;
       }
-      if (message.type === 'stop') this.stopped = true;
+      if (message.type === 'stop') {
+        this.stopped = true;
+        this.port.postMessage({
+          type: 'stopped',
+          buffered_samples: this.queuedSamples,
+          render_clock_samples: this.renderClockSamples,
+          played_samples: this.playedSamples,
+          underrun_count: this.underrunCount,
+        });
+      }
     };
   }
 
@@ -316,7 +531,12 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
       this.started = true;
       this.waitingForBuffer = false;
       this.beginFadeIn();
-      this.port.postMessage({ type: 'started', buffered_samples: this.queuedSamples });
+      this.port.postMessage({
+        type: 'started',
+        buffered_samples: this.queuedSamples,
+        render_clock_samples: this.renderClockSamples,
+        played_samples: this.playedSamples,
+      });
       return;
     }
     if (
@@ -326,7 +546,14 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
     ) {
       this.waitingForBuffer = false;
       this.beginFadeIn();
-      this.port.postMessage({ type: 'resumed', buffered_samples: this.queuedSamples });
+      this.port.postMessage({
+        type: 'resumed',
+        buffered_samples: this.queuedSamples,
+        target_samples: this.currentRebufferSamples,
+        underrun_count: this.underrunCount,
+        render_clock_samples: this.renderClockSamples,
+        played_samples: this.playedSamples,
+      });
     }
   }
 
@@ -364,25 +591,53 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
       type: 'underrun',
       buffered_samples: this.queuedSamples,
       target_samples: this.currentRebufferSamples,
+      underrun_count: this.underrunCount,
+      render_clock_samples: this.renderClockSamples,
+      played_samples: this.playedSamples,
+      input_ended: this.inputEnded,
     });
   }
 
   signalDrained() {
     if (!this.drained) {
       this.drained = true;
-      this.port.postMessage({ type: 'drained' });
+      this.port.postMessage({
+        type: 'drained',
+        buffered_samples: this.queuedSamples,
+        underrun_count: this.underrunCount,
+        render_clock_samples: this.renderClockSamples,
+        played_samples: this.playedSamples,
+      });
     }
     return false;
+  }
+
+  maybeReportProgress() {
+    if (this.renderClockSamples - this.lastProgressSamples < this.progressIntervalSamples) return;
+    this.lastProgressSamples = this.renderClockSamples;
+    this.port.postMessage({
+      type: 'render_progress',
+      buffered_samples: this.queuedSamples,
+      target_samples: this.waitingForBuffer ? this.currentRebufferSamples : 0,
+      waiting_for_buffer: this.waitingForBuffer,
+      input_ended: this.inputEnded,
+      underrun_count: this.underrunCount,
+      current_rebuffer_samples: this.currentRebufferSamples,
+      render_clock_samples: this.renderClockSamples,
+      played_samples: this.playedSamples,
+    });
   }
 
   process(_inputs, outputs) {
     const channel = outputs[0] && outputs[0][0];
     if (!channel) return !this.stopped;
     channel.fill(0);
+    this.renderClockSamples += channel.length;
     if (this.stopped) return false;
 
     this.maybeStartOrResume();
     if (!this.started || this.waitingForBuffer) {
+      this.maybeReportProgress();
       if (this.inputEnded && this.queuedSamples === 0) return this.signalDrained();
       return true;
     }
@@ -402,12 +657,14 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
       }
     }
 
+    this.playedSamples += written;
     this.applyFadeIn(channel, written);
     if (this.queuedSamples === 0) {
       this.applyFadeOut(channel, written);
       if (this.inputEnded) return this.signalDrained();
       this.beginRebuffering();
     }
+    this.maybeReportProgress();
     return true;
   }
 }
