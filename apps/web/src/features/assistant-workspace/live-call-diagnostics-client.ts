@@ -1,0 +1,99 @@
+const LIVE_CALL_DIAGNOSTICS_PATH = '/api/tts/live-call/diagnostics';
+const FLUSH_DELAY_MS = 250;
+const MAX_BATCH_EVENTS = 24;
+
+type LiveCallDiagnosticEvent = {
+  source: string;
+  event: string;
+  details: Record<string, unknown>;
+};
+
+export type LiveCallDiagnosticsReporter = {
+  traceId: string;
+  record: (event: string, details?: Record<string, unknown>, source?: string) => void;
+  flush: () => Promise<void>;
+  close: (event?: string, details?: Record<string, unknown>) => Promise<void>;
+};
+
+export function createLiveCallDiagnosticsReporter(traceId: string): LiveCallDiagnosticsReporter {
+  let queue: LiveCallDiagnosticEvent[] = [];
+  let flushTimer: number | null = null;
+  let closed = false;
+  let pendingFlush: Promise<void> = Promise.resolve();
+
+  const scheduleFlush = () => {
+    if (flushTimer !== null || closed) return;
+    flushTimer = window.setTimeout(() => {
+      flushTimer = null;
+      void flush();
+    }, FLUSH_DELAY_MS);
+  };
+
+  const flush = async (): Promise<void> => {
+    if (flushTimer !== null) {
+      window.clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    if (queue.length === 0) return pendingFlush;
+    const events = queue;
+    queue = [];
+    pendingFlush = pendingFlush.catch(() => undefined).then(async () => {
+      try {
+        await window.fetch(LIVE_CALL_DIAGNOSTICS_PATH, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ trace_id: traceId, events }),
+          keepalive: true,
+        });
+      } catch {
+        // Diagnostics must never interrupt live playback.
+      }
+    });
+    return pendingFlush;
+  };
+
+  const record = (
+    event: string,
+    details: Record<string, unknown> = {},
+    source = 'browser',
+  ): void => {
+    if (closed) return;
+    queue.push({
+      source,
+      event,
+      details: {
+        client_wall_time_ms: Date.now(),
+        client_monotonic_ms: performance.now(),
+        document_visibility: document.visibilityState,
+        ...details,
+      },
+    });
+    if (queue.length >= MAX_BATCH_EVENTS) void flush();
+    else scheduleFlush();
+  };
+
+  const close = async (
+    event = 'reporter_closed',
+    details: Record<string, unknown> = {},
+  ): Promise<void> => {
+    if (closed) return pendingFlush;
+    record(event, details, 'controller');
+    closed = true;
+    if (flushTimer !== null) {
+      window.clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    await flush();
+  };
+
+  record('reporter_created', {}, 'controller');
+  return { traceId, record, flush, close };
+}
+
+export function createLiveCallTraceId(sessionId: string): string {
+  const cryptoWithUuid = globalThis.crypto as Crypto & { randomUUID?: () => string };
+  const suffix = cryptoWithUuid?.randomUUID?.()
+    ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const safeSession = sessionId.replace(/[^A-Za-z0-9_.:-]+/g, '-').slice(0, 80) || 'unknown';
+  return `live-call:${safeSession}:${suffix}`;
+}
