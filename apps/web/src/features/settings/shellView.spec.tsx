@@ -4,10 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { SettingsControlCenter } from './SettingsControlCenter';
 
 describe('settings shell', () => {
-  it('renders and changes category', () => {
+  it('renders provider controls and changes category', () => {
     render(<MantineProvider><SettingsControlCenter /></MantineProvider>);
     expect(screen.getByRole('heading', { name: 'Settings Control Center' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'AI Providers' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Default LLM provider')).toBeInTheDocument();
+    expect(screen.getByText('Routing & fallback')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /RPG/ }));
     expect(screen.getByRole('heading', { name: 'RPG' })).toBeInTheDocument();
   });
