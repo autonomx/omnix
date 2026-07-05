@@ -29,6 +29,7 @@ export default defineConfig(({ command, mode }) => ({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        ws: true,
       },
       '/events': {
         target: 'http://localhost:8000',
