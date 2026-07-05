@@ -6,14 +6,14 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, Query
 
-from app.jobs import JobListResponse, default_job_store
+from app.jobs import JobListResponse, SQLiteJobStore, default_job_store
 
 from .job_summaries import voice_job_projections
 
 _ROUTE_SENTINEL = "_omnix_voice_job_summaries_registered"
 _HOOK_SENTINEL = "_omnix_voice_job_summaries_hook_installed"
 VOICE_JOB_SUMMARIES_PATH = "/api/jobs/voice-summaries"
-VOICE_JOB_MODULES = {"voice", "voice-cloning"}
+VOICE_JOB_MODULES = ("voice", "voice-cloning")
 DEFAULT_VOICE_JOB_LIMIT = 40
 MAX_VOICE_JOB_LIMIT = 100
 
@@ -25,15 +25,33 @@ def register_voice_job_summary_routes(gateway: FastAPI) -> None:
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
     @gateway.get(VOICE_JOB_SUMMARIES_PATH, response_model=JobListResponse, include_in_schema=False)
-    async def voice_job_summaries(
+    def voice_job_summaries(
         limit: int = Query(default=DEFAULT_VOICE_JOB_LIMIT, ge=1, le=MAX_VOICE_JOB_LIMIT),
     ) -> JobListResponse:
-        jobs = [
-            job
-            for job in default_job_store().list_jobs()
-            if job.module in VOICE_JOB_MODULES
-        ][:limit]
+        jobs = _recent_voice_jobs(default_job_store(), limit)
         return JobListResponse(jobs=voice_job_projections(jobs))
+
+
+def _recent_voice_jobs(store: Any, limit: int) -> list[Any]:
+    """Read only the requested recent rows when the SQLite store is available."""
+    if isinstance(store, SQLiteJobStore):
+        with store._connect() as conn:  # noqa: SLF001 - bounded projection adapter
+            rows = conn.execute(
+                """
+                SELECT * FROM jobs
+                WHERE module IN (?, ?)
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (*VOICE_JOB_MODULES, limit),
+            ).fetchall()
+        return [store._row_to_job(row) for row in rows]  # noqa: SLF001
+
+    return [
+        job
+        for job in store.list_jobs()
+        if job.module in VOICE_JOB_MODULES
+    ][:limit]
 
 
 def install_voice_job_summary_hook() -> None:
