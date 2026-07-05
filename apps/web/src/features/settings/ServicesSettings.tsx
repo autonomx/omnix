@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import { SettingsSection } from './SettingsPrimitives';
 
 export type ServiceStatusPayload = {
@@ -24,12 +26,17 @@ const ownershipRows = [
 ] as const;
 
 export function ServicesSettings() {
+  const [payload, setPayload] = useState<ProviderFacadePayload>();
+  useEffect(() => {
+    omnixApiClient.listProviders().then(setPayload).catch(() => undefined);
+  }, []);
   return (
     <div className="settings-category-panel">
       <div className="settings-category-title-row"><p className="eyebrow">Settings category</p><h2>Tools & Integrations</h2><p>Review configuration ownership and connected runtime services.</p></div>
       <SettingsSection title="Configuration ownership" description="This page delegates to existing owners instead of creating duplicate state." scope="global">
         <div className="settings-ownership-table">{ownershipRows.map(([label, owner, note]) => <div key={label}><strong>{label}</strong><span>{owner}</span><small>{note}</small></div>)}</div>
       </SettingsSection>
+      <p>{payload?.providers.length ?? 0} services reported.</p>
     </div>
   );
 }
