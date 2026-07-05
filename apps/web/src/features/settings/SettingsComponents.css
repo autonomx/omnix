@@ -2,6 +2,7 @@
 .settings-field{display:grid;gap:7px}.settings-field-wide{grid-column:1/-1}
 .settings-field input,.settings-field select,.settings-field textarea{width:100%;min-height:38px;border:1px solid var(--mantine-color-dark-3);border-radius:7px;background:var(--mantine-color-dark-8);color:inherit;padding:8px 10px}
 .settings-field-help,.settings-field-error{font-size:.74rem;opacity:.72}.settings-field-error{color:var(--mantine-color-red-4);opacity:1}
+.settings-toggle-list{display:grid;gap:10px}.settings-toggle-list label{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--mantine-color-dark-4);border-radius:8px}.settings-toggle-list input{width:18px;height:18px}
 .settings-status-card{margin-bottom:14px;padding:14px;border:1px solid var(--mantine-color-dark-4);border-radius:11px;background:var(--mantine-color-dark-7)}
 .settings-status-card h3{margin:0 0 12px}.settings-status-card p{opacity:.7}
 .settings-status-row{display:grid;grid-template-columns:22px 1fr auto 12px;gap:8px;align-items:center;width:100%;min-height:42px;padding:8px 10px;border:1px solid var(--mantine-color-dark-4);border-radius:8px;background:var(--mantine-color-dark-8);color:inherit;margin-top:8px}
@@ -9,3 +10,4 @@
 .tone-ready i{background:var(--mantine-color-green-5)}.tone-warning i{background:var(--mantine-color-yellow-5)}.tone-error i{background:var(--mantine-color-red-5)}.tone-idle i{background:var(--mantine-color-blue-5)}
 .settings-run-tests{width:100%}.settings-planned-state{padding:14px;border:1px dashed var(--mantine-color-dark-3);border-radius:8px}.settings-planned-state p{margin:6px 0 0;opacity:.72}
 .settings-advanced{border:1px solid var(--mantine-color-dark-4);border-radius:8px}.settings-advanced summary{cursor:pointer;padding:12px}.settings-advanced-body{padding:0 12px 12px}
+.omnix-reduce-motion *{animation-duration:.01ms!important;transition-duration:.01ms!important}
