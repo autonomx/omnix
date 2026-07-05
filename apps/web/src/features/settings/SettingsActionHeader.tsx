@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createSettingsSaveRequest, loadSettingsProfile, saveSettingsProfile, SettingsProfileApiError } from './settingsApi';
 import { SettingsHeader } from './SettingsHeader';
 import { useSettingsProfileContext } from './SettingsProfileContext';
@@ -6,6 +6,14 @@ import { useSettingsProfileContext } from './SettingsProfileContext';
 export function SettingsActionHeader() {
   const { state, dispatch } = useSettingsProfileContext();
   const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!state.dirtyPaths.length) return;
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [state.dirtyPaths.length]);
 
   const save = async () => {
     if (!state.dirtyPaths.length) return;
@@ -22,5 +30,5 @@ export function SettingsActionHeader() {
     }
   };
 
-  return <SettingsHeader dirtyCount={state.dirtyPaths.length} saving={saving} onDiscard={() => dispatch({ type: 'discard' })} onSave={() => void save()} />;
+  return <><SettingsHeader dirtyCount={state.dirtyPaths.length} saving={saving} onDiscard={() => dispatch({ type: 'discard' })} onSave={() => void save()} />{state.message ? <p className="settings-inline-status" role={state.status === 'error' || state.status === 'conflict' ? 'alert' : 'status'}>{state.message}</p> : null}</>;
 }
