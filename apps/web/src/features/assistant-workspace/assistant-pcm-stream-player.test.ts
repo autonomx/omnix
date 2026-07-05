@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initializeChatMessageStreamAudioController } from './chat-message-stream-audio-controller';
 
 type EndListener = () => void;
+let cleanupController: (() => void) | null = null;
 
 class FakeSource {
   buffer: AudioBuffer | null = null;
@@ -55,7 +56,7 @@ function renderMessage(): HTMLButtonElement {
       </div>
     </article>
     <div class="assistant-inline-status"></div>`;
-  initializeChatMessageStreamAudioController();
+  cleanupController = initializeChatMessageStreamAudioController();
   return document.querySelector('button[aria-label="Stream response audio"]') as HTMLButtonElement;
 }
 
@@ -78,6 +79,8 @@ function streamResponse(events: string[]): Response {
 }
 
 afterEach(() => {
+  cleanupController?.();
+  cleanupController = null;
   document.body.innerHTML = '';
   FakeAudioContext.sources = [];
   vi.restoreAllMocks();
