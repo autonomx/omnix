@@ -1,21 +1,18 @@
 import { Button, Group, Progress, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixAudioControls, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { voiceStudioDefaults } from '../settings/moduleDefaults';
+import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
-
-interface VoiceCloningFormValues {
-  providerId: string;
-  sampleAssetId: string;
-  profileName: string;
-  referenceText: string;
-}
+import { buildProfileInput, cloneFormDefaults, type CloneFormValues } from './cloneFormDefaults';
 
 export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
+  const appliedRevision = useRef('');
   const providersQuery = useQuery({
     queryKey: ['platform', 'providers'],
     queryFn: () => omnixApiClient.listProviders(),
@@ -28,31 +25,45 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
     queryKey: ['platform', 'assets'],
     queryFn: () => omnixApiClient.listAssets(),
   });
+  const settingsQuery = useQuery({
+    queryKey: ['settings', 'profile'],
+    queryFn: () => loadSettingsProfile(),
+  });
+  const moduleDefaults = useMemo(() => {
+    const defaults = voiceStudioDefaults(settingsQuery.data?.profile);
+    return {
+      providerId: defaults.voiceCloningProviderId,
+      language: defaults.cloningLanguage,
+      quality: defaults.cloningQuality,
+    };
+  }, [settingsQuery.data?.profile]);
   const {
     register,
     handleSubmit,
     reset,
-    formState: { errors },
-  } = useForm<VoiceCloningFormValues>({
-    defaultValues: { providerId: '', sampleAssetId: '', profileName: '', referenceText: '' },
+    formState: { errors, isDirty },
+  } = useForm<CloneFormValues>({
+    defaultValues: cloneFormDefaults(moduleDefaults),
   });
+  useEffect(() => {
+    const revision = settingsQuery.data?.profile.revision;
+    if (!revision || isDirty || appliedRevision.current === revision) return;
+    reset(cloneFormDefaults(moduleDefaults));
+    appliedRevision.current = revision;
+  }, [isDirty, moduleDefaults, reset, settingsQuery.data?.profile.revision]);
   const providers = useMemo(() => voiceCloneCapableProviders(providersQuery.data), [providersQuery.data]);
   const sampleAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'voice_sample' || asset.type === 'audio') ?? [];
   const profileAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'voice_profile') ?? [];
   const voiceCloneJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'voice-cloning') ?? [];
   const createJobMutation = useMutation({
-    mutationFn: (values: VoiceCloningFormValues) =>
+    mutationFn: (values: CloneFormValues) =>
       omnixApiClient.createJob({
         module: 'voice-cloning',
         type: 'voice-cloning.train',
         resource_class: 'gpu:tts',
         priority: 0,
         input_ref: values.sampleAssetId ? { sample_asset_id: values.sampleAssetId } : null,
-        input_payload: {
-          provider_id: values.providerId || null,
-          profile_name: values.profileName,
-          reference_text: values.referenceText || null,
-        },
+        input_payload: buildProfileInput(values, moduleDefaults),
         stages: [
           { id: 'ingest-sample', label: 'Ingest sample', resource_class: 'cpu', status: 'queued' },
           { id: 'build-profile', label: 'Build voice profile', resource_class: 'gpu:tts', status: 'queued' },
@@ -61,7 +72,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
         ],
       }),
     onSuccess: async (_job, values) => {
-      reset({ providerId: values.providerId, sampleAssetId: values.sampleAssetId, profileName: '', referenceText: '' });
+      reset({ ...values, profileName: '', referenceText: '' });
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
   });
@@ -116,13 +127,28 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
               Profile name
               <input aria-invalid={Boolean(errors.profileName)} {...register('profileName', { required: true })} placeholder="Narrator profile" />
             </label>
+            <label>
+              Language
+              <input {...register('language')} placeholder="English" />
+            </label>
+            <label>
+              Quality
+              <select {...register('quality')}>
+                <option value="High">High</option>
+                <option value="Standard">Standard</option>
+                <option value="Draft">Draft</option>
+              </select>
+            </label>
             <label className="feature-form-wide">
               Reference text
               <textarea rows={4} {...register('referenceText')} />
             </label>
-            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
-              {createJobMutation.isPending ? 'Queueing voice profile…' : 'Queue voice profile'}
-            </Button>
+            <Group className="feature-form-action" gap="xs">
+              <Button type="button" variant="subtle" onClick={() => reset(cloneFormDefaults(moduleDefaults))}>Reset defaults</Button>
+              <Button type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+                {createJobMutation.isPending ? 'Queueing voice profile…' : 'Queue voice profile'}
+              </Button>
+            </Group>
           </form>
 
           <FeatureValidationMessage show={Boolean(errors.profileName)} message="Enter a profile name before queueing voice cloning." />
