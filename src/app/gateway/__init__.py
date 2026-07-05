@@ -1,7 +1,6 @@
 """Thin FastAPI gateway foundation for the Omnix web app redesign."""
 from __future__ import annotations
 
-from importlib import import_module
 from typing import Any
 
 from .assistant_context_routes import install_assistant_context_route_hook
@@ -25,7 +24,6 @@ install_realtime_route_hook()
 install_live_voice_diagnostics_hook()
 install_tts_runtime_route_hook()
 install_tts_pcm_websocket_hook()
-import_module(".tts_streaming", __name__).install_tts_stream_hook()
 
 
 def __getattr__(name: str) -> Any:
