@@ -37,9 +37,36 @@ afterEach(() => {
 });
 
 describe('VoiceWorkspace', () => {
-  it('queues TTS jobs through the shared jobs API and renders wired studio panels', async () => {
+  it('loads central defaults, resets local edits, and queues TTS through the shared jobs API', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
+
+      if (path === '/api/settings') {
+        return Response.json({
+          success: true,
+          provider: 'lmstudio',
+          audio_provider_tts: 'faster-qwen3-tts',
+          audio_provider_stt: 'parakeet',
+          settings: {
+            settings_control_center: {
+              revision: 'voice-studio-r1',
+              global: { providers: { tts: 'faster-qwen3-tts', voiceCloning: 'qwen-voice' } },
+              voice: {
+                language: 'English',
+                stability: 0.61,
+                similarity: 0.72,
+                style: 0.22,
+                speed: 1.25,
+                pitch: 1,
+                volume: -2,
+                effects: ['Compression'],
+                cloningLanguage: 'French',
+                cloningQuality: 'Standard',
+              },
+            },
+          },
+        });
+      }
 
       if (path === '/api/providers') {
         return Response.json({
@@ -51,6 +78,14 @@ describe('VoiceWorkspace', () => {
               source: 'settings',
               status: 'configured',
               capabilities: ['tts', 'voice_cloning'],
+            },
+            {
+              id: 'qwen-voice',
+              label: 'Qwen Voice',
+              family: 'tts',
+              source: 'settings',
+              status: 'configured',
+              capabilities: ['voice_cloning'],
             },
           ],
           models: [],
@@ -123,6 +158,30 @@ describe('VoiceWorkspace', () => {
     expect(screen.getByRole('heading', { name: 'Text-to-Speech (Multi-Voice)' })).toBeInTheDocument();
     expect(screen.getAllByText('Dave').length).toBeGreaterThan(0);
 
+    await waitFor(() => {
+      expect(screen.getByLabelText('Output speed')).toHaveValue('1.25');
+      expect(screen.getByLabelText('Language / Accent')).toHaveValue('French');
+      expect(screen.getByLabelText('Quality')).toHaveValue('Standard');
+      expect(screen.getByRole('button', { name: 'Compression' })).toHaveClass('active');
+      expect(screen.getByRole('button', { name: 'Equalizer' })).not.toHaveClass('active');
+    });
+
+    fireEvent.change(screen.getByLabelText('Output speed'), { target: { value: '1.5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset tuning' }));
+    expect(screen.getByLabelText('Output speed')).toHaveValue('1.25');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Equalizer' }));
+    expect(screen.getByRole('button', { name: 'Equalizer' })).toHaveClass('active');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset effects' }));
+    expect(screen.getByRole('button', { name: 'Compression' })).toHaveClass('active');
+    expect(screen.getByRole('button', { name: 'Equalizer' })).not.toHaveClass('active');
+
+    fireEvent.change(screen.getByLabelText('Language / Accent'), { target: { value: 'Spanish' } });
+    fireEvent.change(screen.getByLabelText('Quality'), { target: { value: 'Draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset defaults' }));
+    expect(screen.getByLabelText('Language / Accent')).toHaveValue('French');
+    expect(screen.getByLabelText('Quality')).toHaveValue('Standard');
+
     fireEvent.change(screen.getByLabelText('Script'), { target: { value: 'Narrator: A short line for synthesis.' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate Speech/ }));
 
@@ -135,9 +194,11 @@ describe('VoiceWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"module":"voice"');
       expect(createCall?.[1]?.body).toContain('"type":"tts.synthesize"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
-      expect(createCall?.[1]?.body).toContain('"output_settings"');
+      expect(createCall?.[1]?.body).toContain('"provider_id":"faster-qwen3-tts"');
+      expect(createCall?.[1]?.body).toContain('"language":"English"');
+      expect(createCall?.[1]?.body).toContain('"speed":1.25');
+      expect(createCall?.[1]?.body).toContain('"audio_effects":["Compression"]');
       expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
-      expect(createCall?.[1]?.body).toContain('"audio_effects"');
     });
   });
 });

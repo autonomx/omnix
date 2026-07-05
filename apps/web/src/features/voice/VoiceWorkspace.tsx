@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type AssetListResponse, type JobRecord, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { voiceStudioDefaults } from '../settings/moduleDefaults';
+import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import { DEFAULT_OUTPUT_SETTINGS } from './outputDefaults';
 import { firstResultAsset } from './resultList';
@@ -59,6 +61,20 @@ const AUDIO_EFFECTS = ['Equalizer', 'Reverb', 'Compression', 'De-esser', 'Noise 
 export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const appliedSettingsRevision = useRef('');
+  const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
+  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
+  const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
+  const settingsQuery = useQuery({ queryKey: ['settings', 'profile'], queryFn: () => loadSettingsProfile() });
+  const moduleDefaults = useMemo(() => voiceStudioDefaults(settingsQuery.data?.profile), [settingsQuery.data?.profile]);
+  const centralOutputSettings = useMemo(() => ({
+    stability: moduleDefaults.stability,
+    similarity: moduleDefaults.similarity,
+    style: moduleDefaults.style,
+    speed: moduleDefaults.speed,
+    pitch: moduleDefaults.pitch,
+    volume: moduleDefaults.volume,
+  }), [moduleDefaults.pitch, moduleDefaults.similarity, moduleDefaults.speed, moduleDefaults.stability, moduleDefaults.style, moduleDefaults.volume]);
   const [cloneSource, setCloneSource] = useState<CloneSourceKind>('upload');
   const [sampleFile, setSampleFile] = useState<File | null>(null);
   const [recordedSample, setRecordedSample] = useState<Blob | null>(null);
@@ -75,30 +91,40 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [playbackDuration, setPlaybackDuration] = useState(0);
   const [speakerVoiceAssignments, setSpeakerVoiceAssignments] = useState<Record<string, string>>({});
   const [speakerStyleAssignments, setSpeakerStyleAssignments] = useState<Record<string, string>>({});
-  const [outputSettings, setOutputSettings] = useState(DEFAULT_OUTPUT_SETTINGS);
-  const [enabledEffects, setEnabledEffects] = useState<string[]>(AUDIO_EFFECTS);
-
-  const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
-  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
-  const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
+  const [outputSettings, setOutputSettings] = useState(centralOutputSettings);
+  const [enabledEffects, setEnabledEffects] = useState<string[]>(moduleDefaults.effects);
+  const [tuningDirty, setTuningDirty] = useState(false);
+  const [effectsDirty, setEffectsDirty] = useState(false);
 
   const {
     register,
     handleSubmit,
     setValue,
+    reset,
+    getValues,
     watch,
-    formState: { errors },
+    formState: { errors, isDirty: voiceFormDirty },
   } = useForm<VoiceFormValues>({
-    defaultValues: { text: DEFAULT_SCRIPT, providerId: '', speaker: '', voiceId: '' },
+    defaultValues: { text: DEFAULT_SCRIPT, providerId: moduleDefaults.providerId, speaker: '', voiceId: '' },
   });
   const {
     register: registerClone,
     handleSubmit: handleCloneSubmit,
     reset: resetClone,
-    formState: { errors: cloneErrors },
+    formState: { errors: cloneErrors, isDirty: cloneFormDirty },
   } = useForm<VoiceCloneFormValues>({
-    defaultValues: { providerId: '', profileName: '', language: 'English (US)', quality: 'High (Recommended)', notes: '' },
+    defaultValues: { providerId: moduleDefaults.voiceCloningProviderId, profileName: '', language: moduleDefaults.cloningLanguage, quality: moduleDefaults.cloningQuality, notes: '' },
   });
+
+  useEffect(() => {
+    const revision = settingsQuery.data?.profile.revision;
+    if (!revision || appliedSettingsRevision.current === revision) return;
+    if (!voiceFormDirty) reset({ ...getValues(), providerId: moduleDefaults.providerId });
+    if (!cloneFormDirty) resetClone({ providerId: moduleDefaults.voiceCloningProviderId, profileName: '', language: moduleDefaults.cloningLanguage, quality: moduleDefaults.cloningQuality, notes: '' });
+    if (!tuningDirty) setOutputSettings(centralOutputSettings);
+    if (!effectsDirty) setEnabledEffects([...moduleDefaults.effects]);
+    appliedSettingsRevision.current = revision;
+  }, [centralOutputSettings, cloneFormDirty, effectsDirty, getValues, moduleDefaults.cloningLanguage, moduleDefaults.cloningQuality, moduleDefaults.effects, moduleDefaults.providerId, moduleDefaults.voiceCloningProviderId, reset, resetClone, settingsQuery.data?.profile.revision, tuningDirty, voiceFormDirty]);
 
   const scriptText = watch('text') ?? '';
   const scriptSegments = useMemo(() => parseScriptSegments(scriptText), [scriptText]);
@@ -117,8 +143,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const visibleProfileAssets = showAllVoices ? filteredProfileAssets : filteredProfileAssets.slice(0, 6);
   const selectedCloneSample = cloneSource === 'record' ? recordedSample : sampleFile;
   const selectedCloneSampleName = cloneSource === 'record' ? 'recorded-voice.webm' : sampleFile?.name ?? null;
-  const defaultTtsProviderId = ttsProviders[0]?.id ?? '';
-  const defaultCloneProviderId = cloneProviders[0]?.id ?? '';
+  const defaultTtsProviderId = moduleDefaults.providerId || ttsProviders[0]?.id || '';
+  const defaultCloneProviderId = moduleDefaults.voiceCloningProviderId || cloneProviders[0]?.id || '';
   const defaultVoiceId = profileAssets[0] ? voiceStoragePath(profileAssets[0]) : '';
   const defaultSpeakerName = parsedSpeakers[0]?.name ?? 'Narrator';
 
@@ -132,6 +158,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         input_payload: {
           text: values.text,
           provider_id: values.providerId || defaultTtsProviderId || null,
+          language: moduleDefaults.language || null,
           speaker: values.speaker || defaultSpeakerName || null,
           voice_id: values.voiceId || assignedVoiceFor(parsedSpeakers[0] ?? { name: '', count: 0 }, profileAssets, speakerVoiceAssignments) || defaultVoiceId || null,
           script_mode: parsedSpeakers.length > 1 ? 'multi_speaker' : 'single_speaker',
@@ -165,6 +192,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         input_payload: {
           text: `This is a preview of ${voiceName} speaking in Voice Studio.`,
           provider_id: defaultTtsProviderId || null,
+          language: moduleDefaults.language || null,
           speaker: voiceName,
           voice_id: voiceId,
           script_mode: 'single_speaker',
@@ -201,8 +229,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         input_payload: {
           profile_name: values.profileName,
           provider_id: values.providerId || defaultCloneProviderId || null,
-          language: values.language,
-          quality: values.quality,
+          language: values.language || moduleDefaults.cloningLanguage,
+          quality: values.quality || moduleDefaults.cloningQuality,
           notes: values.notes,
           source_kind: cloneSource,
           source_file_name: selectedCloneSampleName,
@@ -353,7 +381,26 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   }
 
   function updateOutputSetting(name: OutputSettingName, value: number) {
+    setTuningDirty(true);
     setOutputSettings((current) => ({ ...current, [name]: value }));
+  }
+
+  function resetTuningDefaults() {
+    setOutputSettings(centralOutputSettings);
+    setTuningDirty(false);
+  }
+
+  function resetEffectDefaults() {
+    setEnabledEffects([...moduleDefaults.effects]);
+    setEffectsDirty(false);
+  }
+
+  function resetEmbeddedCloneDefaults() {
+    resetClone({ providerId: moduleDefaults.voiceCloningProviderId, profileName: '', language: moduleDefaults.cloningLanguage, quality: moduleDefaults.cloningQuality, notes: '' });
+    setSampleFile(null);
+    setRecordedSample(null);
+    setRecordingStatus('');
+    setCloneSource('upload');
   }
 
   return (
@@ -375,9 +422,9 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 </div>
                 <label>Voice Name<input aria-invalid={Boolean(cloneErrors.profileName)} placeholder="e.g. My New Voice" {...registerClone('profileName', { required: true })} /></label>
                 <label className="voice-file-field">Audio sample<input type="file" accept="audio/*" onChange={(event) => { setSampleFile(event.currentTarget.files?.[0] ?? null); setRecordedSample(null); setCloneSource('upload'); }} /><small>{cloneSource === 'record' ? recordingStatus || 'No recording yet.' : sampleFile ? `${sampleFile.name} · ${formatBytes(sampleFile.size)}` : 'No sample selected yet.'}</small></label>
-                <div className="voice-two-col"><label>Language / Accent<input {...registerClone('language')} /></label><label>Quality<select {...registerClone('quality')}><option>High (Recommended)</option><option>Balanced</option><option>Fast Preview</option></select></label></div>
+                <div className="voice-two-col"><label>Language / Accent<input {...registerClone('language')} /></label><label>Quality<select {...registerClone('quality')}><option>High</option><option>Standard</option><option>Draft</option><option>High (Recommended)</option><option>Balanced</option><option>Fast Preview</option></select></label></div>
                 <label>Notes / Tags (optional)<textarea rows={2} placeholder="Add notes or tags to help identify this voice..." {...registerClone('notes')} /></label>
-                <Group justify="space-between"><Text size="xs">Clones are stored to Omnix: /resources/voice_clones</Text><Button type="submit" loading={cloneJobMutation.isPending} disabled={!selectedCloneSample || cloneJobMutation.isPending}>Create Clone</Button></Group>
+                <Group justify="space-between"><Text size="xs">Clones are stored to Omnix: /resources/voice_clones</Text><Group gap="xs"><Button type="button" variant="subtle" onClick={resetEmbeddedCloneDefaults}>Reset defaults</Button><Button type="submit" loading={cloneJobMutation.isPending} disabled={!selectedCloneSample || cloneJobMutation.isPending}>Create Clone</Button></Group></Group>
               </form>
               <FeatureValidationMessage show={Boolean(cloneErrors.profileName)} message="Enter a voice name before creating a clone." />
               <FeatureSubmitFeedback error={cloneJobMutation.error} errorPrefix="Voice clone request" isError={cloneJobMutation.isError} isPending={cloneJobMutation.isPending} jobId={cloneJobMutation.data?.status === 'failed' ? undefined : cloneJobMutation.data?.id} pendingMessage="Queueing voice clone job…" successPrefix="Voice clone job queued" />
@@ -414,8 +461,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
           </section>
 
           <div className="voice-bottom-grid">
-            <section className="voice-panel-final enhancement-panel"><Title order={5}>Voice Enhancement</Title><Text size="xs">Fine-tune and enhance the output with advanced controls.</Text><div className="enhancement-controls">{(Object.entries(outputSettings) as [OutputSettingName, number][]).map(([name, value]) => <label key={name}><span>{settingLabel(name)}</span><b>{settingValueLabel(name, value)}</b><input aria-label={`Output ${name}`} type="range" min={rangeMin(name)} max={rangeMax(name)} step="0.01" value={value} onChange={(event) => updateOutputSetting(name, Number(event.currentTarget.value))} /></label>)}</div></section>
-            <section className="voice-panel-final effects-panel"><Title order={5}>Audio Effects</Title><Text size="xs">Apply effects to polish and enhance the final audio.</Text><div className="effect-buttons">{AUDIO_EFFECTS.map((effect) => <button className={enabledEffects.includes(effect) ? 'active' : ''} key={effect} type="button" onClick={() => toggleEffect(effect, setEnabledEffects)}>{effect}</button>)}</div></section>
+            <section className="voice-panel-final enhancement-panel"><Group justify="space-between"><div><Title order={5}>Voice Enhancement</Title><Text size="xs">Fine-tune and enhance the output with advanced controls.</Text></div><Button size="xs" type="button" variant="subtle" onClick={resetTuningDefaults}>Reset tuning</Button></Group><div className="enhancement-controls">{(Object.entries(outputSettings) as [OutputSettingName, number][]).map(([name, value]) => <label key={name}><span>{settingLabel(name)}</span><b>{settingValueLabel(name, value)}</b><input aria-label={`Output ${name}`} type="range" min={rangeMin(name)} max={rangeMax(name)} step="0.01" value={value} onChange={(event) => updateOutputSetting(name, Number(event.currentTarget.value))} /></label>)}</div></section>
+            <section className="voice-panel-final effects-panel"><Group justify="space-between"><div><Title order={5}>Audio Effects</Title><Text size="xs">Apply effects to polish and enhance the final audio.</Text></div><Button size="xs" type="button" variant="subtle" onClick={resetEffectDefaults}>Reset effects</Button></Group><div className="effect-buttons">{AUDIO_EFFECTS.map((effect) => <button className={enabledEffects.includes(effect) ? 'active' : ''} key={effect} type="button" onClick={() => { setEffectsDirty(true); toggleEffect(effect, setEnabledEffects); }}>{effect}</button>)}</div></section>
           </div>
 
           <footer className="now-playing-bar">
