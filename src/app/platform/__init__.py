@@ -54,7 +54,7 @@ from .rpg_player_compat import (
 )
 from .rpg_session_compat import list_rpg_sessions_payload
 from .rpg_session_genesis_compat import get_rpg_session_payload
-from .settings import SettingsPayload, SettingsSaveResponse, get_settings_payload, save_settings_payload
+from .settings_control import SettingsPayload, SettingsSaveResponse, get_settings_payload, save_settings_payload
 
 __all__ = [
     "DiagnosticsPayload",
