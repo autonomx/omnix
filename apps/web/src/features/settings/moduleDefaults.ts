@@ -33,3 +33,7 @@ export function voiceStudioDefaults(document: SettingsDocument = DEFAULT_SETTING
     cloningQuality: document.voice.cloningQuality,
   };
 }
+
+export function rpgCampaignDefaults(document: SettingsDocument = DEFAULT_SETTINGS_DOCUMENT): SettingsDocument['rpg'] {
+  return { ...document.rpg, campaignDefaults: { ...document.rpg.campaignDefaults } };
+}
