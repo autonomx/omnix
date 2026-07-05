@@ -1,5 +1,12 @@
 .settings-control-panel{padding:0;overflow:hidden}
 .settings-control-center{display:grid;grid-template-columns:244px minmax(0,1fr) 300px;min-height:calc(100vh - 96px)}
 .settings-category-rail{padding:22px 14px;border-right:1px solid var(--mantine-color-dark-4)}
+.settings-category-heading{text-transform:uppercase;letter-spacing:.12em;font-size:.72rem;margin:0 8px 16px}
+.settings-rail-search{display:flex;align-items:center;gap:8px;margin:0 4px 16px;padding:9px 10px;border:1px solid var(--mantine-color-dark-4);border-radius:9px}
+.settings-rail-search input{width:100%;border:0;outline:0;background:transparent;color:inherit}
+.settings-category-rail nav{display:grid;gap:4px}
+.settings-category-rail nav button{display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;width:100%;padding:10px 12px;border:1px solid transparent;border-radius:8px;background:transparent;color:inherit;text-align:left}
+.settings-category-rail nav button:hover{background:var(--mantine-color-dark-6)}
+.settings-category-rail nav button.active{border-color:var(--mantine-color-blue-7);background:var(--mantine-color-dark-6);color:var(--mantine-color-blue-3)}
 .settings-control-content{min-width:0;padding:24px 28px 40px}
 .settings-status-rail{padding:24px 14px;border-left:1px solid var(--mantine-color-dark-4)}
