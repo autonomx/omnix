@@ -1,9 +1,23 @@
-import { useReducer, type ReactNode } from 'react';
+import { useEffect, useReducer, useState, type ReactNode } from 'react';
+import { loadSettingsProfile } from './settingsApi';
 import { DEFAULT_SETTINGS_DOCUMENT } from './settingsDefaults';
 import { createSettingsDraftState, settingsDraftReducer } from './settingsDraft';
 import { SettingsProfileContext } from './SettingsProfileContext';
 
 export function SettingsProfileProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(settingsDraftReducer, DEFAULT_SETTINGS_DOCUMENT, createSettingsDraftState);
-  return <SettingsProfileContext.Provider value={{ state, dispatch, loading: false, loadError: '' }}>{children}</SettingsProfileContext.Provider>;
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => {
+    let active = true;
+    loadSettingsProfile().then((result) => {
+      if (active) dispatch({ type: 'load', document: result.profile });
+    }).catch((error) => {
+      if (active) setLoadError(error instanceof Error ? error.message : 'Settings are unavailable.');
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+  return <SettingsProfileContext.Provider value={{ state, dispatch, loading, loadError }}>{children}</SettingsProfileContext.Provider>;
 }
