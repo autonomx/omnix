@@ -37,9 +37,25 @@ afterEach(() => {
 });
 
 describe('VoiceCloningWorkspace', () => {
-  it('queues voice profile jobs through the shared jobs API', async () => {
+  it('loads central defaults, resets edits, and preserves explicit job overrides', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
+
+      if (path === '/api/settings') {
+        return Response.json({
+          success: true,
+          provider: 'lmstudio',
+          audio_provider_tts: 'faster-qwen3-tts',
+          audio_provider_stt: 'parakeet',
+          settings: {
+            settings_control_center: {
+              revision: 'voice-defaults-r1',
+              global: { providers: { voiceCloning: 'qwen-voice' } },
+              voice: { cloningLanguage: 'French', cloningQuality: 'Standard' },
+            },
+          },
+        });
+      }
 
       if (path === '/api/providers') {
         return Response.json({
@@ -107,9 +123,22 @@ describe('VoiceCloningWorkspace', () => {
     expect(await screen.findByText('Qwen Voice')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'voice_profile / voice-cloning' })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'qwen-voice' } });
+    await waitFor(() => {
+      expect(screen.getByLabelText('Provider')).toHaveValue('qwen-voice');
+      expect(screen.getByLabelText('Language')).toHaveValue('French');
+      expect(screen.getByLabelText('Quality')).toHaveValue('Standard');
+    });
+
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'Spanish' } });
+    fireEvent.change(screen.getByLabelText('Quality'), { target: { value: 'Draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset defaults' }));
+    expect(screen.getByLabelText('Language')).toHaveValue('French');
+    expect(screen.getByLabelText('Quality')).toHaveValue('Standard');
+
     fireEvent.change(screen.getByLabelText('Sample asset'), { target: { value: 'asset:sample' } });
     fireEvent.change(screen.getByLabelText('Profile name'), { target: { value: 'Narrator' } });
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'Spanish' } });
+    fireEvent.change(screen.getByLabelText('Quality'), { target: { value: 'Draft' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue voice profile' }));
 
     expect(await screen.findByText('Voice profile job queued: job:voice-profile')).toBeInTheDocument();
@@ -120,8 +149,10 @@ describe('VoiceCloningWorkspace', () => {
       );
       expect(createCall?.[1]?.body).toContain('"module":"voice-cloning"');
       expect(createCall?.[1]?.body).toContain('"type":"voice-cloning.train"');
-      expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
       expect(createCall?.[1]?.body).toContain('"sample_asset_id":"asset:sample"');
+      expect(createCall?.[1]?.body).toContain('"provider_id":"qwen-voice"');
+      expect(createCall?.[1]?.body).toContain('"language":"Spanish"');
+      expect(createCall?.[1]?.body).toContain('"quality":"Draft"');
     });
   });
 });

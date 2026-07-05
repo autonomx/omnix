@@ -22,6 +22,8 @@ export function speechInputDefaults(document: SettingsDocument = DEFAULT_SETTING
 export function voiceStudioDefaults(document: SettingsDocument = DEFAULT_SETTINGS_DOCUMENT) {
   return {
     providerId: document.global.providers.tts,
+    voiceCloningProviderId: document.global.providers.voiceCloning || document.global.providers.tts,
+    language: document.voice.language,
     stability: document.voice.stability,
     similarity: document.voice.similarity,
     style: document.voice.style,
@@ -29,6 +31,7 @@ export function voiceStudioDefaults(document: SettingsDocument = DEFAULT_SETTING
     pitch: document.voice.pitch,
     volume: document.voice.volume,
     effects: [...document.voice.effects],
+    streaming: document.voice.streaming,
     cloningLanguage: document.voice.cloningLanguage,
     cloningQuality: document.voice.cloningQuality,
   };
