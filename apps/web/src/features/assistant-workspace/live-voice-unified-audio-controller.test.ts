@@ -147,9 +147,9 @@ describe('live voice unified audio controller', () => {
   });
 
   it('stops the persistent live session on interruption', async () => {
-    let resolveFinish: (() => void) | null = null;
-    mocks.session.finish.mockImplementationOnce(() => new Promise<void>((resolve) => {
-      resolveFinish = resolve;
+    let finishResolve: () => void = () => undefined;
+    mocks.session.finish.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      finishResolve = () => resolve(undefined);
     }));
 
     const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
@@ -164,6 +164,6 @@ describe('live voice unified audio controller', () => {
       { reason: 'live-call-stop' },
     ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
-    resolveFinish?.();
+    finishResolve();
   });
 });
