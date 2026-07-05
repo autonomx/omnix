@@ -149,7 +149,8 @@ describe('chat message streaming audio controller', () => {
     await waitFor(() => expect(FakeAudioContext.sources).toHaveLength(2));
     const firstStart = FakeAudioContext.sources[0].start.mock.calls[0][0] as number;
     const secondStart = FakeAudioContext.sources[1].start.mock.calls[0][0] as number;
-    const firstFadeOutAt = FakeAudioContext.gains[0].gain.linearRampToValueAtTime.mock.calls.at(-1)?.[1] as number;
+    const firstGainCalls = FakeAudioContext.gains[0].gain.linearRampToValueAtTime.mock.calls;
+    const firstFadeOutAt = firstGainCalls[firstGainCalls.length - 1][1] as number;
     const secondFadeIn = FakeAudioContext.gains[1].gain.linearRampToValueAtTime.mock.calls[0] as [number, number];
     expect(firstStart).toBeCloseTo(0.18, 4);
     expect(secondStart).toBeCloseTo(0.272, 4);
