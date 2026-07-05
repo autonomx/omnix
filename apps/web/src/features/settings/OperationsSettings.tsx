@@ -19,6 +19,13 @@ function countField(value: unknown, key: string): number {
   return Array.isArray(rows) ? rows.length : 0;
 }
 
+function displayValue(value: unknown): string {
+  if (value === null || value === undefined) return 'Not reported';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return `${value.length} items`;
+  return `${Object.keys(value as Record<string, unknown>).length} fields`;
+}
+
 export function OperationsSettings({ view = 'storage' }: { view?: OperationsSettingsView }) {
   const { state, dispatch } = useSettingsProfileContext();
   const storage = state.draft.storage;
@@ -38,7 +45,8 @@ export function OperationsSettings({ view = 'storage' }: { view?: OperationsSett
     return () => { active = false; };
   }, []);
   if (view === 'runtime') {
-    return <div><h2>Runtime</h2><SettingsSection title="System summary" scope="status">{Object.keys(snapshot.diagnostics).length} diagnostic fields reported.</SettingsSection></div>;
+    const entries = Object.entries(snapshot.diagnostics).slice(0, 12);
+    return <div><h2>Runtime details</h2><SettingsSection title="System summary" scope="status"><div className="settings-detail-grid">{entries.length ? entries.map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{displayValue(value)}</dd></div>) : <p>No runtime details reported.</p>}</div></SettingsSection></div>;
   }
   return <div><h2>Jobs, Assets & Storage</h2><SettingsSection title="Output defaults" scope="global"><SettingsField label="Retention days"><input type="number" min="1" max="3650" value={storage.retentionDays} onChange={(event) => dispatch({ type: 'update', path: 'storage.retentionDays', value: Number(event.currentTarget.value) })} /></SettingsField><label><input type="checkbox" checked={storage.saveOutputByDefault} onChange={(event) => dispatch({ type: 'update', path: 'storage.saveOutputByDefault', value: event.currentTarget.checked })} />Store new outputs</label></SettingsSection></div>;
 }
