@@ -35,17 +35,37 @@ The deterministic gate completed file-limit checks, Ruff checks, gateway event-s
 
 The central settings profile is now the preferred source for supported global and module defaults. Existing browser keys and provider-only request shapes remain compatibility mirrors where needed; session and job overrides remain intentionally outside central persistence.
 
+## Follow-up adoption progress
+
+### SCC-F1.1 — STT central-default adoption
+
+- Implementation PR: #1211 — SCC-F1.1 STT default adoption
+- Implementation head verified: `96a09ad19cecc358fe48229ab2a8366145fc10c7`
+- Squash merge SHA on `rpg`: `c0bc8a7e9405a382095425a03e1e862a1f44a152`
+- Status: complete
+
+Delivered:
+
+- new STT forms initialize from the central provider and language defaults
+- queued transcription payloads inherit alignment and transcript-storage defaults
+- optional alignment and storage stages reflect the effective defaults
+- explicit provider, language, source, and asset job overrides remain authoritative
+- focused pure helper tests cover default inheritance and override precedence
+
+Both required workflows passed on the exact implementation head, including web typecheck, full web unit tests, and the representative deterministic RPG smoke.
+
 ## Next recommended slice
 
-### SCC-F1 — Complete cross-workspace adoption and compatibility retirement
+### SCC-F1.2 — Voice Studio and voice-cloning default adoption
 
-Use narrow module-specific PRs to finish direct consumption of central defaults in:
+Initialize Voice Studio and voice-cloning forms from the central voice profile, tuning, effects, language, and quality defaults. Preserve all per-job edits and add reset-to-default behavior backed by focused regression tests.
 
-1. STT workspace initialization and transcription payload defaults
-2. Voice Studio and voice-cloning initialization/reset-to-default behavior
-3. Chatbot new-session provider/model defaults
-4. Storyteller and Podcast job metadata defaults
-5. RPG campaign-wizard request initialization
-6. removal of compatibility readers only after each owning workspace has regression coverage
+Remaining follow-up sequence:
+
+1. SCC-F1.2 Voice Studio and voice-cloning initialization/reset-to-default behavior
+2. SCC-F1.3 Chatbot new-session provider/model defaults
+3. SCC-F1.4 Storyteller and Podcast job metadata defaults
+4. SCC-F1.5 RPG campaign-wizard request initialization
+5. SCC-F1.6 compatibility-reader removal after every owning workspace has regression coverage
 
 Each adoption PR must preserve editable session/job overrides and pass the existing architecture and deterministic gates on its exact head.
