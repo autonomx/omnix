@@ -22,3 +22,7 @@ class ModelDefaults(BaseModel):
     background: str = ""
     embedding: str = ""
     image_prompt: str = ""
+
+
+class RoutingDefaults(BaseModel):
+    fallback_behavior: str = "next-available"
