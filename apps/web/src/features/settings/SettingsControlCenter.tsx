@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { WorkspacePanel } from '../../design/primitives';
+import { NarrativeSettings } from './NarrativeSettings';
 import { SettingsActionHeader } from './SettingsActionHeader';
 import { SettingsCategoryPanel } from './SettingsCategoryPanel';
 import { SettingsCategoryRail } from './SettingsCategoryRail';
@@ -10,6 +11,8 @@ import './SettingsControlCenter.css';
 import './SettingsComponents.css';
 import './SettingsResponsive.css';
 
+void NarrativeSettings;
+
 export function SettingsControlCenter() {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('ai-providers');
   const [query, setQuery] = useState('');
@@ -18,10 +21,7 @@ export function SettingsControlCenter() {
       <WorkspacePanel className="settings-control-panel">
         <div className="settings-control-center">
           <SettingsCategoryRail activeCategory={activeCategory} query={query} onQueryChange={setQuery} onSelect={setActiveCategory} />
-          <div className="settings-control-content">
-            <SettingsActionHeader />
-            <main className="settings-main-column"><SettingsCategoryPanel categoryId={activeCategory} /></main>
-          </div>
+          <div className="settings-control-content"><SettingsActionHeader /><main className="settings-main-column"><SettingsCategoryPanel categoryId={activeCategory} /></main></div>
           <SettingsStatusRail />
         </div>
       </WorkspacePanel>
