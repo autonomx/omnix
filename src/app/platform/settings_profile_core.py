@@ -1,7 +1,7 @@
 """Core typed Settings Control Center profile models."""
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 SETTINGS_PROFILE_KEY = "settings_control_center"
 SETTINGS_SCHEMA_VERSION = 1
@@ -26,3 +26,4 @@ class ModelDefaults(BaseModel):
 
 class RoutingDefaults(BaseModel):
     fallback_behavior: str = "next-available"
+    task_overrides: dict[str, dict[str, str]] = Field(default_factory=dict)
