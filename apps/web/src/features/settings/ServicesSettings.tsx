@@ -27,18 +27,20 @@ const ownershipRows = [
 
 export function ServicesSettings() {
   const [payload, setPayload] = useState<ProviderFacadePayload>();
+  const [service, setService] = useState<ServiceStatusPayload>();
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const refresh = useCallback(async () => {
     setLoading(true);
-    try {
-      setPayload(await omnixApiClient.listProviders());
-      setMessage('Service status refreshed.');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Service status is unavailable.');
-    } finally {
-      setLoading(false);
-    }
+    const [providers, status] = await Promise.allSettled([
+      omnixApiClient.listProviders(),
+      omnixApiClient.get<ServiceStatusPayload>('/api/hermes/status'),
+    ]);
+    if (providers.status === 'fulfilled') setPayload(providers.value);
+    if (status.status === 'fulfilled') setService(status.value);
+    const failure = [providers, status].find((result) => result.status === 'rejected');
+    setMessage(failure?.status === 'rejected' ? (failure.reason instanceof Error ? failure.reason.message : 'Service status is unavailable.') : 'Service status refreshed.');
+    setLoading(false);
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   const connected = (payload?.providers ?? []).filter((provider) => provider.status === 'available' || provider.status === 'configured');
@@ -50,6 +52,10 @@ export function ServicesSettings() {
       </SettingsSection>
       <SettingsSection title="Connected services" description="Connection state comes from the provider registry." actions={<button type="button" className="settings-secondary-button" disabled={loading} onClick={() => void refresh()}>{loading ? 'Refreshing…' : 'Refresh'}</button>}>
         {connected.length ? <div className="settings-status-list">{connected.map((provider) => <SettingsStatusRow key={provider.id} label={provider.label} value={provider.status} tone="ready" />)}</div> : <div className="settings-planned-state"><strong>No configured services reported</strong><p>Use the owning provider module to configure a service.</p></div>}
+      </SettingsSection>
+      <SettingsSection title="Hermes diagnostics" description="Settings reads the existing diagnostics contract.">
+        <SettingsStatusRow label="Hermes" value={summarizeServiceStatus(service)} tone={service?.ok ? 'ready' : 'idle'} />
+        <dl className="settings-detail-grid"><div><dt>Mode</dt><dd>{String(service?.mode ?? 'Not reported')}</dd></div><div><dt>Source</dt><dd>{String(service?.source ?? 'Hermes diagnostics API')}</dd></div></dl>
         {message ? <p className="settings-inline-status" role="status">{message}</p> : null}
       </SettingsSection>
     </div>
