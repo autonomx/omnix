@@ -15,3 +15,7 @@ export const DEFAULT_OUTPUT_SETTINGS: OutputDefaults = {
   pitch: 0,
   volume: 0,
 };
+
+export function resolveOutputDefaults(overrides: Partial<OutputDefaults> = {}): OutputDefaults {
+  return { ...DEFAULT_OUTPUT_SETTINGS, ...overrides };
+}
