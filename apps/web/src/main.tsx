@@ -16,7 +16,6 @@ import './features/assistant-workspace/assistant-context-controller.css';
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
 import './features/assistant-workspace/live-voice-form-sync';
 import './features/assistant-workspace/live-voice-controller';
-import { initializeLiveVoiceUnifiedAudioController } from './features/assistant-workspace/live-voice-unified-audio-controller';
 import './features/storyteller/StorytellerWorkspace.css';
 import './features/storyteller/StorytellerSidebar.css';
 import './features/storyteller/StoryMode.css';
@@ -48,7 +47,6 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 
 window.setTimeout(() => {
   initializeChatMessageStreamAudioController();
-  initializeLiveVoiceUnifiedAudioController();
   void import('./features/assistant-workspace/assistant-context-controller').catch((error: unknown) => {
     console.error('Assistant context controls failed to initialize', error);
   });
