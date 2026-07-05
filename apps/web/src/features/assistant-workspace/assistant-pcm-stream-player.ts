@@ -2,14 +2,16 @@ import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 
 const STREAM_AUDIO_STATUS_ATTRIBUTE = 'data-omnix-stream-audio-status';
 const STREAMING_TTS_SAMPLE_RATE = 24_000;
-const STREAMING_TTS_START_BUFFER_SECONDS = 0.65;
-const STREAMING_TTS_PLAYBACK_BLOCK_SECONDS = 0.25;
-const STREAMING_TTS_SCHEDULE_LEAD_SECONDS = 0.08;
+const STREAMING_TTS_START_BUFFER_SECONDS = 1.5;
+const STREAMING_TTS_REBUFFER_SECONDS = 0.5;
 const STREAMING_TTS_URL = '/api/tts/stream/server-sent-events';
+const STREAMING_TTS_CHUNK_SIZE = 8;
+const STREAMING_TTS_WORKLET_NAME = 'omnix-assistant-pcm-stream';
 
 type StreamingAudioWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
   webkitAudioContext?: typeof AudioContext;
+  AudioWorkletNode?: typeof AudioWorkletNode;
 };
 
 type StreamingTtsEvent = {
@@ -19,16 +21,16 @@ type StreamingTtsEvent = {
   sample_rate?: number;
 };
 
+type WorkletStatusEvent = {
+  type?: string;
+  buffered_samples?: number;
+};
+
 type MessageStreamPlayback = {
   button: HTMLButtonElement;
   audioContext: AudioContext;
   abortController: AbortController;
-  sources: Set<AudioBufferSourceNode>;
-  pendingPcm: Int16Array[];
-  pendingSamples: number;
-  sampleRate: number;
-  nextStartAt: number;
-  started: boolean;
+  node: AudioWorkletNode | null;
   serverDone: boolean;
   closed: boolean;
 };
@@ -46,8 +48,14 @@ export async function startAssistantPcmStream(
 ): Promise<void> {
   const liveWindow = window as StreamingAudioWindow;
   const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
-  if (!AudioContextCtor || typeof window.fetch !== 'function' || typeof window.ReadableStream === 'undefined') {
-    setStreamAudioStatus(root, 'Streaming audio requires browser streaming fetch and AudioContext support.');
+  const AudioWorkletNodeCtor = liveWindow.AudioWorkletNode;
+  if (
+    !AudioContextCtor
+    || !AudioWorkletNodeCtor
+    || typeof window.fetch !== 'function'
+    || typeof window.ReadableStream === 'undefined'
+  ) {
+    setStreamAudioStatus(root, 'Streaming audio requires browser AudioWorklet and streaming fetch support.');
     return;
   }
 
@@ -57,12 +65,7 @@ export async function startAssistantPcmStream(
     button,
     audioContext,
     abortController: new AbortController(),
-    sources: new Set<AudioBufferSourceNode>(),
-    pendingPcm: [],
-    pendingSamples: 0,
-    sampleRate: STREAMING_TTS_SAMPLE_RATE,
-    nextStartAt: audioContext.currentTime + STREAMING_TTS_SCHEDULE_LEAD_SECONDS,
-    started: false,
+    node: null,
     serverDone: false,
     closed: false,
   };
@@ -72,6 +75,9 @@ export async function startAssistantPcmStream(
 
   try {
     if (audioContext.state !== 'running') await audioContext.resume();
+    playback.node = await createContinuousPcmSink(root, playback, AudioWorkletNodeCtor);
+    if (playback.closed || activePlayback !== playback) return;
+
     const response = await fetch(STREAMING_TTS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -79,7 +85,7 @@ export async function startAssistantPcmStream(
         text,
         speaker: selectedVoiceId(),
         language: 'English',
-        chunk_size: 12,
+        chunk_size: STREAMING_TTS_CHUNK_SIZE,
         temperature: 0.6,
         top_k: 20,
         top_p: 0.85,
@@ -109,15 +115,15 @@ export async function startAssistantPcmStream(
         if (!message) continue;
         if (message.type === 'error') throw new Error(message.message || 'Streaming TTS failed.');
         if (message.type === 'done') {
-          markServerDone(root, playback);
+          markServerDone(playback);
           return;
         }
         if (message.type !== 'chunk' || typeof message.audio_b64 !== 'string') continue;
-        enqueuePcmChunk(root, playback, message);
+        enqueuePcmChunk(playback, message);
       }
     }
 
-    markServerDone(root, playback);
+    markServerDone(playback);
   } catch (error) {
     if (playback.closed || activePlayback !== playback || isAbortError(error)) return;
     terminatePlayback(playback);
@@ -136,80 +142,62 @@ export function stopAssistantPcmStream(root: ParentNode, status?: string): void 
   if (status) setStreamAudioStatus(root, status);
 }
 
-function enqueuePcmChunk(root: ParentNode, playback: MessageStreamPlayback, message: StreamingTtsEvent): void {
-  if (playback.closed || typeof message.audio_b64 !== 'string') return;
+async function createContinuousPcmSink(
+  root: ParentNode,
+  playback: MessageStreamPlayback,
+  AudioWorkletNodeCtor: typeof AudioWorkletNode,
+): Promise<AudioWorkletNode> {
+  const moduleUrl = createAudioWorkletModuleUrl();
+  try {
+    await playback.audioContext.audioWorklet.addModule(moduleUrl.url);
+  } finally {
+    moduleUrl.revoke();
+  }
+
+  const node = new AudioWorkletNodeCtor(playback.audioContext, STREAMING_TTS_WORKLET_NAME, {
+    numberOfInputs: 0,
+    numberOfOutputs: 1,
+    outputChannelCount: [1],
+    processorOptions: {
+      startBufferSamples: Math.round(playback.audioContext.sampleRate * STREAMING_TTS_START_BUFFER_SECONDS),
+      rebufferSamples: Math.round(playback.audioContext.sampleRate * STREAMING_TTS_REBUFFER_SECONDS),
+    },
+  });
+  node.port.onmessage = (event: MessageEvent<WorkletStatusEvent>) => {
+    if (playback.closed || activePlayback !== playback) return;
+    if (event.data?.type === 'started' || event.data?.type === 'resumed') {
+      setStreamAudioStatus(root, 'Streaming response audio…');
+      return;
+    }
+    if (event.data?.type === 'underrun') {
+      setStreamAudioStatus(root, 'Rebuffering streaming response audio…');
+      return;
+    }
+    if (event.data?.type === 'drained' && playback.serverDone) finishPlayback(root, playback);
+  };
+  node.connect(playback.audioContext.destination);
+  return node;
+}
+
+function enqueuePcmChunk(playback: MessageStreamPlayback, message: StreamingTtsEvent): void {
+  if (playback.closed || !playback.node || typeof message.audio_b64 !== 'string') return;
   const samples = base64ToPcm16(message.audio_b64);
   if (!samples.length) return;
 
-  const sampleRate = typeof message.sample_rate === 'number' && message.sample_rate > 0
+  const sourceSampleRate = typeof message.sample_rate === 'number' && message.sample_rate > 0
     ? message.sample_rate
     : STREAMING_TTS_SAMPLE_RATE;
-  if (playback.pendingSamples > 0 && sampleRate !== playback.sampleRate) flushBufferedPcm(root, playback, true);
-  playback.sampleRate = sampleRate;
-  playback.pendingPcm.push(samples);
-  playback.pendingSamples += samples.length;
-  flushBufferedPcm(root, playback, false);
-}
-
-function flushBufferedPcm(root: ParentNode, playback: MessageStreamPlayback, force: boolean): void {
-  if (playback.closed || playback.pendingSamples === 0) return;
-  const startBufferSamples = Math.max(1, Math.round(playback.sampleRate * STREAMING_TTS_START_BUFFER_SECONDS));
-  const playbackBlockSamples = Math.max(1, Math.round(playback.sampleRate * STREAMING_TTS_PLAYBACK_BLOCK_SECONDS));
-
-  if (!playback.started) {
-    if (!force && playback.pendingSamples < startBufferSamples) return;
-    playback.started = true;
-    schedulePcmSamples(root, playback, takeBufferedPcm(playback, playback.pendingSamples));
-    setStreamAudioStatus(root, 'Streaming response audio…');
-    return;
-  }
-
-  while (playback.pendingSamples >= playbackBlockSamples || (force && playback.pendingSamples > 0)) {
-    const sampleCount = force ? playback.pendingSamples : playbackBlockSamples;
-    schedulePcmSamples(root, playback, takeBufferedPcm(playback, sampleCount));
-  }
-}
-
-function takeBufferedPcm(playback: MessageStreamPlayback, sampleCount: number): Int16Array {
-  const output = new Int16Array(sampleCount);
-  let written = 0;
-  while (written < sampleCount && playback.pendingPcm.length > 0) {
-    const chunk = playback.pendingPcm[0];
-    const take = Math.min(chunk.length, sampleCount - written);
-    output.set(chunk.subarray(0, take), written);
-    written += take;
-    if (take === chunk.length) playback.pendingPcm.shift();
-    else playback.pendingPcm[0] = chunk.slice(take);
-  }
-  playback.pendingSamples = Math.max(0, playback.pendingSamples - written);
-  return written === output.length ? output : output.slice(0, written);
-}
-
-function schedulePcmSamples(root: ParentNode, playback: MessageStreamPlayback, samples: Int16Array): void {
-  if (playback.closed || samples.length === 0) return;
-  const audioBuffer = pcm16ToAudioBuffer(playback.audioContext, samples, playback.sampleRate);
-  const source = playback.audioContext.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(playback.audioContext.destination);
-
-  const startAt = Math.max(
-    playback.nextStartAt,
-    playback.audioContext.currentTime + STREAMING_TTS_SCHEDULE_LEAD_SECONDS,
+  const floatSamples = pcm16ToFloat32(samples, sourceSampleRate, playback.audioContext.sampleRate);
+  playback.node.port.postMessage(
+    { type: 'push', samples: floatSamples },
+    [floatSamples.buffer],
   );
-  source.start(startAt);
-  playback.nextStartAt = startAt + audioBuffer.duration;
-  playback.sources.add(source);
-  source.addEventListener('ended', () => {
-    playback.sources.delete(source);
-    try { source.disconnect(); } catch { /* ignore browser cleanup failures */ }
-    if (playback.serverDone && playback.pendingSamples === 0 && playback.sources.size === 0) finishPlayback(root, playback);
-  }, { once: true });
 }
 
-function markServerDone(root: ParentNode, playback: MessageStreamPlayback): void {
+function markServerDone(playback: MessageStreamPlayback): void {
+  if (playback.closed || playback.serverDone) return;
   playback.serverDone = true;
-  flushBufferedPcm(root, playback, true);
-  if (playback.pendingSamples === 0 && playback.sources.size === 0) finishPlayback(root, playback);
+  playback.node?.port.postMessage({ type: 'end' });
 }
 
 function finishPlayback(root: ParentNode, playback: MessageStreamPlayback): void {
@@ -217,6 +205,7 @@ function finishPlayback(root: ParentNode, playback: MessageStreamPlayback): void
   playback.closed = true;
   if (activePlayback === playback) activePlayback = null;
   setButtonStreaming(playback.button, false);
+  try { playback.node?.disconnect(); } catch { /* ignore browser cleanup failures */ }
   void playback.audioContext.close().catch(() => undefined);
   setStreamAudioStatus(root, 'Streaming response audio finished.');
 }
@@ -225,14 +214,123 @@ function terminatePlayback(playback: MessageStreamPlayback): void {
   if (playback.closed) return;
   playback.closed = true;
   try { playback.abortController.abort(); } catch { /* ignore browser cleanup failures */ }
-  playback.sources.forEach((source) => {
-    try { source.stop(); } catch { /* ignore browser cleanup failures */ }
-    try { source.disconnect(); } catch { /* ignore browser cleanup failures */ }
-  });
-  playback.sources.clear();
-  playback.pendingPcm = [];
-  playback.pendingSamples = 0;
+  try { playback.node?.port.postMessage({ type: 'stop' }); } catch { /* ignore browser cleanup failures */ }
+  try { playback.node?.disconnect(); } catch { /* ignore browser cleanup failures */ }
   void playback.audioContext.close().catch(() => undefined);
+}
+
+function createAudioWorkletModuleUrl(): { url: string; revoke: () => void } {
+  const source = assistantPcmStreamWorkletSource();
+  if (typeof URL.createObjectURL === 'function') {
+    const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+    return { url, revoke: () => URL.revokeObjectURL(url) };
+  }
+  return {
+    url: `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`,
+    revoke: () => undefined,
+  };
+}
+
+function assistantPcmStreamWorkletSource(): string {
+  return `
+class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
+  constructor(options) {
+    super();
+    const settings = options.processorOptions || {};
+    this.startBufferSamples = Math.max(1, Number(settings.startBufferSamples) || sampleRate);
+    this.rebufferSamples = Math.max(1, Number(settings.rebufferSamples) || Math.round(sampleRate * 0.5));
+    this.queue = [];
+    this.headOffset = 0;
+    this.queuedSamples = 0;
+    this.started = false;
+    this.waitingForBuffer = false;
+    this.inputEnded = false;
+    this.stopped = false;
+    this.drained = false;
+    this.port.onmessage = (event) => {
+      const message = event.data || {};
+      if (message.type === 'push' && message.samples) {
+        const samples = message.samples instanceof Float32Array
+          ? message.samples
+          : new Float32Array(message.samples);
+        if (samples.length > 0) {
+          this.queue.push(samples);
+          this.queuedSamples += samples.length;
+          this.maybeStartOrResume();
+        }
+        return;
+      }
+      if (message.type === 'end') {
+        this.inputEnded = true;
+        this.maybeStartOrResume();
+        return;
+      }
+      if (message.type === 'stop') this.stopped = true;
+    };
+  }
+
+  maybeStartOrResume() {
+    if (!this.started && (this.queuedSamples >= this.startBufferSamples || (this.inputEnded && this.queuedSamples > 0))) {
+      this.started = true;
+      this.waitingForBuffer = false;
+      this.port.postMessage({ type: 'started', buffered_samples: this.queuedSamples });
+      return;
+    }
+    if (
+      this.started
+      && this.waitingForBuffer
+      && (this.queuedSamples >= this.rebufferSamples || this.inputEnded)
+    ) {
+      this.waitingForBuffer = false;
+      this.port.postMessage({ type: 'resumed', buffered_samples: this.queuedSamples });
+    }
+  }
+
+  signalDrained() {
+    if (!this.drained) {
+      this.drained = true;
+      this.port.postMessage({ type: 'drained' });
+    }
+    return false;
+  }
+
+  process(_inputs, outputs) {
+    const channel = outputs[0] && outputs[0][0];
+    if (!channel) return !this.stopped;
+    channel.fill(0);
+    if (this.stopped) return false;
+
+    this.maybeStartOrResume();
+    if (!this.started || this.waitingForBuffer) {
+      if (this.inputEnded && this.queuedSamples === 0) return this.signalDrained();
+      return true;
+    }
+
+    let written = 0;
+    while (written < channel.length && this.queue.length > 0) {
+      const head = this.queue[0];
+      const available = head.length - this.headOffset;
+      const take = Math.min(available, channel.length - written);
+      channel.set(head.subarray(this.headOffset, this.headOffset + take), written);
+      written += take;
+      this.headOffset += take;
+      this.queuedSamples -= take;
+      if (this.headOffset >= head.length) {
+        this.queue.shift();
+        this.headOffset = 0;
+      }
+    }
+
+    if (written < channel.length && this.queuedSamples === 0) {
+      if (this.inputEnded) return this.signalDrained();
+      this.waitingForBuffer = true;
+      this.port.postMessage({ type: 'underrun' });
+    }
+    return true;
+  }
+}
+registerProcessor('${STREAMING_TTS_WORKLET_NAME}', OmnixAssistantPcmStreamProcessor);
+`;
 }
 
 function setButtonStreaming(button: HTMLButtonElement, streaming: boolean): void {
@@ -278,11 +376,26 @@ function base64ToPcm16(value: string): Int16Array {
   return new Int16Array(bytes.buffer);
 }
 
-function pcm16ToAudioBuffer(audioContext: AudioContext, input: Int16Array, sampleRate: number): AudioBuffer {
-  const buffer = audioContext.createBuffer(1, input.length, sampleRate);
-  const channel = buffer.getChannelData(0);
-  for (let index = 0; index < input.length; index += 1) channel[index] = input[index] / 32768;
-  return buffer;
+function pcm16ToFloat32(input: Int16Array, sourceSampleRate: number, targetSampleRate: number): Float32Array {
+  if (sourceSampleRate === targetSampleRate) {
+    const output = new Float32Array(input.length);
+    for (let index = 0; index < input.length; index += 1) output[index] = input[index] / 32768;
+    return output;
+  }
+
+  const outputLength = Math.max(1, Math.round(input.length * targetSampleRate / sourceSampleRate));
+  const output = new Float32Array(outputLength);
+  const sourceStep = sourceSampleRate / targetSampleRate;
+  for (let index = 0; index < outputLength; index += 1) {
+    const sourcePosition = Math.min(input.length - 1, index * sourceStep);
+    const leftIndex = Math.floor(sourcePosition);
+    const rightIndex = Math.min(input.length - 1, leftIndex + 1);
+    const fraction = sourcePosition - leftIndex;
+    const left = input[leftIndex] / 32768;
+    const right = input[rightIndex] / 32768;
+    output[index] = left + ((right - left) * fraction);
+  }
+  return output;
 }
 
 function isAbortError(error: unknown): boolean {

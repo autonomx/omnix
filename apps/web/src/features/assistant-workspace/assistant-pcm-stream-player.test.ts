@@ -2,48 +2,58 @@ import { fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initializeChatMessageStreamAudioController } from './chat-message-stream-audio-controller';
 
-type EndListener = () => void;
 let cleanupController: (() => void) | null = null;
 
-class FakeSource {
-  buffer: AudioBuffer | null = null;
-  private onEnded: EndListener | null = null;
+class FakeMessagePort {
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  messages: unknown[] = [];
+  start = vi.fn();
+  close = vi.fn();
+
+  postMessage(message: unknown): void {
+    this.messages.push(message);
+    if ((message as { type?: string })?.type === 'end') {
+      queueMicrotask(() => this.onmessage?.({ data: { type: 'drained' } } as MessageEvent));
+    }
+  }
+
+  addEventListener = vi.fn();
+  removeEventListener = vi.fn();
+  dispatchEvent = vi.fn().mockReturnValue(true);
+}
+
+class FakeAudioWorkletNode {
+  static nodes: FakeAudioWorkletNode[] = [];
+  readonly port = new FakeMessagePort();
+  readonly options: AudioWorkletNodeOptions;
   connect = vi.fn();
   disconnect = vi.fn();
-  stop = vi.fn();
-  start = vi.fn((_when?: number) => queueMicrotask(() => this.onEnded?.()));
 
-  addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
-    if (type !== 'ended') return;
-    this.onEnded = typeof listener === 'function'
-      ? () => listener(new Event('ended'))
-      : () => listener.handleEvent(new Event('ended'));
+  constructor(
+    _context: BaseAudioContext,
+    _name: string,
+    options: AudioWorkletNodeOptions = {},
+  ) {
+    this.options = options;
+    FakeAudioWorkletNode.nodes.push(this);
   }
 }
 
 class FakeAudioContext {
-  static sources: FakeSource[] = [];
+  static contexts: FakeAudioContext[] = [];
   state: AudioContextState = 'running';
-  currentTime = 0;
+  sampleRate = 24_000;
   destination = {} as AudioDestinationNode;
+  audioWorklet = { addModule: vi.fn().mockResolvedValue(undefined) };
   resume = vi.fn().mockResolvedValue(undefined);
   close = vi.fn().mockResolvedValue(undefined);
 
-  createBuffer(_channels: number, length: number, sampleRate: number): AudioBuffer {
-    const channel = new Float32Array(length);
-    return {
-      duration: length / sampleRate,
-      length,
-      numberOfChannels: 1,
-      sampleRate,
-      getChannelData: () => channel,
-    } as unknown as AudioBuffer;
+  constructor() {
+    FakeAudioContext.contexts.push(this);
   }
 
   createBufferSource(): AudioBufferSourceNode {
-    const source = new FakeSource();
-    FakeAudioContext.sources.push(source);
-    return source as unknown as AudioBufferSourceNode;
+    throw new Error('continuous AudioWorklet playback must not schedule AudioBufferSourceNode blocks');
   }
 }
 
@@ -78,19 +88,25 @@ function streamResponse(events: string[]): Response {
   });
 }
 
+function installAudioWorkletFakes(): void {
+  vi.stubGlobal('AudioContext', FakeAudioContext as unknown as typeof AudioContext);
+  vi.stubGlobal('AudioWorkletNode', FakeAudioWorkletNode as unknown as typeof AudioWorkletNode);
+  vi.stubGlobal('ReadableStream', ReadableStream);
+}
+
 afterEach(() => {
   cleanupController?.();
   cleanupController = null;
   document.body.innerHTML = '';
-  FakeAudioContext.sources = [];
+  FakeAudioContext.contexts = [];
+  FakeAudioWorkletNode.nodes = [];
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('assistant PCM stream player', () => {
-  it('uses the selected voice and incremental SSE contract', async () => {
-    vi.stubGlobal('AudioContext', FakeAudioContext as unknown as typeof AudioContext);
-    vi.stubGlobal('ReadableStream', ReadableStream);
+  it('uses the selected voice and lower-latency Qwen streaming contract', async () => {
+    installAudioWorkletFakes();
     const fetchMock = vi.fn().mockResolvedValue(streamResponse([chunk(new Int16Array([0, 0]))]));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -102,15 +118,15 @@ describe('assistant PCM stream player', () => {
     expect(JSON.parse(String(init.body))).toMatchObject({
       text: 'Stream this reply.',
       speaker: 'ari-clone',
+      chunk_size: 8,
       non_streaming_mode: false,
       parity_mode: true,
     });
     await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
   });
 
-  it('coalesces gateway blocks into one startup buffer', async () => {
-    vi.stubGlobal('AudioContext', FakeAudioContext as unknown as typeof AudioContext);
-    vi.stubGlobal('ReadableStream', ReadableStream);
+  it('uses one continuously clocked AudioWorklet with startup and rebuffer reserves', async () => {
+    installAudioWorkletFakes();
     const block = new Int16Array(2_048);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse(
       Array.from({ length: 8 }, () => chunk(block)),
@@ -118,14 +134,18 @@ describe('assistant PCM stream player', () => {
 
     fireEvent.click(renderMessage());
 
-    await waitFor(() => expect(FakeAudioContext.sources).toHaveLength(1));
-    expect(FakeAudioContext.sources[0].buffer?.length).toBe(16_384);
-    expect(FakeAudioContext.sources[0].start).toHaveBeenCalledWith(0.08);
+    await waitFor(() => expect(FakeAudioWorkletNode.nodes).toHaveLength(1));
+    const [node] = FakeAudioWorkletNode.nodes;
+    expect(node.options.processorOptions).toMatchObject({
+      startBufferSamples: 36_000,
+      rebufferSamples: 12_000,
+    });
+    expect(node.connect).toHaveBeenCalledTimes(1);
+    expect(FakeAudioContext.contexts[0].audioWorklet.addModule).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves every sample in order without crossfade overlap', async () => {
-    vi.stubGlobal('AudioContext', FakeAudioContext as unknown as typeof AudioContext);
-    vi.stubGlobal('ReadableStream', ReadableStream);
+  it('posts every PCM sample to the continuous queue in exact order', async () => {
+    installAudioWorkletFakes();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse([
       chunk(new Int16Array([1_000, -1_000])),
       chunk(new Int16Array([2_000, -2_000])),
@@ -133,10 +153,18 @@ describe('assistant PCM stream player', () => {
 
     fireEvent.click(renderMessage());
 
-    await waitFor(() => expect(FakeAudioContext.sources).toHaveLength(1));
-    expect(Array.from(FakeAudioContext.sources[0].buffer?.getChannelData(0) ?? [])).toEqual([
+    await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
+    const pushMessages = FakeAudioWorkletNode.nodes[0].port.messages
+      .filter((message) => (message as { type?: string }).type === 'push') as Array<{
+        type: string;
+        samples: Float32Array;
+      }>;
+    expect(pushMessages).toHaveLength(2);
+    expect(Array.from(pushMessages[0].samples)).toEqual([
       1_000 / 32_768,
       -1_000 / 32_768,
+    ]);
+    expect(Array.from(pushMessages[1].samples)).toEqual([
       2_000 / 32_768,
       -2_000 / 32_768,
     ]);
