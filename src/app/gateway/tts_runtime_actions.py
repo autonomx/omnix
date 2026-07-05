@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from app.providers.vendor.qwen3_tts import reset_tts_model_cache
 from app.shared import get_tts_provider
 
 from .tts_runtime_state import (
@@ -148,6 +149,7 @@ def unload_tts_runtime(trigger: str = "manual") -> dict[str, Any]:
         provider = get_tts_provider()
         if provider is None or not hasattr(provider, "stop") or not provider.stop():
             raise RuntimeError("tts_provider_unload_failed")
+        reset_tts_model_cache()
         with STATE_LOCK:
             STATE.update(
                 status="unloaded",
