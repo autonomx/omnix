@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { WorkspacePanel } from '../../design/primitives';
+import { SettingsActionHeader } from './SettingsActionHeader';
 import { SettingsCategoryPanel } from './SettingsCategoryPanel';
 import { SettingsCategoryRail } from './SettingsCategoryRail';
-import { SettingsHeader } from './SettingsHeader';
 import { SettingsProfileProvider } from './SettingsProfileProvider';
 import { SettingsStatusRail } from './SettingsStatusRail';
 import type { SettingsCategoryId } from './settingsTypes';
@@ -19,7 +19,7 @@ export function SettingsControlCenter() {
         <div className="settings-control-center">
           <SettingsCategoryRail activeCategory={activeCategory} query={query} onQueryChange={setQuery} onSelect={setActiveCategory} />
           <div className="settings-control-content">
-            <SettingsHeader dirtyCount={0} onDiscard={() => undefined} onSave={() => undefined} />
+            <SettingsActionHeader />
             <main className="settings-main-column"><SettingsCategoryPanel categoryId={activeCategory} /></main>
           </div>
           <SettingsStatusRail />
