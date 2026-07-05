@@ -7,6 +7,7 @@ from typing import Any
 from .assistant_context_routes import install_assistant_context_route_hook
 from .audiobook_streaming import install_audiobook_websocket_hook
 from .hermes_routes import install_hermes_route_hook
+from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
 from .realtime_routes import install_realtime_route_hook
 from .rpg_session_routes import install_rpg_session_route_hook
 from .rpg_turn_job_mirror import install_rpg_turn_job_mirror_hook
@@ -21,6 +22,7 @@ install_rpg_turn_job_mirror_hook()
 install_audiobook_websocket_hook()
 install_hermes_route_hook()
 install_realtime_route_hook()
+install_live_voice_diagnostics_hook()
 install_tts_runtime_route_hook()
 install_tts_pcm_websocket_hook()
 import_module(".tts_streaming", __name__).install_tts_stream_hook()
