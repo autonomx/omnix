@@ -3,7 +3,9 @@ import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 const STREAM_AUDIO_BUTTON_ATTRIBUTE = 'data-omnix-stream-audio';
 const STREAM_AUDIO_STATUS_ATTRIBUTE = 'data-omnix-stream-audio-status';
 const STREAMING_TTS_SAMPLE_RATE = 24_000;
-const STREAMING_TTS_START_DELAY_SECONDS = 0.03;
+const STREAMING_TTS_START_DELAY_SECONDS = 0.18;
+const STREAMING_TTS_CROSSFADE_SECONDS = 0.008;
+const STREAMING_TTS_LATE_START_DELAY_SECONDS = 0.02;
 const STREAMING_TTS_URL = '/api/tts/stream/server-sent-events';
 const installedRoots = new WeakSet<ParentNode>();
 
@@ -23,8 +25,9 @@ type MessageStreamPlayback = {
   button: HTMLButtonElement;
   audioContext: AudioContext;
   abortController: AbortController;
-  sources: Set<AudioBufferSourceNode>;
+  sources: Map<AudioBufferSourceNode, GainNode>;
   nextStartAt: number;
+  scheduledChunks: number;
   serverDone: boolean;
   closed: boolean;
 };
@@ -103,14 +106,15 @@ async function streamMessageAudio(root: ParentNode, button: HTMLButtonElement, t
     button,
     audioContext,
     abortController: new AbortController(),
-    sources: new Set<AudioBufferSourceNode>(),
+    sources: new Map<AudioBufferSourceNode, GainNode>(),
     nextStartAt: audioContext.currentTime + STREAMING_TTS_START_DELAY_SECONDS,
+    scheduledChunks: 0,
     serverDone: false,
     closed: false,
   };
   activePlayback = playback;
   setButtonStreaming(button, true);
-  setStreamAudioStatus(root, 'Connecting streaming response audio…');
+  setStreamAudioStatus(root, 'Buffering streaming response audio…');
 
   try {
     if (audioContext.state !== 'running') await audioContext.resume();
@@ -185,15 +189,37 @@ function schedulePcmChunk(root: ParentNode, playback: MessageStreamPlayback, mes
     : STREAMING_TTS_SAMPLE_RATE;
   const audioBuffer = pcm16ArrayBufferToAudioBuffer(playback.audioContext, pcm, sampleRate);
   const source = playback.audioContext.createBufferSource();
+  const gain = playback.audioContext.createGain();
   source.buffer = audioBuffer;
-  source.connect(playback.audioContext.destination);
-  const startAt = Math.max(playback.nextStartAt, playback.audioContext.currentTime + 0.01);
+  source.connect(gain);
+  gain.connect(playback.audioContext.destination);
+
+  const crossfade = Math.min(STREAMING_TTS_CROSSFADE_SECONDS, audioBuffer.duration / 2);
+  const isFirstChunk = playback.scheduledChunks === 0;
+  const intendedStartAt = isFirstChunk
+    ? playback.nextStartAt
+    : playback.nextStartAt - crossfade;
+  const startAt = Math.max(
+    intendedStartAt,
+    playback.audioContext.currentTime + STREAMING_TTS_LATE_START_DELAY_SECONDS,
+  );
+  const endAt = startAt + audioBuffer.duration;
+  const fadeInEndAt = startAt + crossfade;
+  const fadeOutStartAt = Math.max(fadeInEndAt, endAt - crossfade);
+
+  gain.gain.setValueAtTime(0, startAt);
+  gain.gain.linearRampToValueAtTime(1, fadeInEndAt);
+  gain.gain.setValueAtTime(1, fadeOutStartAt);
+  gain.gain.linearRampToValueAtTime(0, endAt);
+
   source.start(startAt);
-  playback.nextStartAt = startAt + audioBuffer.duration;
-  playback.sources.add(source);
+  playback.nextStartAt = endAt;
+  playback.scheduledChunks += 1;
+  playback.sources.set(source, gain);
   source.addEventListener('ended', () => {
     playback.sources.delete(source);
     try { source.disconnect(); } catch { /* ignore browser cleanup failures */ }
+    try { gain.disconnect(); } catch { /* ignore browser cleanup failures */ }
     if (playback.serverDone && playback.sources.size === 0) finishPlayback(root, playback);
   }, { once: true });
 }
@@ -225,9 +251,10 @@ function terminatePlayback(playback: MessageStreamPlayback): void {
   if (playback.closed) return;
   playback.closed = true;
   try { playback.abortController.abort(); } catch { /* ignore browser cleanup failures */ }
-  playback.sources.forEach((source) => {
+  playback.sources.forEach((gain, source) => {
     try { source.stop(); } catch { /* ignore browser cleanup failures */ }
     try { source.disconnect(); } catch { /* ignore browser cleanup failures */ }
+    try { gain.disconnect(); } catch { /* ignore browser cleanup failures */ }
   });
   playback.sources.clear();
   void playback.audioContext.close().catch(() => undefined);
