@@ -28,7 +28,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
       <div className="image-assets-toolbar">
         <label className="image-assets-search">
           <span aria-hidden="true">⌕</span>
-          <span className="visually-hidden">Search image assets</span>
+          <span className="visually-hidden">Search images</span>
           <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Search assets..." />
         </label>
         <div className="image-view-toggle" role="group" aria-label="Asset view">
