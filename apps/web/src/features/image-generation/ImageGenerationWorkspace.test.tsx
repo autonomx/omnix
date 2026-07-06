@@ -66,6 +66,19 @@ describe('ImageGenerationWorkspace', () => {
         });
       }
 
+      if (path === '/api/image-generation/model/status') {
+        return Response.json({
+          ok: true,
+          service: 'image',
+          enabled: true,
+          provider: 'flux_klein',
+          model: 'FLUX.2 [klein] 4B',
+          loaded: true,
+          state: 'loaded',
+          local_model: { ok: true, exists: true, complete: true, missing: [], local_dir: 'resources/models/image/flux2-klein-4b' },
+        });
+      }
+
       if (path === '/api/jobs' && init?.method === 'POST') {
         return Response.json({
           id: 'job:image',
@@ -106,6 +119,7 @@ describe('ImageGenerationWorkspace', () => {
 
     expect(await screen.findByRole('heading', { name: 'Image request' })).toBeInTheDocument();
     expect(await screen.findByText('Flux local')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Unload Model' })).toBeInTheDocument();
     expect(screen.queryByText('RPG visual provider')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Size preset')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Select Generated image' })).toBeInTheDocument();
@@ -119,6 +133,7 @@ describe('ImageGenerationWorkspace', () => {
 
     await waitFor(() => {
       const paths = fetchMock.mock.calls.map(([input]) => requestPath(input as RequestInfo | URL));
+      expect(paths).toContain('/api/image-generation/model/status');
       expect(paths).toContain('/api/image-generation/jobs');
       expect(paths).toContain('/api/image-generation/assets');
       const createCall = fetchMock.mock.calls.find(
