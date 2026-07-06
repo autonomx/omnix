@@ -107,11 +107,13 @@ describe('ImageGenerationWorkspace', () => {
     expect(await screen.findByRole('heading', { name: 'Image request' })).toBeInTheDocument();
     expect(await screen.findByText('Flux local')).toBeInTheDocument();
     expect(screen.queryByText('RPG visual provider')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Size preset')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Select Generated image' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'image:flux' } });
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A bright workstation render.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue image' }));
+    fireEvent.change(screen.getByLabelText('Style'), { target: { value: 'cinematic' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate image' }));
 
     expect(await screen.findByText('Image job queued: job:image')).toBeInTheDocument();
 
@@ -126,6 +128,7 @@ describe('ImageGenerationWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"type":"image.generate"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:image"');
       expect(createCall?.[1]?.body).toContain('"provider_id":"image:flux"');
+      expect(createCall?.[1]?.body).toContain('"style":"cinematic"');
     });
   });
 });
