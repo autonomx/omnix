@@ -1,6 +1,7 @@
-import { Text, UnstyledButton } from '@mantine/core';
+import { Button, Text, UnstyledButton } from '@mantine/core';
 import { useMemo, useState } from 'react';
 import type { AssetListResponse } from '../../api/client';
+import { imageAssetUrl } from './imageWorkspaceModel';
 
 export type ImageAsset = AssetListResponse['assets'][number];
 
@@ -22,6 +23,12 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
     () => filterImageAssets(assets, query, provider),
     [assets, provider, query],
   );
+  const hasFilters = Boolean(query.trim() || provider);
+
+  const clearFilters = () => {
+    setQuery('');
+    setProvider('');
+  };
 
   return (
     <>
@@ -39,10 +46,11 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
           <span aria-hidden="true">▽</span>
           <span className="visually-hidden">Filter image assets by provider</span>
           <select aria-label="Filter image assets by provider" value={provider} onChange={(event) => setProvider(event.currentTarget.value)}>
-            <option value="">Filters</option>
+            <option value="">All providers</option>
             {providers.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
+        {hasFilters ? <button className="image-clear-filters" type="button" onClick={clearFilters}>Clear filters</button> : null}
       </div>
 
       <Text className="image-assets-count" aria-live="polite" role="status" size="xs">
@@ -57,23 +65,27 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
             const title = imageAssetTitle(asset);
             const selected = asset.id === selectedAssetId;
             return (
-              <UnstyledButton
-                aria-label={`Select ${title}`}
-                aria-pressed={selected}
-                className={`image-asset-card ${selected ? 'selected' : ''}`}
-                key={asset.id}
-                onClick={() => onSelect(asset.id)}
-              >
-                <div className="image-asset-preview">
-                  <img alt="" loading="lazy" src={imageAssetUrl(asset.id)} />
-                  {selected ? <span className="image-asset-selected" aria-hidden="true">★</span> : null}
+              <article className={`image-asset-card ${selected ? 'selected' : ''}`} key={asset.id}>
+                <UnstyledButton
+                  aria-label={`Select ${title}`}
+                  aria-pressed={selected}
+                  className="image-asset-select"
+                  onClick={() => onSelect(asset.id)}
+                >
+                  <div className="image-asset-preview">
+                    <img alt="" loading="lazy" src={imageAssetUrl(asset.id)} />
+                    {selected ? <span className="image-asset-selected" aria-hidden="true">★</span> : null}
+                  </div>
+                  <div className="image-asset-copy">
+                    <strong title={title}>{title}</strong>
+                    <small>{imageAssetDimensions(asset)} · {relativeCreatedAt(asset.created_at)}</small>
+                  </div>
+                </UnstyledButton>
+                <div className="image-asset-actions">
+                  <Button component="a" href={imageAssetUrl(asset.id)} target="_blank" rel="noreferrer" size="compact-xs" variant="subtle">Open</Button>
+                  <Button component="a" href={imageAssetUrl(asset.id, true)} download size="compact-xs" variant="subtle">Download</Button>
                 </div>
-                <div className="image-asset-copy">
-                  <strong title={title}>{title}</strong>
-                  <small>{imageAssetDimensions(asset)} · {relativeCreatedAt(asset.created_at)}</small>
-                  <span aria-hidden="true">•••</span>
-                </div>
-              </UnstyledButton>
+              </article>
             );
           })}
         </div>
@@ -118,10 +130,6 @@ function metadataString(asset: ImageAsset, key: string): string {
 function metadataNumber(asset: ImageAsset, key: string): number | undefined {
   const value = asset.metadata?.[key];
   return typeof value === 'number' ? value : undefined;
-}
-
-function imageAssetUrl(assetId: string): string {
-  return `/api/assets/${encodeURIComponent(assetId)}/file`;
 }
 
 function relativeCreatedAt(createdAt: string): string {

@@ -1,10 +1,12 @@
 import { Button, Progress, Text } from '@mantine/core';
+import { useState } from 'react';
 import type { JobRecord } from '../../api/client';
 import { OmnixStatusPill } from '../../design/primitives';
 import { imageAssetUrl } from './imageWorkspaceModel';
 
 const ACTIVE_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
 const RETRYABLE_STATUSES = new Set(['failed', 'canceled', 'stale']);
+const COLLAPSED_JOB_LIMIT = 4;
 
 interface ImageJobListProps {
   jobs: JobRecord[];
@@ -16,9 +18,11 @@ interface ImageJobListProps {
 }
 
 export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, onRetry, onSelectAsset }: ImageJobListProps) {
+  const [showAll, setShowAll] = useState(false);
   if (!jobs.length) return <div className="image-empty-state" role="status">No image jobs queued.</div>;
 
-  const visibleJobs = jobs.slice(0, 4);
+  const visibleJobs = showAll ? jobs : jobs.slice(0, COLLAPSED_JOB_LIMIT);
+  const hasHiddenJobs = jobs.length > COLLAPSED_JOB_LIMIT;
 
   return (
     <div className="image-job-list-wrap">
@@ -67,7 +71,12 @@ export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, on
           );
         })}
       </div>
-      <footer className="image-job-footer"><span>{visibleJobs.length} of {jobs.length} job{jobs.length === 1 ? '' : 's'}</span>{jobs.length > visibleJobs.length ? <span>Showing latest</span> : null}</footer>
+      <footer className="image-job-footer">
+        <span>{visibleJobs.length} of {jobs.length} job{jobs.length === 1 ? '' : 's'}</span>
+        {hasHiddenJobs ? (
+          <button type="button" onClick={() => setShowAll((value) => !value)}>{showAll ? 'Show latest only' : `Show all ${jobs.length}`}</button>
+        ) : null}
+      </footer>
     </div>
   );
 }
