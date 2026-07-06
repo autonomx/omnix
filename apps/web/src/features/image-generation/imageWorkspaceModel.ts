@@ -23,6 +23,33 @@ export function hasActiveImageJobs(payload: JobListResponse | undefined): boolea
   return payload?.jobs.some((job) => ACTIVE_IMAGE_JOB_STATUSES.has(job.status)) ?? false;
 }
 
+export function createImageEventRefreshScheduler(
+  flush: (refreshAssets: boolean) => void,
+  delayMs = 750,
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let assetsPending = false;
+
+  const schedule = (refreshAssets = false) => {
+    assetsPending = assetsPending || refreshAssets;
+    if (timer !== undefined) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      const shouldRefreshAssets = assetsPending;
+      assetsPending = false;
+      flush(shouldRefreshAssets);
+    }, delayMs);
+  };
+
+  const dispose = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+    assetsPending = false;
+  };
+
+  return { schedule, dispose };
+}
+
 export function selectLatestImageAsset(
   assets: ImageAsset[],
   jobs: JobRecord[],
