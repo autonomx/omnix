@@ -26,17 +26,21 @@ The browser must use `asset_id` for previews and downloads. It must never depend
 | --- | --- | --- |
 | IGW-0 | Canonical image request/output contracts and provider normalization | Complete - PR #1219 |
 | IGW-1 | Shared background `image.generate` executor | Complete - PR #1220 |
-| IGW-2 | Authoritative shared image asset persistence | In progress |
-| IGW-3 | Browser-safe binary image asset endpoint | Planned |
-| IGW-4 | Filtered and bounded jobs/assets APIs | Planned |
-| IGW-5 | Live job synchronization with SSE and bounded polling fallback | Planned |
-| IGW-6 | Latest Result selection and preview surface | Planned |
-| IGW-7 | Image Jobs progress, failure, cancel, retry, and result actions | Planned |
-| IGW-8 | Image Assets thumbnail grid, search, filters, and selection | Planned |
-| IGW-9 | Request redesign, presets, style, and advanced controls | Planned |
-| IGW-10 | Runtime/provider readiness and actionable disabled states | Planned |
-| IGW-11 | Legacy queue/manifest consolidation and compatibility migration | Planned |
+| IGW-2 | Authoritative shared image asset persistence | Complete - PR #1221 |
+| IGW-3 | Browser-safe binary image asset endpoint | Complete - PR #1222 |
+| IGW-4 | Filtered and bounded jobs/assets APIs | Complete - PR #1223 |
+| IGW-5 | Live job synchronization with SSE and bounded polling fallback | Complete - PR #1224 |
+| IGW-6 | Latest Result selection and preview surface | Complete - PR #1225 |
+| IGW-7 | Image Jobs progress, failure, cancel, retry, and result actions | Complete - PR #1226 |
+| IGW-8 | Image Assets thumbnail grid, search, filters, and selection | Complete - PR #1227 |
+| IGW-9 | Request redesign, presets, style, and advanced controls | Complete - PR #1228 |
+| IGW-10 | Runtime/provider readiness and actionable disabled states | Complete - PR #1229 |
+| IGW-11 | Legacy queue/manifest consolidation and compatibility migration | Next |
 | IGW-12 | End-to-end verification, accessibility, and release cleanup | Planned |
+
+## Current focus
+
+IGW-11 is the next implementation slice. Consolidate legacy image queue and manifest compatibility paths behind the shared jobs and assets systems without deleting compatibility reads before migration evidence is complete.
 
 ## IGW-0 contract
 
