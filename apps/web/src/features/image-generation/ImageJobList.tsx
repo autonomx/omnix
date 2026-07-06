@@ -1,7 +1,7 @@
 import { Button, Group, Progress, Text } from '@mantine/core';
 import type { JobRecord } from '../../api/client';
 import { OmnixStatusPill } from '../../design/primitives';
-import { imageAssetUrl } from './ImageGenerationWorkspace';
+import { imageAssetUrl } from './imageWorkspaceModel';
 
 const ACTIVE_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
 const RETRYABLE_STATUSES = new Set(['failed', 'canceled', 'stale']);
