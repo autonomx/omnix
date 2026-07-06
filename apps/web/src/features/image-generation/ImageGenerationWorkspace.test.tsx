@@ -107,7 +107,7 @@ describe('ImageGenerationWorkspace', () => {
     expect(await screen.findByRole('heading', { name: 'Image request' })).toBeInTheDocument();
     expect(await screen.findByText('Flux local')).toBeInTheDocument();
     expect(screen.queryByText('RPG visual provider')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'image / image-generation' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Select Generated image' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'image:flux' } });
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A bright workstation render.' } });
