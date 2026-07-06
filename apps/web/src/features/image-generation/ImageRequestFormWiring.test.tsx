@@ -3,8 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { ImageRequestForm } from './ImageRequestForm';
+import type { ImageRequestFormValues } from './imageRequestModel';
 
-function renderForm(onSubmit: ReturnType<typeof vi.fn>) {
+function renderForm(onSubmit: (values: ImageRequestFormValues) => void) {
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
       <ImageRequestForm
@@ -26,7 +27,7 @@ function renderForm(onSubmit: ReturnType<typeof vi.fn>) {
 
 describe('ImageRequestForm wiring', () => {
   it('submits the visible provider, aspect ratio, style, quality, and advanced controls', async () => {
-    const onSubmit = vi.fn();
+    const onSubmit = vi.fn<(values: ImageRequestFormValues) => void>();
     renderForm(onSubmit);
 
     expect(screen.getByLabelText('Provider')).toHaveValue('image:flux');
@@ -64,7 +65,7 @@ describe('ImageRequestForm wiring', () => {
   });
 
   it('wires dimension steppers and custom aspect selection', () => {
-    const onSubmit = vi.fn();
+    const onSubmit = vi.fn<(values: ImageRequestFormValues) => void>();
     renderForm(onSubmit);
 
     fireEvent.click(screen.getByRole('button', { name: 'Increase width' }));
