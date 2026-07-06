@@ -54,6 +54,20 @@ def _build_provider(provider_name: str):
     raise RuntimeError(f"unsupported_image_provider:{provider_name}")
 
 
+def is_image_provider_loaded(provider_name: str | None = None) -> bool:
+    provider_name = _safe_str(provider_name).strip().lower() or get_active_image_provider_name()
+    provider = get_cached_provider(provider_name)
+    if provider is None:
+        return False
+    checker = getattr(provider, "is_loaded", None)
+    if callable(checker):
+        try:
+            return bool(checker())
+        except Exception:
+            return False
+    return True
+
+
 def load_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
     provider_name = _safe_str(provider_name).strip() or get_active_image_provider_name()
     provider = get_or_create_image_provider(provider_name)
@@ -61,7 +75,7 @@ def load_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
     return {
         "ok": True,
         "provider": provider_name,
-        "loaded": True,
+        "loaded": is_image_provider_loaded(provider_name),
     }
 
 
@@ -78,6 +92,7 @@ def unload_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
     return {
         "ok": True,
         "provider": provider_name,
+        "loaded": False,
         "unloaded": provider is not None,
     }
 
@@ -100,8 +115,14 @@ def unload_all_image_providers() -> Dict[str, Any]:
 
 
 def get_image_provider_cache_status() -> Dict[str, Any]:
+    loaded_providers = [
+        provider_name
+        for provider_name in sorted(_PROVIDER_CACHE.keys())
+        if is_image_provider_loaded(provider_name)
+    ]
     return {
         "ok": True,
-        "loaded_providers": sorted(list(_PROVIDER_CACHE.keys())),
+        "loaded_providers": loaded_providers,
+        "cached_providers": sorted(list(_PROVIDER_CACHE.keys())),
         "known_providers": get_image_provider_keys(),
     }
