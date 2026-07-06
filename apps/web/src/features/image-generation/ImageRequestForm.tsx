@@ -18,10 +18,11 @@ interface ImageRequestFormProps {
   pending: boolean;
   disabled?: boolean;
   disabledReason?: string;
+  resetToken?: string;
   onSubmit: (values: ImageRequestFormValues) => void;
 }
 
-export function ImageRequestForm({ defaults, providers, pending, disabled, disabledReason, onSubmit }: ImageRequestFormProps) {
+export function ImageRequestForm({ defaults, providers, pending, disabled, disabledReason, resetToken, onSubmit }: ImageRequestFormProps) {
   const {
     register,
     handleSubmit,
@@ -33,6 +34,10 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
   useEffect(() => {
     if (!isDirty) reset(imageRequestDefaultValues(defaults));
   }, [defaults, isDirty, reset]);
+
+  useEffect(() => {
+    if (resetToken) reset(imageRequestDefaultValues(defaults));
+  }, [defaults, reset, resetToken]);
 
   const presetRegistration = register('preset');
 
