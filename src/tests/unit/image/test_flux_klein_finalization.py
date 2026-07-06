@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 from app.image.providers import flux_klein_provider as flux_module
@@ -17,13 +18,13 @@ class _FakeImage:
         self.finalizing = finalizing
         self.release = release
 
-    def save(self, buffer, *, format: str) -> None:
+    def save(self, destination, *, format: str) -> None:
         assert format == "PNG"
         if self.finalizing is not None:
             self.finalizing.set()
         if self.release is not None:
             assert self.release.wait(timeout=3)
-        buffer.write(b"fake-png")
+        Path(destination).write_bytes(b"fake-png")
 
 
 class _FakePipeline:
