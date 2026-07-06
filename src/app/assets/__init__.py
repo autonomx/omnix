@@ -51,10 +51,12 @@ def _skipped_files(family: str, roots: list[Path], supported_suffixes: set[str])
 
 
 class SharedAssetStore(ManifestSharedAssetStore):
-    """Shared asset store with compatibility read-through for legacy documents."""
+    """Shared asset store with non-mutating legacy compatibility read-through."""
 
     def list_assets(self) -> AssetListResponse:
         assets = {asset.id: asset for asset in super().list_assets().assets}
+        for asset in self.preview_image_manifest_import().assets:
+            assets.setdefault(asset.id, asset)
         for asset in legacy_document_assets():
             assets.setdefault(asset.id, asset)
         return AssetListResponse(assets=list(assets.values()))
