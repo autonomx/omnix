@@ -9,6 +9,7 @@ import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback } from '../shared/FeatureSubmitFeedback';
 import { ImageAssetGallery } from './ImageAssetGallery';
 import './ImageGenerationWorkspace.css';
+import './ImageGenerationWorkspaceInteractions.css';
 import { ImageJobList } from './ImageJobList';
 import { ImageLatestResult } from './ImageLatestResult';
 import { ImageReadinessPanel } from './ImageReadinessPanel';
