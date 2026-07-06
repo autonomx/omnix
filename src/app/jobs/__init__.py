@@ -14,6 +14,7 @@ from .models import (
 )
 from .adapters import enqueue_image_job, enqueue_tts_job
 from .executor import LocalJobExecutor
+from .image_inline import install_image_job_execution
 from .provider_control import create_worker_model_control_hooks, evict_worker_model, load_worker_model
 from .residency import (
     ModelResidencyDiagnostics,
@@ -47,6 +48,7 @@ install_rpg_last10_report_inline_job()
 _inline_feature_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES.discard(RPG_LAST10_REPORT_JOB_TYPE)
 install_rpg_turn_job_guard(SQLiteJobStore)
 install_voice_studio_job_execution(SQLiteJobStore)
+install_image_job_execution(SQLiteJobStore)
 
 __all__ = [
     "CancelJobRequest",
