@@ -16,7 +16,6 @@ export function ImageLatestResult({ asset }: { asset?: ImageAsset }) {
       className={`image-surface image-latest-card ${asset ? 'has-result' : ''}`}
       aria-atomic="true"
       aria-label="Latest result"
-      aria-labelledby="latest-image-result-title"
       aria-live="polite"
     >
       <header className="image-section-header image-section-header-compact">
