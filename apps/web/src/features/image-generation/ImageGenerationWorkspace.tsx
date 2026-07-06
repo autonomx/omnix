@@ -1,4 +1,4 @@
-import { Button, Group, Progress, Text, Title } from '@mantine/core';
+import { Button, Group, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
@@ -14,6 +14,7 @@ import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/pr
 import { imageGenerationDefaults } from '../settings/moduleDefaults';
 import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { ImageJobList } from './ImageJobList';
 
 const IMAGE_JOBS_QUERY_KEY = ['image-generation', 'jobs'] as const;
 const IMAGE_ASSETS_QUERY_KEY = ['image-generation', 'assets'] as const;
@@ -107,6 +108,18 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
       await queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY });
     },
   });
+  const cancelJobMutation = useMutation({
+    mutationFn: (jobId: string) => omnixApiClient.cancelJob(jobId, 'Canceled from Image Generation workspace'),
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY }),
+  });
+  const retryJobMutation = useMutation({
+    mutationFn: (jobId: string) =>
+      omnixApiClient.post<Record<string, never>, JobRecord>(
+        `/api/image-generation/jobs/${encodeURIComponent(jobId)}/retry`,
+        {},
+      ),
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY }),
+  });
   const latestAsset = useMemo(
     () => selectLatestImageAsset(imageAssets, imageJobs, null, createJobMutation.data?.id),
     [createJobMutation.data?.id, imageAssets, imageJobs],
@@ -164,17 +177,15 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
 
         <section className="feature-panel">
           <Title order={4}>Image jobs</Title>
-          {imageJobs.length ? (
-            <div className="feature-list">
-              {imageJobs.map((job) => (
-                <article className="feature-mini-card" key={job.id}>
-                  <Group justify="space-between"><strong>{job.type}</strong><OmnixStatusPill>{job.status}</OmnixStatusPill></Group>
-                  <Progress value={progressPercent(job.progress)} aria-label={`${job.type} progress`} />
-                  <Text size="sm">{job.resource_class}</Text>
-                </article>
-              ))}
-            </div>
-          ) : <div className="platform-empty" role="status">No image jobs queued.</div>}
+          <ImageJobList
+            jobs={imageJobs}
+            cancelingJobId={cancelJobMutation.isPending ? cancelJobMutation.variables : undefined}
+            retryingJobId={retryJobMutation.isPending ? retryJobMutation.variables : undefined}
+            onCancel={(jobId) => cancelJobMutation.mutate(jobId)}
+            onRetry={(jobId) => retryJobMutation.mutate(jobId)}
+          />
+          {cancelJobMutation.isError ? <Text c="red" size="sm" role="alert">Image job cancel failed.</Text> : null}
+          {retryJobMutation.isError ? <Text c="red" size="sm" role="alert">Image job retry failed.</Text> : null}
         </section>
 
         <section className="feature-panel feature-panel-wide" aria-labelledby="latest-image-result-title">
@@ -288,9 +299,4 @@ function formatCreatedAt(value: string): string {
 function parseJobEvent(data: unknown): unknown {
   if (typeof data !== 'string') return undefined;
   try { return JSON.parse(data); } catch { return undefined; }
-}
-
-function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) return 0;
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
