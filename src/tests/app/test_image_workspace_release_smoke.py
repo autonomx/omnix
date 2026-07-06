@@ -13,8 +13,10 @@ from app.jobs.image_inline import execute_image_job
 
 def test_image_workspace_release_flow_survives_reload(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
-    jobs = SQLiteJobStore(tmp_path / "jobs.sqlite")
-    assets = SharedAssetStore(tmp_path / "assets" / "manifest.json")
+    jobs_path = tmp_path / "jobs.sqlite"
+    manifest_path = tmp_path / "assets" / "manifest.json"
+    jobs = SQLiteJobStore(jobs_path)
+    assets = SharedAssetStore(manifest_path)
     image_path = tmp_path / "generated" / "harbor.png"
     image_path.parent.mkdir()
     image_path.write_bytes(b"PNG-release-smoke")
@@ -91,10 +93,15 @@ def test_image_workspace_release_flow_survives_reload(tmp_path, monkeypatch) -> 
     assert "event: job.created" in event_stream
     assert "event: job.completed" in event_stream
 
+    reloaded_jobs = SQLiteJobStore(jobs_path)
+    reloaded_assets_store = SharedAssetStore(manifest_path)
+    monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: reloaded_jobs)
+    monkeypatch.setattr(image_workspace_routes, "default_asset_store", lambda: reloaded_assets_store)
+    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: reloaded_assets_store)
     reloaded_client = TestClient(
         create_gateway_app(
-            job_store_factory=lambda: SQLiteJobStore(tmp_path / "jobs.sqlite"),
-            asset_store_factory=lambda: SharedAssetStore(tmp_path / "assets" / "manifest.json"),
+            job_store_factory=lambda: reloaded_jobs,
+            asset_store_factory=lambda: reloaded_assets_store,
         )
     )
     reloaded_assets = reloaded_client.get("/api/image-generation/assets").json()["assets"]
