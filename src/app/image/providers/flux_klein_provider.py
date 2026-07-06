@@ -4,7 +4,6 @@ from __future__ import annotations
 import contextlib
 import gc
 import inspect
-import io
 import os
 import threading
 from typing import Any, Dict
@@ -87,6 +86,7 @@ class FluxKleinImageProvider(BaseImageProvider):
             root = download_dir
         else:
             from app.shared import MODELS_DIR
+
             root = os.path.join(MODELS_DIR, download_dir)
 
         preferred = os.path.normpath(os.path.join(root, "flux2-klein-4b"))
@@ -187,8 +187,14 @@ class FluxKleinImageProvider(BaseImageProvider):
         width = _safe_int(payload.get("width"), _safe_int(self.config.get("width"), 768))
         height = _safe_int(payload.get("height"), _safe_int(self.config.get("height"), 768))
         seed = payload.get("seed")
-        steps = _safe_int(payload.get("num_inference_steps"), _safe_int(self.config.get("num_inference_steps"), 4))
-        guidance_scale = _safe_float(payload.get("guidance_scale"), _safe_float(self.config.get("guidance_scale"), 1.0))
+        steps = _safe_int(
+            payload.get("num_inference_steps"),
+            _safe_int(self.config.get("num_inference_steps"), 4),
+        )
+        guidance_scale = _safe_float(
+            payload.get("guidance_scale"),
+            _safe_float(self.config.get("guidance_scale"), 1.0),
+        )
 
         kwargs: Dict[str, Any] = {
             "prompt": prompt,
@@ -209,7 +215,11 @@ class FluxKleinImageProvider(BaseImageProvider):
         def report_progress(current: int) -> None:
             if callable(progress_callback):
                 with contextlib.suppress(Exception):
-                    progress_callback(max(0, min(steps, current)), max(1, steps), "Generating image")
+                    progress_callback(
+                        max(0, min(steps, current)),
+                        max(1, steps),
+                        "Generating image",
+                    )
 
         with _GENERATE_LOCK:
             pipe = None
@@ -233,7 +243,13 @@ class FluxKleinImageProvider(BaseImageProvider):
                         signature = inspect.signature(pipe.__call__)
                         params = signature.parameters
                         if "callback_on_step_end" in params:
-                            def on_step_end(_pipeline, step: int, _timestep, callback_kwargs: Dict[str, Any]):
+
+                            def on_step_end(
+                                _pipeline,
+                                step: int,
+                                _timestep,
+                                callback_kwargs: Dict[str, Any],
+                            ):
                                 report_progress(int(step) + 1)
                                 return callback_kwargs
 
@@ -241,6 +257,7 @@ class FluxKleinImageProvider(BaseImageProvider):
                             if "callback_on_step_end_tensor_inputs" in params:
                                 kwargs["callback_on_step_end_tensor_inputs"] = []
                         elif "callback" in params:
+
                             def on_step(step: int, _timestep, _latents):
                                 report_progress(int(step) + 1)
 
@@ -261,35 +278,23 @@ class FluxKleinImageProvider(BaseImageProvider):
                         moderation_reason="",
                     )
 
+                out_dir = str(generated_images_root())
+                os.makedirs(out_dir, exist_ok=True)
+                filename = (
+                    f"{_safe_str(payload.get('kind')).strip() or 'image'}_"
+                    f"{os.getpid()}_{id(image)}.png"
+                )
+                file_path = os.path.normpath(os.path.join(out_dir, filename))
+
                 try:
-                    buffer = io.BytesIO()
-                    try:
-                        image.save(buffer, format="PNG")
-                        image_bytes = buffer.getvalue()
-                    finally:
-                        buffer.close()
+                    image.save(file_path, format="PNG")
                 except Exception as exc:
+                    with contextlib.suppress(OSError):
+                        os.remove(file_path)
                     return ImageGenerationResult(
                         ok=False,
                         status="failed",
                         error=f"flux_klein_finalize_failed:{repr(exc)}",
-                        moderation_status="approved",
-                        moderation_reason="",
-                    )
-
-                out_dir = str(generated_images_root())
-                os.makedirs(out_dir, exist_ok=True)
-                filename = f"{_safe_str(payload.get('kind')).strip() or 'image'}_{os.getpid()}_{id(image)}.png"
-                file_path = os.path.normpath(os.path.join(out_dir, filename))
-
-                try:
-                    with open(file_path, "wb") as f:
-                        f.write(image_bytes)
-                except Exception:
-                    return ImageGenerationResult(
-                        ok=False,
-                        status="failed",
-                        error="flux_klein_file_write_failed",
                         moderation_status="approved",
                         moderation_reason="",
                     )
@@ -300,7 +305,6 @@ class FluxKleinImageProvider(BaseImageProvider):
                     error="",
                     moderation_status="approved",
                     moderation_reason="",
-                    image_bytes=image_bytes,
                     mime_type="image/png",
                     revised_prompt=prompt,
                     file_path=file_path,
