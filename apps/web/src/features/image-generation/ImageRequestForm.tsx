@@ -81,7 +81,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
       <form className="image-request-form" onSubmit={submit}>
         <label className="visually-hidden">
           Size preset
-          <select {...register('preset')}>
+          <select aria-label="Size preset" {...register('preset')}>
             <option value="custom">Custom</option>
             {ASPECT_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
           </select>
@@ -90,7 +90,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
         <div className="image-request-primary-row">
           <label className="image-field image-provider-field">
             <span>Provider <i title="The configured local image provider">ⓘ</i></span>
-            <select {...register('providerId')}>
+            <select aria-label="Provider" {...register('providerId')}>
               <option value="">Select provider</option>
               {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
             </select>
@@ -100,7 +100,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
             <span>Width <i title="Output width in pixels">ⓘ</i></span>
             <div className="image-number-control">
               <button type="button" aria-label="Decrease width" onClick={() => adjustDimension('width', width, -64)}>−</button>
-              <input type="number" min="128" max="4096" step="64" aria-invalid={Boolean(errors.width)} {...register('width', { validate: validateImageDimension })} />
+              <input aria-label="Width" type="number" min="128" max="4096" step="64" aria-invalid={Boolean(errors.width)} {...register('width', { validate: validateImageDimension })} />
               <button type="button" aria-label="Increase width" onClick={() => adjustDimension('width', width, 64)}>+</button>
             </div>
           </label>
@@ -109,7 +109,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
             <span>Height <i title="Output height in pixels">ⓘ</i></span>
             <div className="image-number-control">
               <button type="button" aria-label="Decrease height" onClick={() => adjustDimension('height', height, -64)}>−</button>
-              <input type="number" min="128" max="4096" step="64" aria-invalid={Boolean(errors.height)} {...register('height', { validate: validateImageDimension })} />
+              <input aria-label="Height" type="number" min="128" max="4096" step="64" aria-invalid={Boolean(errors.height)} {...register('height', { validate: validateImageDimension })} />
               <button type="button" aria-label="Increase height" onClick={() => adjustDimension('height', height, 64)}>+</button>
             </div>
           </label>
@@ -147,6 +147,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
         <label className="image-field image-prompt-field">
           <span>Prompt <i title="Describe the image you want to create">ⓘ</i></span>
           <textarea
+            aria-label="Prompt"
             rows={4}
             maxLength={2000}
             placeholder="Describe the image you want to create..."
@@ -159,7 +160,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
         <div className="image-request-options-row">
           <label className="image-field">
             <span>Style <i title="A visual style hint sent to the provider">ⓘ</i></span>
-            <select {...register('style')}>
+            <select aria-label="Style" {...register('style')}>
               <option value="photorealistic">Photorealistic</option>
               <option value="cinematic">Cinematic</option>
               <option value="concept art">Concept art</option>
@@ -188,12 +189,12 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
           <details className="image-advanced-options">
             <summary>⚙ Advanced options</summary>
             <div className="image-advanced-grid">
-              <label className="image-field image-advanced-wide">Negative prompt<textarea rows={2} placeholder="Elements to avoid" {...register('negativePrompt')} /></label>
-              <label className="image-field">Seed<input type="number" min="0" {...register('seed', { min: 0 })} /></label>
-              <label className="image-field">Steps<input type="number" min="1" max="200" {...register('steps', { min: 1, max: 200 })} /></label>
-              <label className="image-field">Guidance scale<input type="number" min="0" max="100" step="0.1" {...register('guidanceScale', { min: 0, max: 100 })} /></label>
-              <label className="image-check-field"><input type="checkbox" {...register('unloadAfterGeneration')} /> Unload model after generation</label>
-              <label className="image-check-field"><input type="checkbox" {...register('noCache')} /> Ignore cached results</label>
+              <label className="image-field image-advanced-wide">Negative prompt<textarea aria-label="Negative prompt" rows={2} placeholder="Elements to avoid" {...register('negativePrompt')} /></label>
+              <label className="image-field">Seed<input aria-label="Seed" type="number" min="0" {...register('seed', { min: 0 })} /></label>
+              <label className="image-field">Steps<input aria-label="Steps" type="number" min="1" max="200" {...register('steps', { min: 1, max: 200 })} /></label>
+              <label className="image-field">Guidance scale<input aria-label="Guidance scale" type="number" min="0" max="100" step="0.1" {...register('guidanceScale', { min: 0, max: 100 })} /></label>
+              <label className="image-check-field"><input aria-label="Unload model after generation" type="checkbox" {...register('unloadAfterGeneration')} /> Unload model after generation</label>
+              <label className="image-check-field"><input aria-label="Ignore cached results" type="checkbox" {...register('noCache')} /> Ignore cached results</label>
             </div>
           </details>
         </div>
