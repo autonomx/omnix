@@ -283,6 +283,32 @@ _HTML = r"""
     }
   }
 
+  function captureLogScrollState() {
+    const state = new Map();
+    servicesEl.querySelectorAll('pre[data-log-service-id]').forEach((logEl) => {
+      const serviceId = logEl.dataset.logServiceId || '';
+      if (!serviceId) return;
+      const maxScrollTop = Math.max(0, logEl.scrollHeight - logEl.clientHeight);
+      state.set(serviceId, {
+        scrollTop: logEl.scrollTop,
+        pinnedToBottom: maxScrollTop - logEl.scrollTop <= 4
+      });
+    });
+    return state;
+  }
+
+  function restoreLogScrollState(state) {
+    servicesEl.querySelectorAll('pre[data-log-service-id]').forEach((logEl) => {
+      const serviceId = logEl.dataset.logServiceId || '';
+      const saved = state.get(serviceId);
+      if (!saved) return;
+      const maxScrollTop = Math.max(0, logEl.scrollHeight - logEl.clientHeight);
+      logEl.scrollTop = saved.pinnedToBottom
+        ? maxScrollTop
+        : Math.min(saved.scrollTop, maxScrollTop);
+    });
+  }
+
   function render(service) {
     const running = service.status === 'running';
     const disabled = service.status === 'disabled' || !service.enabled;
@@ -298,14 +324,16 @@ _HTML = r"""
         <button type="button" data-service-id="${id}" data-action="restart" ${disabled ? 'disabled' : ''}>Restart</button>
         <button type="button" class="copy" data-service-id="${id}" data-service-label="${esc(service.label)}" data-action="copy-logs">Copy logs</button>
       </div>
-      <pre>${logs || '[no logs yet]'}</pre>
+      <pre data-log-service-id="${id}">${logs || '[no logs yet]'}</pre>
     </section>`;
   }
 
   async function refresh() {
     try {
       const data = await api('/api/services');
+      const logScrollState = captureLogScrollState();
       servicesEl.innerHTML = (data.services || []).map(render).join('');
+      restoreLogScrollState(logScrollState);
       showError('');
     } catch (error) {
       showError(error && error.message ? error.message : String(error));
