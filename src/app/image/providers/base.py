@@ -30,5 +30,10 @@ class BaseImageProvider:
     def unload(self):
         return None
 
+    def is_loaded(self) -> bool:
+        """Return whether heavyweight provider resources are resident."""
+
+        return False
+
     def generate(self, payload: Dict[str, Any]) -> ImageGenerationResult:
         raise NotImplementedError
