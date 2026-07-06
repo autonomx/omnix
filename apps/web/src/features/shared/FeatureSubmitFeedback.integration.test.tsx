@@ -86,6 +86,25 @@ function installFailingJobApiMock() {
       });
     }
 
+    if (path === '/api/image-generation/model/status') {
+      return Response.json({
+        ok: true,
+        service: 'image',
+        enabled: true,
+        provider: 'flux_klein',
+        model: 'FLUX.2 [klein] 4B',
+        loaded: true,
+        state: 'loaded',
+        local_model: {
+          ok: true,
+          exists: true,
+          complete: true,
+          missing: [],
+          local_dir: 'resources/models/image/flux2-klein-4b',
+        },
+      });
+    }
+
     if (path === '/api/jobs' && init?.method === 'POST') {
       return new Response('gateway unavailable', { status: 500 });
     }
