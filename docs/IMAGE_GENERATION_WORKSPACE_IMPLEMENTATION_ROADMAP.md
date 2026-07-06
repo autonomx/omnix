@@ -35,12 +35,12 @@ The browser must use `asset_id` for previews and downloads. It must never depend
 | IGW-8 | Image Assets thumbnail grid, search, filters, and selection | Complete - PR #1227 |
 | IGW-9 | Request redesign, presets, style, and advanced controls | Complete - PR #1228 |
 | IGW-10 | Runtime/provider readiness and actionable disabled states | Complete - PR #1229 |
-| IGW-11 | Legacy queue/manifest consolidation and compatibility migration | Next |
-| IGW-12 | End-to-end verification, accessibility, and release cleanup | Planned |
+| IGW-11 | Legacy queue/manifest consolidation and compatibility migration | Complete - PR #1231 |
+| IGW-12 | End-to-end verification, accessibility, and release cleanup | Next |
 
 ## Current focus
 
-IGW-11 is the next implementation slice. Consolidate legacy image queue and manifest compatibility paths behind the shared jobs and assets systems without deleting compatibility reads before migration evidence is complete.
+IGW-12 is the final implementation slice. Verify the complete browser flow, accessibility, persisted results after reload, and release readiness.
 
 ## IGW-0 contract
 
