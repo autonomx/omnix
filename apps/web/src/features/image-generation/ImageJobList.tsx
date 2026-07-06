@@ -46,15 +46,11 @@ export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, on
                   <div className="image-job-actions">
                     {assetId ? (
                       <>
-                        <Button
-                          size="compact-xs"
-                          variant="light"
-                          onClick={() => onSelectAsset?.(assetId)}
-                          component={onSelectAsset ? 'button' : 'a'}
-                          href={onSelectAsset ? undefined : imageAssetUrl(assetId)}
-                        >
-                          View in Latest Result
-                        </Button>
+                        {onSelectAsset ? (
+                          <Button size="compact-xs" variant="light" onClick={() => onSelectAsset(assetId)}>View in Latest Result</Button>
+                        ) : (
+                          <Button component="a" href={imageAssetUrl(assetId)} size="compact-xs" variant="light">Open result</Button>
+                        )}
                         <Button component="a" href={imageAssetUrl(assetId, true)} download size="compact-xs" variant="subtle" aria-label="Download image result">↓</Button>
                       </>
                     ) : null}
