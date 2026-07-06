@@ -71,6 +71,11 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
     setValue('preset', 'custom', { shouldDirty: true });
   };
 
+  const chooseQuality = (level: number) => {
+    setQuality(level);
+    setValue('steps', String(QUALITY_STEPS[level - 1]), { shouldDirty: true, shouldValidate: true });
+  };
+
   const submit = handleSubmit((values) => onSubmit({
     ...values,
     steps: values.steps || String(QUALITY_STEPS[quality - 1]),
@@ -89,9 +94,9 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
 
         <div className="image-request-primary-row">
           <label className="image-field image-provider-field">
-            <span>Provider <i title="The configured local image provider">ⓘ</i></span>
+            <span>Provider <i title="The configured image provider that receives this request">ⓘ</i></span>
             <select aria-label="Provider" {...register('providerId')}>
-              <option value="">Select provider</option>
+              <option value="">Configured default provider</option>
               {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
             </select>
           </label>
@@ -171,7 +176,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
           </label>
 
           <fieldset className="image-quality-fieldset">
-            <legend>Quality <i title="Higher quality uses more generation steps">ⓘ</i></legend>
+            <legend>Quality <i title="Higher quality sends more generation steps">ⓘ</i></legend>
             <div className="image-quality-control" role="group" aria-label="Quality">
               {[1, 2, 3, 4, 5].map((level) => (
                 <button
@@ -180,9 +185,10 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
                   className={level <= quality ? 'active' : ''}
                   aria-label={`Set quality to ${level} of 5`}
                   aria-pressed={quality === level}
-                  onClick={() => setQuality(level)}
+                  onClick={() => chooseQuality(level)}
                 >★</button>
               ))}
+              <output className="image-quality-value" aria-live="polite">{QUALITY_STEPS[quality - 1]} steps</output>
             </div>
           </fieldset>
 
@@ -202,7 +208,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
         <Button aria-label={pending ? 'Queueing image' : 'Generate image'} className="image-generate-button" type="submit" disabled={pending || disabled} loading={pending} title={disabledReason}>
           <span aria-hidden="true">✦</span> {pending ? 'Queueing Image...' : 'Generate Image'}
         </Button>
-        <p className="image-local-note"><span aria-hidden="true">♢</span> Processed locally. Your data never leaves your machine.</p>
+        <p className="image-local-note"><span aria-hidden="true">♢</span> Uses the selected configured provider and saves completed output to Image Assets.</p>
       </form>
       <FeatureValidationMessage show={Boolean(errors.prompt)} message="Enter a prompt before generating an image." />
       <FeatureValidationMessage show={Boolean(errors.width || errors.height)} message="Use dimensions from 128 to 4096 in multiples of 64." />
