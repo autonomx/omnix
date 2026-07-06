@@ -1,4 +1,4 @@
-import { Group, Text, UnstyledButton } from '@mantine/core';
+import { Text, UnstyledButton } from '@mantine/core';
 import { useMemo, useState } from 'react';
 import type { AssetListResponse } from '../../api/client';
 
@@ -13,6 +13,7 @@ interface ImageAssetGalleryProps {
 export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAssetGalleryProps) {
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const providers = useMemo(
     () => [...new Set(assets.map(imageAssetProvider).filter(Boolean))].sort(),
     [assets],
@@ -22,30 +23,36 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
     [assets, provider, query],
   );
 
-  if (!assets.length) {
-    return <div className="platform-empty" role="status">No image assets indexed.</div>;
-  }
-
   return (
     <>
-      <div className="feature-form" style={{ marginBottom: '1rem' }}>
-        <label>
-          Search images
-          <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Prompt, title, or provider" />
+      <div className="image-assets-toolbar">
+        <label className="image-assets-search">
+          <span aria-hidden="true">⌕</span>
+          <span className="visually-hidden">Search image assets</span>
+          <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Search assets..." />
         </label>
-        <label>
-          Filter by provider
+        <div className="image-view-toggle" role="group" aria-label="Asset view">
+          <button type="button" className={viewMode === 'grid' ? 'active' : ''} aria-pressed={viewMode === 'grid'} aria-label="Grid view" onClick={() => setViewMode('grid')}>▦</button>
+          <button type="button" className={viewMode === 'list' ? 'active' : ''} aria-pressed={viewMode === 'list'} aria-label="List view" onClick={() => setViewMode('list')}>☷</button>
+        </div>
+        <label className="image-provider-filter">
+          <span aria-hidden="true">▽</span>
+          <span className="visually-hidden">Filter image assets by provider</span>
           <select value={provider} onChange={(event) => setProvider(event.currentTarget.value)}>
-            <option value="">All providers</option>
+            <option value="">Filters</option>
             {providers.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
       </div>
-      <Text aria-live="polite" role="status" size="sm" mb="sm">
+
+      <Text className="image-assets-count" aria-live="polite" role="status" size="xs">
         Showing {visibleAssets.length} of {assets.length} image{assets.length === 1 ? '' : 's'}.
       </Text>
-      {visibleAssets.length ? (
-        <div className="platform-grid" aria-label="Image asset gallery">
+
+      {!assets.length ? (
+        <div className="image-empty-state" role="status"><span aria-hidden="true">▣</span><strong>No image assets yet</strong><small>Generated images will be saved here.</small></div>
+      ) : visibleAssets.length ? (
+        <div className={`image-assets-grid ${viewMode}`} aria-label="Image asset gallery">
           {visibleAssets.map((asset) => {
             const title = imageAssetTitle(asset);
             const selected = asset.id === selectedAssetId;
@@ -53,34 +60,25 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
               <UnstyledButton
                 aria-label={`Select ${title}`}
                 aria-pressed={selected}
+                className={`image-asset-card ${selected ? 'selected' : ''}`}
                 key={asset.id}
                 onClick={() => onSelect(asset.id)}
-                style={{
-                  border: selected ? '2px solid var(--mantine-primary-color-filled)' : '1px solid var(--mantine-color-dark-4)',
-                  borderRadius: '0.75rem',
-                  overflow: 'hidden',
-                  textAlign: 'left',
-                }}
               >
-                <img
-                  alt=""
-                  loading="lazy"
-                  src={imageAssetUrl(asset.id)}
-                  style={{ aspectRatio: '1 / 1', display: 'block', objectFit: 'cover', width: '100%' }}
-                />
-                <div style={{ padding: '0.75rem' }}>
-                  <strong>{title}</strong>
-                  <Group gap="xs" mt="xs">
-                    <Text size="xs">{imageAssetProvider(asset) || 'Default provider'}</Text>
-                    <Text size="xs">{imageAssetDimensions(asset)}</Text>
-                  </Group>
+                <div className="image-asset-preview">
+                  <img alt="" loading="lazy" src={imageAssetUrl(asset.id)} />
+                  {selected ? <span className="image-asset-selected" aria-hidden="true">★</span> : null}
+                </div>
+                <div className="image-asset-copy">
+                  <strong title={title}>{title}</strong>
+                  <small>{imageAssetDimensions(asset)} · {relativeCreatedAt(asset.created_at)}</small>
+                  <span aria-hidden="true">•••</span>
                 </div>
               </UnstyledButton>
             );
           })}
         </div>
       ) : (
-        <div className="platform-empty" role="status">No image assets match these filters.</div>
+        <div className="image-empty-state" role="status">No image assets match these filters.</div>
       )}
     </>
   );
@@ -124,4 +122,16 @@ function metadataNumber(asset: ImageAsset, key: string): number | undefined {
 
 function imageAssetUrl(assetId: string): string {
   return `/api/assets/${encodeURIComponent(assetId)}/file`;
+}
+
+function relativeCreatedAt(createdAt: string): string {
+  const elapsed = Date.now() - new Date(createdAt).getTime();
+  if (!Number.isFinite(elapsed) || elapsed < 0) return 'Just now';
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
