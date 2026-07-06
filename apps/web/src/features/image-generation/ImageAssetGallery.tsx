@@ -41,6 +41,9 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
           </select>
         </label>
       </div>
+      <Text aria-live="polite" role="status" size="sm" mb="sm">
+        Showing {visibleAssets.length} of {assets.length} image{assets.length === 1 ? '' : 's'}.
+      </Text>
       {visibleAssets.length ? (
         <div className="platform-grid" aria-label="Image asset gallery">
           {visibleAssets.map((asset) => {
@@ -60,7 +63,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
                 }}
               >
                 <img
-                  alt={title}
+                  alt=""
                   loading="lazy"
                   src={imageAssetUrl(asset.id)}
                   style={{ aspectRatio: '1 / 1', display: 'block', objectFit: 'cover', width: '100%' }}
