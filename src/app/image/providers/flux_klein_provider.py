@@ -175,17 +175,6 @@ class FluxKleinImageProvider(BaseImageProvider):
         return None
 
     def generate(self, payload: Dict[str, Any]) -> ImageGenerationResult:
-        try:
-            pipe = self._ensure_pipeline()
-        except Exception as exc:
-            return ImageGenerationResult(
-                ok=False,
-                status="failed",
-                error=_safe_str(exc).strip() or f"flux_klein_load_failed:{repr(exc)}",
-                moderation_status="approved",
-                moderation_reason="",
-            )
-
         prompt = _safe_str(payload.get("prompt")).strip()
         negative_prompt = _safe_str(payload.get("negative_prompt")).strip()
         width = _safe_int(payload.get("width"), _safe_int(self.config.get("width"), 768))
@@ -206,22 +195,32 @@ class FluxKleinImageProvider(BaseImageProvider):
 
         if seed is not None:
             with contextlib.suppress(Exception):
-                import torch
                 kwargs["generator"] = torch.Generator(device="cpu").manual_seed(int(seed))
 
-        try:
-            with _GENERATE_LOCK:
+        with _GENERATE_LOCK:
+            try:
+                pipe = self._ensure_pipeline()
+            except Exception as exc:
+                return ImageGenerationResult(
+                    ok=False,
+                    status="failed",
+                    error=_safe_str(exc).strip() or f"flux_klein_load_failed:{repr(exc)}",
+                    moderation_status="approved",
+                    moderation_reason="",
+                )
+
+            try:
                 with torch.inference_mode():
                     output = pipe(**kwargs)
                     image = output.images[0]
-        except Exception as exc:
-            return ImageGenerationResult(
-                ok=False,
-                status="failed",
-                error=f"flux_klein_generate_failed:{repr(exc)}",
-                moderation_status="approved",
-                moderation_reason="",
-            )
+            except Exception as exc:
+                return ImageGenerationResult(
+                    ok=False,
+                    status="failed",
+                    error=f"flux_klein_generate_failed:{repr(exc)}",
+                    moderation_status="approved",
+                    moderation_reason="",
+                )
 
         image_bytes: bytes
         buffer = io.BytesIO()
@@ -263,6 +262,7 @@ class FluxKleinImageProvider(BaseImageProvider):
         with contextlib.suppress(Exception):
             del output
             del image
+            del pipe
 
         if bool(self.config.get("cuda_empty_cache_after_generate", False)):
             with contextlib.suppress(Exception):
