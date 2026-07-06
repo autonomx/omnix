@@ -43,3 +43,7 @@ export function imageRequestDefaultValues(defaults: ImageRequestDefaults): Image
     noCache: false,
   };
 }
+
+export function imagePresetById(presetId: string) {
+  return IMAGE_SIZE_PRESETS.find((preset) => preset.id === presetId);
+}
