@@ -34,7 +34,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
           <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Prompt, title, or provider" />
         </label>
         <label>
-          Provider
+          Filter by provider
           <select value={provider} onChange={(event) => setProvider(event.currentTarget.value)}>
             <option value="">All providers</option>
             {providers.map((item) => <option key={item} value={item}>{item}</option>)}
