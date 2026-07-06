@@ -4,6 +4,8 @@ from app.launcher.runtime_control_app import build_runtime_service_specs
 
 
 def test_launcher_starts_lightweight_image_service_without_preload(monkeypatch):
+    monkeypatch.setenv("OMNIX_IMAGE_ENABLED", "1")
+    monkeypatch.setenv("OMNIX_START_IMAGE_SERVICE", "1")
     monkeypatch.delenv("OMNIX_IMAGE_PRELOAD", raising=False)
     monkeypatch.delenv("OMNIX_IMAGE_WARMUP", raising=False)
     monkeypatch.delenv("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", raising=False)
@@ -27,6 +29,8 @@ def test_launcher_starts_lightweight_image_service_without_preload(monkeypatch):
 
 
 def test_launcher_allows_explicit_preload_override(monkeypatch):
+    monkeypatch.setenv("OMNIX_IMAGE_ENABLED", "1")
+    monkeypatch.setenv("OMNIX_START_IMAGE_SERVICE", "1")
     monkeypatch.setenv("OMNIX_IMAGE_PRELOAD", "1")
     monkeypatch.setenv("OMNIX_IMAGE_WARMUP", "1")
     monkeypatch.setenv("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "0")
@@ -37,3 +41,15 @@ def test_launcher_allows_explicit_preload_override(monkeypatch):
     assert image.env["OMNIX_IMAGE_PRELOAD"] == "1"
     assert image.env["OMNIX_IMAGE_WARMUP"] == "1"
     assert image.env["OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD"] == "0"
+
+
+def test_launcher_can_still_disable_image_service(monkeypatch):
+    monkeypatch.setenv("OMNIX_IMAGE_ENABLED", "0")
+    monkeypatch.setenv("OMNIX_START_IMAGE_SERVICE", "0")
+
+    specs = {spec.service_id: spec for spec in build_runtime_service_specs()}
+
+    assert specs["image"].enabled is False
+    assert specs["image"].auto_start is False
+    assert specs["gateway"].env["OMNIX_IMAGE_ENABLED"] == "0"
+    assert specs["gateway"].env["OMNIX_IMAGE_URL"] == ""
