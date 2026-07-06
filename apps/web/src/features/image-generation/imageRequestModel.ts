@@ -26,3 +26,20 @@ export interface ImageRequestFormValues {
   unloadAfterGeneration: boolean;
   noCache: boolean;
 }
+
+export function imageRequestDefaultValues(defaults: ImageRequestDefaults): ImageRequestFormValues {
+  return {
+    providerId: defaults.providerId,
+    prompt: '',
+    negativePrompt: '',
+    preset: 'custom',
+    width: String(defaults.width),
+    height: String(defaults.height),
+    style: '',
+    seed: '',
+    steps: '',
+    guidanceScale: '',
+    unloadAfterGeneration: defaults.unloadAfterGeneration,
+    noCache: false,
+  };
+}
