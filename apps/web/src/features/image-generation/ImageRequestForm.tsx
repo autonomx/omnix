@@ -16,10 +16,12 @@ interface ImageRequestFormProps {
   defaults: ImageRequestDefaults;
   providers: ProviderFacadePayload['providers'];
   pending: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
   onSubmit: (values: ImageRequestFormValues) => void;
 }
 
-export function ImageRequestForm({ defaults, providers, pending, onSubmit }: ImageRequestFormProps) {
+export function ImageRequestForm({ defaults, providers, pending, disabled, disabledReason, onSubmit }: ImageRequestFormProps) {
   const {
     register,
     handleSubmit,
@@ -73,15 +75,30 @@ export function ImageRequestForm({ defaults, providers, pending, onSubmit }: Ima
           <textarea rows={5} aria-invalid={Boolean(errors.prompt)} {...register('prompt', { required: true })} />
         </label>
         <label className="feature-form-wide">
+          Negative prompt
+          <textarea rows={3} placeholder="Elements to avoid" {...register('negativePrompt')} />
+        </label>
+        <label className="feature-form-wide">
           Style
           <input placeholder="cinematic, watercolor, concept art" {...register('style')} />
         </label>
-        <Button className="feature-form-action" type="submit" disabled={pending} loading={pending}>
+        <details className="feature-form-wide">
+          <summary>Advanced controls</summary>
+          <div className="feature-form" style={{ marginTop: '0.75rem' }}>
+            <label>Seed<input type="number" min="0" {...register('seed', { min: 0 })} /></label>
+            <label>Steps<input type="number" min="1" max="200" {...register('steps', { min: 1, max: 200 })} /></label>
+            <label>Guidance scale<input type="number" min="0" max="100" step="0.1" {...register('guidanceScale', { min: 0, max: 100 })} /></label>
+            <label><input type="checkbox" {...register('unloadAfterGeneration')} /> Unload model after generation</label>
+            <label><input type="checkbox" {...register('noCache')} /> Ignore cached results</label>
+          </div>
+        </details>
+        <Button className="feature-form-action" type="submit" disabled={pending || disabled} loading={pending} title={disabledReason}>
           {pending ? 'Queueing image...' : 'Generate image'}
         </Button>
       </form>
       <FeatureValidationMessage show={Boolean(errors.prompt)} message="Enter a prompt before generating an image." />
       <FeatureValidationMessage show={Boolean(errors.width || errors.height)} message="Use dimensions from 128 to 4096 in multiples of 64." />
+      {disabledReason ? <div className="platform-empty" role="status">{disabledReason}</div> : null}
     </>
   );
 }
