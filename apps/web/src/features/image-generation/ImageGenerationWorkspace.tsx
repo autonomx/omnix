@@ -1,6 +1,6 @@
 import { Button, Group, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   omnixApiClient,
@@ -10,10 +10,11 @@ import {
   type ProviderFacadePayload,
 } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { imageGenerationDefaults } from '../settings/moduleDefaults';
 import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { ImageAssetGallery } from './ImageAssetGallery';
 import { ImageJobList } from './ImageJobList';
 
 const IMAGE_JOBS_QUERY_KEY = ['image-generation', 'jobs'] as const;
@@ -32,6 +33,7 @@ interface ImageGenerationFormValues {
 
 export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const providersQuery = useQuery({
     queryKey: ['platform', 'providers'],
     queryFn: () => omnixApiClient.listProviders(),
@@ -121,8 +123,8 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
     onSuccess: async () => queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY }),
   });
   const latestAsset = useMemo(
-    () => selectLatestImageAsset(imageAssets, imageJobs, null, createJobMutation.data?.id),
-    [createJobMutation.data?.id, imageAssets, imageJobs],
+    () => selectLatestImageAsset(imageAssets, imageJobs, selectedAssetId, createJobMutation.data?.id),
+    [createJobMutation.data?.id, imageAssets, imageJobs, selectedAssetId],
   );
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
@@ -218,11 +220,7 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
 
         <section className="feature-panel feature-panel-wide">
           <Title order={4}>Image assets</Title>
-          {imageAssets.length ? (
-            <div className="platform-grid">
-              {imageAssets.map((asset) => <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.storage_path} />)}
-            </div>
-          ) : <div className="platform-empty" role="status">No image assets indexed.</div>}
+          <ImageAssetGallery assets={imageAssets} selectedAssetId={selectedAssetId} onSelect={setSelectedAssetId} />
         </section>
       </div>
     </WorkspacePanel>
