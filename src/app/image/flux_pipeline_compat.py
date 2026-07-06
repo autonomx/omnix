@@ -225,10 +225,13 @@ def build_flux_pipeline(
     *,
     torch_dtype: Any,
     local_files_only: bool,
+    device_map: str | None = None,
 ):
     pipeline_cls, _class_name = resolve_flux_pipeline_class()
-    return pipeline_cls.from_pretrained(
-        repo_or_path,
-        torch_dtype=torch_dtype,
-        local_files_only=local_files_only,
-    )
+    kwargs: Dict[str, Any] = {
+        "torch_dtype": torch_dtype,
+        "local_files_only": local_files_only,
+    }
+    if device_map:
+        kwargs["device_map"] = device_map
+    return pipeline_cls.from_pretrained(repo_or_path, **kwargs)
