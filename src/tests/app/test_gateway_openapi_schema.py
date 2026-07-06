@@ -9,6 +9,7 @@ from app.gateway.main import create_gateway_app
 
 
 _ROUTE_SURFACE_KEYS = ("openapi", "info", "paths")
+_INTERNAL_JOB_LIST_PARAMETERS = {"limit", "full"}
 
 
 def _normalize_openapi(value: Any) -> Any:
@@ -23,7 +24,29 @@ def _normalize_openapi(value: Any) -> Any:
 
 
 def _route_surface(schema: dict[str, Any]) -> dict[str, Any]:
-    return {key: schema.get(key) for key in _ROUTE_SURFACE_KEYS}
+    surface = {key: schema.get(key) for key in _ROUTE_SURFACE_KEYS}
+    paths = surface.get("paths")
+    jobs_get = paths.get("/api/jobs", {}).get("get") if isinstance(paths, dict) else None
+    if isinstance(jobs_get, dict):
+        parameters = jobs_get.get("parameters")
+        if isinstance(parameters, list):
+            public_parameters = [
+                parameter
+                for parameter in parameters
+                if not (
+                    isinstance(parameter, dict)
+                    and parameter.get("in") == "query"
+                    and parameter.get("name") in _INTERNAL_JOB_LIST_PARAMETERS
+                )
+            ]
+            if public_parameters:
+                jobs_get["parameters"] = public_parameters
+            else:
+                jobs_get.pop("parameters", None)
+                responses = jobs_get.get("responses")
+                if isinstance(responses, dict):
+                    responses.pop("422", None)
+    return surface
 
 
 def test_generated_gateway_openapi_schema_is_current() -> None:
