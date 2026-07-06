@@ -15,6 +15,7 @@ const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const MIN_SENTENCE_CHARS = 36;
 const MAX_PHRASE_CHARS = 120;
+const AUDIO_COMPLETION_TIMEOUT_MS = 60_000;
 const SPEAKABLE_TEXT_PATTERN = /[\p{L}\p{N}]/u;
 
 type ChatStreamEvent = {
@@ -176,15 +177,37 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
     phrases: turn.phraseCount,
   }, 'controller');
 
-  const session = await turn.sessionPromise;
-  await session.finish();
+  let audioIssue: string | null = null;
+  const session = await turn.sessionPromise.catch((error: unknown) => {
+    audioIssue = error instanceof Error ? error.message : 'Live audio could not start.';
+    turn.reporter.record('turn_audio_unavailable', { error: audioIssue }, 'controller');
+    return null;
+  });
+  if (session) {
+    try {
+      await withTimeout(session.finish(), AUDIO_COMPLETION_TIMEOUT_MS, 'Live audio completion timed out.');
+    } catch (error: unknown) {
+      audioIssue = error instanceof Error ? error.message : 'Live audio completion failed.';
+      turn.reporter.record('turn_audio_recovered', {
+        error: audioIssue,
+        elapsed_ms: performance.now() - turn.startedAtMs,
+      }, 'controller');
+      await session.stop('audio-recovery').catch((cleanupError: unknown) => {
+        turn.reporter.record('turn_audio_cleanup_failed', {
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        }, 'controller');
+      });
+    }
+  }
   if (turn.generation !== playbackGeneration) return;
   setVoiceSpeaking(false);
-  setInlineStatus('Live response audio finished.');
+  setInlineStatus(audioIssue ? 'Live response finished; some audio was skipped.' : 'Live response audio finished.');
   await turn.reporter.close('turn_finished', {
     elapsed_ms: performance.now() - turn.startedAtMs,
     text_chunks: turn.textChunkCount,
     phrases: turn.phraseCount,
+    audio_degraded: Boolean(audioIssue),
+    audio_error: audioIssue,
   });
   if (activeTurn?.generation === turn.generation) activeTurn = null;
 }
@@ -216,6 +239,7 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
     turn.reporter.record('phrase_queue_failed', {
       phrase_index: phraseIndex,
       error: error instanceof Error ? error.message : String(error),
+      continuing: true,
     }, 'controller');
   });
 }
@@ -339,4 +363,20 @@ function selectedVoiceId(): string | null {
   } catch {
     return null;
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
