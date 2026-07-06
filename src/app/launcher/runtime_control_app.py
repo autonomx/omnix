@@ -15,6 +15,8 @@ from app.launcher.service_manager import (
     reset_default_manager_for_tests,
 )
 
+IMAGE_SERVICE_URL = "http://127.0.0.1:5301"
+
 
 def build_runtime_service_specs():
     specs = []
@@ -33,6 +35,11 @@ def build_runtime_service_specs():
                         "--port",
                         "8000",
                     ],
+                    env={
+                        **spec.env,
+                        "OMNIX_IMAGE_ENABLED": "1",
+                        "OMNIX_IMAGE_URL": IMAGE_SERVICE_URL,
+                    },
                 )
             )
             continue
