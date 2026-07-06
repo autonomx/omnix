@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Dict
 
@@ -94,6 +95,11 @@ def post_image_service(path: str, payload: Dict[str, Any] | None = None, timeout
 
 def get_image_service_status() -> Dict[str, Any]:
     return request_image_service("GET", "/provider/status", timeout=5.0)
+
+
+def get_image_generation_progress(request_id: str) -> Dict[str, Any]:
+    encoded = urllib.parse.quote(str(request_id or ""), safe="")
+    return request_image_service("GET", f"/generate/progress/{encoded}", timeout=5.0)
 
 
 def load_image_model_via_service(provider: str = "flux_klein") -> Dict[str, Any]:

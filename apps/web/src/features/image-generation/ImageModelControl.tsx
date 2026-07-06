@@ -109,6 +109,7 @@ export function imageModelGenerationBlockReason(
 ): string | undefined {
   if (statusLoading) return 'Checking FLUX.2 [klein] 4B model status.';
   if (statusError || !status) return 'The image model service is unavailable. Check the launcher and refresh status.';
+  if (status.error || status.ok === false || status.state === 'unavailable') return 'The image model service is unavailable. Check the launcher and refresh status.';
   if (!status.enabled) return 'Image generation is disabled for this startup.';
   if (status.local_model?.complete === false) return 'The local FLUX.2 [klein] 4B model files are incomplete.';
   if (!status.loaded) return 'Load FLUX.2 [klein] 4B before generating an image.';

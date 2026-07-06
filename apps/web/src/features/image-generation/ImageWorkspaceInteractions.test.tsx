@@ -71,6 +71,11 @@ describe('ImageAssetGallery interactions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'List view' }));
     expect(screen.getByLabelText('Image asset gallery')).toHaveClass('list');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enlarge Mountain lake' }));
+    expect(screen.getByRole('dialog', { name: 'Enlarged Mountain lake' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close enlarged image' }));
+    expect(screen.queryByRole('dialog', { name: 'Enlarged Mountain lake' })).not.toBeInTheDocument();
   });
 });
 
@@ -143,6 +148,8 @@ describe('ImageJobList interactions', () => {
     );
 
     expect(screen.queryByText('Fifth image')).not.toBeInTheDocument();
+    expect(screen.getByText('Generating image...')).toBeInTheDocument();
+    expect(screen.queryByText(/0%/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Show all 5' }));
     expect(screen.getByText('Fifth image')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Show latest only' }));
@@ -150,6 +157,10 @@ describe('ImageJobList interactions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'View in Latest Result' }));
     expect(onSelectAsset).toHaveBeenCalledWith('asset-one');
+    fireEvent.click(screen.getByRole('button', { name: 'Enlarge Completed image' }));
+    expect(screen.getByRole('dialog', { name: 'Enlarged Completed image' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Download Completed image' })).toHaveAttribute('href', '/api/assets/asset-one/file?download=true');
+    fireEvent.click(screen.getByRole('button', { name: 'Close enlarged image' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledWith('job-running');
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));

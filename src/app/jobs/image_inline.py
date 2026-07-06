@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.jobs.models import JobStatus
 
 from .image_contracts import ImageGenerateInput, ImageOutputRef, image_title_from_prompt
 from .models import CompleteJobRequest, FailJobRequest, JobRecord
@@ -60,9 +61,11 @@ def execute_image_job(
     """Run one image job, index its file, and complete the shared job."""
 
     job_store.mark_running(job.id)
+    _update_progress(job_store, job.id, 1, 4, "Preparing image request", stage_id="generate-image")
     try:
         request = ImageGenerateInput.model_validate(job.input_payload or {})
         provider_payload = request.provider_payload()
+        provider_payload["request_id"] = job.id
     except ValidationError as exc:
         return _fail(job_store, job, "image_invalid_request", str(exc), retryable=False)
     except ValueError as exc:
@@ -73,10 +76,15 @@ def execute_image_job(
 
         generate_fn = generate_image
 
+    _update_progress(job_store, job.id, 0, 100, "Generating image - 0%", stage_id="generate-image")
+    progress_poller = _start_image_generation_progress_poll(job_store, job.id)
     try:
         result = generate_fn(provider_payload)
     except Exception as exc:
         return _fail(job_store, job, "image_generation_failed", str(exc) or "Image generation failed", retryable=True)
+    finally:
+        if progress_poller is not None:
+            progress_poller()
 
     if not bool(getattr(result, "ok", False)):
         message = str(getattr(result, "error", "") or "Image generation failed")
@@ -89,6 +97,16 @@ def execute_image_job(
             details={"provider": getattr(result, "provider", ""), "status": getattr(result, "status", "")},
         )
 
+    _update_progress(
+        job_store,
+        job.id,
+        100,
+        100,
+        "Storing image asset",
+        stage_id="generate-image",
+        stage_status=JobStatus.COMPLETED,
+    )
+    _update_progress(job_store, job.id, 100, 100, "Storing image asset", stage_id="store-asset")
     try:
         asset, output_ref = _store_image_asset(job, request, result, asset_store or default_asset_store())
     except FileNotFoundError as exc:
@@ -161,6 +179,83 @@ def _store_image_asset(
         seed=seed,
     )
     return asset, output_ref
+
+
+def _update_progress(
+    job_store: Any,
+    job_id: str,
+    current: int,
+    total: int,
+    message: str,
+    *,
+    stage_id: str,
+    stage_status: JobStatus = JobStatus.RUNNING,
+) -> None:
+    update_progress = getattr(job_store, "update_progress", None)
+    if callable(update_progress):
+        update_progress(
+            job_id,
+            current=current,
+            total=total,
+            message=message,
+            stage_id=stage_id,
+            stage_status=stage_status,
+        )
+
+
+def _start_image_generation_progress_poll(job_store: Any, job_id: str) -> Callable[[], None] | None:
+    try:
+        from app.image_http_client import get_image_generation_progress, is_image_service_enabled
+    except Exception:
+        return None
+
+    if not is_image_service_enabled():
+        return None
+
+    stop = threading.Event()
+    last_percent = -1
+
+    def poll_once() -> None:
+        nonlocal last_percent
+        try:
+            data = get_image_generation_progress(job_id)
+        except Exception:
+            return
+        if not bool(data.get("ok")):
+            return
+        total = int(data.get("total") or 1)
+        current = int(data.get("current") or 0)
+        generation_percent = max(0, min(100, round((current / max(1, total)) * 100)))
+        percent = 95 if generation_percent >= 100 else max(0, min(94, round(generation_percent * 0.95)))
+        if percent < last_percent:
+            return
+        if percent == last_percent and str(data.get("message") or "").strip() == "Generating image":
+            return
+        last_percent = percent
+        message = str(data.get("message") or "Generating image").strip() or "Generating image"
+        if message.lower() == "generating image":
+            message = "Finalizing image..." if generation_percent >= 100 else f"Generating image - {percent}%"
+        _update_progress(job_store, job_id, percent, 100, message, stage_id="generate-image")
+        if generation_percent >= 100:
+            stop.set()
+
+    def poll_loop() -> None:
+        while not stop.wait(0.5):
+            poll_once()
+
+    thread = threading.Thread(
+        target=poll_loop,
+        name=f"omnix-image-progress-{job_id.removeprefix('job:')[:8]}",
+        daemon=True,
+    )
+    thread.start()
+
+    def stop_polling() -> None:
+        poll_once()
+        stop.set()
+        thread.join(timeout=1.5)
+
+    return stop_polling
 
 
 def _fail(

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.gateway.main import create_gateway_app
+from app.assets import AssetRecord, AssetType
+from app.assets.store import SharedAssetStore
 import app.gateway.image_workspace_routes as image_workspace_routes
 from app.jobs import CreateJobRequest, ResourceClass, SQLiteJobStore
 
@@ -52,7 +53,9 @@ def test_image_workspace_routes_are_filtered_and_bounded(tmp_path, monkeypatch) 
 
     monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: jobs)
     monkeypatch.setattr(image_workspace_routes, "default_asset_store", lambda: assets)
-    client = TestClient(create_gateway_app())
+    app = FastAPI()
+    image_workspace_routes.register_image_workspace_routes(app)
+    client = TestClient(app)
 
     job_response = client.get("/api/image-generation/jobs?limit=1")
     asset_response = client.get("/api/image-generation/assets?limit=1")
@@ -61,3 +64,19 @@ def test_image_workspace_routes_are_filtered_and_bounded(tmp_path, monkeypatch) 
     assert [job["type"] for job in job_response.json()["jobs"]] == ["image.generate"]
     assert asset_response.status_code == 200
     assert [asset["id"] for asset in asset_response.json()["assets"]] == ["image:one"]
+
+
+def test_image_workspace_jobs_tolerates_store_read_failure(monkeypatch) -> None:
+    class BrokenStore:
+        def list_jobs(self) -> list[object]:
+            raise OSError("transient disk read failure")
+
+    monkeypatch.setattr(image_workspace_routes, "default_job_store", BrokenStore)
+    app = FastAPI()
+    image_workspace_routes.register_image_workspace_routes(app)
+    client = TestClient(app)
+
+    response = client.get("/api/image-generation/jobs")
+
+    assert response.status_code == 200
+    assert response.json()["jobs"] == []

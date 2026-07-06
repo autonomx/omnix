@@ -57,16 +57,22 @@ def test_image_model_load_and_unload_proxy_provider(monkeypatch):
     assert calls == [("load", "flux_klein"), ("unload", "flux_klein")]
 
 
-def test_image_model_routes_return_service_unavailable(monkeypatch):
+def test_image_model_status_returns_structured_unavailable_payload(monkeypatch):
     def fail():
         raise RuntimeError("image_service_unreachable")
 
     monkeypatch.setattr(image_model_routes, "get_image_service_status", fail)
+    monkeypatch.setattr(image_model_routes, "is_image_generation_enabled", lambda: True)
 
     response = TestClient(_app()).get("/api/image-generation/model/status")
 
-    assert response.status_code == 503
-    assert response.json()["detail"] == "image_service_unreachable"
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["enabled"] is True
+    assert payload["loaded"] is False
+    assert payload["state"] == "unavailable"
+    assert payload["error"] == "image_service_unreachable"
 
 
 def test_image_model_load_failure_is_not_reported_as_success(monkeypatch):

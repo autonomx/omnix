@@ -94,6 +94,10 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
 
     provider_payload = _map_to_provider_payload(req, provider_config)
     provider_payload["provider"] = provider_name
+    provider_payload["request_id"] = req.request_id
+    progress_callback = payload.get("_progress_callback")
+    if callable(progress_callback):
+        provider_payload["_progress_callback"] = progress_callback
 
     use_cache = not bool(payload.get("no_cache")) and not bool(payload.get("warmup"))
     cache_key = image_cache_key(provider_payload)

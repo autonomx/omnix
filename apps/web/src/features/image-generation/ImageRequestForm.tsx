@@ -58,6 +58,12 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
   const width = watch('width');
   const height = watch('height');
 
+  useEffect(() => {
+    if (isDirty || !defaults.providerId) return;
+    if (!providers.some((provider) => provider.id === defaults.providerId)) return;
+    setValue('providerId', defaults.providerId, { shouldDirty: false });
+  }, [defaults.providerId, isDirty, providers, setValue]);
+
   const choosePreset = (preset: (typeof ASPECT_PRESETS)[number]) => {
     setValue('preset', preset.id, { shouldDirty: true });
     setValue('width', String(preset.width), { shouldDirty: true, shouldValidate: true });

@@ -4,7 +4,7 @@ export const DEFAULT_SETTINGS_DOCUMENT: SettingsDocument = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
   revision: 'default',
   global: {
-    providers: { llm: 'lmstudio', tts: 'faster-qwen3-tts', stt: 'parakeet', image: '', voiceCloning: '' },
+    providers: { llm: 'lmstudio', tts: 'faster-qwen3-tts', stt: 'parakeet', image: 'image:flux_klein', voiceCloning: '' },
     models: { chat: '', fast: '', quality: '', background: '', embedding: '', imagePrompt: '' },
     routing: { fallbackBehavior: 'next-available', taskOverrides: {} },
   },

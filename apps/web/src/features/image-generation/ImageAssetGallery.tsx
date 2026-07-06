@@ -2,6 +2,7 @@ import { Button, Text, UnstyledButton } from '@mantine/core';
 import { useMemo, useState } from 'react';
 import type { AssetListResponse } from '../../api/client';
 import { imageAssetUrl } from './imageWorkspaceModel';
+import { ImagePreviewDialog } from './ImagePreviewDialog';
 
 export type ImageAsset = AssetListResponse['assets'][number];
 
@@ -15,6 +16,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [previewAsset, setPreviewAsset] = useState<ImageAsset | null>(null);
   const providers = useMemo(
     () => [...new Set(assets.map(imageAssetProvider).filter(Boolean))].sort(),
     [assets],
@@ -66,21 +68,23 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
             const selected = asset.id === selectedAssetId;
             return (
               <article className={`image-asset-card ${selected ? 'selected' : ''}`} key={asset.id}>
-                <UnstyledButton
-                  aria-label={`Select ${title}`}
-                  aria-pressed={selected}
-                  className="image-asset-select"
-                  onClick={() => onSelect(asset.id)}
-                >
+                <div className="image-asset-select">
                   <div className="image-asset-preview">
-                    <img alt="" loading="lazy" src={imageAssetUrl(asset.id)} />
+                    <button type="button" aria-label={`Enlarge ${title}`} onClick={() => setPreviewAsset(asset)}>
+                      <img alt="" loading="lazy" src={imageAssetUrl(asset.id)} />
+                    </button>
                     {selected ? <span className="image-asset-selected" aria-hidden="true">★</span> : null}
                   </div>
-                  <div className="image-asset-copy">
+                  <UnstyledButton
+                    aria-label={`Select ${title}`}
+                    aria-pressed={selected}
+                    className="image-asset-copy"
+                    onClick={() => onSelect(asset.id)}
+                  >
                     <strong title={title}>{title}</strong>
                     <small>{imageAssetDimensions(asset)} · {relativeCreatedAt(asset.created_at)}</small>
-                  </div>
-                </UnstyledButton>
+                  </UnstyledButton>
+                </div>
                 <div className="image-asset-actions">
                   <Button component="a" href={imageAssetUrl(asset.id)} target="_blank" rel="noreferrer" size="compact-xs" variant="subtle">Open</Button>
                   <Button component="a" href={imageAssetUrl(asset.id, true)} download size="compact-xs" variant="subtle">Download</Button>
@@ -92,6 +96,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
       ) : (
         <div className="image-empty-state" role="status">No image assets match these filters.</div>
       )}
+      {previewAsset ? <ImagePreviewDialog asset={previewAsset} onClose={() => setPreviewAsset(null)} /> : null}
     </>
   );
 }

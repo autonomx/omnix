@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import gc
+import inspect
 import io
 import os
 import threading
@@ -197,6 +198,13 @@ class FluxKleinImageProvider(BaseImageProvider):
             with contextlib.suppress(Exception):
                 kwargs["generator"] = torch.Generator(device="cpu").manual_seed(int(seed))
 
+        progress_callback = payload.get("_progress_callback")
+
+        def report_progress(current: int) -> None:
+            if callable(progress_callback):
+                with contextlib.suppress(Exception):
+                    progress_callback(max(0, min(steps, current)), max(1, steps), "Generating image")
+
         with _GENERATE_LOCK:
             try:
                 pipe = self._ensure_pipeline()
@@ -210,9 +218,30 @@ class FluxKleinImageProvider(BaseImageProvider):
                 )
 
             try:
+                report_progress(0)
+                with contextlib.suppress(Exception):
+                    signature = inspect.signature(pipe.__call__)
+                    params = signature.parameters
+                    if "callback_on_step_end" in params:
+                        def on_step_end(_pipeline, step: int, _timestep, callback_kwargs: Dict[str, Any]):
+                            report_progress(int(step) + 1)
+                            return callback_kwargs
+
+                        kwargs["callback_on_step_end"] = on_step_end
+                        if "callback_on_step_end_tensor_inputs" in params:
+                            kwargs["callback_on_step_end_tensor_inputs"] = []
+                    elif "callback" in params:
+                        def on_step(step: int, _timestep, _latents):
+                            report_progress(int(step) + 1)
+
+                        kwargs["callback"] = on_step
+                        if "callback_steps" in params:
+                            kwargs["callback_steps"] = 1
+
                 with torch.inference_mode():
                     output = pipe(**kwargs)
                     image = output.images[0]
+                report_progress(steps)
             except Exception as exc:
                 return ImageGenerationResult(
                     ok=False,

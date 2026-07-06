@@ -9,6 +9,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.image_http_client import (
     get_image_service_status,
+    is_image_generation_enabled,
     load_image_model_via_service,
     unload_image_model_via_service,
 )
@@ -36,7 +37,21 @@ async def _call_service(function, *args: Any) -> dict[str, Any]:
 
 @router.get("/api/image-generation/model/status", include_in_schema=False)
 async def image_model_status() -> dict[str, Any]:
-    return await _call_service(get_image_service_status)
+    try:
+        return await _call_service(get_image_service_status)
+    except HTTPException as exc:
+        return {
+            "ok": False,
+            "service": "image",
+            "enabled": is_image_generation_enabled(),
+            "provider": "flux_klein",
+            "model": "FLUX.2 [klein] 4B",
+            "loaded": False,
+            "state": "unavailable",
+            "error": str(exc.detail or "image_service_unavailable"),
+            "explicit_load_required": True,
+            "local_model": {"complete": True, "missing": [], "local_dir": ""},
+        }
 
 
 @router.post("/api/image-generation/model/load", include_in_schema=False)

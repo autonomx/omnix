@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { JobRecord } from '../../api/client';
 import { OmnixStatusPill } from '../../design/primitives';
 import { imageAssetUrl } from './imageWorkspaceModel';
+import { ImagePreviewDialog } from './ImagePreviewDialog';
 
 const ACTIVE_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
 const RETRYABLE_STATUSES = new Set(['failed', 'canceled', 'stale']);
@@ -19,6 +20,7 @@ interface ImageJobListProps {
 
 export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, onRetry, onSelectAsset }: ImageJobListProps) {
   const [showAll, setShowAll] = useState(false);
+  const [preview, setPreview] = useState<{ assetId: string; title: string } | null>(null);
   if (!jobs.length) return <div className="image-empty-state" role="status">No image jobs queued.</div>;
 
   const visibleJobs = showAll ? jobs : jobs.slice(0, COLLAPSED_JOB_LIMIT);
@@ -30,7 +32,7 @@ export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, on
         {visibleJobs.map((job) => {
           const assetId = firstImageAssetId(job);
           const prompt = imageJobPrompt(job);
-          const progress = progressPercent(job.progress);
+          const progress = imageJobProgressPresentation(job);
           return (
             <article className="image-job-card" key={job.id} aria-label={`Image job ${prompt || job.id}`}>
               <div className="image-job-header">
@@ -42,10 +44,19 @@ export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, on
               </div>
 
               <div className="image-job-content">
-                {assetId ? <img alt="" loading="lazy" src={imageAssetUrl(assetId)} /> : <span className="image-job-placeholder" aria-hidden="true">✦</span>}
+                {assetId ? (
+                  <button
+                    type="button"
+                    className="image-job-preview-button"
+                    aria-label={`Enlarge ${prompt || 'image result'}`}
+                    onClick={() => setPreview({ assetId, title: prompt || 'Image result' })}
+                  >
+                    <img alt="" loading="lazy" src={imageAssetUrl(assetId)} />
+                  </button>
+                ) : <span className="image-job-placeholder" aria-hidden="true">✦</span>}
                 <div className="image-job-details">
-                  <Progress value={progress} aria-label={`${job.type} progress`} />
-                  <Text size="xs">{job.progress?.message || jobStatusMessage(job.status, progress)}</Text>
+                  <Progress className={progress.indeterminate ? 'image-job-progress indeterminate' : 'image-job-progress'} value={progress.value} aria-label={`${job.type} progress`} />
+                  <Text size="xs">{progress.label}</Text>
                   {job.error ? <Text c="red" size="xs" role="alert">{job.error.message} ({job.error.code})</Text> : null}
                   <div className="image-job-actions">
                     {assetId ? (
@@ -77,6 +88,15 @@ export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, on
           <button type="button" onClick={() => setShowAll((value) => !value)}>{showAll ? 'Show latest only' : `Show all ${jobs.length}`}</button>
         ) : null}
       </footer>
+      {preview ? (
+        <ImagePreviewDialog
+          downloadUrl={imageAssetUrl(preview.assetId, true)}
+          imageUrl={imageAssetUrl(preview.assetId)}
+          metadata="Completed image result"
+          onClose={() => setPreview(null)}
+          title={preview.title}
+        />
+      ) : null}
     </div>
   );
 }
@@ -101,16 +121,32 @@ function imageJobPrompt(job: JobRecord): string {
   return typeof prompt === 'string' ? prompt : '';
 }
 
+interface ImageJobProgressPresentation {
+  indeterminate: boolean;
+  label: string;
+  value: number;
+}
+
+function imageJobProgressPresentation(job: JobRecord): ImageJobProgressPresentation {
+  const status = String(job.status);
+  const message = job.progress?.message?.trim();
+  const percent = progressPercent(job.progress);
+  if (status === 'completed') return { indeterminate: false, label: 'Completed successfully', value: 100 };
+  if (status === 'failed') return { indeterminate: false, label: 'Generation failed', value: percent };
+  if (status === 'canceled') return { indeterminate: false, label: 'Canceled', value: percent };
+  if (status === 'leased') return { indeterminate: true, label: message || 'Preparing provider...', value: 100 };
+  if (status === 'running') {
+    if (message && !/^(running|generating image)$/i.test(message)) {
+      return { indeterminate: false, label: message, value: percent };
+    }
+    return { indeterminate: true, label: message ? `${message}...` : 'Generating image...', value: 100 };
+  }
+  if (message) return { indeterminate: false, label: message, value: percent };
+  return { indeterminate: false, label: 'Waiting in queue', value: percent };
+}
+
 function progressPercent(progress: { current: number; total: number } | undefined): number {
   if (!progress || progress.total <= 0) return 0;
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
 
-function jobStatusMessage(status: string, progress: number): string {
-  if (status === 'completed') return 'Completed successfully';
-  if (status === 'failed') return 'Generation failed';
-  if (status === 'canceled') return 'Canceled';
-  if (status === 'running') return `Generating · ${progress}%`;
-  if (status === 'leased') return 'Preparing provider';
-  return 'Waiting in queue';
-}

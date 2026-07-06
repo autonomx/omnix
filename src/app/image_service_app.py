@@ -31,6 +31,8 @@ app = FastAPI(title="Omnix Image Service")
 
 _MODEL_OPERATION_LOCK = threading.Lock()
 _MODEL_OPERATION = "idle"
+_GENERATION_PROGRESS_LOCK = threading.Lock()
+_GENERATION_PROGRESS: Dict[str, Dict[str, Any]] = {}
 
 
 def _truthy(value: str) -> bool:
@@ -101,6 +103,58 @@ def _generation_response(result) -> Dict[str, Any]:
     }
 
 
+def _request_id(payload: Dict[str, Any]) -> str:
+    request_id = str(payload.get("request_id") or "").strip()
+    if request_id:
+        return request_id
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        return str(metadata.get("request_id") or "").strip()
+    return ""
+
+
+def _set_generation_progress(
+    request_id: str,
+    *,
+    current: int,
+    total: int,
+    message: str,
+    status: str,
+) -> None:
+    request_id = request_id.strip()
+    if not request_id:
+        return
+    total = max(1, int(total or 1))
+    current = max(0, min(total, int(current or 0)))
+    with _GENERATION_PROGRESS_LOCK:
+        _GENERATION_PROGRESS[request_id] = {
+            "ok": True,
+            "request_id": request_id,
+            "current": current,
+            "total": total,
+            "percent": round((current / total) * 100),
+            "message": message,
+            "status": status,
+        }
+
+
+def _get_generation_progress(request_id: str) -> Dict[str, Any]:
+    request_id = request_id.strip()
+    with _GENERATION_PROGRESS_LOCK:
+        progress = dict(_GENERATION_PROGRESS.get(request_id) or {})
+    if progress:
+        return progress
+    return {
+        "ok": False,
+        "request_id": request_id,
+        "current": 0,
+        "total": 1,
+        "percent": 0,
+        "message": "No generation progress is available.",
+        "status": "missing",
+    }
+
+
 @app.on_event("startup")
 async def startup_load_provider():
     if not is_image_generation_enabled():
@@ -166,9 +220,17 @@ async def provider_status():
 async def generate(request: Request):
     payload = await request.json()
     payload = payload if isinstance(payload, dict) else {}
+    request_id = _request_id(payload)
     provider = str(payload.get("provider") or get_active_image_provider_name()).strip().lower() or "flux_klein"
     explicit_load = _truthy(os.environ.get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1"))
     if explicit_load and provider == "flux_klein" and not is_image_provider_loaded(provider):
+        _set_generation_progress(
+            request_id,
+            current=0,
+            total=1,
+            message="Image model is not loaded.",
+            status="failed",
+        )
         return {
             "ok": False,
             "provider": provider,
@@ -182,8 +244,39 @@ async def generate(request: Request):
             "mime_type": "",
             "metadata": {"model": _model_label(provider), "load_endpoint": "/provider/load"},
         }
+
+    def report_progress(current: int, total: int, message: str = "Generating image") -> None:
+        _set_generation_progress(
+            request_id,
+            current=current,
+            total=total,
+            message=message,
+            status="running",
+        )
+
+    if request_id:
+        payload["_progress_callback"] = report_progress
+        _set_generation_progress(
+            request_id,
+            current=0,
+            total=int(payload.get("steps") or payload.get("num_inference_steps") or 1),
+            message="Generating image",
+            status="running",
+        )
     result = await run_in_threadpool(generate_image_local, payload)
+    _set_generation_progress(
+        request_id,
+        current=1,
+        total=1,
+        message="Generation complete" if result.ok else (result.error or "Image generation failed"),
+        status="completed" if result.ok else "failed",
+    )
     return _generation_response(result)
+
+
+@app.get("/generate/progress/{request_id}")
+async def generate_progress(request_id: str):
+    return _get_generation_progress(request_id)
 
 
 @app.post("/provider/load")

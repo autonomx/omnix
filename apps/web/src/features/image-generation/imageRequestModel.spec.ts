@@ -6,7 +6,7 @@ import {
   validateImageDimension,
 } from './imageRequestModel';
 
-const defaults = { providerId: 'image:flux', width: 768, height: 768, unloadAfterGeneration: true };
+const defaults = { providerId: 'image:flux_klein', width: 768, height: 768, unloadAfterGeneration: true };
 
 describe('image request model', () => {
   it('builds normalized provider controls', () => {
@@ -24,7 +24,7 @@ describe('image request model', () => {
     expect(buildImageGenerateInput(values, defaults)).toEqual({
       prompt: 'moonlit ruins',
       negative_prompt: 'blur',
-      provider_id: 'image:flux',
+      provider_id: 'image:flux_klein',
       width: 768,
       height: 768,
       style: 'cinematic',

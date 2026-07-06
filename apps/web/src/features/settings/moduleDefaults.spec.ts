@@ -10,7 +10,19 @@ describe('module default adapters', () => {
       stt: { ...DEFAULT_SETTINGS_DOCUMENT.stt, language: 'en' },
     };
     expect(imageGenerationDefaults(document).width).toBe(1024);
+    expect(imageGenerationDefaults(document).providerId).toBe('image:flux_klein');
     expect(speechInputDefaults(document).language).toBe('en');
+  });
+
+  it('uses flux as the image provider when older profiles have no image default', () => {
+    const document = {
+      ...DEFAULT_SETTINGS_DOCUMENT,
+      global: {
+        ...DEFAULT_SETTINGS_DOCUMENT.global,
+        providers: { ...DEFAULT_SETTINGS_DOCUMENT.global.providers, image: '' },
+      },
+    };
+    expect(imageGenerationDefaults(document).providerId).toBe('image:flux_klein');
   });
 
   it('maps voice values and isolates RPG defaults', () => {

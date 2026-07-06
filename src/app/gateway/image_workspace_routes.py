@@ -29,8 +29,17 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
 
     @gateway.get("/api/image-generation/jobs", response_model=JobListResponse, include_in_schema=False)
     def image_jobs(limit: int = Query(default=DEFAULT_IMAGE_JOB_LIMIT, ge=1, le=MAX_IMAGE_JOB_LIMIT)) -> JobListResponse:
-        jobs = _recent_image_jobs(default_job_store(), limit)
-        return JobListResponse(jobs=[summarize_job(job) for job in jobs])
+        try:
+            jobs = _recent_image_jobs(default_job_store(), limit)
+        except Exception:
+            jobs = []
+        summaries = []
+        for job in jobs:
+            try:
+                summaries.append(summarize_job(job))
+            except Exception:
+                continue
+        return JobListResponse(jobs=summaries)
 
     @gateway.post("/api/image-generation/jobs/{job_id}/retry", response_model=JobRecord, include_in_schema=False)
     def retry_image_job(job_id: str) -> JobRecord:
@@ -93,7 +102,13 @@ def _recent_image_jobs(store: Any, limit: int) -> list[Any]:
                 """,
                 ("image.generate", "image", "image-generation", limit),
             ).fetchall()
-        return [store._row_to_job(row) for row in rows]  # noqa: SLF001
+        jobs = []
+        for row in rows:
+            try:
+                jobs.append(store._row_to_job(row))  # noqa: SLF001
+            except Exception:
+                continue
+        return jobs
     return [job for job in store.list_jobs() if _is_image_job(job)][:limit]
 
 

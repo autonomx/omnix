@@ -277,6 +277,46 @@ class SQLiteJobStore:
             )
         return self._save_with_event(job, "job.updated")
 
+    def update_progress(
+        self,
+        job_id: str,
+        *,
+        current: int,
+        total: int,
+        message: str | None = None,
+        stage_id: str | None = None,
+        stage_status: JobStatus = JobStatus.RUNNING,
+    ) -> JobRecord | None:
+        job = self.get_job(job_id)
+        if job is None or job.status in TERMINAL_STATUSES:
+            return job
+        now = _utcnow()
+        progress = JobProgress(current=max(0, current), total=max(1, total), message=message)
+        job.progress = progress
+        job.updated_at = now
+        if job.status in {JobStatus.QUEUED, JobStatus.LEASED, JobStatus.WAITING, JobStatus.RETRYING}:
+            job.status = JobStatus.RUNNING
+            job.started_at = job.started_at or now
+        if stage_id:
+            job.stages = [
+                stage.model_copy(
+                    update={
+                        "status": stage_status,
+                        "started_at": stage.started_at or now,
+                        "completed_at": now if stage_status == JobStatus.COMPLETED else stage.completed_at,
+                        "progress": JobProgress(
+                            current=1 if stage_status == JobStatus.COMPLETED else 0,
+                            total=1,
+                            message=message,
+                        ),
+                    }
+                )
+                if stage.id == stage_id
+                else stage
+                for stage in job.stages
+            ]
+        return self._save_with_event(job, "job.updated")
+
     def fail_job(self, job_id: str, request: FailJobRequest) -> JobRecord | None:
         job = self.get_job(job_id)
         if job is None:
@@ -292,6 +332,18 @@ class SQLiteJobStore:
             retryable=request.retryable,
             details=request.details,
         )
+        job.stages = [
+            stage.model_copy(
+                update={
+                    "status": JobStatus.FAILED,
+                    "completed_at": stage.completed_at or now,
+                    "error": job.error,
+                }
+            )
+            if stage.status in {JobStatus.RUNNING, JobStatus.LEASED}
+            else stage
+            for stage in job.stages
+        ]
         return self._save_with_event(job, "job.failed")
 
     def cancel_job(self, job_id: str, request: CancelJobRequest) -> JobRecord | None:

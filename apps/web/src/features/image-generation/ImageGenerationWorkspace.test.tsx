@@ -46,8 +46,8 @@ describe('ImageGenerationWorkspace', () => {
         return Response.json({
           providers: [
             {
-              id: 'image:flux',
-              label: 'Flux local',
+              id: 'image:flux_klein',
+              label: 'FLUX.2 [klein] 4B',
               family: 'image',
               source: 'settings',
               status: 'configured',
@@ -118,13 +118,13 @@ describe('ImageGenerationWorkspace', () => {
     renderImageGeneration();
 
     expect(await screen.findByRole('heading', { name: 'Image request' })).toBeInTheDocument();
-    expect(await screen.findByText('Flux local')).toBeInTheDocument();
+    expect(await screen.findByText('FLUX.2 [klein] 4B')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Unload Model' })).toBeInTheDocument();
     expect(screen.queryByText('RPG visual provider')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Size preset')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Select Generated image' })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'image:flux' } });
+    expect(screen.getByLabelText('Provider')).toHaveValue('image:flux_klein');
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A bright workstation render.' } });
     fireEvent.change(screen.getByLabelText('Style'), { target: { value: 'cinematic' } });
     fireEvent.click(screen.getByRole('button', { name: 'Generate image' }));
@@ -142,7 +142,7 @@ describe('ImageGenerationWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"module":"image-generation"');
       expect(createCall?.[1]?.body).toContain('"type":"image.generate"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:image"');
-      expect(createCall?.[1]?.body).toContain('"provider_id":"image:flux"');
+      expect(createCall?.[1]?.body).toContain('"provider_id":"image:flux_klein"');
       expect(createCall?.[1]?.body).toContain('"style":"cinematic"');
     });
   });

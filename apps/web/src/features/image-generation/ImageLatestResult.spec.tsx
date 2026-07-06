@@ -1,5 +1,5 @@
 import { MantineProvider } from '@mantine/core';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { AssetListResponse } from '../../api/client';
 import { ImageLatestResult } from './ImageLatestResult';
@@ -41,6 +41,28 @@ describe('ImageLatestResult', () => {
       '/api/assets/image%3Anight/file?download=true',
     );
     expect(region).not.toHaveTextContent('private/night.png');
+  });
+
+  it('opens and closes an enlarged image preview when the result image is clicked', () => {
+    render(<MantineProvider><ImageLatestResult asset={asset} /></MantineProvider>);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enlarge Night harbor' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Enlarged Night harbor' });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getAllByRole('img', { name: 'Night harbor' })[1]).toHaveAttribute(
+      'src',
+      '/api/assets/image%3Anight/file',
+    );
+    expect(screen.getByLabelText('Image zoom level')).toHaveTextContent('100%');
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(screen.getByLabelText('Image zoom level')).toHaveTextContent('125%');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset zoom' }));
+    expect(screen.getByLabelText('Image zoom level')).toHaveTextContent('100%');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close enlarged image' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Enlarged Night harbor' })).not.toBeInTheDocument();
   });
 
   it('announces the empty state', () => {

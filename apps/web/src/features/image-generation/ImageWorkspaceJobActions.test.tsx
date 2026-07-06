@@ -31,7 +31,7 @@ describe('Image workspace job actions', () => {
       const path = requestPath(input);
       if (path === '/api/providers') {
         return Response.json({
-          providers: [{ id: 'image:flux', label: 'Flux local', family: 'image', source: 'settings', status: 'configured', capabilities: ['image'] }],
+          providers: [{ id: 'image:flux_klein', label: 'FLUX.2 [klein] 4B', family: 'image', source: 'settings', status: 'configured', capabilities: ['image'] }],
           models: [],
         });
       }

@@ -1,9 +1,11 @@
 import { DEFAULT_SETTINGS_DOCUMENT } from './settingsDefaults';
 import type { SettingsDocument } from './settingsDocumentTypes';
 
+const DEFAULT_IMAGE_PROVIDER_ID = 'image:flux_klein';
+
 export function imageGenerationDefaults(document: SettingsDocument = DEFAULT_SETTINGS_DOCUMENT) {
   return {
-    providerId: document.global.providers.image,
+    providerId: document.global.providers.image || DEFAULT_IMAGE_PROVIDER_ID,
     width: document.image.width,
     height: document.image.height,
     unloadAfterGeneration: document.image.unloadAfterGeneration,

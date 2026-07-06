@@ -9,10 +9,10 @@ function renderForm(onSubmit: (values: ImageRequestFormValues) => void) {
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
       <ImageRequestForm
-        defaults={{ providerId: 'image:flux', width: 768, height: 768, unloadAfterGeneration: false }}
+        defaults={{ providerId: 'image:flux_klein', width: 768, height: 768, unloadAfterGeneration: false }}
         providers={[{
-          id: 'image:flux',
-          label: 'Flux local',
+          id: 'image:flux_klein',
+          label: 'FLUX.2 [klein] 4B',
           family: 'image',
           source: 'settings',
           status: 'configured',
@@ -30,7 +30,7 @@ describe('ImageRequestForm wiring', () => {
     const onSubmit = vi.fn<(values: ImageRequestFormValues) => void>();
     renderForm(onSubmit);
 
-    expect(screen.getByLabelText('Provider')).toHaveValue('image:flux');
+    expect(screen.getByLabelText('Provider')).toHaveValue('image:flux_klein');
     expect(screen.getByLabelText('Style')).toHaveValue('photorealistic');
     expect(screen.getByLabelText('Steps')).toHaveValue(32);
 
@@ -51,7 +51,7 @@ describe('ImageRequestForm wiring', () => {
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      providerId: 'image:flux',
+      providerId: 'image:flux_klein',
       prompt: 'A real generated scene',
       negativePrompt: 'blurry',
       width: '1024',

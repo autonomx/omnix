@@ -28,6 +28,7 @@ def _status(*, loaded: bool) -> dict:
 
 def test_status_reports_unloaded_without_loading_provider(monkeypatch):
     monkeypatch.setattr(image_service_app, "is_image_generation_enabled", lambda: True)
+    monkeypatch.setattr(image_service_app, "get_active_image_provider_name", lambda: "flux_klein")
     monkeypatch.setattr(image_service_app, "is_image_provider_loaded", lambda _provider=None: False)
     monkeypatch.setattr(image_service_app, "_local_model_status", lambda _provider: _status(loaded=False)["local_model"])
     monkeypatch.setattr(image_service_app, "get_image_provider_cache_status", lambda: {"loaded_providers": []})
@@ -99,10 +100,10 @@ def test_loaded_generate_uses_real_generation_path(monkeypatch):
     monkeypatch.setattr(image_service_app, "is_image_generation_enabled", lambda: True)
     monkeypatch.setattr(image_service_app, "get_active_image_provider_name", lambda: "flux_klein")
     monkeypatch.setattr(image_service_app, "is_image_provider_loaded", lambda _provider=None: True)
-    monkeypatch.setattr(
-        image_service_app,
-        "generate_image_local",
-        lambda _payload: SimpleNamespace(
+
+    def generate_image_local(payload):
+        payload["_progress_callback"](16, 32, "Generating image")
+        return SimpleNamespace(
             ok=True,
             provider="flux_klein",
             status="completed",
@@ -114,12 +115,30 @@ def test_loaded_generate_uses_real_generation_path(monkeypatch):
             height=768,
             mime_type="image/png",
             metadata={"width": 768, "height": 768},
-        ),
+        )
+
+    monkeypatch.setattr(
+        image_service_app,
+        "generate_image_local",
+        generate_image_local,
     )
 
     with TestClient(image_service_app.app) as client:
-        response = client.post("/generate", json={"prompt": "castle", "width": 768, "height": 768})
+        response = client.post("/generate", json={"prompt": "castle", "width": 768, "height": 768, "request_id": "job:test"})
+        progress_response = client.get("/generate/progress/job:test")
 
     assert response.status_code == 200
     assert response.json()["ok"] is True
     assert response.json()["status"] == "completed"
+    assert progress_response.status_code == 200
+    assert progress_response.json()["status"] == "completed"
+    assert progress_response.json()["percent"] == 100
+
+
+def test_generation_progress_endpoint_reports_missing_request():
+    with TestClient(image_service_app.app) as client:
+        response = client.get("/generate/progress/job:missing")
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+    assert response.json()["status"] == "missing"

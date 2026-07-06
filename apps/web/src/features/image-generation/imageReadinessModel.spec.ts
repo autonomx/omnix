@@ -4,7 +4,7 @@ import { readyImageProviders, resolveImageReadiness } from './imageReadinessMode
 
 const providers = {
   providers: [
-    { id: 'image:flux', label: 'Flux', family: 'image', capabilities: ['image'], status: 'configured', source: 'settings' },
+    { id: 'image:flux_klein', label: 'FLUX', family: 'image', capabilities: ['image'], status: 'configured', source: 'settings' },
     { id: 'image:broken', label: 'Broken', family: 'image', capabilities: ['image'], status: 'degraded', source: 'settings' },
     { id: 'llm:local', label: 'Local', family: 'llm', capabilities: ['chat'], status: 'configured', source: 'settings' },
   ],
@@ -13,7 +13,7 @@ const providers = {
 
 describe('image runtime readiness', () => {
   it('keeps only usable standalone image providers', () => {
-    expect(readyImageProviders(providers).map((provider) => provider.id)).toEqual(['image:flux']);
+    expect(readyImageProviders(providers).map((provider) => provider.id)).toEqual(['image:flux_klein']);
   });
 
   it('uses inline generation when no image worker is configured', () => {
