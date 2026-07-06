@@ -1,5 +1,4 @@
 import { Button, Text, Title } from '@mantine/core';
-import { OmnixStatusPill } from '../../design/primitives';
 import {
   formatCreatedAt,
   imageAssetMetadata,
@@ -31,7 +30,6 @@ export function ImageLatestResult({ asset, onOpenInAssets }: ImageLatestResultPr
             <Text size="sm">Your most recently generated image appears here first.</Text>
           </div>
         </div>
-        {asset ? <OmnixStatusPill>New</OmnixStatusPill> : null}
       </header>
 
       {asset ? (
