@@ -72,6 +72,10 @@ export function ImageRequestForm({ defaults, providers, pending, onSubmit }: Ima
           Prompt
           <textarea rows={5} aria-invalid={Boolean(errors.prompt)} {...register('prompt', { required: true })} />
         </label>
+        <label className="feature-form-wide">
+          Style
+          <input placeholder="cinematic, watercolor, concept art" {...register('style')} />
+        </label>
         <Button className="feature-form-action" type="submit" disabled={pending} loading={pending}>
           {pending ? 'Queueing image...' : 'Generate image'}
         </Button>
