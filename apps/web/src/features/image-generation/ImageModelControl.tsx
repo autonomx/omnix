@@ -43,8 +43,8 @@ export function ImageModelControl({
   const modelName = status?.model || 'FLUX.2 [klein] 4B';
   const localComplete = status?.local_model?.complete !== false;
   const state = action === 'load' ? 'loading' : action === 'unload' ? 'unloading' : status?.state || 'checking';
-  const canLoad = Boolean(status?.enabled !== false && localComplete && !loaded && !action && !statusLoading);
-  const canUnload = Boolean(loaded && !action && !statusLoading);
+  const canLoad = Boolean(status && status.enabled && localComplete && !loaded && !action && !statusLoading);
+  const canUnload = Boolean(status && loaded && !action && !statusLoading);
   const location = status?.local_model?.local_dir || '';
   const missing = status?.local_model?.missing ?? [];
 
