@@ -131,10 +131,10 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
           <span className="image-flow-icon" aria-hidden="true">⌾</span>
           <p><strong>Flow:</strong> Submit a request <b>→</b> We generate your image <b>→</b> It appears in Latest Result and is saved to Image Assets.</p>
         </section>
-        <section className={`image-system-card ${readiness.canGenerate ? 'ready' : 'degraded'}`} aria-live="polite">
+        <section className={`image-system-card ${readiness.status}`} aria-live="polite">
           <span className="image-system-dot" aria-hidden="true" />
-          <div><strong>System</strong><small>{readiness.canGenerate ? 'All systems operational.' : readiness.message}</small></div>
-          <span className="image-system-wave" aria-hidden="true">▂▅▃▆▂▇▃▅▂</span>
+          <div><strong>{readiness.title}</strong><small>{readiness.message}</small></div>
+          <span className="image-system-wave">{readiness.workerMode}</span>
         </section>
       </div>
 
