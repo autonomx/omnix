@@ -33,12 +33,24 @@ describe('ImageAssetGallery', () => {
     expect(filterImageAssets(assets, '', 'mock')).toEqual([assets[1]]);
   });
 
-  it('selects a thumbnail', () => {
+  it('announces filtered result counts', () => {
+    render(<MantineProvider><ImageAssetGallery assets={assets} selectedAssetId={null} onSelect={vi.fn()} /></MantineProvider>);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Showing 2 of 2 images.');
+    fireEvent.change(screen.getByLabelText('Search images'), { target: { value: 'green' } });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Showing 1 of 2 images.');
+    expect(screen.getByRole('button', { name: 'Select Forest light' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Select Night city' })).not.toBeInTheDocument();
+  });
+
+  it('selects a thumbnail with one accessible name', () => {
     const onSelect = vi.fn();
     render(<MantineProvider><ImageAssetGallery assets={assets} selectedAssetId={null} onSelect={onSelect} /></MantineProvider>);
 
     fireEvent.click(screen.getByRole('button', { name: 'Select Night city' }));
 
     expect(onSelect).toHaveBeenCalledWith('image:city');
+    expect(screen.queryByRole('img', { name: 'Night city' })).not.toBeInTheDocument();
   });
 });
