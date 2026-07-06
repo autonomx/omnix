@@ -79,7 +79,13 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
   return (
     <>
       <form className="image-request-form" onSubmit={submit}>
-        <input type="hidden" {...register('preset')} />
+        <label className="visually-hidden">
+          Size preset
+          <select {...register('preset')}>
+            <option value="custom">Custom</option>
+            {ASPECT_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+          </select>
+        </label>
 
         <div className="image-request-primary-row">
           <label className="image-field image-provider-field">
@@ -192,7 +198,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
           </details>
         </div>
 
-        <Button className="image-generate-button" type="submit" disabled={pending || disabled} loading={pending} title={disabledReason}>
+        <Button aria-label={pending ? 'Queueing image' : 'Generate image'} className="image-generate-button" type="submit" disabled={pending || disabled} loading={pending} title={disabledReason}>
           <span aria-hidden="true">✦</span> {pending ? 'Queueing Image...' : 'Generate Image'}
         </Button>
         <p className="image-local-note"><span aria-hidden="true">♢</span> Processed locally. Your data never leaves your machine.</p>
