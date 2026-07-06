@@ -73,11 +73,13 @@ describe('Image Generation model residency wiring', () => {
 
     renderWorkspace();
 
-    const generateButton = await screen.findByRole('button', { name: 'Generate image' });
+    const loadButton = await screen.findByRole('button', { name: 'Load Model' });
+    await waitFor(() => expect(loadButton).toBeEnabled());
+    const generateButton = screen.getByRole('button', { name: 'Generate image' });
     expect(generateButton).toBeDisabled();
-    expect(screen.getByText('Load FLUX.2 [klein] 4B before generating an image.')).toBeInTheDocument();
+    expect(generateButton).toHaveAttribute('title', 'Load FLUX.2 [klein] 4B before generating an image.');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Load Model' }));
+    fireEvent.click(loadButton);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Unload Model' })).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Generate image' })).not.toBeDisabled();
     expect(fetchMock.mock.calls.some(([input, init]) => requestPath(input as RequestInfo | URL) === '/api/image-generation/model/load' && init?.method === 'POST')).toBe(true);
