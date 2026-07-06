@@ -29,10 +29,11 @@ const ASPECT_PRESETS = [
   { id: 'ultrawide-1344', ratio: '21:9', label: 'Ultrawide', width: 1344, height: 576 },
 ] as const;
 
-const QUALITY_STEPS = [12, 18, 24, 32, 40] as const;
+const QUALITY_STEPS = [2, 3, 4, 6, 8] as const;
+const DEFAULT_QUALITY = 3;
 
 export function ImageRequestForm({ defaults, providers, pending, disabled, disabledReason, resetToken, onSubmit }: ImageRequestFormProps) {
-  const [quality, setQuality] = useState(4);
+  const [quality, setQuality] = useState(DEFAULT_QUALITY);
   const {
     register,
     handleSubmit,
@@ -49,7 +50,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
   useEffect(() => {
     if (resetToken) {
       reset(imageRequestDefaultValues(defaults));
-      setQuality(4);
+      setQuality(DEFAULT_QUALITY);
     }
   }, [defaults, reset, resetToken]);
 
@@ -182,7 +183,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
           </label>
 
           <fieldset className="image-quality-fieldset">
-            <legend>Quality <i title="Higher quality sends more generation steps">ⓘ</i></legend>
+            <legend>Quality <i title="FLUX Klein is distilled; higher quality adds a small number of extra steps">ⓘ</i></legend>
             <div className="image-quality-control" role="group" aria-label="Quality">
               {[1, 2, 3, 4, 5].map((level) => (
                 <button
