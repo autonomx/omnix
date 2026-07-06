@@ -85,12 +85,15 @@ def load_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
     provider_name = _safe_str(provider_name).strip() or get_active_image_provider_name()
     provider = get_or_create_image_provider(provider_name)
     provider.load()
-    return {
+    result: Dict[str, Any] = {
         "ok": True,
         "provider": provider_name,
         "loaded": is_image_provider_loaded(provider_name),
-        "runtime": _provider_runtime_status(provider),
     }
+    runtime = _provider_runtime_status(provider)
+    if runtime:
+        result["runtime"] = runtime
+    return result
 
 
 def unload_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
@@ -135,13 +138,16 @@ def get_image_provider_cache_status() -> Dict[str, Any]:
         if is_image_provider_loaded(provider_name)
     ]
     runtime = {
-        provider_name: _provider_runtime_status(provider)
+        provider_name: status
         for provider_name, provider in sorted(_PROVIDER_CACHE.items())
+        if (status := _provider_runtime_status(provider))
     }
-    return {
+    result: Dict[str, Any] = {
         "ok": True,
         "loaded_providers": loaded_providers,
         "cached_providers": sorted(list(_PROVIDER_CACHE.keys())),
         "known_providers": get_image_provider_keys(),
-        "runtime": runtime,
     }
+    if runtime:
+        result["runtime"] = runtime
+    return result
