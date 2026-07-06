@@ -8,7 +8,12 @@ import {
   type ImageAsset,
 } from './imageWorkspaceModel';
 
-export function ImageLatestResult({ asset }: { asset?: ImageAsset }) {
+interface ImageLatestResultProps {
+  asset?: ImageAsset;
+  onOpenInAssets?: (assetId: string) => void;
+}
+
+export function ImageLatestResult({ asset, onOpenInAssets }: ImageLatestResultProps) {
   const title = asset ? imageAssetTitle(asset) : '';
 
   return (
@@ -38,7 +43,7 @@ export function ImageLatestResult({ asset }: { asset?: ImageAsset }) {
             <Text size="xs">{formatCreatedAt(asset.created_at)}</Text>
             <span className="image-completed-label">● Completed</span>
             <div className="image-latest-actions">
-              <Button component="a" href="#image-assets" size="compact-sm" variant="filled">▣ Open in Assets</Button>
+              <Button size="compact-sm" variant="filled" onClick={() => onOpenInAssets?.(asset.id)}>▣ Open in Assets</Button>
               <Button aria-label={`Download ${title}`} component="a" href={imageAssetUrl(asset.id, true)} download size="compact-sm" variant="default">↓</Button>
               <Button aria-label={`Open ${title} in a new tab`} component="a" href={imageAssetUrl(asset.id)} target="_blank" rel="noreferrer" size="compact-sm" variant="default">↗</Button>
             </div>
