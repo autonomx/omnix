@@ -81,14 +81,11 @@ def enqueue_image_job(
     owner_id: str | None = None,
     priority: int = 0,
 ) -> JobRecord:
-    """Submit image generation through shared jobs and the legacy image queue."""
-    from app.image.job_queue import enqueue_image_job as enqueue_legacy_image_job
-
-    legacy_job = enqueue_legacy_image_job(payload)
+    """Submit image generation only through the durable shared job store."""
     return store.create_job(
         CreateJobRequest(
             owner_id=owner_id,
-            module="image",
+            module="image-generation",
             type="image.generate",
             resource_class=ResourceClass.GPU_IMAGE,
             priority=priority,
@@ -107,8 +104,7 @@ def enqueue_image_job(
             input_payload=payload,
             compat={
                 "legacy_system": "src/app/image/job_queue.py",
-                "legacy_job_id": legacy_job.get("job_id"),
-                "legacy_status": legacy_job.get("status"),
+                "legacy_queue_bypassed": True,
             },
         )
     )
