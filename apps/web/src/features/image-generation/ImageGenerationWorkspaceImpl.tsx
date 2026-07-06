@@ -138,7 +138,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
             <div className="image-section-heading">
               <span className="image-section-icon" aria-hidden="true">▧</span>
               <div>
-                <Title id="image-request-title" order={3}>Image Request</Title>
+                <Title id="image-request-title" order={3} aria-label="Image request">Image Request</Title>
                 <Text size="sm">Configure your request and add a prompt to generate an image.</Text>
               </div>
             </div>
