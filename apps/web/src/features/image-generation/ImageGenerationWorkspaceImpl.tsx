@@ -10,14 +10,19 @@ import { FeatureSubmitFeedback } from '../shared/FeatureSubmitFeedback';
 import { ImageAssetGallery } from './ImageAssetGallery';
 import { ImageJobList } from './ImageJobList';
 import { ImageLatestResult } from './ImageLatestResult';
+import { ImageReadinessPanel } from './ImageReadinessPanel';
 import { ImageRequestForm } from './ImageRequestForm';
+import {
+  readyImageProviders,
+  resolveImageReadiness,
+  type WorkerHealthPayload,
+} from './imageReadinessModel';
 import { buildImageGenerateInput, type ImageRequestFormValues } from './imageRequestModel';
 import {
   IMAGE_ASSETS_QUERY_KEY,
   IMAGE_JOB_EVENT_TYPES,
   IMAGE_JOBS_QUERY_KEY,
   hasActiveImageJobs,
-  imageCapableProviders,
   isImageJobEventPayload,
   parseJobEvent,
   selectLatestImageAsset,
@@ -27,6 +32,11 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
   const queryClient = useQueryClient();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
+  const workersQuery = useQuery({
+    queryKey: ['image-generation', 'worker-health'],
+    queryFn: () => omnixApiClient.get<WorkerHealthPayload>('/api/workers/health'),
+    refetchInterval: 30_000,
+  });
   const jobsQuery = useQuery({
     queryKey: IMAGE_JOBS_QUERY_KEY,
     queryFn: () => omnixApiClient.get<JobListResponse>('/api/image-generation/jobs'),
@@ -56,7 +66,14 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     };
   }, [queryClient]);
 
-  const imageProviders = useMemo(() => imageCapableProviders(providersQuery.data), [providersQuery.data]);
+  const imageProviders = useMemo(() => readyImageProviders(providersQuery.data), [providersQuery.data]);
+  const readiness = useMemo(() => resolveImageReadiness({
+    providers: providersQuery.data,
+    workers: workersQuery.data,
+    loading: providersQuery.isLoading || settingsQuery.isLoading,
+    providerError: providersQuery.isError,
+    workerError: workersQuery.isError,
+  }), [providersQuery.data, providersQuery.isError, providersQuery.isLoading, settingsQuery.isLoading, workersQuery.data, workersQuery.isError]);
   const imageJobs = jobsQuery.data?.jobs ?? [];
   const imageAssets = assetsQuery.data?.assets ?? [];
   const createJobMutation = useMutation({
@@ -88,7 +105,15 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     () => selectLatestImageAsset(imageAssets, imageJobs, selectedAssetId, createJobMutation.data?.id),
     [createJobMutation.data?.id, imageAssets, imageJobs, selectedAssetId],
   );
-  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
+  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? readiness.status;
+
+  const refreshReadiness = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['platform', 'providers'] }),
+      queryClient.invalidateQueries({ queryKey: ['image-generation', 'worker-health'] }),
+      queryClient.invalidateQueries({ queryKey: ['settings', 'profile'] }),
+    ]);
+  };
 
   return (
     <WorkspacePanel>
@@ -103,10 +128,17 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
             <div><Title order={4}>Image request</Title><Text size="sm">Provider-aware controls with presets and optional tuning.</Text></div>
             <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
           </Group>
+          <ImageReadinessPanel
+            readiness={readiness}
+            refreshing={providersQuery.isFetching || workersQuery.isFetching || settingsQuery.isFetching}
+            onRefresh={() => void refreshReadiness()}
+          />
           <ImageRequestForm
             defaults={moduleDefaults}
             providers={imageProviders}
             pending={createJobMutation.isPending}
+            disabled={!readiness.canGenerate}
+            disabledReason={readiness.canGenerate ? undefined : readiness.message}
             resetToken={createJobMutation.data?.id}
             onSubmit={(values) => createJobMutation.mutate(values)}
           />
