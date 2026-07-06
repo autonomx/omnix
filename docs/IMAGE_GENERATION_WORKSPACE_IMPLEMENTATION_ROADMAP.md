@@ -36,11 +36,24 @@ The browser must use `asset_id` for previews and downloads. It must never depend
 | IGW-9 | Request redesign, presets, style, and advanced controls | Complete - PR #1228 |
 | IGW-10 | Runtime/provider readiness and actionable disabled states | Complete - PR #1229 |
 | IGW-11 | Legacy queue/manifest consolidation and compatibility migration | Complete - PR #1231 |
-| IGW-12 | End-to-end verification, accessibility, and release cleanup | Next |
+| IGW-12 | End-to-end verification, accessibility, and release cleanup | Complete - PR #1233 |
 
-## Current focus
+## Status
 
-IGW-12 is the final implementation slice. Verify the complete browser flow, accessibility, persisted results after reload, and release readiness.
+The Image Generation Workspace roadmap is complete. New work should be handled as focused maintenance or provider-specific follow-up rather than extending this roadmap.
+
+## IGW-12 completion evidence
+
+- Verified implementation head: `cced009d7bdbc0272fc70a80e60d9a4f6a37fc5d`
+- Squash merge SHA: `efac3ecfa9048d187c0f1d0f785b177b67acd1bf`
+- Both required pull-request workflows passed on the exact implementation head.
+- The release smoke verifies queued shared submission, background execution, completed job events, shared asset persistence, asset-ID preview and download delivery, and persistence after stores are reopened.
+- Latest Result uses a polite live region and descriptive open/download labels.
+- Image Assets announces filtered result counts and avoids duplicate thumbnail names for assistive technology.
+
+## Verification boundary
+
+CI uses a deterministic image-provider response and does not load a GPU image model. A deployment using FLUX or another local provider must still run the same smoke flow against that configured runtime before release, but no browser, job, persistence, or asset-contract changes are expected for that check.
 
 ## IGW-0 contract
 
@@ -73,13 +86,13 @@ Image bytes and data URLs are forbidden in shared job list projections.
 
 ## Release acceptance
 
-The roadmap is complete only when this smoke flow passes:
+The verified smoke flow covers:
 
 1. Submit an image prompt.
 2. Receive a queued shared job without blocking on generation.
-3. Observe running and completed states without refreshing.
+3. Observe running and completed states through job events.
 4. Persist a shared image asset linked to the source job.
 5. Load the image through an asset-ID file endpoint.
-6. Show it in Latest Result.
-7. Show it in Image Assets.
-8. Reload the workspace and preserve the result.
+6. Expose the result to Latest Result through the bounded asset projection.
+7. Expose the result to Image Assets through the bounded asset projection.
+8. Reopen the durable job and asset stores and preserve the result.
