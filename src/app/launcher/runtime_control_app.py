@@ -22,6 +22,9 @@ def build_runtime_service_specs():
     specs = []
     for spec in build_default_service_specs():
         if spec.service_id == "gateway":
+            image_enabled = os.environ.get("OMNIX_IMAGE_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+            image_start = os.environ.get("OMNIX_START_IMAGE_SERVICE", "1").strip().lower() in {"1", "true", "yes", "on"}
+            image_available = image_enabled and image_start
             specs.append(
                 replace(
                     spec,
@@ -37,8 +40,8 @@ def build_runtime_service_specs():
                     ],
                     env={
                         **spec.env,
-                        "OMNIX_IMAGE_ENABLED": "1",
-                        "OMNIX_IMAGE_URL": IMAGE_SERVICE_URL,
+                        "OMNIX_IMAGE_ENABLED": "1" if image_available else "0",
+                        "OMNIX_IMAGE_URL": IMAGE_SERVICE_URL if image_available else "",
                     },
                 )
             )
@@ -47,11 +50,9 @@ def build_runtime_service_specs():
             specs.append(
                 replace(
                     spec,
-                    enabled=True,
-                    auto_start=True,
                     env={
                         **spec.env,
-                        "OMNIX_IMAGE_ENABLED": "1",
+                        "OMNIX_IMAGE_ENABLED": "1" if spec.enabled else "0",
                         "OMNIX_IMAGE_SERVICE_MODE": "1",
                         "OMNIX_IMAGE_PRELOAD": os.environ.get("OMNIX_IMAGE_PRELOAD", "0"),
                         "OMNIX_IMAGE_WARMUP": os.environ.get("OMNIX_IMAGE_WARMUP", "0"),
