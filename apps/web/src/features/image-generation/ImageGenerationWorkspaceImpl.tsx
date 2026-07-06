@@ -29,7 +29,6 @@ import {
   IMAGE_ASSETS_QUERY_KEY,
   IMAGE_JOB_EVENT_TYPES,
   IMAGE_JOBS_QUERY_KEY,
-  createImageEventRefreshScheduler,
   hasActiveImageJobs,
   isImageJobEventPayload,
   parseJobEvent,
@@ -74,20 +73,16 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
   useEffect(() => {
     if (typeof EventSource === 'undefined') return;
     const source = new EventSource('/events');
-    const refreshScheduler = createImageEventRefreshScheduler((refreshAssets) => {
-      void queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY });
-      if (refreshAssets) void queryClient.invalidateQueries({ queryKey: IMGE_ASSETS_QUERY_KEY });
-    });
     const handleEvent = (event: Event) => {
       if (!(event instanceof MessageEvent)) return;
       const payload = parseJobEvent(event.data);
       if (!isImageJobEventPayload(payload)) return;
-      refreshScheduler.schedule(event.type === 'job.completed');
+      void queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY });
+      if (event.type === 'job.completed') void queryClient.invalidateQueries({ queryKey: IMAGE_ASSETS_QUERY_KEY });
     };
     IMAGE_JOB_EVENT_TYPES.forEach((eventType) => source.addEventListener(eventType, handleEvent));
     return () => {
       IMAGE_JOB_EVENT_TYPES.forEach((eventType) => source.removeEventListener(eventType, handleEvent));
-      refreshScheduler.dispose();
       source.close();
     };
   }, [queryClient]);
@@ -109,7 +104,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
       { provider: 'flux_klein' },
     ),
     onSuccess: async () => Promise.all([
-      queryClient.invalidateQueries({ queryKey: IMGE_MODEL_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: IMAGE_MODEL_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: ['image-generation', 'worker-health'] }),
     ]),
   });
