@@ -6,6 +6,7 @@ import {
   omnixApiClient,
   type AssetListResponse,
   type JobListResponse,
+  type JobRecord,
   type ProviderFacadePayload,
 } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
@@ -18,6 +19,8 @@ const IMAGE_JOBS_QUERY_KEY = ['image-generation', 'jobs'] as const;
 const IMAGE_ASSETS_QUERY_KEY = ['image-generation', 'assets'] as const;
 const IMAGE_JOB_EVENT_TYPES = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled'] as const;
 const ACTIVE_IMAGE_JOB_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
+
+type ImageAsset = AssetListResponse['assets'][number];
 
 interface ImageGenerationFormValues {
   providerId: string;
@@ -62,19 +65,14 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
 
   useEffect(() => {
     if (typeof EventSource === 'undefined') return;
-
     const source = new EventSource('/events');
     const handleEvent = (event: Event) => {
       if (!(event instanceof MessageEvent)) return;
       const payload = parseJobEvent(event.data);
       if (!isImageJobEventPayload(payload)) return;
-
       void queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY });
-      if (event.type === 'job.completed') {
-        void queryClient.invalidateQueries({ queryKey: IMAGE_ASSETS_QUERY_KEY });
-      }
+      if (event.type === 'job.completed') void queryClient.invalidateQueries({ queryKey: IMAGE_ASSETS_QUERY_KEY });
     };
-
     IMAGE_JOB_EVENT_TYPES.forEach((eventType) => source.addEventListener(eventType, handleEvent));
     return () => {
       IMAGE_JOB_EVENT_TYPES.forEach((eventType) => source.removeEventListener(eventType, handleEvent));
@@ -109,6 +107,10 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
       await queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY });
     },
   });
+  const latestAsset = useMemo(
+    () => selectLatestImageAsset(imageAssets, imageJobs, null, createJobMutation.data?.id),
+    [createJobMutation.data?.id, imageAssets, imageJobs],
+  );
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
@@ -120,9 +122,7 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
         </div>
         <code>{module.route}</code>
       </div>
-
       <p className="workspace-summary">{module.summary}</p>
-
       <div className="feature-layout">
         <section className="feature-panel">
           <Group justify="space-between" align="start">
@@ -132,27 +132,16 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
             </div>
             <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
           </Group>
-
           <form className="feature-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
             <label>
               Provider
               <select {...register('providerId')}>
                 <option value="">Default image provider</option>
-                {imageProviders.map((provider) => (
-                  <option key={provider.id} value={provider.id}>
-                    {provider.label}
-                  </option>
-                ))}
+                {imageProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
               </select>
             </label>
-            <label>
-              Width
-              <input type="number" min="128" step="64" {...register('width')} />
-            </label>
-            <label>
-              Height
-              <input type="number" min="128" step="64" {...register('height')} />
-            </label>
+            <label>Width<input type="number" min="128" step="64" {...register('width')} /></label>
+            <label>Height<input type="number" min="128" step="64" {...register('height')} /></label>
             <label className="feature-form-wide">
               Prompt
               <textarea rows={5} aria-invalid={Boolean(errors.prompt)} {...register('prompt', { required: true })} />
@@ -161,7 +150,6 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
               {createJobMutation.isPending ? 'Queueing image…' : 'Queue image'}
             </Button>
           </form>
-
           <FeatureValidationMessage show={Boolean(errors.prompt)} message="Enter a prompt before queueing image generation." />
           <FeatureSubmitFeedback
             error={createJobMutation.error}
@@ -180,35 +168,50 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
             <div className="feature-list">
               {imageJobs.map((job) => (
                 <article className="feature-mini-card" key={job.id}>
-                  <Group justify="space-between">
-                    <strong>{job.type}</strong>
-                    <OmnixStatusPill>{job.status}</OmnixStatusPill>
-                  </Group>
+                  <Group justify="space-between"><strong>{job.type}</strong><OmnixStatusPill>{job.status}</OmnixStatusPill></Group>
                   <Progress value={progressPercent(job.progress)} aria-label={`${job.type} progress`} />
                   <Text size="sm">{job.resource_class}</Text>
                 </article>
               ))}
             </div>
-          ) : (
-            <div className="platform-empty" role="status">
-              No image jobs queued.
+          ) : <div className="platform-empty" role="status">No image jobs queued.</div>}
+        </section>
+
+        <section className="feature-panel feature-panel-wide" aria-labelledby="latest-image-result-title">
+          <Group justify="space-between" align="start">
+            <div>
+              <Title id="latest-image-result-title" order={4}>Latest result</Title>
+              <Text size="sm">Your most recently generated image appears here first.</Text>
             </div>
-          )}
+            {latestAsset ? <OmnixStatusPill>completed</OmnixStatusPill> : null}
+          </Group>
+          {latestAsset ? (
+            <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'minmax(220px, 420px) 1fr', marginTop: '1rem' }}>
+              <img
+                src={imageAssetUrl(latestAsset.id)}
+                alt={imageAssetTitle(latestAsset)}
+                style={{ aspectRatio: '1 / 1', borderRadius: '0.75rem', objectFit: 'cover', width: '100%' }}
+              />
+              <div>
+                <Title order={5}>{imageAssetTitle(latestAsset)}</Title>
+                <Text size="sm" mt="xs">{imageAssetMetadata(latestAsset)}</Text>
+                <Text size="sm" mt="xs">Generated {formatCreatedAt(latestAsset.created_at)}</Text>
+                <Group mt="md">
+                  <Button component="a" href={imageAssetUrl(latestAsset.id)} target="_blank" rel="noreferrer" variant="light">Open image</Button>
+                  <Button component="a" href={imageAssetUrl(latestAsset.id, true)} download variant="default">Download</Button>
+                </Group>
+              </div>
+            </div>
+          ) : <div className="platform-empty" role="status" style={{ marginTop: '1rem' }}>Generate an image to see the latest result here.</div>}
         </section>
 
         <section className="feature-panel feature-panel-wide">
           <Title order={4}>Image assets</Title>
           {imageAssets.length ? (
             <div className="platform-grid">
-              {imageAssets.map((asset) => (
-                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.storage_path} />
-              ))}
+              {imageAssets.map((asset) => <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.storage_path} />)}
             </div>
-          ) : (
-            <div className="platform-empty" role="status">
-              No image assets indexed.
-            </div>
-          )}
+          ) : <div className="platform-empty" role="status">No image assets indexed.</div>}
         </section>
       </div>
     </WorkspacePanel>
@@ -231,19 +234,63 @@ export function hasActiveImageJobs(payload: JobListResponse | undefined): boolea
   return payload?.jobs.some((job) => ACTIVE_IMAGE_JOB_STATUSES.has(job.status)) ?? false;
 }
 
+export function selectLatestImageAsset(
+  assets: ImageAsset[],
+  jobs: JobRecord[],
+  selectedAssetId: string | null,
+  submittedJobId?: string,
+): ImageAsset | undefined {
+  const byId = new Map(assets.map((asset) => [asset.id, asset]));
+  if (selectedAssetId && byId.has(selectedAssetId)) return byId.get(selectedAssetId);
+  if (submittedJobId) {
+    const submittedAsset = assets.find((asset) => asset.source_job_id === submittedJobId);
+    if (submittedAsset) return submittedAsset;
+  }
+  for (const job of jobs) {
+    for (const ref of job.output_refs ?? []) {
+      const assetId = typeof ref.asset_id === 'string' ? ref.asset_id : '';
+      if (assetId && byId.has(assetId)) return byId.get(assetId);
+    }
+  }
+  return assets[0];
+}
+
+export function imageAssetUrl(assetId: string, download = false): string {
+  return `/api/assets/${encodeURIComponent(assetId)}/file${download ? '?download=true' : ''}`;
+}
+
+function imageAssetTitle(asset: ImageAsset): string {
+  return metadataString(asset, 'title') || metadataString(asset, 'prompt') || 'Generated image';
+}
+
+function imageAssetMetadata(asset: ImageAsset): string {
+  const width = metadataNumber(asset, 'width');
+  const height = metadataNumber(asset, 'height');
+  const provider = metadataString(asset, 'provider_key') || metadataString(asset, 'provider_id');
+  return [width && height ? `${width} × ${height}` : '', provider].filter(Boolean).join(' · ') || asset.mime_type;
+}
+
+function metadataString(asset: ImageAsset, key: string): string {
+  const value = asset.metadata?.[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function metadataNumber(asset: ImageAsset, key: string): number | undefined {
+  const value = asset.metadata?.[key];
+  return typeof value === 'number' ? value : undefined;
+}
+
+function formatCreatedAt(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
 function parseJobEvent(data: unknown): unknown {
   if (typeof data !== 'string') return undefined;
-  try {
-    return JSON.parse(data);
-  } catch {
-    return undefined;
-  }
+  try { return JSON.parse(data); } catch { return undefined; }
 }
 
 function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) {
-    return 0;
-  }
-
+  if (!progress || progress.total <= 0) return 0;
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
