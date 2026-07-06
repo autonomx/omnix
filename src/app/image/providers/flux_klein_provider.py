@@ -54,6 +54,10 @@ class FluxKleinImageProvider(BaseImageProvider):
         self._ensure_pipeline()
         return None
 
+    def is_loaded(self) -> bool:
+        with _PIPELINE_LOCK:
+            return self._pipeline is not None
+
     def _repo_id(self) -> str:
         variant = _safe_str(self.config.get("variant")).strip().lower()
         if variant == "base":
@@ -152,20 +156,21 @@ class FluxKleinImageProvider(BaseImageProvider):
             return self._pipeline
 
     def unload(self):
-        with _PIPELINE_LOCK:
-            pipe = self._pipeline
-            self._pipeline = None
+        with _GENERATE_LOCK:
+            with _PIPELINE_LOCK:
+                pipe = self._pipeline
+                self._pipeline = None
 
-        with contextlib.suppress(Exception):
-            del pipe
+            with contextlib.suppress(Exception):
+                del pipe
 
-        with contextlib.suppress(Exception):
-            gc.collect()
+            with contextlib.suppress(Exception):
+                gc.collect()
 
-        with contextlib.suppress(Exception):
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.ipc_collect()
+            with contextlib.suppress(Exception):
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
 
         return None
 
