@@ -29,7 +29,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
         <label className="image-assets-search">
           <span aria-hidden="true">⌕</span>
           <span className="visually-hidden">Search images</span>
-          <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Search assets..." />
+          <input aria-label="Search images" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Search assets..." />
         </label>
         <div className="image-view-toggle" role="group" aria-label="Asset view">
           <button type="button" className={viewMode === 'grid' ? 'active' : ''} aria-pressed={viewMode === 'grid'} aria-label="Grid view" onClick={() => setViewMode('grid')}>▦</button>
@@ -38,7 +38,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
         <label className="image-provider-filter">
           <span aria-hidden="true">▽</span>
           <span className="visually-hidden">Filter image assets by provider</span>
-          <select value={provider} onChange={(event) => setProvider(event.currentTarget.value)}>
+          <select aria-label="Filter image assets by provider" value={provider} onChange={(event) => setProvider(event.currentTarget.value)}>
             <option value="">Filters</option>
             {providers.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
