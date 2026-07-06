@@ -116,6 +116,11 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     ]);
   };
 
+  const openAssetInGallery = (assetId: string) => {
+    setSelectedAssetId(assetId);
+    document.getElementById('image-assets')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <WorkspacePanel className="image-workspace">
       <h2 id="module-title" className="visually-hidden">{module.label}</h2>
@@ -189,7 +194,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
             {retryJobMutation.isError ? <Text c="red" size="sm" role="alert">Image job retry failed.</Text> : null}
           </section>
 
-          <ImageLatestResult asset={latestAsset} />
+          <ImageLatestResult asset={latestAsset} onOpenInAssets={openAssetInGallery} />
         </aside>
 
         <section id="image-assets" className="image-surface image-assets-card" aria-labelledby="image-assets-title">
