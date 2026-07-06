@@ -25,8 +25,8 @@ The browser must use `asset_id` for previews and downloads. It must never depend
 | Phase | Scope | Status |
 | --- | --- | --- |
 | IGW-0 | Canonical image request/output contracts and provider normalization | Complete - PR #1219 |
-| IGW-1 | Shared background `image.generate` executor | Complete in implementation branch |
-| IGW-2 | Authoritative shared image asset persistence | Planned |
+| IGW-1 | Shared background `image.generate` executor | Complete - PR #1220 |
+| IGW-2 | Authoritative shared image asset persistence | In progress |
 | IGW-3 | Browser-safe binary image asset endpoint | Planned |
 | IGW-4 | Filtered and bounded jobs/assets APIs | Planned |
 | IGW-5 | Live job synchronization with SSE and bounded polling fallback | Planned |
