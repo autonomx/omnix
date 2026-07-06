@@ -1,0 +1,125 @@
+.image-quality-value {
+  color: #9aa6c0;
+  font-size: 0.62rem;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.image-job-footer button {
+  background: transparent;
+  border: 0;
+  color: #a78bfa;
+  cursor: pointer;
+  font-size: 0.64rem;
+  padding: 0;
+}
+
+.image-job-footer button:hover,
+.image-job-footer button:focus-visible {
+  color: #c4b5fd;
+  outline: none;
+  text-decoration: underline;
+}
+
+.image-assets-toolbar {
+  max-width: 46rem;
+}
+
+.image-clear-filters {
+  background: rgba(9, 15, 29, 0.9);
+  border: 1px solid rgba(112, 130, 176, 0.22);
+  border-radius: 0.52rem;
+  color: #b6bfd4;
+  cursor: pointer;
+  min-height: 2.45rem;
+  padding: 0 0.72rem;
+  white-space: nowrap;
+}
+
+.image-clear-filters:hover,
+.image-clear-filters:focus-visible {
+  background: rgba(124, 77, 255, 0.14);
+  border-color: rgba(139, 92, 246, 0.62);
+  color: #eee9ff;
+  outline: none;
+}
+
+.image-asset-card {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.image-asset-select {
+  color: inherit;
+  display: block;
+  min-width: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.image-asset-select:focus-visible {
+  outline: 2px solid rgba(139, 92, 246, 0.8);
+  outline-offset: -2px;
+}
+
+.image-asset-copy {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.image-asset-copy small {
+  grid-column: 1;
+}
+
+.image-asset-actions {
+  align-items: center;
+  border-top: 1px solid rgba(112, 130, 176, 0.13);
+  display: flex;
+  gap: 0.2rem;
+  justify-content: flex-end;
+  min-height: 2rem;
+  padding: 0.25rem 0.35rem;
+}
+
+.image-asset-actions .mantine-Button-root {
+  color: #9da8c0;
+  font-size: 0.58rem;
+  padding-inline: 0.38rem;
+}
+
+.image-asset-actions .mantine-Button-root:hover {
+  color: #d8d0ff;
+}
+
+.image-assets-grid.list .image-asset-card {
+  display: block;
+}
+
+.image-assets-grid.list .image-asset-select {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+}
+
+.image-assets-grid.list .image-asset-actions {
+  border-top: 1px solid rgba(112, 130, 176, 0.13);
+}
+
+@media (max-width: 980px) {
+  .image-assets-toolbar {
+    max-width: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .image-assets-toolbar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .image-clear-filters,
+  .image-provider-filter {
+    grid-column: 1 / -1;
+  }
+
+  .image-assets-grid.list .image-asset-select {
+    display: block;
+  }
+}
