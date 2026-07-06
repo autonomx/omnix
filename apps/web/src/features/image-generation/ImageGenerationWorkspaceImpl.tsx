@@ -1,4 +1,4 @@
-import { Group, Text, Title } from '@mantine/core';
+import { Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobListResponse, type JobRecord } from '../../api/client';
@@ -8,6 +8,7 @@ import { imageGenerationDefaults } from '../settings/moduleDefaults';
 import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback } from '../shared/FeatureSubmitFeedback';
 import { ImageAssetGallery } from './ImageAssetGallery';
+import './ImageGenerationWorkspace.css';
 import { ImageJobList } from './ImageJobList';
 import { ImageLatestResult } from './ImageLatestResult';
 import { ImageReadinessPanel } from './ImageReadinessPanel';
@@ -116,18 +117,33 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
   };
 
   return (
-    <WorkspacePanel>
-      <div className="workspace-heading">
-        <div><p className="eyebrow">Feature module</p><h2 id="module-title">{module.label}</h2></div>
-        <code>{module.route}</code>
+    <WorkspacePanel className="image-workspace">
+      <h2 id="module-title" className="visually-hidden">{module.label}</h2>
+
+      <div className="image-workspace-status-row">
+        <section className="image-flow-banner" aria-label="Image generation flow">
+          <span className="image-flow-icon" aria-hidden="true">⌾</span>
+          <p><strong>Flow:</strong> Submit a request <b>→</b> We generate your image <b>→</b> It appears in Latest Result and is saved to Image Assets.</p>
+        </section>
+        <section className={`image-system-card ${readiness.canGenerate ? 'ready' : 'degraded'}`} aria-live="polite">
+          <span className="image-system-dot" aria-hidden="true" />
+          <div><strong>System</strong><small>{readiness.canGenerate ? 'All systems operational.' : readiness.message}</small></div>
+          <span className="image-system-wave" aria-hidden="true">▂▅▃▆▂▇▃▅▂</span>
+        </section>
       </div>
-      <p className="workspace-summary">{module.summary}</p>
-      <div className="feature-layout">
-        <section className="feature-panel">
-          <Group justify="space-between" align="start">
-            <div><Title order={4}>Image request</Title><Text size="sm">Provider-aware controls with presets and optional tuning.</Text></div>
+
+      <div className="image-workspace-grid">
+        <section className="image-surface image-request-card" aria-labelledby="image-request-title">
+          <header className="image-section-header">
+            <div className="image-section-heading">
+              <span className="image-section-icon" aria-hidden="true">▧</span>
+              <div>
+                <Title id="image-request-title" order={3} aria-label="Image request">Image Request</Title>
+                <Text size="sm">Configure your request and add a prompt to generate an image.</Text>
+              </div>
+            </div>
             <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
-          </Group>
+          </header>
           <ImageReadinessPanel
             readiness={readiness}
             refreshing={providersQuery.isFetching || workersQuery.isFetching || settingsQuery.isFetching}
@@ -153,23 +169,36 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
           />
         </section>
 
-        <section className="feature-panel">
-          <Title order={4}>Image jobs</Title>
-          <ImageJobList
-            jobs={imageJobs}
-            cancelingJobId={cancelJobMutation.isPending ? cancelJobMutation.variables : undefined}
-            retryingJobId={retryJobMutation.isPending ? retryJobMutation.variables : undefined}
-            onCancel={(jobId) => cancelJobMutation.mutate(jobId)}
-            onRetry={(jobId) => retryJobMutation.mutate(jobId)}
-          />
-          {cancelJobMutation.isError ? <Text c="red" size="sm" role="alert">Image job cancel failed.</Text> : null}
-          {retryJobMutation.isError ? <Text c="red" size="sm" role="alert">Image job retry failed.</Text> : null}
-        </section>
+        <aside className="image-workspace-rail">
+          <section className="image-surface image-jobs-card" aria-labelledby="image-jobs-title">
+            <header className="image-section-header image-section-header-compact">
+              <div className="image-section-heading">
+                <span className="image-section-icon" aria-hidden="true">☷</span>
+                <div><Title id="image-jobs-title" order={3}>Image Jobs</Title><Text size="sm">Monitor and manage queued generations.</Text></div>
+              </div>
+            </header>
+            <ImageJobList
+              jobs={imageJobs}
+              cancelingJobId={cancelJobMutation.isPending ? cancelJobMutation.variables : undefined}
+              retryingJobId={retryJobMutation.isPending ? retryJobMutation.variables : undefined}
+              onCancel={(jobId) => cancelJobMutation.mutate(jobId)}
+              onRetry={(jobId) => retryJobMutation.mutate(jobId)}
+              onSelectAsset={setSelectedAssetId}
+            />
+            {cancelJobMutation.isError ? <Text c="red" size="sm" role="alert">Image job cancel failed.</Text> : null}
+            {retryJobMutation.isError ? <Text c="red" size="sm" role="alert">Image job retry failed.</Text> : null}
+          </section>
 
-        <ImageLatestResult asset={latestAsset} />
+          <ImageLatestResult asset={latestAsset} />
+        </aside>
 
-        <section className="feature-panel feature-panel-wide">
-          <Title order={4}>Image assets</Title>
+        <section id="image-assets" className="image-surface image-assets-card" aria-labelledby="image-assets-title">
+          <header className="image-section-header image-assets-heading">
+            <div className="image-section-heading">
+              <span className="image-section-icon" aria-hidden="true">▣</span>
+              <div><Title id="image-assets-title" order={3}>Image Assets</Title><Text size="sm">Browse and manage generated images and assets.</Text></div>
+            </div>
+          </header>
           <ImageAssetGallery assets={imageAssets} selectedAssetId={selectedAssetId} onSelect={setSelectedAssetId} />
         </section>
       </div>

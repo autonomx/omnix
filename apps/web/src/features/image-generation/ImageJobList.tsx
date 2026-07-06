@@ -1,4 +1,4 @@
-import { Button, Group, Progress, Text } from '@mantine/core';
+import { Button, Progress, Text } from '@mantine/core';
 import type { JobRecord } from '../../api/client';
 import { OmnixStatusPill } from '../../design/primitives';
 import { imageAssetUrl } from './imageWorkspaceModel';
@@ -12,45 +12,62 @@ interface ImageJobListProps {
   retryingJobId?: string;
   onCancel: (jobId: string) => void;
   onRetry: (jobId: string) => void;
+  onSelectAsset?: (assetId: string) => void;
 }
 
-export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, onRetry }: ImageJobListProps) {
-  if (!jobs.length) return <div className="platform-empty" role="status">No image jobs queued.</div>;
+export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, onRetry, onSelectAsset }: ImageJobListProps) {
+  if (!jobs.length) return <div className="image-empty-state" role="status">No image jobs queued.</div>;
+
+  const visibleJobs = jobs.slice(0, 4);
 
   return (
-    <div className="feature-list">
-      {jobs.map((job) => {
-        const assetId = firstImageAssetId(job);
-        const prompt = imageJobPrompt(job);
-        return (
-          <article className="feature-mini-card" key={job.id} aria-label={`Image job ${job.id}`}>
-            <Group justify="space-between" align="start">
-              <div>
-                <strong>{prompt || job.type}</strong>
-                <Text size="xs">{new Date(job.created_at).toLocaleString()}</Text>
+    <div className="image-job-list-wrap">
+      <div className="image-job-list">
+        {visibleJobs.map((job) => {
+          const assetId = firstImageAssetId(job);
+          const prompt = imageJobPrompt(job);
+          const progress = progressPercent(job.progress);
+          return (
+            <article className="image-job-card" key={job.id} aria-label={`Image job ${prompt || job.id}`}>
+              <div className="image-job-header">
+                <div>
+                  <strong title={prompt || job.type}>{prompt || job.type}</strong>
+                  <time>{new Date(job.created_at).toLocaleString()}</time>
+                </div>
+                <OmnixStatusPill>{job.status}</OmnixStatusPill>
               </div>
-              <OmnixStatusPill>{job.status}</OmnixStatusPill>
-            </Group>
-            <Progress value={progressPercent(job.progress)} aria-label={`${job.type} progress`} />
-            {job.progress?.message ? <Text size="sm">{job.progress.message}</Text> : null}
-            {job.error ? <Text c="red" size="sm" role="alert">{job.error.message} ({job.error.code})</Text> : null}
-            <Group gap="xs">
-              {assetId ? (
-                <>
-                  <Button component="a" href={imageAssetUrl(assetId)} target="_blank" rel="noreferrer" size="xs" variant="light">Open result</Button>
-                  <Button component="a" href={imageAssetUrl(assetId, true)} download size="xs" variant="default">Download</Button>
-                </>
-              ) : null}
-              {canCancelImageJob(job) ? (
-                <Button color="red" disabled={cancelingJobId === job.id || job.status === 'cancel_requested'} loading={cancelingJobId === job.id} onClick={() => onCancel(job.id)} size="xs" variant="subtle">Cancel</Button>
-              ) : null}
-              {canRetryImageJob(job) ? (
-                <Button disabled={retryingJobId === job.id} loading={retryingJobId === job.id} onClick={() => onRetry(job.id)} size="xs" variant="light">Retry</Button>
-              ) : null}
-            </Group>
-          </article>
-        );
-      })}
+
+              <div className="image-job-content">
+                {assetId ? <img alt="" loading="lazy" src={imageAssetUrl(assetId)} /> : <span className="image-job-placeholder" aria-hidden="true">✦</span>}
+                <div className="image-job-details">
+                  <Progress value={progress} aria-label={`${job.type} progress`} />
+                  <Text size="xs">{job.progress?.message || jobStatusMessage(job.status, progress)}</Text>
+                  {job.error ? <Text c="red" size="xs" role="alert">{job.error.message} ({job.error.code})</Text> : null}
+                  <div className="image-job-actions">
+                    {assetId ? (
+                      <>
+                        {onSelectAsset ? (
+                          <Button size="compact-xs" variant="light" onClick={() => onSelectAsset(assetId)}>View in Latest Result</Button>
+                        ) : (
+                          <Button component="a" href={imageAssetUrl(assetId)} size="compact-xs" variant="light">Open result</Button>
+                        )}
+                        <Button component="a" href={imageAssetUrl(assetId, true)} download size="compact-xs" variant="subtle" aria-label="Download image result">↓</Button>
+                      </>
+                    ) : null}
+                    {canCancelImageJob(job) ? (
+                      <Button color="red" disabled={cancelingJobId === job.id || job.status === 'cancel_requested'} loading={cancelingJobId === job.id} onClick={() => onCancel(job.id)} size="compact-xs" variant="subtle">Cancel</Button>
+                    ) : null}
+                    {canRetryImageJob(job) ? (
+                      <Button disabled={retryingJobId === job.id} loading={retryingJobId === job.id} onClick={() => onRetry(job.id)} size="compact-xs" variant="light">Retry</Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <footer className="image-job-footer"><span>{visibleJobs.length} of {jobs.length} job{jobs.length === 1 ? '' : 's'}</span>{jobs.length > visibleJobs.length ? <span>Showing latest</span> : null}</footer>
     </div>
   );
 }
@@ -78,4 +95,13 @@ function imageJobPrompt(job: JobRecord): string {
 function progressPercent(progress: { current: number; total: number } | undefined): number {
   if (!progress || progress.total <= 0) return 0;
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
+}
+
+function jobStatusMessage(status: string, progress: number): string {
+  if (status === 'completed') return 'Completed successfully';
+  if (status === 'failed') return 'Generation failed';
+  if (status === 'canceled') return 'Canceled';
+  if (status === 'running') return `Generating · ${progress}%`;
+  if (status === 'leased') return 'Preparing provider';
+  return 'Waiting in queue';
 }
