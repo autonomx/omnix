@@ -1,4 +1,4 @@
-import { Button, Group, Text, Title } from '@mantine/core';
+import { Button, Text, Title } from '@mantine/core';
 import { OmnixStatusPill } from '../../design/primitives';
 import {
   formatCreatedAt,
@@ -13,56 +13,42 @@ export function ImageLatestResult({ asset }: { asset?: ImageAsset }) {
 
   return (
     <section
-      className="feature-panel feature-panel-wide"
+      className={`image-surface image-latest-card ${asset ? 'has-result' : ''}`}
       aria-atomic="true"
       aria-labelledby="latest-image-result-title"
       aria-live="polite"
     >
-      <Group justify="space-between" align="start">
-        <div>
-          <Title id="latest-image-result-title" order={4}>Latest result</Title>
-          <Text size="sm">Your most recently generated or selected image appears here.</Text>
-        </div>
-        {asset ? <OmnixStatusPill>completed</OmnixStatusPill> : null}
-      </Group>
-      {asset ? (
-        <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'minmax(220px, 420px) 1fr', marginTop: '1rem' }}>
-          <img
-            src={imageAssetUrl(asset.id)}
-            alt={title}
-            decoding="async"
-            style={{ aspectRatio: '1 / 1', borderRadius: '0.75rem', objectFit: 'cover', width: '100%' }}
-          />
+      <header className="image-section-header image-section-header-compact">
+        <div className="image-section-heading">
+          <span className="image-section-icon" aria-hidden="true">✦</span>
           <div>
-            <Title order={5}>{title}</Title>
-            <Text size="sm" mt="xs">{imageAssetMetadata(asset)}</Text>
-            <Text size="sm" mt="xs">Generated {formatCreatedAt(asset.created_at)}</Text>
-            <Group mt="md">
-              <Button
-                aria-label={`Open ${title} in a new tab`}
-                component="a"
-                href={imageAssetUrl(asset.id)}
-                target="_blank"
-                rel="noreferrer"
-                variant="light"
-              >
-                Open image
-              </Button>
-              <Button
-                aria-label={`Download ${title}`}
-                component="a"
-                href={imageAssetUrl(asset.id, true)}
-                download
-                variant="default"
-              >
-                Download
-              </Button>
-            </Group>
+            <Title id="latest-image-result-title" order={3}>Latest Result</Title>
+            <Text size="sm">Your most recently generated image appears here first.</Text>
+          </div>
+        </div>
+        {asset ? <OmnixStatusPill>New</OmnixStatusPill> : null}
+      </header>
+
+      {asset ? (
+        <div className="image-latest-content">
+          <img src={imageAssetUrl(asset.id)} alt={title} decoding="async" />
+          <div className="image-latest-details">
+            <strong title={title}>{title}</strong>
+            <Text size="xs">{imageAssetMetadata(asset)}</Text>
+            <Text size="xs">{formatCreatedAt(asset.created_at)}</Text>
+            <span className="image-completed-label">● Completed</span>
+            <div className="image-latest-actions">
+              <Button component="a" href="#image-assets" size="compact-sm" variant="filled">▣ Open in Assets</Button>
+              <Button aria-label={`Download ${title}`} component="a" href={imageAssetUrl(asset.id, true)} download size="compact-sm" variant="default">↓</Button>
+              <Button aria-label={`Open ${title} in a new tab`} component="a" href={imageAssetUrl(asset.id)} target="_blank" rel="noreferrer" size="compact-sm" variant="default">↗</Button>
+            </div>
           </div>
         </div>
       ) : (
-        <div className="platform-empty" role="status" style={{ marginTop: '1rem' }}>
-          Generate an image to see the latest result here.
+        <div className="image-empty-state" role="status">
+          <span aria-hidden="true">✦</span>
+          <strong>No result yet</strong>
+          <small>Generate an image and it will appear here.</small>
         </div>
       )}
     </section>
