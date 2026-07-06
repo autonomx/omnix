@@ -36,6 +36,18 @@ describe('Image workspace job actions', () => {
         });
       }
       if (path === '/api/workers/health') return Response.json({ ok: true, status: 'ok', workers: [] });
+      if (path === '/api/image-generation/model/status') {
+        return Response.json({
+          ok: true,
+          service: 'image',
+          enabled: true,
+          provider: 'flux_klein',
+          model: 'FLUX.2 [klein] 4B',
+          loaded: true,
+          state: 'loaded',
+          local_model: { complete: true, missing: [], local_dir: 'resources/models/image/flux2-klein-4b' },
+        });
+      }
       if (path === '/api/image-generation/assets') return Response.json({ assets: [] });
       if (path === '/api/image-generation/jobs') {
         return Response.json({
