@@ -15,6 +15,7 @@ export function ImageLatestResult({ asset }: { asset?: ImageAsset }) {
     <section
       className={`image-surface image-latest-card ${asset ? 'has-result' : ''}`}
       aria-atomic="true"
+      aria-label="Latest result"
       aria-labelledby="latest-image-result-title"
       aria-live="polite"
     >
@@ -48,7 +49,7 @@ export function ImageLatestResult({ asset }: { asset?: ImageAsset }) {
         <div className="image-empty-state" role="status">
           <span aria-hidden="true">✦</span>
           <strong>No result yet</strong>
-          <small>Generate an image and it will appear here.</small>
+          <small>Generate an image to see the latest result here.</small>
         </div>
       )}
     </section>
