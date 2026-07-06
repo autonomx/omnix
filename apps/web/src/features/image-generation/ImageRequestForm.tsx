@@ -4,6 +4,8 @@ import { useForm } from 'react-hook-form';
 import type { ProviderFacadePayload } from '../../api/client';
 import { FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import {
+  IMAGE_SIZE_PRESETS,
+  imagePresetById,
   imageRequestDefaultValues,
   type ImageRequestDefaults,
   type ImageRequestFormValues,
@@ -22,12 +24,15 @@ export function ImageRequestForm({ defaults, providers, pending, onSubmit }: Ima
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isDirty },
   } = useForm<ImageRequestFormValues>({ defaultValues: imageRequestDefaultValues(defaults) });
 
   useEffect(() => {
     if (!isDirty) reset(imageRequestDefaultValues(defaults));
   }, [defaults, isDirty, reset]);
+
+  const presetRegistration = register('preset');
 
   return (
     <>
@@ -37,6 +42,22 @@ export function ImageRequestForm({ defaults, providers, pending, onSubmit }: Ima
           <select {...register('providerId')}>
             <option value="">Default image provider</option>
             {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
+          </select>
+        </label>
+        <label>
+          Size preset
+          <select
+            {...presetRegistration}
+            onChange={(event) => {
+              void presetRegistration.onChange(event);
+              const preset = imagePresetById(event.currentTarget.value);
+              if (!preset) return;
+              setValue('width', String(preset.width), { shouldDirty: true, shouldValidate: true });
+              setValue('height', String(preset.height), { shouldDirty: true, shouldValidate: true });
+            }}
+          >
+            <option value="custom">Custom</option>
+            {IMAGE_SIZE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
           </select>
         </label>
         <label>
