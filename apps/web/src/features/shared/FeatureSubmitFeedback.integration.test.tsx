@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules, type OmnixModuleDefinition } from '../../app/modules';
@@ -179,7 +179,9 @@ describe('provider-backed feature submit feedback', () => {
 
     expect(await screen.findByRole('heading', { name: 'Image request' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A glowing nebula.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate image' }));
+    const generateButton = screen.getByRole('button', { name: 'Generate image' });
+    await waitFor(() => expect(generateButton).toBeEnabled());
+    fireEvent.click(generateButton);
 
     expect(await screen.findByText(/Image request failed with status 500/)).toBeInTheDocument();
   });
