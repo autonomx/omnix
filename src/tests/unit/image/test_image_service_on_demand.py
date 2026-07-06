@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+from fastapi.testclient import TestClient
+
+from app import image_service_app
+
+
+def _status(*, loaded: bool) -> dict:
+    return {
+        "ok": True,
+        "service": "image",
+        "enabled": True,
+        "provider": "flux_klein",
+        "model": "FLUX.2 [klein] 4B",
+        "loaded": loaded,
+        "state": "loaded" if loaded else "unloaded",
+        "local_model": {
+            "ok": True,
+            "exists": True,
+            "complete": True,
+            "missing": [],
+            "local_dir": "resources/models/image/flux2-klein-4b",
+        },
+    }
+
+
+def test_status_reports_unloaded_without_loading_provider(monkeypatch):
+    monkeypatch.setattr(image_service_app, "is_image_generation_enabled", lambda: True)
+    monkeypatch.setattr(image_service_app, "is_image_provider_loaded", lambda _provider=None: False)
+    monkeypatch.setattr(image_service_app, "_local_model_status", lambda _provider: _status(loaded=False)["local_model"])
+    monkeypatch.setattr(image_service_app, "get_image_provider_cache_status", lambda: {"loaded_providers": []})
+
+    with TestClient(image_service_app.app) as client:
+        response = client.get("/provider/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["model"] == "FLUX.2 [klein] 4B"
+    assert payload["loaded"] is False
+    assert payload["state"] == "unloaded"
+
+
+def test_generate_requires_explicit_load(monkeypatch):
+    generation_calls: list[dict] = []
+    monkeypatch.setenv("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1")
+    monkeypatch.setattr(image_service_app, "is_image_generation_enabled", lambda: True)
+    monkeypatch.setattr(image_service_app, "get_active_image_provider_name", lambda: "flux_klein")
+    monkeypatch.setattr(image_service_app, "is_image_provider_loaded", lambda _provider=None: False)
+    monkeypatch.setattr(image_service_app, "generate_image_local", lambda payload: generation_calls.append(payload))
+
+    with TestClient(image_service_app.app) as client:
+        response = client.post("/generate", json={"prompt": "castle", "width": 768, "height": 768})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "model_unloaded"
+    assert response.json()["error"] == "image_model_not_loaded"
+    assert generation_calls == []
+
+
+def test_load_and_unload_routes_report_final_residency(monkeypatch):
+    loaded = False
+
+    def is_loaded(_provider=None):
+        return loaded
+
+    def load_provider(provider=None):
+        nonlocal loaded
+        loaded = True
+        return {"ok": True, "provider": provider or "flux_klein", "loaded": True}
+
+    def unload_provider(provider=None):
+        nonlocal loaded
+        loaded = False
+        return {"ok": True, "provider": provider or "flux_klein", "loaded": False, "unloaded": True}
+
+    monkeypatch.setattr(image_service_app, "is_image_generation_enabled", lambda: True)
+    monkeypatch.setattr(image_service_app, "is_image_provider_loaded", is_loaded)
+    monkeypatch.setattr(image_service_app, "load_image_provider", load_provider)
+    monkeypatch.setattr(image_service_app, "unload_image_provider", unload_provider)
+    monkeypatch.setattr(image_service_app, "_local_model_status", lambda _provider: _status(loaded=loaded)["local_model"])
+    monkeypatch.setattr(image_service_app, "get_image_provider_cache_status", lambda: {"loaded_providers": ["flux_klein"] if loaded else []})
+
+    with TestClient(image_service_app.app) as client:
+        load_response = client.post("/provider/load", json={"provider": "flux_klein"})
+        status_response = client.get("/provider/status")
+        unload_response = client.post("/provider/unload", json={"provider": "flux_klein"})
+
+    assert load_response.status_code == 200
+    assert load_response.json()["loaded"] is True
+    assert status_response.json()["loaded"] is True
+    assert unload_response.status_code == 200
+    assert unload_response.json()["loaded"] is False
+
+
+def test_loaded_generate_uses_real_generation_path(monkeypatch):
+    monkeypatch.setenv("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1")
+    monkeypatch.setattr(image_service_app, "is_image_generation_enabled", lambda: True)
+    monkeypatch.setattr(image_service_app, "get_active_image_provider_name", lambda: "flux_klein")
+    monkeypatch.setattr(image_service_app, "is_image_provider_loaded", lambda _provider=None: True)
+    monkeypatch.setattr(
+        image_service_app,
+        "generate_image_local",
+        lambda _payload: SimpleNamespace(
+            ok=True,
+            provider="flux_klein",
+            status="completed",
+            error="",
+            asset_url="/generated/image.png",
+            local_path="generated/image.png",
+            seed=7,
+            width=768,
+            height=768,
+            mime_type="image/png",
+            metadata={"width": 768, "height": 768},
+        ),
+    )
+
+    with TestClient(image_service_app.app) as client:
+        response = client.post("/generate", json={"prompt": "castle", "width": 768, "height": 768})
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert response.json()["status"] == "completed"

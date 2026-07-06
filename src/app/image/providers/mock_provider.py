@@ -29,6 +29,9 @@ def _safe_int(value: Any, default: int) -> int:
 class MockImageProvider(BaseImageProvider):
     provider_name = "mock"
 
+    def is_loaded(self) -> bool:
+        return True
+
     def generate(self, payload: Dict[str, Any]) -> ImageGenerationResult:
         width = _safe_int(payload.get("width"), 1024)
         height = _safe_int(payload.get("height"), 1024)

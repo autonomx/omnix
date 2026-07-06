@@ -10,13 +10,14 @@ set "OMNIX_STT_URL=http://127.0.0.1:5201"
 set "OMNIX_LAUNCHER_URL=http://127.0.0.1:5055"
 if not defined OMNIX_APP_OPEN_URL set "OMNIX_APP_OPEN_URL=http://localhost:5173/"
 
-REM Image generation is disabled by default to avoid loading FLUX/diffusers or
-REM consuming GPU/VRAM during normal app startup. To re-enable later, run:
-REM   set OMNIX_IMAGE_ENABLED=1
-REM   set OMNIX_START_IMAGE_SERVICE=1
-REM before calling start_all.bat.
-if not defined OMNIX_IMAGE_ENABLED set "OMNIX_IMAGE_ENABLED=0"
-if not defined OMNIX_START_IMAGE_SERVICE set "OMNIX_START_IMAGE_SERVICE=0"
+REM Start the lightweight image service, but keep FLUX.2 [klein] 4B unloaded.
+REM The model is loaded and unloaded on demand from the Image Generation page.
+REM Override these before running start_all.bat only when intentionally changing behavior.
+if not defined OMNIX_IMAGE_ENABLED set "OMNIX_IMAGE_ENABLED=1"
+if not defined OMNIX_START_IMAGE_SERVICE set "OMNIX_START_IMAGE_SERVICE=1"
+if not defined OMNIX_IMAGE_PRELOAD set "OMNIX_IMAGE_PRELOAD=0"
+if not defined OMNIX_IMAGE_WARMUP set "OMNIX_IMAGE_WARMUP=0"
+if not defined OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD set "OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD=1"
 set "OMNIX_IMAGE_URL="
 if /I "%OMNIX_IMAGE_ENABLED%"=="1" if /I "%OMNIX_START_IMAGE_SERVICE%"=="1" set "OMNIX_IMAGE_URL=http://127.0.0.1:5301"
 
@@ -38,12 +39,16 @@ echo This starts one launcher dashboard instead of opening separate service term
 echo Dashboard: %OMNIX_LAUNCHER_URL%
 echo Private app button: %OMNIX_APP_OPEN_URL%
 echo.
-echo [IMAGE] Enabled: %OMNIX_IMAGE_ENABLED%
-echo [IMAGE] Start service: %OMNIX_START_IMAGE_SERVICE%
+echo [IMAGE] Service enabled: %OMNIX_IMAGE_ENABLED%
+echo [IMAGE] Start lightweight service: %OMNIX_START_IMAGE_SERVICE%
+echo [IMAGE] Preload model: %OMNIX_IMAGE_PRELOAD%
+echo [IMAGE] Warmup model: %OMNIX_IMAGE_WARMUP%
+echo [IMAGE] Explicit load required: %OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD%
 if defined OMNIX_IMAGE_URL (
     echo [IMAGE] Service URL: %OMNIX_IMAGE_URL%
+    echo [IMAGE] FLUX.2 [klein] 4B will remain unloaded until requested in the web UI.
 ) else (
-    echo [IMAGE] Disabled for this startup. The launcher will not start image service.
+    echo [IMAGE] Service disabled for this startup.
 )
 
 if not exist "%RPG_FLUX_PYTHON%" (
@@ -89,11 +94,14 @@ set "OMNIX_TTS_URL=%OMNIX_TTS_URL%"
 set "OMNIX_STT_URL=%OMNIX_STT_URL%"
 set "OMNIX_IMAGE_ENABLED=%OMNIX_IMAGE_ENABLED%"
 set "OMNIX_START_IMAGE_SERVICE=%OMNIX_START_IMAGE_SERVICE%"
+set "OMNIX_IMAGE_PRELOAD=%OMNIX_IMAGE_PRELOAD%"
+set "OMNIX_IMAGE_WARMUP=%OMNIX_IMAGE_WARMUP%"
+set "OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD=%OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD%"
 set "OMNIX_IMAGE_URL=%OMNIX_IMAGE_URL%"
 set "OMNIX_APP_OPEN_URL=%OMNIX_APP_OPEN_URL%"
 set "OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"
 set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"
 
-"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.control_app:app --host 127.0.0.1 --port 5055
+"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host 127.0.0.1 --port 5055
 
 endlocal

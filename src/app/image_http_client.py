@@ -15,8 +15,9 @@ def _truthy(value: str) -> bool:
 def is_image_generation_enabled() -> bool:
     """Return whether image generation is explicitly enabled.
 
-    Image generation is opt-in because FLUX/diffusers can consume substantial
-    GPU/VRAM when started or called. Set OMNIX_IMAGE_ENABLED=1 to re-enable.
+    The lightweight image service can be started without loading FLUX weights.
+    ``OMNIX_IMAGE_ENABLED`` controls whether model load and generation actions
+    are allowed.
     """
 
     return _truthy(os.environ.get("OMNIX_IMAGE_ENABLED", "0"))
@@ -52,17 +53,28 @@ def image_disabled_response(source: str = "app") -> Dict[str, Any]:
     }
 
 
-def post_image_service(path: str, payload: Dict[str, Any] | None = None, timeout: float = 600.0) -> Dict[str, Any]:
+def request_image_service(
+    method: str,
+    path: str,
+    payload: Dict[str, Any] | None = None,
+    timeout: float = 600.0,
+) -> Dict[str, Any]:
     base = _image_service_url()
     if not base:
         raise RuntimeError("image_service_not_configured")
 
-    body = json.dumps(payload or {}).encode("utf-8")
+    method = method.strip().upper() or "GET"
+    body = None
+    headers = {"Accept": "application/json"}
+    if method != "GET":
+        body = json.dumps(payload or {}).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
     req = urllib.request.Request(
         f"{base}{path}",
         data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+        headers=headers,
+        method=method,
     )
 
     try:
@@ -74,6 +86,22 @@ def post_image_service(path: str, payload: Dict[str, Any] | None = None, timeout
         raise RuntimeError(f"image_service_http_{exc.code}:{raw}") from exc
     except Exception as exc:
         raise RuntimeError(f"image_service_unreachable:{exc}") from exc
+
+
+def post_image_service(path: str, payload: Dict[str, Any] | None = None, timeout: float = 600.0) -> Dict[str, Any]:
+    return request_image_service("POST", path, payload, timeout)
+
+
+def get_image_service_status() -> Dict[str, Any]:
+    return request_image_service("GET", "/provider/status", timeout=5.0)
+
+
+def load_image_model_via_service(provider: str = "flux_klein") -> Dict[str, Any]:
+    return post_image_service("/provider/load", {"provider": provider}, timeout=900.0)
+
+
+def unload_image_model_via_service(provider: str = "flux_klein") -> Dict[str, Any]:
+    return post_image_service("/provider/unload", {"provider": provider}, timeout=120.0)
 
 
 def generate_image_via_service(payload: Dict[str, Any]) -> Dict[str, Any]:
