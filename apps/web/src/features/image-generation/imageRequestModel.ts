@@ -47,3 +47,10 @@ export function imageRequestDefaultValues(defaults: ImageRequestDefaults): Image
 export function imagePresetById(presetId: string) {
   return IMAGE_SIZE_PRESETS.find((preset) => preset.id === presetId);
 }
+
+export function validateImageDimension(value: string): true | string {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 128 || parsed > 4096) return 'Use a value from 128 to 4096.';
+  if (parsed % 64 !== 0) return 'Use a multiple of 64.';
+  return true;
+}
