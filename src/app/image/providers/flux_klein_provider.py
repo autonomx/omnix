@@ -4,7 +4,6 @@ from __future__ import annotations
 import contextlib
 import gc
 import inspect
-import io
 import os
 import threading
 from typing import Any, Dict
@@ -46,6 +45,18 @@ def _safe_float(value: Any, default: float) -> float:
         return float(default)
 
 
+def _release_generation_memory() -> None:
+    """Release transient CPU/GPU allocations before another request can start."""
+
+    with contextlib.suppress(Exception):
+        gc.collect()
+    with contextlib.suppress(Exception):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+
+
 class FluxKleinImageProvider(BaseImageProvider):
     def __init__(self, config: Dict[str, Any] | None = None):
         super().__init__(config)
@@ -75,6 +86,7 @@ class FluxKleinImageProvider(BaseImageProvider):
             root = download_dir
         else:
             from app.shared import MODELS_DIR
+
             root = os.path.join(MODELS_DIR, download_dir)
 
         preferred = os.path.normpath(os.path.join(root, "flux2-klein-4b"))
@@ -165,13 +177,7 @@ class FluxKleinImageProvider(BaseImageProvider):
             with contextlib.suppress(Exception):
                 del pipe
 
-            with contextlib.suppress(Exception):
-                gc.collect()
-
-            with contextlib.suppress(Exception):
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    torch.cuda.ipc_collect()
+            _release_generation_memory()
 
         return None
 
@@ -181,8 +187,14 @@ class FluxKleinImageProvider(BaseImageProvider):
         width = _safe_int(payload.get("width"), _safe_int(self.config.get("width"), 768))
         height = _safe_int(payload.get("height"), _safe_int(self.config.get("height"), 768))
         seed = payload.get("seed")
-        steps = _safe_int(payload.get("num_inference_steps"), _safe_int(self.config.get("num_inference_steps"), 4))
-        guidance_scale = _safe_float(payload.get("guidance_scale"), _safe_float(self.config.get("guidance_scale"), 1.0))
+        steps = _safe_int(
+            payload.get("num_inference_steps"),
+            _safe_int(self.config.get("num_inference_steps"), 4),
+        )
+        guidance_scale = _safe_float(
+            payload.get("guidance_scale"),
+            _safe_float(self.config.get("guidance_scale"), 1.0),
+        )
 
         kwargs: Dict[str, Any] = {
             "prompt": prompt,
@@ -203,102 +215,104 @@ class FluxKleinImageProvider(BaseImageProvider):
         def report_progress(current: int) -> None:
             if callable(progress_callback):
                 with contextlib.suppress(Exception):
-                    progress_callback(max(0, min(steps, current)), max(1, steps), "Generating image")
+                    progress_callback(
+                        max(0, min(steps, current)),
+                        max(1, steps),
+                        "Generating image",
+                    )
 
         with _GENERATE_LOCK:
+            pipe = None
+            output = None
+            image = None
             try:
-                pipe = self._ensure_pipeline()
-            except Exception as exc:
+                try:
+                    pipe = self._ensure_pipeline()
+                except Exception as exc:
+                    return ImageGenerationResult(
+                        ok=False,
+                        status="failed",
+                        error=_safe_str(exc).strip() or f"flux_klein_load_failed:{repr(exc)}",
+                        moderation_status="approved",
+                        moderation_reason="",
+                    )
+
+                try:
+                    report_progress(0)
+                    with contextlib.suppress(Exception):
+                        signature = inspect.signature(pipe.__call__)
+                        params = signature.parameters
+                        if "callback_on_step_end" in params:
+
+                            def on_step_end(
+                                _pipeline,
+                                step: int,
+                                _timestep,
+                                callback_kwargs: Dict[str, Any],
+                            ):
+                                report_progress(int(step) + 1)
+                                return callback_kwargs
+
+                            kwargs["callback_on_step_end"] = on_step_end
+                            if "callback_on_step_end_tensor_inputs" in params:
+                                kwargs["callback_on_step_end_tensor_inputs"] = []
+                        elif "callback" in params:
+
+                            def on_step(step: int, _timestep, _latents):
+                                report_progress(int(step) + 1)
+
+                            kwargs["callback"] = on_step
+                            if "callback_steps" in params:
+                                kwargs["callback_steps"] = 1
+
+                    with torch.inference_mode():
+                        output = pipe(**kwargs)
+                        image = output.images[0]
+                    report_progress(steps)
+                except Exception as exc:
+                    return ImageGenerationResult(
+                        ok=False,
+                        status="failed",
+                        error=f"flux_klein_generate_failed:{repr(exc)}",
+                        moderation_status="approved",
+                        moderation_reason="",
+                    )
+
+                out_dir = str(generated_images_root())
+                os.makedirs(out_dir, exist_ok=True)
+                filename = (
+                    f"{_safe_str(payload.get('kind')).strip() or 'image'}_"
+                    f"{os.getpid()}_{id(image)}.png"
+                )
+                file_path = os.path.normpath(os.path.join(out_dir, filename))
+
+                try:
+                    image.save(file_path, format="PNG")
+                except Exception as exc:
+                    with contextlib.suppress(OSError):
+                        os.remove(file_path)
+                    return ImageGenerationResult(
+                        ok=False,
+                        status="failed",
+                        error=f"flux_klein_finalize_failed:{repr(exc)}",
+                        moderation_status="approved",
+                        moderation_reason="",
+                    )
+
                 return ImageGenerationResult(
-                    ok=False,
-                    status="failed",
-                    error=_safe_str(exc).strip() or f"flux_klein_load_failed:{repr(exc)}",
+                    ok=True,
+                    status="completed",
+                    error="",
                     moderation_status="approved",
                     moderation_reason="",
+                    mime_type="image/png",
+                    revised_prompt=prompt,
+                    file_path=file_path,
+                    asset_url="",
+                    metadata={"width": width, "height": height},
                 )
-
-            try:
-                report_progress(0)
-                with contextlib.suppress(Exception):
-                    signature = inspect.signature(pipe.__call__)
-                    params = signature.parameters
-                    if "callback_on_step_end" in params:
-                        def on_step_end(_pipeline, step: int, _timestep, callback_kwargs: Dict[str, Any]):
-                            report_progress(int(step) + 1)
-                            return callback_kwargs
-
-                        kwargs["callback_on_step_end"] = on_step_end
-                        if "callback_on_step_end_tensor_inputs" in params:
-                            kwargs["callback_on_step_end_tensor_inputs"] = []
-                    elif "callback" in params:
-                        def on_step(step: int, _timestep, _latents):
-                            report_progress(int(step) + 1)
-
-                        kwargs["callback"] = on_step
-                        if "callback_steps" in params:
-                            kwargs["callback_steps"] = 1
-
-                with torch.inference_mode():
-                    output = pipe(**kwargs)
-                    image = output.images[0]
-                report_progress(steps)
-            except Exception as exc:
-                return ImageGenerationResult(
-                    ok=False,
-                    status="failed",
-                    error=f"flux_klein_generate_failed:{repr(exc)}",
-                    moderation_status="approved",
-                    moderation_reason="",
-                )
-
-        image_bytes: bytes
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        image_bytes = buffer.getvalue()
-        buffer.close()
-
-        out_dir = str(generated_images_root())
-        os.makedirs(out_dir, exist_ok=True)
-        filename = f"{_safe_str(payload.get('kind')).strip() or 'image'}_{os.getpid()}_{id(image)}.png"
-        file_path = os.path.normpath(os.path.join(out_dir, filename))
-
-        try:
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-        except Exception:
-            return ImageGenerationResult(
-                ok=False,
-                status="failed",
-                error="flux_klein_file_write_failed",
-                moderation_status="approved",
-                moderation_reason="",
-            )
-
-        result = ImageGenerationResult(
-            ok=True,
-            status="completed",
-            error="",
-            moderation_status="approved",
-            moderation_reason="",
-            image_bytes=image_bytes,
-            mime_type="image/png",
-            revised_prompt=prompt,
-            file_path=file_path,
-            asset_url="",
-            metadata={"width": width, "height": height},
-        )
-
-        with contextlib.suppress(Exception):
-            del output
-            del image
-            del pipe
-
-        if bool(self.config.get("cuda_empty_cache_after_generate", False)):
-            with contextlib.suppress(Exception):
-                gc.collect()
-            with contextlib.suppress(Exception):
-                if torch.cuda.is_available():
-                    torch.cuda.synchronize()
-                    torch.cuda.empty_cache()
-
-        return result
+            finally:
+                output = None
+                image = None
+                pipe = None
+                _release_generation_memory()
