@@ -15,6 +15,7 @@ const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const MIN_SENTENCE_CHARS = 36;
 const MAX_PHRASE_CHARS = 120;
+const SPEAKABLE_TEXT_PATTERN = /[\p{L}\p{N}]/u;
 
 type ChatStreamEvent = {
   type?: string;
@@ -191,6 +192,15 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
 function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
   const phrase = text.trim();
   if (!phrase || turn.generation !== playbackGeneration) return;
+  if (!SPEAKABLE_TEXT_PATTERN.test(phrase)) {
+    turn.reporter.record('phrase_skipped', {
+      reason: 'non-speech-only',
+      text: phrase,
+      text_length: phrase.length,
+      elapsed_ms: performance.now() - turn.startedAtMs,
+    }, 'controller');
+    return;
+  }
   const phraseIndex = turn.phraseCount;
   turn.phraseCount += 1;
   setVoiceSpeaking(true);
