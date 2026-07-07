@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OmnixApp } from './app/OmnixApp';
 import { omnixTheme } from './design/theme';
 import './features/chatbot/sessionTools';
+import './features/chatbot/researchProgressController';
+import './features/chatbot/researchProgressController.css';
 import './features/podcast/podcastSessionGuard';
 import './features/voice/voiceJobListGuard';
 import './styles.css';
