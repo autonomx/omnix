@@ -1,5 +1,6 @@
 import type {
   RpgMapDefinition,
+  RpgMapFogPolygon,
   RpgMapLabelDefinition,
   RpgMapMarker,
   RpgMapOverlay,
@@ -8,6 +9,7 @@ import type {
 } from '../../api/rpgMapClient';
 
 export interface RpgMapLayerVisibility {
+  fog: boolean;
   labels: boolean;
   markers: boolean;
   routes: boolean;
@@ -15,6 +17,7 @@ export interface RpgMapLayerVisibility {
 }
 
 export const DEFAULT_RPG_MAP_LAYERS: RpgMapLayerVisibility = Object.freeze({
+  fog: true,
   labels: true,
   markers: true,
   routes: true,
@@ -42,6 +45,50 @@ export function RpgMapLayerControls({
         </label>
       ))}
     </fieldset>
+  );
+}
+
+export function RpgMapEnvironmentLayer({ definition, environment }: {
+  definition: RpgMapDefinition;
+  environment: Record<string, string>;
+}) {
+  const weather = environment.weather?.toLowerCase() ?? '';
+  const light = environment.light?.toLowerCase() ?? '';
+  const visibility = environment.visibility?.toLowerCase() ?? '';
+  const classes = [
+    'rpg-map-environment',
+    weather ? `rpg-map-weather-${safeClass(weather)}` : '',
+    light ? `rpg-map-light-${safeClass(light)}` : '',
+    visibility ? `rpg-map-visibility-${safeClass(visibility)}` : '',
+  ].filter(Boolean).join(' ');
+  return (
+    <rect
+      aria-hidden="true"
+      className={classes}
+      data-map-environment-light={light || undefined}
+      data-map-environment-weather={weather || undefined}
+      data-map-layer="environment"
+      height={definition.bounds.height}
+      width={definition.bounds.width}
+      x={definition.bounds.x}
+      y={definition.bounds.y}
+    />
+  );
+}
+
+export function RpgMapFogLayer({ polygons }: { polygons: RpgMapFogPolygon[] }) {
+  return (
+    <g data-map-layer="fog">
+      {[...polygons].sort((left, right) => left.id.localeCompare(right.id)).map((polygon) => (
+        <polygon
+          aria-hidden="true"
+          className="rpg-map-fog-polygon"
+          data-map-fog-id={polygon.id}
+          key={polygon.id}
+          points={polygon.points.map(([x, y]) => `${x},${y}`).join(' ')}
+        />
+      ))}
+    </g>
   );
 }
 
@@ -126,4 +173,8 @@ function MapMarker({ marker }: { marker: RpgMapMarker }) {
 
 function humanize(value: string): string {
   return value.replaceAll('_', ' ');
+}
+
+function safeClass(value: string): string {
+  return value.replace(/[^a-z0-9_-]/g, '-');
 }
