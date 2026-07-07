@@ -38,6 +38,8 @@ def register_image_asset_file_route(gateway: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="asset_not_found")
         if asset.type != AssetType.IMAGE or asset.mime_type.lower() not in SUPPORTED_IMAGE_MIME_TYPES:
             raise HTTPException(status_code=415, detail="asset_content_not_image")
+        if asset.mime_type.lower() == "image/svg+xml" and not bool(asset.metadata.get("trusted_svg")):
+            raise HTTPException(status_code=415, detail="asset_svg_not_trusted")
         path = Path(asset.storage_path)
         if not path.is_file():
             raise HTTPException(status_code=404, detail="asset_file_not_found")
