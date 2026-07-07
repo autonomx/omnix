@@ -17,7 +17,6 @@ from .planner import (
     ResearchPlanningBudget,
     ResearchPlanningRequest,
 )
-from .quick_search import QuickSearchExecution, QuickSearchService
 from .source_store import ResearchSourceStore, default_research_source_store
 
 ResearchExecutionStatus = Literal["completed", "partial", "canceled"]
@@ -65,7 +64,7 @@ class ResearchExecutionResult(BaseModel):
 ProgressCallback = Callable[[str, str], None]
 CancelCallback = Callable[[], bool]
 CheckpointCallback = Callable[[str, ResearchExecutionCheckpoint], None]
-QuickSearchFactory = Callable[[int, int], QuickSearchService]
+QuickSearchFactory = Callable[[int, int], Any]
 
 
 class DeepResearchExecutor:
@@ -117,7 +116,11 @@ class DeepResearchExecutor:
             if canceled():
                 state.stop_reason = "canceled"
                 state.next_operation_index = operation_index
-                self._save(_stage_for_operation(state.plan.operations[operation_index].operation), state, save_checkpoint)
+                self._save(
+                    _stage_for_operation(state.plan.operations[operation_index].operation),
+                    state,
+                    save_checkpoint,
+                )
                 return self._result(state, "canceled", None)
             if operation_index >= budget.max_steps:
                 state.stop_reason = "step_budget_exhausted"
@@ -224,7 +227,9 @@ class DeepResearchExecutor:
         self,
         remaining_sources: int,
         remaining_extracts: int,
-    ) -> QuickSearchService:
+    ) -> Any:
+        from .quick_search import QuickSearchService
+
         return QuickSearchService(
             source_store_factory=self.source_store_factory,
             extractor_factory=self.extractor_factory,
@@ -234,7 +239,7 @@ class DeepResearchExecutor:
     @staticmethod
     def _merge_search_execution(
         state: ResearchExecutionCheckpoint,
-        execution: QuickSearchExecution,
+        execution: Any,
         store: ResearchSourceStore,
         seen_source_ids: set[str],
         source_budget: int,
