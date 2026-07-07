@@ -17,6 +17,7 @@ from .models import (
     AssetRecord,
     AssetType,
 )
+from .rpg_map_pack import curated_rpg_map_assets
 from .store import (
     _AUDIO_MIME_TYPES,
     _legacy_audio_roots,
@@ -51,13 +52,15 @@ def _skipped_files(family: str, roots: list[Path], supported_suffixes: set[str])
 
 
 class SharedAssetStore(ManifestSharedAssetStore):
-    """Shared asset store with non-mutating legacy compatibility read-through."""
+    """Shared asset store with non-mutating compatibility and curated read-through."""
 
     def list_assets(self) -> AssetListResponse:
         assets = {asset.id: asset for asset in super().list_assets().assets}
         for asset in self.preview_image_manifest_import().assets:
             assets.setdefault(asset.id, asset)
         for asset in legacy_document_assets():
+            assets.setdefault(asset.id, asset)
+        for asset in curated_rpg_map_assets():
             assets.setdefault(asset.id, asset)
         return AssetListResponse(assets=list(assets.values()))
 
