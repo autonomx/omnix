@@ -11,7 +11,7 @@ from app.research.quick_search import QuickSearchService
 
 from .models import AssistantContextBuildResult, AssistantContextChatRequest, AssistantContextItem
 from .vision import DesktopVisionClient
-from .web_search import WebSearchClient, should_search_automatically
+from .web_search import WebSearchClient
 
 
 class AssistantContextService:
@@ -63,21 +63,14 @@ class AssistantContextService:
         )
         diagnostics: dict[str, object] = {
             "web_research_mode": request.web_research_mode,
-            "legacy_web_search_mode": request.legacy_web_search_mode,
-            "web_search_requested": request.web_search_requested,
             "research_provider": request.internal_research_provider,
+            "research_compatibility_warnings": request.internal_research_warnings,
             "desktop_requested": desktop_requested,
             "desktop_capture_mode": request.desktop_capture_mode,
             "desktop_history_frames": len(request.desktop_history_timestamps),
         }
 
-        search_needed = request.web_research_mode == "quick"
-        if request.legacy_web_search_mode == "automatic":
-            search_needed = should_search_automatically(request.content)
-        elif request.legacy_web_search_mode == "manual":
-            search_needed = request.web_search_requested
-
-        if search_needed:
+        if request.web_research_mode == "quick":
             execution = self._quick_search_for(request).search(
                 request.content,
                 request.web_search_max_results,
