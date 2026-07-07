@@ -144,15 +144,26 @@ def render_answer_with_compatibility_fallback(
             validation=validation,
         )
 
+    allowed = list(dict.fromkeys(allowed_labels))
+    declared: list[str] = []
     sections: list[str] = []
     for section in structured.sections:
-        labels = [label for label in section.citation_labels if label in allowed_labels]
+        for label in section.citation_labels:
+            if label not in declared:
+                declared.append(label)
+        labels = [label for label in section.citation_labels if label in allowed]
         citations = " ".join(f"[{label}]" for label in labels)
         prefix = "Inference: " if section.kind == "inference" else ""
         sections.append(f"{prefix}{section.text}{(' ' + citations) if citations else ''}")
     rendered = "\n\n".join(sections)
-    validation = validate_plain_text_citations(rendered, allowed_labels)
+    validation = validate_plain_text_citations(rendered, allowed)
+    unknown = [label for label in declared if label not in allowed]
     validation.structured = True
+    validation.used_labels = declared
+    validation.unknown_labels = unknown
+    if unknown and "unknown_citation_labels" not in validation.warnings:
+        validation.warnings.append("unknown_citation_labels")
+    validation.valid = not validation.unknown_labels and not validation.missing_citations
     return RenderedResearchAnswer(content=_append_visible_notice(rendered, validation), validation=validation)
 
 
@@ -160,7 +171,8 @@ def validate_plain_text_citations(text: str, allowed_labels: list[str]) -> Citat
     allowed = list(dict.fromkeys(allowed_labels))
     used = list(dict.fromkeys(_CITATION_PATTERN.findall(text)))
     unknown = [label for label in used if label not in allowed]
-    missing = bool(allowed and not used)
+    supported = [label for label in used if label in allowed]
+    missing = bool(allowed and not supported)
     warnings: list[str] = []
     if unknown:
         warnings.append("unknown_citation_labels")
