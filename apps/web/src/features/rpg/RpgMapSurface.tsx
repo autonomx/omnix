@@ -11,6 +11,7 @@ import {
   type RpgMapOverlay,
   type RpgMapOverlayResponse,
 } from '../../api/rpgMapClient';
+import { RpgMapChildControls, RpgMapHierarchyNav } from './RpgMapHierarchyNav';
 import { RpgMapViewportSurface } from './RpgMapViewportSurface';
 import './RpgMapSurface.css';
 
@@ -21,18 +22,19 @@ interface RpgMapSurfaceProps {
 
 export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
   const queryClient = useQueryClient();
+  const [viewMapId, setViewMapId] = useState(mapId);
   const [activeObjectId, setActiveObjectId] = useState<string | null>(null);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const definitionQuery = useQuery({
-    queryKey: ['feature', 'rpg', 'map-definition', mapId],
-    queryFn: () => getRpgMapDefinition(mapId),
-    enabled: Boolean(mapId),
+    queryKey: ['feature', 'rpg', 'map-definition', viewMapId],
+    queryFn: () => getRpgMapDefinition(viewMapId),
+    enabled: Boolean(viewMapId),
     staleTime: Number.POSITIVE_INFINITY,
   });
   const overlayQuery = useQuery({
-    queryKey: ['feature', 'rpg', 'map-overlay', sessionId, mapId],
-    queryFn: () => getRpgMapOverlay(sessionId, mapId),
-    enabled: Boolean(sessionId && mapId),
+    queryKey: ['feature', 'rpg', 'map-overlay', sessionId, viewMapId],
+    queryFn: () => getRpgMapOverlay(sessionId, viewMapId),
+    enabled: Boolean(sessionId && viewMapId),
     refetchInterval: 2500,
     refetchIntervalInBackground: false,
   });
@@ -40,7 +42,7 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
     mutationFn: (capability: RpgMapActionCapability) => {
       const definitionRevision = definitionQuery.data?.definition_revision ?? '';
       const overlayRevision = overlayQuery.data?.overlay_revision ?? -1;
-      return applyRpgMapAction(sessionId, mapId, {
+      return applyRpgMapAction(sessionId, viewMapId, {
         action: capability.type,
         client_action_id: actionId(),
         definition_revision: definitionRevision,
@@ -58,21 +60,28 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
         session_turn_index: response.session_turn_index,
         overlay: response.overlay,
       };
-      queryClient.setQueryData(['feature', 'rpg', 'map-overlay', sessionId, mapId], overlayResponse);
+      queryClient.setQueryData(['feature', 'rpg', 'map-overlay', sessionId, response.map_id], overlayResponse);
       queryClient.setQueryData(['feature', 'rpg', 'session', sessionId], {
         ok: true,
         session_id: sessionId,
         session: response.session,
         game: response.game,
       });
+      setViewMapId(response.map_id);
+      setActiveObjectId(null);
+      setSelectedObjectId(null);
       void queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] });
     },
   });
 
   useEffect(() => {
+    setViewMapId(mapId);
+  }, [mapId, sessionId]);
+
+  useEffect(() => {
     setActiveObjectId(null);
     setSelectedObjectId(null);
-  }, [mapId, sessionId]);
+  }, [viewMapId]);
 
   if (definitionQuery.isPending || overlayQuery.isPending) {
     return <MapStateMessage title="Loading map" detail="Reading the map definition and current session overlay…" />;
@@ -106,16 +115,20 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
     setSelectedObjectId(objectId);
     setActiveObjectId(objectId);
   };
+  const enterCapability: RpgMapActionCapability | null = selectedObject?.child_map_id ? {
+    type: 'enter',
+    enabled: overlay.availability === 'ready' && !revisionMismatch,
+    target_object_id: selectedObject.id,
+    target_location_id: selectedObject.location_id,
+    route_id: null,
+    disabled_reason: overlay.availability === 'ready' ? '' : 'map_not_active',
+  } : null;
 
   return (
     <div className="rpg-map-surface">
+      <RpgMapHierarchyNav definition={definition} onNavigate={setViewMapId} />
       {revisionMismatch ? (
-        <MapStateMessage
-          compact
-          title="Map definition changed"
-          detail="The live overlay references a newer map definition. Refreshing the map before actions are enabled."
-          tone="warning"
-        />
+        <MapStateMessage compact title="Map definition changed" detail="The live overlay references a newer map definition. Refreshing the map before actions are enabled." tone="warning" />
       ) : null}
       {overlay.availability === 'ready' ? null : (
         <MapStateMessage compact title="Live position unavailable" detail={humanizeReason(overlay.unavailable_reason)} tone="warning" />
@@ -141,11 +154,13 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
       </div>
       <SelectedObjectPanel
         capabilities={revisionMismatch ? [] : selectedCapabilities}
+        enterCapability={enterCapability}
         isApplyingAction={actionMutation.isPending}
         item={selectedObject}
         objectState={objectState}
         onAction={(capability) => actionMutation.mutate(capability)}
         onClose={() => setSelectedObjectId(null)}
+        onPeek={(childMapId) => setViewMapId(childMapId)}
       />
       <AccessibleObjectList
         activeObjectId={activeObjectId}
@@ -161,18 +176,22 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
 
 function SelectedObjectPanel({
   capabilities,
+  enterCapability,
   isApplyingAction,
   item,
   objectState,
   onAction,
   onClose,
+  onPeek,
 }: {
   capabilities: RpgMapActionCapability[];
+  enterCapability: RpgMapActionCapability | null;
   isApplyingAction: boolean;
   item: RpgMapObjectDefinition | null;
   objectState?: RpgMapObjectDynamicState;
   onAction: (capability: RpgMapActionCapability) => void;
   onClose: () => void;
+  onPeek: (childMapId: string) => void;
 }) {
   if (!item) return null;
   return (
@@ -183,10 +202,15 @@ function SelectedObjectPanel({
         <p>{objectState?.presentation_hint || item.description || `A ${humanizeReason(item.kind)} on the current map.`}</p>
         <small>{item.location_id ?? item.id} • {humanizeReason(objectState?.status ?? 'normal')}</small>
       </div>
-      {item.tags.length ? (
-        <div className="rpg-map-object-tags" aria-label="Object tags">
-          {item.tags.map((tag) => <span key={tag}>{humanizeReason(tag)}</span>)}
-        </div>
+      {item.tags.length ? <div className="rpg-map-object-tags" aria-label="Object tags">{item.tags.map((tag) => <span key={tag}>{humanizeReason(tag)}</span>)}</div> : null}
+      {item.child_map_id && enterCapability ? (
+        <RpgMapChildControls
+          canEnter={enterCapability.enabled}
+          childMapId={item.child_map_id}
+          isApplying={isApplyingAction}
+          onEnter={() => onAction(enterCapability)}
+          onPeek={() => onPeek(item.child_map_id!)}
+        />
       ) : null}
       <div className="rpg-map-capability-list" aria-label="Projected map capabilities">
         {capabilities.length ? capabilities.map((capability) => (
@@ -207,14 +231,7 @@ function SelectedObjectPanel({
   );
 }
 
-function AccessibleObjectList({
-  activeObjectId,
-  definition,
-  onActiveObjectChange,
-  onSelectObject,
-  overlay,
-  selectedObjectId,
-}: {
+function AccessibleObjectList({ activeObjectId, definition, onActiveObjectChange, onSelectObject, overlay, selectedObjectId }: {
   activeObjectId: string | null;
   definition: RpgMapDefinition;
   onActiveObjectChange: (objectId: string | null) => void;
@@ -225,39 +242,15 @@ function AccessibleObjectList({
   return (
     <div className="rpg-map-accessible-list" aria-label="Visible map locations">
       <p className="eyebrow">Visible map objects</p>
-      <ul>
-        {visibleObjects(definition, overlay).map((item) => (
-          <li key={item.id}>
-            <button
-              aria-pressed={selectedObjectId === item.id}
-              className={activeObjectId === item.id ? 'rpg-map-object-list-active' : undefined}
-              onBlur={() => onActiveObjectChange(null)}
-              onClick={() => onSelectObject(item.id)}
-              onFocus={() => onActiveObjectChange(item.id)}
-              onMouseEnter={() => onActiveObjectChange(item.id)}
-              onMouseLeave={() => onActiveObjectChange(null)}
-              type="button"
-            >
-              {item.label || item.location_id || item.id}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <ul>{visibleObjects(definition, overlay).map((item) => (
+        <li key={item.id}><button aria-pressed={selectedObjectId === item.id} className={activeObjectId === item.id ? 'rpg-map-object-list-active' : undefined} onBlur={() => onActiveObjectChange(null)} onClick={() => onSelectObject(item.id)} onFocus={() => onActiveObjectChange(item.id)} onMouseEnter={() => onActiveObjectChange(item.id)} onMouseLeave={() => onActiveObjectChange(null)} type="button">{item.label || item.location_id || item.id}</button></li>
+      ))}</ul>
     </div>
   );
 }
 
-function MapStateMessage({ compact = false, detail, title, tone = 'neutral' }: {
-  compact?: boolean;
-  detail: string;
-  title: string;
-  tone?: 'neutral' | 'warning' | 'error';
-}) {
-  return (
-    <div className={`rpg-map-state-message rpg-map-state-${tone}${compact ? ' rpg-map-state-compact' : ''}`} role="status">
-      <strong>{title}</strong><span>{detail}</span>
-    </div>
-  );
+function MapStateMessage({ compact = false, detail, title, tone = 'neutral' }: { compact?: boolean; detail: string; title: string; tone?: 'neutral' | 'warning' | 'error' }) {
+  return <div className={`rpg-map-state-message rpg-map-state-${tone}${compact ? ' rpg-map-state-compact' : ''}`} role="status"><strong>{title}</strong><span>{detail}</span></div>;
 }
 
 function visibleObjects(definition: RpgMapDefinition, overlay: RpgMapOverlay): RpgMapObjectDefinition[] {
@@ -267,9 +260,7 @@ function visibleObjects(definition: RpgMapDefinition, overlay: RpgMapOverlay): R
 }
 
 function actionId(): string {
-  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `map-action:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `map-action:${Date.now()}:${Math.random().toString(16).slice(2)}`;
 }
 
 function shortRevision(value: string): string {
