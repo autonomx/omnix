@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RpgMapSurface } from './RpgMapSurface';
 
+const polygon = { kind: 'polygon' as const, points: [[-110, -90], [110, -90], [110, 20], [-110, 20]] as [number, number][] };
 const definition = {
   schema_version: 1,
   map_id: 'settlement:frost_haven',
@@ -18,15 +19,15 @@ const definition = {
       kind: 'building',
       x: 300,
       y: 420,
-      anchor: 'bottom_center',
+      anchor: 'bottom_center' as const,
       location_id: 'rusty_flagon_tavern',
       label: 'The Frosted Flagon',
       description: 'A warm inn.',
       tags: ['inn'],
-      render_order: { layer: 'structures', sort_y: 420, offset: 0 },
+      render_order: { layer: 'structures' as const, sort_y: 420, offset: 0 },
       sprite: { asset_id: 'asset:inn', width: 220, height: 180 },
-      footprint: null,
-      hitbox: null,
+      footprint: polygon,
+      hitbox: polygon,
       child_map_id: null,
     },
   ],
@@ -50,7 +51,14 @@ function overlay(availability: 'ready' | 'unavailable' = 'ready') {
     markers: availability === 'ready'
       ? [{ id: 'marker:player', kind: 'player', x: 300, y: 420, object_id: 'building:inn', label: 'You' }]
       : [],
-    capabilities: [],
+    capabilities: [{
+      type: 'inspect',
+      enabled: true,
+      target_object_id: 'building:inn',
+      target_location_id: 'rusty_flagon_tavern',
+      route_id: null,
+      disabled_reason: '',
+    }],
     environment: { weather: 'Clear' },
   };
 }
@@ -68,55 +76,77 @@ function requestPath(input: RequestInfo | URL): string {
   return typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
 }
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
-describe('RpgMapSurface', () => {
-  it('renders definition objects and the authoritative player marker', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const path = requestPath(input);
-      if (path === '/api/rpg/maps/settlement%3Afrost_haven') {
-        return Response.json({ ok: true, map_id: definition.map_id, definition_revision: definition.definition_revision, definition });
-      }
-      if (path === '/api/rpg/sessions/session%3Atest/maps/settlement%3Afrost_haven/overlay') {
-        return Response.json({
-          ok: true,
-          map_id: definition.map_id,
-          definition_revision: definition.definition_revision,
-          overlay_revision: 2,
-          session_turn_index: 5,
-          overlay: overlay(),
-        });
-      }
-      return new Response('not found', { status: 404 });
-    }));
-
-    const view = renderMap();
-
-    expect(await screen.findByRole('img', { name: /interactive map/i })).toBeInTheDocument();
-    expect(screen.getAllByText('The Frosted Flagon')).toHaveLength(2);
-    expect(view.container.querySelector('[data-map-object-id="building:inn"]')).toBeInTheDocument();
-    expect(view.container.querySelector('.rpg-map-player-marker')).toBeInTheDocument();
-    expect(screen.getByText('Definition abc123')).toBeInTheDocument();
-  });
-
-  it('renders a truthful unavailable state without a player marker', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const path = requestPath(input);
-      if (path.includes('/api/rpg/maps/')) {
-        return Response.json({ ok: true, map_id: definition.map_id, definition_revision: definition.definition_revision, definition });
-      }
+function installFetch(availability: 'ready' | 'unavailable' = 'ready') {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const path = requestPath(input);
+    if (path.includes('/api/rpg/maps/')) {
+      return Response.json({ ok: true, map_id: definition.map_id, definition_revision: definition.definition_revision, definition });
+    }
+    if (path.includes('/overlay')) {
       return Response.json({
         ok: true,
         map_id: definition.map_id,
         definition_revision: definition.definition_revision,
         overlay_revision: 2,
         session_turn_index: 5,
-        overlay: overlay('unavailable'),
+        overlay: overlay(availability),
       });
-    }));
+    }
+    return new Response('not found', { status: 404 });
+  }));
+}
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('RpgMapSurface', () => {
+  it('renders definition objects and the authoritative player marker', async () => {
+    installFetch();
+    const view = renderMap();
+
+    expect(await screen.findByRole('img', { name: /interactive map/i })).toBeInTheDocument();
+    expect(screen.getAllByText('The Frosted Flagon')).toHaveLength(2);
+    expect(view.container.querySelector('[data-map-object-id="building:inn"]')).toBeInTheDocument();
+    expect(view.container.querySelector('[data-map-hitbox="building:inn"]')).toHaveAttribute('points', '-110,-90 110,-90 110,20 -110,20');
+    expect(view.container.querySelector('.rpg-map-player-marker')).toBeInTheDocument();
+    expect(screen.getByText('Definition abc123')).toBeInTheDocument();
+  });
+
+  it('shows the same details for pointer hover and keyboard focus', async () => {
+    installFetch();
+    renderMap();
+    const object = await screen.findByRole('button', { name: 'The Frosted Flagon map object' });
+
+    fireEvent.mouseEnter(object);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('A warm inn.');
+    fireEvent.mouseLeave(object);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    fireEvent.focus(object);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('The Frosted Flagon');
+    fireEvent.blur(object);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('selects from the visual object and accessible list without changing location', async () => {
+    installFetch();
+    const view = renderMap();
+    const object = await screen.findByRole('button', { name: 'The Frosted Flagon map object' });
+
+    fireEvent.click(object);
+    expect(screen.getByRole('region', { name: 'Selected map object' })).toHaveTextContent('A warm inn.');
+    expect(screen.getByText('inspect')).toBeInTheDocument();
+    expect(object).toHaveAttribute('aria-pressed', 'true');
+    expect(view.container.querySelector('.rpg-map-object-selected')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close selection' }));
+    expect(screen.queryByRole('region', { name: 'Selected map object' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'The Frosted Flagon' })).toBeInTheDocument();
+  });
+
+  it('renders a truthful unavailable state without a player marker', async () => {
+    installFetch('unavailable');
     const view = renderMap();
 
     expect(await screen.findByText('Live position unavailable')).toBeInTheDocument();
