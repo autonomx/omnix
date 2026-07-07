@@ -9,10 +9,18 @@ export type ImageAsset = AssetListResponse['assets'][number];
 interface ImageAssetGalleryProps {
   assets: ImageAsset[];
   selectedAssetId: string | null;
+  deletingAssetId?: string;
   onSelect: (assetId: string) => void;
+  onDelete: (assetId: string) => void;
 }
 
-export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAssetGalleryProps) {
+export function ImageAssetGallery({
+  assets,
+  selectedAssetId,
+  deletingAssetId,
+  onSelect,
+  onDelete,
+}: ImageAssetGalleryProps) {
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -30,6 +38,15 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
   const clearFilters = () => {
     setQuery('');
     setProvider('');
+  };
+
+  const requestDelete = (asset: ImageAsset) => {
+    const title = imageAssetTitle(asset);
+    const confirmed = typeof window === 'undefined'
+      || window.confirm(`Delete “${title}”? This removes the image file and cannot be undone.`);
+    if (!confirmed) return;
+    if (previewAsset?.id === asset.id) setPreviewAsset(null);
+    onDelete(asset.id);
   };
 
   return (
@@ -66,6 +83,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
           {visibleAssets.map((asset) => {
             const title = imageAssetTitle(asset);
             const selected = asset.id === selectedAssetId;
+            const deleting = asset.id === deletingAssetId;
             return (
               <article className={`image-asset-card ${selected ? 'selected' : ''}`} key={asset.id}>
                 <div className="image-asset-select">
@@ -88,6 +106,17 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
                 <div className="image-asset-actions">
                   <Button component="a" href={imageAssetUrl(asset.id)} target="_blank" rel="noreferrer" size="compact-xs" variant="subtle">Open</Button>
                   <Button component="a" href={imageAssetUrl(asset.id, true)} download size="compact-xs" variant="subtle">Download</Button>
+                  <Button
+                    aria-label={`Delete ${title}`}
+                    color="red"
+                    disabled={Boolean(deletingAssetId) && !deleting}
+                    loading={deleting}
+                    onClick={() => requestDelete(asset)}
+                    size="compact-xs"
+                    variant="subtle"
+                  >
+                    Delete
+                  </Button>
                 </div>
               </article>
             );
