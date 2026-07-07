@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.map_package_bridge import attach_map_state_to_package, restore_map_state_from_package
 from app.rpg.map_persistence import ensure_session_map_state
 from app.rpg.session.ambient_builder import (
     ensure_ambient_runtime_state,
@@ -94,7 +95,8 @@ def archive_session(session_id: str) -> Dict[str, Any]:
 def export_session_as_package(session: Dict[str, Any]) -> Dict[str, Any]:
     session = create_or_normalize_session(session)
     assert_session_integrity(session)
-    return session_to_package(session)
+    package = session_to_package(session)
+    return attach_map_state_to_package(package, session)
 
 
 def import_session_from_package(package_payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -102,6 +104,7 @@ def import_session_from_package(package_payload: Dict[str, Any]) -> Dict[str, An
     result = package_to_session(package_payload)
     if not result.get("ok"):
         return result
-    session = create_or_normalize_session(_safe_dict(result.get("session")))
+    session = restore_map_state_from_package(_safe_dict(result.get("session")), package_payload)
+    session = create_or_normalize_session(session)
     assert_session_integrity(session)
     return {"ok": True, "session": session}
