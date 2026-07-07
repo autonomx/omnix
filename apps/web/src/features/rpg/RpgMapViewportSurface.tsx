@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react';
-import type { RpgMapDefinition, RpgMapObjectDefinition, RpgMapOverlay } from '../../api/rpgMapClient';
+import type { RpgMapDefinition, RpgMapOverlay } from '../../api/rpgMapClient';
+import { RpgMapObjectLayer, RpgMapObjectTooltip } from './RpgMapObjectInteractions';
 import {
   RPG_MAP_MAX_ZOOM,
   RPG_MAP_MIN_ZOOM,
@@ -15,17 +16,6 @@ import {
 } from './rpgMapViewport';
 import './RpgMapViewportSurface.css';
 
-const LAYER_PRIORITY: Record<string, number> = {
-  background: 0,
-  terrain: 10,
-  routes: 20,
-  ground_props: 30,
-  structures: 40,
-  markers: 50,
-  labels: 60,
-  fog: 70,
-  interaction: 80,
-};
 const viewportCache = new Map<string, RpgMapViewportState>();
 
 interface PointerPoint {
@@ -39,16 +29,34 @@ interface PinchStart {
   viewport: RpgMapViewportState;
 }
 
-export function RpgMapViewportSurface({ definition, overlay }: { definition: RpgMapDefinition; overlay: RpgMapOverlay }) {
+interface RpgMapViewportSurfaceProps {
+  activeObjectId: string | null;
+  definition: RpgMapDefinition;
+  onActiveObjectChange: (objectId: string | null) => void;
+  onSelectObject: (objectId: string) => void;
+  overlay: RpgMapOverlay;
+  selectedObjectId: string | null;
+}
+
+export function RpgMapViewportSurface({
+  activeObjectId,
+  definition,
+  onActiveObjectChange,
+  onSelectObject,
+  overlay,
+  selectedObjectId,
+}: RpgMapViewportSurfaceProps) {
   const { x, y, width, height } = definition.bounds;
   const [viewport, setViewport] = useState<RpgMapViewportState>(() => viewportCache.get(definition.map_id) ?? fitRpgMapViewport());
   const [dragging, setDragging] = useState(false);
   const pointersRef = useRef(new Map<number, PointerPoint>());
   const lastPointRef = useRef<PointerPoint | null>(null);
   const pinchRef = useRef<PinchStart | null>(null);
-  const objects = [...definition.objects].sort(compareObjects);
-  const visibleIds = new Set(overlay.visible_object_ids);
+  const visibleIds = overlay.availability === 'ready'
+    ? new Set(overlay.visible_object_ids)
+    : new Set(definition.objects.map((item) => item.id));
   const player = overlay.markers.find((marker) => marker.kind === 'player');
+  const activeObject = definition.objects.find((item) => item.id === activeObjectId) ?? null;
 
   useEffect(() => {
     setViewport(viewportCache.get(definition.map_id) ?? fitRpgMapViewport());
@@ -84,6 +92,7 @@ export function RpgMapViewportSurface({ definition, overlay }: { definition: Rpg
   };
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (isObjectInteractionTarget(event.target)) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     setDragging(true);
@@ -183,9 +192,14 @@ export function RpgMapViewportSurface({ definition, overlay }: { definition: Rpg
           </defs>
           <g data-map-viewport="true" transform={rpgMapViewportTransform(viewport)}>
             <rect x={x} y={y} width={width} height={height} fill="url(#rpg-map-parchment-grid)" />
-            <g data-map-layer="structures">
-              {objects.map((item) => <MapObjectShape item={item} key={item.id} visible={overlay.availability !== 'ready' || visibleIds.has(item.id)} />)}
-            </g>
+            <RpgMapObjectLayer
+              activeObjectId={activeObjectId}
+              objects={definition.objects}
+              onActiveObjectChange={onActiveObjectChange}
+              onSelectObject={onSelectObject}
+              selectedObjectId={selectedObjectId}
+              visibleObjectIds={visibleIds}
+            />
             {overlay.availability === 'ready' && player ? (
               <g className="rpg-map-player-marker" data-map-layer="markers" transform={`translate(${player.x} ${player.y})`}>
                 <circle r="92" />
@@ -194,28 +208,10 @@ export function RpgMapViewportSurface({ definition, overlay }: { definition: Rpg
             ) : null}
           </g>
         </svg>
+        <RpgMapObjectTooltip definition={definition} item={activeObject} viewport={viewport} />
       </div>
     </div>
   );
-}
-
-function MapObjectShape({ item, visible }: { item: RpgMapObjectDefinition; visible: boolean }) {
-  const spriteWidth = item.sprite?.width ?? 480;
-  const spriteHeight = item.sprite?.height ?? 360;
-  return (
-    <g aria-label={item.label || item.id} className={`rpg-map-object rpg-map-object-${item.kind}${visible ? '' : ' rpg-map-object-hidden'}`} data-map-object-id={item.id} filter="url(#rpg-map-object-shadow)" transform={`translate(${item.x} ${item.y})`}>
-      <rect height={spriteHeight} rx={Math.min(90, spriteWidth * 0.12)} width={spriteWidth} x={-spriteWidth / 2} y={-spriteHeight} />
-      <path d={`M${-spriteWidth / 2} ${-spriteHeight} L0 ${-spriteHeight - 170} L${spriteWidth / 2} ${-spriteHeight} Z`} />
-      <text y={90}>{item.label || item.location_id || item.id}</text>
-    </g>
-  );
-}
-
-function compareObjects(left: RpgMapObjectDefinition, right: RpgMapObjectDefinition): number {
-  return (LAYER_PRIORITY[left.render_order.layer] ?? 100) - (LAYER_PRIORITY[right.render_order.layer] ?? 100)
-    || left.render_order.sort_y - right.render_order.sort_y
-    || left.render_order.offset - right.render_order.offset
-    || left.id.localeCompare(right.id);
 }
 
 function createPinchStart(pointers: Map<number, PointerPoint>, viewport: RpgMapViewportState): PinchStart | null {
@@ -230,4 +226,8 @@ function pinchMetrics(pointers: Map<number, PointerPoint>): Omit<PinchStart, 'vi
     distance: Math.hypot(second.x - first.x, second.y - first.y),
     midpoint: { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 },
   };
+}
+
+function isObjectInteractionTarget(target: EventTarget): boolean {
+  return target instanceof Element && Boolean(target.closest('[data-map-object-id]'));
 }
