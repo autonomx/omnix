@@ -5,6 +5,8 @@ import time
 from typing import Callable
 
 from app.research.evidence import prepare_evidence_context_items
+from app.research.extraction import ReadablePageExtractor
+from app.research.policy import ResearchPolicy, research_policy_from_env
 from app.research.quick_search import QuickSearchService
 
 from .models import AssistantContextBuildResult, AssistantContextChatRequest, AssistantContextItem
@@ -21,17 +23,35 @@ class AssistantContextService:
         desktop_vision_factory: Callable[[], DesktopVisionClient] = DesktopVisionClient,
     ) -> None:
         self.web_search_factory = web_search_factory
-        self.quick_search_factory = quick_search_factory or self._default_quick_search_factory
+        self.quick_search_factory = quick_search_factory
         self.desktop_vision_factory = desktop_vision_factory
 
-    def _default_quick_search_factory(self) -> QuickSearchService:
+    def _quick_search_for(self, request: AssistantContextChatRequest) -> QuickSearchService:
+        if self.quick_search_factory is not None:
+            return self.quick_search_factory()
+        policy = (
+            ResearchPolicy(**request.internal_research_policy)
+            if request.internal_research_policy
+            else research_policy_from_env()
+        )
+
         def create_client(timeout_seconds: float) -> WebSearchClient:
             try:
-                return self.web_search_factory(timeout_seconds=timeout_seconds)
+                return self.web_search_factory(
+                    provider=request.internal_research_provider,
+                    timeout_seconds=timeout_seconds,
+                )
             except TypeError:
-                return self.web_search_factory()
+                try:
+                    return self.web_search_factory(timeout_seconds=timeout_seconds)
+                except TypeError:
+                    return self.web_search_factory()
 
-        return QuickSearchService(client_factory=create_client)
+        return QuickSearchService(
+            client_factory=create_client,
+            research_policy=policy,
+            extractor_factory=lambda: ReadablePageExtractor(research_policy=policy),
+        )
 
     def build(self, request: AssistantContextChatRequest) -> AssistantContextBuildResult:
         items: list[AssistantContextItem] = []
@@ -45,6 +65,7 @@ class AssistantContextService:
             "web_research_mode": request.web_research_mode,
             "legacy_web_search_mode": request.legacy_web_search_mode,
             "web_search_requested": request.web_search_requested,
+            "research_provider": request.internal_research_provider,
             "desktop_requested": desktop_requested,
             "desktop_capture_mode": request.desktop_capture_mode,
             "desktop_history_frames": len(request.desktop_history_timestamps),
@@ -57,7 +78,7 @@ class AssistantContextService:
             search_needed = request.web_search_requested
 
         if search_needed:
-            execution = self.quick_search_factory().search(
+            execution = self._quick_search_for(request).search(
                 request.content,
                 request.web_search_max_results,
                 identity=request.internal_research_identity or "anonymous",
