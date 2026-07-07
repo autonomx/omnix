@@ -1,0 +1,125 @@
+.rpg-map-object-hitbox {
+  cursor: pointer;
+  fill: transparent;
+  pointer-events: all;
+  stroke: transparent;
+  stroke-width: 16;
+}
+
+.rpg-map-object-footprint {
+  fill: rgba(35, 27, 16, 0.08);
+  pointer-events: none;
+  stroke: rgba(35, 27, 16, 0.12);
+  stroke-width: 8;
+}
+
+.rpg-map-object-active > g rect,
+.rpg-map-object:focus-visible > g rect {
+  stroke: #f2c75d;
+  stroke-width: 28;
+}
+
+.rpg-map-object-selected > g rect,
+.rpg-map-object-selected > g path {
+  filter: brightness(1.2);
+  stroke: #fff0a5;
+}
+
+.rpg-map-object:focus-visible {
+  outline: none;
+}
+
+.rpg-map-object-tooltip {
+  background: rgba(20, 17, 13, 0.96);
+  border: 1px solid rgba(244, 211, 127, 0.45);
+  border-radius: 0.65rem;
+  box-shadow: 0 0.8rem 2rem rgba(0, 0, 0, 0.38);
+  display: grid;
+  gap: 0.18rem;
+  left: var(--rpg-map-tooltip-left);
+  max-width: min(18rem, 72%);
+  padding: 0.65rem 0.75rem;
+  pointer-events: none;
+  position: absolute;
+  top: var(--rpg-map-tooltip-top);
+  transform: translate(-50%, calc(-100% - 0.55rem));
+  z-index: 5;
+}
+
+.rpg-map-object-tooltip span,
+.rpg-map-object-tooltip small {
+  color: var(--mantine-color-dimmed, #a7a7a7);
+}
+
+.rpg-map-selected-panel {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(244, 211, 127, 0.2);
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+}
+
+.rpg-map-selected-panel h3,
+.rpg-map-selected-panel p {
+  margin: 0.12rem 0;
+}
+
+.rpg-map-selected-panel small {
+  color: var(--mantine-color-dimmed, #a7a7a7);
+}
+
+.rpg-map-object-tags,
+.rpg-map-capability-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rpg-map-object-tags span,
+.rpg-map-capability-list span {
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.rpg-map-capability-enabled {
+  border-color: rgba(121, 210, 139, 0.35) !important;
+}
+
+.rpg-map-capability-disabled {
+  color: var(--mantine-color-dimmed, #a7a7a7);
+  opacity: 0.72;
+}
+
+.rpg-map-accessible-list ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.rpg-map-accessible-list button {
+  background: transparent;
+  border: 0;
+  border-radius: 0.4rem;
+  color: var(--mantine-color-dimmed, #a7a7a7);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.18rem 0.28rem;
+  text-align: left;
+}
+
+.rpg-map-accessible-list button:hover,
+.rpg-map-accessible-list button:focus-visible,
+.rpg-map-object-list-active {
+  background: rgba(244, 211, 127, 0.1) !important;
+  color: inherit !important;
+  outline: 1px solid rgba(244, 211, 127, 0.35);
+}
+
+.rpg-map-accessible-list button[aria-pressed='true'] {
+  color: #f2d57f;
+  font-weight: 700;
+}
