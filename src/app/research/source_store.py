@@ -8,12 +8,11 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, Field
 
-from app.assistant_context.models import AssistantContextItem
 from app.runtime_paths import resources_data_root
 
 from .contracts import ResearchSource, ResearchSourceSnapshot
@@ -40,7 +39,7 @@ class RecordedResearchSources(BaseModel):
     manifest: ResearchSourceManifest
     sources: list[ResearchSource] = Field(default_factory=list)
     snapshots: list[ResearchSourceSnapshot] = Field(default_factory=list)
-    items: list[AssistantContextItem] = Field(default_factory=list)
+    items: list[Any] = Field(default_factory=list)
 
 
 def canonicalize_source_url(value: str | None) -> str | None:
@@ -89,14 +88,14 @@ class ResearchSourceStore:
         self,
         query: str,
         provider: str,
-        items: list[AssistantContextItem],
+        items: list[Any],
     ) -> RecordedResearchSources:
         now = self.clock()
         query_id = f"query:{_digest(' '.join(query.split()).lower())[:20]}"
         manifest_id = f"manifest:{self.id_factory()}"
         sources: list[ResearchSource] = []
         snapshots: list[ResearchSourceSnapshot] = []
-        recorded_items: list[AssistantContextItem] = []
+        recorded_items: list[Any] = []
         seen_sources: set[str] = set()
 
         with self._lock:
@@ -238,7 +237,7 @@ class ResearchSourceStore:
 
 def stable_source_record_id(
     provider: str,
-    item: AssistantContextItem,
+    item: Any,
     *,
     canonical_url: str | None = None,
 ) -> str:
