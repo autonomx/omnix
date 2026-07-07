@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from PIL import Image
+import pytest
+
+Image = pytest.importorskip("PIL.Image")
 
 from app.image.providers import flux_klein_provider as flux_module
 from app.image.providers.flux_klein_provider import FluxKleinImageProvider
