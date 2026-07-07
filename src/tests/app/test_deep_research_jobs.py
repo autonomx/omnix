@@ -21,11 +21,33 @@ from app.research.adversarial_gate import (
 )
 from app.research.executor import ResearchExecutionCheckpoint
 from app.research.planner import ResearchOperation, ResearchPlan
+from app.research.policy import ResearchPolicy
+from app.research.release_policy import ResearchReleasePolicy
+from app.research.settings import ResearchRuntimeSettings
 
 
 class ContextServiceMustNotRun:
     def build(self, request):
         raise AssertionError("Deep Research must not build synchronous assistant context")
+
+
+def enabled_research_settings() -> ResearchRuntimeSettings:
+    return ResearchRuntimeSettings(
+        provider="duckduckgo",
+        deep_enabled=True,
+        policy=ResearchPolicy(),
+    )
+
+
+def register_test_routes(app, chat_store, job_store) -> None:
+    register_assistant_context_routes(
+        app,
+        chat_store_factory=lambda: chat_store,
+        job_store_factory=lambda: job_store,
+        context_service_factory=ContextServiceMustNotRun,
+        settings_factory=enabled_research_settings,
+        release_policy_factory=ResearchReleasePolicy,
+    )
 
 
 def test_deep_research_route_returns_user_turn_and_queued_job_before_generation(
@@ -37,12 +59,7 @@ def test_deep_research_route_returns_user_turn_and_queued_job_before_generation(
     job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
     session = chat_store.create_session(CreateChatSessionRequest(title="Deep research"))
     app = FastAPI()
-    register_assistant_context_routes(
-        app,
-        chat_store_factory=lambda: chat_store,
-        job_store_factory=lambda: job_store,
-        context_service_factory=ContextServiceMustNotRun,
-    )
+    register_test_routes(app, chat_store, job_store)
     response = TestClient(app).post(
         f"/api/assistant/context/chat/sessions/{session.id}/messages",
         json={"content": "Compare the current options", "web_research_mode": "deep"},
@@ -71,12 +88,7 @@ def test_deep_research_executor_persists_partial_message_and_completes_shared_jo
     job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
     session = chat_store.create_session(CreateChatSessionRequest(title="Deep research"))
     app = FastAPI()
-    register_assistant_context_routes(
-        app,
-        chat_store_factory=lambda: chat_store,
-        job_store_factory=lambda: job_store,
-        context_service_factory=ContextServiceMustNotRun,
-    )
+    register_test_routes(app, chat_store, job_store)
     response = TestClient(app).post(
         f"/api/assistant/context/chat/sessions/{session.id}/messages",
         json={"content": "Research this", "web_research_mode": "deep"},
@@ -113,12 +125,7 @@ def test_research_checkpoint_round_trips_on_job_stage(tmp_path, monkeypatch) -> 
     job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
     session = chat_store.create_session(CreateChatSessionRequest(title="Checkpoint research"))
     app = FastAPI()
-    register_assistant_context_routes(
-        app,
-        chat_store_factory=lambda: chat_store,
-        job_store_factory=lambda: job_store,
-        context_service_factory=ContextServiceMustNotRun,
-    )
+    register_test_routes(app, chat_store, job_store)
     response = TestClient(app).post(
         f"/api/assistant/context/chat/sessions/{session.id}/messages",
         json={"content": "Research this", "web_research_mode": "deep"},
@@ -154,12 +161,7 @@ def test_deep_research_executor_acknowledges_cancellation(tmp_path, monkeypatch)
     job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
     session = chat_store.create_session(CreateChatSessionRequest(title="Cancel research"))
     app = FastAPI()
-    register_assistant_context_routes(
-        app,
-        chat_store_factory=lambda: chat_store,
-        job_store_factory=lambda: job_store,
-        context_service_factory=ContextServiceMustNotRun,
-    )
+    register_test_routes(app, chat_store, job_store)
     response = TestClient(app).post(
         f"/api/assistant/context/chat/sessions/{session.id}/messages",
         json={"content": "Research this", "web_research_mode": "deep"},
