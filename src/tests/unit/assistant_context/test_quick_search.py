@@ -32,7 +32,11 @@ def test_quick_search_uses_one_logical_query_and_retries_one_transient_failure()
         timeouts.append(timeout_seconds)
         return FakeSearchClient("brave", outcomes)
 
-    result = QuickSearchService(client_factory=factory, deadline_seconds=8).search("latest Omnix", 5)
+    result = QuickSearchService(
+        client_factory=factory,
+        source_store_factory=None,
+        deadline_seconds=8,
+    ).search("latest Omnix", 5)
 
     assert len(result.items) == 1
     assert result.diagnostics["logical_queries"] == 1
@@ -51,7 +55,9 @@ def test_quick_search_does_not_retry_permanent_configuration_failure() -> None:
         calls += 1
         return FakeSearchClient("brave", outcomes)
 
-    result = QuickSearchService(client_factory=factory).search("current release", 5)
+    result = QuickSearchService(client_factory=factory, source_store_factory=None).search(
+        "current release", 5
+    )
 
     assert calls == 1
     assert result.items == []
@@ -61,7 +67,8 @@ def test_quick_search_does_not_retry_permanent_configuration_failure() -> None:
 
 def test_duckduckgo_is_reported_as_limited_fallback() -> None:
     result = QuickSearchService(
-        client_factory=lambda timeout: FakeSearchClient("duckduckgo", [[]])
+        client_factory=lambda timeout: FakeSearchClient("duckduckgo", [[]]),
+        source_store_factory=None,
     ).search("niche current topic", 5)
 
     assert result.diagnostics["coverage"] == "limited reference and instant-answer fallback"
