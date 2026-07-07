@@ -9,6 +9,7 @@ from app.assistant_context.models import AssistantContextItem
 from app.assistant_context.web_search import WebSearchClient
 
 from .contracts import ResearchSource, ResearchSourceSnapshot
+from .extraction import ReadablePageExtractor
 from .source_store import ResearchSourceStore, default_research_source_store
 
 _DEFAULT_DEADLINE_SECONDS = 8.0
@@ -40,16 +41,20 @@ class QuickSearchService:
         *,
         client_factory: Callable[[float], WebSearchClient] | None = None,
         source_store_factory: Callable[[], ResearchSourceStore] | None = default_research_source_store,
+        extractor_factory: Callable[[], ReadablePageExtractor] | None = ReadablePageExtractor,
         deadline_seconds: float = _DEFAULT_DEADLINE_SECONDS,
         max_transport_attempts: int = _MAX_TRANSPORT_ATTEMPTS,
+        max_extracts: int = 2,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self.client_factory = client_factory or (
             lambda timeout_seconds: WebSearchClient(timeout_seconds=timeout_seconds)
         )
         self.source_store_factory = source_store_factory
+        self.extractor_factory = extractor_factory
         self.deadline_seconds = max(0.1, float(deadline_seconds))
         self.max_transport_attempts = max(1, min(2, int(max_transport_attempts)))
+        self.max_extracts = max(0, min(3, int(max_extracts)))
         self.monotonic = monotonic
 
     def search(self, query: str, max_results: int = 5) -> QuickSearchExecution:
@@ -70,12 +75,10 @@ class QuickSearchService:
         for attempt in range(1, self.max_transport_attempts + 1):
             remaining = self.deadline_seconds - (self.monotonic() - started)
             if remaining <= 0:
-                warnings.append(
-                    {
-                        "code": "quick_search_deadline_exhausted",
-                        "message": "Quick Search reached its total deadline.",
-                    }
-                )
+                warnings.append({
+                    "code": "quick_search_deadline_exhausted",
+                    "message": "Quick Search reached its total deadline.",
+                })
                 break
             client = self.client_factory(remaining)
             provider = str(getattr(client, "provider", "") or "unknown").strip().lower()
@@ -88,13 +91,7 @@ class QuickSearchService:
                 diagnostics["results"] = len(items)
                 diagnostics["elapsed_ms"] = round((self.monotonic() - started) * 1000)
                 self._append_provider_warnings(provider, items, warnings)
-                return self._record_sources(
-                    clean_query,
-                    provider,
-                    items,
-                    diagnostics=diagnostics,
-                    warnings=warnings,
-                )
+                return self._record_sources(clean_query, provider, items, diagnostics, warnings)
             except Exception as exc:  # provider boundary
                 last_error = exc
                 if attempt >= self.max_transport_attempts or not is_transient_search_error(exc):
@@ -104,12 +101,10 @@ class QuickSearchService:
         diagnostics["elapsed_ms"] = round((self.monotonic() - started) * 1000)
         if last_error is not None:
             diagnostics["error"] = f"{type(last_error).__name__}: {last_error}"
-        warnings.append(
-            {
-                "code": "quick_search_unavailable",
-                "message": "Fresh web context was unavailable; the chat turn can continue without it.",
-            }
-        )
+        warnings.append({
+            "code": "quick_search_unavailable",
+            "message": "Fresh web context was unavailable; the chat turn can continue without it.",
+        })
         return QuickSearchExecution(diagnostics=diagnostics, warnings=warnings)
 
     def _record_sources(
@@ -117,32 +112,67 @@ class QuickSearchService:
         query: str,
         provider: str,
         items: list[AssistantContextItem],
-        *,
         diagnostics: dict[str, object],
         warnings: list[dict[str, object]],
     ) -> QuickSearchExecution:
         if not items or self.source_store_factory is None:
             return QuickSearchExecution(items=items, diagnostics=diagnostics, warnings=warnings)
+        store = self.source_store_factory()
         try:
-            recorded = self.source_store_factory().record_quick_search(query, provider, items)
+            recorded = store.record_quick_search(query, provider, items)
         except Exception as exc:
             diagnostics["source_manifest_status"] = "failed"
             diagnostics["source_manifest_error"] = f"{type(exc).__name__}: {exc}"
-            warnings.append(
-                {
-                    "code": "source_manifest_unavailable",
-                    "message": "Search results were usable, but their durable source manifest could not be saved.",
-                }
-            )
+            warnings.append({
+                "code": "source_manifest_unavailable",
+                "message": "Search results were usable, but their durable source manifest could not be saved.",
+            })
             return QuickSearchExecution(items=items, diagnostics=diagnostics, warnings=warnings)
-        diagnostics["source_manifest_status"] = "completed"
-        diagnostics["source_manifest_id"] = recorded.manifest.manifest_id
-        diagnostics["source_count"] = len(recorded.sources)
-        diagnostics["snapshot_count"] = len(recorded.snapshots)
+
+        snapshots = list(recorded.snapshots)
+        extracted = 0
+        extraction_failures = 0
+        if self.extractor_factory is not None and self.max_extracts:
+            extractor = self.extractor_factory()
+            for index, (item, snapshot) in enumerate(zip(recorded.items, snapshots, strict=False)):
+                if extracted >= self.max_extracts or not item.url:
+                    continue
+                try:
+                    page = extractor.extract(item.url)
+                    updated = store.save_extraction(snapshot.snapshot_id, page)
+                    snapshots[index] = updated
+                    item.metadata.update({
+                        "extraction_status": "completed",
+                        "extractor_version": page.extractor_version,
+                        "content_hash": page.content_hash,
+                        "extracted_text_ref": updated.extracted_text_ref,
+                        "extracted_title": page.title,
+                        "extracted_excerpt": page.text[:4000],
+                    })
+                    extracted += 1
+                except Exception as exc:
+                    snapshots[index] = store.mark_extraction_failed(snapshot.snapshot_id) or snapshot
+                    item.metadata["extraction_status"] = "failed"
+                    item.metadata["extraction_error"] = f"{type(exc).__name__}: {exc}"
+                    extraction_failures += 1
+            if extraction_failures:
+                warnings.append({
+                    "code": "page_extraction_partial",
+                    "message": "Some search results could not be safely extracted; snippets remain available.",
+                    "details": {"failures": extraction_failures},
+                })
+        diagnostics.update({
+            "source_manifest_status": "completed",
+            "source_manifest_id": recorded.manifest.manifest_id,
+            "source_count": len(recorded.sources),
+            "snapshot_count": len(snapshots),
+            "extracted_pages": extracted,
+            "extraction_failures": extraction_failures,
+        })
         return QuickSearchExecution(
             items=recorded.items,
             sources=recorded.sources,
-            snapshots=recorded.snapshots,
+            snapshots=snapshots,
             source_manifest_id=recorded.manifest.manifest_id,
             diagnostics=diagnostics,
             warnings=warnings,
@@ -155,19 +185,15 @@ class QuickSearchService:
         warnings: list[dict[str, object]],
     ) -> None:
         if provider == "duckduckgo":
-            warnings.append(
-                {
-                    "code": "limited_search_provider",
-                    "message": "DuckDuckGo Instant Answer provides limited reference coverage.",
-                }
-            )
+            warnings.append({
+                "code": "limited_search_provider",
+                "message": "DuckDuckGo Instant Answer provides limited reference coverage.",
+            })
         if not items:
-            warnings.append(
-                {
-                    "code": "quick_search_empty",
-                    "message": "The configured provider returned no usable results; this does not prove the web has no answer.",
-                }
-            )
+            warnings.append({
+                "code": "quick_search_empty",
+                "message": "The configured provider returned no usable results; this does not prove the web has no answer.",
+            })
 
 
 def provider_coverage(provider: str) -> str:
@@ -177,25 +203,13 @@ def provider_coverage(provider: str) -> str:
 def is_transient_search_error(error: Exception) -> bool:
     text = f"{type(error).__name__}: {error}".lower()
     permanent_markers = (
-        "401",
-        "403",
-        "authentication",
-        "api key is required",
-        "unsupported provider",
-        "policy",
-        "malformed",
+        "401", "403", "authentication", "api key is required",
+        "unsupported provider", "policy", "malformed",
     )
     if any(marker in text for marker in permanent_markers):
         return False
     transient_markers = (
-        "timeout",
-        "timed out",
-        "temporar",
-        "connection",
-        "429",
-        "500",
-        "502",
-        "503",
-        "504",
+        "timeout", "timed out", "temporar", "connection",
+        "429", "500", "502", "503", "504",
     )
     return any(marker in text for marker in transient_markers)
