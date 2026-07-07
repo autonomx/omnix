@@ -163,12 +163,14 @@ export interface RpgMapOverlayResponse {
 export async function getRpgMapDefinition(
   mapId: string,
   knownDefinitionRevision?: string,
+  sessionId?: string,
 ): Promise<RpgMapDefinitionResponse> {
-  const query = knownDefinitionRevision
-    ? `?known_definition_revision=${encodeURIComponent(knownDefinitionRevision)}`
-    : '';
+  const query = new URLSearchParams();
+  if (knownDefinitionRevision) query.set('known_definition_revision', knownDefinitionRevision);
+  if (sessionId) query.set('session_id', sessionId);
+  const suffix = query.size ? `?${query.toString()}` : '';
   return omnixApiClient.get<RpgMapDefinitionResponse>(
-    `/api/rpg/maps/${encodeURIComponent(mapId)}${query}`,
+    `/api/rpg/maps/${encodeURIComponent(mapId)}${suffix}`,
   );
 }
 
