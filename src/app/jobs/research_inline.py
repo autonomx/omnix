@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import threading
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -36,6 +37,15 @@ class DeepResearchWorkflowResult(BaseModel):
     source_manifest_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     output: dict[str, Any] = Field(default_factory=dict)
+
+
+class _IdentityBoundQuickSearch:
+    def __init__(self, service: Any, identity: str) -> None:
+        self.service = service
+        self.identity = identity
+
+    def search(self, query: str, max_results: int) -> Any:
+        return self.service.search(query, max_results, identity=self.identity)
 
 
 def install_research_job_execution(sqlite_job_store_cls: Any) -> None:
@@ -304,7 +314,35 @@ def _default_workflow(
     checkpoint: ResearchExecutionCheckpoint | None = None,
     save_checkpoint: Callable[[str, ResearchExecutionCheckpoint], None] | None = None,
 ) -> DeepResearchWorkflowResult:
-    execution = DeepResearchExecutor().execute(
+    from app.assistant_context.web_search import WebSearchClient
+    from app.research.extraction import ReadablePageExtractor
+    from app.research.planner import ResearchPlanner
+    from app.research.policy import research_policy_from_env
+    from app.research.quick_search import QuickSearchService
+
+    policy = replace(
+        research_policy_from_env(),
+        search_cache_ttl_seconds=request.search_cache_ttl_seconds,
+        extraction_cache_ttl_seconds=request.extraction_cache_ttl_seconds,
+    )
+
+    def quick_search_factory(remaining_sources: int, remaining_extracts: int) -> Any:
+        service = QuickSearchService(
+            client_factory=lambda timeout: WebSearchClient(
+                provider=request.research_provider,
+                timeout_seconds=timeout,
+            ),
+            research_policy=policy,
+            extractor_factory=lambda: ReadablePageExtractor(research_policy=policy),
+            max_extracts=min(3, remaining_extracts),
+        )
+        return _IdentityBoundQuickSearch(service, request.session_id)
+
+    execution = DeepResearchExecutor(
+        planner=ResearchPlanner(prefer_hermes=request.hermes_planner_enabled),
+        quick_search_factory=quick_search_factory,
+        extractor_factory=lambda: ReadablePageExtractor(research_policy=policy),
+    ).execute(
         request,
         progress,
         canceled,
@@ -335,6 +373,13 @@ def _default_workflow(
         research_status=research_status,
         source_manifest_id=execution.source_manifest_id,
         metadata={
+            "research_provider": request.research_provider,
+            "research_budget": {
+                "max_steps": request.max_steps,
+                "max_queries": request.max_queries,
+                "max_sources": request.max_sources,
+                "max_extracts": request.max_extracts,
+            },
             "planner_backend": execution.planner_backend,
             "synthesis_backend": synthesis.backend,
             "synthesis_validation": synthesis.validation.model_dump(mode="json"),
@@ -347,6 +392,13 @@ def _default_workflow(
         },
         output={
             "objective": execution.objective,
+            "research_provider": request.research_provider,
+            "research_budget": {
+                "max_steps": request.max_steps,
+                "max_queries": request.max_queries,
+                "max_sources": request.max_sources,
+                "max_extracts": request.max_extracts,
+            },
             "planner_backend": execution.planner_backend,
             "synthesis_backend": synthesis.backend,
             "synthesis_validation": synthesis.validation.model_dump(mode="json"),
