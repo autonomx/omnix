@@ -11,6 +11,7 @@ from .image_reference_routes import install_image_reference_route_hook
 from .image_workspace_routes import install_image_workspace_route_hook
 from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
 from .realtime_routes import install_realtime_route_hook
+from .research_mode_routes import install_research_mode_route_hook
 from .rpg_session_routes import install_rpg_session_route_hook
 from .rpg_turn_job_mirror import install_rpg_turn_job_mirror_hook
 from .tts_pcm_websocket import install_tts_pcm_websocket_hook
@@ -20,6 +21,7 @@ from .voice_job_summary_routes import install_voice_job_summary_hook
 __all__ = ["app", "create_gateway_app"]
 
 install_assistant_context_route_hook()
+install_research_mode_route_hook()
 install_rpg_session_route_hook()
 install_rpg_turn_job_mirror_hook()
 install_audiobook_websocket_hook()
