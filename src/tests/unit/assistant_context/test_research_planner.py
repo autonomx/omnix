@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
 from app.assist_core.hermes_client import HermesSidecarClient
+import app.research.planner as planner_module
 from app.research.planner import (
     ResearchOperation,
     ResearchPlan,
@@ -90,6 +92,23 @@ def test_hermes_research_prompt_contains_no_general_tool_catalog(monkeypatch) ->
     assert "send_email" not in prompt
     assert "gmail" not in prompt.lower()
     assert "hermes_catalog" not in prompt
+
+
+def test_default_hermes_client_uses_runtime_config(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.assist_core.hermes_status.hermes_runtime_config",
+        lambda: SimpleNamespace(
+            base_url="http://127.0.0.1:9000",
+            timeout_seconds=17.0,
+        ),
+    )
+    monkeypatch.setenv("HERMES_API_KEY", "secret")
+
+    client = planner_module._default_hermes_client()
+
+    assert client.base_url == "http://127.0.0.1:9000"
+    assert client.timeout == 17.0
+    assert client.api_key == "secret"
 
 
 def test_invalid_hermes_plan_falls_back_to_local_planner() -> None:
