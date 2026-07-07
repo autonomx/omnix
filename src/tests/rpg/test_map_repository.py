@@ -4,17 +4,25 @@ import pytest
 
 from app.rpg.map_contracts import MapContractError, MapDefinition
 from app.rpg.map_fixtures import FROST_HAVEN_MAP_ID, NORTHERN_PASS_MAP_ID, starter_map_definitions
+from app.rpg.map_hierarchy_fixtures import FROSTED_FLAGON_INTERIOR_MAP_ID
 from app.rpg.map_repository import MapDefinitionNotFound, MapDefinitionRepository, default_map_repository
 
 
-def test_starter_repository_contains_region_and_settlement() -> None:
+def test_starter_repository_contains_region_settlement_and_interior() -> None:
     repository = default_map_repository()
 
     assert [item.map_id for item in repository.list()] == [
+        FROSTED_FLAGON_INTERIOR_MAP_ID,
         NORTHERN_PASS_MAP_ID,
         FROST_HAVEN_MAP_ID,
     ]
-    assert repository.get(FROST_HAVEN_MAP_ID).parent_map_id == NORTHERN_PASS_MAP_ID
+    settlement = repository.get(FROST_HAVEN_MAP_ID)
+    interior = repository.get(FROSTED_FLAGON_INTERIOR_MAP_ID)
+    assert settlement.parent_map_id == NORTHERN_PASS_MAP_ID
+    assert interior.parent_map_id == FROST_HAVEN_MAP_ID
+    inn = next(item for item in settlement.objects if item.id == "building:frost_haven_inn")
+    assert inn.child_map_id == FROSTED_FLAGON_INTERIOR_MAP_ID
+    assert any(item.child_map_id == FROST_HAVEN_MAP_ID for item in interior.objects)
 
 
 def test_starter_settlement_is_revisioned_and_has_vertical_slice_content() -> None:
