@@ -37,97 +37,71 @@ def register_rpg_map_routes(app: FastAPI) -> None:
         try:
             definition = default_map_repository().get(map_id)
         except MapDefinitionNotFound as exc:
-            raise HTTPException(
-                status_code=404,
-                detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id},
-            ) from exc
+            raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
         etag = _etag(definition.definition_revision)
         headers = {"Cache-Control": MAP_DEFINITION_CACHE_CONTROL, "ETag": etag}
         if request.headers.get("if-none-match") == etag:
             return Response(status_code=304, headers=headers)
         include_definition = known_definition_revision != definition.definition_revision
-        return JSONResponse(
-            {
-                "ok": True,
-                "map_id": map_id,
-                "definition_revision": definition.definition_revision,
-                "definition": _payload(definition) if include_definition else None,
-            },
-            headers=headers,
-        )
+        return JSONResponse({
+            "ok": True,
+            "map_id": map_id,
+            "definition_revision": definition.definition_revision,
+            "definition": _payload(definition) if include_definition else None,
+        }, headers=headers)
 
-    @app.get(
-        "/api/rpg/sessions/{session_id}/maps/{map_id}/overlay",
-        tags=["rpg-map"],
-        include_in_schema=False,
-    )
+    @app.get("/api/rpg/sessions/{session_id}/maps/{map_id}/overlay", tags=["rpg-map"], include_in_schema=False)
     def rpg_map_overlay(session_id: str, map_id: str) -> Response:
         session = _load_session_or_404(session_id)
         definition, overlay = _definition_and_overlay(session, map_id)
         dynamic = project_dynamic_map_overlay(session, definition)
         overlay_payload = merge_dynamic_overlay_payload(_payload(overlay), dynamic)
         etag = _etag(f"{overlay.definition_revision}:{overlay.overlay_revision}:{overlay.session_turn_index}")
-        return JSONResponse(
-            {
-                "ok": True,
-                "map_id": map_id,
-                "definition_revision": overlay.definition_revision,
-                "overlay_revision": overlay.overlay_revision,
-                "session_turn_index": overlay.session_turn_index,
-                "overlay": overlay_payload,
-            },
-            headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL, "ETag": etag},
-        )
+        return JSONResponse({
+            "ok": True,
+            "map_id": map_id,
+            "definition_revision": overlay.definition_revision,
+            "overlay_revision": overlay.overlay_revision,
+            "session_turn_index": overlay.session_turn_index,
+            "overlay": overlay_payload,
+        }, headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL, "ETag": etag})
 
-    @app.post(
-        "/api/rpg/sessions/{session_id}/maps/{map_id}/map-actions",
-        tags=["rpg-map"],
-        include_in_schema=False,
-    )
+    @app.post("/api/rpg/sessions/{session_id}/maps/{map_id}/map-actions", tags=["rpg-map"], include_in_schema=False)
     async def rpg_map_action(session_id: str, map_id: str, request: Request) -> Response:
         session = _load_session_or_404(session_id)
-        raw = await request.json()
-        action_request = _map_action_request(raw)
+        action_request = _map_action_request(await request.json())
         try:
             result = apply_map_action(session, map_id, action_request)
         except MapDefinitionNotFound as exc:
-            raise HTTPException(
-                status_code=404,
-                detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id},
-            ) from exc
+            raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
         except MapActionError as exc:
             raise HTTPException(status_code=exc.status_code, detail=map_action_error_payload(exc, map_id)) from exc
 
         result_session = result.get("session")
         saved = save_session(result_session, compact=False) if isinstance(result_session, dict) else session
-        definition, overlay = _definition_and_overlay(saved, map_id)
+        active_map_id = str(result.get("map_id") or map_id)
+        definition, overlay = _definition_and_overlay(saved, active_map_id)
         dynamic = project_dynamic_map_overlay(saved, definition)
         overlay_payload = merge_dynamic_overlay_payload(_payload(overlay), dynamic)
-        return JSONResponse(
-            {
-                "ok": True,
-                "session_id": session_id,
-                "map_id": map_id,
-                "definition_revision": definition.definition_revision,
-                "overlay_revision": overlay.overlay_revision,
-                "session_turn_index": overlay.session_turn_index,
-                "idempotent": bool(result.get("idempotent")),
-                "action_result": result.get("action_result", {}),
-                "session": saved,
-                "game": saved.get("state", {}),
-                "overlay": overlay_payload,
-            },
-            headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL},
-        )
+        return JSONResponse({
+            "ok": True,
+            "session_id": session_id,
+            "map_id": active_map_id,
+            "definition_revision": definition.definition_revision,
+            "overlay_revision": overlay.overlay_revision,
+            "session_turn_index": overlay.session_turn_index,
+            "idempotent": bool(result.get("idempotent")),
+            "action_result": result.get("action_result", {}),
+            "session": saved,
+            "game": saved.get("state", {}),
+            "overlay": overlay_payload,
+        }, headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL})
 
 
 def _load_session_or_404(session_id: str) -> dict[str, Any]:
     session = load_session(session_id)
     if not session:
-        raise HTTPException(
-            status_code=404,
-            detail={"ok": False, "error": "session_not_found", "session_id": session_id},
-        )
+        raise HTTPException(status_code=404, detail={"ok": False, "error": "session_not_found", "session_id": session_id})
     return session
 
 
@@ -137,10 +111,7 @@ def _definition_and_overlay(session: dict[str, Any], map_id: str) -> tuple[Any, 
         overlay = project_session_map_overlay(session, map_id)
         return definition, overlay
     except MapDefinitionNotFound as exc:
-        raise HTTPException(
-            status_code=404,
-            detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id},
-        ) from exc
+        raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
 
 
 def _map_action_request(raw: object) -> MapActionRequest:
@@ -176,7 +147,6 @@ def _etag(value: str) -> str:
 
 def install_rpg_map_route_hook() -> None:
     """Install map routes before the gateway app is constructed."""
-
     if getattr(FastAPI, _HOOK_SENTINEL, False):
         return
     original_init: Callable[..., None] = FastAPI.__init__
