@@ -1,5 +1,9 @@
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
-import type { RpgMapDefinition, RpgMapObjectDefinition } from '../../api/rpgMapClient';
+import type {
+  RpgMapDefinition,
+  RpgMapObjectDefinition,
+  RpgMapObjectDynamicState,
+} from '../../api/rpgMapClient';
 import type { RpgMapViewportState } from './rpgMapViewport';
 
 const LAYER_PRIORITY: Record<string, number> = {
@@ -16,6 +20,8 @@ const LAYER_PRIORITY: Record<string, number> = {
 
 interface RpgMapObjectLayerProps {
   activeObjectId: string | null;
+  discoveredObjectIds: Set<string>;
+  objectStates: Map<string, RpgMapObjectDynamicState>;
   objects: RpgMapObjectDefinition[];
   onActiveObjectChange: (objectId: string | null) => void;
   onSelectObject: (objectId: string) => void;
@@ -25,6 +31,8 @@ interface RpgMapObjectLayerProps {
 
 export function RpgMapObjectLayer({
   activeObjectId,
+  discoveredObjectIds,
+  objectStates,
   objects,
   onActiveObjectChange,
   onSelectObject,
@@ -33,9 +41,10 @@ export function RpgMapObjectLayer({
 }: RpgMapObjectLayerProps) {
   return (
     <g data-map-layer="structures">
-      {[...objects].sort(compareObjects).map((item) => (
+      {[...objects].sort(compareObjects).filter((item) => discoveredObjectIds.has(item.id)).map((item) => (
         <MapObjectShape
           active={activeObjectId === item.id}
+          dynamicState={objectStates.get(item.id)}
           item={item}
           key={item.id}
           onActiveObjectChange={onActiveObjectChange}
@@ -50,15 +59,18 @@ export function RpgMapObjectLayer({
 
 export function RpgMapObjectTooltip({
   definition,
+  dynamicState,
   item,
   viewport,
 }: {
   definition: RpgMapDefinition;
+  dynamicState?: RpgMapObjectDynamicState;
   item: RpgMapObjectDefinition | null;
   viewport: RpgMapViewportState;
 }) {
   if (!item) return null;
   const position = projectMapObjectToPercent(definition, item, viewport);
+  const status = dynamicState?.status && dynamicState.status !== 'normal' ? humanize(dynamicState.status) : humanize(item.kind);
   return (
     <div
       className="rpg-map-object-tooltip"
@@ -67,8 +79,8 @@ export function RpgMapObjectTooltip({
       style={{ '--rpg-map-tooltip-left': `${position.left}%`, '--rpg-map-tooltip-top': `${position.top}%` } as CSSProperties}
     >
       <strong>{item.label || item.location_id || item.id}</strong>
-      <span>{item.description || humanize(item.kind)}</span>
-      <small>{humanize(item.kind)}</small>
+      <span>{dynamicState?.presentation_hint || item.description || humanize(item.kind)}</span>
+      <small>{status}</small>
     </div>
   );
 }
@@ -88,6 +100,7 @@ export function projectMapObjectToPercent(
 
 function MapObjectShape({
   active,
+  dynamicState,
   item,
   onActiveObjectChange,
   onSelectObject,
@@ -95,6 +108,7 @@ function MapObjectShape({
   visible,
 }: {
   active: boolean;
+  dynamicState?: RpgMapObjectDynamicState;
   item: RpgMapObjectDefinition;
   onActiveObjectChange: (objectId: string | null) => void;
   onSelectObject: (objectId: string) => void;
@@ -105,10 +119,12 @@ function MapObjectShape({
   const spriteHeight = item.sprite?.height ?? 360;
   const interactive = visible && item.kind !== 'decorative' && Boolean(item.hitbox);
   const tooltipId = `rpg-map-tooltip-${safeDomId(item.id)}`;
+  const status = dynamicState?.status ?? 'normal';
   const className = [
     'rpg-map-object',
     `rpg-map-object-${item.kind}`,
-    visible ? '' : 'rpg-map-object-hidden',
+    `rpg-map-object-status-${status}`,
+    visible ? '' : 'rpg-map-object-obscured',
     active ? 'rpg-map-object-active' : '',
     selected ? 'rpg-map-object-selected' : '',
   ].filter(Boolean).join(' ');
@@ -129,6 +145,8 @@ function MapObjectShape({
       aria-pressed={interactive ? selected : undefined}
       className={className}
       data-map-object-id={item.id}
+      data-map-object-status={status}
+      data-map-object-visible={visible ? 'true' : 'false'}
       onBlur={() => onActiveObjectChange(null)}
       onClick={select}
       onFocus={() => interactive && onActiveObjectChange(item.id)}
