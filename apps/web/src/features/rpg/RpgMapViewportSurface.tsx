@@ -11,6 +11,7 @@ import {
   RpgMapRouteLayer,
   type RpgMapLayerVisibility,
 } from './RpgMapOverlayLayers';
+import { rpgMapAssetUrl } from './rpgMapAssets';
 import {
   RPG_MAP_MAX_ZOOM,
   RPG_MAP_MIN_ZOOM,
@@ -73,6 +74,7 @@ export function RpgMapViewportSurface({
   const objectStates = new Map((overlay.object_states ?? []).map((state) => [state.object_id, state]));
   const activeObject = definition.objects.find((item) => item.id === activeObjectId) ?? null;
   const activeDynamicState = activeObject ? objectStates.get(activeObject.id) : undefined;
+  const backgroundUrl = rpgMapAssetUrl(definition.background?.asset_id);
 
   useEffect(() => {
     setViewport(viewportCache.get(definition.map_id) ?? fitRpgMapViewport());
@@ -215,6 +217,19 @@ export function RpgMapViewportSurface({
           </defs>
           <g data-map-viewport="true" transform={rpgMapViewportTransform(viewport)}>
             <rect x={x} y={y} width={width} height={height} fill="url(#rpg-map-parchment-grid)" />
+            {backgroundUrl && definition.background ? (
+              <image
+                aria-hidden="true"
+                className="rpg-map-background-asset"
+                data-map-asset-id={definition.background.asset_id}
+                height={definition.background.destination_bounds.height}
+                href={backgroundUrl}
+                preserveAspectRatio="none"
+                width={definition.background.destination_bounds.width}
+                x={definition.background.destination_bounds.x}
+                y={definition.background.destination_bounds.y}
+              />
+            ) : null}
             <RpgMapEnvironmentLayer definition={definition} environment={overlay.environment} />
             {layers.routes ? <RpgMapRouteLayer definition={definition} overlay={overlay} /> : null}
             {layers.structures ? (
