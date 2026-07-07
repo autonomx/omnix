@@ -931,3 +931,189 @@
     min-height: 7.8rem;
   }
 }
+
+:root[data-omnix-appearance='light'] .workspace-card.assistant-chat-page {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(99, 102, 241, 0.08), transparent 24rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(242, 247, 255, 0.9));
+  border-color: rgba(86, 102, 145, 0.22);
+  color: var(--omnix-text);
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-sidebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(236, 242, 252, 0.94));
+  border-color: rgba(86, 102, 145, 0.24);
+}
+
+:root[data-omnix-appearance='light'] .assistant-sidebar-nav,
+:root[data-omnix-appearance='light'] .assistant-sidebar-section {
+  background: rgba(255, 255, 255, 0.62);
+  border-color: rgba(86, 102, 145, 0.18);
+}
+
+:root[data-omnix-appearance='light'] .assistant-sidebar-nav button,
+:root[data-omnix-appearance='light'] .assistant-sidebar-list button,
+:root[data-omnix-appearance='light'] .assistant-sidebar-section header button {
+  color: var(--omnix-text);
+}
+
+:root[data-omnix-appearance='light'] .assistant-sidebar-nav button span:first-child,
+:root[data-omnix-appearance='light'] .assistant-nav-icon,
+:root[data-omnix-appearance='light'] .assistant-sidebar-list button small,
+:root[data-omnix-appearance='light'] .assistant-sidebar-list button time,
+:root[data-omnix-appearance='light'] .assistant-sidebar-empty {
+  color: var(--omnix-muted);
+}
+
+:root[data-omnix-appearance='light'] .assistant-sidebar-nav button:hover,
+:root[data-omnix-appearance='light'] .assistant-sidebar-nav button:focus-visible,
+:root[data-omnix-appearance='light'] .assistant-sidebar-nav button.active,
+:root[data-omnix-appearance='light'] .assistant-sidebar-list button:hover,
+:root[data-omnix-appearance='light'] .assistant-sidebar-list button:focus-visible,
+:root[data-omnix-appearance='light'] .assistant-sidebar-list button.active,
+:root[data-omnix-appearance='light'] .assistant-sidebar-session-row.active > button:first-child {
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.18), rgba(34, 211, 238, 0.1));
+  border-color: rgba(99, 67, 201, 0.2);
+  color: #1b2440;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-main,
+:root[data-omnix-appearance='light'] .assistant-live-card,
+:root[data-omnix-appearance='light'] .assistant-tool-sidebar-card,
+:root[data-omnix-appearance='light'] .assistant-view-panel,
+:root[data-omnix-appearance='light'] .assistant-workspace-dashboard,
+:root[data-omnix-appearance='light'] .assistant-workspace-activity {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(34, 211, 238, 0.1), transparent 24rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 255, 0.94)) !important;
+  border-color: rgba(86, 102, 145, 0.22) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 1rem 2.4rem rgba(37, 51, 86, 0.1) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-header {
+  border-bottom-color: rgba(86, 102, 145, 0.18);
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-header h2,
+:root[data-omnix-appearance='light'] .assistant-chat-bubble header strong,
+:root[data-omnix-appearance='light'] .assistant-view-panel > h2,
+:root[data-omnix-appearance='light'] .assistant-live-draft strong,
+:root[data-omnix-appearance='light'] .assistant-voice-input-indicator strong,
+:root[data-omnix-appearance='light'] .assistant-audio-devices strong,
+:root[data-omnix-appearance='light'] .assistant-settings-list dd {
+  color: var(--omnix-text);
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-bubble,
+:root[data-omnix-appearance='light'] .assistant-chat-bubble header,
+:root[data-omnix-appearance='light'] .assistant-chat-bubble time,
+:root[data-omnix-appearance='light'] .assistant-view-panel > p,
+:root[data-omnix-appearance='light'] .assistant-view-note,
+:root[data-omnix-appearance='light'] .assistant-live-draft p,
+:root[data-omnix-appearance='light'] .assistant-voice-input-indicator span,
+:root[data-omnix-appearance='light'] .assistant-audio-devices span,
+:root[data-omnix-appearance='light'] .assistant-settings-list dt {
+  color: var(--omnix-muted);
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-bubble p {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(86, 102, 145, 0.22);
+  color: #26344f;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble {
+  background: linear-gradient(135deg, rgba(117, 85, 225, 0.92), rgba(82, 124, 220, 0.9));
+  border-color: rgba(99, 67, 201, 0.26);
+  box-shadow: 0 0.8rem 1.8rem rgba(99, 67, 201, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble header,
+:root[data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble header strong,
+:root[data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble p {
+  color: #ffffff;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble p {
+  background: transparent;
+  border-color: transparent;
+}
+
+:root[data-omnix-appearance='light'] .assistant-message-actions button,
+:root[data-omnix-appearance='light'] .assistant-chat-header-actions button,
+:root[data-omnix-appearance='light'] .assistant-message-action-menu,
+:root[data-omnix-appearance='light'] .assistant-message-action-menu button,
+:root[data-omnix-appearance='light'] .assistant-live-draft,
+:root[data-omnix-appearance='light'] .assistant-voice-toggle,
+:root[data-omnix-appearance='light'] .assistant-voice-input-indicator,
+:root[data-omnix-appearance='light'] .assistant-audio-devices,
+:root[data-omnix-appearance='light'] .assistant-audio-devices div,
+:root[data-omnix-appearance='light'] .assistant-tool-connection-panel,
+:root[data-omnix-appearance='light'] .assistant-tool-action-row,
+:root[data-omnix-appearance='light'] .assistant-view-panel article,
+:root[data-omnix-appearance='light'] .assistant-tool-config-list article,
+:root[data-omnix-appearance='light'] .assistant-settings-list div {
+  background: rgba(255, 255, 255, 0.76) !important;
+  border-color: rgba(86, 102, 145, 0.2) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-composer {
+  background: linear-gradient(180deg, rgba(239, 245, 255, 0.45), rgba(235, 242, 253, 0.86));
+  border-top-color: rgba(86, 102, 145, 0.16);
+}
+
+:root[data-omnix-appearance='light'] .assistant-message-input textarea,
+:root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select select,
+:root[data-omnix-appearance='light'] .assistant-tool-oauth-form input,
+:root[data-omnix-appearance='light'] .assistant-tool-policy-select select,
+:root[data-omnix-appearance='light'] .assistant-settings-list select,
+:root[data-omnix-appearance='light'] .assistant-settings-list textarea,
+:root[data-omnix-appearance='light'] .assistant-settings-list input {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-color: rgba(86, 102, 145, 0.24) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-message-input textarea::placeholder {
+  color: #6b778d;
+}
+
+:root[data-omnix-appearance='light'] .assistant-side-panel-toggle {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(235, 242, 253, 0.88));
+  border-color: rgba(86, 102, 145, 0.2);
+}
+
+:root[data-omnix-appearance='light'] .assistant-side-panel-toggle button {
+  color: var(--omnix-muted);
+}
+
+:root[data-omnix-appearance='light'] .assistant-side-panel-toggle button:hover,
+:root[data-omnix-appearance='light'] .assistant-side-panel-toggle button:focus-visible {
+  background: rgba(124, 92, 255, 0.1);
+  border-color: rgba(99, 67, 201, 0.2);
+  color: var(--omnix-text);
+}
+
+:root[data-omnix-appearance='light'] .assistant-side-panel-toggle button.active {
+  background: linear-gradient(135deg, rgba(117, 85, 225, 0.94), rgba(20, 132, 166, 0.82));
+  border-color: rgba(99, 67, 201, 0.28);
+  color: #ffffff;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-pill,
+:root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select {
+  box-shadow: 0 0.55rem 1.2rem rgba(99, 67, 201, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select span,
+:root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select option {
+  color: #ffffff;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select option {
+  background: #ffffff;
+  color: var(--omnix-text);
+}

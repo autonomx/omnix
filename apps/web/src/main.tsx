@@ -27,6 +27,7 @@ import './features/storyteller/story-audio-enhancer';
 import './features/storyteller/story-extra-mount';
 import './features/podcast/PodcastWorkspaceLayoutFix.css';
 import './features/podcast/PodcastWorkspaceEditable.css';
+import './appearance-overrides.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {

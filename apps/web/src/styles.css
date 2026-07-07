@@ -1,40 +1,80 @@
 :root {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #070b16;
-  color: #f4f7ff;
+  background: var(--omnix-body-bg);
+  color: var(--omnix-text);
+  --omnix-body-bg: #070b16;
+  --omnix-body-surface: radial-gradient(circle at 20% 10%, rgba(93, 69, 178, 0.22), transparent 26rem), linear-gradient(135deg, #070b16 0%, #090d1a 52%, #050710 100%);
   --omnix-border: rgba(132, 148, 196, 0.18);
+  --omnix-strong-border: rgba(151, 114, 255, 0.28);
   --omnix-text: #f4f7ff;
   --omnix-muted: #aab3c8;
+  --omnix-muted-text: #aab3c8;
   --omnix-purple: #6f49dd;
   --omnix-cyan: #22d3ee;
   --omnix-success: #22c55e;
+  --omnix-main-bg: rgba(5, 8, 16, 0.7);
+  --omnix-sidebar-bg: linear-gradient(180deg, rgba(18, 25, 46, 0.96), rgba(10, 15, 29, 0.98));
+  --omnix-panel-bg: linear-gradient(180deg, rgba(23, 22, 34, 0.9), rgba(13, 12, 22, 0.86));
+  --omnix-panel-solid: rgba(15, 20, 36, 0.88);
+  --omnix-control-bg: rgba(7, 6, 13, 0.82);
+  --omnix-control-text: #f3f0ff;
+  --omnix-soft-bg: rgba(255, 255, 255, 0.04);
+  --omnix-topbar-bg: linear-gradient(180deg, rgba(18, 16, 31, 0.96), rgba(11, 10, 21, 0.98));
+  --omnix-topbar-status-bg: rgba(124, 58, 237, 0.24);
+  --omnix-topbar-status-text: #e7ddff;
+  --omnix-brand-core-bg: #10182d;
   --omnix-topbar-height: 4.55rem;
 }
 
+:root[data-omnix-appearance='light'] {
+  color-scheme: light;
+  --omnix-body-bg: #f7f9ff;
+  --omnix-body-surface: radial-gradient(circle at 20% 10%, rgba(34, 211, 238, 0.16), transparent 25rem), linear-gradient(135deg, #f7f9ff 0%, #eef4ff 54%, #fffefe 100%);
+  --omnix-border: rgba(86, 102, 145, 0.2);
+  --omnix-strong-border: rgba(98, 72, 176, 0.24);
+  --omnix-text: #172033;
+  --omnix-muted: #556278;
+  --omnix-muted-text: #556278;
+  --omnix-purple: #6343c9;
+  --omnix-cyan: #087f91;
+  --omnix-success: #15803d;
+  --omnix-main-bg: rgba(246, 249, 255, 0.84);
+  --omnix-sidebar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(238, 244, 255, 0.98));
+  --omnix-panel-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 255, 0.9));
+  --omnix-panel-solid: rgba(255, 255, 255, 0.9);
+  --omnix-control-bg: rgba(255, 255, 255, 0.94);
+  --omnix-control-text: #172033;
+  --omnix-soft-bg: rgba(79, 70, 229, 0.055);
+  --omnix-topbar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(240, 246, 255, 0.96));
+  --omnix-topbar-status-bg: rgba(99, 67, 201, 0.1);
+  --omnix-topbar-status-text: #493088;
+  --omnix-brand-core-bg: #ffffff;
+}
+
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 20% 10%, rgba(93, 69, 178, 0.22), transparent 26rem), linear-gradient(135deg, #070b16 0%, #090d1a 52%, #050710 100%); }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--omnix-body-surface); color: var(--omnix-text); }
 button, input, textarea, select { font: inherit; }
 .visually-hidden { border: 0; clip: rect(0 0 0 0); height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; white-space: nowrap; width: 1px; }
 
 .omnix-shell { display: grid; grid-template-columns: 19.5rem minmax(0, 1fr); grid-template-rows: var(--omnix-topbar-height) minmax(0, 1fr); min-height: 100vh; }
 .omnix-shell.sidebar-hidden { grid-template-columns: minmax(0, 1fr); }
 .omnix-shell.sidebar-hidden .omnix-main { grid-column: 1; }
-.omnix-main { background: rgba(5, 8, 16, 0.7); display: flex; flex-direction: column; grid-column: 2; grid-row: 2; min-height: calc(100vh - var(--omnix-topbar-height)); min-width: 0; }
+.omnix-main { background: var(--omnix-main-bg); display: flex; flex-direction: column; grid-column: 2; grid-row: 2; min-height: calc(100vh - var(--omnix-topbar-height)); min-width: 0; }
 
-.omnix-sidebar { align-content: start; background: linear-gradient(180deg, rgba(18, 25, 46, 0.96), rgba(10, 15, 29, 0.98)); border-right: 1px solid var(--omnix-border); display: grid; gap: 1rem; grid-column: 1; grid-row: 2; grid-template-rows: auto auto minmax(0, 1fr); height: calc(100vh - var(--omnix-topbar-height)); justify-items: stretch; min-width: 0; padding: 1rem; position: sticky; top: var(--omnix-topbar-height); }
+.omnix-sidebar { align-content: start; background: var(--omnix-sidebar-bg); border-right: 1px solid var(--omnix-border); display: grid; gap: 1rem; grid-column: 1; grid-row: 2; grid-template-rows: auto auto minmax(0, 1fr); height: calc(100vh - var(--omnix-topbar-height)); justify-items: stretch; min-width: 0; padding: 1rem; position: sticky; top: var(--omnix-topbar-height); }
 .omnix-sidebar.hidden { display: none; }
 .omnix-sidebar-toggle { display: none; }
 .omnix-brand { align-items: center; display: flex; gap: 0.75rem; margin: 0 0 0.35rem; }
 .omnix-brand-mark, .omnix-logo-core { background: conic-gradient(from 120deg, #22d3ee, #8b5cf6, #22d3ee); border-radius: 999px; height: 2.3rem; position: relative; width: 2.3rem; }
-.omnix-brand-mark::after, .omnix-logo-core::after { background: #10182d; border-radius: inherit; content: ""; inset: 0.42rem; position: absolute; }
+.omnix-brand-mark::after, .omnix-logo-core::after { background: var(--omnix-brand-core-bg); border-radius: inherit; content: ""; inset: 0.42rem; position: absolute; }
 .omnix-brand-copy { display: grid; gap: 0.1rem; }
 .omnix-brand-copy h1 { color: var(--omnix-text); font-size: 1.35rem; line-height: 1; margin: 0; }
 .omnix-brand-copy small { color: var(--omnix-muted); font-size: 0.78rem; }
 
 .omnix-nav { border-bottom: 1px solid var(--omnix-border); display: grid; gap: 0.35rem; padding-bottom: 1rem; }
 .omnix-nav::after { display: none; }
-.omnix-nav a { align-items: center; background: transparent; border: 1px solid transparent; border-radius: 0.65rem; color: #dbe4ff; cursor: pointer; display: flex; justify-content: start; min-height: 2.45rem; padding: 0 0.85rem; text-decoration: none; }
+.omnix-nav a { align-items: center; background: transparent; border: 1px solid transparent; border-radius: 0.65rem; color: var(--omnix-text); cursor: pointer; display: flex; justify-content: start; min-height: 2.45rem; padding: 0 0.85rem; text-decoration: none; }
 .omnix-nav a::after { display: none; }
 .omnix-nav-item { align-items: center; display: flex; gap: 0.75rem; }
 .omnix-nav-icon { color: #d9e2ff; display: inline-flex; justify-content: center; width: 1.4rem; }
@@ -65,8 +105,8 @@ button, input, textarea, select { font: inherit; }
 .assistant-workspace-usage meter::-webkit-meter-optimum-value { background: linear-gradient(90deg, #2dd4bf, #22d3ee); border-radius: 999px; }
 .assistant-workspace-usage button { background: rgba(255,255,255,0.06); border: 1px solid rgba(132, 148, 196, 0.24); border-radius: 0.45rem; color: #f4f7ff; cursor: pointer; font-weight: 800; min-height: 2.45rem; }
 
-.omnix-topbar { align-items: center; background: linear-gradient(180deg, rgba(18, 16, 31, 0.96), rgba(11, 10, 21, 0.98)); border-bottom: 1px solid rgba(151, 114, 255, 0.22); display: grid; gap: 0.85rem; grid-column: 1 / -1; grid-row: 1; grid-template-columns: auto minmax(8rem, auto) max-content minmax(10rem, 1fr); min-height: var(--omnix-topbar-height); padding: 0.6rem 0.85rem; position: sticky; top: 0; z-index: 10; }
-.omnix-shell-toggle, .omnix-workspace-select, .omnix-new-chat-button, .omnix-icon-button, .omnix-mode-tabs button, .assistant-chat-header-actions button, .assistant-voice-controls button, .assistant-message-actions button, .assistant-mic-button, .assistant-send-button { appearance: none; border: 0; cursor: pointer; }
+.omnix-topbar { align-items: center; background: var(--omnix-topbar-bg); border-bottom: 1px solid var(--omnix-strong-border); display: grid; gap: 0.85rem; grid-column: 1 / -1; grid-row: 1; grid-template-columns: auto minmax(8rem, auto) max-content minmax(12rem, 1fr); min-height: var(--omnix-topbar-height); padding: 0.6rem 0.85rem; position: sticky; top: 0; z-index: 10; }
+.omnix-shell-toggle, .omnix-workspace-select, .omnix-new-chat-button, .omnix-icon-button, .omnix-mode-tabs button, .omnix-theme-toggle, .assistant-chat-header-actions button, .assistant-voice-controls button, .assistant-message-actions button, .assistant-mic-button, .assistant-send-button { appearance: none; border: 0; cursor: pointer; }
 .omnix-shell-toggle { align-items: center; background: linear-gradient(135deg, #5843df, #22d3ee); border: 1px solid rgba(255,255,255,0.16); border-radius: 0.55rem; display: inline-flex; height: 3rem; justify-content: center; width: 3rem; }
 .omnix-shell-toggle span { background: #f4f7ff; border-radius: 999px; box-shadow: 0 0 0 0.45rem rgba(255,255,255,0.08); display: block; height: 0.38rem; width: 0.38rem; }
 .omnix-topbar-brand { display: grid; gap: 0.05rem; }
@@ -77,7 +117,11 @@ button, input, textarea, select { font: inherit; }
 .omnix-command-search { align-items: center; background: rgba(12,18,34,0.94); border: 1px solid var(--omnix-border); border-radius: 0.65rem; display: grid; gap: 0.65rem; grid-template-columns: auto 1fr auto; height: 2.75rem; max-width: 42rem; padding: 0 0.85rem; }
 .omnix-command-search input { background: transparent; border: 0; color: var(--omnix-text); outline: none; width: 100%; }
 .omnix-command-search kbd { background: rgba(255,255,255,0.06); border: 1px solid var(--omnix-border); border-radius: 0.4rem; color: var(--omnix-muted); font-size: 0.75rem; padding: 0.12rem 0.35rem; }
-.omnix-topbar-actions { align-items: center; display: flex; gap: 0.8rem; justify-content: end; }
+.omnix-topbar-actions { align-items: center; display: flex; gap: 0.8rem; justify-content: end; min-width: 0; }
+.omnix-theme-toggle { align-items: center; background: var(--omnix-control-bg); border: 1px solid var(--omnix-border); border-radius: 999px; color: var(--omnix-text); display: inline-flex; flex: 0 0 auto; height: 2.35rem; justify-content: center; width: 2.35rem; }
+.omnix-theme-toggle:hover, .omnix-theme-toggle:focus-visible { border-color: var(--omnix-strong-border); outline: none; }
+.omnix-theme-toggle-glyph { background: var(--omnix-text); border-radius: 999px; box-shadow: inset -0.38rem -0.18rem 0 0 var(--omnix-control-bg); display: block; height: 1rem; width: 1rem; }
+:root[data-omnix-appearance='light'] .omnix-theme-toggle-glyph { box-shadow: 0 0 0 0.22rem rgba(245, 158, 11, 0.18), 0 0 0 0.42rem rgba(245, 158, 11, 0.08); }
 .omnix-new-chat-button { align-items: center; background: linear-gradient(135deg, #6544d9, #7c5cff); border-radius: 0.65rem; color: #fff; display: inline-flex; font-weight: 750; gap: 0.45rem; min-height: 2.55rem; padding: 0 1rem; }
 .omnix-icon-button { background: transparent; color: #dbe4ff; font-size: 1.1rem; }
 .omnix-user-avatar { background: linear-gradient(135deg, #2dd4bf, #7c5cff); border-radius: 999px; color: transparent; display: inline-flex; height: 2.3rem; width: 2.3rem; }
@@ -87,11 +131,11 @@ button, input, textarea, select { font: inherit; }
 .omnix-mode-tabs button.active { background: linear-gradient(135deg, rgba(124, 92, 255, 0.95), rgba(98, 66, 205, 0.92)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 0 0 0.35rem rgba(124, 92, 255, 0.12); color: #fff; }
 .omnix-topbar-status { align-items: center; display: flex; gap: 0.65rem; justify-self: end; min-width: 0; }
 .omnix-topbar-status span { color: rgba(170, 179, 200, 0.08); font-size: 0.78rem; font-weight: 900; text-transform: uppercase; }
-.omnix-topbar-status b { background: rgba(124, 58, 237, 0.24); border: 1px solid rgba(151, 114, 255, 0.38); border-radius: 999px; color: #e7ddff; font-size: 0.76rem; line-height: 1; max-width: 12rem; overflow: hidden; padding: 0.35rem 0.7rem; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.omnix-topbar-status b { background: var(--omnix-topbar-status-bg); border: 1px solid var(--omnix-strong-border); border-radius: 999px; color: var(--omnix-topbar-status-text); font-size: 0.76rem; line-height: 1; max-width: 12rem; overflow: hidden; padding: 0.35rem 0.7rem; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 
 .eyebrow { color: var(--omnix-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; margin: 0 0 0.25rem; text-transform: uppercase; }
 .status-pill, .workspace-heading code { background: rgba(124, 58, 237, 0.16); border: 1px solid rgba(151, 114, 255, 0.32); border-radius: 999px; color: #e7ddff; padding: 0.42rem 0.68rem; }
-.workspace-card { background: linear-gradient(180deg, rgba(23, 22, 34, 0.9), rgba(13, 12, 22, 0.86)); border: 1px solid rgba(151, 114, 255, 0.16); border-radius: 0.9rem; margin: 1rem; padding: 1.35rem; position: relative; }
+.workspace-card { background: var(--omnix-panel-bg); border: 1px solid var(--omnix-strong-border); border-radius: 0.9rem; margin: 1rem; padding: 1.35rem; position: relative; }
 .workspace-module-heading { height: 1px; left: 0; margin: 0; opacity: 0; overflow: hidden; pointer-events: none; position: absolute; top: 0; width: 1px; }
 .workspace-card h2, .workspace-card h3, .workspace-card h4 { margin: 0; }
 .workspace-heading { align-items: center; display: flex; justify-content: space-between; gap: 1rem; }
@@ -99,14 +143,76 @@ button, input, textarea, select { font: inherit; }
 .platform-empty { background: rgba(255,255,255,0.035); border: 1px dashed rgba(170,165,188,0.28); border-radius: 0.65rem; color: var(--omnix-muted); margin-top: 1rem; padding: 1rem; }
 .platform-grid, .platform-list { display: grid; gap: 1rem; margin-top: 1.25rem; }
 .platform-grid, .workspace-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.platform-section, .workspace-grid article, .feature-panel, .feature-mini-card { background: rgba(255,255,255,0.035); border: 1px solid rgba(151,114,255,0.13); border-radius: 0.65rem; padding: 1rem; }
+.platform-section, .workspace-grid article, .feature-panel, .feature-mini-card { background: var(--omnix-soft-bg); border: 1px solid var(--omnix-strong-border); border-radius: 0.65rem; padding: 1rem; }
 .feature-layout { display: grid; gap: 1rem; grid-template-columns: minmax(0,1.6fr) minmax(16rem,0.7fr); margin-top: 1.25rem; }
 .feature-form { display: grid; gap: 0.875rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .feature-form label { color: #c8bee8; display: grid; gap: 0.4rem; font-size: 0.85rem; }
-.feature-form input, .feature-form select, .feature-form textarea { background: rgba(7,6,13,0.82); border: 1px solid rgba(151,114,255,0.16); border-radius: 0.5rem; color: #f3f0ff; padding: 0.7rem 0.75rem; }
+.feature-form input, .feature-form select, .feature-form textarea { background: var(--omnix-control-bg); border: 1px solid var(--omnix-strong-border); border-radius: 0.5rem; color: var(--omnix-control-text); padding: 0.7rem 0.75rem; }
 .feature-form-wide, .feature-form-action, .feature-panel-wide { grid-column: 1 / -1; }
 .feature-list { display: grid; gap: 0.5rem; }
 .feature-list button { background: rgba(7,6,13,0.58); border: 1px solid rgba(151,114,255,0.14); border-radius: 0.65rem; color: #f3f0ff; cursor: pointer; display: grid; gap: 0.2rem; padding: 0.75rem; text-align: left; }
 .feature-list button.active, .feature-list button:hover, .feature-list button:focus-visible { background: rgba(124,58,237,0.18); border-color: rgba(151,114,255,0.42); outline: none; }
 .feature-list small { color: var(--omnix-muted); }
 .feature-job-link { background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.24); border-radius: 0.5rem; color: #ffe4a3; padding: 0.75rem; }
+
+:root[data-omnix-appearance='light'] .assistant-sidebar-nav,
+:root[data-omnix-appearance='light'] .assistant-sidebar-section,
+:root[data-omnix-appearance='light'] .assistant-workspace-usage,
+:root[data-omnix-appearance='light'] .voice-studio-app,
+:root[data-omnix-appearance='light'] .voice-side-nav,
+:root[data-omnix-appearance='light'] .voice-panel-final,
+:root[data-omnix-appearance='light'] .voice-credit-card,
+:root[data-omnix-appearance='light'] .voice-user-card,
+:root[data-omnix-appearance='light'] .script-card,
+:root[data-omnix-appearance='light'] .assignment-card,
+:root[data-omnix-appearance='light'] .generate-card,
+:root[data-omnix-appearance='light'] .now-playing-bar,
+:root[data-omnix-appearance='light'] .settings-status-card,
+:root[data-omnix-appearance='light'] .settings-status-row,
+:root[data-omnix-appearance='light'] .provider-config-group,
+:root[data-omnix-appearance='light'] .provider-settings-card,
+:root[data-omnix-appearance='light'] .rpg-shell,
+:root[data-omnix-appearance='light'] .rpg-panel,
+:root[data-omnix-appearance='light'] .rpg-card,
+:root[data-omnix-appearance='light'] .rpg-player-rail,
+:root[data-omnix-appearance='light'] .rpg-world-rail,
+:root[data-omnix-appearance='light'] .rpg-story-scene,
+:root[data-omnix-appearance='light'] .rpg-session-launcher,
+:root[data-omnix-appearance='light'] .rpg-item-panel {
+  background: var(--omnix-panel-bg) !important;
+  border-color: var(--omnix-border) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] input,
+:root[data-omnix-appearance='light'] select,
+:root[data-omnix-appearance='light'] textarea,
+:root[data-omnix-appearance='light'] .voice-clone-form input,
+:root[data-omnix-appearance='light'] .voice-clone-form select,
+:root[data-omnix-appearance='light'] .voice-clone-form textarea,
+:root[data-omnix-appearance='light'] .voice-search input,
+:root[data-omnix-appearance='light'] .script-card textarea,
+:root[data-omnix-appearance='light'] .assignment-row select,
+:root[data-omnix-appearance='light'] .settings-field input,
+:root[data-omnix-appearance='light'] .settings-field select,
+:root[data-omnix-appearance='light'] .settings-field textarea {
+  background: var(--omnix-control-bg) !important;
+  border-color: var(--omnix-border) !important;
+  color: var(--omnix-control-text) !important;
+}
+
+:root[data-omnix-appearance='light'] small,
+:root[data-omnix-appearance='light'] p,
+:root[data-omnix-appearance='light'] li,
+:root[data-omnix-appearance='light'] dt,
+:root[data-omnix-appearance='light'] .assistant-sidebar-list button small,
+:root[data-omnix-appearance='light'] .assistant-sidebar-list button time,
+:root[data-omnix-appearance='light'] .voice-final-header p,
+:root[data-omnix-appearance='light'] .voice-panel-final p,
+:root[data-omnix-appearance='light'] .feature-list small {
+  color: var(--omnix-muted);
+}
+
+:root[data-omnix-appearance='light'] button {
+  color: inherit;
+}

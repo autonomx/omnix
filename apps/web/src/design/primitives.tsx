@@ -92,12 +92,16 @@ export function OmnixNavItem({ active, moduleId, children }: { active: boolean; 
 export function OmnixTopBar({
   isSidebarVisible = true,
   onToggleSidebar,
+  onToggleTheme,
+  themeMode = 'dark',
   title,
   status = 'Local-first',
   children,
 }: {
   isSidebarVisible?: boolean;
   onToggleSidebar?: () => void;
+  onToggleTheme?: () => void;
+  themeMode?: 'light' | 'dark';
   title: string;
   status?: string;
   children?: ReactNode;
@@ -123,10 +127,23 @@ export function OmnixTopBar({
 
       {children ? <div className="omnix-mode-tabs" aria-label="Workspace modes">{children}</div> : null}
 
-      <div className="omnix-topbar-status" aria-label={`${title}, ${status}`}>
-        <span>Assistant</span>
-        <b>{title}</b>
-        <b>{status}</b>
+      <div className="omnix-topbar-actions">
+        <button
+          className="omnix-theme-toggle"
+          type="button"
+          aria-label={themeMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          aria-pressed={themeMode === 'light'}
+          title={themeMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          onClick={onToggleTheme}
+        >
+          <span className="omnix-theme-toggle-glyph" aria-hidden="true" />
+        </button>
+
+        <div className="omnix-topbar-status" aria-label={`${title}, ${status}`}>
+          <span>Assistant</span>
+          <b>{title}</b>
+          <b>{status}</b>
+        </div>
       </div>
     </header>
   );

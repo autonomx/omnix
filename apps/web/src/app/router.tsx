@@ -1,3 +1,4 @@
+import { useMantineColorScheme } from '@mantine/core';
 import {
   Link,
   Navigate,
@@ -9,8 +10,9 @@ import {
   useNavigate,
   useRouterState,
 } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar } from '../design/primitives';
+import { applyAppearanceSettings, type ResolvedOmnixAppearanceMode } from '../features/settings/appearanceEffects';
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
 
@@ -20,6 +22,7 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
 >;
 const defaultModule = moduleById.chatbot;
 const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'voice', 'image-generation'];
+const appearanceModeStorageKey = 'omnix.appearance.mode';
 
 function moduleFromPath(pathname: string): OmnixModuleDefinition {
   return (
@@ -29,12 +32,38 @@ function moduleFromPath(pathname: string): OmnixModuleDefinition {
   );
 }
 
+function loadStoredAppearanceMode(): ResolvedOmnixAppearanceMode {
+  if (typeof window === 'undefined') return 'dark';
+  try {
+    const storedMode = window.localStorage.getItem(appearanceModeStorageKey);
+    return storedMode === 'light' || storedMode === 'dark' ? storedMode : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+
 function OmnixShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
+  const { setColorScheme } = useMantineColorScheme();
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [appearanceMode, setAppearanceMode] = useState<ResolvedOmnixAppearanceMode>(loadStoredAppearanceMode);
   const activeModule = moduleFromPath(pathname);
   const modeModules = modeModuleIds.map((moduleId) => moduleById[moduleId]);
+  useEffect(() => {
+    const root = document.documentElement;
+    applyAppearanceSettings({
+      mode: appearanceMode,
+      density: root.dataset.omnixDensity ?? 'comfortable',
+      reduceMotion: root.classList.contains('omnix-reduce-motion'),
+    });
+    setColorScheme(appearanceMode);
+    try {
+      window.localStorage.setItem(appearanceModeStorageKey, appearanceMode);
+    } catch {
+      // Appearance persistence is best-effort in private or locked-down browser contexts.
+    }
+  }, [appearanceMode, setColorScheme]);
 
   return (
     <OmnixShellLayout
@@ -62,6 +91,8 @@ function OmnixShell() {
         <OmnixTopBar
           isSidebarVisible={isSidebarVisible}
           onToggleSidebar={() => setIsSidebarVisible((value) => !value)}
+          onToggleTheme={() => setAppearanceMode((value) => (value === 'light' ? 'dark' : 'light'))}
+          themeMode={appearanceMode}
           title={activeModule.label}
         >
           {modeModules.map((module) => (

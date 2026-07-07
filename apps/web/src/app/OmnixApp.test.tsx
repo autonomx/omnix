@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MantineProvider } from '@mantine/core';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { omnixTheme } from '../design/theme';
 import { OmnixApp } from './OmnixApp';
 
@@ -18,6 +18,12 @@ function renderApp() {
 }
 
 describe('OmnixApp', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.documentElement.dataset.omnixAppearance = '';
+    document.documentElement.dataset.omnixAppearancePreference = '';
+  });
+
   it('renders the shared app shell and all module entrypoints', async () => {
     renderApp();
 
@@ -53,5 +59,23 @@ describe('OmnixApp', () => {
 
     expect(screen.getByRole('link', { name: 'RPG' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide Omnix sidebar' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('toggles and persists the app appearance mode', async () => {
+    renderApp();
+
+    const lightToggle = await screen.findByRole('button', { name: 'Switch to light mode' });
+
+    expect(document.documentElement.dataset.omnixAppearance).toBe('dark');
+    fireEvent.click(lightToggle);
+
+    expect(document.documentElement.dataset.omnixAppearance).toBe('light');
+    expect(window.localStorage.getItem('omnix.appearance.mode')).toBe('light');
+    expect(screen.getByRole('button', { name: 'Switch to dark mode' })).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to dark mode' }));
+
+    expect(document.documentElement.dataset.omnixAppearance).toBe('dark');
+    expect(window.localStorage.getItem('omnix.appearance.mode')).toBe('dark');
   });
 });
