@@ -6,6 +6,7 @@ import {
   type RpgMapActionCapability,
   type RpgMapDefinition,
   type RpgMapObjectDefinition,
+  type RpgMapObjectDynamicState,
   type RpgMapOverlay,
 } from '../../api/rpgMapClient';
 import { RpgMapViewportSurface } from './RpgMapViewportSurface';
@@ -29,6 +30,8 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
     queryKey: ['feature', 'rpg', 'map-overlay', sessionId, mapId],
     queryFn: () => getRpgMapOverlay(sessionId, mapId),
     enabled: Boolean(sessionId && mapId),
+    refetchInterval: 2500,
+    refetchIntervalInBackground: false,
   });
 
   useEffect(() => {
@@ -55,8 +58,12 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
     return <MapStateMessage title="Empty map overlay" detail="The selected session did not return live map state." />;
   }
 
+  const revisionMismatch = definition.definition_revision !== overlay.definition_revision;
   const visible = visibleObjects(definition, overlay);
   const selectedObject = visible.find((item) => item.id === selectedObjectId) ?? null;
+  const objectState = selectedObject
+    ? overlay.object_states?.find((state) => state.object_id === selectedObject.id)
+    : undefined;
   const selectedCapabilities = selectedObject
     ? overlay.capabilities.filter((capability) => capability.target_object_id === selectedObject.id)
     : [];
@@ -67,6 +74,14 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
 
   return (
     <div className="rpg-map-surface">
+      {revisionMismatch ? (
+        <MapStateMessage
+          compact
+          title="Map definition changed"
+          detail="The live overlay references a newer map definition. Refreshing the map before actions are enabled."
+          tone="warning"
+        />
+      ) : null}
       {overlay.availability === 'ready' ? null : (
         <MapStateMessage
           compact
@@ -80,7 +95,7 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
         definition={definition}
         onActiveObjectChange={setActiveObjectId}
         onSelectObject={selectObject}
-        overlay={overlay}
+        overlay={revisionMismatch ? { ...overlay, availability: 'stale', capabilities: [] } : overlay}
         selectedObjectId={selectedObjectId}
       />
       <div className="rpg-map-surface-meta" aria-label="Map revision information">
@@ -88,10 +103,12 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
         <span>Definition {shortRevision(definition.definition_revision)}</span>
         <span>Overlay {overlay.overlay_revision}</span>
         <span>Turn {overlay.session_turn_index}</span>
+        {overlayQuery.isFetching ? <span>Refreshing live overlay…</span> : null}
       </div>
       <SelectedObjectPanel
-        capabilities={selectedCapabilities}
+        capabilities={revisionMismatch ? [] : selectedCapabilities}
         item={selectedObject}
+        objectState={objectState}
         onClose={() => setSelectedObjectId(null)}
       />
       <AccessibleObjectList
@@ -109,10 +126,12 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
 function SelectedObjectPanel({
   capabilities,
   item,
+  objectState,
   onClose,
 }: {
   capabilities: RpgMapActionCapability[];
   item: RpgMapObjectDefinition | null;
+  objectState?: RpgMapObjectDynamicState;
   onClose: () => void;
 }) {
   if (!item) return null;
@@ -121,8 +140,8 @@ function SelectedObjectPanel({
       <div>
         <p className="eyebrow">Selected location</p>
         <h3>{item.label || item.location_id || item.id}</h3>
-        <p>{item.description || `A ${humanizeReason(item.kind)} on the current map.`}</p>
-        <small>{item.location_id ?? item.id}</small>
+        <p>{objectState?.presentation_hint || item.description || `A ${humanizeReason(item.kind)} on the current map.`}</p>
+        <small>{item.location_id ?? item.id} • {humanizeReason(objectState?.status ?? 'normal')}</small>
       </div>
       {item.tags.length ? (
         <div className="rpg-map-object-tags" aria-label="Object tags">
