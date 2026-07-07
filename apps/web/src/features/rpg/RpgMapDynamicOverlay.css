@@ -1,0 +1,66 @@
+.rpg-map-object-obscured {
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.rpg-map-object-status-closed > g {
+  filter: grayscale(0.55) brightness(0.75);
+}
+
+.rpg-map-object-status-damaged > g {
+  filter: sepia(0.5) contrast(1.15);
+}
+
+.rpg-map-object-status-damaged > g rect,
+.rpg-map-object-status-damaged > g path {
+  stroke-dasharray: 58 22;
+}
+
+.rpg-map-object-status-burned > g {
+  filter: grayscale(0.8) brightness(0.55) sepia(0.4);
+}
+
+.rpg-map-object-status-occupied > g rect {
+  stroke: #6f9c6d;
+}
+
+.rpg-map-environment {
+  fill: transparent;
+  pointer-events: none;
+}
+
+.rpg-map-weather-snow,
+.rpg-map-weather-snowy,
+.rpg-map-weather-blizzard {
+  fill: rgba(210, 226, 238, 0.11);
+}
+
+.rpg-map-weather-rain,
+.rpg-map-weather-rainy,
+.rpg-map-weather-storm {
+  fill: rgba(55, 80, 106, 0.14);
+}
+
+.rpg-map-light-night,
+.rpg-map-light-dark,
+.rpg-map-light-moonlight {
+  fill: rgba(23, 31, 63, 0.24);
+}
+
+.rpg-map-light-dusk,
+.rpg-map-light-dawn {
+  fill: rgba(116, 68, 54, 0.13);
+}
+
+.rpg-map-visibility-poor,
+.rpg-map-visibility-foggy,
+.rpg-map-visibility-low {
+  fill: rgba(212, 216, 205, 0.16);
+}
+
+.rpg-map-fog-polygon {
+  fill: rgba(33, 35, 39, 0.72);
+  pointer-events: none;
+  stroke: rgba(72, 75, 78, 0.32);
+  stroke-width: 18;
+}
