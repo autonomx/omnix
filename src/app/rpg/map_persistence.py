@@ -6,22 +6,22 @@ from collections.abc import Mapping
 from typing import Any
 
 from app.rpg.map_projection import MAP_STATE_SCHEMA_VERSION, initial_map_session_state
+from app.rpg.map_world_integration import integrate_canonical_world_map_state
 
 _DEMO_PRESET_ID = "demo_glimmerdeep_pass_lvl14"
 _DEMO_STARTING_LOCATION_ID = "glimmerdeep_pass"
 
 
 def ensure_session_map_state(session: dict[str, Any]) -> dict[str, Any]:
-    """Add map state only when an explicit persisted creation input identifies it.
-
-    Display labels such as `state.location` are deliberately ignored. Existing
-    sessions without an explicit canonical creation input remain unavailable to the
-    live map projection rather than receiving a fabricated location.
-    """
+    """Normalize explicit canonical map state without inferring IDs from labels."""
 
     state = session.get("state") if isinstance(session.get("state"), dict) else None
     if state is None:
         return session
+
+    if isinstance(state.get("world_graph"), dict):
+        return integrate_canonical_world_map_state(session)
+
     current = state.get("map_state")
     if isinstance(current, dict) and current.get("schema_version") == MAP_STATE_SCHEMA_VERSION:
         return session

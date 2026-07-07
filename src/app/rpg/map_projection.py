@@ -13,6 +13,10 @@ from app.rpg.map_contracts import (
 )
 from app.rpg.map_fixtures import FROST_HAVEN_MAP_ID, NORTHERN_PASS_MAP_ID
 from app.rpg.map_repository import MapDefinitionRepository, default_map_repository
+from app.rpg.map_world_integration import (
+    canonical_route_id_for_locations,
+    map_repository_for_session,
+)
 
 MAP_STATE_SCHEMA_VERSION = 1
 
@@ -60,7 +64,7 @@ def project_session_map_overlay(
     map_id: str,
     repository: MapDefinitionRepository | None = None,
 ) -> MapOverlay:
-    repository = repository or default_map_repository()
+    repository = repository or map_repository_for_session(session)
     definition = repository.get(map_id)
     state = _mapping(session.get("state"))
     manifest = _mapping(session.get("manifest"))
@@ -136,7 +140,7 @@ def project_session_map_overlay(
     visible = _known_ids(map_state.get("visible_object_ids"), set(discovered))
     routes = _route_overlays(definition.route_geometry, _mapping(map_state.get("route_states")))
     markers = _markers(state, player_object.id, player_object.x, player_object.y, visible)
-    capabilities = _capabilities(definition.objects, visible, current_location_id, routes)
+    capabilities = _capabilities(session, definition.objects, visible, current_location_id, routes)
     environment = _environment(state)
     return MapOverlay(
         map_id=map_id,
@@ -237,6 +241,7 @@ def _markers(
 
 
 def _capabilities(
+    session: Mapping[str, object],
     objects: Sequence[object],
     visible: set[str],
     current_location_id: str,
@@ -259,7 +264,8 @@ def _capabilities(
         )
         if str(location_id) == current_location_id:
             continue
-        route_id = _route_id_for_object(object_id, routes_by_id)
+        route_id = canonical_route_id_for_locations(session, current_location_id, str(location_id))
+        route_id = route_id or _route_id_for_object(item, routes_by_id)
         route = routes_by_id.get(route_id) if route_id else None
         enabled = route is None or (route.known and route.status == "open" and route.safe)
         reason = "" if enabled else _route_disabled_reason(route)
@@ -276,7 +282,12 @@ def _capabilities(
     return tuple(sorted(capabilities, key=lambda item: (item.target_object_id, item.type)))
 
 
-def _route_id_for_object(object_id: str, routes: Mapping[str, MapRouteOverlay]) -> str | None:
+def _route_id_for_object(item: object, routes: Mapping[str, MapRouteOverlay]) -> str | None:
+    tags = tuple(str(tag) for tag in getattr(item, "tags", ()))
+    tagged = next((tag.removeprefix("route_id:") for tag in tags if tag.startswith("route_id:")), None)
+    if tagged in routes:
+        return tagged
+    object_id = str(getattr(item, "id", ""))
     token = object_id.split(":")[-1]
     return next((route_id for route_id in sorted(routes) if token in route_id), None)
 
