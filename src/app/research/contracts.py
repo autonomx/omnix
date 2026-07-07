@@ -23,19 +23,12 @@ RESEARCH_STAGE_IDS = (
 
 
 def normalize_research_mode(value: Any) -> ResearchMode:
-    """Normalize canonical and compatibility values without enabling malformed input."""
+    """Normalize only canonical values; legacy aliases use the compatibility adapter."""
 
-    normalized = str(value or "").strip().lower().replace("-", "_")
-    compatibility = {
-        "automatic": "quick",
-        "manual": "quick",
-        "disabled": "disabled",
-        "quick": "quick",
-        "quick_search": "quick",
-        "deep": "deep",
-        "deep_research": "deep",
-    }
-    return compatibility.get(normalized, "disabled")  # type: ignore[return-value]
+    normalized = str(value or "").strip().lower()
+    if normalized in {"disabled", "quick", "deep"}:
+        return normalized  # type: ignore[return-value]
+    return "disabled"
 
 
 class ResearchModeResolution(BaseModel):
