@@ -4,9 +4,10 @@ from __future__ import annotations
 import time
 from typing import Callable
 
+from app.research.evidence import prepare_evidence_context_items
 from app.research.quick_search import QuickSearchService
 
-from .models import AssistantContextBuildResult, AssistantContextChatRequest
+from .models import AssistantContextBuildResult, AssistantContextChatRequest, AssistantContextItem
 from .vision import DesktopVisionClient
 from .web_search import WebSearchClient, should_search_automatically
 
@@ -33,7 +34,7 @@ class AssistantContextService:
         return QuickSearchService(client_factory=create_client)
 
     def build(self, request: AssistantContextChatRequest) -> AssistantContextBuildResult:
-        items = []
+        items: list[AssistantContextItem] = []
         current_image = request.desktop_current_image_data_url or request.desktop_image_data_url
         desktop_requested = bool(
             current_image
@@ -60,7 +61,10 @@ class AssistantContextService:
                 request.content,
                 request.web_search_max_results,
             )
-            items.extend(execution.items)
+            prepared = prepare_evidence_context_items(
+                [item.model_dump(mode="json") for item in execution.items]
+            )
+            items.extend(AssistantContextItem.model_validate(item) for item in prepared)
             for key, value in execution.diagnostics.items():
                 diagnostics[f"web_search_{key}"] = value
             diagnostics["web_search_warnings"] = execution.warnings
