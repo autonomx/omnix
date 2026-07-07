@@ -136,6 +136,18 @@ def resolve_map_id_for_location(
     return region_id if repository.find(region_id) else None
 
 
+def canonical_route_id_for_locations(
+    session: Mapping[str, object],
+    from_location_id: str,
+    to_location_id: str,
+) -> str | None:
+    model = canonical_world_map_model(session)
+    if model is None:
+        return None
+    routes = model.graph.routes_between(from_location_id, to_location_id)
+    return routes[0].id if routes else None
+
+
 def integrate_canonical_world_map_state(session: dict[str, Any]) -> dict[str, Any]:
     model = canonical_world_map_model(session)
     if model is None or not model.current_location_id:
@@ -206,8 +218,6 @@ def _region_definition(model: CanonicalWorldMapModel, region_id: str) -> MapDefi
                 route_id=route.id,
                 points=(anchors[route.from_id], anchors[route.to_id]),
                 style="trail" if "trail" in route.tags else "road",
-                from_location_id=route.from_id,
-                to_location_id=route.to_id,
             )
         )
     label = region_id.replace("_", " ").replace("-", " ").upper()
