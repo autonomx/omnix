@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.jobs import JobRecord
+from app.research import ResearchMode
 
 
 ChatMessageRole = Literal["system", "user", "assistant"]
@@ -24,6 +25,7 @@ class ChatSessionSummary(BaseModel):
     title: str
     provider_id: str | None = None
     model_id: str | None = None
+    research_mode_override: ResearchMode | None = None
     message_count: int = 0
     created_at: str
     updated_at: str
@@ -47,6 +49,11 @@ class CreateChatSessionRequest(BaseModel):
     provider_id: str | None = None
     model_id: str | None = None
     system_prompt: str | None = None
+    research_mode_override: ResearchMode | None = None
+
+
+class UpdateChatResearchModeRequest(BaseModel):
+    research_mode_override: ResearchMode | None = None
 
 
 class SendChatMessageRequest(BaseModel):
@@ -55,6 +62,7 @@ class SendChatMessageRequest(BaseModel):
     model_id: str | None = None
     agent_mode: bool = False
     dry_run: bool = False
+    research_mode: ResearchMode | None = None
 
 
 class SendChatMessageResponse(BaseModel):

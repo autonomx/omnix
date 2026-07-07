@@ -5,16 +5,17 @@ type AssistantContextTestWindow = Window & typeof globalThis & {
 };
 
 (window as AssistantContextTestWindow).__omnixAssistantContextInitialized = true;
-const { assistantContextControlsMissing, desktopStatusLabel } = await import('./assistant-context-controller');
+const {
+  assistantContextControlsMissing,
+  desktopStatusLabel,
+  normalizeResearchMode,
+  webResearchModeLabel,
+} = await import('./assistant-context-controller');
 
 describe('assistant context control mounting', () => {
   it('requests injection only while a target is missing its Omnix control', () => {
     const root = document.createElement('div');
-    root.innerHTML = `
-      <div class="assistant-composer-controls"></div>
-      <div class="assistant-composer-actions"></div>
-      <div class="assistant-audio-devices"></div>
-    `;
+    root.innerHTML = '<div class="assistant-composer-controls"></div><div class="assistant-composer-actions"></div><div class="assistant-audio-devices"></div>';
 
     expect(assistantContextControlsMissing(root)).toBe(true);
 
@@ -42,5 +43,18 @@ describe('assistant context control mounting', () => {
     expect(desktopStatusLabel(false, 'Off')).toBe('Off');
     expect(desktopStatusLabel(false, 'Screen capture unavailable')).toBe('Screen capture unavailable');
     expect(desktopStatusLabel(true, 'Buffering recent frames')).toBe('Buffering recent frames');
+  });
+
+  it('accepts only canonical browser modes', () => {
+    expect(normalizeResearchMode('disabled')).toBe('disabled');
+    expect(normalizeResearchMode('quick')).toBe('quick');
+    expect(normalizeResearchMode('deep')).toBe('deep');
+    expect(normalizeResearchMode('unknown')).toBe('disabled');
+  });
+
+  it('uses the three explicit user-facing labels', () => {
+    expect(webResearchModeLabel('disabled')).toBe('Disabled');
+    expect(webResearchModeLabel('quick')).toBe('Quick search');
+    expect(webResearchModeLabel('deep')).toBe('Deep research');
   });
 });

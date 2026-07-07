@@ -1,0 +1,51 @@
+"""Persist visible research release and downgrade metadata on chat replies."""
+from __future__ import annotations
+
+from app.research.release_policy import ResearchReleaseDecision, research_release_notice
+
+from .models import ChatSession
+from .store import ChatSessionStore
+
+
+def apply_research_release_decision(
+    store: ChatSessionStore,
+    session_id: str,
+    user_message_id: str,
+    decision: ResearchReleaseDecision,
+) -> ChatSession | None:
+    sessions = store._load_sessions()  # noqa: SLF001 - same bounded persistence domain
+    for session_index, session in enumerate(sessions):
+        if session.id != session_id:
+            continue
+        user_index = next(
+            (index for index, message in enumerate(session.messages) if message.id == user_message_id),
+            None,
+        )
+        if user_index is None:
+            return session
+        assistant = next(
+            (
+                message
+                for message in session.messages[user_index + 1 :]
+                if message.role == "assistant"
+            ),
+            None,
+        )
+        if assistant is None:
+            return session
+        notice = research_release_notice(decision)
+        if notice and notice not in assistant.content:
+            assistant.content = f"{assistant.content}\n\n> Research mode notice: {notice}".strip()
+        assistant.metadata.update(
+            {
+                "research_requested_mode": decision.requested_mode,
+                "research_effective_mode": decision.effective_mode,
+                "research_release_status": decision.status,
+                "research_release_reason": decision.reason,
+                "research_release_warnings": decision.warnings,
+            }
+        )
+        sessions[session_index] = session
+        store._save_sessions(sessions)  # noqa: SLF001 - same bounded persistence domain
+        return session
+    return None

@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OmnixApp } from './app/OmnixApp';
 import { omnixTheme } from './design/theme';
 import './features/chatbot/sessionTools';
+import './features/chatbot/researchProgressController';
+import './features/chatbot/researchProgressController.css';
 import './features/podcast/podcastSessionGuard';
 import './features/voice/voiceJobListGuard';
 import './styles.css';
@@ -14,6 +16,7 @@ import './features/chatbot/ChatbotWorkspaceTools.css';
 import './features/chatbot/ChatbotWorkspaceSidePanelFix.css';
 import './features/chatbot/ChatbotWorkspaceUtilityToggle.css';
 import './features/assistant-workspace/assistant-context-controller.css';
+import './features/assistant-workspace/research-release-controller.css';
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
 import './features/assistant-workspace/live-voice-form-sync';
 import './features/assistant-workspace/live-voice-controller';
@@ -52,7 +55,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 
 window.setTimeout(() => {
   initializeChatMessageStreamAudioController();
-  void import('./features/assistant-workspace/assistant-context-controller').catch((error: unknown) => {
-    console.error('Assistant context controls failed to initialize', error);
-  });
+  void import('./features/assistant-workspace/assistant-context-controller')
+    .then(() => import('./features/assistant-workspace/research-release-controller'))
+    .catch((error: unknown) => {
+      console.error('Assistant context controls failed to initialize', error);
+    });
 }, 0);

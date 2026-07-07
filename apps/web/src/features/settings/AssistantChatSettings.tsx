@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { syncAssistantPreferences } from './assistantPreferencesBridge';
+import { ResearchSettingsSection } from './ResearchSettingsSection';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 
@@ -7,5 +8,55 @@ export function AssistantChatSettings() {
   const { state, dispatch } = useSettingsProfileContext();
   const value = state.draft.assistant;
   useEffect(() => syncAssistantPreferences(value), [value]);
-  return <div className="settings-category-panel"><h2>Assistant & Chat</h2><p>Defaults for new conversations and voice responses.</p><SettingsSection title="Assistant defaults" scope="module"><div className="settings-form-grid"><SettingsField label="Personality"><select value={value.personalityId} onChange={(event) => dispatch({ type: 'update', path: 'assistant.personalityId', value: event.currentTarget.value })}><option value="omnix-default">Omnix Default</option><option value="concise">Concise operator</option><option value="coach">Friendly coach</option><option value="technical">Technical expert</option><option value="creative">Creative collaborator</option><option value="custom">Custom personality</option></select></SettingsField><SettingsField label="Assistant voice"><input value={value.voiceId} placeholder="Runtime default" onChange={(event) => dispatch({ type: 'update', path: 'assistant.voiceId', value: event.currentTarget.value })} /></SettingsField>{value.personalityId === 'custom' ? <SettingsField label="Custom personality" wide><textarea rows={4} value={value.customPersonality} onChange={(event) => dispatch({ type: 'update', path: 'assistant.customPersonality', value: event.currentTarget.value })} /></SettingsField> : null}</div></SettingsSection><SettingsSection title="Voice responses" scope="module"><div className="settings-form-grid"><SettingsField label="Speech language"><input value={value.speechLanguage} onChange={(event) => dispatch({ type: 'update', path: 'assistant.speechLanguage', value: event.currentTarget.value })} /></SettingsField></div><div className="settings-toggle-list"><label><input type="checkbox" checked={value.autoSpeakReplies} onChange={(event) => dispatch({ type: 'update', path: 'assistant.autoSpeakReplies', value: event.currentTarget.checked })} /><span>Auto-speak replies</span></label><label><input type="checkbox" checked={value.streamingAudio} onChange={(event) => dispatch({ type: 'update', path: 'assistant.streamingAudio', value: event.currentTarget.checked })} /><span>Stream response audio</span></label></div></SettingsSection></div>;
+  return (
+    <div className="settings-category-panel">
+      <h2>Assistant & Chat</h2>
+      <p>Defaults for new conversations, research, and voice responses.</p>
+      <SettingsSection title="Assistant defaults" scope="module">
+        <div className="settings-form-grid">
+          <SettingsField label="Personality">
+            <select value={value.personalityId} onChange={(event) => dispatch({ type: 'update', path: 'assistant.personalityId', value: event.currentTarget.value })}>
+              <option value="omnix-default">Omnix Default</option>
+              <option value="concise">Concise operator</option>
+              <option value="coach">Friendly coach</option>
+              <option value="technical">Technical expert</option>
+              <option value="creative">Creative collaborator</option>
+              <option value="custom">Custom personality</option>
+            </select>
+          </SettingsField>
+          <SettingsField label="Assistant voice">
+            <input value={value.voiceId} placeholder="Runtime default" onChange={(event) => dispatch({ type: 'update', path: 'assistant.voiceId', value: event.currentTarget.value })} />
+          </SettingsField>
+          <SettingsField label="Default web research">
+            <select
+              aria-label="Default web research"
+              value={value.researchDefaultMode}
+              onChange={(event) => dispatch({ type: 'update', path: 'assistant.researchDefaultMode', value: event.currentTarget.value })}
+            >
+              <option value="disabled">Disabled</option>
+              <option value="quick">Quick search</option>
+              <option value="deep">Deep research</option>
+            </select>
+          </SettingsField>
+          {value.personalityId === 'custom' ? (
+            <SettingsField label="Custom personality" wide>
+              <textarea rows={4} value={value.customPersonality} onChange={(event) => dispatch({ type: 'update', path: 'assistant.customPersonality', value: event.currentTarget.value })} />
+            </SettingsField>
+          ) : null}
+        </div>
+      </SettingsSection>
+      <ResearchSettingsSection />
+      <SettingsSection title="Voice responses" scope="module">
+        <div className="settings-form-grid">
+          <SettingsField label="Speech language">
+            <input value={value.speechLanguage} onChange={(event) => dispatch({ type: 'update', path: 'assistant.speechLanguage', value: event.currentTarget.value })} />
+          </SettingsField>
+        </div>
+        <div className="settings-toggle-list">
+          <label><input type="checkbox" checked={value.autoSpeakReplies} onChange={(event) => dispatch({ type: 'update', path: 'assistant.autoSpeakReplies', value: event.currentTarget.checked })} /><span>Auto-speak replies</span></label>
+          <label><input type="checkbox" checked={value.streamingAudio} onChange={(event) => dispatch({ type: 'update', path: 'assistant.streamingAudio', value: event.currentTarget.checked })} /><span>Stream response audio</span></label>
+        </div>
+      </SettingsSection>
+    </div>
+  );
 }

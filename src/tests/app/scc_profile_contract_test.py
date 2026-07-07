@@ -13,6 +13,8 @@ def test_profile_contract() -> None:
     payload = profile_payload(profile)
     assert payload["schema_version"] == 1
     assert payload["global"]["providers"]["llm"] == "lmstudio"
+    assert payload["assistant"]["researchDefaultMode"] == "disabled"
+    assert payload["assistant"]["researchProvider"] == "duckduckgo"
     assert len(payload["revision"]) == 16
 
 
@@ -23,6 +25,46 @@ def test_profile_patch_preserves_defaults_and_syncs_legacy_provider() -> None:
     assert saved.voice.speed == 1.2
     assert saved.voice.stability == 0.75
     assert settings["provider"] == "cerebras"
+
+
+def test_profile_persists_research_provider_budgets_and_retention() -> None:
+    settings = {"provider": "lmstudio"}
+    current = load_settings_profile(settings)
+    saved = save_settings_profile(
+        settings,
+        {
+            "assistant": {
+                "researchProvider": "brave",
+                "researchMaxResults": 7,
+                "researchMaxSteps": 9,
+                "researchMaxQueries": 6,
+                "researchMaxSources": 20,
+                "researchMaxExtracts": 10,
+                "researchSearchCacheTtlSeconds": 600,
+                "researchExtractionCacheTtlSeconds": 2400,
+                "researchRawRetentionDays": 4,
+                "researchManifestRetentionDays": 45,
+                "researchShowDiagnostics": False,
+                "researchDeepEnabled": True,
+                "researchHermesPlannerEnabled": True,
+            }
+        },
+        current.revision,
+    )
+    payload = profile_payload(saved)["assistant"]
+    assert payload["researchProvider"] == "brave"
+    assert payload["researchMaxResults"] == 7
+    assert payload["researchMaxSteps"] == 9
+    assert payload["researchMaxQueries"] == 6
+    assert payload["researchMaxSources"] == 20
+    assert payload["researchMaxExtracts"] == 10
+    assert payload["researchSearchCacheTtlSeconds"] == 600
+    assert payload["researchExtractionCacheTtlSeconds"] == 2400
+    assert payload["researchRawRetentionDays"] == 4
+    assert payload["researchManifestRetentionDays"] == 45
+    assert payload["researchShowDiagnostics"] is False
+    assert payload["researchDeepEnabled"] is True
+    assert payload["researchHermesPlannerEnabled"] is True
 
 
 def test_profile_rejects_stale_revision() -> None:

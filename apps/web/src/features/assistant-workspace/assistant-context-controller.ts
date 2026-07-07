@@ -1,6 +1,6 @@
 import { DesktopTemporalCapture } from './desktop-temporal-capture';
 
-type WebSearchMode = 'automatic' | 'manual' | 'disabled';
+type ResearchMode = 'disabled' | 'quick' | 'deep';
 
 type DesktopShareSession = {
   stream: MediaStream;
@@ -19,15 +19,17 @@ type DisplayMediaDevices = MediaDevices & {
   }) => Promise<MediaStream>;
 };
 
-const CONTEXT_STORAGE_KEY = 'omnix.chatbot.contextSettings';
 const CONTEXT_CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
 const DESKTOP_ACTION_ATTRIBUTE = 'data-omnix-desktop-action';
 const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages$/;
+const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
 const assistantContextWindow = window as AssistantContextWindow;
 
-let webSearchMode: WebSearchMode = loadWebSearchMode();
-let manualSearchRequested = false;
+let profileDefaultMode: ResearchMode = 'disabled';
+let researchMode: ResearchMode = 'disabled';
+let activeSessionId: string | null = null;
+let nativeFetch: typeof window.fetch | null = null;
 let desktopShare: DesktopShareSession | null = null;
 let desktopStatus = 'Off';
 
@@ -35,6 +37,7 @@ export function initializeAssistantContextController(root: ParentNode = document
   if (assistantContextWindow.__omnixAssistantContextInitialized) return;
   assistantContextWindow.__omnixAssistantContextInitialized = true;
   installFetchInterceptor();
+  void loadProfileResearchDefault();
   injectControls(root);
   const observer = new MutationObserver(() => {
     if (assistantContextControlsMissing(root)) injectControls(root);
@@ -73,10 +76,15 @@ export function enhancedAssistantMessageUrl(url: string): string | null {
   return parsed.toString();
 }
 
-export function webSearchModeLabel(mode: WebSearchMode, requested = false): string {
-  if (mode === 'automatic') return 'Automatic';
-  if (mode === 'manual') return requested ? 'Next turn armed' : 'Manual';
+export function webResearchModeLabel(mode: ResearchMode): string {
+  if (mode === 'quick') return 'Quick search';
+  if (mode === 'deep') return 'Deep research';
   return 'Disabled';
+}
+
+export function normalizeResearchMode(value: unknown): ResearchMode {
+  if (value === 'quick' || value === 'deep' || value === 'disabled') return value;
+  return 'disabled';
 }
 
 export function desktopStatusLabel(isSharing: boolean, status: string): string {
@@ -85,14 +93,25 @@ export function desktopStatusLabel(isSharing: boolean, status: string): string {
 
 function installFetchInterceptor(): void {
   const originalFetch = window.fetch.bind(window);
+  nativeFetch = originalFetch;
   const wrappedFetch: typeof window.fetch = async (input, init) => {
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const inputUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+    const parsed = new URL(inputUrl, window.location.origin);
+    const sessionMatch = parsed.pathname.match(SESSION_PATH);
+
+    if (method === 'GET' && sessionMatch) {
+      const response = await originalFetch(input, init);
+      if (response.ok) void applySessionResearchMode(sessionMatch[1], response.clone());
+      return response;
+    }
     if (!isAssistantMessageRequest(inputUrl, method)) return originalFetch(input, init);
 
-    const shouldEnhance = webSearchMode === 'automatic'
-      || (webSearchMode === 'manual' && manualSearchRequested)
-      || desktopShare !== null;
+    const messageMatch = parsed.pathname.match(MESSAGE_PATH);
+    activeSessionId = messageMatch?.[1] ?? null;
+    if (activeSessionId) await persistConversationResearchMode(activeSessionId, researchMode);
+
+    const shouldEnhance = researchMode !== 'disabled' || desktopShare !== null;
     if (!shouldEnhance) return originalFetch(input, init);
 
     const bodyText = await requestBodyText(input, init);
@@ -127,8 +146,7 @@ function installFetchInterceptor(): void {
       headers,
       body: JSON.stringify({
         ...payload,
-        web_search_mode: webSearchMode,
-        web_search_requested: webSearchMode === 'manual' && manualSearchRequested,
+        web_research_mode: researchMode,
         desktop_current_image_data_url: desktopPayload?.currentImageDataUrl,
         desktop_history_image_data_url: desktopPayload?.historyImageDataUrl,
         desktop_combined_image_data_url: desktopPayload?.combinedImageDataUrl,
@@ -137,13 +155,53 @@ function installFetchInterceptor(): void {
       }),
     });
     if (enhancedResponse.status === 404) return originalFetch(input, init);
-    if (enhancedResponse.ok && webSearchMode === 'manual') {
-      manualSearchRequested = false;
-      renderControls();
-    }
     return enhancedResponse;
   };
   window.fetch = wrappedFetch;
+}
+
+async function applySessionResearchMode(sessionId: string, response: Response): Promise<void> {
+  try {
+    const session = await response.json() as { research_mode_override?: unknown };
+    activeSessionId = sessionId;
+    researchMode = session.research_mode_override == null
+      ? profileDefaultMode
+      : normalizeResearchMode(session.research_mode_override);
+    renderControls();
+  } catch {
+    // Session reads remain usable when research metadata is absent.
+  }
+}
+
+async function loadProfileResearchDefault(): Promise<void> {
+  const fetchImpl = nativeFetch ?? window.fetch.bind(window);
+  try {
+    const response = await fetchImpl('/api/settings');
+    if (!response.ok) return;
+    const payload = await response.json() as Record<string, unknown>;
+    const settings = asRecord(payload.settings);
+    const profile = asRecord(settings.settings_control_center);
+    const assistant = asRecord(profile.assistant);
+    profileDefaultMode = normalizeResearchMode(assistant.researchDefaultMode);
+    if (!activeSessionId) researchMode = profileDefaultMode;
+    renderControls();
+  } catch {
+    // Settings availability must not block chat.
+  }
+}
+
+async function persistConversationResearchMode(sessionId: string, mode: ResearchMode): Promise<void> {
+  const fetchImpl = nativeFetch;
+  if (!fetchImpl) return;
+  try {
+    await fetchImpl(`/api/chat/sessions/${encodeURIComponent(sessionId)}/research-mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ research_mode_override: mode }),
+    });
+  } catch {
+    // The selected turn still carries its explicit mode if session persistence is unavailable.
+  }
 }
 
 async function requestBodyText(input: RequestInfo | URL, init?: RequestInit): Promise<string> {
@@ -162,39 +220,29 @@ function injectControls(root: ParentNode): void {
     const webLabel = document.createElement('label');
     webLabel.className = 'assistant-context-mode';
     const webCaption = document.createElement('span');
-    webCaption.textContent = 'Web search';
+    webCaption.textContent = 'Web research';
     const webSelect = document.createElement('select');
-    webSelect.setAttribute('aria-label', 'Web search mode');
-    for (const mode of ['automatic', 'manual', 'disabled'] as const) {
+    webSelect.setAttribute('aria-label', 'Web research mode');
+    for (const mode of ['disabled', 'quick', 'deep'] as const) {
       const option = document.createElement('option');
       option.value = mode;
-      option.textContent = mode[0].toUpperCase() + mode.slice(1);
+      option.textContent = webResearchModeLabel(mode);
       webSelect.append(option);
     }
-    webSelect.value = webSearchMode;
+    webSelect.value = researchMode;
     webSelect.addEventListener('change', () => {
-      webSearchMode = isWebSearchMode(webSelect.value) ? webSelect.value : 'disabled';
-      manualSearchRequested = false;
-      saveWebSearchMode(webSearchMode);
+      researchMode = normalizeResearchMode(webSelect.value);
+      if (activeSessionId) void persistConversationResearchMode(activeSessionId, researchMode);
       renderControls();
     });
     webLabel.append(webCaption, webSelect);
-
-    const manualButton = document.createElement('button');
-    manualButton.type = 'button';
-    manualButton.className = 'assistant-composer-chip assistant-context-manual';
-    manualButton.setAttribute('aria-label', 'Search the web for the next message');
-    manualButton.addEventListener('click', () => {
-      manualSearchRequested = !manualSearchRequested;
-      renderControls();
-    });
 
     const desktopButton = document.createElement('button');
     desktopButton.type = 'button';
     desktopButton.className = 'assistant-composer-chip assistant-context-desktop';
     desktopButton.addEventListener('click', () => void toggleDesktopShare());
 
-    container.append(webLabel, manualButton, desktopButton);
+    container.append(webLabel, desktopButton);
     composerControls.append(container);
   }
 
@@ -225,13 +273,8 @@ function injectControls(root: ParentNode): void {
 }
 
 function renderControls(): void {
-  document.querySelectorAll<HTMLSelectElement>('select[aria-label="Web search mode"]').forEach((select) => {
-    select.value = webSearchMode;
-  });
-  document.querySelectorAll<HTMLButtonElement>('.assistant-context-manual').forEach((button) => {
-    button.hidden = webSearchMode !== 'manual';
-    button.classList.toggle('active', manualSearchRequested);
-    button.innerHTML = `<span>Web</span><strong>${webSearchModeLabel(webSearchMode, manualSearchRequested)}</strong>`;
+  document.querySelectorAll<HTMLSelectElement>('select[aria-label="Web research mode"]').forEach((select) => {
+    select.value = researchMode;
   });
   document.querySelectorAll<HTMLButtonElement>('.assistant-context-desktop').forEach((button) => {
     const active = desktopShare !== null;
@@ -306,27 +349,10 @@ function waitForVideoDimensions(video: HTMLVideoElement): Promise<void> {
   });
 }
 
-function loadWebSearchMode(): WebSearchMode {
-  try {
-    const raw = window.localStorage.getItem(CONTEXT_STORAGE_KEY);
-    if (!raw) return 'disabled';
-    const parsed = JSON.parse(raw) as { webSearchMode?: unknown };
-    return isWebSearchMode(parsed.webSearchMode) ? parsed.webSearchMode : 'disabled';
-  } catch {
-    return 'disabled';
-  }
-}
-
-function saveWebSearchMode(mode: WebSearchMode): void {
-  try {
-    window.localStorage.setItem(CONTEXT_STORAGE_KEY, JSON.stringify({ webSearchMode: mode }));
-  } catch {
-    // Storage is optional; the active page still keeps the selected mode.
-  }
-}
-
-function isWebSearchMode(value: unknown): value is WebSearchMode {
-  return value === 'automatic' || value === 'manual' || value === 'disabled';
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 if (document.readyState === 'loading') {

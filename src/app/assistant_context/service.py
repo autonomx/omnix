@@ -4,23 +4,57 @@ from __future__ import annotations
 import time
 from typing import Callable
 
-from .models import AssistantContextBuildResult, AssistantContextChatRequest
+from app.research.evidence import prepare_evidence_context_items
+from app.research.extraction import ReadablePageExtractor
+from app.research.policy import ResearchPolicy, research_policy_from_env
+from app.research.quick_search import QuickSearchService
+
+from .models import AssistantContextBuildResult, AssistantContextChatRequest, AssistantContextItem
 from .vision import DesktopVisionClient
-from .web_search import WebSearchClient, should_search_automatically
+from .web_search import WebSearchClient
 
 
 class AssistantContextService:
     def __init__(
         self,
         *,
-        web_search_factory: Callable[[], WebSearchClient] = WebSearchClient,
+        web_search_factory: Callable[..., WebSearchClient] = WebSearchClient,
+        quick_search_factory: Callable[[], QuickSearchService] | None = None,
         desktop_vision_factory: Callable[[], DesktopVisionClient] = DesktopVisionClient,
     ) -> None:
         self.web_search_factory = web_search_factory
+        self.quick_search_factory = quick_search_factory
         self.desktop_vision_factory = desktop_vision_factory
 
+    def _quick_search_for(self, request: AssistantContextChatRequest) -> QuickSearchService:
+        if self.quick_search_factory is not None:
+            return self.quick_search_factory()
+        policy = (
+            ResearchPolicy(**request.internal_research_policy)
+            if request.internal_research_policy
+            else research_policy_from_env()
+        )
+
+        def create_client(timeout_seconds: float) -> WebSearchClient:
+            try:
+                return self.web_search_factory(
+                    provider=request.internal_research_provider,
+                    timeout_seconds=timeout_seconds,
+                )
+            except TypeError:
+                try:
+                    return self.web_search_factory(timeout_seconds=timeout_seconds)
+                except TypeError:
+                    return self.web_search_factory()
+
+        return QuickSearchService(
+            client_factory=create_client,
+            research_policy=policy,
+            extractor_factory=lambda: ReadablePageExtractor(research_policy=policy),
+        )
+
     def build(self, request: AssistantContextChatRequest) -> AssistantContextBuildResult:
-        items = []
+        items: list[AssistantContextItem] = []
         current_image = request.desktop_current_image_data_url or request.desktop_image_data_url
         desktop_requested = bool(
             current_image
@@ -28,26 +62,29 @@ class AssistantContextService:
             or request.desktop_combined_image_data_url
         )
         diagnostics: dict[str, object] = {
-            "web_search_mode": request.web_search_mode,
-            "web_search_requested": request.web_search_requested,
+            "web_research_mode": request.web_research_mode,
+            "research_provider": request.internal_research_provider,
+            "research_compatibility_warnings": request.internal_research_warnings,
             "desktop_requested": desktop_requested,
             "desktop_capture_mode": request.desktop_capture_mode,
             "desktop_history_frames": len(request.desktop_history_timestamps),
         }
 
-        search_needed = request.web_search_mode == "automatic" and should_search_automatically(request.content)
-        search_needed = search_needed or (request.web_search_mode == "manual" and request.web_search_requested)
-        if search_needed:
-            started = time.perf_counter()
-            try:
-                web_items = self.web_search_factory().search(request.content, request.web_search_max_results)
-                items.extend(web_items)
-                diagnostics["web_search_status"] = "completed" if web_items else "empty"
-                diagnostics["web_search_results"] = len(web_items)
-            except Exception as exc:
-                diagnostics["web_search_status"] = "failed"
-                diagnostics["web_search_error"] = f"{type(exc).__name__}: {exc}"
-            diagnostics["web_search_ms"] = round((time.perf_counter() - started) * 1000)
+        if request.web_research_mode == "quick":
+            execution = self._quick_search_for(request).search(
+                request.content,
+                request.web_search_max_results,
+                identity=request.internal_research_identity or "anonymous",
+            )
+            prepared = prepare_evidence_context_items(
+                [item.model_dump(mode="json") for item in execution.items]
+            )
+            items.extend(AssistantContextItem.model_validate(item) for item in prepared)
+            for key, value in execution.diagnostics.items():
+                diagnostics[f"web_search_{key}"] = value
+            diagnostics["web_search_warnings"] = execution.warnings
+        elif request.web_research_mode == "deep":
+            diagnostics["web_search_status"] = "deferred_to_deep_research"
         else:
             diagnostics["web_search_status"] = "skipped"
 

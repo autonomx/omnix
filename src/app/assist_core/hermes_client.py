@@ -23,12 +23,16 @@ class HermesSidecarError(RuntimeError):
 class HermesSidecarClient:
     """Small HTTP client for the Hermes sidecar API.
 
-    Omnix asks Hermes for a structured plan and keeps execution inside Omnix.
-    This avoids handing house or RPG state mutation to an external runtime
-    before Omnix policy, dry-run, and confirmation checks run.
+    Omnix asks Hermes for structured declarative plans and keeps execution,
+    policy, budgets, and state ownership inside Omnix.
     """
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8642", api_key: str | None = None, timeout: float = 45.0):
+    def __init__(
+        self,
+        base_url: str = "http://127.0.0.1:8642",
+        api_key: str | None = None,
+        timeout: float = 45.0,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
@@ -40,12 +44,20 @@ class HermesSidecarClient:
         return headers
 
     def health(self) -> dict[str, Any]:
-        response = requests.get(f"{self.base_url}/health", headers=self._headers(), timeout=min(5.0, self.timeout))
+        response = requests.get(
+            f"{self.base_url}/health",
+            headers=self._headers(),
+            timeout=min(5.0, self.timeout),
+        )
         response.raise_for_status()
         return response.json()
 
     def capabilities(self) -> dict[str, Any]:
-        response = requests.get(f"{self.base_url}/v1/capabilities", headers=self._headers(), timeout=min(5.0, self.timeout))
+        response = requests.get(
+            f"{self.base_url}/v1/capabilities",
+            headers=self._headers(),
+            timeout=min(5.0, self.timeout),
+        )
         response.raise_for_status()
         return response.json()
 
@@ -61,6 +73,49 @@ class HermesSidecarClient:
         if not isinstance(data, dict):
             raise HermesSidecarError("Hermes RPG planner response was not an object")
         return data
+
+    def plan_research(self, request: Any) -> Any:
+        """Plan research with a dedicated schema and no general tool catalog."""
+
+        from app.research.planner import (
+            ResearchPlan,
+            ResearchPlanningRequest,
+            research_planning_payload,
+        )
+
+        validated_request = ResearchPlanningRequest.model_validate(request)
+        payload = {
+            "model": "hermes-agent",
+            "stream": False,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Return only valid JSON matching the supplied research schema. "
+                        "Do not execute operations and do not propose operations outside the allowlist."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        research_planning_payload(validated_request),
+                        sort_keys=True,
+                    ),
+                },
+            ],
+        }
+        response = requests.post(
+            f"{self.base_url}/v1/chat/completions",
+            headers=self._headers(),
+            data=json.dumps(payload),
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        content = self._extract_content(response.json())
+        try:
+            return ResearchPlan.model_validate(json.loads(_strip_json_fence(content)))
+        except Exception as exc:
+            raise HermesSidecarError("Hermes did not return a valid research plan") from exc
 
     def plan(self, request: AssistantRequest) -> AssistantResult:
         prompt = self._planner_prompt(request)
@@ -101,13 +156,8 @@ class HermesSidecarClient:
             raise HermesSidecarError("Hermes response did not include message content") from exc
 
     def _parse_plan(self, content: str, request: AssistantRequest) -> AssistantResult:
-        text = content.strip()
-        if text.startswith("```"):
-            text = text.strip("`")
-            if text.lower().startswith("json"):
-                text = text[4:].strip()
         try:
-            plan = json.loads(text)
+            plan = json.loads(_strip_json_fence(content))
         except json.JSONDecodeError as exc:
             raise HermesSidecarError("Hermes did not return valid planner JSON") from exc
 
@@ -120,3 +170,12 @@ class HermesSidecarClient:
             requires_confirmation=normalized.requires_review,
             error=normalized.error,
         )
+
+
+def _strip_json_fence(content: str) -> str:
+    text = str(content or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+    return text

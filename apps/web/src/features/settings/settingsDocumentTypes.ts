@@ -1,5 +1,7 @@
 export const SETTINGS_SCHEMA_VERSION = 1 as const;
 
+export type ResearchMode = 'disabled' | 'quick' | 'deep';
+export type ResearchProvider = 'duckduckgo' | 'brave' | 'tavily';
 export type ProviderDefaults = { llm: string; tts: string; stt: string; image: string; voiceCloning: string };
 export type ModelDefaults = { chat: string; fast: string; quality: string; background: string; embedding: string; imagePrompt: string };
 export type RoutingDefaults = { fallbackBehavior: 'next-available' | 'fail'; taskOverrides: Record<string, { providerId: string; modelId: string }> };
@@ -13,13 +15,36 @@ export type ProviderConfigs = {
   fluxKlein: { enabled: boolean; repoId: string; localDir: string; device: string; torchDtype: string; preferLocalFiles: boolean; allowRepoFallback: boolean };
 };
 
+export type AssistantSettings = {
+  personalityId: string;
+  customPersonality: string;
+  voiceId: string;
+  autoSpeakReplies: boolean;
+  speechLanguage: string;
+  streamingAudio: boolean;
+  researchDefaultMode: ResearchMode;
+  researchProvider: ResearchProvider;
+  researchMaxResults: number;
+  researchMaxSteps: number;
+  researchMaxQueries: number;
+  researchMaxSources: number;
+  researchMaxExtracts: number;
+  researchSearchCacheTtlSeconds: number;
+  researchExtractionCacheTtlSeconds: number;
+  researchRawRetentionDays: number;
+  researchManifestRetentionDays: number;
+  researchShowDiagnostics: boolean;
+  researchDeepEnabled: boolean;
+  researchHermesPlannerEnabled: boolean;
+};
+
 export type SettingsDocument = {
   schemaVersion: number;
   revision: string;
   global: { providers: ProviderDefaults; models: ModelDefaults; routing: RoutingDefaults };
   providerConfigs: ProviderConfigs;
   appearance: { mode: 'system' | 'light' | 'dark'; density: 'comfortable' | 'compact'; reduceMotion: boolean; liveCaptions: boolean };
-  assistant: { personalityId: string; customPersonality: string; voiceId: string; autoSpeakReplies: boolean; speechLanguage: string; streamingAudio: boolean };
+  assistant: AssistantSettings;
   voice: { language: string; stability: number; similarity: number; style: number; speed: number; pitch: number; volume: number; effects: string[]; streaming: boolean; cloningLanguage: string; cloningQuality: string };
   storyteller: { providerId: string; modelId: string; tone: string; writingStyle: string; readSpeed: number; pauseParagraphMs: number; pauseChapterMs: number; readChapterTitles: boolean; readStylePreset: string; pronunciation: Record<string, string> };
   podcast: { providerId: string; modelId: string; format: string; durationMinutes: number; tone: string; language: string; generationStyle: string; autoplay: boolean; playbackRate: number; stability: number; similarity: number; effects: string[] };
