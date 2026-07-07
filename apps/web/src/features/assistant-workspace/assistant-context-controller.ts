@@ -19,7 +19,6 @@ type DisplayMediaDevices = MediaDevices & {
   }) => Promise<MediaStream>;
 };
 
-const CONTEXT_STORAGE_KEY = 'omnix.chatbot.contextSettings';
 const CONTEXT_CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
 const DESKTOP_ACTION_ATTRIBUTE = 'data-omnix-desktop-action';
 const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
@@ -27,9 +26,8 @@ const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
 const assistantContextWindow = window as AssistantContextWindow;
 
-const legacySelectionPresent = hasLegacyResearchSelection();
 let profileDefaultMode: ResearchMode = 'disabled';
-let researchMode: ResearchMode = loadResearchMode();
+let researchMode: ResearchMode = 'disabled';
 let activeSessionId: string | null = null;
 let nativeFetch: typeof window.fetch | null = null;
 let desktopShare: DesktopShareSession | null = null;
@@ -84,13 +82,8 @@ export function webResearchModeLabel(mode: ResearchMode): string {
   return 'Disabled';
 }
 
-export function webSearchModeLabel(mode: ResearchMode): string {
-  return webResearchModeLabel(mode);
-}
-
-export function normalizeStoredResearchMode(value: unknown): ResearchMode {
+export function normalizeResearchMode(value: unknown): ResearchMode {
   if (value === 'quick' || value === 'deep' || value === 'disabled') return value;
-  if (value === 'automatic' || value === 'manual') return 'quick';
   return 'disabled';
 }
 
@@ -173,11 +166,10 @@ async function applySessionResearchMode(sessionId: string, response: Response): 
     activeSessionId = sessionId;
     researchMode = session.research_mode_override == null
       ? profileDefaultMode
-      : normalizeStoredResearchMode(session.research_mode_override);
-    saveResearchModeMirror(researchMode);
+      : normalizeResearchMode(session.research_mode_override);
     renderControls();
   } catch {
-    // Session reads remain usable even when compatibility metadata is absent.
+    // Session reads remain usable when research metadata is absent.
   }
 }
 
@@ -190,11 +182,8 @@ async function loadProfileResearchDefault(): Promise<void> {
     const settings = asRecord(payload.settings);
     const profile = asRecord(settings.settings_control_center);
     const assistant = asRecord(profile.assistant);
-    profileDefaultMode = normalizeStoredResearchMode(
-      assistant.research_default_mode ?? assistant.researchDefaultMode,
-    );
-    if (!legacySelectionPresent && !activeSessionId) researchMode = profileDefaultMode;
-    saveResearchModeMirror(researchMode);
+    profileDefaultMode = normalizeResearchMode(assistant.researchDefaultMode);
+    if (!activeSessionId) researchMode = profileDefaultMode;
     renderControls();
   } catch {
     // Settings availability must not block chat.
@@ -242,8 +231,7 @@ function injectControls(root: ParentNode): void {
     }
     webSelect.value = researchMode;
     webSelect.addEventListener('change', () => {
-      researchMode = normalizeStoredResearchMode(webSelect.value);
-      saveResearchModeMirror(researchMode);
+      researchMode = normalizeResearchMode(webSelect.value);
       if (activeSessionId) void persistConversationResearchMode(activeSessionId, researchMode);
       renderControls();
     });
@@ -288,7 +276,6 @@ function renderControls(): void {
   document.querySelectorAll<HTMLSelectElement>('select[aria-label="Web research mode"]').forEach((select) => {
     select.value = researchMode;
   });
-  document.querySelectorAll<HTMLElement>('.assistant-context-manual').forEach((element) => element.remove());
   document.querySelectorAll<HTMLButtonElement>('.assistant-context-desktop').forEach((button) => {
     const active = desktopShare !== null;
     button.classList.toggle('active', active);
@@ -360,36 +347,6 @@ function waitForVideoDimensions(video: HTMLVideoElement): Promise<void> {
       resolve();
     }, { once: true });
   });
-}
-
-function loadResearchMode(): ResearchMode {
-  try {
-    const raw = window.localStorage.getItem(CONTEXT_STORAGE_KEY);
-    if (!raw) return 'disabled';
-    const parsed = JSON.parse(raw) as { webResearchMode?: unknown; webSearchMode?: unknown };
-    return normalizeStoredResearchMode(parsed.webResearchMode ?? parsed.webSearchMode);
-  } catch {
-    return 'disabled';
-  }
-}
-
-function hasLegacyResearchSelection(): boolean {
-  try {
-    const raw = window.localStorage.getItem(CONTEXT_STORAGE_KEY);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as { webResearchMode?: unknown; webSearchMode?: unknown };
-    return parsed.webResearchMode !== undefined || parsed.webSearchMode !== undefined;
-  } catch {
-    return false;
-  }
-}
-
-function saveResearchModeMirror(mode: ResearchMode): void {
-  try {
-    window.localStorage.setItem(CONTEXT_STORAGE_KEY, JSON.stringify({ webResearchMode: mode }));
-  } catch {
-    // Compatibility storage is optional; settings and session APIs remain authoritative.
-  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
