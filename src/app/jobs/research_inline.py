@@ -10,6 +10,11 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 
 from app.research.contracts import RESEARCH_JOB_TYPE
+from app.research.executor import (
+    DeepResearchExecutor,
+    ResearchExecutionCheckpoint,
+    render_execution_summary,
+)
 from app.research.jobs import DeepResearchJobInput
 
 from .models import (
@@ -22,6 +27,10 @@ from .models import (
 )
 
 RESEARCH_EXECUTOR_ENV = "OMNIX_INLINE_RESEARCH_JOB_EXECUTOR"
+ResearchWorkflow = Callable[
+    [DeepResearchJobInput, Callable[[str, str], None], Callable[[], bool]],
+    "DeepResearchWorkflowResult",
+]
 
 
 class DeepResearchWorkflowResult(BaseModel):
@@ -53,7 +62,7 @@ def execute_research_job(
     job_store: Any,
     job: JobRecord,
     *,
-    workflow_fn: Callable[[DeepResearchJobInput, Callable[[str, str], None], Callable[[], bool]], DeepResearchWorkflowResult] | None = None,
+    workflow_fn: ResearchWorkflow | None = None,
     chat_store: Any | None = None,
 ) -> JobRecord:
     """Execute one durable research job and persist a normal assistant message."""
@@ -68,7 +77,25 @@ def execute_research_job(
 
         chat_store = default_chat_store()
     if workflow_fn is None:
-        workflow_fn = _default_workflow
+        resume = load_research_checkpoint(job_store, job.id)
+
+        def workflow_fn(
+            request: DeepResearchJobInput,
+            progress: Callable[[str, str], None],
+            canceled: Callable[[], bool],
+        ) -> DeepResearchWorkflowResult:
+            return _default_workflow(
+                request,
+                progress,
+                canceled,
+                checkpoint=resume,
+                save_checkpoint=lambda stage_id, state: save_research_checkpoint(
+                    job_store,
+                    job.id,
+                    stage_id,
+                    state,
+                ),
+            )
 
     if _cancel_requested(job_store, job.id):
         return _finalize_canceled(job_store, job.id, "Canceled before research started") or job
@@ -93,7 +120,7 @@ def execute_research_job(
             retryable=True,
         )
 
-    if canceled():
+    if canceled() or result.research_status == "canceled":
         return _finalize_canceled(job_store, job.id, "Canceled during research") or job
 
     _stage(job_store, job.id, "persisting", "Saving research result")
@@ -137,6 +164,46 @@ def execute_research_job(
         ),
     )
     return completed or job
+
+
+def save_research_checkpoint(
+    job_store: Any,
+    job_id: str,
+    stage_id: str,
+    checkpoint: ResearchExecutionCheckpoint,
+) -> JobRecord | None:
+    job = job_store.get_job(job_id)
+    if job is None or job.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELED}:
+        return job
+    now = datetime.now(timezone.utc).isoformat()
+    job.updated_at = now
+    job.stages = [
+        stage.model_copy(
+            update={"checkpoint_ref": checkpoint.model_dump(mode="json")}
+        )
+        if stage.id == stage_id
+        else stage
+        for stage in job.stages
+    ]
+    return job_store._save_with_event(job, "job.updated")  # noqa: SLF001 - shared job adapter
+
+
+def load_research_checkpoint(
+    job_store: Any,
+    job_id: str,
+) -> ResearchExecutionCheckpoint | None:
+    job = job_store.get_job(job_id)
+    if job is None:
+        return None
+    checkpoints: list[ResearchExecutionCheckpoint] = []
+    for stage in job.stages:
+        if not stage.checkpoint_ref:
+            continue
+        try:
+            checkpoints.append(ResearchExecutionCheckpoint.model_validate(stage.checkpoint_ref))
+        except ValidationError:
+            continue
+    return max(checkpoints, key=lambda item: item.next_operation_index, default=None)
 
 
 def _start_research_job(job_store: Any, job: JobRecord) -> None:
@@ -238,19 +305,45 @@ def _default_workflow(
     request: DeepResearchJobInput,
     progress: Callable[[str, str], None],
     canceled: Callable[[], bool],
+    *,
+    checkpoint: ResearchExecutionCheckpoint | None = None,
+    save_checkpoint: Callable[[str, ResearchExecutionCheckpoint], None] | None = None,
 ) -> DeepResearchWorkflowResult:
-    """Safe WSR-4 fallback replaced by the planner/executor phases."""
-
-    progress("searching", "Preparing bounded research execution")
-    if canceled():
-        return DeepResearchWorkflowResult(content="Research was canceled.", research_status="canceled")
-    progress("synthesizing", "Writing a partial research response")
+    execution = DeepResearchExecutor().execute(
+        request,
+        progress,
+        canceled,
+        checkpoint=checkpoint,
+        save_checkpoint=save_checkpoint,
+    )
+    if execution.research_status == "canceled":
+        return DeepResearchWorkflowResult(
+            content="Research was canceled.",
+            research_status="canceled",
+        )
+    progress("synthesizing", "Preparing the evidence-backed research summary")
     return DeepResearchWorkflowResult(
-        content=(
-            "Deep Research was queued successfully, but the iterative research planner is not enabled yet.\n\n"
-            "## Limitations\nNo external sources were evaluated for this result."
-        ),
-        research_status="partial",
-        metadata={"limitations": ["research_planner_not_enabled"]},
-        output={"limitations": ["research_planner_not_enabled"]},
+        content=render_execution_summary(execution),
+        research_status=execution.research_status,
+        source_manifest_id=execution.source_manifest_id,
+        metadata={
+            "planner_backend": execution.planner_backend,
+            "research_stop_reason": execution.stop_reason,
+            "research_warnings": execution.warnings,
+            "conflict_count": len(execution.conflicts),
+            "logical_queries": execution.logical_queries,
+            "extracted_pages": execution.extracted_pages,
+        },
+        output={
+            "objective": execution.objective,
+            "planner_backend": execution.planner_backend,
+            "stop_reason": execution.stop_reason,
+            "warnings": execution.warnings,
+            "sources": [item.model_dump(mode="json") for item in execution.sources],
+            "snapshots": [item.model_dump(mode="json") for item in execution.snapshots],
+            "evidence": [item.model_dump(mode="json") for item in execution.evidence],
+            "conflicts": [item.model_dump(mode="json") for item in execution.conflicts],
+            "logical_queries": execution.logical_queries,
+            "extracted_pages": execution.extracted_pages,
+        },
     )
