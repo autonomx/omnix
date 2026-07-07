@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.map_persistence import ensure_session_map_state
 from app.rpg.session.ambient_builder import (
     ensure_ambient_runtime_state,
     normalize_ambient_state,
@@ -38,6 +39,7 @@ def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
     session.setdefault("simulation_state", {})
     session = ensure_session_environment_seed_state(session)
     session = normalize_session_survival_for_persistence(session)
+    session = ensure_session_map_state(session)
     # Living-world: ensure ambient runtime state exists and is bounded
     runtime_state = _safe_dict(session.get("runtime_state"))
     runtime_state = ensure_ambient_runtime_state(runtime_state)
