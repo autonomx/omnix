@@ -5,6 +5,12 @@ from pydantic import BaseModel, Field
 
 from .policy import privacy_contract
 from .quick_search import provider_coverage
+from .release_policy import (
+    ResearchReleaseAvailability,
+    ResearchReleasePolicy,
+    research_release_availability,
+    research_release_policy_from_env,
+)
 from .settings import ResearchRuntimeSettings, load_research_runtime_settings
 
 
@@ -31,11 +37,23 @@ class ResearchRetentionStatus(BaseModel):
     source_manifest_retention_days: int
 
 
+class ResearchReleaseStatus(BaseModel):
+    master_enabled: bool
+    quick_enabled: bool
+    quick_percentage: int
+    deep_local_enabled: bool
+    deep_local_percentage: int
+    hermes_enabled: bool
+    hermes_percentage: int
+    availability: ResearchReleaseAvailability
+
+
 class ResearchRuntimeStatus(BaseModel):
     default_mode: str
     provider: ResearchProviderStatus
     budgets: ResearchBudgetStatus
     retention: ResearchRetentionStatus
+    release: ResearchReleaseStatus
     deep_enabled: bool
     hermes_planner_enabled: bool
     diagnostics_enabled: bool
@@ -44,8 +62,13 @@ class ResearchRuntimeStatus(BaseModel):
 
 def research_runtime_status(
     settings: ResearchRuntimeSettings | None = None,
+    release_policy: ResearchReleasePolicy | None = None,
+    *,
+    identity: str = "status-preview",
 ) -> ResearchRuntimeStatus:
     resolved = settings or load_research_runtime_settings()
+    release = release_policy or research_release_policy_from_env()
+    availability = research_release_availability(resolved, release, identity=identity)
     return ResearchRuntimeStatus(
         default_mode=resolved.default_mode,
         provider=ResearchProviderStatus(
@@ -67,6 +90,16 @@ def research_runtime_status(
             extraction_cache_ttl_seconds=resolved.policy.extraction_cache_ttl_seconds,
             raw_snapshot_retention_days=resolved.policy.raw_snapshot_retention_days,
             source_manifest_retention_days=resolved.policy.source_manifest_retention_days,
+        ),
+        release=ResearchReleaseStatus(
+            master_enabled=release.master_enabled,
+            quick_enabled=release.quick_enabled,
+            quick_percentage=release.quick_percentage,
+            deep_local_enabled=release.deep_local_enabled,
+            deep_local_percentage=release.deep_local_percentage,
+            hermes_enabled=release.hermes_enabled,
+            hermes_percentage=release.hermes_percentage,
+            availability=availability,
         ),
         deep_enabled=resolved.deep_enabled,
         hermes_planner_enabled=resolved.hermes_planner_enabled,
