@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { ProviderFacadePayload } from '../../api/client';
 import { FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { ImageReferenceControl } from './ImageReferenceControl';
 import {
   imageRequestDefaultValues,
   type ImageRequestDefaults,
@@ -58,6 +59,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
   const prompt = watch('prompt') ?? '';
   const width = watch('width');
   const height = watch('height');
+  const referenceAssetIds = watch('referenceAssetIds') ?? [];
 
   useEffect(() => {
     if (isDirty || !defaults.providerId) return;
@@ -157,21 +159,26 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
         </fieldset>
 
         <label className="image-field image-prompt-field">
-          <span>Prompt <i title="Describe the image you want to create">ⓘ</i></span>
+          <span>Prompt <i title="Describe the image you want to create or how the references should change">ⓘ</i></span>
           <textarea
             aria-label="Prompt"
             rows={4}
             maxLength={2000}
-            placeholder="Describe the image you want to create..."
+            placeholder="Describe the image you want to create, or what to preserve and change from the reference..."
             aria-invalid={Boolean(errors.prompt)}
             {...register('prompt', { required: true })}
           />
           <small className="image-character-count">{prompt.length} / 2000</small>
         </label>
 
+        <ImageReferenceControl
+          selectedAssetIds={referenceAssetIds}
+          onChange={(assetIds) => setValue('referenceAssetIds', assetIds, { shouldDirty: true })}
+        />
+
         <div className="image-request-options-row">
           <label className="image-field">
-            <span>Style <i title="A visual style hint sent to the provider">ⓘ</i></span>
+            <span>Style <i title="A visual style directive sent to the provider">ⓘ</i></span>
             <select aria-label="Style" {...register('style')}>
               <option value="photorealistic">Photorealistic</option>
               <option value="cinematic">Cinematic</option>
@@ -215,7 +222,7 @@ export function ImageRequestForm({ defaults, providers, pending, disabled, disab
         <Button aria-label={pending ? 'Queueing image' : 'Generate image'} className="image-generate-button" type="submit" disabled={pending || disabled} loading={pending} title={disabledReason}>
           <span aria-hidden="true">✦</span> {pending ? 'Queueing Image...' : 'Generate Image'}
         </Button>
-        <p className="image-local-note"><span aria-hidden="true">♢</span> Uses the selected configured provider and saves completed output to Image Assets.</p>
+        <p className="image-local-note"><span aria-hidden="true">♢</span> Uses the selected provider and saves completed output to Image Assets. Reference-conditioned requests bypass the reusable result cache.</p>
       </form>
       <FeatureValidationMessage show={Boolean(errors.prompt)} message="Enter a prompt before generating an image." />
       <FeatureValidationMessage show={Boolean(errors.width || errors.height)} message="Use dimensions from 128 to 4096 in multiples of 64." />
