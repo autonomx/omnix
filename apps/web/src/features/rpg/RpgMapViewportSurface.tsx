@@ -3,6 +3,8 @@ import type { RpgMapDefinition, RpgMapOverlay } from '../../api/rpgMapClient';
 import { RpgMapObjectLayer, RpgMapObjectTooltip } from './RpgMapObjectInteractions';
 import {
   DEFAULT_RPG_MAP_LAYERS,
+  RpgMapEnvironmentLayer,
+  RpgMapFogLayer,
   RpgMapLabelLayer,
   RpgMapLayerControls,
   RpgMapMarkerLayer,
@@ -62,10 +64,15 @@ export function RpgMapViewportSurface({
   const pointersRef = useRef(new Map<number, PointerPoint>());
   const lastPointRef = useRef<PointerPoint | null>(null);
   const pinchRef = useRef<PinchStart | null>(null);
+  const discoveredIds = overlay.availability === 'ready'
+    ? new Set(overlay.discovered_object_ids)
+    : new Set(definition.objects.map((item) => item.id));
   const visibleIds = overlay.availability === 'ready'
     ? new Set(overlay.visible_object_ids)
     : new Set(definition.objects.map((item) => item.id));
+  const objectStates = new Map((overlay.object_states ?? []).map((state) => [state.object_id, state]));
   const activeObject = definition.objects.find((item) => item.id === activeObjectId) ?? null;
+  const activeDynamicState = activeObject ? objectStates.get(activeObject.id) : undefined;
 
   useEffect(() => {
     setViewport(viewportCache.get(definition.map_id) ?? fitRpgMapViewport());
@@ -208,10 +215,13 @@ export function RpgMapViewportSurface({
           </defs>
           <g data-map-viewport="true" transform={rpgMapViewportTransform(viewport)}>
             <rect x={x} y={y} width={width} height={height} fill="url(#rpg-map-parchment-grid)" />
+            <RpgMapEnvironmentLayer definition={definition} environment={overlay.environment} />
             {layers.routes ? <RpgMapRouteLayer definition={definition} overlay={overlay} /> : null}
             {layers.structures ? (
               <RpgMapObjectLayer
                 activeObjectId={activeObjectId}
+                discoveredObjectIds={discoveredIds}
+                objectStates={objectStates}
                 objects={definition.objects}
                 onActiveObjectChange={onActiveObjectChange}
                 onSelectObject={onSelectObject}
@@ -221,9 +231,12 @@ export function RpgMapViewportSurface({
             ) : null}
             {layers.markers ? <RpgMapMarkerLayer markers={overlay.markers} /> : null}
             {layers.labels ? <RpgMapLabelLayer labels={definition.labels} /> : null}
+            {layers.fog ? <RpgMapFogLayer polygons={overlay.fog_polygons ?? []} /> : null}
           </g>
         </svg>
-        {layers.structures ? <RpgMapObjectTooltip definition={definition} item={activeObject} viewport={viewport} /> : null}
+        {layers.structures ? (
+          <RpgMapObjectTooltip definition={definition} dynamicState={activeDynamicState} item={activeObject} viewport={viewport} />
+        ) : null}
       </div>
     </div>
   );
