@@ -74,65 +74,105 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
     @gateway.post("/api/image-generation/assets/{asset_id}/delete", include_in_schema=False)
     def delete_image_asset(asset_id: str) -> dict[str, Any]:
         store = default_asset_store()
-        asset = next((item for item in store.list_assets().assets if item.id == asset_id), None)
+        all_assets = store.list_assets().assets
+        asset = next((item for item in all_assets if item.id == asset_id), None)
         if asset is None:
             raise HTTPException(status_code=404, detail="asset_not_found")
         if asset.type != AssetType.IMAGE or asset.module not in {"image", "image-generation"}:
             raise HTTPException(status_code=409, detail="asset_not_image_generation")
 
-        source_job_id = str(asset.source_job_id or "").strip()
-        job_store: Any | None = None
-        if source_job_id:
-            job_store = default_job_store()
-            source_job = job_store.get_job(source_job_id)
+        related_assets = _related_image_assets(all_assets, asset)
+        source_job_ids = sorted(
+            {
+                str(item.source_job_id or "").strip()
+                for item in related_assets
+                if str(item.source_job_id or "").strip()
+            }
+        )
+        job_store: Any | None = default_job_store() if source_job_ids else None
+        for source_job_id in source_job_ids:
+            source_job = job_store.get_job(source_job_id) if job_store is not None else None
             if source_job is not None and source_job.status not in TERMINAL_STATUSES:
                 raise HTTPException(status_code=409, detail="image_job_still_active")
 
-        cache_key = str((asset.metadata or {}).get("cache_key") or "").strip()
-        cache_result = forget_image_cache_record(cache_key=cache_key, file_path=asset.storage_path)
-        shared_result = store.delete_asset(asset_id)
-        legacy_result: dict[str, Any] | None = None
-        legacy_asset_id = str((asset.compat or {}).get("legacy_asset_id") or "").strip()
-        if legacy_asset_id:
-            from app.image.asset_store import delete_image_asset as delete_legacy_image_asset
+        forgotten_keys: set[str] = set()
+        for item in related_assets:
+            cache_key = str((item.metadata or {}).get("cache_key") or "").strip()
+            cache_result = forget_image_cache_record(cache_key=cache_key, file_path=item.storage_path)
+            forgotten_keys.update(str(key) for key in cache_result.get("forgotten_keys") or [])
 
-            legacy_result = delete_legacy_image_asset(
-                legacy_asset_id,
-                delete_file=not bool(shared_result.get("file_deleted")),
+        removed_asset_ids: list[str] = []
+        file_deleted = False
+        file_error = ""
+        for item in related_assets:
+            shared_result = store.delete_asset(item.id)
+            legacy_result: dict[str, Any] | None = None
+            legacy_asset_id = str((item.compat or {}).get("legacy_asset_id") or "").strip()
+            if legacy_asset_id:
+                from app.image.asset_store import delete_image_asset as delete_legacy_image_asset
+
+                legacy_result = delete_legacy_image_asset(
+                    legacy_asset_id,
+                    delete_file=not bool(shared_result.get("file_deleted")),
+                )
+            if bool(shared_result.get("deleted")) or bool((legacy_result or {}).get("deleted")):
+                removed_asset_ids.append(item.id)
+            file_deleted = file_deleted or bool(shared_result.get("file_deleted")) or bool(
+                (legacy_result or {}).get("file_deleted")
             )
+            file_error = file_error or str(
+                shared_result.get("file_error") or (legacy_result or {}).get("file_error") or ""
+            ).strip()
 
-        deleted = bool(shared_result.get("deleted")) or bool((legacy_result or {}).get("deleted"))
-        if not deleted:
+        if asset_id not in removed_asset_ids:
             raise HTTPException(status_code=404, detail="asset_not_deletable")
 
-        job_result = {
-            "ok": True,
-            "job_id": source_job_id,
-            "job_removed": False,
-            "events_removed": 0,
-        }
-        if source_job_id and job_store is not None:
-            job_result = purge_terminal_job_history(job_store, source_job_id)
+        removed_job_ids: list[str] = []
+        events_removed = 0
+        if job_store is not None:
+            for source_job_id in source_job_ids:
+                job_result = purge_terminal_job_history(job_store, source_job_id)
+                if job_result.get("job_removed"):
+                    removed_job_ids.append(source_job_id)
+                events_removed += int(job_result.get("events_removed") or 0)
 
         result: dict[str, Any] = {
             "ok": True,
             "asset_id": asset_id,
             "deleted": True,
-            "file_deleted": bool(shared_result.get("file_deleted"))
-            or bool((legacy_result or {}).get("file_deleted")),
+            "file_deleted": file_deleted,
         }
-        forgotten_keys = list(cache_result.get("forgotten_keys") or [])
+        if len(removed_asset_ids) > 1:
+            result["deleted_asset_ids"] = removed_asset_ids
         if forgotten_keys:
-            result["cache_keys_removed"] = forgotten_keys
-        if job_result.get("job_removed") and source_job_id:
-            result["job_ids_removed"] = [source_job_id]
-        events_removed = int(job_result.get("events_removed") or 0)
+            result["cache_keys_removed"] = sorted(forgotten_keys)
+        if removed_job_ids:
+            result["job_ids_removed"] = removed_job_ids
         if events_removed:
             result["job_events_removed"] = events_removed
-        file_error = str(shared_result.get("file_error") or (legacy_result or {}).get("file_error") or "").strip()
         if file_error:
             result["file_error"] = file_error
         return result
+
+
+def _related_image_assets(assets: list[AssetRecord], target: AssetRecord) -> list[AssetRecord]:
+    target_path = _normalized_path(target.storage_path)
+    target_cache_key = str((target.metadata or {}).get("cache_key") or "").strip()
+    related: list[AssetRecord] = []
+    for asset in assets:
+        if asset.type != AssetType.IMAGE or asset.module not in {"image", "image-generation"}:
+            continue
+        same_path = bool(target_path and _normalized_path(asset.storage_path) == target_path)
+        cache_key = str((asset.metadata or {}).get("cache_key") or "").strip()
+        same_cache_key = bool(target_cache_key and cache_key == target_cache_key)
+        if asset.id == target.id or same_path or same_cache_key:
+            related.append(asset)
+    return related
+
+
+def _normalized_path(value: str) -> str:
+    path = str(value or "").strip()
+    return str(Path(path).resolve()) if path else ""
 
 
 def _is_usable_image_asset(asset: AssetRecord) -> bool:
