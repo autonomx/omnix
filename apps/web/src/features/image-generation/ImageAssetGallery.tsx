@@ -1,30 +1,44 @@
 import { Button, Text, UnstyledButton } from '@mantine/core';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import type { AssetListResponse } from '../../api/client';
-import { imageAssetUrl } from './imageWorkspaceModel';
+import { omnixApiClient, type AssetListResponse } from '../../api/client';
+import { IMAGE_ASSETS_QUERY_KEY, imageAssetUrl } from './imageWorkspaceModel';
 import { ImagePreviewDialog } from './ImagePreviewDialog';
 
 export type ImageAsset = AssetListResponse['assets'][number];
 
+interface DeleteImageAssetResponse {
+  ok: boolean;
+  asset_id: string;
+  deleted: boolean;
+  file_deleted: boolean;
+  file_error?: string;
+}
+
 interface ImageAssetGalleryProps {
   assets: ImageAsset[];
   selectedAssetId: string | null;
-  deletingAssetId?: string;
   onSelect: (assetId: string) => void;
-  onDelete: (assetId: string) => void;
 }
 
-export function ImageAssetGallery({
-  assets,
-  selectedAssetId,
-  deletingAssetId,
-  onSelect,
-  onDelete,
-}: ImageAssetGalleryProps) {
+export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAssetGalleryProps) {
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [previewAsset, setPreviewAsset] = useState<ImageAsset | null>(null);
+  const deleteAssetMutation = useMutation({
+    mutationFn: (assetId: string) => omnixApiClient.post<Record<string, never>, DeleteImageAssetResponse>(
+      `/api/image-generation/assets/${encodeURIComponent(assetId)}/delete`,
+      {},
+    ),
+    onSuccess: async (result) => {
+      queryClient.setQueryData<AssetListResponse>(IMAGE_ASSETS_QUERY_KEY, (current) => current
+        ? { ...current, assets: current.assets.filter((asset) => asset.id !== result.asset_id) }
+        : current);
+      await queryClient.invalidateQueries({ queryKey: IMAGE_ASSETS_QUERY_KEY });
+    },
+  });
   const providers = useMemo(
     () => [...new Set(assets.map(imageAssetProvider).filter(Boolean))].sort(),
     [assets],
@@ -46,7 +60,7 @@ export function ImageAssetGallery({
       || window.confirm(`Delete “${title}”? This removes the image file and cannot be undone.`);
     if (!confirmed) return;
     if (previewAsset?.id === asset.id) setPreviewAsset(null);
-    onDelete(asset.id);
+    deleteAssetMutation.mutate(asset.id);
   };
 
   return (
@@ -83,7 +97,7 @@ export function ImageAssetGallery({
           {visibleAssets.map((asset) => {
             const title = imageAssetTitle(asset);
             const selected = asset.id === selectedAssetId;
-            const deleting = asset.id === deletingAssetId;
+            const deleting = asset.id === deleteAssetMutation.variables;
             return (
               <article className={`image-asset-card ${selected ? 'selected' : ''}`} key={asset.id}>
                 <div className="image-asset-select">
@@ -109,7 +123,7 @@ export function ImageAssetGallery({
                   <Button
                     aria-label={`Delete ${title}`}
                     color="red"
-                    disabled={Boolean(deletingAssetId) && !deleting}
+                    disabled={deleteAssetMutation.isPending && !deleting}
                     loading={deleting}
                     onClick={() => requestDelete(asset)}
                     size="compact-xs"
@@ -125,6 +139,7 @@ export function ImageAssetGallery({
       ) : (
         <div className="image-empty-state" role="status">No image assets match these filters.</div>
       )}
+      {deleteAssetMutation.isError ? <Text c="red" size="sm" role="alert">Image deletion failed.</Text> : null}
       {previewAsset ? <ImagePreviewDialog asset={previewAsset} onClose={() => setPreviewAsset(null)} /> : null}
     </>
   );
