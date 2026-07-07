@@ -110,6 +110,40 @@ class SharedAssetStore:
         self._save_manifest(manifest)
         return asset
 
+    def delete_asset(self, asset_id: str, *, delete_file: bool = True) -> dict[str, Any]:
+        """Delete one manifest-backed asset and, by default, its stored file."""
+
+        manifest = self._load_manifest()
+        asset = manifest.pop(str(asset_id), None)
+        if asset is None:
+            return {
+                "ok": False,
+                "asset_id": str(asset_id),
+                "deleted": False,
+                "file_deleted": False,
+            }
+
+        self._save_manifest(manifest)
+        file_deleted = False
+        file_error = ""
+        path = Path(str(asset.storage_path or ""))
+        if delete_file and str(asset.storage_path or "").strip() and path.is_file():
+            try:
+                path.unlink()
+                file_deleted = True
+            except OSError as exc:
+                file_error = str(exc)
+
+        result: dict[str, Any] = {
+            "ok": True,
+            "asset_id": asset.id,
+            "deleted": True,
+            "file_deleted": file_deleted,
+        }
+        if file_error:
+            result["file_error"] = file_error
+        return result
+
     def preview_image_manifest_import(
         self,
         image_manifest: dict[str, Any] | None = None,
