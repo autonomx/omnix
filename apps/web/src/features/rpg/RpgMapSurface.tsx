@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   getRpgMapDefinition,
   getRpgMapOverlay,
+  type RpgMapActionCapability,
   type RpgMapDefinition,
   type RpgMapObjectDefinition,
   type RpgMapOverlay,
@@ -15,6 +17,8 @@ interface RpgMapSurfaceProps {
 }
 
 export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
+  const [activeObjectId, setActiveObjectId] = useState<string | null>(null);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const definitionQuery = useQuery({
     queryKey: ['feature', 'rpg', 'map-definition', mapId],
     queryFn: () => getRpgMapDefinition(mapId),
@@ -26,6 +30,11 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
     queryFn: () => getRpgMapOverlay(sessionId, mapId),
     enabled: Boolean(sessionId && mapId),
   });
+
+  useEffect(() => {
+    setActiveObjectId(null);
+    setSelectedObjectId(null);
+  }, [mapId, sessionId]);
 
   if (definitionQuery.isPending || overlayQuery.isPending) {
     return <MapStateMessage title="Loading map" detail="Reading the map definition and current session overlay…" />;
@@ -46,6 +55,16 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
     return <MapStateMessage title="Empty map overlay" detail="The selected session did not return live map state." />;
   }
 
+  const visible = visibleObjects(definition, overlay);
+  const selectedObject = visible.find((item) => item.id === selectedObjectId) ?? null;
+  const selectedCapabilities = selectedObject
+    ? overlay.capabilities.filter((capability) => capability.target_object_id === selectedObject.id)
+    : [];
+  const selectObject = (objectId: string) => {
+    setSelectedObjectId(objectId);
+    setActiveObjectId(objectId);
+  };
+
   return (
     <div className="rpg-map-surface">
       {overlay.availability === 'ready' ? null : (
@@ -56,25 +75,106 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
           tone="warning"
         />
       )}
-      <RpgMapViewportSurface definition={definition} overlay={overlay} />
+      <RpgMapViewportSurface
+        activeObjectId={activeObjectId}
+        definition={definition}
+        onActiveObjectChange={setActiveObjectId}
+        onSelectObject={selectObject}
+        overlay={overlay}
+        selectedObjectId={selectedObjectId}
+      />
       <div className="rpg-map-surface-meta" aria-label="Map revision information">
         <span>{definition.level}</span>
         <span>Definition {shortRevision(definition.definition_revision)}</span>
         <span>Overlay {overlay.overlay_revision}</span>
         <span>Turn {overlay.session_turn_index}</span>
       </div>
-      <AccessibleObjectList definition={definition} overlay={overlay} />
+      <SelectedObjectPanel
+        capabilities={selectedCapabilities}
+        item={selectedObject}
+        onClose={() => setSelectedObjectId(null)}
+      />
+      <AccessibleObjectList
+        activeObjectId={activeObjectId}
+        definition={definition}
+        onActiveObjectChange={setActiveObjectId}
+        onSelectObject={selectObject}
+        overlay={overlay}
+        selectedObjectId={selectedObjectId}
+      />
     </div>
   );
 }
 
-function AccessibleObjectList({ definition, overlay }: { definition: RpgMapDefinition; overlay: RpgMapOverlay }) {
+function SelectedObjectPanel({
+  capabilities,
+  item,
+  onClose,
+}: {
+  capabilities: RpgMapActionCapability[];
+  item: RpgMapObjectDefinition | null;
+  onClose: () => void;
+}) {
+  if (!item) return null;
+  return (
+    <section aria-label="Selected map object" className="rpg-map-selected-panel">
+      <div>
+        <p className="eyebrow">Selected location</p>
+        <h3>{item.label || item.location_id || item.id}</h3>
+        <p>{item.description || `A ${humanizeReason(item.kind)} on the current map.`}</p>
+        <small>{item.location_id ?? item.id}</small>
+      </div>
+      {item.tags.length ? (
+        <div className="rpg-map-object-tags" aria-label="Object tags">
+          {item.tags.map((tag) => <span key={tag}>{humanizeReason(tag)}</span>)}
+        </div>
+      ) : null}
+      <div className="rpg-map-capability-list" aria-label="Projected map capabilities">
+        {capabilities.length ? capabilities.map((capability) => (
+          <span className={capability.enabled ? 'rpg-map-capability-enabled' : 'rpg-map-capability-disabled'} key={`${capability.type}:${capability.route_id ?? capability.target_object_id}`}>
+            {humanizeReason(capability.type)}{capability.enabled ? '' : ` — ${humanizeReason(capability.disabled_reason)}`}
+          </span>
+        )) : <span>No live actions are projected for this object.</span>}
+      </div>
+      <button className="rpg-secondary-button" onClick={onClose} type="button">Close selection</button>
+    </section>
+  );
+}
+
+function AccessibleObjectList({
+  activeObjectId,
+  definition,
+  onActiveObjectChange,
+  onSelectObject,
+  overlay,
+  selectedObjectId,
+}: {
+  activeObjectId: string | null;
+  definition: RpgMapDefinition;
+  onActiveObjectChange: (objectId: string | null) => void;
+  onSelectObject: (objectId: string) => void;
+  overlay: RpgMapOverlay;
+  selectedObjectId: string | null;
+}) {
   return (
     <div className="rpg-map-accessible-list" aria-label="Visible map locations">
       <p className="eyebrow">Visible map objects</p>
       <ul>
         {visibleObjects(definition, overlay).map((item) => (
-          <li key={item.id}>{item.label || item.location_id || item.id}</li>
+          <li key={item.id}>
+            <button
+              aria-pressed={selectedObjectId === item.id}
+              className={activeObjectId === item.id ? 'rpg-map-object-list-active' : undefined}
+              onBlur={() => onActiveObjectChange(null)}
+              onClick={() => onSelectObject(item.id)}
+              onFocus={() => onActiveObjectChange(item.id)}
+              onMouseEnter={() => onActiveObjectChange(item.id)}
+              onMouseLeave={() => onActiveObjectChange(null)}
+              type="button"
+            >
+              {item.label || item.location_id || item.id}
+            </button>
+          </li>
         ))}
       </ul>
     </div>
