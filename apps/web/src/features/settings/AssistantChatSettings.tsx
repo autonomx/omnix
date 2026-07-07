@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { syncAssistantPreferences } from './assistantPreferencesBridge';
+import { ResearchSettingsSection } from './ResearchSettingsSection';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 
@@ -10,7 +11,7 @@ export function AssistantChatSettings() {
   return (
     <div className="settings-category-panel">
       <h2>Assistant & Chat</h2>
-      <p>Defaults for new conversations and voice responses.</p>
+      <p>Defaults for new conversations, research, and voice responses.</p>
       <SettingsSection title="Assistant defaults" scope="module">
         <div className="settings-form-grid">
           <SettingsField label="Personality">
@@ -44,6 +45,7 @@ export function AssistantChatSettings() {
           ) : null}
         </div>
       </SettingsSection>
+      <ResearchSettingsSection />
       <SettingsSection title="Voice responses" scope="module">
         <div className="settings-form-grid">
           <SettingsField label="Speech language">
