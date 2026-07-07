@@ -25,6 +25,21 @@ type ResearchRuntimeStatus = {
     raw_snapshot_retention_days: number;
     source_manifest_retention_days: number;
   };
+  release: {
+    master_enabled: boolean;
+    quick_enabled: boolean;
+    quick_percentage: number;
+    deep_local_enabled: boolean;
+    deep_local_percentage: number;
+    hermes_enabled: boolean;
+    hermes_percentage: number;
+    availability: {
+      disabled: boolean;
+      quick: boolean;
+      deep: boolean;
+      hermes_planner: boolean;
+    };
+  };
   deep_enabled: boolean;
   hermes_planner_enabled: boolean;
   diagnostics_enabled: boolean;
@@ -72,7 +87,7 @@ export function ResearchSettingsSection() {
   return (
     <SettingsSection
       title="Web research"
-      description="Defaults apply to new Quick Search turns and new durable Deep Research jobs. API keys remain environment-owned."
+      description="Defaults apply to new Quick Search turns and new durable Deep Research jobs. API keys and release percentages remain environment-owned."
       scope="module"
     >
       <div className="settings-form-grid">
@@ -87,9 +102,9 @@ export function ResearchSettingsSection() {
       </div>
 
       <div className="settings-toggle-list">
-        <label><input type="checkbox" checked={value.researchDeepEnabled} onChange={(event) => dispatch({ type: 'update', path: 'assistant.researchDeepEnabled', value: event.currentTarget.checked })} /><span>Enable Deep Research for rollout</span></label>
+        <label><input type="checkbox" checked={value.researchDeepEnabled} onChange={(event) => dispatch({ type: 'update', path: 'assistant.researchDeepEnabled', value: event.currentTarget.checked })} /><span>Enable Deep Research when released for this session</span></label>
         <label><input type="checkbox" checked={value.researchShowDiagnostics} onChange={(event) => dispatch({ type: 'update', path: 'assistant.researchShowDiagnostics', value: event.currentTarget.checked })} /><span>Show research diagnostics and source details</span></label>
-        <label><input type="checkbox" checked={value.researchHermesPlannerEnabled} onChange={(event) => dispatch({ type: 'update', path: 'assistant.researchHermesPlannerEnabled', value: event.currentTarget.checked })} /><span>Prefer Hermes research planner when Hermes is enabled</span></label>
+        <label><input type="checkbox" checked={value.researchHermesPlannerEnabled} onChange={(event) => dispatch({ type: 'update', path: 'assistant.researchHermesPlannerEnabled', value: event.currentTarget.checked })} /><span>Prefer Hermes only when its separate release gate is active</span></label>
       </div>
 
       <SettingsAdvanced label="Budgets, cache, and retention">
@@ -120,6 +135,26 @@ export function ResearchSettingsSection() {
           label="Credentials"
           value={runtime ? (runtime.provider.credential_required ? (runtime.provider.credential_configured ? 'Configured' : 'Not configured') : 'Not required') : 'Checking'}
           tone={runtime?.provider.available ? 'ready' : runtime ? 'warning' : 'idle'}
+        />
+        <SettingsStatusRow
+          label="Master release"
+          value={runtime ? (runtime.release.master_enabled ? 'Enabled' : 'Rollback active') : 'Checking'}
+          tone={runtime?.release.master_enabled ? 'ready' : runtime ? 'warning' : 'idle'}
+        />
+        <SettingsStatusRow
+          label="Quick Search release"
+          value={runtime ? `${runtime.release.availability.quick ? 'Available' : 'Unavailable'} · ${runtime.release.quick_percentage}% cohort` : 'Checking'}
+          tone={runtime?.release.availability.quick ? 'ready' : runtime ? 'warning' : 'idle'}
+        />
+        <SettingsStatusRow
+          label="Deep Research release"
+          value={runtime ? `${runtime.release.availability.deep ? 'Available' : 'Unavailable'} · ${runtime.release.deep_local_percentage}% cohort` : 'Checking'}
+          tone={runtime?.release.availability.deep ? 'ready' : runtime ? 'idle' : 'idle'}
+        />
+        <SettingsStatusRow
+          label="Hermes planner release"
+          value={runtime ? `${runtime.release.availability.hermes_planner ? 'Available' : 'Not released'} · ${runtime.release.hermes_percentage}% cohort` : 'Checking'}
+          tone={runtime?.release.availability.hermes_planner ? 'ready' : 'idle'}
         />
       </div>
       <p className="settings-inline-status" role="status">{statusMessage}</p>
