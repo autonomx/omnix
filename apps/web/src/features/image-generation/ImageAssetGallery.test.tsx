@@ -45,7 +45,7 @@ afterEach(() => {
 
 describe('ImageAssetGallery deletion', () => {
   it('confirms and requests deletion of the selected image asset', async () => {
-    const fetchMock = vi.fn(async () => Response.json({
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({
       ok: true,
       asset_id: asset.id,
       deleted: true,
@@ -65,7 +65,7 @@ describe('ImageAssetGallery deletion', () => {
   });
 
   it('does not delete when confirmation is declined', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => Promise.resolve(Response.json({})));
     vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderGallery();
