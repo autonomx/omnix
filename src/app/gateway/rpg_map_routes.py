@@ -10,6 +10,8 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.rpg.map_actions import MapActionError, MapActionRequest, apply_map_action, map_action_error_payload
+from app.rpg.map_living_overlay import project_living_map_markers
+from app.rpg.map_living_state import merge_living_overlay_payload, project_living_map_state
 from app.rpg.map_overlay_projection import merge_dynamic_overlay_payload, project_dynamic_map_overlay
 from app.rpg.map_projection import project_session_map_overlay
 from app.rpg.map_repository import MapDefinitionNotFound, default_map_repository
@@ -64,8 +66,7 @@ def register_rpg_map_routes(app: FastAPI) -> None:
     def rpg_map_overlay(session_id: str, map_id: str) -> Response:
         session = _load_session_or_404(session_id)
         definition, overlay = _definition_and_overlay(session, map_id)
-        dynamic = project_dynamic_map_overlay(session, definition)
-        overlay_payload = merge_dynamic_overlay_payload(_payload(overlay), dynamic)
+        overlay_payload = _project_overlay_payload(session, definition, overlay)
         etag = _etag(f"{overlay.definition_revision}:{overlay.overlay_revision}:{overlay.session_turn_index}")
         return JSONResponse({
             "ok": True,
@@ -92,8 +93,7 @@ def register_rpg_map_routes(app: FastAPI) -> None:
         saved = save_session(result_session, compact=False) if isinstance(result_session, dict) else session
         active_map_id = str(result.get("map_id") or map_id)
         definition, overlay = _definition_and_overlay(saved, active_map_id)
-        dynamic = project_dynamic_map_overlay(saved, definition)
-        overlay_payload = merge_dynamic_overlay_payload(_payload(overlay), dynamic)
+        overlay_payload = _project_overlay_payload(saved, definition, overlay)
         return JSONResponse({
             "ok": True,
             "session_id": session_id,
@@ -107,6 +107,14 @@ def register_rpg_map_routes(app: FastAPI) -> None:
             "game": saved.get("state", {}),
             "overlay": overlay_payload,
         }, headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL})
+
+
+def _project_overlay_payload(session: dict[str, Any], definition: Any, overlay: Any) -> dict[str, object]:
+    dynamic = project_dynamic_map_overlay(session, definition)
+    payload = merge_dynamic_overlay_payload(_payload(overlay), dynamic)
+    markers = project_living_map_markers(session, definition)
+    living = project_living_map_state(session, definition)
+    return merge_living_overlay_payload(payload, markers.markers, living)
 
 
 def _definition_response(definition: Any, request: Request, known_revision: str | None) -> Response:
