@@ -2,6 +2,14 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, typ
 import type { RpgMapDefinition, RpgMapOverlay } from '../../api/rpgMapClient';
 import { RpgMapObjectLayer, RpgMapObjectTooltip } from './RpgMapObjectInteractions';
 import {
+  DEFAULT_RPG_MAP_LAYERS,
+  RpgMapLabelLayer,
+  RpgMapLayerControls,
+  RpgMapMarkerLayer,
+  RpgMapRouteLayer,
+  type RpgMapLayerVisibility,
+} from './RpgMapOverlayLayers';
+import {
   RPG_MAP_MAX_ZOOM,
   RPG_MAP_MIN_ZOOM,
   RPG_MAP_ZOOM_STEP,
@@ -17,6 +25,7 @@ import {
 import './RpgMapViewportSurface.css';
 
 const viewportCache = new Map<string, RpgMapViewportState>();
+const layerCache = new Map<string, RpgMapLayerVisibility>();
 
 interface PointerPoint {
   x: number;
@@ -48,6 +57,7 @@ export function RpgMapViewportSurface({
 }: RpgMapViewportSurfaceProps) {
   const { x, y, width, height } = definition.bounds;
   const [viewport, setViewport] = useState<RpgMapViewportState>(() => viewportCache.get(definition.map_id) ?? fitRpgMapViewport());
+  const [layers, setLayers] = useState<RpgMapLayerVisibility>(() => layerCache.get(definition.map_id) ?? { ...DEFAULT_RPG_MAP_LAYERS });
   const [dragging, setDragging] = useState(false);
   const pointersRef = useRef(new Map<number, PointerPoint>());
   const lastPointRef = useRef<PointerPoint | null>(null);
@@ -55,16 +65,21 @@ export function RpgMapViewportSurface({
   const visibleIds = overlay.availability === 'ready'
     ? new Set(overlay.visible_object_ids)
     : new Set(definition.objects.map((item) => item.id));
-  const player = overlay.markers.find((marker) => marker.kind === 'player');
   const activeObject = definition.objects.find((item) => item.id === activeObjectId) ?? null;
 
   useEffect(() => {
     setViewport(viewportCache.get(definition.map_id) ?? fitRpgMapViewport());
+    setLayers(layerCache.get(definition.map_id) ?? { ...DEFAULT_RPG_MAP_LAYERS });
   }, [definition.map_id]);
 
   useEffect(() => {
     viewportCache.set(definition.map_id, viewport);
   }, [definition.map_id, viewport]);
+
+  useEffect(() => {
+    layerCache.set(definition.map_id, layers);
+    if (!layers.structures) onActiveObjectChange(null);
+  }, [definition.map_id, layers, onActiveObjectChange]);
 
   const fitMap = () => setViewport(fitRpgMapViewport());
   const zoomBy = (factor: number) => setViewport(
@@ -167,6 +182,7 @@ export function RpgMapViewportSurface({
         <button onClick={fitMap} type="button">Fit map</button>
         <button onClick={fitMap} type="button">Reset view</button>
       </div>
+      <RpgMapLayerControls layers={layers} onChange={setLayers} />
       <div
         aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown + - Home 0"
         aria-label="Interactive map viewport. Drag to pan, use the mouse wheel or pinch to zoom, and use arrow keys to pan."
@@ -192,23 +208,22 @@ export function RpgMapViewportSurface({
           </defs>
           <g data-map-viewport="true" transform={rpgMapViewportTransform(viewport)}>
             <rect x={x} y={y} width={width} height={height} fill="url(#rpg-map-parchment-grid)" />
-            <RpgMapObjectLayer
-              activeObjectId={activeObjectId}
-              objects={definition.objects}
-              onActiveObjectChange={onActiveObjectChange}
-              onSelectObject={onSelectObject}
-              selectedObjectId={selectedObjectId}
-              visibleObjectIds={visibleIds}
-            />
-            {overlay.availability === 'ready' && player ? (
-              <g className="rpg-map-player-marker" data-map-layer="markers" transform={`translate(${player.x} ${player.y})`}>
-                <circle r="92" />
-                <path d="M0-120 72 18 0 86-72 18Z" />
-              </g>
+            {layers.routes ? <RpgMapRouteLayer definition={definition} overlay={overlay} /> : null}
+            {layers.structures ? (
+              <RpgMapObjectLayer
+                activeObjectId={activeObjectId}
+                objects={definition.objects}
+                onActiveObjectChange={onActiveObjectChange}
+                onSelectObject={onSelectObject}
+                selectedObjectId={selectedObjectId}
+                visibleObjectIds={visibleIds}
+              />
             ) : null}
+            {layers.markers ? <RpgMapMarkerLayer markers={overlay.markers} /> : null}
+            {layers.labels ? <RpgMapLabelLayer labels={definition.labels} /> : null}
           </g>
         </svg>
-        <RpgMapObjectTooltip definition={definition} item={activeObject} viewport={viewport} />
+        {layers.structures ? <RpgMapObjectTooltip definition={definition} item={activeObject} viewport={viewport} /> : null}
       </div>
     </div>
   );
