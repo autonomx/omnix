@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { applyRpgMapAction } from '../../api/rpgMapActionClient';
 import {
   getRpgMapDefinition,
   getRpgMapOverlay,
@@ -8,6 +9,7 @@ import {
   type RpgMapObjectDefinition,
   type RpgMapObjectDynamicState,
   type RpgMapOverlay,
+  type RpgMapOverlayResponse,
 } from '../../api/rpgMapClient';
 import { RpgMapViewportSurface } from './RpgMapViewportSurface';
 import './RpgMapSurface.css';
@@ -18,6 +20,7 @@ interface RpgMapSurfaceProps {
 }
 
 export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
+  const queryClient = useQueryClient();
   const [activeObjectId, setActiveObjectId] = useState<string | null>(null);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const definitionQuery = useQuery({
@@ -32,6 +35,38 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
     enabled: Boolean(sessionId && mapId),
     refetchInterval: 2500,
     refetchIntervalInBackground: false,
+  });
+  const actionMutation = useMutation({
+    mutationFn: (capability: RpgMapActionCapability) => {
+      const definitionRevision = definitionQuery.data?.definition_revision ?? '';
+      const overlayRevision = overlayQuery.data?.overlay_revision ?? -1;
+      return applyRpgMapAction(sessionId, mapId, {
+        action: capability.type,
+        client_action_id: actionId(),
+        definition_revision: definitionRevision,
+        overlay_revision: overlayRevision,
+        route_id: capability.route_id,
+        target_object_id: capability.target_object_id,
+      });
+    },
+    onSuccess: (response) => {
+      const overlayResponse: RpgMapOverlayResponse = {
+        ok: true,
+        map_id: response.map_id,
+        definition_revision: response.definition_revision,
+        overlay_revision: response.overlay_revision,
+        session_turn_index: response.session_turn_index,
+        overlay: response.overlay,
+      };
+      queryClient.setQueryData(['feature', 'rpg', 'map-overlay', sessionId, mapId], overlayResponse);
+      queryClient.setQueryData(['feature', 'rpg', 'session', sessionId], {
+        ok: true,
+        session_id: sessionId,
+        session: response.session,
+        game: response.game,
+      });
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] });
+    },
   });
 
   useEffect(() => {
@@ -83,13 +118,11 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
         />
       ) : null}
       {overlay.availability === 'ready' ? null : (
-        <MapStateMessage
-          compact
-          title="Live position unavailable"
-          detail={humanizeReason(overlay.unavailable_reason)}
-          tone="warning"
-        />
+        <MapStateMessage compact title="Live position unavailable" detail={humanizeReason(overlay.unavailable_reason)} tone="warning" />
       )}
+      {actionMutation.isError ? (
+        <MapStateMessage compact title="Map action rejected" detail={errorMessage(actionMutation.error)} tone="error" />
+      ) : null}
       <RpgMapViewportSurface
         activeObjectId={activeObjectId}
         definition={definition}
@@ -104,11 +137,14 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
         <span>Overlay {overlay.overlay_revision}</span>
         <span>Turn {overlay.session_turn_index}</span>
         {overlayQuery.isFetching ? <span>Refreshing live overlay…</span> : null}
+        {actionMutation.isPending ? <span>Applying authoritative action…</span> : null}
       </div>
       <SelectedObjectPanel
         capabilities={revisionMismatch ? [] : selectedCapabilities}
+        isApplyingAction={actionMutation.isPending}
         item={selectedObject}
         objectState={objectState}
+        onAction={(capability) => actionMutation.mutate(capability)}
         onClose={() => setSelectedObjectId(null)}
       />
       <AccessibleObjectList
@@ -125,13 +161,17 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
 
 function SelectedObjectPanel({
   capabilities,
+  isApplyingAction,
   item,
   objectState,
+  onAction,
   onClose,
 }: {
   capabilities: RpgMapActionCapability[];
+  isApplyingAction: boolean;
   item: RpgMapObjectDefinition | null;
   objectState?: RpgMapObjectDynamicState;
+  onAction: (capability: RpgMapActionCapability) => void;
   onClose: () => void;
 }) {
   if (!item) return null;
@@ -150,9 +190,16 @@ function SelectedObjectPanel({
       ) : null}
       <div className="rpg-map-capability-list" aria-label="Projected map capabilities">
         {capabilities.length ? capabilities.map((capability) => (
-          <span className={capability.enabled ? 'rpg-map-capability-enabled' : 'rpg-map-capability-disabled'} key={`${capability.type}:${capability.route_id ?? capability.target_object_id}`}>
+          <button
+            className={capability.enabled ? 'rpg-map-capability-enabled' : 'rpg-map-capability-disabled'}
+            disabled={!capability.enabled || isApplyingAction}
+            key={`${capability.type}:${capability.route_id ?? capability.target_object_id}`}
+            onClick={() => onAction(capability)}
+            title={capability.enabled ? '' : humanizeReason(capability.disabled_reason)}
+            type="button"
+          >
             {humanizeReason(capability.type)}{capability.enabled ? '' : ` — ${humanizeReason(capability.disabled_reason)}`}
-          </span>
+          </button>
         )) : <span>No live actions are projected for this object.</span>}
       </div>
       <button className="rpg-secondary-button" onClick={onClose} type="button">Close selection</button>
@@ -200,12 +247,7 @@ function AccessibleObjectList({
   );
 }
 
-function MapStateMessage({
-  compact = false,
-  detail,
-  title,
-  tone = 'neutral',
-}: {
+function MapStateMessage({ compact = false, detail, title, tone = 'neutral' }: {
   compact?: boolean;
   detail: string;
   title: string;
@@ -213,8 +255,7 @@ function MapStateMessage({
 }) {
   return (
     <div className={`rpg-map-state-message rpg-map-state-${tone}${compact ? ' rpg-map-state-compact' : ''}`} role="status">
-      <strong>{title}</strong>
-      <span>{detail}</span>
+      <strong>{title}</strong><span>{detail}</span>
     </div>
   );
 }
@@ -223,6 +264,12 @@ function visibleObjects(definition: RpgMapDefinition, overlay: RpgMapOverlay): R
   if (overlay.availability !== 'ready') return definition.objects;
   const visibleIds = new Set(overlay.visible_object_ids);
   return definition.objects.filter((item) => visibleIds.has(item.id));
+}
+
+function actionId(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `map-action:${Date.now()}:${Math.random().toString(16).slice(2)}`;
 }
 
 function shortRevision(value: string): string {
