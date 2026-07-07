@@ -50,7 +50,6 @@ def _safe_asset_filename_component(value: str) -> str:
 
     # Windows-invalid filename chars: <>:"/\\|?*
     text = re.sub(r'[<>:"/\\\\|?*]+', "_", text)
-
     # Collapse whitespace / repeated separators a bit
     text = re.sub(r"\s+", "_", text)
     text = re.sub(r"_+", "_", text).strip("._ ")
@@ -99,6 +98,42 @@ def register_image_asset_file(file_path: str, asset_id: str, metadata: Dict[str,
 
 def get_image_asset_manifest():
     return _load_manifest()
+
+
+def delete_image_asset(asset_id: str, *, delete_file: bool = True) -> Dict[str, Any]:
+    """Delete a legacy image manifest entry and, by default, its file."""
+
+    manifest = _load_manifest()
+    assets = manifest.setdefault("assets", {})
+    payload = assets.pop(str(asset_id), None)
+    if payload is None:
+        return {
+            "ok": False,
+            "asset_id": str(asset_id),
+            "deleted": False,
+            "file_deleted": False,
+        }
+
+    _save_manifest(manifest)
+    path = str((payload or {}).get("path") or "").strip()
+    file_deleted = False
+    file_error = ""
+    if delete_file and path and os.path.isfile(path):
+        try:
+            os.remove(path)
+            file_deleted = True
+        except OSError as exc:
+            file_error = str(exc)
+
+    result: Dict[str, Any] = {
+        "ok": True,
+        "asset_id": str(asset_id),
+        "deleted": True,
+        "file_deleted": file_deleted,
+    }
+    if file_error:
+        result["file_error"] = file_error
+    return result
 
 
 def cleanup_unused_image_assets():
