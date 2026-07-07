@@ -14,6 +14,7 @@ from app.image.job_queue import enqueue_image_job
 from app.image.lifecycle import get_or_create_image_provider
 from app.image.models import ImageGenerationRequest, ImageGenerationResponse
 from app.image.providers.registry import is_supported_image_provider
+from app.image.style import apply_image_style
 from app.image_http_client import generate_image_via_service, is_image_service_enabled
 
 
@@ -62,7 +63,6 @@ def _normalize_request(payload: Dict[str, Any]) -> ImageGenerationRequest:
     )
 
 
-
 def _map_to_provider_payload(req: ImageGenerationRequest, provider_config: Dict[str, Any]) -> Dict[str, Any]:
     steps = req.steps
     if steps is None:
@@ -73,7 +73,7 @@ def _map_to_provider_payload(req: ImageGenerationRequest, provider_config: Dict[
         guidance_scale = _safe_float(provider_config.get("guidance_scale"), 1.0)
 
     return {
-        "prompt": req.prompt,
+        "prompt": apply_image_style(req.prompt, req.style),
         "negative_prompt": req.negative_prompt,
         "width": req.width,
         "height": req.height,
