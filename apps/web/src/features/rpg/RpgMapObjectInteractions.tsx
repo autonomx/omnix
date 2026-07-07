@@ -4,6 +4,7 @@ import type {
   RpgMapObjectDefinition,
   RpgMapObjectDynamicState,
 } from '../../api/rpgMapClient';
+import { rpgMapAssetUrl } from './rpgMapAssets';
 import type { RpgMapViewportState } from './rpgMapViewport';
 
 const LAYER_PRIORITY: Record<string, number> = {
@@ -117,6 +118,7 @@ function MapObjectShape({
 }) {
   const spriteWidth = item.sprite?.width ?? 480;
   const spriteHeight = item.sprite?.height ?? 360;
+  const spriteUrl = rpgMapAssetUrl(item.sprite?.asset_id);
   const interactive = visible && item.kind !== 'decorative' && Boolean(item.hitbox);
   const tooltipId = `rpg-map-tooltip-${safeDomId(item.id)}`;
   const status = dynamicState?.status ?? 'normal';
@@ -159,8 +161,23 @@ function MapObjectShape({
     >
       {item.footprint ? <polygon className="rpg-map-object-footprint" points={polygonPoints(item.footprint.points)} /> : null}
       <g filter="url(#rpg-map-object-shadow)" pointerEvents="none">
-        <rect height={spriteHeight} rx={Math.min(90, spriteWidth * 0.12)} width={spriteWidth} x={-spriteWidth / 2} y={-spriteHeight} />
-        <path d={`M${-spriteWidth / 2} ${-spriteHeight} L0 ${-spriteHeight - 170} L${spriteWidth / 2} ${-spriteHeight} Z`} />
+        <g className="rpg-map-object-vector-fallback">
+          <rect height={spriteHeight} rx={Math.min(90, spriteWidth * 0.12)} width={spriteWidth} x={-spriteWidth / 2} y={-spriteHeight} />
+          <path d={`M${-spriteWidth / 2} ${-spriteHeight} L0 ${-spriteHeight - 170} L${spriteWidth / 2} ${-spriteHeight} Z`} />
+        </g>
+        {spriteUrl ? (
+          <image
+            aria-hidden="true"
+            className="rpg-map-object-sprite"
+            data-map-asset-id={item.sprite?.asset_id}
+            height={spriteHeight}
+            href={spriteUrl}
+            preserveAspectRatio="xMidYMax meet"
+            width={spriteWidth}
+            x={-spriteWidth / 2}
+            y={-spriteHeight}
+          />
+        ) : null}
         <text y={90}>{item.label || item.location_id || item.id}</text>
       </g>
       {item.hitbox ? <polygon className="rpg-map-object-hitbox" data-map-hitbox={item.id} points={polygonPoints(item.hitbox.points)} /> : null}
