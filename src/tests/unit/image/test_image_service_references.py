@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from PIL import Image
+import pytest
+
+Image = pytest.importorskip("PIL.Image")
 
 from app.image.providers.base import ImageGenerationResult
 import app.image.service as image_service
