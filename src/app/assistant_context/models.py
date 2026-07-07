@@ -25,10 +25,12 @@ class AssistantContextChatRequest(BaseModel):
     agent_mode: bool = False
     dry_run: bool = False
     web_research_mode: ResearchMode = "disabled"
+    allow_research_downgrade: bool = False
     legacy_web_search_mode: str | None = Field(default=None, exclude=True)
     internal_research_identity: str | None = Field(default=None, exclude=True)
     internal_research_provider: str | None = Field(default=None, exclude=True)
     internal_research_policy: dict[str, Any] = Field(default_factory=dict, exclude=True)
+    internal_research_warnings: list[str] = Field(default_factory=list, exclude=True)
     web_search_requested: bool = False
     web_search_max_results: int = Field(default=5, ge=1, le=8)
     desktop_image_data_url: str | None = None
@@ -55,6 +57,7 @@ class AssistantContextChatRequest(BaseModel):
         payload.pop("internal_research_identity", None)
         payload.pop("internal_research_provider", None)
         payload.pop("internal_research_policy", None)
+        payload.pop("internal_research_warnings", None)
         return payload
 
     @property
