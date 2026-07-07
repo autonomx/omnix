@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import io
 
-from PIL import Image
+import pytest
+
+Image = pytest.importorskip("PIL.Image")
 
 from app.assets import SharedAssetStore
 from app.image.reference_assets import (
