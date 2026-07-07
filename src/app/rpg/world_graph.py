@@ -7,6 +7,7 @@ from typing import Literal, Mapping, Sequence
 
 LocationStatus = Literal["stub", "expanded"]
 RouteStatus = Literal["open", "blocked", "locked"]
+RouteDirection = Literal["both", "forward"]
 TravelMode = Literal["instant", "blocked", "unknown"]
 
 
@@ -32,20 +33,44 @@ class RpgLocationNode:
 
 @dataclass(frozen=True)
 class RpgRoute:
+    """Canonical route with backward-compatible legacy ID derivation.
+
+    `id` and `direction` are trailing fields so older positional construction remains
+    readable while persisted/new map data supplies explicit stable IDs.
+    """
+
     from_id: str
     to_id: str
     status: RouteStatus = "open"
     safe: bool = True
     known: bool = True
     tags: tuple[str, ...] = ()
+    id: str = ""
+    direction: RouteDirection = "both"
+
+    def __post_init__(self) -> None:
+        if not self.from_id or not self.to_id:
+            raise ValueError("route_endpoint_missing")
+        if self.status not in {"open", "blocked", "locked"}:
+            raise ValueError(f"unsupported_route_status:{self.status}")
+        if self.direction not in {"both", "forward"}:
+            raise ValueError(f"unsupported_route_direction:{self.direction}")
+        if not self.id:
+            legacy_id = f"route:{self.from_id}:{self.to_id}"
+            object.__setattr__(self, "id", legacy_id)
 
     def connects(self, location_id: str, target_id: str) -> bool:
         return {self.from_id, self.to_id} == {location_id, target_id}
 
+    def allows(self, location_id: str, target_id: str) -> bool:
+        if self.from_id == location_id and self.to_id == target_id:
+            return True
+        return self.direction == "both" and self.to_id == location_id and self.from_id == target_id
+
     def other(self, location_id: str) -> str | None:
         if self.from_id == location_id:
             return self.to_id
-        if self.to_id == location_id:
+        if self.direction == "both" and self.to_id == location_id:
             return self.from_id
         return None
 
@@ -58,6 +83,7 @@ class RpgTravelResult:
     mode: TravelMode
     reason: str
     requires_narration: bool = False
+    route_id: str | None = None
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -67,6 +93,7 @@ class RpgTravelResult:
             "mode": self.mode,
             "reason": self.reason,
             "requires_narration": self.requires_narration,
+            "route_id": self.route_id,
         }
 
 
@@ -78,12 +105,15 @@ class RpgRegionGraph:
     def get_location(self, location_id: str) -> RpgLocationNode | None:
         return self.locations.get(location_id)
 
+    def get_route(self, route_id: str) -> RpgRoute | None:
+        return next((route for route in self.routes if route.id == route_id), None)
+
     def known_exits(self, location_id: str) -> tuple[str, ...]:
-        exits: list[str] = []
-        for route in self.routes:
-            other = route.other(location_id)
-            if other and route.known:
-                exits.append(other)
+        exits = {
+            other
+            for route in self.routes
+            if route.known and (other := route.other(location_id)) is not None
+        }
         return tuple(sorted(exits))
 
     def discoverable_stubs(self, location_id: str) -> tuple[RpgLocationNode, ...]:
@@ -94,8 +124,17 @@ class RpgRegionGraph:
                 stubs.append(target)
         return tuple(sorted(stubs, key=lambda node: node.id))
 
+    def routes_between(self, location_id: str, target_id: str) -> tuple[RpgRoute, ...]:
+        return tuple(
+            sorted(
+                (route for route in self.routes if route.allows(location_id, target_id)),
+                key=lambda route: route.id,
+            )
+        )
+
     def route_between(self, location_id: str, target_id: str) -> RpgRoute | None:
-        return next((route for route in self.routes if route.connects(location_id, target_id)), None)
+        routes = self.routes_between(location_id, target_id)
+        return routes[0] if routes else None
 
     def with_location(self, node: RpgLocationNode) -> "RpgRegionGraph":
         updated = dict(self.locations)
@@ -103,28 +142,34 @@ class RpgRegionGraph:
         return replace(self, locations=updated)
 
     def with_route(self, route: RpgRoute) -> "RpgRegionGraph":
-        existing = [candidate for candidate in self.routes if not candidate.connects(route.from_id, route.to_id)]
-        return replace(self, routes=tuple(existing + [route]))
+        existing = [candidate for candidate in self.routes if candidate.id != route.id]
+        return replace(self, routes=tuple(sorted((*existing, route), key=lambda item: item.id)))
 
 
-def can_instant_travel(graph: RpgRegionGraph, location_id: str, target_id: str) -> RpgTravelResult:
+def can_instant_travel(
+    graph: RpgRegionGraph,
+    location_id: str,
+    target_id: str,
+    *,
+    route_id: str | None = None,
+) -> RpgTravelResult:
     if location_id not in graph.locations:
-        return RpgTravelResult(False, location_id, target_id, "unknown", "current_location_unknown", True)
+        return RpgTravelResult(False, location_id, target_id, "unknown", "current_location_unknown", True, route_id)
     if target_id not in graph.locations:
-        return RpgTravelResult(False, location_id, target_id, "unknown", "target_location_unknown", True)
+        return RpgTravelResult(False, location_id, target_id, "unknown", "target_location_unknown", True, route_id)
 
-    route = graph.route_between(location_id, target_id)
-    if route is None or not route.known:
-        return RpgTravelResult(False, location_id, target_id, "unknown", "route_unknown", True)
+    route = graph.get_route(route_id) if route_id else graph.route_between(location_id, target_id)
+    if route is None or not route.known or not route.allows(location_id, target_id):
+        return RpgTravelResult(False, location_id, target_id, "unknown", "route_unknown", True, route_id)
     if route.status != "open":
-        return RpgTravelResult(False, location_id, target_id, "blocked", f"route_{route.status}", True)
+        return RpgTravelResult(False, location_id, target_id, "blocked", f"route_{route.status}", True, route.id)
     if not route.safe:
-        return RpgTravelResult(False, location_id, target_id, "blocked", "route_requires_encounter_check", True)
+        return RpgTravelResult(False, location_id, target_id, "blocked", "route_requires_encounter_check", True, route.id)
 
     target = graph.get_location(target_id)
     if target and target.status == "stub":
-        return RpgTravelResult(False, location_id, target_id, "blocked", "target_requires_expansion", True)
-    return RpgTravelResult(True, location_id, target_id, "instant", "known_safe_route", False)
+        return RpgTravelResult(False, location_id, target_id, "blocked", "target_requires_expansion", True, route.id)
+    return RpgTravelResult(True, location_id, target_id, "instant", "known_safe_route", False, route.id)
 
 
 def map_debug_payload(graph: RpgRegionGraph, current_location_id: str) -> dict[str, object]:
@@ -133,5 +178,6 @@ def map_debug_payload(graph: RpgRegionGraph, current_location_id: str) -> dict[s
         "known_exits": list(graph.known_exits(current_location_id)),
         "discoverable_stubs": [node.id for node in graph.discoverable_stubs(current_location_id)],
         "locations": [node.id for node in sorted(graph.locations.values(), key=lambda item: item.id)],
+        "routes": [route.id for route in sorted(graph.routes, key=lambda item: item.id)],
         "route_count": len(graph.routes),
     }
