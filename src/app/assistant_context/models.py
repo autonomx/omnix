@@ -6,6 +6,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.research import ResearchMode, normalize_research_mode
+from app.research.compatibility import (
+    LEGACY_RESEARCH_FIELDS,
+    LEGACY_RESEARCH_MODES,
+    legacy_research_aliases_enabled,
+    legacy_research_warnings,
+    record_legacy_research_aliases,
+)
 
 DesktopCaptureMode = Literal["single", "temporal"]
 
@@ -26,12 +33,10 @@ class AssistantContextChatRequest(BaseModel):
     dry_run: bool = False
     web_research_mode: ResearchMode = "disabled"
     allow_research_downgrade: bool = False
-    legacy_web_search_mode: str | None = Field(default=None, exclude=True)
     internal_research_identity: str | None = Field(default=None, exclude=True)
     internal_research_provider: str | None = Field(default=None, exclude=True)
     internal_research_policy: dict[str, Any] = Field(default_factory=dict, exclude=True)
     internal_research_warnings: list[str] = Field(default_factory=list, exclude=True)
-    web_search_requested: bool = False
     web_search_max_results: int = Field(default=5, ge=1, le=8)
     desktop_image_data_url: str | None = None
     desktop_current_image_data_url: str | None = None
@@ -44,27 +49,42 @@ class AssistantContextChatRequest(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def normalize_legacy_research_fields(cls, value: Any) -> Any:
+    def accept_temporary_server_aliases(cls, value: Any) -> Any:
         if not isinstance(value, dict):
             return value
         payload = dict(value)
-        legacy = payload.get("web_search_mode")
-        selected = payload.get("web_research_mode")
-        if selected is None:
-            selected = legacy
-        payload["web_research_mode"] = normalize_research_mode(selected)
-        payload["legacy_web_search_mode"] = str(legacy) if legacy is not None else None
         payload.pop("internal_research_identity", None)
         payload.pop("internal_research_provider", None)
         payload.pop("internal_research_policy", None)
         payload.pop("internal_research_warnings", None)
+
+        aliases = [field for field in LEGACY_RESEARCH_FIELDS if field in payload]
+        selected = payload.get("web_research_mode")
+        if selected is None and "web_search_mode" in payload:
+            selected = payload.get("web_search_mode")
+        normalized_selected = str(selected or "").strip().lower().replace("-", "_")
+        if normalized_selected in LEGACY_RESEARCH_MODES:
+            aliases.append(f"mode:{normalized_selected}")
+
+        if aliases and not legacy_research_aliases_enabled():
+            raise ValueError("legacy_research_aliases_disabled")
+        if aliases:
+            record_legacy_research_aliases(aliases)
+            payload["internal_research_warnings"] = legacy_research_warnings(aliases)
+
+        legacy_modes = {
+            "automatic": "quick",
+            "manual": "quick",
+            "quick_search": "quick",
+            "deep_research": "deep",
+        }
+        payload["web_research_mode"] = legacy_modes.get(
+            normalized_selected,
+            normalize_research_mode(selected),
+        )
+        for field in LEGACY_RESEARCH_FIELDS:
+            payload.pop(field, None)
         return payload
-
-    @property
-    def web_search_mode(self) -> str:
-        """Compatibility accessor removed after the legacy request window."""
-
-        return self.legacy_web_search_mode or self.web_research_mode
 
 
 class AssistantContextBuildResult(BaseModel):
