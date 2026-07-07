@@ -5,7 +5,12 @@ type AssistantContextTestWindow = Window & typeof globalThis & {
 };
 
 (window as AssistantContextTestWindow).__omnixAssistantContextInitialized = true;
-const { assistantContextControlsMissing, desktopStatusLabel } = await import('./assistant-context-controller');
+const {
+  assistantContextControlsMissing,
+  desktopStatusLabel,
+  normalizeStoredResearchMode,
+  webResearchModeLabel,
+} = await import('./assistant-context-controller');
 
 describe('assistant context control mounting', () => {
   it('requests injection only while a target is missing its Omnix control', () => {
@@ -42,5 +47,17 @@ describe('assistant context control mounting', () => {
     expect(desktopStatusLabel(false, 'Off')).toBe('Off');
     expect(desktopStatusLabel(false, 'Screen capture unavailable')).toBe('Screen capture unavailable');
     expect(desktopStatusLabel(true, 'Buffering recent frames')).toBe('Buffering recent frames');
+  });
+
+  it('migrates legacy automatic and manual values to Quick search', () => {
+    expect(normalizeStoredResearchMode('automatic')).toBe('quick');
+    expect(normalizeStoredResearchMode('manual')).toBe('quick');
+    expect(normalizeStoredResearchMode('unknown')).toBe('disabled');
+  });
+
+  it('uses the three explicit user-facing labels', () => {
+    expect(webResearchModeLabel('disabled')).toBe('Disabled');
+    expect(webResearchModeLabel('quick')).toBe('Quick search');
+    expect(webResearchModeLabel('deep')).toBe('Deep research');
   });
 });
