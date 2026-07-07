@@ -1,0 +1,166 @@
+import { omnixApiClient } from './client';
+
+export type RpgMapAvailability = 'ready' | 'unavailable' | 'stale' | 'error';
+export type RpgMapLayer =
+  | 'background'
+  | 'terrain'
+  | 'routes'
+  | 'ground_props'
+  | 'structures'
+  | 'markers'
+  | 'labels'
+  | 'fog'
+  | 'interaction';
+
+export interface RpgMapBounds {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+export interface RpgMapRenderOrder {
+  layer: RpgMapLayer;
+  offset: number;
+  sort_y: number;
+}
+
+export interface RpgMapPolygon {
+  kind: 'polygon';
+  points: [number, number][];
+}
+
+export interface RpgMapSprite {
+  asset_id: string;
+  height: number;
+  width: number;
+}
+
+export interface RpgMapObjectDefinition {
+  anchor: 'bottom_center' | 'center' | 'top_left';
+  child_map_id?: string | null;
+  description: string;
+  footprint?: RpgMapPolygon | null;
+  hitbox?: RpgMapPolygon | null;
+  id: string;
+  kind: string;
+  label: string;
+  location_id?: string | null;
+  render_order: RpgMapRenderOrder;
+  sprite?: RpgMapSprite | null;
+  tags: string[];
+  x: number;
+  y: number;
+}
+
+export interface RpgMapRouteGeometry {
+  points: [number, number][];
+  route_id: string;
+  style: string;
+}
+
+export interface RpgMapLabelDefinition {
+  id: string;
+  priority: number;
+  text: string;
+  x: number;
+  y: number;
+}
+
+export interface RpgMapDefinition {
+  background?: {
+    asset_id: string;
+    destination_bounds: RpgMapBounds;
+    source_crop?: RpgMapBounds | null;
+  } | null;
+  bounds: RpgMapBounds;
+  definition_revision: string;
+  labels: RpgMapLabelDefinition[];
+  level: string;
+  map_id: string;
+  objects: RpgMapObjectDefinition[];
+  parent_map_id?: string | null;
+  route_geometry: RpgMapRouteGeometry[];
+  schema_version: number;
+  seed: number;
+}
+
+export interface RpgMapMarker {
+  id: string;
+  kind: string;
+  label: string;
+  object_id?: string | null;
+  x: number;
+  y: number;
+}
+
+export interface RpgMapRouteOverlay {
+  known: boolean;
+  reason: string;
+  route_id: string;
+  safe: boolean;
+  status: 'open' | 'blocked' | 'locked' | 'unknown';
+}
+
+export interface RpgMapActionCapability {
+  disabled_reason: string;
+  enabled: boolean;
+  route_id?: string | null;
+  target_location_id?: string | null;
+  target_object_id: string;
+  type: 'travel' | 'inspect' | 'enter' | 'talk' | 'trade';
+}
+
+export interface RpgMapOverlay {
+  availability: RpgMapAvailability;
+  capabilities: RpgMapActionCapability[];
+  current_location_id?: string | null;
+  definition_revision: string;
+  discovered_object_ids: string[];
+  environment: Record<string, string>;
+  map_id: string;
+  markers: RpgMapMarker[];
+  overlay_revision: number;
+  routes: RpgMapRouteOverlay[];
+  session_id: string;
+  session_turn_index: number;
+  unavailable_reason: string;
+  visible_object_ids: string[];
+}
+
+export interface RpgMapDefinitionResponse {
+  definition: RpgMapDefinition | null;
+  definition_revision: string;
+  map_id: string;
+  ok: boolean;
+}
+
+export interface RpgMapOverlayResponse {
+  definition_revision: string;
+  map_id: string;
+  ok: boolean;
+  overlay: RpgMapOverlay;
+  overlay_revision: number;
+  session_turn_index: number;
+}
+
+export async function getRpgMapDefinition(
+  mapId: string,
+  knownDefinitionRevision?: string,
+): Promise<RpgMapDefinitionResponse> {
+  const query = knownDefinitionRevision
+    ? `?known_definition_revision=${encodeURIComponent(knownDefinitionRevision)}`
+    : '';
+  return omnixApiClient.get<RpgMapDefinitionResponse>(
+    `/api/rpg/maps/${encodeURIComponent(mapId)}${query}`,
+  );
+}
+
+export async function getRpgMapOverlay(
+  sessionId: string,
+  mapId: string,
+): Promise<RpgMapOverlayResponse> {
+  return omnixApiClient.get<RpgMapOverlayResponse>(
+    `/api/rpg/sessions/${encodeURIComponent(sessionId)}/maps/${encodeURIComponent(mapId)}/overlay`,
+  );
+}
