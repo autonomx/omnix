@@ -56,11 +56,13 @@ def test_quick_search_updates_snapshot_without_mutating_source_identity(tmp_path
         clock=lambda: "2026-07-06T00:00:00Z",
         id_factory=lambda: next(ids),
     )
-    extractor = ReadablePageExtractor(policy_factory=FakePolicy)
+    extractor = ReadablePageExtractor(policy_factory=FakePolicy, cache_store_factory=None)
     result = QuickSearchService(
         client_factory=lambda timeout: FakeSearchClient(),
         source_store_factory=lambda: store,
         extractor_factory=lambda: extractor,
+        cache_store_factory=None,
+        rate_limiter_factory=None,
     ).search("current release", 5)
 
     assert result.diagnostics["extracted_pages"] == 1
