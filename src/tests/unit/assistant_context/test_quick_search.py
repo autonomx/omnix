@@ -24,6 +24,14 @@ def result_item() -> AssistantContextItem:
     )
 
 
+def quick_service(**kwargs) -> QuickSearchService:
+    return QuickSearchService(
+        cache_store_factory=None,
+        rate_limiter_factory=None,
+        **kwargs,
+    )
+
+
 def test_quick_search_uses_one_logical_query_and_retries_one_transient_failure() -> None:
     outcomes: list[object] = [RuntimeError("503 temporary provider failure"), [result_item()]]
     timeouts: list[float] = []
@@ -32,7 +40,7 @@ def test_quick_search_uses_one_logical_query_and_retries_one_transient_failure()
         timeouts.append(timeout_seconds)
         return FakeSearchClient("brave", outcomes)
 
-    result = QuickSearchService(
+    result = quick_service(
         client_factory=factory,
         source_store_factory=None,
         deadline_seconds=8,
@@ -55,7 +63,7 @@ def test_quick_search_does_not_retry_permanent_configuration_failure() -> None:
         calls += 1
         return FakeSearchClient("brave", outcomes)
 
-    result = QuickSearchService(client_factory=factory, source_store_factory=None).search(
+    result = quick_service(client_factory=factory, source_store_factory=None).search(
         "current release", 5
     )
 
@@ -66,7 +74,7 @@ def test_quick_search_does_not_retry_permanent_configuration_failure() -> None:
 
 
 def test_duckduckgo_is_reported_as_limited_fallback() -> None:
-    result = QuickSearchService(
+    result = quick_service(
         client_factory=lambda timeout: FakeSearchClient("duckduckgo", [[]]),
         source_store_factory=None,
     ).search("niche current topic", 5)
