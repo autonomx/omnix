@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from .compatibility import ResearchCompatibilityStatus, research_compatibility_status
 from .policy import privacy_contract
 from .quick_search import provider_coverage
 from .release_policy import (
@@ -54,6 +55,7 @@ class ResearchRuntimeStatus(BaseModel):
     budgets: ResearchBudgetStatus
     retention: ResearchRetentionStatus
     release: ResearchReleaseStatus
+    compatibility: ResearchCompatibilityStatus
     deep_enabled: bool
     hermes_planner_enabled: bool
     diagnostics_enabled: bool
@@ -101,6 +103,7 @@ def research_runtime_status(
             hermes_percentage=release.hermes_percentage,
             availability=availability,
         ),
+        compatibility=research_compatibility_status(),
         deep_enabled=resolved.deep_enabled,
         hermes_planner_enabled=resolved.hermes_planner_enabled,
         diagnostics_enabled=resolved.show_diagnostics,
