@@ -7,8 +7,11 @@ import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Callable
+from urllib.parse import urlsplit, urlunsplit
 
+from .cache import ResearchCacheStore
 from .outbound_web import OutboundWebPolicy, OutboundWebResponse
+from .policy import ResearchPolicy, research_policy_from_env
 
 EXTRACTOR_VERSION = "readable-html-v1"
 _MAX_EXTRACTED_CHARACTERS = 24_000
@@ -31,15 +34,38 @@ class ReadablePageExtractor:
         self,
         *,
         policy_factory: Callable[[], OutboundWebPolicy] = OutboundWebPolicy,
+        cache_store_factory: Callable[[], ResearchCacheStore] | None = ResearchCacheStore,
+        research_policy: ResearchPolicy | None = None,
         max_characters: int = _MAX_EXTRACTED_CHARACTERS,
     ) -> None:
         self.policy_factory = policy_factory
+        self.cache_store_factory = cache_store_factory
+        self.research_policy = research_policy or research_policy_from_env()
         self.max_characters = max(1000, int(max_characters))
 
     def extract(self, url: str) -> ExtractedPage:
+        cache_key_url = _cache_url(url)
+        cache = self.cache_store_factory() if self.cache_store_factory else None
+        if cache is not None:
+            cached = cache.get_extraction(
+                canonical_url=cache_key_url,
+                extractor_version=EXTRACTOR_VERSION,
+            )
+            if cached:
+                return ExtractedPage(
+                    requested_url=str(cached.get("requested_url") or url),
+                    final_url=str(cached.get("final_url") or url),
+                    title=str(cached.get("title") or ""),
+                    published_at=str(cached.get("published_at") or "") or None,
+                    text=str(cached.get("text") or "")[: self.max_characters],
+                    content_hash=str(cached.get("content_hash") or ""),
+                    extractor_version=str(cached.get("extractor_version") or EXTRACTOR_VERSION),
+                    elapsed_ms=0,
+                )
+
         response = self.policy_factory().fetch(url)
         text, title, published_at = extract_readable_content(response)
-        return ExtractedPage(
+        page = ExtractedPage(
             requested_url=url,
             final_url=response.final_url,
             title=title,
@@ -49,6 +75,14 @@ class ReadablePageExtractor:
             extractor_version=EXTRACTOR_VERSION,
             elapsed_ms=response.elapsed_ms,
         )
+        if cache is not None:
+            cache.put_extraction(
+                canonical_url=cache_key_url,
+                extractor_version=EXTRACTOR_VERSION,
+                page=page,
+                ttl_seconds=self.research_policy.extraction_cache_ttl_seconds,
+            )
+        return page
 
 
 class _ReadableHTMLParser(HTMLParser):
@@ -130,3 +164,16 @@ def _normalize_text(value: str) -> str:
         if cleaned and (not lines or cleaned != lines[-1]):
             lines.append(cleaned)
     return "\n".join(lines)
+
+
+def _cache_url(value: str) -> str:
+    parsed = urlsplit(str(value or "").strip())
+    return urlunsplit(
+        (
+            parsed.scheme.lower(),
+            (parsed.netloc or "").lower(),
+            parsed.path or "/",
+            parsed.query,
+            "",
+        )
+    )
