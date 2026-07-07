@@ -53,6 +53,7 @@ def curated_rpg_map_assets() -> tuple[AssetRecord, ...]:
                     "immutable": True,
                     "logical_role": _logical_role(filename),
                     "source": "repository_curated",
+                    "trusted_svg": True,
                 },
                 created_at=_created_at(path),
                 compat={"asset_pack_version": 1, "alias_file": filename},
