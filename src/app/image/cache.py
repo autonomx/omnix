@@ -72,7 +72,7 @@ def store_image_cache(cache_key: str, result: Any) -> Dict[str, Any]:
     cache_path = os.path.join(CACHE_DIR, cache_filename)
 
     if os.path.abspath(file_path) != os.path.abspath(cache_path):
-        shutil.copyfile(file_path, cache_path)
+        shutil.move(file_path, cache_path)
 
     row = {
         "cache_key": cache_key,
