@@ -108,6 +108,7 @@ def apply_map_action(
         player = state.get("player") if isinstance(state.get("player"), dict) else {}
         player["location_id"] = target.location_id
         state["player"] = player
+        _sync_world_graph_location(state, target.location_id)
         revision = increment_map_overlay_revision(state)
         result.update(
             {
@@ -204,6 +205,25 @@ def _authoritative_route_reason(session: Mapping[str, object], route_id: str | N
     route_states = map_state.get("route_states") if isinstance(map_state.get("route_states"), Mapping) else {}
     route_state = route_states.get(route_id) if isinstance(route_states.get(route_id), Mapping) else {}
     return str(route_state.get("reason") or "").strip()
+
+
+def _sync_world_graph_location(state: dict[str, object], location_id: str) -> None:
+    graph = state.get("world_graph") if isinstance(state.get("world_graph"), dict) else None
+    if graph is None:
+        return
+    known_ids = {
+        str(item.get("id") or item.get("location_id") or "")
+        for item in _sequence(graph.get("locations"))
+        if isinstance(item, Mapping)
+    }
+    if isinstance(graph.get("locations"), Mapping):
+        known_ids.update(str(key) for key in graph["locations"])
+    if location_id not in known_ids:
+        return
+    graph["current_location_id"] = location_id
+    discovered = [str(item) for item in _sequence(graph.get("discovered_location_ids"))]
+    graph["discovered_location_ids"] = [*dict.fromkeys((*discovered, location_id))]
+    state["world_graph"] = graph
 
 
 def _record_action(map_state: dict[str, object], request: MapActionRequest, result: Mapping[str, object]) -> None:
