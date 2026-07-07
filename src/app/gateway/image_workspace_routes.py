@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from functools import wraps
+from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Query
 
-from app.assets import AssetListResponse, AssetType, default_asset_store
+from app.assets import AssetListResponse, AssetRecord, AssetType, default_asset_store
 from app.jobs import CreateJobRequest, JobListResponse, JobRecord, JobStatus, SQLiteJobStore, default_job_store
 
 from .job_summaries import summarize_job
@@ -18,6 +19,7 @@ MAX_IMAGE_JOB_LIMIT = 100
 DEFAULT_IMAGE_ASSET_LIMIT = 100
 MAX_IMAGE_ASSET_LIMIT = 250
 RETRYABLE_IMAGE_JOB_STATUSES = {JobStatus.FAILED, JobStatus.CANCELED, JobStatus.STALE}
+SUPPORTED_IMAGE_MIME_TYPES = {"image/gif", "image/jpeg", "image/png", "image/webp"}
 
 
 def register_image_workspace_routes(gateway: FastAPI) -> None:
@@ -58,10 +60,62 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
         assets = [
             asset
             for asset in default_asset_store().list_assets().assets
-            if asset.type == AssetType.IMAGE and asset.module in {"image", "image-generation"}
+            if asset.type == AssetType.IMAGE
+            and asset.module in {"image", "image-generation"}
+            and _is_usable_image_asset(asset)
         ]
         assets.sort(key=lambda asset: (asset.created_at, asset.id), reverse=True)
         return AssetListResponse(assets=assets[:limit])
+
+    @gateway.delete("/api/image-generation/assets/{asset_id}", include_in_schema=False)
+    @gateway.post("/api/image-generation/assets/{asset_id}/delete", include_in_schema=False)
+    def delete_image_asset(asset_id: str) -> dict[str, Any]:
+        store = default_asset_store()
+        asset = next((item for item in store.list_assets().assets if item.id == asset_id), None)
+        if asset is None:
+            raise HTTPException(status_code=404, detail="asset_not_found")
+        if asset.type != AssetType.IMAGE or asset.module not in {"image", "image-generation"}:
+            raise HTTPException(status_code=409, detail="asset_not_image_generation")
+
+        shared_result = store.delete_asset(asset_id)
+        legacy_result: dict[str, Any] | None = None
+        legacy_asset_id = str((asset.compat or {}).get("legacy_asset_id") or "").strip()
+        if legacy_asset_id:
+            from app.image.asset_store import delete_image_asset as delete_legacy_image_asset
+
+            legacy_result = delete_legacy_image_asset(
+                legacy_asset_id,
+                delete_file=not bool(shared_result.get("file_deleted")),
+            )
+
+        deleted = bool(shared_result.get("deleted")) or bool((legacy_result or {}).get("deleted"))
+        if not deleted:
+            raise HTTPException(status_code=404, detail="asset_not_deletable")
+
+        result: dict[str, Any] = {
+            "ok": True,
+            "asset_id": asset_id,
+            "deleted": True,
+            "file_deleted": bool(shared_result.get("file_deleted"))
+            or bool((legacy_result or {}).get("file_deleted")),
+        }
+        file_error = str(shared_result.get("file_error") or (legacy_result or {}).get("file_error") or "").strip()
+        if file_error:
+            result["file_error"] = file_error
+        return result
+
+
+def _is_usable_image_asset(asset: AssetRecord) -> bool:
+    if str(asset.mime_type or "").lower() not in SUPPORTED_IMAGE_MIME_TYPES:
+        return False
+    storage_path = str(asset.storage_path or "").strip()
+    if not storage_path:
+        return False
+    path = Path(storage_path)
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
 
 
 def _retry_request(source: JobRecord) -> CreateJobRequest:

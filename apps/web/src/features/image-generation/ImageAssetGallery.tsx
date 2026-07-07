@@ -1,10 +1,18 @@
 import { Button, Text, UnstyledButton } from '@mantine/core';
 import { useMemo, useState } from 'react';
-import type { AssetListResponse } from '../../api/client';
+import { omnixApiClient, type AssetListResponse } from '../../api/client';
 import { imageAssetUrl } from './imageWorkspaceModel';
 import { ImagePreviewDialog } from './ImagePreviewDialog';
 
 export type ImageAsset = AssetListResponse['assets'][number];
+
+interface DeleteImageAssetResponse {
+  ok: boolean;
+  asset_id: string;
+  deleted: boolean;
+  file_deleted: boolean;
+  file_error?: string;
+}
 
 interface ImageAssetGalleryProps {
   assets: ImageAsset[];
@@ -17,19 +25,48 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
   const [provider, setProvider] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [previewAsset, setPreviewAsset] = useState<ImageAsset | null>(null);
+  const [deletedAssetIds, setDeletedAssetIds] = useState<Set<string>>(() => new Set());
+  const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState(false);
+  const activeAssets = useMemo(
+    () => assets.filter((asset) => !deletedAssetIds.has(asset.id)),
+    [assets, deletedAssetIds],
+  );
   const providers = useMemo(
-    () => [...new Set(assets.map(imageAssetProvider).filter(Boolean))].sort(),
-    [assets],
+    () => [...new Set(activeAssets.map(imageAssetProvider).filter(Boolean))].sort(),
+    [activeAssets],
   );
   const visibleAssets = useMemo(
-    () => filterImageAssets(assets, query, provider),
-    [assets, provider, query],
+    () => filterImageAssets(activeAssets, query, provider),
+    [activeAssets, provider, query],
   );
   const hasFilters = Boolean(query.trim() || provider);
 
   const clearFilters = () => {
     setQuery('');
     setProvider('');
+  };
+
+  const requestDelete = async (asset: ImageAsset) => {
+    const title = imageAssetTitle(asset);
+    const confirmed = typeof window === 'undefined'
+      || window.confirm(`Delete “${title}”? This removes the image file and cannot be undone.`);
+    if (!confirmed) return;
+    if (previewAsset?.id === asset.id) setPreviewAsset(null);
+    setDeleteError(false);
+    setDeletingAssetId(asset.id);
+    try {
+      const result = await omnixApiClient.post<Record<string, never>, DeleteImageAssetResponse>(
+        `/api/image-generation/assets/${encodeURIComponent(asset.id)}/delete`,
+        {},
+      );
+      if (!result.ok || !result.deleted) throw new Error('image_delete_failed');
+      setDeletedAssetIds((current) => new Set(current).add(result.asset_id));
+    } catch {
+      setDeleteError(true);
+    } finally {
+      setDeletingAssetId(null);
+    }
   };
 
   return (
@@ -56,16 +93,17 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
       </div>
 
       <Text className="image-assets-count" aria-live="polite" role="status" size="xs">
-        Showing {visibleAssets.length} of {assets.length} image{assets.length === 1 ? '' : 's'}.
+        Showing {visibleAssets.length} of {activeAssets.length} image{activeAssets.length === 1 ? '' : 's'}.
       </Text>
 
-      {!assets.length ? (
+      {!activeAssets.length ? (
         <div className="image-empty-state" role="status"><span aria-hidden="true">▣</span><strong>No image assets yet</strong><small>Generated images will be saved here.</small></div>
       ) : visibleAssets.length ? (
         <div className={`image-assets-grid ${viewMode}`} aria-label="Image asset gallery">
           {visibleAssets.map((asset) => {
             const title = imageAssetTitle(asset);
             const selected = asset.id === selectedAssetId;
+            const deleting = asset.id === deletingAssetId;
             return (
               <article className={`image-asset-card ${selected ? 'selected' : ''}`} key={asset.id}>
                 <div className="image-asset-select">
@@ -88,6 +126,17 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
                 <div className="image-asset-actions">
                   <Button component="a" href={imageAssetUrl(asset.id)} target="_blank" rel="noreferrer" size="compact-xs" variant="subtle">Open</Button>
                   <Button component="a" href={imageAssetUrl(asset.id, true)} download size="compact-xs" variant="subtle">Download</Button>
+                  <Button
+                    aria-label={`Delete ${title}`}
+                    color="red"
+                    disabled={Boolean(deletingAssetId) && !deleting}
+                    loading={deleting}
+                    onClick={() => void requestDelete(asset)}
+                    size="compact-xs"
+                    variant="subtle"
+                  >
+                    Delete
+                  </Button>
                 </div>
               </article>
             );
@@ -96,6 +145,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
       ) : (
         <div className="image-empty-state" role="status">No image assets match these filters.</div>
       )}
+      {deleteError ? <Text c="red" size="sm" role="alert">Image deletion failed.</Text> : null}
       {previewAsset ? <ImagePreviewDialog asset={previewAsset} onClose={() => setPreviewAsset(null)} /> : null}
     </>
   );
