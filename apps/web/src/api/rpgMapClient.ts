@@ -11,6 +11,7 @@ export type RpgMapLayer =
   | 'labels'
   | 'fog'
   | 'interaction';
+export type RpgMapObjectStatus = 'normal' | 'open' | 'closed' | 'damaged' | 'burned' | 'occupied';
 
 export interface RpgMapBounds {
   height: number;
@@ -102,6 +103,19 @@ export interface RpgMapRouteOverlay {
   status: 'open' | 'blocked' | 'locked' | 'unknown';
 }
 
+export interface RpgMapObjectDynamicState {
+  discovered: boolean;
+  object_id: string;
+  presentation_hint: string;
+  status: RpgMapObjectStatus;
+  visible: boolean;
+}
+
+export interface RpgMapFogPolygon {
+  id: string;
+  points: [number, number][];
+}
+
 export interface RpgMapActionCapability {
   disabled_reason: string;
   enabled: boolean;
@@ -118,8 +132,10 @@ export interface RpgMapOverlay {
   definition_revision: string;
   discovered_object_ids: string[];
   environment: Record<string, string>;
+  fog_polygons?: RpgMapFogPolygon[];
   map_id: string;
   markers: RpgMapMarker[];
+  object_states?: RpgMapObjectDynamicState[];
   overlay_revision: number;
   routes: RpgMapRouteOverlay[];
   session_id: string;
