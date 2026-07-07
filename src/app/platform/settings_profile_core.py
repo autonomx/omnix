@@ -1,7 +1,7 @@
 """Core typed Settings Control Center profile models."""
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 SETTINGS_PROFILE_KEY = "settings_control_center"
 SETTINGS_SCHEMA_VERSION = 1
@@ -27,3 +27,77 @@ class ModelDefaults(BaseModel):
 class RoutingDefaults(BaseModel):
     fallback_behavior: str = "next-available"
     task_overrides: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+class LmStudioProviderConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    base_url: str = Field("http://localhost:1234", alias="baseUrl")
+    model: str = ""
+    direct: bool = False
+
+
+class OpenRouterProviderConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    api_key: str = Field("", alias="apiKey")
+    model: str = "openai/gpt-4o-mini"
+    context_size: int = Field(128000, alias="contextSize")
+    thinking_budget: int = Field(0, alias="thinkingBudget")
+
+
+class CerebrasProviderConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    api_key: str = Field("", alias="apiKey")
+    model: str = "llama-3.3-70b-versatile"
+
+
+class LlamaCppProviderConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    base_url: str = Field("http://localhost:8080", alias="baseUrl")
+    model: str = ""
+    download_location: str = Field("server", alias="downloadLocation")
+    auto_start: bool = Field(False, alias="autoStart")
+
+
+class FasterQwen3TtsProviderConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_name: str = Field("Qwen/Qwen3-TTS-12Hz-0.6B-Base", alias="modelName")
+    model_dir: str = Field("", alias="modelDir")
+    device: str = "cuda"
+    dtype: str = "bfloat16"
+    chunk_size: int = Field(12, alias="chunkSize")
+    non_streaming_mode: bool = Field(True, alias="nonStreamingMode")
+
+
+class ParakeetProviderConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    base_url: str = Field("http://localhost:8000", alias="baseUrl")
+
+
+class FluxKleinProviderConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    enabled: bool = False
+    repo_id: str = Field("black-forest-labs/FLUX.2-klein-4B", alias="repoId")
+    local_dir: str = Field("", alias="localDir")
+    device: str = "cuda"
+    torch_dtype: str = Field("bfloat16", alias="torchDtype")
+    prefer_local_files: bool = Field(True, alias="preferLocalFiles")
+    allow_repo_fallback: bool = Field(False, alias="allowRepoFallback")
+
+
+class ProviderConfigs(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    lmstudio: LmStudioProviderConfig = Field(default_factory=LmStudioProviderConfig)
+    openrouter: OpenRouterProviderConfig = Field(default_factory=OpenRouterProviderConfig)
+    cerebras: CerebrasProviderConfig = Field(default_factory=CerebrasProviderConfig)
+    llamacpp: LlamaCppProviderConfig = Field(default_factory=LlamaCppProviderConfig)
+    faster_qwen3_tts: FasterQwen3TtsProviderConfig = Field(default_factory=FasterQwen3TtsProviderConfig, alias="fasterQwen3Tts")
+    parakeet: ParakeetProviderConfig = Field(default_factory=ParakeetProviderConfig)
+    flux_klein: FluxKleinProviderConfig = Field(default_factory=FluxKleinProviderConfig, alias="fluxKlein")

@@ -1,28 +1,14 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
-import { IMAGE_REFERENCES_QUERY_KEY } from './ImageReferenceControl';
 import { ImageRequestForm } from './ImageRequestForm';
 import type { ImageRequestFormValues } from './imageRequestModel';
 
 function renderForm(onSubmit: (values: ImageRequestFormValues) => void) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
-  });
-  queryClient.setQueryData(IMAGE_REFERENCES_QUERY_KEY, {
-    assets: [{
-      id: 'image:reference-one',
-      module: 'image-generation',
-      type: 'image',
-      mime_type: 'image/png',
-      storage_path: 'generated/reference-one.png',
-      source_job_id: null,
-      created_at: '2026-07-07T00:00:00Z',
-      metadata: { title: 'Reference one', width: 768, height: 768 },
-      compat: {},
-    }],
   });
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
@@ -45,9 +31,28 @@ function renderForm(onSubmit: (values: ImageRequestFormValues) => void) {
   );
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('ImageRequestForm wiring', () => {
-  it('submits provider, reference image, aspect ratio, style, quality, and advanced controls', async () => {
+  it('submits provider, uploaded reference image, aspect ratio, style, quality, and advanced controls', async () => {
     const onSubmit = vi.fn<(values: ImageRequestFormValues) => void>();
+    const fetchMock = vi.fn(async () => Response.json({
+      ok: true,
+      asset: {
+        id: 'image-reference:upload-one',
+        module: 'image-reference',
+        type: 'image',
+        mime_type: 'image/png',
+        storage_path: 'generated/reference-one.png',
+        source_job_id: null,
+        created_at: '2026-07-07T00:00:00Z',
+        metadata: { title: 'reference-one.png', width: 768, height: 768 },
+        compat: { uploaded_reference: true },
+      },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
     renderForm(onSubmit);
 
     expect(screen.getByLabelText('Provider')).toHaveValue('image:flux_klein');
@@ -62,8 +67,12 @@ describe('ImageRequestForm wiring', () => {
     expect(screen.getByLabelText('Steps')).toHaveValue(3);
     expect(screen.getByText('3 steps')).toBeInTheDocument();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Use Reference one as reference' }));
-    expect(screen.getByText('1 / 2 selected')).toBeInTheDocument();
+    const file = new File(['fake image'], 'reference-one.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText('Select reference image from hard drive'), {
+      target: { files: [file] },
+    });
+    expect(await screen.findByText('1 / 2 selected')).toBeInTheDocument();
+    expect(screen.getByText('reference-one.png')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Keep the character and change the clothing' } });
     fireEvent.change(screen.getByLabelText('Negative prompt'), { target: { value: 'blurry' } });
@@ -80,12 +89,16 @@ describe('ImageRequestForm wiring', () => {
       width: '1024',
       height: '576',
       style: 'photorealistic',
-      referenceAssetIds: ['image:reference-one'],
+      referenceAssetIds: ['image-reference:upload-one'],
       steps: '3',
       guidanceScale: '4.5',
       unloadAfterGeneration: true,
       noCache: true,
     }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/image-generation/references?filename=reference-one.png',
+      expect.objectContaining({ method: 'POST', body: file }),
+    );
   });
 
   it('wires dimension steppers and custom aspect selection', () => {

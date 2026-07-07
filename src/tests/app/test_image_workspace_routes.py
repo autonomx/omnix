@@ -9,7 +9,7 @@ from app.assets import AssetRecord, AssetType, SharedAssetStore as CompatibleSha
 from app.assets.store import SharedAssetStore
 import app.gateway.image_workspace_routes as image_workspace_routes
 import app.image.asset_store as legacy_image_store
-from app.jobs import CreateJobRequest, ResourceClass, SQLiteJobStore
+from app.jobs import CompleteJobRequest, CreateJobRequest, ResourceClass, SQLiteJobStore
 
 
 def test_image_workspace_routes_are_filtered_and_bounded(tmp_path, monkeypatch) -> None:
@@ -95,9 +95,23 @@ def test_image_workspace_routes_are_filtered_and_bounded(tmp_path, monkeypatch) 
 
 
 def test_image_workspace_deletes_manifest_asset_and_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     image_file = tmp_path / "generated.png"
     image_file.write_bytes(b"png")
     assets = SharedAssetStore(tmp_path / "assets.json")
+    jobs = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job = jobs.create_job(
+        CreateJobRequest(
+            module="image-generation",
+            type="image.generate",
+            resource_class=ResourceClass.GPU_IMAGE,
+            input_payload={"prompt": "generated"},
+        )
+    )
+    jobs.complete_job(
+        job.id,
+        CompleteJobRequest(output_refs=[{"type": "image", "asset_id": "image:generated"}]),
+    )
     assets.upsert_asset(
         AssetRecord(
             id="image:generated",
@@ -105,11 +119,13 @@ def test_image_workspace_deletes_manifest_asset_and_file(tmp_path, monkeypatch) 
             type=AssetType.IMAGE,
             mime_type="image/png",
             storage_path=str(image_file),
+            source_job_id=job.id,
             created_at="2026-01-02T00:00:00+00:00",
         )
     )
 
     monkeypatch.setattr(image_workspace_routes, "default_asset_store", lambda: assets)
+    monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: jobs)
     app = FastAPI()
     image_workspace_routes.register_image_workspace_routes(app)
     client = TestClient(app)
@@ -124,7 +140,38 @@ def test_image_workspace_deletes_manifest_asset_and_file(tmp_path, monkeypatch) 
         "file_deleted": True,
     }
     assert image_file.exists() is False
-    assert assets.list_assets().assets == []
+    assert "image:generated" not in {asset.id for asset in assets.list_assets().assets}
+    assert jobs.get_job(job.id) is None
+
+
+def test_image_workspace_jobs_prunes_deleted_image_result_jobs(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
+    jobs = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job = jobs.create_job(
+        CreateJobRequest(
+            module="image-generation",
+            type="image.generate",
+            resource_class=ResourceClass.GPU_IMAGE,
+            input_payload={"prompt": "deleted result"},
+        )
+    )
+    jobs.complete_job(
+        job.id,
+        CompleteJobRequest(output_refs=[{"type": "image", "asset_id": "image:deleted"}]),
+    )
+    assets = SharedAssetStore(tmp_path / "assets.json")
+
+    monkeypatch.setattr(image_workspace_routes, "default_asset_store", lambda: assets)
+    monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: jobs)
+    app = FastAPI()
+    image_workspace_routes.register_image_workspace_routes(app)
+    client = TestClient(app)
+
+    response = client.get("/api/image-generation/jobs")
+
+    assert response.status_code == 200
+    assert response.json()["jobs"] == []
+    assert jobs.get_job(job.id) is None
 
 
 def test_image_workspace_deletes_legacy_image_manifest_asset(tmp_path, monkeypatch) -> None:

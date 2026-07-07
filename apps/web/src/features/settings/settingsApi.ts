@@ -17,6 +17,16 @@ export type SettingsProfileEnvelope = {
 export type SettingsProfileSaveRequest = {
   base_revision: string;
   settings_profile_patch: Partial<SettingsDocument>;
+  provider?: string;
+  audio_provider_tts?: string;
+  audio_provider_stt?: string;
+  lmstudio?: Record<string, unknown>;
+  openrouter?: Record<string, unknown>;
+  cerebras?: Record<string, unknown>;
+  llamacpp?: Record<string, unknown>;
+  'faster-qwen3-tts'?: Record<string, unknown>;
+  parakeet?: Record<string, unknown>;
+  image?: Record<string, unknown>;
 };
 
 export class SettingsProfileApiError extends Error {
@@ -47,6 +57,82 @@ export async function saveSettingsProfile(request: SettingsProfileSaveRequest, f
   if (result.success !== true) throw new SettingsProfileApiError('Settings were not saved because the profile changed or validation failed.', 409);
 }
 
+function profilePatchWithoutSecrets(patch: Partial<SettingsDocument>): Partial<SettingsDocument> {
+  if (!patch.providerConfigs) return patch;
+  const providerConfigs = { ...patch.providerConfigs };
+  if (providerConfigs.openrouter) {
+    providerConfigs.openrouter = { ...providerConfigs.openrouter };
+    delete (providerConfigs.openrouter as Partial<typeof providerConfigs.openrouter>).apiKey;
+  }
+  if (providerConfigs.cerebras) {
+    providerConfigs.cerebras = { ...providerConfigs.cerebras };
+    delete (providerConfigs.cerebras as Partial<typeof providerConfigs.cerebras>).apiKey;
+  }
+  return { ...patch, providerConfigs };
+}
+
 export function createSettingsSaveRequest(base: SettingsDocument, draft: SettingsDocument): SettingsProfileSaveRequest {
-  return { base_revision: base.revision, settings_profile_patch: settingsPatch(base, draft) };
+  const request: SettingsProfileSaveRequest = { base_revision: base.revision, settings_profile_patch: profilePatchWithoutSecrets(settingsPatch(base, draft)) };
+  if (JSON.stringify(base.global.providers) !== JSON.stringify(draft.global.providers)) {
+    request.provider = draft.global.providers.llm;
+    request.audio_provider_tts = draft.global.providers.tts;
+    request.audio_provider_stt = draft.global.providers.stt;
+  }
+  if (JSON.stringify(base.providerConfigs.lmstudio) !== JSON.stringify(draft.providerConfigs.lmstudio)) {
+    request.lmstudio = {
+      base_url: draft.providerConfigs.lmstudio.baseUrl,
+      model: draft.providerConfigs.lmstudio.model,
+      direct: draft.providerConfigs.lmstudio.direct,
+    };
+  }
+  if (JSON.stringify(base.providerConfigs.openrouter) !== JSON.stringify(draft.providerConfigs.openrouter)) {
+    request.openrouter = {
+      api_key: draft.providerConfigs.openrouter.apiKey,
+      model: draft.providerConfigs.openrouter.model,
+      context_size: draft.providerConfigs.openrouter.contextSize,
+      thinking_budget: draft.providerConfigs.openrouter.thinkingBudget,
+    };
+  }
+  if (JSON.stringify(base.providerConfigs.cerebras) !== JSON.stringify(draft.providerConfigs.cerebras)) {
+    request.cerebras = {
+      api_key: draft.providerConfigs.cerebras.apiKey,
+      model: draft.providerConfigs.cerebras.model,
+    };
+  }
+  if (JSON.stringify(base.providerConfigs.llamacpp) !== JSON.stringify(draft.providerConfigs.llamacpp)) {
+    request.llamacpp = {
+      base_url: draft.providerConfigs.llamacpp.baseUrl,
+      model: draft.providerConfigs.llamacpp.model,
+      download_location: draft.providerConfigs.llamacpp.downloadLocation,
+      auto_start: draft.providerConfigs.llamacpp.autoStart,
+    };
+  }
+  if (JSON.stringify(base.providerConfigs.fasterQwen3Tts) !== JSON.stringify(draft.providerConfigs.fasterQwen3Tts)) {
+    request['faster-qwen3-tts'] = {
+      model_name: draft.providerConfigs.fasterQwen3Tts.modelName,
+      model_dir: draft.providerConfigs.fasterQwen3Tts.modelDir,
+      device: draft.providerConfigs.fasterQwen3Tts.device,
+      dtype: draft.providerConfigs.fasterQwen3Tts.dtype,
+      chunk_size: draft.providerConfigs.fasterQwen3Tts.chunkSize,
+      non_streaming_mode: draft.providerConfigs.fasterQwen3Tts.nonStreamingMode,
+    };
+  }
+  if (JSON.stringify(base.providerConfigs.parakeet) !== JSON.stringify(draft.providerConfigs.parakeet)) {
+    request.parakeet = { base_url: draft.providerConfigs.parakeet.baseUrl };
+  }
+  if (JSON.stringify(base.providerConfigs.fluxKlein) !== JSON.stringify(draft.providerConfigs.fluxKlein)) {
+    request.image = {
+      provider: 'flux_klein',
+      flux_klein: {
+        enabled: draft.providerConfigs.fluxKlein.enabled,
+        repo_id: draft.providerConfigs.fluxKlein.repoId,
+        local_dir: draft.providerConfigs.fluxKlein.localDir,
+        device: draft.providerConfigs.fluxKlein.device,
+        torch_dtype: draft.providerConfigs.fluxKlein.torchDtype,
+        prefer_local_files: draft.providerConfigs.fluxKlein.preferLocalFiles,
+        allow_repo_fallback: draft.providerConfigs.fluxKlein.allowRepoFallback,
+      },
+    };
+  }
+  return request;
 }

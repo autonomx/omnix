@@ -32,7 +32,9 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
     @gateway.get("/api/image-generation/jobs", response_model=JobListResponse, include_in_schema=False)
     def image_jobs(limit: int = Query(default=DEFAULT_IMAGE_JOB_LIMIT, ge=1, le=MAX_IMAGE_JOB_LIMIT)) -> JobListResponse:
         try:
-            jobs = _recent_image_jobs(default_job_store(), limit)
+            store = default_job_store()
+            jobs = _recent_image_jobs(store, limit)
+            jobs = _prune_deleted_image_asset_jobs(store, jobs)
         except Exception:
             jobs = []
         summaries = []
@@ -92,6 +94,8 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
         if not deleted:
             raise HTTPException(status_code=404, detail="asset_not_deletable")
 
+        _delete_jobs_for_image_asset(asset)
+
         result: dict[str, Any] = {
             "ok": True,
             "asset_id": asset_id,
@@ -116,6 +120,73 @@ def _is_usable_image_asset(asset: AssetRecord) -> bool:
         return path.is_file() and path.stat().st_size > 0
     except OSError:
         return False
+
+
+def _delete_jobs_for_image_asset(asset: AssetRecord) -> None:
+    job_ids = {str(asset.source_job_id or "").strip()}
+    legacy_asset_id = str((asset.compat or {}).get("legacy_asset_id") or "").strip()
+    asset_ids = {asset.id}
+    if legacy_asset_id:
+        asset_ids.add(legacy_asset_id)
+
+    try:
+        store = default_job_store()
+        for job in store.list_jobs():
+            if not _is_image_job(job):
+                continue
+            if _job_references_image_asset(job, asset_ids):
+                job_ids.add(job.id)
+        delete_job = getattr(store, "delete_job", None)
+        if not callable(delete_job):
+            return
+        for job_id in sorted(job_id for job_id in job_ids if job_id):
+            delete_job(job_id)
+    except Exception:
+        return
+
+
+def _prune_deleted_image_asset_jobs(store: Any, jobs: list[JobRecord]) -> list[JobRecord]:
+    delete_job = getattr(store, "delete_job", None)
+    if not callable(delete_job):
+        return jobs
+    try:
+        current_image_asset_ids = {
+            asset.id
+            for asset in default_asset_store().list_assets().assets
+            if asset.type == AssetType.IMAGE
+            and asset.module in {"image", "image-generation"}
+            and _is_usable_image_asset(asset)
+        }
+    except Exception:
+        return jobs
+
+    retained: list[JobRecord] = []
+    for job in jobs:
+        if job.status == JobStatus.COMPLETED and _job_image_asset_ids(job) - current_image_asset_ids:
+            try:
+                delete_job(job.id)
+            except Exception:
+                retained.append(job)
+            continue
+        retained.append(job)
+    return retained
+
+
+def _job_image_asset_ids(job: JobRecord) -> set[str]:
+    asset_ids: set[str] = set()
+    for ref in getattr(job, "output_refs", []) or []:
+        if not isinstance(ref, dict):
+            continue
+        if str(ref.get("type") or "") != "image":
+            continue
+        asset_id = str(ref.get("asset_id") or "").strip()
+        if asset_id:
+            asset_ids.add(asset_id)
+    return asset_ids
+
+
+def _job_references_image_asset(job: JobRecord, asset_ids: set[str]) -> bool:
+    return bool(_job_image_asset_ids(job) & asset_ids)
 
 
 def _retry_request(source: JobRecord) -> CreateJobRequest:

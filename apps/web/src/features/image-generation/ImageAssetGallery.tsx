@@ -1,7 +1,8 @@
 import { Button, Text, UnstyledButton } from '@mantine/core';
+import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { omnixApiClient, type AssetListResponse } from '../../api/client';
-import { imageAssetUrl } from './imageWorkspaceModel';
+import { IMAGE_ASSETS_QUERY_KEY, IMAGE_JOBS_QUERY_KEY, imageAssetUrl } from './imageWorkspaceModel';
 import { ImagePreviewDialog } from './ImagePreviewDialog';
 
 export type ImageAsset = AssetListResponse['assets'][number];
@@ -21,6 +22,7 @@ interface ImageAssetGalleryProps {
 }
 
 export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAssetGalleryProps) {
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -62,6 +64,10 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
       );
       if (!result.ok || !result.deleted) throw new Error('image_delete_failed');
       setDeletedAssetIds((current) => new Set(current).add(result.asset_id));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: IMAGE_ASSETS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY }),
+      ]);
     } catch {
       setDeleteError(true);
     } finally {

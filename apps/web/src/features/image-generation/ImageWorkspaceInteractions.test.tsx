@@ -1,4 +1,5 @@
 import { MantineProvider } from '@mantine/core';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AssetListResponse, JobRecord } from '../../api/client';
@@ -41,7 +42,14 @@ const assets: AssetListResponse['assets'] = [
 ];
 
 function renderWithTheme(node: React.ReactNode) {
-  return render(<MantineProvider theme={omnixTheme} defaultColorScheme="dark">{node}</MantineProvider>);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
+      <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>
+    </MantineProvider>,
+  );
 }
 
 describe('ImageAssetGallery interactions', () => {

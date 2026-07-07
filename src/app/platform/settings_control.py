@@ -23,7 +23,7 @@ PROFILE_BASE_REVISION_KEY = "base_revision"
 
 def get_settings_payload() -> SettingsPayload:
     payload = get_legacy_settings_payload()
-    profile = load_settings_profile(load_settings())
+    profile = load_settings_profile(payload.settings)
     payload.settings[SETTINGS_PROFILE_KEY] = profile_payload(profile)
     return payload
 
@@ -54,7 +54,7 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
     base_revision = data.get(PROFILE_BASE_REVISION_KEY)
     try:
         if isinstance(patch, dict):
-            save_settings_profile(settings, patch, str(base_revision) if base_revision else None)
+            save_settings_profile(settings, patch, None if legacy else str(base_revision) if base_revision else None)
         elif legacy:
             current = load_settings_profile(settings)
             save_settings_profile(settings, _provider_patch(settings), current.revision)

@@ -24,4 +24,25 @@ describe('settings API adapter', () => {
     await saveSettingsProfile(request, fetcher);
     expect(JSON.parse(sent).settings_profile_patch).toEqual({ assistant: draft.assistant });
   });
+
+  it('mirrors provider config to the legacy payload without storing API keys in the profile patch', () => {
+    const base = migrateSettingsDocument(DEFAULT_SETTINGS_DOCUMENT);
+    const draft = migrateSettingsDocument({
+      ...base,
+      global: { ...base.global, providers: { ...base.global.providers, llm: 'openrouter' } },
+      providerConfigs: {
+        ...base.providerConfigs,
+        openrouter: { ...base.providerConfigs.openrouter, apiKey: 'sk-live', model: 'anthropic/claude-sonnet-4' },
+      },
+    });
+    const request = createSettingsSaveRequest(base, draft);
+    expect(request.provider).toBe('openrouter');
+    expect(request.openrouter).toEqual({
+      api_key: 'sk-live',
+      model: 'anthropic/claude-sonnet-4',
+      context_size: 128000,
+      thinking_budget: 0,
+    });
+    expect(request.settings_profile_patch.providerConfigs?.openrouter?.apiKey).toBeUndefined();
+  });
 });

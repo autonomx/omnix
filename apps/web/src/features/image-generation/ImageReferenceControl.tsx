@@ -1,7 +1,5 @@
 import { Button, Text } from '@mantine/core';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { omnixApiClient, type AssetListResponse } from '../../api/client';
 import './ImageReferenceControl.css';
 import { imageAssetTitle, imageAssetUrl, type ImageAsset } from './imageWorkspaceModel';
 
@@ -35,110 +33,124 @@ async function uploadImageReference(file: File): Promise<ImageReferenceUploadRes
 }
 
 export function ImageReferenceControl({ selectedAssetIds, onChange }: ImageReferenceControlProps) {
-  const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachedAssets, setAttachedAssets] = useState<ImageAsset[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(false);
   const [limitMessage, setLimitMessage] = useState('');
-  const referenceQuery = useQuery({
-    queryKey: IMAGE_REFERENCES_QUERY_KEY,
-    queryFn: () => omnixApiClient.get<AssetListResponse>('/api/image-generation/references'),
-  });
-  const uploadMutation = useMutation({
-    mutationFn: uploadImageReference,
-    onSuccess: async ({ asset }) => {
-      const next = [...selectedAssetIds.filter((id) => id !== asset.id), asset.id].slice(-MAX_REFERENCE_IMAGES);
-      onChange(next);
-      queryClient.setQueryData<AssetListResponse>(IMAGE_REFERENCES_QUERY_KEY, (current) => ({
-        assets: [asset, ...(current?.assets ?? []).filter((item) => item.id !== asset.id)],
-      }));
-      await queryClient.invalidateQueries({ queryKey: IMAGE_REFERENCES_QUERY_KEY });
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    },
-  });
 
-  const toggleReference = (assetId: string) => {
+  const removeReference = (assetId: string) => {
     setLimitMessage('');
-    if (selectedAssetIds.includes(assetId)) {
-      onChange(selectedAssetIds.filter((id) => id !== assetId));
-      return;
-    }
-    if (selectedAssetIds.length >= MAX_REFERENCE_IMAGES) {
-      setLimitMessage(`Use at most ${MAX_REFERENCE_IMAGES} reference images.`);
-      return;
-    }
-    onChange([...selectedAssetIds, assetId]);
+    onChange(selectedAssetIds.filter((id) => id !== assetId));
   };
 
-  const chooseUpload = (file: File | undefined) => {
+  const chooseUploads = async (files: FileList | File[] | null | undefined) => {
     setLimitMessage('');
-    if (!file) return;
-    if (selectedAssetIds.length >= MAX_REFERENCE_IMAGES) {
+    setUploadError(false);
+    const incoming = Array.from(files ?? []).filter((file) => file.type.startsWith('image/'));
+    if (!incoming.length) return;
+
+    const slots = MAX_REFERENCE_IMAGES - selectedAssetIds.length;
+    if (slots <= 0) {
       setLimitMessage(`Remove a reference before uploading another. Maximum: ${MAX_REFERENCE_IMAGES}.`);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
-    uploadMutation.mutate(file);
+
+    const accepted = incoming.slice(0, slots);
+    if (incoming.length > accepted.length) {
+      setLimitMessage(`Attached the first ${accepted.length}; use at most ${MAX_REFERENCE_IMAGES} reference images.`);
+    }
+
+    setUploading(true);
+    try {
+      const uploads = await Promise.all(accepted.map(uploadImageReference));
+      const uploadedAssets = uploads.map((result) => result.asset);
+      setAttachedAssets((current) => [
+        ...uploadedAssets,
+        ...current.filter((asset) => !uploadedAssets.some((uploaded) => uploaded.id === asset.id)),
+      ]);
+      onChange([...selectedAssetIds, ...uploadedAssets.map((asset) => asset.id)].slice(0, MAX_REFERENCE_IMAGES));
+    } catch {
+      setUploadError(true);
+    } finally {
+      setUploading(false);
+      setDragActive(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
-  const assets = referenceQuery.data?.assets ?? [];
-  const selected = new Set(selectedAssetIds);
+  const selectedAssets = selectedAssetIds
+    .map((assetId) => attachedAssets.find((asset) => asset.id === assetId))
+    .filter((asset): asset is ImageAsset => Boolean(asset));
 
   return (
     <fieldset className="image-reference-fieldset">
       <legend>
-        Reference images <i title="Condition FLUX on up to two existing or uploaded images">ⓘ</i>
+        Reference images <i title="Condition FLUX on up to two uploaded images">i</i>
       </legend>
-      <div className="image-reference-heading">
-        <Text size="xs">
-          Optional image-to-image guidance. Select or upload up to {MAX_REFERENCE_IMAGES}; describe what to preserve or change in the prompt.
-        </Text>
+      <div
+        className={`image-reference-dropzone ${dragActive ? 'active' : ''}`}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setDragActive(false);
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          void chooseUploads(event.dataTransfer.files);
+        }}
+      >
+        <div>
+          <strong>Drop reference images here</strong>
+          <Text size="xs">PNG, JPEG, or WebP. Attach up to {MAX_REFERENCE_IMAGES} from your hard drive.</Text>
+        </div>
         <Button
-          loading={uploadMutation.isPending}
+          loading={uploading}
           onClick={() => fileInputRef.current?.click()}
           size="compact-xs"
           type="button"
           variant="light"
         >
-          Upload reference
+          Select image
         </Button>
         <input
           ref={fileInputRef}
           className="visually-hidden"
           type="file"
+          multiple
           accept="image/png,image/jpeg,image/webp"
-          aria-label="Upload reference image"
-          onChange={(event) => chooseUpload(event.currentTarget.files?.[0])}
+          aria-label="Select reference image from hard drive"
+          onChange={(event) => void chooseUploads(event.currentTarget.files)}
         />
       </div>
 
-      {referenceQuery.isLoading ? <Text size="xs">Loading reference images…</Text> : null}
-      {referenceQuery.isError ? <Text c="red" size="xs" role="alert">Reference images could not be loaded.</Text> : null}
-      {uploadMutation.isError ? <Text c="red" size="xs" role="alert">Reference upload failed.</Text> : null}
+      {uploadError ? <Text c="red" size="xs" role="alert">Reference upload failed.</Text> : null}
       {limitMessage ? <Text c="yellow" size="xs" role="status">{limitMessage}</Text> : null}
 
-      {assets.length ? (
-        <div className="image-reference-grid" aria-label="Reference image choices">
-          {assets.slice(0, 16).map((asset) => {
-            const active = selected.has(asset.id);
-            const blocked = !active && selectedAssetIds.length >= MAX_REFERENCE_IMAGES;
-            return (
-              <button
-                aria-label={`${active ? 'Remove' : 'Use'} ${imageAssetTitle(asset)} as reference`}
-                aria-pressed={active}
-                className={active ? 'active' : ''}
-                disabled={blocked}
-                key={asset.id}
-                onClick={() => toggleReference(asset.id)}
-                type="button"
-              >
-                <img alt="" loading="lazy" src={imageAssetUrl(asset.id)} />
+      {selectedAssets.length ? (
+        <div className="image-reference-grid" aria-label="Attached reference images">
+          {selectedAssets.map((asset) => (
+            <article key={asset.id} className="image-reference-card">
+              <img alt="" loading="lazy" src={imageAssetUrl(asset.id)} />
+              <div>
                 <span title={imageAssetTitle(asset)}>{imageAssetTitle(asset)}</span>
-                {active ? <b aria-hidden="true">✓</b> : null}
-              </button>
-            );
-          })}
+                <button
+                  aria-label={`Remove ${imageAssetTitle(asset)} reference`}
+                  onClick={() => removeReference(asset.id)}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            </article>
+          ))}
         </div>
-      ) : !referenceQuery.isLoading ? (
-        <Text size="xs">No prior images are available. Upload a PNG, JPEG, or WebP reference.</Text>
       ) : null}
       <Text className="image-reference-count" size="xs">{selectedAssetIds.length} / {MAX_REFERENCE_IMAGES} selected</Text>
     </fieldset>

@@ -3,11 +3,21 @@ export const SETTINGS_SCHEMA_VERSION = 1 as const;
 export type ProviderDefaults = { llm: string; tts: string; stt: string; image: string; voiceCloning: string };
 export type ModelDefaults = { chat: string; fast: string; quality: string; background: string; embedding: string; imagePrompt: string };
 export type RoutingDefaults = { fallbackBehavior: 'next-available' | 'fail'; taskOverrides: Record<string, { providerId: string; modelId: string }> };
+export type ProviderConfigs = {
+  lmstudio: { baseUrl: string; model: string; direct: boolean };
+  openrouter: { apiKey: string; model: string; contextSize: number; thinkingBudget: number };
+  cerebras: { apiKey: string; model: string };
+  llamacpp: { baseUrl: string; model: string; downloadLocation: string; autoStart: boolean };
+  fasterQwen3Tts: { modelName: string; modelDir: string; device: string; dtype: string; chunkSize: number; nonStreamingMode: boolean };
+  parakeet: { baseUrl: string };
+  fluxKlein: { enabled: boolean; repoId: string; localDir: string; device: string; torchDtype: string; preferLocalFiles: boolean; allowRepoFallback: boolean };
+};
 
 export type SettingsDocument = {
   schemaVersion: number;
   revision: string;
   global: { providers: ProviderDefaults; models: ModelDefaults; routing: RoutingDefaults };
+  providerConfigs: ProviderConfigs;
   appearance: { mode: 'system' | 'light' | 'dark'; density: 'comfortable' | 'compact'; reduceMotion: boolean; liveCaptions: boolean };
   assistant: { personalityId: string; customPersonality: string; voiceId: string; autoSpeakReplies: boolean; speechLanguage: string; streamingAudio: boolean };
   voice: { language: string; stability: number; similarity: number; style: number; speed: number; pitch: number; volume: number; effects: string[]; streaming: boolean; cloningLanguage: string; cloningQuality: string };

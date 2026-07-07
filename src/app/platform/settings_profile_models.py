@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from .settings_profile_capture import ImageSettingsProfile, StorageSettingsProfile, SttSettingsProfile
-from .settings_profile_core import SETTINGS_SCHEMA_VERSION
+from .settings_profile_core import SETTINGS_SCHEMA_VERSION, ProviderConfigs
 from .settings_profile_experience import AppearanceSettingsProfile, AssistantSettingsProfile
 from .settings_profile_global import GlobalSettingsProfile
 from .settings_profile_podcast import PodcastSettingsProfile
@@ -20,6 +20,7 @@ class SettingsProfile(BaseModel):
     schema_version: int = SETTINGS_SCHEMA_VERSION
     revision: str = "default"
     global_settings: GlobalSettingsProfile = Field(default_factory=GlobalSettingsProfile, alias="global")
+    provider_configs: ProviderConfigs = Field(default_factory=ProviderConfigs, alias="providerConfigs")
     appearance: AppearanceSettingsProfile = Field(default_factory=AppearanceSettingsProfile)
     assistant: AssistantSettingsProfile = Field(default_factory=AssistantSettingsProfile)
     voice: VoiceSettingsProfile = Field(default_factory=VoiceSettingsProfile)

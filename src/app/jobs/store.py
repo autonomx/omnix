@@ -176,6 +176,14 @@ class SQLiteJobStore:
             row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         return self._row_to_job(row) if row else None
 
+    def delete_job(self, job_id: str) -> bool:
+        """Delete one job and its event rows from the local job store."""
+
+        with self._connect() as conn:
+            conn.execute("DELETE FROM job_events WHERE job_id = ?", (job_id,))
+            cursor = conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+        return cursor.rowcount > 0
+
     def claim_next(
         self,
         request: ClaimJobRequest,

@@ -1,4 +1,5 @@
 import { MantineProvider } from '@mantine/core';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AssetListResponse } from '../../api/client';
@@ -27,6 +28,17 @@ const assets = [
   },
 ] as ImageAsset[];
 
+function renderGallery(node: React.ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <MantineProvider>
+      <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>
+    </MantineProvider>,
+  );
+}
+
 describe('ImageAssetGallery', () => {
   it('filters by search and provider', () => {
     expect(filterImageAssets(assets, 'green', '')).toEqual([assets[0]]);
@@ -34,7 +46,7 @@ describe('ImageAssetGallery', () => {
   });
 
   it('announces filtered result counts', () => {
-    render(<MantineProvider><ImageAssetGallery assets={assets} selectedAssetId={null} onSelect={vi.fn()} /></MantineProvider>);
+    renderGallery(<ImageAssetGallery assets={assets} selectedAssetId={null} onSelect={vi.fn()} />);
 
     expect(screen.getByRole('status')).toHaveTextContent('Showing 2 of 2 images.');
     fireEvent.change(screen.getByLabelText('Search images'), { target: { value: 'green' } });
@@ -46,7 +58,7 @@ describe('ImageAssetGallery', () => {
 
   it('selects a thumbnail with one accessible name', () => {
     const onSelect = vi.fn();
-    render(<MantineProvider><ImageAssetGallery assets={assets} selectedAssetId={null} onSelect={onSelect} /></MantineProvider>);
+    renderGallery(<ImageAssetGallery assets={assets} selectedAssetId={null} onSelect={onSelect} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Select Night city' }));
 
