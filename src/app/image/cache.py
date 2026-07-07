@@ -89,3 +89,24 @@ def store_image_cache(cache_key: str, result: Any) -> Dict[str, Any]:
     index[cache_key] = row
     _write_index(index)
     return row
+
+
+def forget_image_cache_record(*, cache_key: str = "", file_path: str = "") -> Dict[str, Any]:
+    """Forget cache-index rows that point at a removed generated image."""
+
+    wanted_key = str(cache_key or "").strip()
+    wanted_path = os.path.abspath(str(file_path or "")) if str(file_path or "").strip() else ""
+    index = _read_index()
+    forgotten: list[str] = []
+    for key, payload in list(index.items()):
+        if not isinstance(payload, dict):
+            continue
+        row_path = str(payload.get("file_path") or "").strip()
+        same_key = bool(wanted_key and key == wanted_key)
+        same_path = bool(wanted_path and row_path and os.path.abspath(row_path) == wanted_path)
+        if same_key or same_path:
+            index.pop(key, None)
+            forgotten.append(str(key))
+    if forgotten:
+        _write_index(index)
+    return {"ok": True, "forgotten_keys": forgotten}
