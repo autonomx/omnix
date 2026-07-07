@@ -80,9 +80,10 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
         if asset.type != AssetType.IMAGE or asset.module not in {"image", "image-generation"}:
             raise HTTPException(status_code=409, detail="asset_not_image_generation")
 
-        job_store = default_job_store()
         source_job_id = str(asset.source_job_id or "").strip()
+        job_store: Any | None = None
         if source_job_id:
+            job_store = default_job_store()
             source_job = job_store.get_job(source_job_id)
             if source_job is not None and source_job.status not in TERMINAL_STATUSES:
                 raise HTTPException(status_code=409, detail="image_job_still_active")
@@ -110,20 +111,24 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
             "job_removed": False,
             "events_removed": 0,
         }
-        if source_job_id:
+        if source_job_id and job_store is not None:
             job_result = purge_terminal_job_history(job_store, source_job_id)
 
         result: dict[str, Any] = {
             "ok": True,
             "asset_id": asset_id,
-            "deleted_asset_ids": [asset_id],
             "deleted": True,
             "file_deleted": bool(shared_result.get("file_deleted"))
             or bool((legacy_result or {}).get("file_deleted")),
-            "cache_keys_removed": list(cache_result.get("forgotten_keys") or []),
-            "job_ids_removed": [source_job_id] if job_result.get("job_removed") and source_job_id else [],
-            "job_events_removed": int(job_result.get("events_removed") or 0),
         }
+        forgotten_keys = list(cache_result.get("forgotten_keys") or [])
+        if forgotten_keys:
+            result["cache_keys_removed"] = forgotten_keys
+        if job_result.get("job_removed") and source_job_id:
+            result["job_ids_removed"] = [source_job_id]
+        events_removed = int(job_result.get("events_removed") or 0)
+        if events_removed:
+            result["job_events_removed"] = events_removed
         file_error = str(shared_result.get("file_error") or (legacy_result or {}).get("file_error") or "").strip()
         if file_error:
             result["file_error"] = file_error
