@@ -20,6 +20,7 @@ export interface ImageRequestFormValues {
   width: string;
   height: string;
   style: string;
+  referenceAssetIds: string[];
   seed: string;
   steps: string;
   guidanceScale: string;
@@ -36,6 +37,7 @@ export function imageRequestDefaultValues(defaults: ImageRequestDefaults): Image
     width: String(defaults.width),
     height: String(defaults.height),
     style: 'photorealistic',
+    referenceAssetIds: [],
     seed: '',
     steps: '4',
     guidanceScale: '',
@@ -52,11 +54,12 @@ export function buildImageGenerateInput(values: ImageRequestFormValues, defaults
     width: parseDimension(values.width, defaults.width),
     height: parseDimension(values.height, defaults.height),
     style: values.style.trim(),
+    reference_asset_ids: values.referenceAssetIds,
     seed: optionalInteger(values.seed),
     steps: optionalInteger(values.steps),
     guidance_scale: optionalNumber(values.guidanceScale),
     unload_after_generation: values.unloadAfterGeneration,
-    no_cache: values.noCache,
+    no_cache: values.noCache || values.referenceAssetIds.length > 0,
   };
 }
 
