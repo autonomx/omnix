@@ -126,6 +126,7 @@ def register_assistant_context_routes(
             session.id,
             user_message.id,
             context_items,
+            show_diagnostics=settings.show_diagnostics,
         )
         if validated is not None:
             session = validated
