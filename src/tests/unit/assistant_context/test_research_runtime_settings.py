@@ -9,7 +9,9 @@ from app.assistant_context.models import AssistantContextBuildResult
 from app.assistant_context.routes import register_assistant_context_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 from app.jobs import SQLiteJobStore
+from app.research.compatibility import reset_research_compatibility_telemetry
 from app.research.policy import ResearchPolicy, ResearchRateLimiter
+from app.research.release_policy import ResearchReleasePolicy
 from app.research.settings import ResearchRuntimeSettings, load_research_runtime_settings
 
 
@@ -91,6 +93,7 @@ class CapturingContextService:
 
 def test_quick_search_route_applies_saved_provider_result_limit_and_policy(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
+    monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "fixture-key")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
     job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
     limiter = ResearchRateLimiter(tmp_path / "limits.sqlite")
@@ -122,6 +125,7 @@ def test_quick_search_route_applies_saved_provider_result_limit_and_policy(tmp_p
 
 def test_deep_research_job_freezes_saved_provider_budgets_and_cache_ttls(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
+    monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "fixture-key")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
     job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
     limiter = ResearchRateLimiter(tmp_path / "limits.sqlite")
@@ -134,6 +138,10 @@ def test_deep_research_job_freezes_saved_provider_budgets_and_cache_ttls(tmp_pat
         job_store_factory=lambda: job_store,
         rate_limiter_factory=lambda: limiter,
         settings_factory=lambda: settings,
+        release_policy_factory=lambda: ResearchReleasePolicy(
+            hermes_enabled=True,
+            hermes_percentage=100,
+        ),
     )
 
     response = TestClient(app).post(
@@ -155,6 +163,9 @@ def test_deep_research_job_freezes_saved_provider_budgets_and_cache_ttls(tmp_pat
 
 def test_research_status_reports_capability_without_exposing_secret(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "never-return-this-secret")
+    monkeypatch.setenv("OMNIX_RESEARCH_LEGACY_ALIASES_ENABLED", "1")
+    monkeypatch.setenv("OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET", "2026-09-01")
+    reset_research_compatibility_telemetry()
     app = FastAPI()
     settings = runtime_settings()
     register_assistant_context_routes(
@@ -175,4 +186,8 @@ def test_research_status_reports_capability_without_exposing_secret(tmp_path, mo
     assert payload["provider"]["available"] is True
     assert payload["budgets"]["deep_max_steps"] == 9
     assert payload["retention"]["raw_snapshot_retention_days"] == 3
+    assert payload["compatibility"]["aliases_enabled"] is True
+    assert payload["compatibility"]["sunset"] == "2026-09-01"
+    assert payload["compatibility"]["canonical_field"] == "web_research_mode"
+    assert payload["compatibility"]["total_legacy_requests"] == 0
     assert "never-return-this-secret" not in json.dumps(payload)
