@@ -5,7 +5,7 @@ import os
 from collections.abc import Callable
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 ResearchOperationType = Literal["web_search", "web_extract", "evaluate_evidence", "stop"]
 
@@ -107,7 +107,7 @@ class ResearchPlanner:
                 plan=enforce_research_plan_budget(plan, request.budget),
                 backend="hermes",
             )
-        except (Exception, ValidationError) as exc:
+        except Exception as exc:
             warnings.append(f"hermes_planner_unavailable:{type(exc).__name__}")
             return ResearchPlannerDecision(
                 plan=self.local_planner.plan_research(request),
@@ -162,13 +162,13 @@ def research_planning_payload(request: ResearchPlanningRequest) -> dict[str, Any
 
 
 def _default_hermes_client() -> Any:
-    from app.assist_core.hermes_status import hermes_config_from_env
     from app.assist_core.hermes_client import HermesSidecarClient
+    from app.assist_core.hermes_status import hermes_runtime_config
 
-    config = hermes_config_from_env()
+    config = hermes_runtime_config()
     return HermesSidecarClient(
         base_url=config.base_url,
-        api_key=config.api_key,
+        api_key=os.environ.get("HERMES_API_KEY") or None,
         timeout=config.timeout_seconds,
     )
 
