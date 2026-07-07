@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -74,6 +75,33 @@ def build_evidence_blocks(context_items: list[dict[str, Any]]) -> list[ResearchE
             )
         )
     return blocks
+
+
+def prepare_evidence_context_items(
+    context_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return citation-aware copies compatible with the existing chat formatter."""
+
+    prepared: list[dict[str, Any]] = []
+    for item in context_items:
+        copied = deepcopy(item)
+        metadata = copied.get("metadata") if isinstance(copied.get("metadata"), dict) else {}
+        label = str(metadata.get("citation_label") or "").strip()
+        if not label:
+            prepared.append(copied)
+            continue
+        snippet = str(copied.get("content") or "").strip()
+        excerpt = str(metadata.get("extracted_excerpt") or "").strip()
+        lines = [
+            f"Citation label: [{label}]. Use this label for factual claims supported by this source.",
+            f"Search snippet: {snippet}",
+        ]
+        if excerpt:
+            lines.append(f"Extracted evidence: {excerpt}")
+        copied["title"] = f"[{label}] {str(copied.get('title') or label).strip()}"
+        copied["content"] = "\n".join(lines)
+        prepared.append(copied)
+    return prepared
 
 
 def format_evidence_context(content: str, context_items: list[dict[str, Any]]) -> str:
@@ -152,16 +180,26 @@ def citation_labels(context_items: list[dict[str, Any]]) -> list[str]:
     return [block.citation_label for block in build_evidence_blocks(context_items)]
 
 
+def source_manifest_id(context_items: list[dict[str, Any]]) -> str | None:
+    for item in context_items:
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        value = str(metadata.get("source_manifest_id") or "").strip()
+        if value:
+            return value
+    return None
+
+
 def _append_visible_notice(text: str, validation: CitationValidation) -> str:
-    if validation.valid:
-        return text
     notices = []
+    if "structured_output_unavailable" in validation.warnings:
+        notices.append("structured output was unavailable, so citation-constrained plain text was used")
     if validation.missing_citations:
         notices.append("the answer could not be linked to the retrieved source labels")
     if validation.unknown_labels:
-        notices.append("unsupported citation labels were removed or flagged")
-    note = "; ".join(notices) or "citation validation was incomplete"
-    return f"{text}\n\n> Research validation note: {note}.".strip()
+        notices.append("unsupported citation labels were flagged")
+    if not notices:
+        return text
+    return f"{text}\n\n> Research validation note: {'; '.join(notices)}.".strip()
 
 
 def _format_legacy_context(content: str, context_items: list[dict[str, Any]]) -> str:
