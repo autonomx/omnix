@@ -1,5 +1,5 @@
 from app.assistant_context.models import AssistantContextItem
-from app.research.extraction import ExtractedPage, ReadablePageExtractor, extract_readable_content
+from app.research.extraction import ReadablePageExtractor, extract_readable_content
 from app.research.outbound_web import OutboundWebResponse
 from app.research.quick_search import QuickSearchService
 from app.research.source_store import ResearchSourceStore
