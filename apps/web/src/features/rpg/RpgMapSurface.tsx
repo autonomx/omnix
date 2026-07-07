@@ -26,9 +26,9 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
   const [activeObjectId, setActiveObjectId] = useState<string | null>(null);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const definitionQuery = useQuery({
-    queryKey: ['feature', 'rpg', 'map-definition', viewMapId],
-    queryFn: () => getRpgMapDefinition(viewMapId),
-    enabled: Boolean(viewMapId),
+    queryKey: ['feature', 'rpg', 'map-definition', sessionId, viewMapId],
+    queryFn: () => getRpgMapDefinition(viewMapId, undefined, sessionId),
+    enabled: Boolean(sessionId && viewMapId),
     staleTime: Number.POSITIVE_INFINITY,
   });
   const overlayQuery = useQuery({
