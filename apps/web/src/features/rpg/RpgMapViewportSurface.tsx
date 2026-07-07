@@ -13,6 +13,7 @@ import {
   zoomRpgMapViewportAt,
   type RpgMapViewportState,
 } from './rpgMapViewport';
+import './RpgMapViewportSurface.css';
 
 const LAYER_PRIORITY: Record<string, number> = {
   background: 0,
