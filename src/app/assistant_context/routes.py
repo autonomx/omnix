@@ -12,17 +12,15 @@ from app.chat.research_jobs import link_user_message_to_research_job
 from app.jobs import CreateJobRequest, JobStatus, ResourceClass, SQLiteJobStore, default_job_store
 from app.research.contracts import RESEARCH_JOB_TYPE
 from app.research.jobs import DeepResearchJobInput, create_deep_research_job_request
-from app.research.policy import (
-    ResearchPolicy,
-    ResearchRateLimitError,
-    ResearchRateLimiter,
-    research_policy_from_env,
-)
+from app.research.policy import ResearchPolicy, ResearchRateLimitError, ResearchRateLimiter
+from app.research.settings import ResearchRuntimeSettings, load_research_runtime_settings
+from app.research.status import ResearchRuntimeStatus, research_runtime_status
 
 from .models import AssistantContextChatRequest
 from .service import AssistantContextService, default_assistant_context_service
 
 _ROUTE_NAME = "assistant_context_chat_message_endpoint"
+_STATUS_ROUTE_NAME = "assistant_research_runtime_status_endpoint"
 _ACTIVE_RESEARCH_STATUSES = {
     JobStatus.QUEUED,
     JobStatus.LEASED,
@@ -40,9 +38,21 @@ def register_assistant_context_routes(
     job_store_factory: Callable[[], SQLiteJobStore] = default_job_store,
     context_service_factory: Callable[[], AssistantContextService] = default_assistant_context_service,
     rate_limiter_factory: Callable[[], ResearchRateLimiter] = ResearchRateLimiter,
-    policy_factory: Callable[[], ResearchPolicy] = research_policy_from_env,
+    policy_factory: Callable[[], ResearchPolicy] | None = None,
+    settings_factory: Callable[[], ResearchRuntimeSettings] = load_research_runtime_settings,
 ) -> None:
-    if any(getattr(route, "name", "") == _ROUTE_NAME for route in app.routes):
+    route_names = {getattr(route, "name", "") for route in app.routes}
+    if _STATUS_ROUTE_NAME not in route_names:
+
+        @app.get(
+            "/api/assistant/research/status",
+            response_model=ResearchRuntimeStatus,
+            name=_STATUS_ROUTE_NAME,
+        )
+        async def assistant_research_runtime_status_endpoint() -> ResearchRuntimeStatus:
+            return research_runtime_status(settings_factory())
+
+    if _ROUTE_NAME in route_names:
         return
 
     @app.post(
@@ -55,8 +65,23 @@ def register_assistant_context_routes(
         session_id: str,
         request: AssistantContextChatRequest,
     ) -> SendChatMessageResponse:
+        settings = settings_factory()
+        policy = policy_factory() if policy_factory is not None else settings.policy
         request.internal_research_identity = session_id
-        policy = policy_factory()
+        request.internal_research_provider = settings.provider
+        request.internal_research_policy = {
+            "search_cache_ttl_seconds": policy.search_cache_ttl_seconds,
+            "extraction_cache_ttl_seconds": policy.extraction_cache_ttl_seconds,
+            "quick_requests_per_minute": policy.quick_requests_per_minute,
+            "deep_requests_per_hour": policy.deep_requests_per_hour,
+            "provider_requests_per_minute": policy.provider_requests_per_minute,
+            "raw_snapshot_retention_days": policy.raw_snapshot_retention_days,
+            "source_manifest_retention_days": policy.source_manifest_retention_days,
+            "max_active_deep_jobs_per_session": policy.max_active_deep_jobs_per_session,
+            "planner_receives_conversation_history": False,
+            "synthesis_receives_raw_page_bodies": False,
+        }
+        request.web_search_max_results = settings.max_results
         limiter = rate_limiter_factory()
         try:
             if request.web_research_mode == "quick":
@@ -80,6 +105,7 @@ def register_assistant_context_routes(
                 chat_store=chat_store_factory(),
                 job_store=job_store_factory(),
                 policy=policy,
+                settings=settings,
             )
 
         context = await asyncio.to_thread(context_service_factory().build, request)
@@ -129,6 +155,7 @@ def _begin_deep_research(
     chat_store: ChatSessionStore,
     job_store: SQLiteJobStore,
     policy: ResearchPolicy,
+    settings: ResearchRuntimeSettings,
 ) -> SendChatMessageResponse:
     active_jobs = [
         job
@@ -146,6 +173,7 @@ def _begin_deep_research(
         context_diagnostics={
             "web_research_mode": "deep",
             "web_search_status": "queued_as_durable_research_job",
+            "research_provider": settings.provider,
         },
     )
     if appended is None:
@@ -159,7 +187,19 @@ def _begin_deep_research(
                 question=request.content,
                 provider_id=request.provider_id or session.provider_id,
                 model_id=request.model_id or session.model_id,
-                metadata={"agent_mode": request.agent_mode, "dry_run": request.dry_run},
+                research_provider=settings.provider,
+                max_steps=settings.max_steps,
+                max_queries=settings.max_queries,
+                max_sources=settings.max_sources,
+                max_extracts=settings.max_extracts,
+                search_cache_ttl_seconds=policy.search_cache_ttl_seconds,
+                extraction_cache_ttl_seconds=policy.extraction_cache_ttl_seconds,
+                hermes_planner_enabled=settings.hermes_planner_enabled,
+                metadata={
+                    "agent_mode": request.agent_mode,
+                    "dry_run": request.dry_run,
+                    "diagnostics_enabled": settings.show_diagnostics,
+                },
             )
         )
     )
