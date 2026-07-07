@@ -1,5 +1,6 @@
 export const SETTINGS_SCHEMA_VERSION = 1 as const;
 
+export type ResearchMode = 'disabled' | 'quick' | 'deep';
 export type ProviderDefaults = { llm: string; tts: string; stt: string; image: string; voiceCloning: string };
 export type ModelDefaults = { chat: string; fast: string; quality: string; background: string; embedding: string; imagePrompt: string };
 export type RoutingDefaults = { fallbackBehavior: 'next-available' | 'fail'; taskOverrides: Record<string, { providerId: string; modelId: string }> };
@@ -19,7 +20,7 @@ export type SettingsDocument = {
   global: { providers: ProviderDefaults; models: ModelDefaults; routing: RoutingDefaults };
   providerConfigs: ProviderConfigs;
   appearance: { mode: 'system' | 'light' | 'dark'; density: 'comfortable' | 'compact'; reduceMotion: boolean; liveCaptions: boolean };
-  assistant: { personalityId: string; customPersonality: string; voiceId: string; autoSpeakReplies: boolean; speechLanguage: string; streamingAudio: boolean };
+  assistant: { personalityId: string; customPersonality: string; voiceId: string; autoSpeakReplies: boolean; speechLanguage: string; streamingAudio: boolean; researchDefaultMode: ResearchMode };
   voice: { language: string; stability: number; similarity: number; style: number; speed: number; pitch: number; volume: number; effects: string[]; streaming: boolean; cloningLanguage: string; cloningQuality: string };
   storyteller: { providerId: string; modelId: string; tone: string; writingStyle: string; readSpeed: number; pauseParagraphMs: number; pauseChapterMs: number; readChapterTitles: boolean; readStylePreset: string; pronunciation: Record<string, string> };
   podcast: { providerId: string; modelId: string; format: string; durationMinutes: number; tone: string; language: string; generationStyle: string; autoplay: boolean; playbackRate: number; stability: number; similarity: number; effects: string[] };
