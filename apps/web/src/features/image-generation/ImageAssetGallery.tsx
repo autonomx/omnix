@@ -6,11 +6,15 @@ import { ImagePreviewDialog } from './ImagePreviewDialog';
 
 export type ImageAsset = AssetListResponse['assets'][number];
 
-interface DeleteImageAssetResponse {
+export interface ImageDeleteResult {
   ok: boolean;
   asset_id: string;
+  deleted_asset_ids: string[];
   deleted: boolean;
   file_deleted: boolean;
+  cache_keys_removed: string[];
+  job_ids_removed: string[];
+  job_events_removed: number;
   file_error?: string;
 }
 
@@ -18,9 +22,10 @@ interface ImageAssetGalleryProps {
   assets: ImageAsset[];
   selectedAssetId: string | null;
   onSelect: (assetId: string) => void;
+  onDeleted?: (result: ImageDeleteResult) => void;
 }
 
-export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAssetGalleryProps) {
+export function ImageAssetGallery({ assets, selectedAssetId, onSelect, onDeleted }: ImageAssetGalleryProps) {
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -50,18 +55,20 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
   const requestDelete = async (asset: ImageAsset) => {
     const title = imageAssetTitle(asset);
     const confirmed = typeof window === 'undefined'
-      || window.confirm(`Delete “${title}”? This removes the image file and cannot be undone.`);
+      || window.confirm(`Delete “${title}” permanently? This removes the image, its Image Jobs history, local file, and cache entry. This cannot be undone.`);
     if (!confirmed) return;
     if (previewAsset?.id === asset.id) setPreviewAsset(null);
     setDeleteError(false);
     setDeletingAssetId(asset.id);
     try {
-      const result = await omnixApiClient.post<Record<string, never>, DeleteImageAssetResponse>(
+      const result = await omnixApiClient.post<Record<string, never>, ImageDeleteResult>(
         `/api/image-generation/assets/${encodeURIComponent(asset.id)}/delete`,
         {},
       );
       if (!result.ok || !result.deleted) throw new Error('image_delete_failed');
-      setDeletedAssetIds((current) => new Set(current).add(result.asset_id));
+      const removedIds = result.deleted_asset_ids?.length ? result.deleted_asset_ids : [result.asset_id];
+      setDeletedAssetIds((current) => new Set([...current, ...removedIds]));
+      onDeleted?.(result);
     } catch {
       setDeleteError(true);
     } finally {

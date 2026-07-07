@@ -7,7 +7,7 @@ import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { imageGenerationDefaults } from '../settings/moduleDefaults';
 import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback } from '../shared/FeatureSubmitFeedback';
-import { ImageAssetGallery } from './ImageAssetGallery';
+import { ImageAssetGallery, type ImageDeleteResult } from './ImageAssetGallery';
 import './ImageGenerationWorkspace.css';
 import './ImageGenerationWorkspaceInteractions.css';
 import { ImageJobList } from './ImageJobList';
@@ -177,6 +177,22 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     document.getElementById('image-assets')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const handleImageDeleted = (result: ImageDeleteResult) => {
+    const assetIds = new Set(result.deleted_asset_ids?.length ? result.deleted_asset_ids : [result.asset_id]);
+    const jobIds = new Set(result.job_ids_removed ?? []);
+    setSelectedAssetId((current) => current && assetIds.has(current) ? null : current);
+    queryClient.setQueryData<AssetListResponse>(IMAGE_ASSETS_QUERY_KEY, (current) => current
+      ? { ...current, assets: current.assets.filter((asset) => !assetIds.has(asset.id)) }
+      : current);
+    queryClient.setQueryData<JobListResponse>(IMAGE_JOBS_QUERY_KEY, (current) => current
+      ? { ...current, jobs: current.jobs.filter((job) => !jobIds.has(job.id)) }
+      : current);
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: IMAGE_ASSETS_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY }),
+    ]);
+  };
+
   const modelActionError = loadModelMutation.isError
     ? errorMessage(loadModelMutation.error)
     : unloadModelMutation.isError
@@ -284,7 +300,12 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
               <div><Title id="image-assets-title" order={3}>Image Assets</Title><Text size="sm">Browse and manage generated images and assets.</Text></div>
             </div>
           </header>
-          <ImageAssetGallery assets={imageAssets} selectedAssetId={selectedAssetId} onSelect={setSelectedAssetId} />
+          <ImageAssetGallery
+            assets={imageAssets}
+            selectedAssetId={selectedAssetId}
+            onSelect={setSelectedAssetId}
+            onDeleted={handleImageDeleted}
+          />
         </section>
       </div>
     </WorkspacePanel>

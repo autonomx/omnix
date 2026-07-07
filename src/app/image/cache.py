@@ -5,12 +5,14 @@ import hashlib
 import json
 import os
 import shutil
+import threading
 from typing import Any, Dict
 
 from app.runtime_paths import generated_images_root
 
 CACHE_DIR = str(generated_images_root() / "_cache")
 INDEX_PATH = os.path.join(CACHE_DIR, "index.json")
+_CACHE_LOCK = threading.Lock()
 
 
 def _read_index() -> Dict[str, Any]:
@@ -52,8 +54,9 @@ def image_cache_key(payload: Dict[str, Any]) -> str:
 
 
 def lookup_image_cache(cache_key: str) -> Dict[str, Any] | None:
-    index = _read_index()
-    row = index.get(cache_key)
+    with _CACHE_LOCK:
+        index = _read_index()
+        row = index.get(cache_key)
     if not isinstance(row, dict):
         return None
     file_path = row.get("file_path")
@@ -71,21 +74,43 @@ def store_image_cache(cache_key: str, result: Any) -> Dict[str, Any]:
     cache_filename = f"{cache_key}.png"
     cache_path = os.path.join(CACHE_DIR, cache_filename)
 
-    if os.path.abspath(file_path) != os.path.abspath(cache_path):
-        shutil.copyfile(file_path, cache_path)
+    with _CACHE_LOCK:
+        if os.path.abspath(file_path) != os.path.abspath(cache_path):
+            shutil.move(file_path, cache_path)
 
-    row = {
-        "cache_key": cache_key,
-        "file_path": cache_path,
-        "asset_url": f"/generated-images/_cache/{cache_filename}",
-        "width": getattr(result, "width", 0),
-        "height": getattr(result, "height", 0),
-        "seed": getattr(result, "seed", None),
-        "mime_type": getattr(result, "mime_type", "image/png") or "image/png",
-        "provider": getattr(result, "provider", ""),
-    }
-
-    index = _read_index()
-    index[cache_key] = row
-    _write_index(index)
+        row = {
+            "cache_key": cache_key,
+            "file_path": cache_path,
+            "asset_url": f"/generated-images/_cache/{cache_filename}",
+            "width": getattr(result, "width", 0),
+            "height": getattr(result, "height", 0),
+            "seed": getattr(result, "seed", None),
+            "mime_type": getattr(result, "mime_type", "image/png") or "image/png",
+            "provider": getattr(result, "provider", ""),
+        }
+        index = _read_index()
+        index[cache_key] = row
+        _write_index(index)
     return row
+
+
+def forget_image_cache_record(*, cache_key: str = "", file_path: str = "") -> Dict[str, Any]:
+    """Forget cache-index rows that point at a removed generated image."""
+
+    wanted_key = str(cache_key or "").strip()
+    wanted_path = os.path.abspath(str(file_path or "")) if str(file_path or "").strip() else ""
+    forgotten: list[str] = []
+    with _CACHE_LOCK:
+        index = _read_index()
+        for key, payload in list(index.items()):
+            if not isinstance(payload, dict):
+                continue
+            row_path = str(payload.get("file_path") or "").strip()
+            same_key = bool(wanted_key and key == wanted_key)
+            same_path = bool(wanted_path and row_path and os.path.abspath(row_path) == wanted_path)
+            if same_key or same_path:
+                index.pop(key, None)
+                forgotten.append(str(key))
+        if forgotten:
+            _write_index(index)
+    return {"ok": True, "forgotten_keys": forgotten}
