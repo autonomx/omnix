@@ -12,6 +12,12 @@ from app.chat.research_jobs import link_user_message_to_research_job
 from app.jobs import CreateJobRequest, JobStatus, ResourceClass, SQLiteJobStore, default_job_store
 from app.research.contracts import RESEARCH_JOB_TYPE
 from app.research.jobs import DeepResearchJobInput, create_deep_research_job_request
+from app.research.policy import (
+    ResearchPolicy,
+    ResearchRateLimitError,
+    ResearchRateLimiter,
+    research_policy_from_env,
+)
 
 from .models import AssistantContextChatRequest
 from .service import AssistantContextService, default_assistant_context_service
@@ -33,6 +39,8 @@ def register_assistant_context_routes(
     chat_store_factory: Callable[[], ChatSessionStore] = default_chat_store,
     job_store_factory: Callable[[], SQLiteJobStore] = default_job_store,
     context_service_factory: Callable[[], AssistantContextService] = default_assistant_context_service,
+    rate_limiter_factory: Callable[[], ResearchRateLimiter] = ResearchRateLimiter,
+    policy_factory: Callable[[], ResearchPolicy] = research_policy_from_env,
 ) -> None:
     if any(getattr(route, "name", "") == _ROUTE_NAME for route in app.routes):
         return
@@ -47,12 +55,31 @@ def register_assistant_context_routes(
         session_id: str,
         request: AssistantContextChatRequest,
     ) -> SendChatMessageResponse:
+        request.internal_research_identity = session_id
+        policy = policy_factory()
+        limiter = rate_limiter_factory()
+        try:
+            if request.web_research_mode == "quick":
+                limiter.quick_request(session_id, policy)
+            elif request.web_research_mode == "deep":
+                limiter.deep_request(session_id, policy)
+        except ResearchRateLimitError as exc:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "research_rate_limited",
+                    "action": exc.action,
+                    "retry_after_seconds": exc.retry_after_seconds,
+                },
+            ) from exc
+
         if request.web_research_mode == "deep":
             return _begin_deep_research(
                 session_id,
                 request,
                 chat_store=chat_store_factory(),
                 job_store=job_store_factory(),
+                policy=policy,
             )
 
         context = await asyncio.to_thread(context_service_factory().build, request)
@@ -101,18 +128,16 @@ def _begin_deep_research(
     *,
     chat_store: ChatSessionStore,
     job_store: SQLiteJobStore,
+    policy: ResearchPolicy,
 ) -> SendChatMessageResponse:
-    active = next(
-        (
-            job
-            for job in job_store.list_jobs()
-            if job.type == RESEARCH_JOB_TYPE
-            and job.owner_id == session_id
-            and job.status in _ACTIVE_RESEARCH_STATUSES
-        ),
-        None,
-    )
-    if active is not None:
+    active_jobs = [
+        job
+        for job in job_store.list_jobs()
+        if job.type == RESEARCH_JOB_TYPE
+        and job.owner_id == session_id
+        and job.status in _ACTIVE_RESEARCH_STATUSES
+    ]
+    if len(active_jobs) >= policy.max_active_deep_jobs_per_session:
         raise HTTPException(status_code=409, detail="deep_research_already_active")
 
     appended = chat_store.begin_user_message(
