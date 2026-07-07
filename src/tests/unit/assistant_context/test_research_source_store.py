@@ -66,6 +66,7 @@ def test_quick_search_persists_manifest_with_stable_citations(tmp_path) -> None:
     result = QuickSearchService(
         client_factory=lambda timeout: FakeSearchClient(),
         source_store_factory=lambda: store,
+        extractor_factory=None,
     ).search("current release", 5)
 
     assert len(result.items) == 1
