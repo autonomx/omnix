@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
+from app.rpg.map_hierarchy import switch_active_map
 from app.rpg.map_projection import increment_map_overlay_revision, project_session_map_overlay
 from app.rpg.map_repository import MapDefinitionRepository, default_map_repository
 
@@ -61,6 +62,7 @@ def apply_map_action(
         return {
             "ok": True,
             "idempotent": True,
+            "map_id": map_id,
             "action_result": existing,
             "session": deepcopy(dict(session)),
             "overlay": overlay,
@@ -74,22 +76,24 @@ def apply_map_action(
         ),
         None,
     )
-    if capability is None:
+    hierarchy_enter = request.action == "enter" and bool(target.child_map_id)
+    if capability is None and not hierarchy_enter:
         raise MapActionError("map_action_not_available", status_code=409)
-    if request.route_id and capability.route_id and request.route_id != capability.route_id:
+    if capability and request.route_id and capability.route_id and request.route_id != capability.route_id:
         raise MapActionError("route_identity_mismatch", status_code=409)
-    if not capability.enabled:
+    if capability and not capability.enabled:
         reason = _authoritative_route_reason(session, capability.route_id) or capability.disabled_reason or "map_action_disabled"
         raise MapActionError(reason, reason=reason, status_code=409)
 
     updated = deepcopy(dict(session))
     state = updated.get("state") if isinstance(updated.get("state"), dict) else {}
     map_state = state.get("map_state") if isinstance(state.get("map_state"), dict) else {}
+    result_map_id = map_id
     result: dict[str, object] = {
         "action": request.action,
         "target_object_id": target.id,
         "target_location_id": target.location_id,
-        "route_id": capability.route_id,
+        "route_id": capability.route_id if capability else None,
         "changed": False,
     }
 
@@ -113,6 +117,33 @@ def apply_map_action(
                 "overlay_revision": revision,
             }
         )
+    elif request.action == "enter":
+        if not target.child_map_id:
+            raise MapActionError("child_map_unavailable", status_code=409)
+        previous_map_id = str(map_state.get("current_map_id") or map_id)
+        map_state, destination_location_id = switch_active_map(
+            state,
+            target.child_map_id,
+            target.location_id,
+            repository,
+        )
+        revision = increment_map_overlay_revision(state)
+        state["current_location_id"] = destination_location_id
+        state["current_location"] = target.label or destination_location_id
+        state["location"] = target.label or destination_location_id
+        player = state.get("player") if isinstance(state.get("player"), dict) else {}
+        player["location_id"] = destination_location_id
+        state["player"] = player
+        result_map_id = target.child_map_id
+        result.update(
+            {
+                "changed": True,
+                "previous_map_id": previous_map_id,
+                "current_map_id": result_map_id,
+                "current_location_id": destination_location_id,
+                "overlay_revision": revision,
+            }
+        )
     elif request.action == "inspect":
         result.update(
             {
@@ -128,10 +159,11 @@ def apply_map_action(
     _record_action(map_state, request, result)
     state["map_state"] = map_state
     updated["state"] = state
-    projected = project_session_map_overlay(updated, map_id, repository)
+    projected = project_session_map_overlay(updated, result_map_id, repository)
     return {
         "ok": True,
         "idempotent": False,
+        "map_id": result_map_id,
         "action_result": result,
         "session": updated,
         "overlay": projected,
@@ -195,7 +227,6 @@ def _object_status(map_state: Mapping[str, object], object_id: str) -> str:
 
 def _suggested_command(action: str, label: str) -> str:
     return {
-        "enter": f"Enter {label}.",
         "talk": f"Talk to the people at {label}.",
         "trade": f"Trade at {label}.",
     }.get(action, f"Interact with {label}.")
