@@ -37,7 +37,7 @@ export function imageRequestDefaultValues(defaults: ImageRequestDefaults): Image
     height: String(defaults.height),
     style: 'photorealistic',
     seed: '',
-    steps: '32',
+    steps: '4',
     guidanceScale: '',
     unloadAfterGeneration: defaults.unloadAfterGeneration,
     noCache: false,

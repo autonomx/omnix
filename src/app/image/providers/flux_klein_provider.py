@@ -21,6 +21,10 @@ from app.runtime_paths import generated_images_root
 
 _PIPELINE_LOCK = threading.Lock()
 _GENERATE_LOCK = threading.Lock()
+_GIB = float(1024**3)
+_DEFAULT_MIN_LOAD_FREE_GIB = 14.0
+_DEFAULT_MIN_GENERATION_FREE_GIB = 3.0
+_DEFAULT_MAX_PIXELS = 1024 * 1024
 
 
 def _safe_str(value: Any) -> str:
@@ -45,6 +49,27 @@ def _safe_float(value: Any, default: float) -> float:
         return float(default)
 
 
+def _optional_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    normalized = _safe_str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _cuda_memory_gib() -> tuple[float, float] | None:
+    if not torch.cuda.is_available():
+        return None
+    try:
+        free_bytes, total_bytes = torch.cuda.mem_get_info()
+        return free_bytes / _GIB, total_bytes / _GIB
+    except Exception:
+        return None
+
+
 def _release_generation_memory() -> None:
     """Release transient CPU/GPU allocations before another request can start."""
 
@@ -61,6 +86,7 @@ class FluxKleinImageProvider(BaseImageProvider):
     def __init__(self, config: Dict[str, Any] | None = None):
         super().__init__(config)
         self._pipeline = None
+        self._memory_mode = "unloaded"
 
     def load(self):
         self._ensure_pipeline()
@@ -69,6 +95,15 @@ class FluxKleinImageProvider(BaseImageProvider):
     def is_loaded(self) -> bool:
         with _PIPELINE_LOCK:
             return self._pipeline is not None
+
+    def runtime_status(self) -> Dict[str, Any]:
+        memory = _cuda_memory_gib()
+        return {
+            "memory_mode": self._memory_mode,
+            "cuda_available": torch.cuda.is_available(),
+            "cuda_free_gib": round(memory[0], 2) if memory else None,
+            "cuda_total_gib": round(memory[1], 2) if memory else None,
+        }
 
     def _repo_id(self) -> str:
         variant = _safe_str(self.config.get("variant")).strip().lower()
@@ -99,14 +134,72 @@ class FluxKleinImageProvider(BaseImageProvider):
         return preferred
 
     def _dtype(self):
-        import torch
-
         dtype_name = _safe_str(self.config.get("torch_dtype")).strip().lower()
         if dtype_name == "float16":
             return torch.float16
         if dtype_name == "float32":
             return torch.float32
         return torch.bfloat16
+
+    def _resolve_memory_mode(self) -> str:
+        device = _safe_str(self.config.get("device")).strip().lower() or "cuda"
+        if device != "cuda":
+            return "cpu"
+        if not torch.cuda.is_available():
+            raise RuntimeError("flux_klein_cuda_unavailable")
+
+        explicit_offload = _optional_bool(self.config.get("enable_cpu_offload"))
+        memory = _cuda_memory_gib()
+        free_gib = memory[0] if memory else None
+        total_gib = memory[1] if memory else None
+
+        if explicit_offload is True:
+            return "cpu_offload"
+        if explicit_offload is None and total_gib is not None and total_gib < 16.0:
+            return "cpu_offload"
+
+        min_free_gib = _safe_float(
+            self.config.get("min_cuda_free_gib"),
+            _DEFAULT_MIN_LOAD_FREE_GIB,
+        )
+        if free_gib is not None and free_gib < min_free_gib:
+            raise RuntimeError(
+                "flux_klein_insufficient_vram:"
+                f"free_gib={free_gib:.2f} required_gib={min_free_gib:.2f} "
+                f"total_gib={total_gib:.2f}; unload other GPU models before loading FLUX"
+            )
+        return "cuda_direct"
+
+    def _generation_budget_error(self, width: int, height: int) -> str:
+        max_pixels = _safe_int(self.config.get("max_pixels"), _DEFAULT_MAX_PIXELS)
+        pixels = max(1, width * height)
+        if pixels > max_pixels:
+            return (
+                "flux_klein_image_too_large:"
+                f"requested_pixels={pixels} max_pixels={max_pixels} "
+                f"requested_size={width}x{height}"
+            )
+
+        if self._memory_mode != "cuda_direct":
+            return ""
+        memory = _cuda_memory_gib()
+        if memory is None:
+            return ""
+        free_gib, total_gib = memory
+        configured_min = _safe_float(
+            self.config.get("min_generation_free_gib"),
+            _DEFAULT_MIN_GENERATION_FREE_GIB,
+        )
+        scaled_min = 4.0 * (pixels / _DEFAULT_MAX_PIXELS)
+        required_gib = max(configured_min, scaled_min)
+        if free_gib < required_gib:
+            return (
+                "flux_klein_insufficient_generation_vram:"
+                f"free_gib={free_gib:.2f} required_gib={required_gib:.2f} "
+                f"total_gib={total_gib:.2f} requested_size={width}x{height}; "
+                "unload other GPU models or reduce image size"
+            )
+        return ""
 
     def _ensure_pipeline(self):
         if self._pipeline is not None:
@@ -149,22 +242,26 @@ class FluxKleinImageProvider(BaseImageProvider):
                 repo_or_path = self._repo_id()
                 local_files_only = False
 
+            memory_mode = self._resolve_memory_mode()
+            memory = _cuda_memory_gib()
+            memory_text = (
+                f" free={memory[0]:.2f}GiB total={memory[1]:.2f}GiB"
+                if memory
+                else ""
+            )
+            print(f"[FLUX] Memory mode: {memory_mode}{memory_text}")
+
             pipe = build_flux_pipeline(
                 repo_or_path,
                 torch_dtype=self._dtype(),
                 local_files_only=local_files_only,
+                device_map="cuda" if memory_mode == "cuda_direct" else None,
             )
 
-            enable_cpu_offload = bool(self.config.get("enable_cpu_offload", True))
-            device = _safe_str(self.config.get("device")).strip().lower() or "cuda"
+            if memory_mode == "cpu_offload":
+                pipe.enable_model_cpu_offload()
 
-            if enable_cpu_offload:
-                with contextlib.suppress(Exception):
-                    pipe.enable_model_cpu_offload()
-            elif device == "cuda":
-                with contextlib.suppress(Exception):
-                    pipe.to("cuda")
-
+            self._memory_mode = memory_mode
             self._pipeline = pipe
             return self._pipeline
 
@@ -173,6 +270,7 @@ class FluxKleinImageProvider(BaseImageProvider):
             with _PIPELINE_LOCK:
                 pipe = self._pipeline
                 self._pipeline = None
+                self._memory_mode = "unloaded"
 
             with contextlib.suppress(Exception):
                 del pipe
@@ -233,6 +331,16 @@ class FluxKleinImageProvider(BaseImageProvider):
                         ok=False,
                         status="failed",
                         error=_safe_str(exc).strip() or f"flux_klein_load_failed:{repr(exc)}",
+                        moderation_status="approved",
+                        moderation_reason="",
+                    )
+
+                budget_error = self._generation_budget_error(width, height)
+                if budget_error:
+                    return ImageGenerationResult(
+                        ok=False,
+                        status="failed",
+                        error=budget_error,
                         moderation_status="approved",
                         moderation_reason="",
                     )
@@ -309,7 +417,11 @@ class FluxKleinImageProvider(BaseImageProvider):
                     revised_prompt=prompt,
                     file_path=file_path,
                     asset_url="",
-                    metadata={"width": width, "height": height},
+                    metadata={
+                        "width": width,
+                        "height": height,
+                        "memory_mode": self._memory_mode,
+                    },
                 )
             finally:
                 output = None

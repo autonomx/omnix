@@ -22,6 +22,17 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
+def _provider_runtime_status(provider: Any) -> Dict[str, Any]:
+    reader = getattr(provider, "runtime_status", None)
+    if not callable(reader):
+        return {}
+    try:
+        status = reader()
+        return status if isinstance(status, dict) else {}
+    except Exception:
+        return {}
+
+
 def get_cached_provider(provider_name: str | None = None):
     provider_name = _safe_str(provider_name).strip() or get_active_image_provider_name()
     return _PROVIDER_CACHE.get(provider_name)
@@ -46,9 +57,11 @@ def _build_provider(provider_name: str):
 
     if provider_name == "flux_klein":
         from app.image.providers.flux_klein_provider import FluxKleinImageProvider
+
         return FluxKleinImageProvider(config)
     if provider_name == "mock":
         from app.image.providers.mock_provider import MockImageProvider
+
         return MockImageProvider(config)
 
     raise RuntimeError(f"unsupported_image_provider:{provider_name}")
@@ -72,11 +85,15 @@ def load_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
     provider_name = _safe_str(provider_name).strip() or get_active_image_provider_name()
     provider = get_or_create_image_provider(provider_name)
     provider.load()
-    return {
+    result: Dict[str, Any] = {
         "ok": True,
         "provider": provider_name,
         "loaded": is_image_provider_loaded(provider_name),
     }
+    runtime = _provider_runtime_status(provider)
+    if runtime:
+        result["runtime"] = runtime
+    return result
 
 
 def unload_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
@@ -120,9 +137,17 @@ def get_image_provider_cache_status() -> Dict[str, Any]:
         for provider_name in sorted(_PROVIDER_CACHE.keys())
         if is_image_provider_loaded(provider_name)
     ]
-    return {
+    runtime = {
+        provider_name: status
+        for provider_name, provider in sorted(_PROVIDER_CACHE.items())
+        if (status := _provider_runtime_status(provider))
+    }
+    result: Dict[str, Any] = {
         "ok": True,
         "loaded_providers": loaded_providers,
         "cached_providers": sorted(list(_PROVIDER_CACHE.keys())),
         "known_providers": get_image_provider_keys(),
     }
+    if runtime:
+        result["runtime"] = runtime
+    return result

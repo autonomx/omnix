@@ -32,15 +32,15 @@ describe('ImageRequestForm wiring', () => {
 
     expect(screen.getByLabelText('Provider')).toHaveValue('image:flux_klein');
     expect(screen.getByLabelText('Style')).toHaveValue('photorealistic');
-    expect(screen.getByLabelText('Steps')).toHaveValue(32);
+    expect(screen.getByLabelText('Steps')).toHaveValue(4);
 
     fireEvent.click(screen.getByRole('button', { name: 'Use 16:9 Widescreen' }));
     expect(screen.getByLabelText('Width')).toHaveValue(1024);
     expect(screen.getByLabelText('Height')).toHaveValue(576);
 
     fireEvent.click(screen.getByRole('button', { name: 'Set quality to 2 of 5' }));
-    expect(screen.getByLabelText('Steps')).toHaveValue(18);
-    expect(screen.getByText('18 steps')).toBeInTheDocument();
+    expect(screen.getByLabelText('Steps')).toHaveValue(3);
+    expect(screen.getByText('3 steps')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A real generated scene' } });
     fireEvent.change(screen.getByLabelText('Negative prompt'), { target: { value: 'blurry' } });
@@ -57,7 +57,7 @@ describe('ImageRequestForm wiring', () => {
       width: '1024',
       height: '576',
       style: 'photorealistic',
-      steps: '18',
+      steps: '3',
       guidanceScale: '4.5',
       unloadAfterGeneration: true,
       noCache: true,
