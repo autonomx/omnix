@@ -4,6 +4,8 @@ from __future__ import annotations
 import time
 from typing import Callable
 
+from app.research.quick_search import QuickSearchService
+
 from .models import AssistantContextBuildResult, AssistantContextChatRequest
 from .vision import DesktopVisionClient
 from .web_search import WebSearchClient, should_search_automatically
@@ -13,11 +15,22 @@ class AssistantContextService:
     def __init__(
         self,
         *,
-        web_search_factory: Callable[[], WebSearchClient] = WebSearchClient,
+        web_search_factory: Callable[..., WebSearchClient] = WebSearchClient,
+        quick_search_factory: Callable[[], QuickSearchService] | None = None,
         desktop_vision_factory: Callable[[], DesktopVisionClient] = DesktopVisionClient,
     ) -> None:
         self.web_search_factory = web_search_factory
+        self.quick_search_factory = quick_search_factory or self._default_quick_search_factory
         self.desktop_vision_factory = desktop_vision_factory
+
+    def _default_quick_search_factory(self) -> QuickSearchService:
+        def create_client(timeout_seconds: float) -> WebSearchClient:
+            try:
+                return self.web_search_factory(timeout_seconds=timeout_seconds)
+            except TypeError:
+                return self.web_search_factory()
+
+        return QuickSearchService(client_factory=create_client)
 
     def build(self, request: AssistantContextChatRequest) -> AssistantContextBuildResult:
         items = []
@@ -28,26 +41,31 @@ class AssistantContextService:
             or request.desktop_combined_image_data_url
         )
         diagnostics: dict[str, object] = {
-            "web_search_mode": request.web_search_mode,
+            "web_research_mode": request.web_research_mode,
+            "legacy_web_search_mode": request.legacy_web_search_mode,
             "web_search_requested": request.web_search_requested,
             "desktop_requested": desktop_requested,
             "desktop_capture_mode": request.desktop_capture_mode,
             "desktop_history_frames": len(request.desktop_history_timestamps),
         }
 
-        search_needed = request.web_search_mode == "automatic" and should_search_automatically(request.content)
-        search_needed = search_needed or (request.web_search_mode == "manual" and request.web_search_requested)
+        search_needed = request.web_research_mode == "quick"
+        if request.legacy_web_search_mode == "automatic":
+            search_needed = should_search_automatically(request.content)
+        elif request.legacy_web_search_mode == "manual":
+            search_needed = request.web_search_requested
+
         if search_needed:
-            started = time.perf_counter()
-            try:
-                web_items = self.web_search_factory().search(request.content, request.web_search_max_results)
-                items.extend(web_items)
-                diagnostics["web_search_status"] = "completed" if web_items else "empty"
-                diagnostics["web_search_results"] = len(web_items)
-            except Exception as exc:
-                diagnostics["web_search_status"] = "failed"
-                diagnostics["web_search_error"] = f"{type(exc).__name__}: {exc}"
-            diagnostics["web_search_ms"] = round((time.perf_counter() - started) * 1000)
+            execution = self.quick_search_factory().search(
+                request.content,
+                request.web_search_max_results,
+            )
+            items.extend(execution.items)
+            for key, value in execution.diagnostics.items():
+                diagnostics[f"web_search_{key}"] = value
+            diagnostics["web_search_warnings"] = execution.warnings
+        elif request.web_research_mode == "deep":
+            diagnostics["web_search_status"] = "deferred_to_deep_research"
         else:
             diagnostics["web_search_status"] = "skipped"
 
