@@ -6,24 +6,13 @@ import {
   type RpgMapObjectDefinition,
   type RpgMapOverlay,
 } from '../../api/rpgMapClient';
+import { RpgMapViewportSurface } from './RpgMapViewportSurface';
 import './RpgMapSurface.css';
 
 interface RpgMapSurfaceProps {
   mapId: string;
   sessionId: string;
 }
-
-const LAYER_PRIORITY: Record<string, number> = {
-  background: 0,
-  terrain: 10,
-  routes: 20,
-  ground_props: 30,
-  structures: 40,
-  markers: 50,
-  labels: 60,
-  fog: 70,
-  interaction: 80,
-};
 
 export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
   const definitionQuery = useQuery({
@@ -67,96 +56,28 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
           tone="warning"
         />
       )}
-      <MapCanvas definition={definition} overlay={overlay} />
+      <RpgMapViewportSurface definition={definition} overlay={overlay} />
       <div className="rpg-map-surface-meta" aria-label="Map revision information">
         <span>{definition.level}</span>
         <span>Definition {shortRevision(definition.definition_revision)}</span>
         <span>Overlay {overlay.overlay_revision}</span>
         <span>Turn {overlay.session_turn_index}</span>
       </div>
-      <div className="rpg-map-accessible-list" aria-label="Visible map locations">
-        <p className="eyebrow">Visible map objects</p>
-        <ul>
-          {visibleObjects(definition, overlay).map((item) => (
-            <li key={item.id}>{item.label || item.location_id || item.id}</li>
-          ))}
-        </ul>
-      </div>
+      <AccessibleObjectList definition={definition} overlay={overlay} />
     </div>
   );
 }
 
-function MapCanvas({ definition, overlay }: { definition: RpgMapDefinition; overlay: RpgMapOverlay }) {
-  const { x, y, width, height } = definition.bounds;
-  const objects = [...definition.objects].sort(compareObjects);
-  const visibleIds = new Set(overlay.visible_object_ids);
-  const player = overlay.markers.find((marker) => marker.kind === 'player');
-
+function AccessibleObjectList({ definition, overlay }: { definition: RpgMapDefinition; overlay: RpgMapOverlay }) {
   return (
-    <div className="rpg-map-canvas-frame">
-      <svg
-        className="rpg-map-canvas"
-        role="img"
-        aria-label={`${definition.map_id} interactive map`}
-        viewBox={`${x} ${y} ${width} ${height}`}
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>
-          <pattern id="rpg-map-parchment-grid" width="320" height="320" patternUnits="userSpaceOnUse">
-            <rect width="320" height="320" className="rpg-map-parchment-tile" />
-            <path d="M0 160H320M160 0V320" className="rpg-map-parchment-line" />
-          </pattern>
-          <filter id="rpg-map-object-shadow" x="-20%" y="-20%" width="140%" height="150%">
-            <feDropShadow dx="0" dy="24" stdDeviation="18" floodOpacity="0.35" />
-          </filter>
-        </defs>
-        <rect x={x} y={y} width={width} height={height} fill="url(#rpg-map-parchment-grid)" />
-        <g data-map-layer="structures">
-          {objects.map((item) => (
-            <MapObjectShape
-              item={item}
-              key={item.id}
-              visible={overlay.availability !== 'ready' || visibleIds.has(item.id)}
-            />
-          ))}
-        </g>
-        {overlay.availability === 'ready' && player ? (
-          <g
-            className="rpg-map-player-marker"
-            data-map-layer="markers"
-            transform={`translate(${player.x} ${player.y})`}
-          >
-            <circle r="92" />
-            <path d="M0-120 72 18 0 86-72 18Z" />
-          </g>
-        ) : null}
-      </svg>
+    <div className="rpg-map-accessible-list" aria-label="Visible map locations">
+      <p className="eyebrow">Visible map objects</p>
+      <ul>
+        {visibleObjects(definition, overlay).map((item) => (
+          <li key={item.id}>{item.label || item.location_id || item.id}</li>
+        ))}
+      </ul>
     </div>
-  );
-}
-
-function MapObjectShape({ item, visible }: { item: RpgMapObjectDefinition; visible: boolean }) {
-  const spriteWidth = item.sprite?.width ?? 480;
-  const spriteHeight = item.sprite?.height ?? 360;
-  const className = `rpg-map-object rpg-map-object-${item.kind}${visible ? '' : ' rpg-map-object-hidden'}`;
-  return (
-    <g
-      aria-label={item.label || item.id}
-      className={className}
-      data-map-object-id={item.id}
-      filter="url(#rpg-map-object-shadow)"
-      transform={`translate(${item.x} ${item.y})`}
-    >
-      <rect
-        height={spriteHeight}
-        rx={Math.min(90, spriteWidth * 0.12)}
-        width={spriteWidth}
-        x={-spriteWidth / 2}
-        y={-spriteHeight}
-      />
-      <path d={`M${-spriteWidth / 2} ${-spriteHeight} L0 ${-spriteHeight - 170} L${spriteWidth / 2} ${-spriteHeight} Z`} />
-      <text y={90}>{item.label || item.location_id || item.id}</text>
-    </g>
   );
 }
 
@@ -177,15 +98,6 @@ function MapStateMessage({
       <span>{detail}</span>
     </div>
   );
-}
-
-function compareObjects(left: RpgMapObjectDefinition, right: RpgMapObjectDefinition): number {
-  const leftLayer = LAYER_PRIORITY[left.render_order.layer] ?? 100;
-  const rightLayer = LAYER_PRIORITY[right.render_order.layer] ?? 100;
-  return leftLayer - rightLayer
-    || left.render_order.sort_y - right.render_order.sort_y
-    || left.render_order.offset - right.render_order.offset
-    || left.id.localeCompare(right.id);
 }
 
 function visibleObjects(definition: RpgMapDefinition, overlay: RpgMapOverlay): RpgMapObjectDefinition[] {
