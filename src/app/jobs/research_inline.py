@@ -10,12 +10,9 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 
 from app.research.contracts import RESEARCH_JOB_TYPE
-from app.research.executor import (
-    DeepResearchExecutor,
-    ResearchExecutionCheckpoint,
-    render_execution_summary,
-)
+from app.research.executor import DeepResearchExecutor, ResearchExecutionCheckpoint
 from app.research.jobs import DeepResearchJobInput
+from app.research.synthesis import DeepResearchSynthesizer
 
 from .models import (
     CancelState,
@@ -178,9 +175,7 @@ def save_research_checkpoint(
     now = datetime.now(timezone.utc).isoformat()
     job.updated_at = now
     job.stages = [
-        stage.model_copy(
-            update={"checkpoint_ref": checkpoint.model_dump(mode="json")}
-        )
+        stage.model_copy(update={"checkpoint_ref": checkpoint.model_dump(mode="json")})
         if stage.id == stage_id
         else stage
         for stage in job.stages
@@ -321,24 +316,43 @@ def _default_workflow(
             content="Research was canceled.",
             research_status="canceled",
         )
-    progress("synthesizing", "Preparing the evidence-backed research summary")
+
+    progress("synthesizing", "Writing the evidence-backed research answer")
+    synthesis = DeepResearchSynthesizer().synthesize(
+        execution,
+        question=request.question,
+        provider_id=request.provider_id,
+        model_id=request.model_id,
+    )
+    research_status = (
+        "partial"
+        if synthesis.backend == "deterministic_fallback"
+        else execution.research_status
+    )
+    combined_warnings = list(dict.fromkeys([*execution.warnings, *synthesis.warnings]))
     return DeepResearchWorkflowResult(
-        content=render_execution_summary(execution),
-        research_status=execution.research_status,
+        content=synthesis.content,
+        research_status=research_status,
         source_manifest_id=execution.source_manifest_id,
         metadata={
             "planner_backend": execution.planner_backend,
+            "synthesis_backend": synthesis.backend,
+            "synthesis_validation": synthesis.validation.model_dump(mode="json"),
             "research_stop_reason": execution.stop_reason,
-            "research_warnings": execution.warnings,
+            "research_warnings": combined_warnings,
             "conflict_count": len(execution.conflicts),
             "logical_queries": execution.logical_queries,
             "extracted_pages": execution.extracted_pages,
+            **synthesis.provider_metadata,
         },
         output={
             "objective": execution.objective,
             "planner_backend": execution.planner_backend,
+            "synthesis_backend": synthesis.backend,
+            "synthesis_validation": synthesis.validation.model_dump(mode="json"),
+            "answer_sections": [item.model_dump(mode="json") for item in synthesis.sections],
             "stop_reason": execution.stop_reason,
-            "warnings": execution.warnings,
+            "warnings": combined_warnings,
             "sources": [item.model_dump(mode="json") for item in execution.sources],
             "snapshots": [item.model_dump(mode="json") for item in execution.snapshots],
             "evidence": [item.model_dump(mode="json") for item in execution.evidence],
