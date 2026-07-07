@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from app.rpg.world_graph import (
+    RouteDirection,
+    RouteStatus,
     RpgLocationNode,
     RpgRegionGraph,
     RpgRoute,
@@ -14,6 +16,8 @@ from app.rpg.world_graph import (
 
 WORLD_RUNTIME_SOURCE = "phase19_world_runtime_v1"
 _REQUIRED_SAVE_GROUPS = ("world", "map", "player", "inventory", "quests", "npcs")
+_ROUTE_STATUSES = {"open", "blocked", "locked"}
+_ROUTE_DIRECTIONS = {"both", "forward"}
 
 
 def build_world_runtime_report(
@@ -26,7 +30,7 @@ def build_world_runtime_report(
 
     state = _mapping(turn_result.get("simulation_state") or turn_result.get("state"))
     graph = graph_from_state(state)
-    current = current_location_id or _current_location_id(turn_result, state, graph)
+    current = current_location_id or _current_location_id(turn_result, state)
     target = target_location_id or _target_location_id(turn_result)
     travel = None
     if current and target:
@@ -55,7 +59,11 @@ def graph_from_state(state: Mapping[str, object]) -> RpgRegionGraph:
     for item in _iter_nodes(raw_locations):
         node = _location_node(item)
         locations[node.id] = node
-    routes = tuple(_route(item) for item in _sequence(raw_routes) if isinstance(item, Mapping))
+    routes = tuple(
+        _route(item, index)
+        for index, item in enumerate(_sequence(raw_routes))
+        if isinstance(item, Mapping)
+    )
     return RpgRegionGraph(locations=locations, routes=routes)
 
 
@@ -91,7 +99,6 @@ def _world_runtime_issues(
 def _current_location_id(
     turn_result: Mapping[str, object],
     state: Mapping[str, object],
-    graph: RpgRegionGraph,
 ) -> str:
     for raw in (
         turn_result.get("current_location_id"),
@@ -101,7 +108,7 @@ def _current_location_id(
     ):
         if raw:
             return str(raw)
-    return next(iter(sorted(graph.locations)), "")
+    return ""
 
 
 def _target_location_id(turn_result: Mapping[str, object]) -> str:
@@ -131,15 +138,36 @@ def _location_node(raw: Mapping[str, object]) -> RpgLocationNode:
     )
 
 
-def _route(raw: Mapping[str, object]) -> RpgRoute:
+def _route(raw: Mapping[str, object], index: int) -> RpgRoute:
+    from_id = str(raw.get("from_id") or raw.get("from") or "")
+    to_id = str(raw.get("to_id") or raw.get("to") or "")
+    status = _route_status(raw.get("status"))
+    direction = _route_direction(raw.get("direction"))
+    route_id = str(raw.get("id") or raw.get("route_id") or f"legacy-route:{from_id}:{to_id}:{index}")
     return RpgRoute(
-        from_id=str(raw.get("from_id") or raw.get("from") or ""),
-        to_id=str(raw.get("to_id") or raw.get("to") or ""),
-        status="open" if str(raw.get("status") or "open") == "open" else "blocked",
+        from_id=from_id,
+        to_id=to_id,
+        status=status,
         safe=bool(raw.get("safe", True)),
         known=bool(raw.get("known", True)),
         tags=tuple(str(item) for item in _sequence(raw.get("tags"))),
+        id=route_id,
+        direction=direction,
     )
+
+
+def _route_status(value: object) -> RouteStatus:
+    status = str(value or "open").strip().lower()
+    if status not in _ROUTE_STATUSES:
+        raise ValueError(f"unsupported_route_status:{status}")
+    return status  # type: ignore[return-value]
+
+
+def _route_direction(value: object) -> RouteDirection:
+    direction = str(value or "both").strip().lower()
+    if direction not in _ROUTE_DIRECTIONS:
+        raise ValueError(f"unsupported_route_direction:{direction}")
+    return direction  # type: ignore[return-value]
 
 
 def _mapping(value: object) -> Mapping[str, object]:
