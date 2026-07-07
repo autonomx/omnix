@@ -6,7 +6,7 @@ from functools import lru_cache
 from typing import Iterable
 
 from app.rpg.map_contracts import MapContractError, MapDefinition
-from app.rpg.map_fixtures import starter_map_definitions
+from app.rpg.map_hierarchy_fixtures import hierarchical_starter_map_definitions
 from app.rpg.map_serialization import with_definition_revision
 
 
@@ -63,4 +63,4 @@ class MapDefinitionRepository:
 
 @lru_cache(maxsize=1)
 def default_map_repository() -> MapDefinitionRepository:
-    return MapDefinitionRepository(starter_map_definitions())
+    return MapDefinitionRepository(hierarchical_starter_map_definitions())
