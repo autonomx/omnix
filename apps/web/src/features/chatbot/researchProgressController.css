@@ -1,0 +1,144 @@
+.assistant-research-progress {
+  margin: 0.75rem 1rem 1rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--mantine-color-violet-5, #845ef7) 38%, transparent);
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--mantine-color-dark-7, #1a1b1e) 88%, var(--mantine-color-violet-9, #5f3dc4));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+}
+
+.assistant-research-progress > header,
+.assistant-research-progress-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.assistant-research-progress h3,
+.assistant-research-progress p,
+.assistant-research-progress dl,
+.assistant-research-progress ul,
+.assistant-research-progress ol {
+  margin-top: 0;
+}
+
+.assistant-research-progress h3 {
+  margin-bottom: 0;
+  font-size: 1rem;
+}
+
+.assistant-research-status {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(132, 94, 247, 0.18);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.assistant-research-progress-track {
+  height: 0.35rem;
+  margin: 0.85rem 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.assistant-research-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7950f2, #b197fc);
+  transition: width 240ms ease;
+}
+
+.assistant-research-announcement {
+  min-height: 1.4rem;
+  margin-bottom: 0.75rem;
+  color: var(--mantine-color-gray-3, #dee2e6);
+}
+
+.assistant-research-progress-actions button,
+.assistant-research-job-details a {
+  min-height: 2rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  cursor: pointer;
+}
+
+.assistant-research-progress-actions button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.assistant-research-job-details,
+.assistant-research-message-details {
+  margin-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  padding-top: 0.65rem;
+}
+
+.assistant-research-job-details > summary,
+.assistant-research-message-details > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.assistant-research-job-details dl,
+.assistant-research-message-details dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.assistant-research-job-details dl > div,
+.assistant-research-message-details dl > div {
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.assistant-research-job-details dt,
+.assistant-research-message-details dt {
+  color: var(--mantine-color-gray-5, #adb5bd);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.assistant-research-job-details dd,
+.assistant-research-message-details dd {
+  margin: 0.15rem 0 0;
+}
+
+.assistant-research-source-list {
+  display: grid;
+  gap: 0.55rem;
+  padding-left: 1.3rem;
+}
+
+.assistant-research-source-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+
+.assistant-research-source-list small {
+  grid-column: 1 / -1;
+  color: var(--mantine-color-gray-5, #adb5bd);
+}
+
+.omnix-research-injected-message .assistant-chat-bubble > p {
+  white-space: pre-wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-research-progress-track > span {
+    transition: none;
+  }
+}
