@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 
 from app.chat import ChatSessionStore, SendChatMessageRequest, SendChatMessageResponse, default_chat_store
 from app.chat.research_citations import validate_completed_research_reply
+from app.chat.research_jobs import link_user_message_to_research_job
 from app.jobs import CreateJobRequest, JobStatus, ResourceClass, SQLiteJobStore, default_job_store
 from app.research.contracts import RESEARCH_JOB_TYPE
 from app.research.jobs import DeepResearchJobInput, create_deep_research_job_request
@@ -137,13 +138,14 @@ def _begin_deep_research(
             )
         )
     )
-    user_message.metadata.update(
-        {
-            "research_mode": "deep",
-            "research_status": "queued",
-            "research_job_id": job.id,
-        }
+    linked = link_user_message_to_research_job(
+        chat_store,
+        session.id,
+        user_message.id,
+        job.id,
     )
+    if linked is not None:
+        session, user_message = linked
     return SendChatMessageResponse(session=session, user_message=user_message, job=job)
 
 
