@@ -95,7 +95,7 @@ describe('RpgMapSurface', () => {
     const view = renderMap();
 
     expect(await screen.findByRole('img', { name: /interactive map/i })).toBeInTheDocument();
-    expect(screen.getByText('The Frosted Flagon')).toBeInTheDocument();
+    expect(screen.getAllByText('The Frosted Flagon')).toHaveLength(2);
     expect(view.container.querySelector('[data-map-object-id="building:inn"]')).toBeInTheDocument();
     expect(view.container.querySelector('.rpg-map-player-marker')).toBeInTheDocument();
     expect(screen.getByText('Definition abc123')).toBeInTheDocument();
