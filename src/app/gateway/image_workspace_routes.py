@@ -8,7 +8,10 @@ from typing import Any, Callable
 from fastapi import FastAPI, HTTPException, Query
 
 from app.assets import AssetListResponse, AssetRecord, AssetType, default_asset_store
+from app.image.cache import forget_image_cache_record
 from app.jobs import CreateJobRequest, JobListResponse, JobRecord, JobStatus, SQLiteJobStore, default_job_store
+from app.jobs.history_cleanup import purge_terminal_job_history
+from app.jobs.models import TERMINAL_STATUSES
 
 from .job_summaries import summarize_job
 
@@ -77,6 +80,15 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
         if asset.type != AssetType.IMAGE or asset.module not in {"image", "image-generation"}:
             raise HTTPException(status_code=409, detail="asset_not_image_generation")
 
+        job_store = default_job_store()
+        source_job_id = str(asset.source_job_id or "").strip()
+        if source_job_id:
+            source_job = job_store.get_job(source_job_id)
+            if source_job is not None and source_job.status not in TERMINAL_STATUSES:
+                raise HTTPException(status_code=409, detail="image_job_still_active")
+
+        cache_key = str((asset.metadata or {}).get("cache_key") or "").strip()
+        cache_result = forget_image_cache_record(cache_key=cache_key, file_path=asset.storage_path)
         shared_result = store.delete_asset(asset_id)
         legacy_result: dict[str, Any] | None = None
         legacy_asset_id = str((asset.compat or {}).get("legacy_asset_id") or "").strip()
@@ -92,12 +104,25 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
         if not deleted:
             raise HTTPException(status_code=404, detail="asset_not_deletable")
 
+        job_result = {
+            "ok": True,
+            "job_id": source_job_id,
+            "job_removed": False,
+            "events_removed": 0,
+        }
+        if source_job_id:
+            job_result = purge_terminal_job_history(job_store, source_job_id)
+
         result: dict[str, Any] = {
             "ok": True,
             "asset_id": asset_id,
+            "deleted_asset_ids": [asset_id],
             "deleted": True,
             "file_deleted": bool(shared_result.get("file_deleted"))
             or bool((legacy_result or {}).get("file_deleted")),
+            "cache_keys_removed": list(cache_result.get("forgotten_keys") or []),
+            "job_ids_removed": [source_job_id] if job_result.get("job_removed") and source_job_id else [],
+            "job_events_removed": int(job_result.get("events_removed") or 0),
         }
         file_error = str(shared_result.get("file_error") or (legacy_result or {}).get("file_error") or "").strip()
         if file_error:
