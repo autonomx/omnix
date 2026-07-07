@@ -14,6 +14,11 @@ from app.image.job_queue import enqueue_image_job
 from app.image.lifecycle import get_or_create_image_provider
 from app.image.models import ImageGenerationRequest, ImageGenerationResponse
 from app.image.providers.registry import is_supported_image_provider
+from app.image.reference_assets import (
+    ImageReferenceError,
+    close_image_references,
+    load_image_reference_assets,
+)
 from app.image.style import apply_image_style
 from app.image_http_client import generate_image_via_service, is_image_service_enabled
 
@@ -40,6 +45,17 @@ def _safe_float(value: Any, default: float) -> float:
         return float(default)
 
 
+def _reference_asset_ids(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    result: list[str] = []
+    for item in value:
+        normalized = _safe_str(item).strip()
+        if normalized and normalized not in result:
+            result.append(normalized)
+    return result
+
+
 def _normalize_request(payload: Dict[str, Any]) -> ImageGenerationRequest:
     payload = payload if isinstance(payload, dict) else {}
     provider = _safe_str(payload.get("provider")).strip() or get_active_image_provider_name()
@@ -57,6 +73,7 @@ def _normalize_request(payload: Dict[str, Any]) -> ImageGenerationRequest:
         kind=_safe_str(payload.get("kind")).strip() or "image",
         source=_safe_str(payload.get("source")).strip() or "app",
         style=_safe_str(payload.get("style")).strip(),
+        reference_asset_ids=_reference_asset_ids(payload.get("reference_asset_ids")),
         session_id=_safe_str(payload.get("session_id")).strip(),
         request_id=_safe_str(payload.get("request_id")).strip(),
         metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
@@ -82,8 +99,26 @@ def _map_to_provider_payload(req: ImageGenerationRequest, provider_config: Dict[
         "guidance_scale": guidance_scale,
         "kind": req.kind,
         "style": req.style,
+        "reference_asset_ids": list(req.reference_asset_ids),
         "metadata": req.metadata,
     }
+
+
+def _reference_failure(req: ImageGenerationRequest, provider_name: str, error: Exception) -> ImageGenerationResponse:
+    return ImageGenerationResponse(
+        ok=False,
+        provider=provider_name,
+        status="failed",
+        error=str(error) or repr(error),
+        seed=req.seed,
+        width=req.width,
+        height=req.height,
+        mime_type="image/png",
+        metadata={
+            "image_to_image": True,
+            "reference_asset_ids": list(req.reference_asset_ids),
+        },
+    )
 
 
 def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
@@ -99,7 +134,13 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
     if callable(progress_callback):
         provider_payload["_progress_callback"] = progress_callback
 
-    use_cache = not bool(payload.get("no_cache")) and not bool(payload.get("warmup"))
+    # Reference-conditioned output is intentionally not cached. A deleted or
+    # replaced reference must not leave a reusable derived cache result behind.
+    use_cache = (
+        not bool(payload.get("no_cache"))
+        and not bool(payload.get("warmup"))
+        and not req.reference_asset_ids
+    )
     cache_key = image_cache_key(provider_payload)
     if use_cache:
         cached = lookup_image_cache(cache_key)
@@ -118,12 +159,22 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
                 metadata={"cache_hit": True, "cache_key": cache_key},
             )
 
-    result = provider.generate(provider_payload)
-    if use_cache and result.ok:
-        cached = store_image_cache(cache_key, result)
-        if cached:
-            result.file_path = cached.get("file_path") or getattr(result, "file_path", "")
-            result.asset_url = cached.get("asset_url") or getattr(result, "asset_url", "")
+    reference_images = []
+    try:
+        if req.reference_asset_ids:
+            reference_images = load_image_reference_assets(req.reference_asset_ids)
+            provider_payload["image"] = reference_images[0] if len(reference_images) == 1 else reference_images
+
+        result = provider.generate(provider_payload)
+        if use_cache and result.ok:
+            cached = store_image_cache(cache_key, result)
+            if cached:
+                result.file_path = cached.get("file_path") or getattr(result, "file_path", "")
+                result.asset_url = cached.get("asset_url") or getattr(result, "asset_url", "")
+    except ImageReferenceError as exc:
+        return _reference_failure(req, provider_name, exc)
+    finally:
+        close_image_references(reference_images)
 
     local_path = _safe_str(getattr(result, "file_path", "")).strip()
     asset_url = _safe_str(getattr(result, "asset_url", "")).strip()
@@ -149,10 +200,12 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
         metadata={
             **(result_metadata or {}),
             "cache_hit": False,
-            "cache_key": cache_key,
+            "cache_key": cache_key if use_cache else "",
             "source": req.source,
             "kind": req.kind,
             "style": req.style,
+            "image_to_image": bool(req.reference_asset_ids),
+            "reference_asset_ids": list(req.reference_asset_ids),
             "request_id": req.request_id,
             "session_id": req.session_id,
             "revised_prompt": revised_prompt,

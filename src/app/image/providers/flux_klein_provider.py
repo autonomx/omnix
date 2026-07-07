@@ -6,7 +6,7 @@ import gc
 import inspect
 import os
 import threading
-from typing import Any, Dict
+from typing import Any, Dict, Iterable
 
 import torch
 
@@ -25,6 +25,8 @@ _GIB = float(1024**3)
 _DEFAULT_MIN_LOAD_FREE_GIB = 14.0
 _DEFAULT_MIN_GENERATION_FREE_GIB = 3.0
 _DEFAULT_MAX_PIXELS = 1024 * 1024
+_DEFAULT_MAX_REFERENCE_PIXELS = 2 * 1024 * 1024
+_DEFAULT_MAX_REFERENCE_COUNT = 2
 
 
 def _safe_str(value: Any) -> str:
@@ -80,6 +82,23 @@ def _release_generation_memory() -> None:
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
+
+
+def _reference_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [item for item in value if item is not None]
+    return [value]
+
+
+def _reference_pixels(images: Iterable[Any]) -> int:
+    total = 0
+    for image in images:
+        size = getattr(image, "size", None)
+        if isinstance(size, tuple) and len(size) >= 2:
+            total += max(1, _safe_int(size[0], 1) * _safe_int(size[1], 1))
+    return total
 
 
 class FluxKleinImageProvider(BaseImageProvider):
@@ -170,7 +189,12 @@ class FluxKleinImageProvider(BaseImageProvider):
             )
         return "cuda_direct"
 
-    def _generation_budget_error(self, width: int, height: int) -> str:
+    def _generation_budget_error(
+        self,
+        width: int,
+        height: int,
+        reference_images: Iterable[Any] | None = None,
+    ) -> str:
         max_pixels = _safe_int(self.config.get("max_pixels"), _DEFAULT_MAX_PIXELS)
         pixels = max(1, width * height)
         if pixels > max_pixels:
@@ -178,6 +202,27 @@ class FluxKleinImageProvider(BaseImageProvider):
                 "flux_klein_image_too_large:"
                 f"requested_pixels={pixels} max_pixels={max_pixels} "
                 f"requested_size={width}x{height}"
+            )
+
+        references = list(reference_images or [])
+        max_reference_count = _safe_int(
+            self.config.get("max_reference_count"),
+            _DEFAULT_MAX_REFERENCE_COUNT,
+        )
+        if len(references) > max_reference_count:
+            return (
+                "flux_klein_reference_limit_exceeded:"
+                f"count={len(references)} max={max_reference_count}"
+            )
+        reference_pixels = _reference_pixels(references)
+        max_reference_pixels = _safe_int(
+            self.config.get("max_reference_pixels"),
+            _DEFAULT_MAX_REFERENCE_PIXELS,
+        )
+        if reference_pixels > max_reference_pixels:
+            return (
+                "flux_klein_reference_images_too_large:"
+                f"reference_pixels={reference_pixels} max_pixels={max_reference_pixels}"
             )
 
         if self._memory_mode != "cuda_direct":
@@ -190,14 +235,16 @@ class FluxKleinImageProvider(BaseImageProvider):
             self.config.get("min_generation_free_gib"),
             _DEFAULT_MIN_GENERATION_FREE_GIB,
         )
-        scaled_min = 4.0 * (pixels / _DEFAULT_MAX_PIXELS)
-        required_gib = max(configured_min, scaled_min)
+        output_headroom = 4.0 * (pixels / _DEFAULT_MAX_PIXELS)
+        reference_headroom = 1.25 * (reference_pixels / _DEFAULT_MAX_PIXELS)
+        required_gib = max(configured_min, output_headroom + reference_headroom)
         if free_gib < required_gib:
             return (
                 "flux_klein_insufficient_generation_vram:"
                 f"free_gib={free_gib:.2f} required_gib={required_gib:.2f} "
-                f"total_gib={total_gib:.2f} requested_size={width}x{height}; "
-                "unload other GPU models or reduce image size"
+                f"total_gib={total_gib:.2f} requested_size={width}x{height} "
+                f"reference_count={len(references)}; "
+                "unload other GPU models, reduce image size, or remove a reference image"
             )
         return ""
 
@@ -293,6 +340,8 @@ class FluxKleinImageProvider(BaseImageProvider):
             payload.get("guidance_scale"),
             _safe_float(self.config.get("guidance_scale"), 1.0),
         )
+        reference_input = payload.get("image")
+        references = _reference_list(reference_input)
 
         kwargs: Dict[str, Any] = {
             "prompt": prompt,
@@ -303,6 +352,8 @@ class FluxKleinImageProvider(BaseImageProvider):
         }
         if negative_prompt:
             kwargs["negative_prompt"] = negative_prompt
+        if reference_input is not None:
+            kwargs["image"] = reference_input
 
         if seed is not None:
             with contextlib.suppress(Exception):
@@ -322,7 +373,7 @@ class FluxKleinImageProvider(BaseImageProvider):
         with _GENERATE_LOCK:
             pipe = None
             output = None
-            image = None
+            output_image = None
             try:
                 try:
                     pipe = self._ensure_pipeline()
@@ -335,7 +386,7 @@ class FluxKleinImageProvider(BaseImageProvider):
                         moderation_reason="",
                     )
 
-                budget_error = self._generation_budget_error(width, height)
+                budget_error = self._generation_budget_error(width, height, references)
                 if budget_error:
                     return ImageGenerationResult(
                         ok=False,
@@ -350,6 +401,8 @@ class FluxKleinImageProvider(BaseImageProvider):
                     with contextlib.suppress(Exception):
                         signature = inspect.signature(pipe.__call__)
                         params = signature.parameters
+                        if reference_input is not None and "image" not in params:
+                            raise RuntimeError("flux_klein_image_to_image_unsupported_by_runtime")
                         if "callback_on_step_end" in params:
 
                             def on_step_end(
@@ -375,7 +428,7 @@ class FluxKleinImageProvider(BaseImageProvider):
 
                     with torch.inference_mode():
                         output = pipe(**kwargs)
-                        image = output.images[0]
+                        output_image = output.images[0]
                     report_progress(steps)
                 except Exception as exc:
                     return ImageGenerationResult(
@@ -390,12 +443,12 @@ class FluxKleinImageProvider(BaseImageProvider):
                 os.makedirs(out_dir, exist_ok=True)
                 filename = (
                     f"{_safe_str(payload.get('kind')).strip() or 'image'}_"
-                    f"{os.getpid()}_{id(image)}.png"
+                    f"{os.getpid()}_{id(output_image)}.png"
                 )
                 file_path = os.path.normpath(os.path.join(out_dir, filename))
 
                 try:
-                    image.save(file_path, format="PNG")
+                    output_image.save(file_path, format="PNG")
                 except Exception as exc:
                     with contextlib.suppress(OSError):
                         os.remove(file_path)
@@ -421,10 +474,12 @@ class FluxKleinImageProvider(BaseImageProvider):
                         "width": width,
                         "height": height,
                         "memory_mode": self._memory_mode,
+                        "image_to_image": bool(references),
+                        "reference_count": len(references),
                     },
                 )
             finally:
                 output = None
-                image = None
+                output_image = None
                 pipe = None
                 _release_generation_memory()

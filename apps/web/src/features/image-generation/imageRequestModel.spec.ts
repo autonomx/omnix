@@ -28,6 +28,7 @@ describe('image request model', () => {
       width: 768,
       height: 768,
       style: 'cinematic',
+      reference_asset_ids: [],
       seed: 42,
       steps: 30,
       guidance_scale: 4.5,

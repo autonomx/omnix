@@ -1,0 +1,126 @@
+.image-reference-fieldset {
+  border: 1px solid rgba(112, 130, 176, 0.18);
+  border-radius: 0.72rem;
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  min-width: 0;
+  padding: 0.72rem;
+}
+
+.image-reference-fieldset legend {
+  align-items: center;
+  color: #cbd3e8;
+  display: inline-flex;
+  font-size: 0.76rem;
+  gap: 0.32rem;
+  padding: 0 0.24rem;
+}
+
+.image-reference-fieldset legend i {
+  color: #77829d;
+  font-size: 0.67rem;
+  font-style: normal;
+}
+
+.image-reference-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.image-reference-heading p,
+.image-reference-count {
+  color: #8f9ab4;
+  margin: 0;
+}
+
+.image-reference-heading .mantine-Button-root {
+  flex: 0 0 auto;
+}
+
+.image-reference-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(8, minmax(5.2rem, 1fr));
+  max-height: 13rem;
+  overflow-y: auto;
+  padding: 0.08rem;
+}
+
+.image-reference-grid button {
+  background: rgba(4, 9, 20, 0.92);
+  border: 1px solid rgba(112, 130, 176, 0.22);
+  border-radius: 0.58rem;
+  color: #cbd3e8;
+  cursor: pointer;
+  display: grid;
+  grid-template-rows: 4.4rem auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  text-align: left;
+}
+
+.image-reference-grid button:hover,
+.image-reference-grid button:focus-visible {
+  border-color: rgba(139, 92, 246, 0.72);
+  outline: none;
+}
+
+.image-reference-grid button.active {
+  border-color: #8254ff;
+  box-shadow: 0 0 0 0.12rem rgba(124, 77, 255, 0.2);
+}
+
+.image-reference-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.image-reference-grid img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.image-reference-grid span {
+  overflow: hidden;
+  padding: 0.38rem 0.42rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-reference-grid b {
+  align-items: center;
+  background: #7c4dff;
+  border-radius: 999px;
+  color: white;
+  display: flex;
+  font-size: 0.65rem;
+  height: 1.15rem;
+  justify-content: center;
+  position: absolute;
+  right: 0.3rem;
+  top: 0.3rem;
+  width: 1.15rem;
+}
+
+@media (max-width: 1100px) {
+  .image-reference-grid {
+    grid-template-columns: repeat(4, minmax(5rem, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .image-reference-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .image-reference-grid {
+    grid-template-columns: repeat(2, minmax(5rem, 1fr));
+  }
+}

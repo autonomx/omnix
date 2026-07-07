@@ -18,6 +18,7 @@ class ImageGenerationRequest:
     kind: str = "image"          # portrait | scene | item | cover | image
     source: str = "app"          # rpg | chat | story | app | ...
     style: str = ""
+    reference_asset_ids: list[str] = field(default_factory=list)
     session_id: str = ""
     request_id: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
