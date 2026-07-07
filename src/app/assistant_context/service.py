@@ -60,6 +60,7 @@ class AssistantContextService:
             execution = self.quick_search_factory().search(
                 request.content,
                 request.web_search_max_results,
+                identity=request.internal_research_identity or "anonymous",
             )
             prepared = prepare_evidence_context_items(
                 [item.model_dump(mode="json") for item in execution.items]
