@@ -26,8 +26,9 @@ function renderWorkspace() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Image Generation model residency wiring', () => {
-  it('loads and unloads FLUX through the gateway and gates generation', async () => {
+  it('loads, warms, and unloads FLUX through the gateway while gating generation', async () => {
     let loaded = false;
+    let warmedUp = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
       if (path === '/api/providers') {
@@ -53,16 +54,25 @@ describe('Image Generation model residency wiring', () => {
           model: 'FLUX.2 [klein] 4B',
           loaded,
           state: loaded ? 'loaded' : 'unloaded',
+          warmed_up: warmedUp,
+          warmup_state: warmedUp ? 'completed' : 'not_started',
           explicit_load_required: true,
           local_model: { ok: true, exists: true, complete: true, missing: [], local_dir: 'resources/models/image/flux2-klein-4b' },
         });
       }
       if (path === '/api/image-generation/model/load' && init?.method === 'POST') {
         loaded = true;
-        return Response.json({ ok: true, provider: 'flux_klein', loaded: true });
+        warmedUp = true;
+        return Response.json({
+          ok: true,
+          provider: 'flux_klein',
+          loaded: true,
+          warmup: { ok: true, warmed_up: true, state: 'completed' },
+        });
       }
       if (path === '/api/image-generation/model/unload' && init?.method === 'POST') {
         loaded = false;
+        warmedUp = false;
         return Response.json({ ok: true, provider: 'flux_klein', loaded: false, unloaded: true });
       }
       if (path === '/api/image-generation/jobs') return Response.json({ jobs: [] });
@@ -73,19 +83,20 @@ describe('Image Generation model residency wiring', () => {
 
     renderWorkspace();
 
-    const loadButton = await screen.findByRole('button', { name: 'Load Model' });
+    const loadButton = await screen.findByRole('button', { name: 'Load & Warm Model' });
     await waitFor(() => expect(loadButton).toBeEnabled());
     const generateButton = screen.getByRole('button', { name: 'Generate image' });
     expect(generateButton).toBeDisabled();
-    expect(generateButton).toHaveAttribute('title', 'Load FLUX.2 [klein] 4B before generating an image.');
+    expect(generateButton).toHaveAttribute('title', 'Load and warm FLUX.2 [klein] 4B before generating an image.');
 
     fireEvent.click(loadButton);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Unload Model' })).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Generate image' })).not.toBeDisabled();
+    expect(screen.getByText(/resident and warmed/i)).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([input, init]) => requestPath(input as RequestInfo | URL) === '/api/image-generation/model/load' && init?.method === 'POST')).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Unload Model' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Load Model' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Load & Warm Model' })).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Generate image' })).toBeDisabled();
     expect(fetchMock.mock.calls.some(([input, init]) => requestPath(input as RequestInfo | URL) === '/api/image-generation/model/unload' && init?.method === 'POST')).toBe(true);
   });
