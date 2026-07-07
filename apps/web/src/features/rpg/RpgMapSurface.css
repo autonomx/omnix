@@ -1,0 +1,165 @@
+.rpg-map-surface {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.rpg-map-canvas-frame {
+  aspect-ratio: 16 / 10;
+  background: #15120f;
+  border: 1px solid rgba(221, 198, 151, 0.28);
+  border-radius: 1rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 1.4rem 3rem rgba(0, 0, 0, 0.3);
+  min-height: 24rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.rpg-map-canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.rpg-map-parchment-tile {
+  fill: #bda675;
+}
+
+.rpg-map-parchment-line {
+  fill: none;
+  opacity: 0.08;
+  stroke: #4d3f29;
+  stroke-width: 4;
+}
+
+.rpg-map-object {
+  color: #211d18;
+  transition: opacity 160ms ease;
+}
+
+.rpg-map-object rect {
+  fill: #6d5134;
+  stroke: #261b12;
+  stroke-width: 18;
+}
+
+.rpg-map-object path {
+  fill: #4b2f1f;
+  stroke: #261b12;
+  stroke-linejoin: round;
+  stroke-width: 18;
+}
+
+.rpg-map-object-landmark rect,
+.rpg-map-object-gate rect {
+  fill: #4d5560;
+}
+
+.rpg-map-object-landmark path,
+.rpg-map-object-gate path {
+  fill: #303640;
+}
+
+.rpg-map-object text {
+  fill: #1b1814;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 118px;
+  font-variant: small-caps;
+  font-weight: 700;
+  paint-order: stroke;
+  pointer-events: none;
+  stroke: rgba(222, 204, 160, 0.88);
+  stroke-width: 20;
+  text-anchor: middle;
+}
+
+.rpg-map-object-hidden {
+  opacity: 0.16;
+}
+
+.rpg-map-player-marker circle {
+  fill: rgba(245, 196, 75, 0.2);
+  stroke: #ffd45a;
+  stroke-width: 18;
+}
+
+.rpg-map-player-marker path {
+  fill: #ffd45a;
+  stroke: #32240b;
+  stroke-width: 16;
+}
+
+.rpg-map-state-message {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  justify-content: center;
+  min-height: 8rem;
+  padding: 1rem 1.1rem;
+}
+
+.rpg-map-state-message span {
+  color: var(--mantine-color-dimmed, #a7a7a7);
+}
+
+.rpg-map-state-compact {
+  min-height: auto;
+  padding: 0.7rem 0.85rem;
+}
+
+.rpg-map-state-warning {
+  background: rgba(184, 119, 28, 0.12);
+  border-color: rgba(243, 177, 76, 0.32);
+}
+
+.rpg-map-state-error {
+  background: rgba(155, 48, 48, 0.13);
+  border-color: rgba(235, 104, 104, 0.34);
+}
+
+.rpg-map-surface-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.rpg-map-surface-meta span {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: var(--mantine-color-dimmed, #a7a7a7);
+  font-size: 0.72rem;
+  padding: 0.25rem 0.55rem;
+}
+
+.rpg-map-accessible-list {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.75rem;
+}
+
+.rpg-map-accessible-list ul {
+  columns: 2;
+  margin: 0.45rem 0 0;
+  padding-left: 1.15rem;
+}
+
+.rpg-map-accessible-list li {
+  break-inside: avoid;
+  color: var(--mantine-color-dimmed, #a7a7a7);
+  font-size: 0.78rem;
+  margin-bottom: 0.22rem;
+}
+
+@media (max-width: 760px) {
+  .rpg-map-canvas-frame {
+    min-height: 18rem;
+  }
+
+  .rpg-map-accessible-list ul {
+    columns: 1;
+  }
+}
