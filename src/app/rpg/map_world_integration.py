@@ -107,11 +107,7 @@ def map_repository_for_session(session: Mapping[str, object]) -> MapDefinitionRe
         if map_id in existing_ids:
             continue
         assembly = assemble_settlement_map(model.seed, model.graph, node.id, map_id=map_id)
-        definitions.append(
-            with_definition_revision(
-                replace(assembly.definition, parent_map_id=_region_map_id(node.region_id))
-            )
-        )
+        definitions.append(_canonical_settlement_definition(model, node, assembly.definition))
         existing_ids.add(map_id)
     return MapDefinitionRepository(definitions)
 
@@ -197,6 +193,54 @@ def integrate_canonical_world_map_state(session: dict[str, Any]) -> dict[str, An
     state["player"] = player
     session["state"] = state
     return session
+
+
+def _canonical_settlement_definition(
+    model: CanonicalWorldMapModel,
+    node: RpgLocationNode,
+    definition: MapDefinition,
+) -> MapDefinition:
+    center_polygon = MapPolygon(points=((-260, -180), (260, -180), (260, 80), (-260, 80)))
+    center = MapObjectDefinition(
+        id=f"landmark:{node.id}:center",
+        kind="landmark",
+        x=definition.bounds.width // 2,
+        y=definition.bounds.height // 2,
+        location_id=node.id,
+        label=node.name,
+        description=f"The central district of {node.name}.",
+        sprite=MapSprite(asset_id="asset:rpg-map:landmark-01", width=520, height=430),
+        footprint=center_polygon,
+        hitbox=center_polygon,
+        render_order=MapRenderOrder(layer="structures", sort_y=definition.bounds.height // 2),
+        tags=("canonical_world", "settlement_center"),
+    )
+    objects = []
+    for item in definition.objects:
+        route = model.graph.routes_between(node.id, item.location_id or "")
+        tags = item.tags
+        if route:
+            tags = (*tags, f"route_id:{route[0].id}")
+        objects.append(replace(item, tags=tags))
+
+    route_geometry = []
+    prefix = f"route:{node.id}:exit:"
+    for geometry in definition.route_geometry:
+        route_id = geometry.route_id
+        if route_id.startswith(prefix):
+            target_id = route_id.removeprefix(prefix)
+            routes = model.graph.routes_between(node.id, target_id)
+            if routes:
+                route_id = routes[0].id
+        route_geometry.append(replace(geometry, route_id=route_id))
+    return with_definition_revision(
+        replace(
+            definition,
+            parent_map_id=_region_map_id(node.region_id),
+            objects=(center, *objects),
+            route_geometry=tuple(route_geometry),
+        )
+    )
 
 
 def _region_definition(model: CanonicalWorldMapModel, region_id: str) -> MapDefinition:
