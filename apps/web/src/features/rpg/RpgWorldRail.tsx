@@ -1,4 +1,5 @@
 import { Progress, Text } from '@mantine/core';
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { omnixApiClient } from '../../api/client';
 import { RpgMapDialog } from './RpgMapDialog';
@@ -72,9 +73,19 @@ export function RpgWorldRail({
 }: RpgWorldRailProps) {
   const railClassName = className ? `rpg-right-rail ${className}` : 'rpg-right-rail';
   const isPreview = selectedSessionSummary.source === 'preview';
+  const liveSessionQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'session', selectedSessionSummary.id],
+    queryFn: () => omnixApiClient.getRpgSession(selectedSessionSummary.id),
+    enabled: !isPreview && Boolean(selectedSessionSummary.id.trim()),
+  });
+  const sessionRecord = recordValue(liveSessionQuery.data?.session);
+  const stateRecord = recordValue(sessionRecord.state);
+  const mapStateRecord = recordValue(stateRecord.map_state);
+  const queriedMapId = typeof mapStateRecord.current_map_id === 'string' ? mapStateRecord.current_map_id.trim() : '';
+  const activeMapId = currentMapId?.trim() || queriedMapId;
   const visibleJobCards = jobCards.slice(0, 3);
   const canGenerateLast10Report = selectedSessionSummary.source === 'live' && selectedSessionSummary.id.trim().length > 0;
-  const canOpenLiveMap = !isPreview && Boolean(selectedSessionSummary.id.trim() && currentMapId?.trim());
+  const canOpenLiveMap = !isPreview && Boolean(selectedSessionSummary.id.trim() && activeMapId);
   const [isGeneratingLast10Report, setIsGeneratingLast10Report] = useState(false);
   const [last10ReportStatusLabel, setLast10ReportStatusLabel] = useState('Ready to generate');
   const [isMapOpen, setIsMapOpen] = useState(false);
@@ -132,12 +143,12 @@ export function RpgWorldRail({
             {isPreview ? (
               <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
             ) : (
-              <span className="rpg-live-visual-label">{currentMapId ? 'Live map ready' : 'Live map unavailable'}</span>
+              <span className="rpg-live-visual-label">{activeMapId ? 'Live map ready' : 'Live map unavailable'}</span>
             )}
             <span className="rpg-map-pin" aria-hidden="true" />
           </div>
           <strong>{selectedSessionSummary.location}</strong>
-          {isPreview ? <small>Preview artwork</small> : <small>{currentMapId ?? 'Canonical map state is not available.'}</small>}
+          {isPreview ? <small>Preview artwork</small> : <small>{activeMapId || 'Canonical map state is not available.'}</small>}
           <button className="rpg-secondary-button" disabled={!canOpenLiveMap} onClick={() => setIsMapOpen(true)} type="button">
             Open interactive map
           </button>
@@ -271,10 +282,10 @@ export function RpgWorldRail({
           </button>
         </section>
       </aside>
-      {canOpenLiveMap && currentMapId ? (
+      {canOpenLiveMap && activeMapId ? (
         <RpgMapDialog
           locationLabel={selectedSessionSummary.location}
-          mapId={currentMapId}
+          mapId={activeMapId}
           onClose={() => setIsMapOpen(false)}
           open={isMapOpen}
           sessionId={selectedSessionSummary.id}
@@ -282,4 +293,8 @@ export function RpgWorldRail({
       ) : null}
     </>
   );
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
