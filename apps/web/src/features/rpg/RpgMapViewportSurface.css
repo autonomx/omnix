@@ -1,5 +1,6 @@
 @import './RpgMapObjectInteractions.css';
 @import './RpgMapLayerStyles.css';
+@import './RpgMapDynamicOverlay.css';
 
 .rpg-map-viewport-shell {
   display: grid;
