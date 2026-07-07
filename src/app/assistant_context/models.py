@@ -26,6 +26,7 @@ class AssistantContextChatRequest(BaseModel):
     dry_run: bool = False
     web_research_mode: ResearchMode = "disabled"
     legacy_web_search_mode: str | None = Field(default=None, exclude=True)
+    internal_research_identity: str | None = Field(default=None, exclude=True)
     web_search_requested: bool = False
     web_search_max_results: int = Field(default=5, ge=1, le=8)
     desktop_image_data_url: str | None = None
@@ -49,6 +50,7 @@ class AssistantContextChatRequest(BaseModel):
             selected = legacy
         payload["web_research_mode"] = normalize_research_mode(selected)
         payload["legacy_web_search_mode"] = str(legacy) if legacy is not None else None
+        payload.pop("internal_research_identity", None)
         return payload
 
     @property
