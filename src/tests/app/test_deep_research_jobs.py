@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -11,6 +14,10 @@ from app.jobs.research_inline import (
     execute_research_job,
     load_research_checkpoint,
     save_research_checkpoint,
+)
+from app.research.adversarial_gate import (
+    adversarial_case_manifest,
+    run_research_adversarial_gate,
 )
 from app.research.executor import ResearchExecutionCheckpoint
 from app.research.planner import ResearchOperation, ResearchPlan
@@ -169,3 +176,26 @@ def test_deep_research_executor_acknowledges_cancellation(tmp_path, monkeypatch)
     saved = chat_store.get_session(session.id)
     assert saved is not None
     assert [message.role for message in saved.messages] == ["user"]
+
+
+def test_research_adversarial_gate_matches_audited_manifest_and_passes() -> None:
+    fixture_path = Path(__file__).parents[1] / "fixtures" / "research_adversarial_cases.json"
+    expected = json.loads(fixture_path.read_text(encoding="utf-8"))
+    manifest = adversarial_case_manifest()
+    report = run_research_adversarial_gate()
+
+    assert manifest == expected
+    assert len(report.cases) == len(expected) == 16
+    assert report.categories == {
+        "provider",
+        "ssrf",
+        "redirect",
+        "prompt_injection",
+        "privacy",
+        "citation",
+        "structured_output",
+        "cancellation",
+        "resume",
+        "partial_result",
+    }
+    assert report.passed, report.model_dump_json(indent=2)
