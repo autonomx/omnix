@@ -18,6 +18,8 @@ def validate_completed_research_reply(
     session_id: str,
     user_message_id: str,
     context_items: list[dict[str, Any]],
+    *,
+    show_diagnostics: bool = True,
 ) -> ChatSession | None:
     labels = citation_labels(context_items)
     if not labels:
@@ -48,6 +50,7 @@ def validate_completed_research_reply(
             {
                 "research_mode": "quick",
                 "research_status": "completed",
+                "research_diagnostics_enabled": show_diagnostics,
                 "source_manifest_id": source_manifest_id(context_items),
                 "citation_validation": rendered.validation.model_dump(mode="json"),
             }
