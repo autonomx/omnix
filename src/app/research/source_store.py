@@ -17,6 +17,7 @@ from app.assistant_context.models import AssistantContextItem
 from app.runtime_paths import resources_data_root
 
 from .contracts import ResearchSource, ResearchSourceSnapshot
+from .extraction import ExtractedPage
 
 _TRACKING_PARAMETERS = {"fbclid", "gclid", "mc_cid", "mc_eid", "ref", "ref_src"}
 
@@ -48,13 +49,13 @@ def canonicalize_source_url(value: str | None) -> str | None:
         return None
     try:
         parsed = urlsplit(text)
+        port = parsed.port
     except ValueError:
         return None
     scheme = parsed.scheme.lower()
     hostname = (parsed.hostname or "").lower()
     if scheme not in {"http", "https"} or not hostname:
         return None
-    port = parsed.port
     netloc = hostname
     if port and not ((scheme == "http" and port == 80) or (scheme == "https" and port == 443)):
         netloc = f"{hostname}:{port}"
@@ -158,6 +159,44 @@ class ResearchSourceStore:
             snapshots=snapshots,
             items=recorded_items,
         )
+
+    def save_extraction(self, snapshot_id: str, page: ExtractedPage) -> ResearchSourceSnapshot:
+        extraction_root = self.path.parent / "research_extracts"
+        extraction_root.mkdir(parents=True, exist_ok=True)
+        safe_name = snapshot_id.replace(":", "_").replace("/", "_")
+        text_path = extraction_root / f"{safe_name}.txt"
+        text_path.write_text(page.text, encoding="utf-8")
+        with self._lock:
+            payload = self._load()
+            raw = payload["snapshots"].get(snapshot_id)
+            if raw is None:
+                text_path.unlink(missing_ok=True)
+                raise KeyError(f"research snapshot not found: {snapshot_id}")
+            snapshot = ResearchSourceSnapshot.model_validate(raw).model_copy(
+                update={
+                    "published_at": page.published_at or raw.get("published_at"),
+                    "extractor_version": page.extractor_version,
+                    "extraction_status": "completed",
+                    "content_hash": page.content_hash,
+                    "extracted_text_ref": str(text_path),
+                }
+            )
+            payload["snapshots"][snapshot_id] = snapshot.model_dump(mode="json")
+            self._save(payload)
+        return snapshot
+
+    def mark_extraction_failed(self, snapshot_id: str) -> ResearchSourceSnapshot | None:
+        with self._lock:
+            payload = self._load()
+            raw = payload["snapshots"].get(snapshot_id)
+            if raw is None:
+                return None
+            snapshot = ResearchSourceSnapshot.model_validate(raw).model_copy(
+                update={"extraction_status": "failed"}
+            )
+            payload["snapshots"][snapshot_id] = snapshot.model_dump(mode="json")
+            self._save(payload)
+        return snapshot
 
     def get_manifest(self, manifest_id: str) -> RecordedResearchSources | None:
         with self._lock:
