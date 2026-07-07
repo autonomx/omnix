@@ -31,8 +31,12 @@ const definition = {
       child_map_id: null,
     },
   ],
-  route_geometry: [],
-  labels: [],
+  route_geometry: [{
+    route_id: 'route:frost_haven:inn_market',
+    points: [[300, 420], [500, 360], [760, 330]] as [number, number][],
+    style: 'street',
+  }],
+  labels: [{ id: 'label:frost_haven', text: 'FROST HAVEN', x: 500, y: 120, priority: 100 }],
 };
 
 function overlay(availability: 'ready' | 'unavailable' = 'ready') {
@@ -47,9 +51,12 @@ function overlay(availability: 'ready' | 'unavailable' = 'ready') {
     current_location_id: availability === 'ready' ? 'rusty_flagon_tavern' : null,
     discovered_object_ids: ['building:inn'],
     visible_object_ids: ['building:inn'],
-    routes: [],
+    routes: [{ route_id: 'route:frost_haven:inn_market', status: 'open', known: true, safe: true, reason: '' }],
     markers: availability === 'ready'
-      ? [{ id: 'marker:player', kind: 'player', x: 300, y: 420, object_id: 'building:inn', label: 'You' }]
+      ? [
+          { id: 'marker:player', kind: 'player', x: 300, y: 420, object_id: 'building:inn', label: 'You' },
+          { id: 'marker:quest:shipment', kind: 'quest', x: 760, y: 330, object_id: null, label: 'Missing shipment' },
+        ]
       : [],
     capabilities: [{
       type: 'inspect',
@@ -101,7 +108,7 @@ afterEach(() => {
 });
 
 describe('RpgMapSurface', () => {
-  it('renders definition objects and the authoritative player marker', async () => {
+  it('renders objects, route geometry, labels, and authoritative markers', async () => {
     installFetch();
     const view = renderMap();
 
@@ -109,8 +116,27 @@ describe('RpgMapSurface', () => {
     expect(screen.getAllByText('The Frosted Flagon')).toHaveLength(2);
     expect(view.container.querySelector('[data-map-object-id="building:inn"]')).toBeInTheDocument();
     expect(view.container.querySelector('[data-map-hitbox="building:inn"]')).toHaveAttribute('points', '-110,-90 110,-90 110,20 -110,20');
-    expect(view.container.querySelector('.rpg-map-player-marker')).toBeInTheDocument();
+    expect(view.container.querySelector('[data-map-route-id="route:frost_haven:inn_market"]')).toHaveAttribute('points', '300,420 500,360 760,330');
+    expect(view.container.querySelector('[data-map-label-id="label:frost_haven"]')).toHaveTextContent('FROST HAVEN');
+    expect(view.container.querySelector('[data-map-marker-kind="player"]')).toBeInTheDocument();
+    expect(view.container.querySelector('[data-map-marker-kind="quest"]')).toHaveTextContent('Missing shipment');
     expect(screen.getByText('Definition abc123')).toBeInTheDocument();
+  });
+
+  it('toggles presentation layers without mutating map data', async () => {
+    installFetch();
+    const view = renderMap();
+    await screen.findByRole('img', { name: /interactive map/i });
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'routes' }));
+    expect(view.container.querySelector('[data-map-layer="routes"]')).not.toBeInTheDocument();
+    expect(view.container.querySelector('[data-map-object-id="building:inn"]')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'markers' }));
+    expect(view.container.querySelector('[data-map-layer="markers"]')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'labels' }));
+    expect(view.container.querySelector('[data-map-layer="labels"]')).not.toBeInTheDocument();
   });
 
   it('shows the same details for pointer hover and keyboard focus', async () => {
@@ -151,6 +177,6 @@ describe('RpgMapSurface', () => {
 
     expect(await screen.findByText('Live position unavailable')).toBeInTheDocument();
     expect(screen.getByText('current location unavailable')).toBeInTheDocument();
-    await waitFor(() => expect(view.container.querySelector('.rpg-map-player-marker')).not.toBeInTheDocument());
+    await waitFor(() => expect(view.container.querySelector('[data-map-marker-kind="player"]')).not.toBeInTheDocument());
   });
 });
