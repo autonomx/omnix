@@ -23,6 +23,7 @@ from app.image.lifecycle import (
     load_image_provider,
     unload_all_image_providers,
     unload_image_provider,
+    warm_image_provider,
 )
 from app.image.service import generate_image_local
 from app.shared import load_settings
@@ -66,6 +67,14 @@ def _local_model_status(provider: str) -> Dict[str, Any]:
     return get_flux_local_model_status(local_dir)
 
 
+def _runtime_status(cache: Dict[str, Any], provider: str) -> Dict[str, Any]:
+    runtime = cache.get("runtime") if isinstance(cache, dict) else None
+    if not isinstance(runtime, dict):
+        return {}
+    status = runtime.get(provider)
+    return status if isinstance(status, dict) else {}
+
+
 def image_model_status(provider: str | None = None) -> Dict[str, Any]:
     provider_name = (provider or get_active_image_provider_name()).strip().lower() or "flux_klein"
     loaded = is_image_provider_loaded(provider_name)
@@ -73,6 +82,8 @@ def image_model_status(provider: str | None = None) -> Dict[str, Any]:
     state = operation if operation != "idle" else ("loaded" if loaded else "unloaded")
     local_status = _local_model_status(provider_name)
     enabled = is_image_generation_enabled()
+    cache = get_image_provider_cache_status()
+    runtime = _runtime_status(cache, provider_name)
     return {
         "ok": bool(enabled and local_status.get("complete", True)),
         "service": "image",
@@ -82,7 +93,11 @@ def image_model_status(provider: str | None = None) -> Dict[str, Any]:
         "loaded": loaded,
         "state": state,
         "local_model": local_status,
-        "cache": get_image_provider_cache_status(),
+        "cache": cache,
+        "warmed_up": bool(runtime.get("warmed_up")),
+        "warmup_state": str(runtime.get("warmup_state") or "not_started"),
+        "warmup_error": str(runtime.get("warmup_error") or ""),
+        "warmup_duration_ms": runtime.get("warmup_duration_ms"),
         "explicit_load_required": _truthy(os.environ.get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1")),
     }
 
@@ -155,6 +170,33 @@ def _get_generation_progress(request_id: str) -> Dict[str, Any]:
     }
 
 
+async def _warm_provider(provider: str | None, *, source: str) -> Dict[str, Any]:
+    provider_name = str(provider or get_active_image_provider_name()).strip().lower() or "flux_klein"
+    _set_model_operation("warming")
+    print(f"[IMAGE SERVICE] Warming {provider_name} after {source}...")
+    try:
+        result = await run_in_threadpool(warm_image_provider, provider_name)
+        print(
+            "[IMAGE SERVICE] Warmup complete:",
+            {
+                "ok": result.get("ok"),
+                "duration_ms": result.get("duration_ms"),
+                "error": result.get("error", ""),
+            },
+        )
+        return result
+    except Exception as exc:
+        result = {
+            "ok": False,
+            "provider": provider_name,
+            "warmed_up": False,
+            "state": "failed",
+            "error": str(exc) or repr(exc),
+        }
+        print("[IMAGE SERVICE] Warmup failed:", repr(exc))
+        return result
+
+
 @app.on_event("startup")
 async def startup_load_provider():
     if not is_image_generation_enabled():
@@ -170,31 +212,12 @@ async def startup_load_provider():
         print("[IMAGE SERVICE] Preloading image provider...")
         result = await run_in_threadpool(load_image_provider, provider)
         print("[IMAGE SERVICE] Image provider preload complete:", result)
+        if _truthy(os.environ.get("OMNIX_IMAGE_WARMUP", "0")):
+            await _warm_provider(provider, source="startup preload")
     except Exception as exc:
         print("[IMAGE SERVICE] Image provider preload failed:", repr(exc))
-
-    if not _truthy(os.environ.get("OMNIX_IMAGE_WARMUP", "0")):
-        return
-
-    try:
-        print("[IMAGE SERVICE] Running tiny FLUX warmup...")
-        warmup = await run_in_threadpool(
-            generate_image_local,
-            {
-                "prompt": "tiny warmup image, simple fantasy torch flame, no text",
-                "negative_prompt": "text, watermark, logo",
-                "width": 256,
-                "height": 256,
-                "steps": 1,
-                "num_inference_steps": 1,
-                "seed": 1,
-                "warmup": True,
-                "no_cache": True,
-            },
-        )
-        print("[IMAGE SERVICE] Warmup complete:", {"ok": warmup.ok, "error": warmup.error})
-    except Exception as exc:
-        print("[IMAGE SERVICE] Warmup failed:", repr(exc))
+    finally:
+        _set_model_operation("idle")
 
 
 @app.get("/health")
@@ -288,8 +311,22 @@ async def provider_load(request: Request):
     _set_model_operation("loading")
     try:
         result = await run_in_threadpool(load_image_provider, provider)
-        return {**result, "status": image_model_status(provider)}
+        warmup: Dict[str, Any] = {
+            "ok": True,
+            "provider": provider or get_active_image_provider_name(),
+            "warmed_up": False,
+            "skipped": True,
+            "state": "disabled",
+        }
+        if _truthy(os.environ.get("OMNIX_IMAGE_WARMUP_ON_LOAD", "1")):
+            warmup = await _warm_provider(provider, source="explicit load")
+        _set_model_operation("idle")
+        response = {**result, "warmup": warmup, "status": image_model_status(provider)}
+        if not warmup.get("ok"):
+            response["warning"] = "image_model_warmup_failed"
+        return response
     except Exception as exc:
+        _set_model_operation("idle")
         return {
             "ok": False,
             "provider": provider or get_active_image_provider_name(),

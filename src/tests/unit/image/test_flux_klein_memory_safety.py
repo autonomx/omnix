@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from app.image import flux_pipeline_compat
@@ -65,6 +67,45 @@ def test_pipeline_load_uses_direct_cuda_device_map(monkeypatch, tmp_path) -> Non
     assert captured["repo_or_path"] == str(tmp_path)
     assert captured["device_map"] == "cuda"
     assert provider.runtime_status()["memory_mode"] == "cuda_direct"
+
+
+def test_warmup_runs_representative_inference_without_saving_asset(monkeypatch) -> None:
+    calls = []
+
+    class FakePipeline:
+        def __call__(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(images=[object()])
+
+    provider = FluxKleinImageProvider(
+        {
+            "warmup_width": 768,
+            "warmup_height": 768,
+            "warmup_steps": 4,
+        }
+    )
+    provider._pipeline = FakePipeline()
+    provider._memory_mode = "cpu"
+    monkeypatch.setattr(flux_module, "_release_generation_memory", lambda: None)
+    monkeypatch.setattr(
+        flux_module,
+        "generated_images_root",
+        lambda: (_ for _ in ()).throw(AssertionError("warmup must not write an asset")),
+    )
+
+    first = provider.warmup()
+    second = provider.warmup()
+
+    assert first["ok"] is True
+    assert first["warmed_up"] is True
+    assert first["skipped"] is False
+    assert first["width"] == 768
+    assert first["height"] == 768
+    assert first["steps"] == 4
+    assert second["skipped"] is True
+    assert len(calls) == 1
+    assert calls[0]["num_inference_steps"] == 4
+    assert provider.runtime_status()["warmup_state"] == "completed"
 
 
 def test_generation_budget_rejects_oversized_images() -> None:
