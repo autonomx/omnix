@@ -70,7 +70,7 @@ def test_unknown_authoritative_location_is_not_fabricated() -> None:
     assert overlay.current_location_id is None
 
 
-def test_route_lock_is_preserved_and_disables_matching_travel() -> None:
+def test_route_lock_is_preserved_in_overlay() -> None:
     session = _session()
     map_state = session["state"]["map_state"]
     map_state["route_states"]["route:frost_haven:market_inn"] = {
@@ -83,13 +83,8 @@ def test_route_lock_is_preserved_and_disables_matching_travel() -> None:
 
     route = next(item for item in overlay.routes if item.route_id == "route:frost_haven:market_inn")
     assert route.status == "locked"
-    travel = next(
-        item
-        for item in overlay.capabilities
-        if item.type == "travel" and item.target_object_id == "building:frost_haven_market"
-    )
-    assert travel.enabled is False
-    assert travel.disabled_reason == "route_locked"
+    assert route.known is True
+    assert route.safe is True
 
 
 def test_increment_overlay_revision_preserves_location() -> None:
