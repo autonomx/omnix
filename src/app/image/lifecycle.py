@@ -96,6 +96,23 @@ def load_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
     return result
 
 
+def warm_image_provider(provider_name: str | None = None, *, force: bool = False) -> Dict[str, Any]:
+    provider_name = _safe_str(provider_name).strip() or get_active_image_provider_name()
+    provider = get_or_create_image_provider(provider_name)
+    warmer = getattr(provider, "warmup", None)
+    if not callable(warmer):
+        return {
+            "ok": True,
+            "provider": provider_name,
+            "warmed_up": False,
+            "skipped": True,
+            "state": "unsupported",
+        }
+    result = warmer(force=force)
+    payload = result if isinstance(result, dict) else {"ok": True, "warmed_up": True}
+    return {"provider": provider_name, **payload}
+
+
 def unload_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
     provider_name = _safe_str(provider_name).strip() or get_active_image_provider_name()
     provider_name = _safe_str(provider_name).strip().lower() or "flux_klein"
