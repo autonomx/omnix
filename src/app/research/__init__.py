@@ -20,6 +20,14 @@ from .contracts import (
     normalize_research_mode,
     resolve_research_mode,
 )
+from .source_store import (
+    RecordedResearchSources,
+    ResearchSourceManifest,
+    ResearchSourceStore,
+    canonicalize_source_url,
+    default_research_source_store,
+    stable_source_record_id,
+)
 
 __all__ = [
     "DeepResearchResult",
@@ -27,6 +35,7 @@ __all__ = [
     "RESEARCH_JOB_MODULE",
     "RESEARCH_JOB_TYPE",
     "RESEARCH_STAGE_IDS",
+    "RecordedResearchSources",
     "ResearchAnswerSection",
     "ResearchDiagnostics",
     "ResearchEvidence",
@@ -36,8 +45,13 @@ __all__ = [
     "ResearchQuery",
     "ResearchResult",
     "ResearchSource",
+    "ResearchSourceManifest",
     "ResearchSourceSnapshot",
+    "ResearchSourceStore",
     "ResearchWarning",
+    "canonicalize_source_url",
+    "default_research_source_store",
     "normalize_research_mode",
     "resolve_research_mode",
+    "stable_source_record_id",
 ]
