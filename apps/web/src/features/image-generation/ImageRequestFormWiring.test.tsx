@@ -1,32 +1,52 @@
 import { MantineProvider } from '@mantine/core';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
+import { IMAGE_REFERENCES_QUERY_KEY } from './ImageReferenceControl';
 import { ImageRequestForm } from './ImageRequestForm';
 import type { ImageRequestFormValues } from './imageRequestModel';
 
 function renderForm(onSubmit: (values: ImageRequestFormValues) => void) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
+  });
+  queryClient.setQueryData(IMAGE_REFERENCES_QUERY_KEY, {
+    assets: [{
+      id: 'image:reference-one',
+      module: 'image-generation',
+      type: 'image',
+      mime_type: 'image/png',
+      storage_path: 'generated/reference-one.png',
+      source_job_id: null,
+      created_at: '2026-07-07T00:00:00Z',
+      metadata: { title: 'Reference one', width: 768, height: 768 },
+      compat: {},
+    }],
+  });
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      <ImageRequestForm
-        defaults={{ providerId: 'image:flux_klein', width: 768, height: 768, unloadAfterGeneration: false }}
-        providers={[{
-          id: 'image:flux_klein',
-          label: 'FLUX.2 [klein] 4B',
-          family: 'image',
-          source: 'settings',
-          status: 'configured',
-          capabilities: ['image'],
-        }]}
-        pending={false}
-        onSubmit={onSubmit}
-      />
+      <QueryClientProvider client={queryClient}>
+        <ImageRequestForm
+          defaults={{ providerId: 'image:flux_klein', width: 768, height: 768, unloadAfterGeneration: false }}
+          providers={[{
+            id: 'image:flux_klein',
+            label: 'FLUX.2 [klein] 4B',
+            family: 'image',
+            source: 'settings',
+            status: 'configured',
+            capabilities: ['image'],
+          }]}
+          pending={false}
+          onSubmit={onSubmit}
+        />
+      </QueryClientProvider>
     </MantineProvider>,
   );
 }
 
 describe('ImageRequestForm wiring', () => {
-  it('submits the visible provider, aspect ratio, style, quality, and advanced controls', async () => {
+  it('submits provider, reference image, aspect ratio, style, quality, and advanced controls', async () => {
     const onSubmit = vi.fn<(values: ImageRequestFormValues) => void>();
     renderForm(onSubmit);
 
@@ -42,7 +62,10 @@ describe('ImageRequestForm wiring', () => {
     expect(screen.getByLabelText('Steps')).toHaveValue(3);
     expect(screen.getByText('3 steps')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'A real generated scene' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Use Reference one as reference' }));
+    expect(screen.getByText('1 / 2 selected')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Keep the character and change the clothing' } });
     fireEvent.change(screen.getByLabelText('Negative prompt'), { target: { value: 'blurry' } });
     fireEvent.change(screen.getByLabelText('Guidance scale'), { target: { value: '4.5' } });
     fireEvent.click(screen.getByLabelText('Unload model after generation'));
@@ -52,11 +75,12 @@ describe('ImageRequestForm wiring', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       providerId: 'image:flux_klein',
-      prompt: 'A real generated scene',
+      prompt: 'Keep the character and change the clothing',
       negativePrompt: 'blurry',
       width: '1024',
       height: '576',
       style: 'photorealistic',
+      referenceAssetIds: ['image:reference-one'],
       steps: '3',
       guidanceScale: '4.5',
       unloadAfterGeneration: true,
