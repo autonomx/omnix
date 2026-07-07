@@ -34,9 +34,13 @@ def register_rpg_map_routes(app: FastAPI) -> None:
         map_id: str,
         request: Request,
         known_definition_revision: str | None = Query(default=None),
+        session_id: str | None = Query(default=None),
     ) -> Response:
+        repository = default_map_repository()
+        if session_id:
+            repository = _session_repository(_load_session_or_404(session_id))
         try:
-            definition = default_map_repository().get(map_id)
+            definition = repository.get(map_id)
         except MapDefinitionNotFound as exc:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
         return _definition_response(definition, request, known_definition_revision)
@@ -177,7 +181,6 @@ def _etag(value: str) -> str:
 
 
 def install_rpg_map_route_hook() -> None:
-    """Install map routes before the gateway app is constructed."""
     if getattr(FastAPI, _HOOK_SENTINEL, False):
         return
     original_init: Callable[..., None] = FastAPI.__init__
