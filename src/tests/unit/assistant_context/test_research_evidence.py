@@ -36,6 +36,18 @@ def test_structured_answer_requires_fact_support_and_renders_citations() -> None
     assert rendered.validation.structured is True
 
 
+def test_structured_unknown_citation_is_rejected_and_reported() -> None:
+    raw = '{"sections":[{"kind":"fact","text":"Unsupported release claim.","citation_labels":["S999"]}]}'
+    rendered = render_answer_with_compatibility_fallback(raw, ["S1"])
+    assert rendered.validation.valid is False
+    assert rendered.validation.structured is True
+    assert rendered.validation.used_labels == ["S999"]
+    assert rendered.validation.unknown_labels == ["S999"]
+    assert rendered.validation.missing_citations is True
+    assert "unsupported citation labels were flagged" in rendered.content
+    assert "the answer could not be linked" in rendered.content
+
+
 def test_plain_text_fallback_is_visible_and_citation_constrained() -> None:
     rendered = render_answer_with_compatibility_fallback("The release is current [S1].", ["S1"])
     assert rendered.validation.valid is True
@@ -50,3 +62,4 @@ def test_missing_and_unknown_citations_are_reported() -> None:
     assert missing.missing_citations is True
     assert unknown.valid is False
     assert unknown.unknown_labels == ["S9"]
+    assert unknown.missing_citations is True
