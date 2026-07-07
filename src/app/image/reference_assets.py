@@ -7,8 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from PIL import Image, ImageOps, UnidentifiedImageError
-
 from app.assets import AssetListResponse, AssetRecord, AssetType, SharedAssetStore, default_asset_store
 from app.runtime_paths import resources_data_root
 
@@ -21,6 +19,14 @@ MAX_REFERENCE_EDGE = 1024
 
 class ImageReferenceError(ValueError):
     """Raised when a reference-image request is invalid or unavailable."""
+
+
+def _pillow():
+    try:
+        from PIL import Image, ImageOps, UnidentifiedImageError
+    except ImportError as exc:
+        raise ImageReferenceError("image_reference_runtime_missing:Pillow") from exc
+    return Image, ImageOps, UnidentifiedImageError
 
 
 def image_reference_root() -> Path:
@@ -62,6 +68,7 @@ def save_image_reference_upload(
     if normalized_mime not in SUPPORTED_REFERENCE_MIME_TYPES:
         raise ImageReferenceError(f"image_reference_unsupported_type:{normalized_mime or 'unknown'}")
 
+    Image, ImageOps, UnidentifiedImageError = _pillow()
     try:
         with Image.open(io.BytesIO(data)) as uploaded:
             uploaded.verify()
@@ -110,7 +117,7 @@ def load_image_reference_assets(
     asset_ids: Iterable[str],
     *,
     store: SharedAssetStore | None = None,
-) -> list[Image.Image]:
+) -> list[Any]:
     normalized_ids = _normalize_reference_ids(asset_ids)
     if not normalized_ids:
         return []
@@ -119,9 +126,10 @@ def load_image_reference_assets(
             f"image_reference_limit_exceeded:count={len(normalized_ids)} max={MAX_REFERENCE_COUNT}"
         )
 
+    Image, ImageOps, UnidentifiedImageError = _pillow()
     asset_store = store or default_asset_store()
     by_id = {asset.id: asset for asset in asset_store.list_assets().assets}
-    images: list[Image.Image] = []
+    images: list[Any] = []
     try:
         for asset_id in normalized_ids:
             asset = by_id.get(asset_id)
@@ -132,21 +140,28 @@ def load_image_reference_assets(
             if asset.mime_type.lower() not in SUPPORTED_REFERENCE_MIME_TYPES:
                 raise ImageReferenceError(f"image_reference_unsupported_type:{asset_id}")
             path = Path(asset.storage_path)
-            if not path.is_file() or path.stat().st_size <= 0:
+            try:
+                usable = path.is_file() and path.stat().st_size > 0
+            except OSError:
+                usable = False
+            if not usable:
                 raise ImageReferenceError(f"image_reference_file_missing:{asset_id}")
-            with Image.open(path) as source:
-                prepared = ImageOps.exif_transpose(source)
-                prepared.seek(0)
-                prepared = prepared.convert("RGB")
-                prepared.thumbnail((MAX_REFERENCE_EDGE, MAX_REFERENCE_EDGE), Image.Resampling.LANCZOS)
-                images.append(prepared.copy())
+            try:
+                with Image.open(path) as source:
+                    prepared = ImageOps.exif_transpose(source)
+                    prepared.seek(0)
+                    prepared = prepared.convert("RGB")
+                    prepared.thumbnail((MAX_REFERENCE_EDGE, MAX_REFERENCE_EDGE), Image.Resampling.LANCZOS)
+                    images.append(prepared.copy())
+            except (UnidentifiedImageError, OSError, ValueError) as exc:
+                raise ImageReferenceError(f"image_reference_invalid_image:{asset_id}:{exc}") from exc
         return images
     except Exception:
         close_image_references(images)
         raise
 
 
-def close_image_references(images: Iterable[Image.Image]) -> None:
+def close_image_references(images: Iterable[Any]) -> None:
     for image in images:
         try:
             image.close()
