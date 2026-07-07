@@ -2,6 +2,7 @@ import { Button, Text } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse } from '../../api/client';
+import './ImageReferenceControl.css';
 import { imageAssetTitle, imageAssetUrl, type ImageAsset } from './imageWorkspaceModel';
 
 export const IMAGE_REFERENCES_QUERY_KEY = ['image-generation', 'references'] as const;
