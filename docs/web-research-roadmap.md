@@ -1,6 +1,6 @@
 # Web Research Roadmap
 
-Status: canonical implementation source of truth
+Status: WSR-0 through WSR-13 implemented; final pull-request verification required on the exact head.
 
 ## Product modes
 
@@ -26,7 +26,9 @@ Malformed values resolve to `disabled`. Runtime feature availability is applied 
 - Deep Research begins with `begin_user_message`, creates and returns a durable job, then persists a normal assistant message later.
 - A partial result completes the shared job with `output.research_status = partial` and persists a readable assistant message with job and source-manifest metadata.
 - Profile defaults belong to the settings API. Conversation overrides belong to the backend chat session. Turn overrides belong to the request. Runtime state is read-only. Credentials remain environment or integration owned.
-- Compatibility accepts `web_search_mode` and `web_research_mode` for one release. `automatic` and `manual` normalize to `quick`; unknown values normalize to `disabled`.
+- The canonical request field is `web_research_mode`; canonical values are `disabled`, `quick`, and `deep` only.
+- Retired server aliases are outside the canonical model, emit warnings and telemetry, and can be disabled with `OMNIX_RESEARCH_LEGACY_ALIASES_ENABLED=0`. Their planned removal date may be exposed through `OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET`.
+- Browser compatibility mirrors, Automatic/Manual execution semantics, and manual one-turn arming state are removed.
 - DuckDuckGo Instant Answer is identified as a limited keyless fallback, not comprehensive web search.
 - Source identity and retrieval state are separate. `ResearchSource` is stable provenance; `ResearchSourceSnapshot` is one versioned search or extraction observation.
 - Durable source IDs are separate from human citation labels such as `S1`.
@@ -35,72 +37,40 @@ Malformed values resolve to `disabled`. Runtime feature availability is applied 
 - Structured synthesis is preferred. Quick Search retains a citation-constrained plain-text fallback when a provider emits invalid structured output.
 - Quick and Deep use one shared outbound-web policy for URL validation, DNS and redirects, response limits, MIME validation, TLS, and extraction.
 
-## Phase sequence
+## Completed phase sequence
 
-### WSR-0 — Contracts, ownership, precedence, and compatibility
+- [x] WSR-0 — Contracts, ownership, precedence, and compatibility
+- [x] WSR-1 — Composer, central default, and session persistence
+- [x] WSR-2A — Quick Search execution
+- [x] WSR-2B — Canonical sources and snapshots
+- [x] WSR-3 — Shared outbound-web and extraction policy
+- [x] WSR-3C — Quick Search evidence and citations
+- [x] WSR-4 — Durable Deep Research jobs
+- [x] WSR-5 — Dedicated research planner
+- [x] WSR-6 — Iterative executor
+- [x] WSR-7 — Structured Deep Research synthesis
+- [x] WSR-8 — Progress and research-details UI
+- [x] WSR-9 — Cache, limits, privacy, and retention
+- [x] WSR-10 — Advanced Settings integration
+- [x] WSR-11 — Evaluation and adversarial gates
+- [x] WSR-12 — Controlled rollout
+- [x] WSR-13 — Compatibility retirement
 
-Canonical modes, precedence, settings ownership, compatibility normalization, discriminated results, source/snapshot identities, job constants, and message metadata.
+## Production gates
 
-### WSR-1 — Composer, central default, and session persistence
+The completed implementation includes:
 
-Three-mode UI, profile default, backend conversation override, turn override, exact browser migration, and removal of manual arming.
+- one logical Quick Search query with bounded transport retries and a total deadline;
+- Brave, Tavily, and explicitly limited DuckDuckGo Instant Answer provider semantics;
+- canonical source records, snapshots, stable source IDs, and separate citation labels;
+- shared outbound-web SSRF, DNS-rebinding, redirect, size, MIME, and extraction controls;
+- structured Quick and Deep citations with visible fallback validation;
+- durable Deep Research jobs with cancellation, checkpoints, resume, partial completion, and normal chat persistence;
+- dedicated local and Hermes planning schemas with post-parse budget enforcement;
+- evidence, conflict, limitation, source, and progress UI;
+- centralized provider, budget, cache, retention, diagnostics, and capability settings;
+- deterministic adversarial fixtures for provider degradation, SSRF, redirects, prompt injection, citations, structured output, cancellation, resume, privacy, and partial results;
+- deterministic rollout cohorts, master rollback, separate Quick/local-Deep/Hermes releases, and explicit downgrade consent;
+- compatibility telemetry and a server-controlled alias sunset.
 
-### WSR-2A — Quick Search execution
-
-One logical query, bounded attempts, total deadline, provider adapters, coverage diagnostics, and safe failure behavior.
-
-### WSR-2B — Canonical sources and snapshots
-
-Stable IDs, citation labels, canonical URLs, deduplication, persistence, and source manifests.
-
-### WSR-3 — Shared outbound-web and extraction policy
-
-SSRF controls, DNS and redirect validation, fetch limits, content validation, readable extraction, hashes, and retention metadata.
-
-### WSR-3C — Quick Search evidence and citations
-
-Structured evidence, structured answer path, plain-text fallback, citation validation, persisted manifests, and source UI.
-
-### WSR-4 — Durable Deep Research jobs
-
-Shared job lifecycle, research stages, non-blocking chat flow, checkpoints, cancellation, resume, and partial assistant-message persistence.
-
-### WSR-5 — Dedicated research planner
-
-Dedicated Hermes schema and method, no general tool catalog, deterministic fallback, and post-parse budget enforcement.
-
-### WSR-6 — Iterative executor
-
-Bounded search/extract/evaluate loop, evidence and conflict records, stop conditions, and resume.
-
-### WSR-7 — Structured Deep Research synthesis
-
-Evidence-linked facts, inferences, limitations, recommendations, citation validation, conflicts, and partial completion.
-
-### WSR-8 — Progress and research-details UI
-
-Stage progress, refresh recovery, cancellation, source/snapshot details, conflicts, warnings, and accessibility announcements.
-
-### WSR-9 — Cache, limits, privacy, and retention
-
-Search and extraction caches, limits, privacy boundaries, expiry, and cleanup.
-
-### WSR-10 — Advanced Settings integration
-
-Provider, budgets, retention, runtime status, diagnostics, and capability availability.
-
-### WSR-11 — Evaluation and adversarial gates
-
-Provider, retry, SSRF, redirect, prompt-injection, structured-output, citation, cancellation, resume, and partial-result fixtures.
-
-### WSR-12 — Controlled rollout
-
-Feature flags, Quick rollout, local Deep planner rollout, Hermes rollout, explicit downgrade behavior, and rollback.
-
-### WSR-13 — Compatibility retirement
-
-Remove legacy request fields and modes, browser compatibility mirrors, manual-search state, and temporary migration code.
-
-## First production milestone
-
-Deep Research does not start until Disabled and Quick Search provide explicit precedence, central and conversation defaults, one bounded logical query, an honest provider coverage label, canonical sources and snapshots, stable citations, safe extraction, structured evidence, citation validation, plain-text fallback, diagnostics, and deterministic SSRF and prompt-injection fixtures.
+Deep Research production rollout remains controlled by the WSR-12 release policy and the Settings Control Center Deep Research enablement flag.
