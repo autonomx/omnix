@@ -117,7 +117,10 @@ def register_assistant_context_routes(
             )
 
         request.web_research_mode = decision.effective_mode
-        request.internal_research_warnings = list(decision.warnings)
+        request.internal_research_warnings = [
+            *request.internal_research_warnings,
+            *decision.warnings,
+        ]
         policy = policy_factory() if policy_factory is not None else settings.policy
         request.internal_research_identity = session_id
         request.internal_research_provider = settings.provider
@@ -211,6 +214,7 @@ def register_assistant_context_routes(
                     "context_sources": [item.source_id for item in context.items],
                     "context_diagnostics": context.diagnostics,
                     "research_release": decision.model_dump(mode="json"),
+                    "research_compatibility_warnings": request.internal_research_warnings,
                 },
                 compat={"contract": "assistant_context_chat_v1"},
             )
@@ -249,6 +253,7 @@ def _begin_deep_research(
             "research_effective_mode": decision.effective_mode,
             "research_release_status": decision.status,
             "research_release_reason": decision.reason,
+            "research_compatibility_warnings": request.internal_research_warnings,
         },
     )
     if appended is None:
@@ -275,6 +280,7 @@ def _begin_deep_research(
                     "dry_run": request.dry_run,
                     "diagnostics_enabled": settings.show_diagnostics,
                     "research_release": decision.model_dump(mode="json"),
+                    "research_compatibility_warnings": request.internal_research_warnings,
                 },
             )
         )
