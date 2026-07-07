@@ -7,6 +7,7 @@ from collections.abc import Callable
 from fastapi import FastAPI, HTTPException
 
 from app.chat import ChatSessionStore, SendChatMessageRequest, SendChatMessageResponse, default_chat_store
+from app.chat.research_citations import validate_completed_research_reply
 from app.jobs import CreateJobRequest, ResourceClass, SQLiteJobStore, default_job_store
 
 from .models import AssistantContextChatRequest
@@ -36,22 +37,33 @@ def register_assistant_context_routes(
         request: AssistantContextChatRequest,
     ) -> SendChatMessageResponse:
         context = await asyncio.to_thread(context_service_factory().build, request)
+        context_items = [item.model_dump(mode="json") for item in context.items]
         send_request = SendChatMessageRequest(
             content=request.content,
             provider_id=request.provider_id,
             model_id=request.model_id,
             agent_mode=request.agent_mode,
             dry_run=request.dry_run,
+            research_mode=request.web_research_mode,
         )
-        appended = chat_store_factory().append_user_message(
+        chat_store = chat_store_factory()
+        appended = chat_store.append_user_message(
             session_id,
             send_request,
-            context_items=[item.model_dump(mode="json") for item in context.items],
+            context_items=context_items,
             context_diagnostics=context.diagnostics,
         )
         if appended is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         session, user_message = appended
+        validated = validate_completed_research_reply(
+            chat_store,
+            session.id,
+            user_message.id,
+            context_items,
+        )
+        if validated is not None:
+            session = validated
         job = job_store_factory().create_job(
             CreateJobRequest(
                 module="chatbot",
