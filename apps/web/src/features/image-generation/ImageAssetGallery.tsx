@@ -97,7 +97,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
           {visibleAssets.map((asset) => {
             const title = imageAssetTitle(asset);
             const selected = asset.id === selectedAssetId;
-            const deleting = asset.id === deleteAssetMutation.variables;
+            const deleting = deleteAssetMutation.isPending && asset.id === deleteAssetMutation.variables;
             return (
               <article className={`image-asset-card ${selected ? 'selected' : ''}`} key={asset.id}>
                 <div className="image-asset-select">
