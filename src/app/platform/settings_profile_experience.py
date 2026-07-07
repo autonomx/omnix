@@ -1,4 +1,6 @@
 """User experience settings profile models."""
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.research import ResearchMode
@@ -22,23 +24,37 @@ class AssistantSettingsProfile(BaseModel):
     streaming_audio: bool = Field(default=True, alias="streamingAudio")
 
     research_default_mode: ResearchMode = Field(default="disabled", alias="researchDefaultMode")
-    research_provider: str = Field(default="duckduckgo", alias="researchProvider")
-    research_max_results: int = Field(default=5, alias="researchMaxResults")
-    research_max_steps: int = Field(default=6, alias="researchMaxSteps")
-    research_max_queries: int = Field(default=5, alias="researchMaxQueries")
-    research_max_sources: int = Field(default=12, alias="researchMaxSources")
-    research_max_extracts: int = Field(default=8, alias="researchMaxExtracts")
+    research_provider: Literal["duckduckgo", "brave", "tavily"] = Field(
+        default="duckduckgo",
+        alias="researchProvider",
+    )
+    research_max_results: int = Field(default=5, ge=1, le=8, alias="researchMaxResults")
+    research_max_steps: int = Field(default=6, ge=1, le=12, alias="researchMaxSteps")
+    research_max_queries: int = Field(default=5, ge=1, le=10, alias="researchMaxQueries")
+    research_max_sources: int = Field(default=12, ge=1, le=30, alias="researchMaxSources")
+    research_max_extracts: int = Field(default=8, ge=0, le=20, alias="researchMaxExtracts")
     research_search_cache_ttl_seconds: int = Field(
         default=300,
+        ge=1,
+        le=86400,
         alias="researchSearchCacheTtlSeconds",
     )
     research_extraction_cache_ttl_seconds: int = Field(
         default=3600,
+        ge=1,
+        le=604800,
         alias="researchExtractionCacheTtlSeconds",
     )
-    research_raw_retention_days: int = Field(default=7, alias="researchRawRetentionDays")
+    research_raw_retention_days: int = Field(
+        default=7,
+        ge=0,
+        le=365,
+        alias="researchRawRetentionDays",
+    )
     research_manifest_retention_days: int = Field(
         default=30,
+        ge=1,
+        le=3650,
         alias="researchManifestRetentionDays",
     )
     research_show_diagnostics: bool = Field(default=True, alias="researchShowDiagnostics")
