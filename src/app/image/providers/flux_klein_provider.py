@@ -6,6 +6,7 @@ import gc
 import inspect
 import os
 import threading
+import time
 from typing import Any, Dict
 
 import torch
@@ -87,6 +88,10 @@ class FluxKleinImageProvider(BaseImageProvider):
         super().__init__(config)
         self._pipeline = None
         self._memory_mode = "unloaded"
+        self._warmed_up = False
+        self._warmup_state = "not_started"
+        self._warmup_error = ""
+        self._warmup_duration_ms: int | None = None
 
     def load(self):
         self._ensure_pipeline()
@@ -103,6 +108,10 @@ class FluxKleinImageProvider(BaseImageProvider):
             "cuda_available": torch.cuda.is_available(),
             "cuda_free_gib": round(memory[0], 2) if memory else None,
             "cuda_total_gib": round(memory[1], 2) if memory else None,
+            "warmed_up": self._warmed_up,
+            "warmup_state": self._warmup_state,
+            "warmup_error": self._warmup_error,
+            "warmup_duration_ms": self._warmup_duration_ms,
         }
 
     def _repo_id(self) -> str:
@@ -265,12 +274,92 @@ class FluxKleinImageProvider(BaseImageProvider):
             self._pipeline = pipe
             return self._pipeline
 
+    def warmup(self, *, force: bool = False) -> Dict[str, Any]:
+        """Run a representative inference pass without writing an image asset."""
+
+        if self._warmed_up and not force:
+            return {
+                "ok": True,
+                "warmed_up": True,
+                "skipped": True,
+                "state": self._warmup_state,
+                "duration_ms": self._warmup_duration_ms,
+            }
+
+        width = max(128, _safe_int(self.config.get("warmup_width"), 768))
+        height = max(128, _safe_int(self.config.get("warmup_height"), 768))
+        steps = max(1, _safe_int(self.config.get("warmup_steps"), 4))
+        guidance_scale = _safe_float(self.config.get("warmup_guidance_scale"), 1.0)
+        started = time.perf_counter()
+
+        with _GENERATE_LOCK:
+            output = None
+            pipe = None
+            self._warmed_up = False
+            self._warmup_state = "running"
+            self._warmup_error = ""
+            try:
+                pipe = self._ensure_pipeline()
+                budget_error = self._generation_budget_error(width, height)
+                if budget_error:
+                    raise RuntimeError(budget_error)
+                kwargs: Dict[str, Any] = {
+                    "prompt": "simple warmup image, single softly glowing lantern, no text",
+                    "negative_prompt": "text, watermark, logo",
+                    "width": width,
+                    "height": height,
+                    "num_inference_steps": steps,
+                    "guidance_scale": guidance_scale,
+                    "generator": torch.Generator(device="cpu").manual_seed(1),
+                }
+                with torch.inference_mode():
+                    output = pipe(**kwargs)
+                    images = getattr(output, "images", None)
+                    if images:
+                        _ = images[0]
+                with contextlib.suppress(Exception):
+                    if torch.cuda.is_available():
+                        torch.cuda.synchronize()
+                self._warmup_duration_ms = round((time.perf_counter() - started) * 1000)
+                self._warmed_up = True
+                self._warmup_state = "completed"
+                return {
+                    "ok": True,
+                    "warmed_up": True,
+                    "skipped": False,
+                    "state": self._warmup_state,
+                    "duration_ms": self._warmup_duration_ms,
+                    "width": width,
+                    "height": height,
+                    "steps": steps,
+                }
+            except Exception as exc:
+                self._warmup_duration_ms = round((time.perf_counter() - started) * 1000)
+                self._warmup_error = _safe_str(exc).strip() or repr(exc)
+                self._warmup_state = "failed"
+                return {
+                    "ok": False,
+                    "warmed_up": False,
+                    "skipped": False,
+                    "state": self._warmup_state,
+                    "duration_ms": self._warmup_duration_ms,
+                    "error": self._warmup_error,
+                }
+            finally:
+                output = None
+                pipe = None
+                _release_generation_memory()
+
     def unload(self):
         with _GENERATE_LOCK:
             with _PIPELINE_LOCK:
                 pipe = self._pipeline
                 self._pipeline = None
                 self._memory_mode = "unloaded"
+                self._warmed_up = False
+                self._warmup_state = "not_started"
+                self._warmup_error = ""
+                self._warmup_duration_ms = None
 
             with contextlib.suppress(Exception):
                 del pipe
