@@ -16,11 +16,15 @@ class DeepResearchJobInput(BaseModel):
     question: str
     provider_id: str | None = None
     model_id: str | None = None
+    research_provider: str = "duckduckgo"
     source_manifest_id: str | None = None
     max_steps: int = Field(default=6, ge=1, le=12)
     max_queries: int = Field(default=5, ge=1, le=10)
     max_sources: int = Field(default=12, ge=1, le=30)
     max_extracts: int = Field(default=8, ge=0, le=20)
+    search_cache_ttl_seconds: int = Field(default=300, ge=1, le=86400)
+    extraction_cache_ttl_seconds: int = Field(default=3600, ge=1, le=604800)
+    hermes_planner_enabled: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
