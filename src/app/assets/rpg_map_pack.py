@@ -14,6 +14,7 @@ _ASSET_FILES: dict[str, str] = {
     "asset:rpg-map:northern-pass-base": "region-background.svg",
     "asset:rpg-map:frosted-flagon-interior-base": "interior-background.svg",
     "asset:rpg-map:timber-inn-01": "timber-building.svg",
+    "asset:rpg-map:stone-building-01": "stone-building.svg",
     "asset:rpg-map:smithy-01": "stone-building.svg",
     "asset:rpg-map:market-hall-01": "timber-building.svg",
     "asset:rpg-map:shrine-01": "stone-building.svg",
