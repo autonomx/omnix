@@ -14,6 +14,7 @@ from app.rpg.map_overlay_projection import merge_dynamic_overlay_payload, projec
 from app.rpg.map_projection import project_session_map_overlay
 from app.rpg.map_repository import MapDefinitionNotFound, default_map_repository
 from app.rpg.map_serialization import canonical_map_json
+from app.rpg.map_world_integration import MapWorldIntegrationError, map_repository_for_session
 from app.rpg.session.service import load_session, save_session
 
 _ROUTE_SENTINEL = "_omnix_rpg_map_routes_registered"
@@ -38,17 +39,22 @@ def register_rpg_map_routes(app: FastAPI) -> None:
             definition = default_map_repository().get(map_id)
         except MapDefinitionNotFound as exc:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
-        etag = _etag(definition.definition_revision)
-        headers = {"Cache-Control": MAP_DEFINITION_CACHE_CONTROL, "ETag": etag}
-        if request.headers.get("if-none-match") == etag:
-            return Response(status_code=304, headers=headers)
-        include_definition = known_definition_revision != definition.definition_revision
-        return JSONResponse({
-            "ok": True,
-            "map_id": map_id,
-            "definition_revision": definition.definition_revision,
-            "definition": _payload(definition) if include_definition else None,
-        }, headers=headers)
+        return _definition_response(definition, request, known_definition_revision)
+
+    @app.get("/api/rpg/sessions/{session_id}/maps/{map_id}", tags=["rpg-map"], include_in_schema=False)
+    def rpg_session_map_definition(
+        session_id: str,
+        map_id: str,
+        request: Request,
+        known_definition_revision: str | None = Query(default=None),
+    ) -> Response:
+        session = _load_session_or_404(session_id)
+        repository = _session_repository(session)
+        try:
+            definition = repository.get(map_id)
+        except MapDefinitionNotFound as exc:
+            raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
+        return _definition_response(definition, request, known_definition_revision)
 
     @app.get("/api/rpg/sessions/{session_id}/maps/{map_id}/overlay", tags=["rpg-map"], include_in_schema=False)
     def rpg_map_overlay(session_id: str, map_id: str) -> Response:
@@ -70,8 +76,9 @@ def register_rpg_map_routes(app: FastAPI) -> None:
     async def rpg_map_action(session_id: str, map_id: str, request: Request) -> Response:
         session = _load_session_or_404(session_id)
         action_request = _map_action_request(await request.json())
+        repository = _session_repository(session)
         try:
-            result = apply_map_action(session, map_id, action_request)
+            result = apply_map_action(session, map_id, action_request, repository)
         except MapDefinitionNotFound as exc:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
         except MapActionError as exc:
@@ -98,6 +105,19 @@ def register_rpg_map_routes(app: FastAPI) -> None:
         }, headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL})
 
 
+def _definition_response(definition: Any, request: Request, known_revision: str | None) -> Response:
+    etag = _etag(definition.definition_revision)
+    headers = {"Cache-Control": MAP_DEFINITION_CACHE_CONTROL, "ETag": etag}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return JSONResponse({
+        "ok": True,
+        "map_id": definition.map_id,
+        "definition_revision": definition.definition_revision,
+        "definition": _payload(definition) if known_revision != definition.definition_revision else None,
+    }, headers=headers)
+
+
 def _load_session_or_404(session_id: str) -> dict[str, Any]:
     session = load_session(session_id)
     if not session:
@@ -105,10 +125,21 @@ def _load_session_or_404(session_id: str) -> dict[str, Any]:
     return session
 
 
-def _definition_and_overlay(session: dict[str, Any], map_id: str) -> tuple[Any, Any]:
+def _session_repository(session: dict[str, Any]) -> Any:
     try:
-        definition = default_map_repository().get(map_id)
-        overlay = project_session_map_overlay(session, map_id)
+        return map_repository_for_session(session)
+    except MapWorldIntegrationError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"ok": False, "error": exc.code, "reason": exc.detail or exc.code},
+        ) from exc
+
+
+def _definition_and_overlay(session: dict[str, Any], map_id: str) -> tuple[Any, Any]:
+    repository = _session_repository(session)
+    try:
+        definition = repository.get(map_id)
+        overlay = project_session_map_overlay(session, map_id, repository)
         return definition, overlay
     except MapDefinitionNotFound as exc:
         raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
