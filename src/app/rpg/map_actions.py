@@ -79,7 +79,7 @@ def apply_map_action(
     if request.route_id and capability.route_id and request.route_id != capability.route_id:
         raise MapActionError("route_identity_mismatch", status_code=409)
     if not capability.enabled:
-        reason = capability.disabled_reason or "map_action_disabled"
+        reason = _authoritative_route_reason(session, capability.route_id) or capability.disabled_reason or "map_action_disabled"
         raise MapActionError(reason, reason=reason, status_code=409)
 
     updated = deepcopy(dict(session))
@@ -162,6 +162,16 @@ def _existing_action(session: Mapping[str, object], client_action_id: str | None
             result = item.get("result")
             return result if isinstance(result, Mapping) else item
     return None
+
+
+def _authoritative_route_reason(session: Mapping[str, object], route_id: str | None) -> str:
+    if not route_id:
+        return ""
+    state = session.get("state") if isinstance(session.get("state"), Mapping) else {}
+    map_state = state.get("map_state") if isinstance(state.get("map_state"), Mapping) else {}
+    route_states = map_state.get("route_states") if isinstance(map_state.get("route_states"), Mapping) else {}
+    route_state = route_states.get(route_id) if isinstance(route_states.get(route_id), Mapping) else {}
+    return str(route_state.get("reason") or "").strip()
 
 
 def _record_action(map_state: dict[str, object], request: MapActionRequest, result: Mapping[str, object]) -> None:
