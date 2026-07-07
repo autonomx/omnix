@@ -40,6 +40,13 @@ type ResearchRuntimeStatus = {
       hermes_planner: boolean;
     };
   };
+  compatibility: {
+    aliases_enabled: boolean;
+    sunset: string | null;
+    total_legacy_requests: number;
+    alias_counts: Record<string, number>;
+    canonical_field: string;
+  };
   deep_enabled: boolean;
   hermes_planner_enabled: boolean;
   diagnostics_enabled: boolean;
@@ -126,11 +133,7 @@ export function ResearchSettingsSection() {
           value={runtime ? `${runtime.provider.provider} · ${runtime.provider.available ? 'Ready' : 'Credential required'}` : 'Checking'}
           tone={runtime?.provider.available ? 'ready' : runtime ? 'warning' : 'idle'}
         />
-        <SettingsStatusRow
-          label="Coverage"
-          value={runtime?.provider.coverage ?? 'Not reported'}
-          tone="neutral"
-        />
+        <SettingsStatusRow label="Coverage" value={runtime?.provider.coverage ?? 'Not reported'} tone="neutral" />
         <SettingsStatusRow
           label="Credentials"
           value={runtime ? (runtime.provider.credential_required ? (runtime.provider.credential_configured ? 'Configured' : 'Not configured') : 'Not required') : 'Checking'}
@@ -149,12 +152,22 @@ export function ResearchSettingsSection() {
         <SettingsStatusRow
           label="Deep Research release"
           value={runtime ? `${runtime.release.availability.deep ? 'Available' : 'Unavailable'} · ${runtime.release.deep_local_percentage}% cohort` : 'Checking'}
-          tone={runtime?.release.availability.deep ? 'ready' : runtime ? 'idle' : 'idle'}
+          tone={runtime?.release.availability.deep ? 'ready' : 'idle'}
         />
         <SettingsStatusRow
           label="Hermes planner release"
           value={runtime ? `${runtime.release.availability.hermes_planner ? 'Available' : 'Not released'} · ${runtime.release.hermes_percentage}% cohort` : 'Checking'}
           tone={runtime?.release.availability.hermes_planner ? 'ready' : 'idle'}
+        />
+        <SettingsStatusRow
+          label="Legacy request aliases"
+          value={runtime ? (runtime.compatibility.aliases_enabled ? `Temporary · sunset ${runtime.compatibility.sunset ?? 'not scheduled'}` : 'Disabled') : 'Checking'}
+          tone={runtime?.compatibility.aliases_enabled ? 'warning' : runtime ? 'ready' : 'idle'}
+        />
+        <SettingsStatusRow
+          label="Legacy alias requests"
+          value={runtime ? `${runtime.compatibility.total_legacy_requests} observed · canonical ${runtime.compatibility.canonical_field}` : 'Checking'}
+          tone={runtime?.compatibility.total_legacy_requests ? 'warning' : 'neutral'}
         />
       </div>
       <p className="settings-inline-status" role="status">{statusMessage}</p>
