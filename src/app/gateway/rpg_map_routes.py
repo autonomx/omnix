@@ -9,6 +9,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
+from app.rpg.map_overlay_projection import merge_dynamic_overlay_payload, project_dynamic_map_overlay
 from app.rpg.map_projection import project_session_map_overlay
 from app.rpg.map_repository import MapDefinitionNotFound, default_map_repository
 from app.rpg.map_serialization import canonical_map_json
@@ -66,12 +67,15 @@ def register_rpg_map_routes(app: FastAPI) -> None:
                 detail={"ok": False, "error": "session_not_found", "session_id": session_id},
             )
         try:
+            definition = default_map_repository().get(map_id)
             overlay = project_session_map_overlay(session, map_id)
         except MapDefinitionNotFound as exc:
             raise HTTPException(
                 status_code=404,
                 detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id},
             ) from exc
+        dynamic = project_dynamic_map_overlay(session, definition)
+        overlay_payload = merge_dynamic_overlay_payload(_payload(overlay), dynamic)
         etag = _etag(f"{overlay.definition_revision}:{overlay.overlay_revision}:{overlay.session_turn_index}")
         return JSONResponse(
             {
@@ -80,7 +84,7 @@ def register_rpg_map_routes(app: FastAPI) -> None:
                 "definition_revision": overlay.definition_revision,
                 "overlay_revision": overlay.overlay_revision,
                 "session_turn_index": overlay.session_turn_index,
-                "overlay": _payload(overlay),
+                "overlay": overlay_payload,
             },
             headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL, "ETag": etag},
         )
