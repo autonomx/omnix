@@ -25,6 +25,7 @@ class ImageGenerateInput(BaseModel):
     width: int = Field(default=768, ge=128, le=4_096)
     height: int = Field(default=768, ge=128, le=4_096)
     style: str = Field(default="", max_length=200)
+    reference_asset_ids: list[str] = Field(default_factory=list, max_length=2)
     seed: int | None = Field(default=None, ge=0)
     steps: int | None = Field(default=None, ge=1, le=200)
     guidance_scale: float | None = Field(default=None, ge=0, le=100)
@@ -36,6 +37,18 @@ class ImageGenerateInput(BaseModel):
     @classmethod
     def normalize_text(cls, value: Any) -> str:
         return str(value or "").strip()
+
+    @field_validator("reference_asset_ids", mode="before")
+    @classmethod
+    def normalize_reference_asset_ids(cls, value: Any) -> list[str]:
+        if not isinstance(value, (list, tuple)):
+            return []
+        result: list[str] = []
+        for item in value:
+            normalized = str(item or "").strip()
+            if normalized and normalized not in result:
+                result.append(normalized)
+        return result
 
     @field_validator("width", "height")
     @classmethod
@@ -57,11 +70,12 @@ class ImageGenerateInput(BaseModel):
             "width": self.width,
             "height": self.height,
             "style": self.style,
+            "reference_asset_ids": list(self.reference_asset_ids),
             "seed": self.seed,
             "steps": self.steps,
             "guidance_scale": self.guidance_scale,
             "unload_after_generation": self.unload_after_generation,
-            "no_cache": self.no_cache,
+            "no_cache": self.no_cache or bool(self.reference_asset_ids),
             "metadata": dict(self.metadata),
         }
 
