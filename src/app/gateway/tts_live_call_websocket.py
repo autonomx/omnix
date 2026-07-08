@@ -7,6 +7,7 @@ import json
 import threading
 import time
 from contextlib import suppress
+from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable
 
@@ -37,6 +38,13 @@ TTS_PCM_FRAME_SAMPLES = 2_400  # 100 ms at 24 kHz.
 FrameMessage = tuple[str, bytes | None, int, dict[str, Any]]
 
 
+@dataclass
+class ConnectionState:
+    stop_event: threading.Event
+    requests: asyncio.Queue[dict[str, Any] | None]
+    active_frames: asyncio.Queue[FrameMessage] | None = None
+
+
 def _connection_details(websocket: WebSocket) -> dict[str, Any]:
     client = websocket.client
     return {
@@ -54,10 +62,71 @@ def _phrase_index(payload: dict[str, Any]) -> int | None:
     return value if isinstance(value, int) and value >= 0 else None
 
 
+def _stop_connection(state: ConnectionState, reason: str) -> None:
+    if state.stop_event.is_set():
+        return
+    state.stop_event.set()
+    if state.active_frames is not None:
+        state.active_frames.put_nowait(
+            ("client_disconnect", None, DEFAULT_SAMPLE_RATE, {"reason": reason})
+        )
+    state.requests.put_nowait(None)
+
+
+async def _receive_messages(websocket: WebSocket, state: ConnectionState) -> None:
+    """Receive requests and cancellation while phrase audio is being produced."""
+    try:
+        while not state.stop_event.is_set():
+            raw_message = await websocket.receive_text()
+            try:
+                payload = json.loads(raw_message)
+            except json.JSONDecodeError as exc:
+                await websocket.send_json(
+                    {"type": "error", "message": f"Invalid JSON: {exc}"}
+                )
+                continue
+            if not isinstance(payload, dict):
+                await websocket.send_json(
+                    {"type": "error", "message": "TTS message must be an object."}
+                )
+                continue
+            message_type = payload.get("type")
+            if message_type == "close":
+                _stop_connection(state, str(payload.get("reason") or "client-close"))
+                return
+            if message_type == "diagnostic":
+                stream_id = normalize_stream_id(payload.get("stream_id"))
+                event = str(payload.get("event") or "diagnostic")[:120]
+                details = payload.get("details")
+                normalized_details = details if isinstance(details, dict) else {}
+                stream_log(
+                    stream_id,
+                    "client",
+                    event,
+                    persistent_connection=True,
+                    **normalized_details,
+                )
+                continue
+            if message_type == "synthesize":
+                await state.requests.put(payload)
+                continue
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "message": "unsupported_message_type",
+                    "received_type": message_type,
+                }
+            )
+    except WebSocketDisconnect:
+        _stop_connection(state, "websocket-disconnected")
+    except Exception as exc:  # pragma: no cover - defensive receiver guard.
+        _stop_connection(state, f"receiver-failed:{type(exc).__name__}")
+
+
 async def _stream_phrase(
     websocket: WebSocket,
     payload: dict[str, Any],
-    connection_stop: threading.Event,
+    state: ConnectionState,
 ) -> None:
     """Generate and send one phrase without closing the turn websocket."""
     phrase_index = _phrase_index(payload)
@@ -125,7 +194,11 @@ async def _stream_phrase(
 
         provider = get_tts_provider()
         if provider is None or not hasattr(provider, "generate_audio_stream"):
-            message = "tts_provider_unavailable" if provider is None else "tts_provider_streaming_unavailable"
+            message = (
+                "tts_provider_unavailable"
+                if provider is None
+                else "tts_provider_streaming_unavailable"
+            )
             stream_log(stream_id, "server", "request_rejected", reason=message)
             await websocket.send_json(
                 {
@@ -147,9 +220,10 @@ async def _stream_phrase(
         )
         loop = asyncio.get_running_loop()
         frames: asyncio.Queue[FrameMessage] = asyncio.Queue()
+        state.active_frames = frames
 
         def stopped() -> bool:
-            return connection_stop.is_set() or phrase_stop.is_set()
+            return state.stop_event.is_set() or phrase_stop.is_set()
 
         def emit(message: FrameMessage) -> None:
             if not stopped():
@@ -161,7 +235,12 @@ async def _stream_phrase(
             raw_chunk_count = 0
             queued_frame_count = 0
             produced_samples = 0
-            stream_log(stream_id, "provider", "producer_thread_started", phrase_index=phrase_index)
+            stream_log(
+                stream_id,
+                "provider",
+                "producer_thread_started",
+                phrase_index=phrase_index,
+            )
             try:
                 stream_kwargs: dict[str, Any] = {
                     "chunk_size": request.chunk_size,
@@ -176,7 +255,12 @@ async def _stream_phrase(
                     stream_kwargs["max_new_tokens"] = request.max_new_tokens
                 if request.parity_mode is not None:
                     stream_kwargs["parity_mode"] = request.parity_mode
-                stream_log(stream_id, "provider", "generation_started", stream_kwargs=stream_kwargs)
+                stream_log(
+                    stream_id,
+                    "provider",
+                    "generation_started",
+                    stream_kwargs=stream_kwargs,
+                )
 
                 def raw_chunks():
                     nonlocal last_raw_chunk_at, produced_samples, raw_chunk_count
@@ -208,7 +292,9 @@ async def _stream_phrase(
                             interval_ms=round((now - last_raw_chunk_at) * 1000, 3),
                             generation_elapsed_ms=round(elapsed_ms, 3),
                             cumulative_audio_ms=round(audio_ms, 3),
-                            generation_rtf=round(elapsed_ms / audio_ms, 5) if audio_ms else None,
+                            generation_rtf=(
+                                round(elapsed_ms / audio_ms, 5) if audio_ms else None
+                            ),
                             provider_timing=timing,
                             stop_requested=stopped(),
                         )
@@ -224,7 +310,10 @@ async def _stream_phrase(
                     metadata = {
                         "frame_index": queued_frame_count,
                         "provider_timing": timing,
-                        "producer_elapsed_ms": round((time.perf_counter() - producer_started_at) * 1000, 3),
+                        "producer_elapsed_ms": round(
+                            (time.perf_counter() - producer_started_at) * 1000,
+                            3,
+                        ),
                     }
                     queued_frame_count += 1
                     emit(("chunk", pcm_bytes, sample_rate, metadata))
@@ -238,15 +327,30 @@ async def _stream_phrase(
                         bytes=len(pcm_bytes),
                     )
                 emit(("done", None, DEFAULT_SAMPLE_RATE, {}))
-            except Exception as exc:  # pragma: no cover - surfaced to the browser.
-                stream_log(stream_id, "provider", "generation_failed", error=repr(exc))
-                emit(("error", None, DEFAULT_SAMPLE_RATE, {"message": str(exc) or "TTS stream failed."}))
+            except Exception as exc:  # pragma: no cover - surfaced to browser.
+                stream_log(
+                    stream_id,
+                    "provider",
+                    "generation_failed",
+                    error=repr(exc),
+                )
+                emit(
+                    (
+                        "error",
+                        None,
+                        DEFAULT_SAMPLE_RATE,
+                        {"message": str(exc) or "TTS stream failed."},
+                    )
+                )
             finally:
                 stream_log(
                     stream_id,
                     "provider",
                     "producer_thread_finished",
-                    elapsed_ms=round((time.perf_counter() - producer_started_at) * 1000, 3),
+                    elapsed_ms=round(
+                        (time.perf_counter() - producer_started_at) * 1000,
+                        3,
+                    ),
                     raw_chunk_count=raw_chunk_count,
                     queued_frame_count=queued_frame_count,
                     produced_samples=produced_samples,
@@ -259,13 +363,26 @@ async def _stream_phrase(
             daemon=True,
         )
         producer.start()
-        stream_log(stream_id, "server", "producer_thread_launched", producer_thread_name=producer.name)
+        stream_log(
+            stream_id,
+            "server",
+            "producer_thread_launched",
+            producer_thread_name=producer.name,
+        )
 
         started = False
         current_sample_rate = DEFAULT_SAMPLE_RATE
         last_send_at = route_started_at
         while True:
             message_type, pcm_bytes, sample_rate, metadata = await frames.get()
+            if message_type == "client_disconnect":
+                stream_log(
+                    stream_id,
+                    "server",
+                    "client_disconnect_observed",
+                    metadata=metadata,
+                )
+                return
             if message_type == "chunk" and pcm_bytes is not None:
                 if not started or sample_rate != current_sample_rate:
                     current_sample_rate = sample_rate
@@ -297,8 +414,14 @@ async def _stream_phrase(
                     samples=frame_samples,
                     sample_rate=current_sample_rate,
                     send_duration_ms=round((sent_at - send_started_at) * 1000, 3),
-                    interval_since_previous_send_ms=round((sent_at - last_send_at) * 1000, 3),
-                    cumulative_audio_ms=round(sent_samples * 1000 / max(1, current_sample_rate), 3),
+                    interval_since_previous_send_ms=round(
+                        (sent_at - last_send_at) * 1000,
+                        3,
+                    ),
+                    cumulative_audio_ms=round(
+                        sent_samples * 1000 / max(1, current_sample_rate),
+                        3,
+                    ),
                     pending_server_frames=frames.qsize(),
                     producer_metadata=metadata,
                 )
@@ -320,7 +443,10 @@ async def _stream_phrase(
                     phrase_index=phrase_index,
                     sent_frames=sent_frames,
                     sent_samples=sent_samples,
-                    sent_audio_ms=round(sent_samples * 1000 / max(1, current_sample_rate), 3),
+                    sent_audio_ms=round(
+                        sent_samples * 1000 / max(1, current_sample_rate),
+                        3,
+                    ),
                     persistent_connection=True,
                 )
                 return
@@ -336,6 +462,8 @@ async def _stream_phrase(
             return
     finally:
         phrase_stop.set()
+        if state.active_frames is not None:
+            state.active_frames = None
         producer_alive_before_join = bool(producer and producer.is_alive())
         if producer is not None and producer_alive_before_join:
             await asyncio.to_thread(producer.join, 0.25)
@@ -345,7 +473,10 @@ async def _stream_phrase(
             "server",
             "phrase_route_cleanup",
             phrase_index=phrase_index,
-            route_elapsed_ms=round((time.perf_counter() - route_started_at) * 1000, 3),
+            route_elapsed_ms=round(
+                (time.perf_counter() - route_started_at) * 1000,
+                3,
+            ),
             sent_frames=sent_frames,
             sent_samples=sent_samples,
             producer_alive_before_join=producer_alive_before_join,
@@ -370,41 +501,22 @@ def register_tts_live_call_websocket(gateway: FastAPI) -> None:
     @gateway.websocket(TTS_LIVE_CALL_WEBSOCKET_PATH)
     async def tts_live_call_websocket(websocket: WebSocket) -> None:
         await websocket.accept()
-        connection_stop = threading.Event()
+        state = ConnectionState(
+            stop_event=threading.Event(),
+            requests=asyncio.Queue(),
+        )
+        receiver = asyncio.create_task(_receive_messages(websocket, state))
         try:
-            while True:
-                raw_message = await websocket.receive_text()
-                try:
-                    payload = json.loads(raw_message)
-                except json.JSONDecodeError as exc:
-                    await websocket.send_json({"type": "error", "message": f"Invalid JSON: {exc}"})
-                    continue
-                if not isinstance(payload, dict):
-                    await websocket.send_json({"type": "error", "message": "TTS message must be an object."})
-                    continue
-                message_type = payload.get("type")
-                if message_type == "close":
+            while not state.stop_event.is_set():
+                payload = await state.requests.get()
+                if payload is None:
                     return
-                if message_type == "diagnostic":
-                    stream_id = normalize_stream_id(payload.get("stream_id"))
-                    event = str(payload.get("event") or "diagnostic")[:120]
-                    details = payload.get("details") if isinstance(payload.get("details"), dict) else {}
-                    stream_log(stream_id, "client", event, persistent_connection=True, **details)
-                    continue
-                if message_type != "synthesize":
-                    await websocket.send_json(
-                        {
-                            "type": "error",
-                            "message": "unsupported_message_type",
-                            "received_type": message_type,
-                        }
-                    )
-                    continue
-                await _stream_phrase(websocket, payload, connection_stop)
-        except WebSocketDisconnect:
-            pass
+                await _stream_phrase(websocket, payload, state)
         finally:
-            connection_stop.set()
+            _stop_connection(state, "route-cleanup")
+            receiver.cancel()
+            with suppress(asyncio.CancelledError):
+                await receiver
             with suppress(Exception):
                 await websocket.close()
 
@@ -419,7 +531,8 @@ def install_tts_live_call_websocket_hook() -> None:
     @wraps(original_init)
     def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
         original_init(self, *args, **kwargs)
-        if kwargs.get("title") == "Omnix Web Gateway" or (args and args[0] == "Omnix Web Gateway"):
+        is_gateway = kwargs.get("title") == "Omnix Web Gateway"
+        if is_gateway or (args and args[0] == "Omnix Web Gateway"):
             register_tts_live_call_websocket(self)
 
     FastAPI.__init__ = patched_init  # type: ignore[method-assign]
