@@ -13,6 +13,7 @@ class SetSessionInteractionRequest(BaseModel):
     character_id: str | None = Field(default=None, max_length=160)
     voice_asset_id: str | None = Field(default=None, max_length=240)
     transcript_policy: TranscriptPolicy = "persistent"
+    continue_topic: bool = False
 
     @model_validator(mode="after")
     def validate_selection(self) -> "SetSessionInteractionRequest":
