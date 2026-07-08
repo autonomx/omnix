@@ -8,8 +8,9 @@ from typing import Any
 
 from app.assistant_memory import MemoryService, default_memory_service
 
+from .memory_commands import execute_memory_command, parse_memory_command
 from .memory_prompt import resolve_prompt_memory
-from .models import ChatMessage, ChatSession, ChatSessionSummary
+from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessageRequest
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
 from .store import (
@@ -83,6 +84,86 @@ class ChatSessionStore(JsonChatSessionStore):
             }
         }
 
+    def _mark_memory_command(self, session_id: str, message_id: str, command: dict[str, Any]) -> None:
+        sessions = self._load_sessions()
+        for index, session in enumerate(sessions):
+            if session.id != session_id:
+                continue
+            for message in session.messages:
+                if message.id == message_id:
+                    message.metadata["memory_command"] = command
+                    break
+            sessions[index] = session
+            self._save_sessions(sessions)
+            return
+
+    def begin_user_message(
+        self,
+        session_id: str,
+        request: SendChatMessageRequest,
+        *,
+        context_items: list[dict[str, Any]] | None = None,
+        context_diagnostics: dict[str, Any] | None = None,
+    ) -> tuple[ChatSession, ChatMessage] | None:
+        appended = super().begin_user_message(
+            session_id,
+            request,
+            context_items=context_items,
+            context_diagnostics=context_diagnostics,
+        )
+        if appended is None:
+            return None
+        session, message = appended
+        command = parse_memory_command(message.content)
+        if command is not None:
+            payload = command.model_dump(mode="json")
+            message.metadata["memory_command"] = payload
+            self._mark_memory_command(session.id, message.id, payload)
+        return session, message
+
+    def append_user_message(
+        self,
+        session_id: str,
+        request: SendChatMessageRequest,
+        *,
+        context_items: list[dict[str, Any]] | None = None,
+        context_diagnostics: dict[str, Any] | None = None,
+    ) -> tuple[ChatSession, ChatMessage] | None:
+        command = parse_memory_command(request.content)
+        if command is None:
+            return super().append_user_message(
+                session_id,
+                request,
+                context_items=context_items,
+                context_diagnostics=context_diagnostics,
+            )
+        appended = self.begin_user_message(
+            session_id,
+            request,
+            context_items=context_items,
+            context_diagnostics=context_diagnostics,
+        )
+        if appended is None:
+            return None
+        _, user_message = appended
+        result = execute_memory_command(
+            self,
+            self.memory_service_factory(),
+            session_id,
+            user_message.id,
+            command,
+        )
+        completed = self.complete_streamed_reply(
+            session_id,
+            user_message.id,
+            result.content,
+            {
+                "generation_status": "completed",
+                "memory_command": result.model_dump(mode="json"),
+            },
+        )
+        return (completed, user_message) if completed is not None else None
+
     def _generate_provider_reply(
         self,
         session: ChatSession,
@@ -132,6 +213,26 @@ class ChatSessionStore(JsonChatSessionStore):
         model_id: str | None,
         context_items: list[dict[str, Any]] | None = None,
     ):
+        command = parse_memory_command(user_message.content)
+        if command is not None:
+            result = execute_memory_command(
+                self,
+                self.memory_service_factory(),
+                session.id,
+                user_message.id,
+                command,
+            )
+            yield {"type": "text_chunk", "text": result.content}
+            yield {
+                "type": "complete",
+                "content": result.content,
+                "metadata": {
+                    "generation_status": "completed",
+                    "memory_command": result.model_dump(mode="json"),
+                },
+            }
+            return
+
         from app import shared
         from app.providers import ChatMessage as ProviderMessage
 
