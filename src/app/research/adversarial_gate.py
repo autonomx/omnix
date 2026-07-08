@@ -70,10 +70,10 @@ class _SearchClient:
 
 class _FixedPlanner:
     def __init__(self, plan: ResearchPlan) -> None:
-        self.plan = plan
+        self._plan = plan
 
     def plan(self, request) -> ResearchPlannerDecision:
-        return ResearchPlannerDecision(plan=self.plan, backend="local")
+        return ResearchPlannerDecision(plan=self._plan, backend="local")
 
 
 class _FakeQuickSearch:
@@ -155,7 +155,6 @@ def _provider_transient_retry() -> None:
         source_store_factory=None,
         extractor_factory=None,
         cache_store_factory=None,
-        rate_limiter_factory=None,
     )
     result = service.search("current release", 5)
     assert calls == ["current release", "current release"]
@@ -172,7 +171,6 @@ def _provider_permanent_no_retry() -> None:
         source_store_factory=None,
         extractor_factory=None,
         cache_store_factory=None,
-        rate_limiter_factory=None,
     ).search("current release", 5)
     assert calls == ["current release"]
     assert result.diagnostics["transport_attempts"] == 1
@@ -186,7 +184,6 @@ def _provider_empty_is_not_proof() -> None:
         source_store_factory=None,
         extractor_factory=None,
         cache_store_factory=None,
-        rate_limiter_factory=None,
     ).search("niche current topic", 5)
     codes = {str(item.get("code")) for item in result.warnings}
     assert result.items == []
@@ -275,7 +272,7 @@ def _synthesis_excludes_raw_pages() -> None:
     execution = _execution_fixture()
     messages = build_synthesis_messages(execution, question="What changed?")
     serialized = json.dumps(messages)
-    assert "snapshot:one" in serialized
+    assert execution.snapshots[0].snapshot_id in serialized
     assert "/private/raw-page.txt" not in serialized
     assert "extracted_text_ref" not in serialized
     assert "untrusted data" in messages[0]["content"]

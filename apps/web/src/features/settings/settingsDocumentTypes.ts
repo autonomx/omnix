@@ -1,7 +1,7 @@
 export const SETTINGS_SCHEMA_VERSION = 1 as const;
 
 export type ResearchMode = 'disabled' | 'quick' | 'deep';
-export type ResearchProvider = 'duckduckgo' | 'brave' | 'tavily';
+export type ResearchProvider = 'duckduckgo' | 'brave' | 'tavily' | 'playwright';
 export type ProviderDefaults = { llm: string; tts: string; stt: string; image: string; voiceCloning: string };
 export type ModelDefaults = { chat: string; fast: string; quality: string; background: string; embedding: string; imagePrompt: string };
 export type RoutingDefaults = { fallbackBehavior: 'next-available' | 'fail'; taskOverrides: Record<string, { providerId: string; modelId: string }> };

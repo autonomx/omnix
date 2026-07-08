@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
-import { ChatbotWorkspace } from './ChatbotWorkspace';
+import { ChatbotWorkspace, selectFreshChatSession } from './ChatbotWorkspace';
 
 function renderChatbot() {
   const queryClient = new QueryClient({
@@ -89,6 +89,24 @@ afterEach(() => {
 });
 
 describe('ChatbotWorkspace', () => {
+  it('prefers a refreshed session over the queued mutation snapshot', () => {
+    const queued = {
+      id: 'chat:research',
+      message_count: 1,
+      messages: [{ id: 'msg:user', role: 'user', content: 'Research this' }],
+    };
+    const refreshed = {
+      id: 'chat:research',
+      message_count: 2,
+      messages: [
+        { id: 'msg:user', role: 'user', content: 'Research this' },
+        { id: 'msg:assistant', role: 'assistant', content: 'Research result' },
+      ],
+    };
+
+    expect(selectFreshChatSession(queued, refreshed)).toBe(refreshed);
+  });
+
   it('shows chat loading states instead of empty states while sessions are pending', async () => {
     const sessions = deferred<Response>();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

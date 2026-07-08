@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import os
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field
 
 from .policy import ResearchPolicy, research_policy_from_env
 
-ResearchProvider = Literal["duckduckgo", "brave", "tavily"]
+ResearchProvider = Literal["duckduckgo", "brave", "tavily", "playwright"]
 
 
 class ResearchRuntimeSettings(BaseModel):
@@ -26,13 +26,26 @@ class ResearchRuntimeSettings(BaseModel):
 
     @property
     def credential_configured(self) -> bool:
-        if self.provider == "duckduckgo":
+        if self.provider in {"duckduckgo", "playwright"}:
             return True
         return bool(os.environ.get("OMNIX_WEB_SEARCH_API_KEY"))
 
     @property
     def provider_available(self) -> bool:
-        return self.provider == "duckduckgo" or self.credential_configured
+        return self.provider in {"duckduckgo", "playwright"} or self.credential_configured
+
+    @property
+    def effective_provider(self) -> ResearchProvider:
+        env_provider = os.environ.get("OMNIX_WEB_SEARCH_PROVIDER", "").strip().lower()
+        if (
+            self.provider == "duckduckgo"
+            and (
+                env_provider == "playwright"
+                or (env_provider in {"brave", "tavily"} and os.environ.get("OMNIX_WEB_SEARCH_API_KEY"))
+            )
+        ):
+            return cast(ResearchProvider, env_provider)
+        return self.provider
 
 
 def load_research_runtime_settings() -> ResearchRuntimeSettings:
@@ -51,12 +64,8 @@ def load_research_runtime_settings() -> ResearchRuntimeSettings:
     policy = ResearchPolicy(
         search_cache_ttl_seconds=assistant.research_search_cache_ttl_seconds,
         extraction_cache_ttl_seconds=assistant.research_extraction_cache_ttl_seconds,
-        quick_requests_per_minute=environment_policy.quick_requests_per_minute,
-        deep_requests_per_hour=environment_policy.deep_requests_per_hour,
-        provider_requests_per_minute=environment_policy.provider_requests_per_minute,
         raw_snapshot_retention_days=assistant.research_raw_retention_days,
         source_manifest_retention_days=assistant.research_manifest_retention_days,
-        max_active_deep_jobs_per_session=environment_policy.max_active_deep_jobs_per_session,
         planner_receives_conversation_history=False,
         synthesis_receives_raw_page_bodies=False,
     )

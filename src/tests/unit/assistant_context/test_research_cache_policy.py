@@ -2,16 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
 from app.assistant_context.models import AssistantContextItem
 from app.research.cache import ResearchCacheStore
 from app.research.extraction import ExtractedPage, ReadablePageExtractor
 from app.research.outbound_web import OutboundWebResponse
 from app.research.policy import (
     ResearchPolicy,
-    ResearchRateLimitError,
-    ResearchRateLimiter,
     privacy_contract,
 )
 from app.research.quick_search import QuickSearchService
@@ -58,8 +54,7 @@ class CountingFetchPolicy:
 def test_search_cache_hit_skips_provider_call_and_transport_attempt(tmp_path) -> None:
     calls: list[str] = []
     cache = ResearchCacheStore(tmp_path / "cache.sqlite")
-    limiter = ResearchRateLimiter(tmp_path / "limits.sqlite")
-    policy = ResearchPolicy(search_cache_ttl_seconds=60, provider_requests_per_minute=1)
+    policy = ResearchPolicy(search_cache_ttl_seconds=60)
 
     def service() -> QuickSearchService:
         return QuickSearchService(
@@ -67,7 +62,6 @@ def test_search_cache_hit_skips_provider_call_and_transport_attempt(tmp_path) ->
             source_store_factory=None,
             extractor_factory=None,
             cache_store_factory=lambda: cache,
-            rate_limiter_factory=lambda: limiter,
             research_policy=policy,
         )
 
@@ -100,22 +94,6 @@ def test_extraction_cache_is_keyed_by_url_and_extractor_version(tmp_path) -> Non
     assert first.content_hash == second.content_hash
     assert second.elapsed_ms == 0
     assert "Evidence." in second.text
-
-
-def test_rate_limiter_returns_deterministic_retry_window(tmp_path) -> None:
-    now = [1_000.0]
-    limiter = ResearchRateLimiter(tmp_path / "limits.sqlite", clock=lambda: now[0])
-    policy = ResearchPolicy(quick_requests_per_minute=2)
-
-    limiter.quick_request("chat:one", policy)
-    limiter.quick_request("chat:one", policy)
-    with pytest.raises(ResearchRateLimitError) as error:
-        limiter.quick_request("chat:one", policy)
-    assert error.value.action == "quick_request"
-    assert error.value.retry_after_seconds == 60
-
-    now[0] += 61
-    limiter.quick_request("chat:one", policy)
 
 
 def test_retention_expires_raw_text_but_keeps_referenced_provenance(tmp_path) -> None:

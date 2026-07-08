@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -10,11 +11,9 @@ from app.assistant_context.web_search import WebSearchClient
 
 from .cache import ResearchCacheStore
 from .contracts import ResearchSource, ResearchSourceSnapshot
-from .extraction import ReadablePageExtractor
+from .extraction import ExtractedPage, ReadablePageExtractor
 from .policy import (
     ResearchPolicy,
-    ResearchRateLimitError,
-    ResearchRateLimiter,
     research_policy_from_env,
 )
 from .source_store import ResearchSourceStore, default_research_source_store
@@ -26,6 +25,7 @@ _PROVIDER_COVERAGE = {
     "brave": "general web search",
     "tavily": "general web search",
     "searxng": "general web search",
+    "playwright": "browser-assisted web search with parallel page extraction",
     "duckduckgo": "limited reference and instant-answer fallback",
 }
 
@@ -50,11 +50,11 @@ class QuickSearchService:
         source_store_factory: Callable[[], ResearchSourceStore] | None = default_research_source_store,
         extractor_factory: Callable[[], ReadablePageExtractor] | None = ReadablePageExtractor,
         cache_store_factory: Callable[[], ResearchCacheStore] | None = ResearchCacheStore,
-        rate_limiter_factory: Callable[[], ResearchRateLimiter] | None = ResearchRateLimiter,
         research_policy: ResearchPolicy | None = None,
         deadline_seconds: float = _DEFAULT_DEADLINE_SECONDS,
         max_transport_attempts: int = _MAX_TRANSPORT_ATTEMPTS,
         max_extracts: int = 2,
+        max_extract_workers: int = 1,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self.client_factory = client_factory or (
@@ -63,11 +63,11 @@ class QuickSearchService:
         self.source_store_factory = source_store_factory
         self.extractor_factory = extractor_factory
         self.cache_store_factory = cache_store_factory
-        self.rate_limiter_factory = rate_limiter_factory
         self.research_policy = research_policy or research_policy_from_env()
         self.deadline_seconds = max(0.1, float(deadline_seconds))
         self.max_transport_attempts = max(1, min(2, int(max_transport_attempts)))
-        self.max_extracts = max(0, min(3, int(max_extracts)))
+        self.max_extracts = max(0, min(4, int(max_extracts)))
+        self.max_extract_workers = max(1, min(4, int(max_extract_workers)))
         self.monotonic = monotonic
 
     def search(
@@ -93,7 +93,6 @@ class QuickSearchService:
             return QuickSearchExecution(diagnostics=diagnostics)
 
         cache = self.cache_store_factory() if self.cache_store_factory else None
-        limiter = self.rate_limiter_factory() if self.rate_limiter_factory else None
         last_error: Exception | None = None
         provider = ""
         for attempt in range(1, self.max_transport_attempts + 1):
@@ -134,8 +133,6 @@ class QuickSearchService:
 
             diagnostics["transport_attempts"] = attempt
             try:
-                if limiter is not None:
-                    limiter.provider_request(identity, provider, self.research_policy)
                 items = client.search(clean_query, max_results)
                 if cache is not None:
                     cache.put_search(
@@ -152,18 +149,6 @@ class QuickSearchService:
                 diagnostics["elapsed_ms"] = round((self.monotonic() - started) * 1000)
                 self._append_provider_warnings(provider, items, warnings)
                 return self._record_sources(clean_query, provider, items, diagnostics, warnings)
-            except ResearchRateLimitError as exc:
-                diagnostics.update({
-                    "status": "rate_limited",
-                    "retry_after_seconds": exc.retry_after_seconds,
-                    "elapsed_ms": round((self.monotonic() - started) * 1000),
-                })
-                warnings.append({
-                    "code": "provider_rate_limited",
-                    "message": "The research provider request limit was reached.",
-                    "details": {"retry_after_seconds": exc.retry_after_seconds},
-                })
-                return QuickSearchExecution(diagnostics=diagnostics, warnings=warnings)
             except Exception as exc:  # provider boundary
                 last_error = exc
                 if attempt >= self.max_transport_attempts or not is_transient_search_error(exc):
@@ -205,12 +190,11 @@ class QuickSearchService:
         extracted = 0
         extraction_failures = 0
         if self.extractor_factory is not None and self.max_extracts:
-            extractor = self.extractor_factory()
-            for index, (item, snapshot) in enumerate(zip(recorded.items, snapshots, strict=False)):
-                if extracted >= self.max_extracts or not item.url:
-                    continue
-                try:
-                    page = extractor.extract(item.url)
+            extraction_results = self._extract_result_pages(recorded.items, snapshots)
+            for index, page, exc in extraction_results:
+                item = recorded.items[index]
+                snapshot = snapshots[index]
+                if exc is None and page is not None:
                     updated = store.save_extraction(snapshot.snapshot_id, page)
                     snapshots[index] = updated
                     item.metadata.update({
@@ -222,10 +206,12 @@ class QuickSearchService:
                         "extracted_excerpt": page.text[:4000],
                     })
                     extracted += 1
-                except Exception as exc:
+                else:
                     snapshots[index] = store.mark_extraction_failed(snapshot.snapshot_id) or snapshot
                     item.metadata["extraction_status"] = "failed"
-                    item.metadata["extraction_error"] = f"{type(exc).__name__}: {exc}"
+                    item.metadata["extraction_error"] = (
+                        f"{type(exc).__name__}: {exc}" if exc is not None else "extraction failed"
+                    )
                     extraction_failures += 1
             if extraction_failures:
                 warnings.append({
@@ -240,6 +226,7 @@ class QuickSearchService:
             "snapshot_count": len(snapshots),
             "extracted_pages": extracted,
             "extraction_failures": extraction_failures,
+            "extraction_workers": self.max_extract_workers,
         })
         return QuickSearchExecution(
             items=recorded.items,
@@ -266,6 +253,35 @@ class QuickSearchService:
                 "code": "quick_search_empty",
                 "message": "The configured provider returned no usable results; this does not prove the web has no answer.",
             })
+
+    def _extract_result_pages(
+        self,
+        items: list[AssistantContextItem],
+        snapshots: list[ResearchSourceSnapshot],
+    ) -> list[tuple[int, ExtractedPage | None, Exception | None]]:
+        targets = [
+            (index, item.url)
+            for index, (item, _snapshot) in enumerate(zip(items, snapshots, strict=False))
+            if item.url
+        ][: self.max_extracts]
+        if not targets:
+            return []
+
+        def extract(index: int, url: str) -> tuple[int, ExtractedPage | None, Exception | None]:
+            try:
+                return index, self.extractor_factory().extract(url), None  # type: ignore[union-attr]
+            except Exception as exc:
+                return index, None, exc
+
+        if self.max_extract_workers <= 1 or len(targets) <= 1:
+            return [extract(index, url) for index, url in targets]
+
+        results: list[tuple[int, ExtractedPage | None, Exception | None]] = []
+        with ThreadPoolExecutor(max_workers=min(self.max_extract_workers, len(targets))) as pool:
+            futures = [pool.submit(extract, index, url) for index, url in targets]
+            for future in as_completed(futures):
+                results.append(future.result())
+        return sorted(results, key=lambda item: item[0])
 
 
 def provider_coverage(provider: str) -> str:

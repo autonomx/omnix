@@ -293,7 +293,13 @@ export function researchStageLabel(job: JobRecord): string {
 
 export function researchStageAnnouncement(job: JobRecord): string {
   const status = String(job.status);
-  if (status === 'completed') return 'Research complete. The answer and source details are available in the conversation.';
+  if (status === 'completed') {
+    const details = researchJobOutput(job);
+    if (details?.researchStatus === 'partial' || details?.stopReason === 'no_reliable_sources') {
+      return 'Research completed with limited evidence. Review the warnings and search diagnostics before relying on the answer.';
+    }
+    return 'Research complete. The answer and source details are available in the conversation.';
+  }
   if (status === 'failed') return 'Research failed. Review the recorded error before retrying.';
   if (status === 'canceled') return 'Research canceled.';
   if (status === 'cancel_requested') return 'Cancellation requested. The current operation will stop at the next safe boundary.';
@@ -319,11 +325,14 @@ function completedStageCount(job: JobRecord): number {
 }
 
 type JobOutput = {
+  researchStatus?: string;
+  researchProvider?: string;
   plannerBackend?: string;
   synthesisBackend?: string;
   stopReason?: string;
   logicalQueries?: number;
   extractedPages?: number;
+  searchDiagnostics: Array<{ query?: string; provider?: string; status?: string; results?: number; coverage?: string; error?: string }>;
   sources: Array<{ id: string; title: string; url?: string; citation?: string; extractionStatus?: string }>;
   conflicts: Array<{ id: string; summary: string }>;
   warnings: string[];
@@ -346,11 +355,21 @@ function researchJobOutput(job: JobRecord): JobOutput | null {
     };
   });
   return {
+    researchStatus: stringValue(output.research_status) || undefined,
+    researchProvider: stringValue(output.research_provider) || undefined,
     plannerBackend: stringValue(output.planner_backend) || undefined,
     synthesisBackend: stringValue(output.synthesis_backend) || undefined,
     stopReason: stringValue(output.stop_reason) || undefined,
     logicalQueries: numberValue(output.logical_queries) ?? undefined,
     extractedPages: numberValue(output.extracted_pages) ?? undefined,
+    searchDiagnostics: arrayRecords(output.search_diagnostics).map((diagnostic) => ({
+      query: stringValue(diagnostic.query) || undefined,
+      provider: stringValue(diagnostic.provider) || undefined,
+      status: stringValue(diagnostic.status) || undefined,
+      results: numberValue(diagnostic.results) ?? undefined,
+      coverage: stringValue(diagnostic.coverage) || undefined,
+      error: stringValue(diagnostic.error) || undefined,
+    })),
     sources,
     conflicts: arrayRecords(output.conflicts).map((conflict, index) => ({
       id: stringValue(conflict.conflict_id) || `conflict-${index + 1}`,
@@ -362,6 +381,8 @@ function researchJobOutput(job: JobRecord): JobOutput | null {
 
 function renderJobDetails(details: JobOutput): string {
   const rows = [
+    details.researchStatus ? `<div><dt>Result</dt><dd>${escapeHtml(humanizeCode(details.researchStatus))}</dd></div>` : '',
+    details.researchProvider ? `<div><dt>Search provider</dt><dd>${escapeHtml(humanizeCode(details.researchProvider))}</dd></div>` : '',
     details.plannerBackend ? `<div><dt>Planner</dt><dd>${escapeHtml(details.plannerBackend)}</dd></div>` : '',
     details.synthesisBackend ? `<div><dt>Synthesis</dt><dd>${escapeHtml(details.synthesisBackend)}</dd></div>` : '',
     details.logicalQueries !== undefined ? `<div><dt>Queries</dt><dd>${details.logicalQueries}</dd></div>` : '',
@@ -369,9 +390,10 @@ function renderJobDetails(details: JobOutput): string {
     details.stopReason ? `<div><dt>Stop reason</dt><dd>${escapeHtml(humanizeCode(details.stopReason))}</dd></div>` : '',
   ].join('');
   const sources = details.sources.length ? `<section><h4>Sources</h4><ol class="assistant-research-source-list">${details.sources.map((source) => `<li><span>${source.citation ? `[${escapeHtml(source.citation)}] ` : ''}${escapeHtml(source.title)}</span>${source.url ? `<a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">Open source</a>` : ''}${source.extractionStatus ? `<small>${escapeHtml(humanizeCode(source.extractionStatus))}</small>` : ''}</li>`).join('')}</ol></section>` : '';
+  const diagnostics = details.searchDiagnostics.length ? `<section><h4>Search diagnostics</h4><ol>${details.searchDiagnostics.map((diagnostic) => `<li><span>${escapeHtml(diagnostic.query || 'Search query')}</span><small>${escapeHtml([diagnostic.provider, diagnostic.status, diagnostic.results !== undefined ? `${diagnostic.results} results` : '', diagnostic.coverage, diagnostic.error].filter(Boolean).join(' · '))}</small></li>`).join('')}</ol></section>` : '';
   const conflicts = details.conflicts.length ? `<section><h4>Unresolved conflicts</h4><ul>${details.conflicts.map((conflict) => `<li>${escapeHtml(conflict.summary)}</li>`).join('')}</ul></section>` : '';
   const warnings = details.warnings.length ? `<section><h4>Warnings</h4><ul>${details.warnings.map((warning) => `<li>${escapeHtml(humanizeCode(warning))}</li>`).join('')}</ul></section>` : '';
-  return `<details class="assistant-research-job-details"><summary>Research details</summary><dl>${rows}</dl>${sources}${conflicts}${warnings}</details>`;
+  return `<details class="assistant-research-job-details"><summary>Research details</summary><dl>${rows}</dl>${sources}${diagnostics}${conflicts}${warnings}</details>`;
 }
 
 function renderMessageDetails(message: ChatMessage): string {

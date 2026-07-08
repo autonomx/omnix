@@ -318,8 +318,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     },
   });
 
-  const activeSession = sendMutation.data?.session ?? sessionQuery.data;
-  const generationComplete = Boolean(sendMutation.data?.session.messages?.some((message) => message.role === 'assistant'));
+  const activeSession = selectFreshChatSession(sendMutation.data?.session, sessionQuery.data);
+  const generationComplete = Boolean(activeSession?.messages?.some((message) => message.role === 'assistant'));
   const activeMessageCount = activeSession?.messages?.length ?? 0;
   const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
   const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
@@ -1379,6 +1379,18 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       </div>
     </WorkspacePanel>
   );
+}
+
+export function selectFreshChatSession<T extends { id?: string; message_count?: number; messages?: unknown[] } | null | undefined>(
+  mutationSession: T,
+  queriedSession: T,
+): T {
+  if (!mutationSession) return queriedSession;
+  if (!queriedSession) return mutationSession;
+  if (mutationSession.id !== queriedSession.id) return mutationSession;
+  const mutationCount = mutationSession.message_count ?? mutationSession.messages?.length ?? 0;
+  const queryCount = queriedSession.message_count ?? queriedSession.messages?.length ?? 0;
+  return queryCount > mutationCount ? queriedSession : mutationSession;
 }
 
 function AssistantWorkspaceView({ activeView, assistantSettings, chatProviders, enabledToolCount, initialToolConnectionMessage, initialToolId, modelLabel, onResetAssistantSettings, onShowTools, onStartLiveCall, onUpdateAssistantSettings, providerLabel, runtimeConfig, settingsStatus, speechInputLabel, toolExecutionRows, ttsOutputLabel, voiceProfiles, voiceProfilesLoading }: { activeView: Exclude<AssistantView, 'chats'>; assistantSettings: AssistantSettings; chatProviders: ReturnType<typeof chatCapableProviders>; enabledToolCount: number; initialToolConnectionMessage: string | null; initialToolId: string | null; modelLabel: string; onResetAssistantSettings: () => void; onShowTools: () => void; onStartLiveCall: () => void | Promise<void>; onUpdateAssistantSettings: (settings: AssistantSettings) => void; providerLabel: string; runtimeConfig: AssistantWorkspaceRuntimeConfig; settingsStatus: string | null; speechInputLabel: string; toolExecutionRows: number; ttsOutputLabel: string; voiceProfiles: VoiceProfileAsset[]; voiceProfilesLoading: boolean }) {

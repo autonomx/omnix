@@ -98,11 +98,12 @@ export function ResearchSettingsSection() {
       scope="module"
     >
       <div className="settings-form-grid">
-        <SettingsField label="Search provider" help="Brave and Tavily require OMNIX_WEB_SEARCH_API_KEY on the server.">
+        <SettingsField label="Search provider" help="Brave and Tavily require OMNIX_WEB_SEARCH_API_KEY on the server. Playwright uses a local browser fallback.">
           <select value={value.researchProvider} onChange={(event) => dispatch({ type: 'update', path: 'assistant.researchProvider', value: event.currentTarget.value })}>
             <option value="duckduckgo">DuckDuckGo Instant Answer · limited fallback</option>
             <option value="brave">Brave Search · general web search</option>
             <option value="tavily">Tavily · general web search</option>
+            <option value="playwright">Playwright browser search - keyless fallback</option>
           </select>
         </SettingsField>
         {numberField('Quick results', 'assistant.researchMaxResults', value.researchMaxResults, 1, 8)}

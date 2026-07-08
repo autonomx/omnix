@@ -7,7 +7,7 @@ from app.assistant_context.models import AssistantContextBuildResult
 from app.assistant_context.routes import register_assistant_context_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 from app.jobs import SQLiteJobStore
-from app.research.policy import ResearchPolicy, ResearchRateLimiter
+from app.research.policy import ResearchPolicy
 from app.research.release_policy import (
     ResearchReleasePolicy,
     research_release_availability,
@@ -119,7 +119,6 @@ def test_route_rejects_silent_downgrade_and_persists_visible_opt_in_notice(
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
     job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
-    limiter = ResearchRateLimiter(tmp_path / "limits.sqlite")
     context_service = EmptyContextService()
     session = chat_store.create_session(CreateChatSessionRequest(title="Release test"))
     app = FastAPI()
@@ -128,7 +127,6 @@ def test_route_rejects_silent_downgrade_and_persists_visible_opt_in_notice(
         chat_store_factory=lambda: chat_store,
         job_store_factory=lambda: job_store,
         context_service_factory=lambda: context_service,
-        rate_limiter_factory=lambda: limiter,
         settings_factory=lambda: settings(deep_enabled=False),
         release_policy_factory=ResearchReleasePolicy,
     )

@@ -1,4 +1,6 @@
 from app.assistant_context.models import AssistantContextItem
+from app.research.contracts import ResearchSourceSnapshot
+from app.research.extraction import ExtractedPage
 from app.research.quick_search import QuickSearchService, is_transient_search_error, provider_coverage
 
 
@@ -27,7 +29,6 @@ def result_item() -> AssistantContextItem:
 def quick_service(**kwargs) -> QuickSearchService:
     return QuickSearchService(
         cache_store_factory=None,
-        rate_limiter_factory=None,
         **kwargs,
     )
 
@@ -91,3 +92,54 @@ def test_transient_error_policy_is_bounded() -> None:
     assert is_transient_search_error(RuntimeError("request timed out")) is True
     assert is_transient_search_error(RuntimeError("401 authentication failed")) is False
     assert provider_coverage("brave") == "general web search"
+    assert provider_coverage("playwright") == "browser-assisted web search with parallel page extraction"
+
+
+def test_extract_result_pages_uses_bounded_parallel_workers() -> None:
+    calls: list[str] = []
+
+    class FakeExtractor:
+        def extract(self, url: str) -> ExtractedPage:
+            calls.append(url)
+            return ExtractedPage(
+                requested_url=url,
+                final_url=url,
+                title=url.rsplit("/", 1)[-1],
+                published_at=None,
+                text=f"Extracted {url}",
+                content_hash=url,
+                extractor_version="fixture",
+                elapsed_ms=1,
+            )
+
+    service = quick_service(
+        extractor_factory=FakeExtractor,
+        max_extracts=4,
+        max_extract_workers=4,
+    )
+    items = [
+        AssistantContextItem(
+            source_id="web_search",
+            title=f"Result {index}",
+            content="snippet",
+            url=f"https://example.test/{index}",
+        )
+        for index in range(6)
+    ]
+    snapshots = [
+        ResearchSourceSnapshot(
+            snapshot_id=f"snapshot:{index}",
+            source_record_id=f"source:{index}",
+            citation_label=f"S{index}",
+            query_id="query:fixture",
+            rank=index + 1,
+            snippet="snippet",
+            retrieved_at="2026-07-08T00:00:00Z",
+        )
+        for index in range(6)
+    ]
+
+    results = service._extract_result_pages(items, snapshots)
+
+    assert [index for index, _page, _exc in results] == [0, 1, 2, 3]
+    assert sorted(calls) == [f"https://example.test/{index}" for index in range(4)]

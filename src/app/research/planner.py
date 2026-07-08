@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -50,21 +52,26 @@ class LocalResearchPlanner:
         operations = [
             ResearchOperation(
                 operation="web_search",
-                query=request.question,
+                query=query,
                 reason="Find directly relevant current sources.",
-            ),
-            ResearchOperation(
-                operation="evaluate_evidence",
-                evaluation_question=(
-                    "Which claims are supported by multiple sources, and where do sources conflict?"
-                ),
-                reason="Compare support, uncertainty, and conflicts before synthesis.",
-            ),
-            ResearchOperation(
-                operation="stop",
-                reason="Stop when the evidence is sufficient or the hard budget is exhausted.",
-            ),
+            )
+            for query in _local_query_variants(request.question, request.budget.max_queries)
         ]
+        operations.extend(
+            [
+                ResearchOperation(
+                    operation="evaluate_evidence",
+                    evaluation_question=(
+                        "Which claims are supported by multiple sources, and where do sources conflict?"
+                    ),
+                    reason="Compare support, uncertainty, and conflicts before synthesis.",
+                ),
+                ResearchOperation(
+                    operation="stop",
+                    reason="Stop when the evidence is sufficient or the hard budget is exhausted.",
+                ),
+            ]
+        )
         return enforce_research_plan_budget(
             ResearchPlan(
                 objective=request.question,
@@ -179,3 +186,53 @@ def _hermes_planner_enabled() -> bool:
         "1", "true", "yes", "on"
     }
     return enabled and research
+
+
+def _local_query_variants(question: str, max_queries: int) -> list[str]:
+    clean = " ".join(str(question or "").split()).strip()
+    if not clean:
+        return []
+    variants = [clean]
+    lower = clean.casefold()
+    year = str(datetime.now().year)
+    if any(term in lower for term in ("gpu", "rtx", "llm", "local model", "coding", "coder")):
+        variants.extend(
+            [
+                f"{clean} local model benchmark {year}",
+                f"{clean} coding model comparison Qwen Coder DeepSeek Coder {year}",
+            ]
+        )
+    else:
+        keywords = " ".join(_significant_terms(clean)[:8])
+        if keywords and keywords != clean:
+            variants.append(f"{keywords} reliable sources {year}")
+        variants.append(f"{clean} latest source comparison {year}")
+    return list(dict.fromkeys(variants))[:max(1, max_queries)]
+
+
+def _significant_terms(value: str) -> list[str]:
+    ignored = {
+        "about",
+        "after",
+        "best",
+        "could",
+        "does",
+        "good",
+        "have",
+        "latest",
+        "should",
+        "that",
+        "the",
+        "this",
+        "what",
+        "when",
+        "where",
+        "which",
+        "with",
+        "would",
+    }
+    return [
+        word
+        for word in re.findall(r"[a-zA-Z0-9][a-zA-Z0-9.+-]*", value)
+        if word.casefold() not in ignored and len(word) > 2
+    ]

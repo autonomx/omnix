@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import date
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import httpx
 
@@ -70,6 +70,8 @@ class WebSearchClient:
                 return self._search_brave(client, clean_query, max_results)
             if self.provider == "tavily":
                 return self._search_tavily(client, clean_query, max_results)
+            if self.provider == "playwright":
+                return self._search_playwright(clean_query, max_results)
             return self._search_duckduckgo(client, clean_query, max_results)
         finally:
             if close_client:
@@ -171,6 +173,57 @@ class WebSearchClient:
         ]
         return self._context_items(rows, max_results, provider="tavily")
 
+    def _search_playwright(self, query: str, max_results: int) -> list[AssistantContextItem]:
+        """Use a normal browser page as a transparent keyless search fallback."""
+
+        try:
+            from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+            from playwright.sync_api import sync_playwright
+        except Exception as exc:
+            raise RuntimeError("playwright is required for the Playwright search provider") from exc
+
+        timeout_ms = max(1000, int(self.timeout_seconds * 1000))
+        rows: list[dict[str, str]] = []
+        failures: list[str] = []
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=_playwright_headless())
+            try:
+                page = browser.new_page(
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0 Safari/537.36 OmnixResearch/1.0"
+                    )
+                )
+                for search_url, parser in (
+                    (
+                        f"https://search.brave.com/search?q={quote_plus(query)}",
+                        lambda: _playwright_external_link_rows(page, max_results, internal_hosts={"search.brave.com"}),
+                    ),
+                    (
+                        f"https://duckduckgo.com/html/?q={quote_plus(query)}",
+                        lambda: _playwright_duckduckgo_rows(page, max_results),
+                    ),
+                ):
+                    try:
+                        page.goto(search_url, wait_until="domcontentloaded", timeout=timeout_ms)
+                        try:
+                            page.wait_for_load_state("networkidle", timeout=min(timeout_ms, 5_000))
+                        except PlaywrightTimeoutError:
+                            pass
+                        _raise_if_playwright_search_blocked(page)
+                        rows = parser()
+                    except Exception as exc:
+                        failures.append(f"{type(exc).__name__}: {exc}")
+                        rows = []
+                    if rows:
+                        break
+            finally:
+                browser.close()
+        if failures and not rows:
+            raise RuntimeError(f"Playwright search did not return usable results: {'; '.join(failures)}")
+        return self._context_items(rows, max_results, provider="playwright")
+
     @staticmethod
     def _append_duckduckgo_row(rows: list[dict[str, str]], row: Any) -> None:
         if not isinstance(row, dict):
@@ -260,3 +313,79 @@ def _clean_duckduckgo_url(value: str) -> str:
     if uddg:
         return unquote(uddg)
     return value
+
+
+def _playwright_headless() -> bool:
+    value = os.environ.get("OMNIX_PLAYWRIGHT_SEARCH_HEADLESS", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def _playwright_duckduckgo_rows(page: Any, max_results: int) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    anchors = page.locator("a.result__a")
+    for index in range(min(anchors.count(), max(1, max_results))):
+        anchor = anchors.nth(index)
+        title = " ".join(anchor.inner_text(timeout=1000).split()).strip()
+        url = _clean_duckduckgo_url(anchor.get_attribute("href") or "")
+        snippet = title
+        try:
+            result = anchor.locator("xpath=ancestor::*[contains(@class, 'result')][1]")
+            candidate = " ".join(result.locator(".result__snippet").inner_text(timeout=1000).split())
+            snippet = candidate or snippet
+        except Exception:
+            pass
+        if title and url:
+            rows.append({"title": title, "url": url, "snippet": snippet})
+    return rows
+
+
+def _raise_if_playwright_search_blocked(page: Any) -> None:
+    body = ""
+    try:
+        body = page.locator("body").inner_text(timeout=1000).lower()
+    except Exception:
+        return
+    blocked_markers = (
+        "one last step",
+        "solve the challenge",
+        "unexpected error",
+        "if error persists",
+        "captcha",
+    )
+    if any(marker in body for marker in blocked_markers):
+        raise RuntimeError("search page returned a block, challenge, or error page")
+
+
+def _playwright_external_link_rows(
+    page: Any,
+    max_results: int,
+    *,
+    internal_hosts: set[str],
+) -> list[dict[str, str]]:
+    raw_rows = page.evaluate(
+        """(maxResults) => Array.from(document.querySelectorAll('a[href]')).map((anchor) => {
+            const href = anchor.href || '';
+            const title = (anchor.innerText || anchor.textContent || '').replace(/\\s+/g, ' ').trim();
+            const container = anchor.closest('article, section, div');
+            const snippet = ((container && container.innerText) || title).replace(/\\s+/g, ' ').trim();
+            return { title, url: href, snippet };
+        }).filter((row) => row.title && row.url).slice(0, maxResults * 12)""",
+        max(1, max_results),
+    )
+    rows: list[dict[str, str]] = []
+    seen_urls: set[str] = set()
+    for row in raw_rows:
+        url = str(row.get("url") or "").strip()
+        title = str(row.get("title") or "").strip()
+        snippet = str(row.get("snippet") or title).strip()
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        if not parsed.scheme.startswith("http") or host in internal_hosts:
+            continue
+        if url in seen_urls or not title:
+            continue
+        seen_urls.add(url)
+        rows.append({"title": title, "url": url, "snippet": snippet or title})
+        if len(rows) >= max_results:
+            break
+    return rows

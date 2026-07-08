@@ -42,6 +42,7 @@ class ResearchExecutionCheckpoint(BaseModel):
     snapshots: list[ResearchSourceSnapshot] = Field(default_factory=list)
     evidence: list[ResearchEvidence] = Field(default_factory=list)
     conflicts: list[ResearchConflict] = Field(default_factory=list)
+    search_diagnostics: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     stop_reason: str | None = None
 
@@ -55,6 +56,7 @@ class ResearchExecutionResult(BaseModel):
     snapshots: list[ResearchSourceSnapshot] = Field(default_factory=list)
     evidence: list[ResearchEvidence] = Field(default_factory=list)
     conflicts: list[ResearchConflict] = Field(default_factory=list)
+    search_diagnostics: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     stop_reason: str
     logical_queries: int = 0
@@ -143,6 +145,12 @@ class DeepResearchExecutor:
                     min(8, remaining_sources),
                 )
                 state.logical_queries += 1
+                state.search_diagnostics.append(
+                    {
+                        "query": operation.query or request.question,
+                        **dict(getattr(execution, "diagnostics", {}) or {}),
+                    }
+                )
                 added = self._merge_search_execution(
                     state,
                     execution,
@@ -150,7 +158,7 @@ class DeepResearchExecutor:
                     seen_source_ids,
                     budget.max_sources,
                 )
-                if added == 0:
+                if added == 0 and execution.sources:
                     state.duplicate_saturation += 1
                 else:
                     state.duplicate_saturation = 0
@@ -209,6 +217,12 @@ class DeepResearchExecutor:
         stop_reason = state.stop_reason or (
             "evidence_collected" if state.sources else "no_reliable_sources"
         )
+        if not state.sources and stop_reason in {
+            "planner_stop",
+            "Planner operations completed.",
+            "Stop when the evidence is sufficient or the hard budget is exhausted.",
+        }:
+            stop_reason = "no_reliable_sources"
         state.stop_reason = stop_reason
         partial_reasons = {
             "step_budget_exhausted",
@@ -322,6 +336,7 @@ class DeepResearchExecutor:
             snapshots=state.snapshots,
             evidence=state.evidence,
             conflicts=state.conflicts,
+            search_diagnostics=state.search_diagnostics,
             warnings=list(dict.fromkeys(state.warnings)),
             stop_reason=state.stop_reason or "completed",
             logical_queries=state.logical_queries,

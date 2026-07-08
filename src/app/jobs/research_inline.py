@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 
 from app.research.contracts import RESEARCH_JOB_TYPE
+from app.research.deep_research_diagnostics import deep_research_log
 from app.research.executor import DeepResearchExecutor, ResearchExecutionCheckpoint
 from app.research.jobs import DeepResearchJobInput
 from app.research.synthesis import DeepResearchSynthesizer
@@ -77,6 +78,7 @@ def execute_research_job(
     try:
         request = DeepResearchJobInput.model_validate(job.input_payload or {})
     except ValidationError as exc:
+        deep_research_log(job.id, "invalid_request", error_type=type(exc).__name__, error=str(exc))
         return _fail(job_store, job, "research_invalid_request", str(exc), retryable=False)
 
     if chat_store is None:
@@ -105,8 +107,20 @@ def execute_research_job(
             )
 
     if _cancel_requested(job_store, job.id):
+        deep_research_log(job.id, "cancel_before_start")
         return _finalize_canceled(job_store, job.id, "Canceled before research started") or job
 
+    deep_research_log(
+        job.id,
+        "job_start",
+        session_id=request.session_id,
+        user_message_id=request.user_message_id,
+        provider=request.research_provider,
+        max_steps=request.max_steps,
+        max_queries=request.max_queries,
+        max_sources=request.max_sources,
+        max_extracts=request.max_extracts,
+    )
     job_store.mark_running(job.id)
     _stage(job_store, job.id, "planning", "Planning research")
 
@@ -119,6 +133,12 @@ def execute_research_job(
     try:
         result = workflow_fn(request, progress, canceled)
     except Exception as exc:
+        deep_research_log(
+            job.id,
+            "workflow_failed",
+            error_type=type(exc).__name__,
+            error=str(exc) or "Deep Research failed",
+        )
         return _fail(
             job_store,
             job,
@@ -128,8 +148,22 @@ def execute_research_job(
         )
 
     if canceled() or result.research_status == "canceled":
+        deep_research_log(job.id, "cancel_during_research", research_status=result.research_status)
         return _finalize_canceled(job_store, job.id, "Canceled during research") or job
 
+    deep_research_log(
+        job.id,
+        "workflow_result",
+        research_status=result.research_status,
+        content_length=len(result.content or ""),
+        source_manifest_id=result.source_manifest_id,
+        stop_reason=result.output.get("stop_reason"),
+        logical_queries=result.output.get("logical_queries"),
+        extracted_pages=result.output.get("extracted_pages"),
+        source_count=len(result.output.get("sources") or []),
+        warning_count=len(result.output.get("warnings") or []),
+        search_diagnostics=result.output.get("search_diagnostics"),
+    )
     _stage(job_store, job.id, "persisting", "Saving research result")
     metadata = {
         "generation_status": "completed",
@@ -146,6 +180,13 @@ def execute_research_job(
         metadata,
     )
     if saved is None:
+        deep_research_log(
+            job.id,
+            "chat_persist_missing",
+            session_id=request.session_id,
+            user_message_id=request.user_message_id,
+            content_length=len(result.content or ""),
+        )
         return _fail(
             job_store,
             job,
@@ -169,6 +210,24 @@ def execute_research_job(
             ],
             logs=[{"level": "info", "message": "Deep Research result persisted to chat"}],
         ),
+    )
+    assistant_message = next(
+        (
+            message
+            for message in reversed(saved.messages)
+            if message.role == "assistant"
+            and (getattr(message, "metadata", {}) or {}).get("research_job_id") == job.id
+        ),
+        None,
+    )
+    deep_research_log(
+        job.id,
+        "job_completed",
+        session_id=saved.id,
+        message_count=len(saved.messages),
+        assistant_message_id=getattr(assistant_message, "id", None),
+        assistant_content_length=len(getattr(assistant_message, "content", "") or ""),
+        job_status=getattr(completed or job, "status", None),
     )
     return completed or job
 
@@ -230,7 +289,9 @@ def _executor_enabled() -> bool:
 def _stage(job_store: Any, job_id: str, stage_id: str, message: str) -> None:
     job = job_store.get_job(job_id)
     if job is None:
+        deep_research_log(job_id, "stage_missing_job", stage_id=stage_id, message=message)
         return
+    deep_research_log(job_id, "stage", stage_id=stage_id, message=message)
     total = max(1, len(job.stages))
     index = next((i for i, stage in enumerate(job.stages) if stage.id == stage_id), 0)
     for prior in job.stages[:index]:
@@ -261,6 +322,7 @@ def _cancel_requested(job_store: Any, job_id: str) -> bool:
 def _finalize_canceled(job_store: Any, job_id: str, reason: str) -> JobRecord | None:
     job = job_store.get_job(job_id)
     if job is None:
+        deep_research_log(job_id, "cancel_missing_job", reason=reason)
         return None
     now = datetime.now(timezone.utc).isoformat()
     job.status = JobStatus.CANCELED
@@ -283,7 +345,9 @@ def _finalize_canceled(job_store: Any, job_id: str, reason: str) -> JobRecord | 
         )
         for stage in job.stages
     ]
-    return job_store._save_with_event(job, "job.canceled")  # noqa: SLF001 - shared job adapter
+    saved = job_store._save_with_event(job, "job.canceled")  # noqa: SLF001 - shared job adapter
+    deep_research_log(job_id, "job_canceled", reason=reason)
+    return saved
 
 
 def _fail(
@@ -294,6 +358,7 @@ def _fail(
     *,
     retryable: bool,
 ) -> JobRecord:
+    deep_research_log(job.id, "job_failed", code=code, message=message, retryable=retryable)
     failed = job_store.fail_job(
         job.id,
         FailJobRequest(
@@ -334,7 +399,8 @@ def _default_workflow(
             ),
             research_policy=policy,
             extractor_factory=lambda: ReadablePageExtractor(research_policy=policy),
-            max_extracts=min(3, remaining_extracts),
+            max_extracts=min(4, remaining_extracts),
+            max_extract_workers=4 if request.research_provider == "playwright" else 1,
         )
         return _IdentityBoundQuickSearch(service, request.session_id)
 
@@ -385,6 +451,7 @@ def _default_workflow(
             "synthesis_validation": synthesis.validation.model_dump(mode="json"),
             "research_stop_reason": execution.stop_reason,
             "research_warnings": combined_warnings,
+            "search_diagnostics": execution.search_diagnostics,
             "conflict_count": len(execution.conflicts),
             "logical_queries": execution.logical_queries,
             "extracted_pages": execution.extracted_pages,
@@ -405,6 +472,7 @@ def _default_workflow(
             "answer_sections": [item.model_dump(mode="json") for item in synthesis.sections],
             "stop_reason": execution.stop_reason,
             "warnings": combined_warnings,
+            "search_diagnostics": execution.search_diagnostics,
             "sources": [item.model_dump(mode="json") for item in execution.sources],
             "snapshots": [item.model_dump(mode="json") for item in execution.snapshots],
             "evidence": [item.model_dump(mode="json") for item in execution.evidence],

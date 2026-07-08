@@ -57,7 +57,7 @@ export const INITIAL_SETTINGS_REGISTRY: SettingDefinition[] = [
     persistenceOwner: 'settings-api',
     writable: true,
     appliesTo: 'new-jobs',
-    searchAliases: ['brave', 'tavily', 'duckduckgo'],
+    searchAliases: ['brave', 'tavily', 'duckduckgo', 'playwright', 'browser search'],
   },
   {
     key: 'assistant.researchBudgets',

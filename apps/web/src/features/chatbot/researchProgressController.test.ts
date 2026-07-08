@@ -107,6 +107,36 @@ describe('research progress restoration', () => {
     expect(helpers.isActiveResearchJob(complete)).toBe(false);
   });
 
+  it('announces limited evidence for completed jobs with empty research output', () => {
+    const complete = researchJob({
+      status: 'completed',
+      output_refs: [
+        {
+          type: 'research',
+          research_status: 'partial',
+          stop_reason: 'no_reliable_sources',
+          research_provider: 'duckduckgo',
+          search_diagnostics: [
+            {
+              query: 'rtx 4090 coding llm',
+              provider: 'duckduckgo',
+              status: 'empty',
+              results: 0,
+            },
+          ],
+          warnings: ['limited_search_provider', 'quick_search_empty'],
+        },
+      ],
+    });
+    const panel = document.createElement('section');
+
+    expect(helpers.researchStageAnnouncement(complete)).toContain('limited evidence');
+    helpers.renderJobPanel(panel, complete);
+    expect(panel.textContent).toContain('Search diagnostics');
+    expect(panel.textContent).toContain('rtx 4090 coding llm');
+    expect(panel.textContent).toContain('0 results');
+  });
+
   it('renders a close button for completed progress panels', () => {
     const panel = document.createElement('section');
     document.body.append(panel);

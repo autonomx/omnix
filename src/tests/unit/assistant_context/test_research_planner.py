@@ -34,9 +34,25 @@ def test_local_planner_uses_only_declarative_research_operations() -> None:
         ResearchPlanningRequest(question="Compare the current options")
     )
     assert decision.backend == "local"
-    assert [item.operation for item in decision.plan.operations] == [
-        "web_search", "evaluate_evidence", "stop"
-    ]
+    assert all(
+        item.operation in {"web_search", "evaluate_evidence", "stop"}
+        for item in decision.plan.operations
+    )
+    assert decision.plan.operations[0].operation == "web_search"
+    assert decision.plan.operations[-2].operation == "evaluate_evidence"
+    assert decision.plan.operations[-1].operation == "stop"
+
+
+def test_local_planner_adds_targeted_query_variants_for_coding_gpu_llm_requests() -> None:
+    decision = ResearchPlanner(prefer_hermes=False).plan(
+        ResearchPlanningRequest(question="what is a good llm for rtx 4090 gpu, for coding purposes?")
+    )
+    searches = [item.query for item in decision.plan.operations if item.operation == "web_search"]
+
+    assert len(searches) >= 3
+    assert searches[0] == "what is a good llm for rtx 4090 gpu, for coding purposes?"
+    assert any("benchmark" in str(query).lower() for query in searches)
+    assert any("qwen" in str(query).lower() for query in searches)
 
 
 def test_budget_enforcement_caps_queries_steps_and_extracts() -> None:

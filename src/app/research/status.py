@@ -71,14 +71,15 @@ def research_runtime_status(
     resolved = settings or load_research_runtime_settings()
     release = release_policy or research_release_policy_from_env()
     availability = research_release_availability(resolved, release, identity=identity)
+    provider = resolved.effective_provider
     return ResearchRuntimeStatus(
         default_mode=resolved.default_mode,
         provider=ResearchProviderStatus(
-            provider=resolved.provider,
-            available=resolved.provider_available,
-            credential_required=resolved.provider != "duckduckgo",
-            credential_configured=resolved.credential_configured,
-            coverage=provider_coverage(resolved.provider),
+            provider=provider,
+            available=provider in {"duckduckgo", "playwright"} or resolved.credential_configured,
+            credential_required=provider not in {"duckduckgo", "playwright"},
+            credential_configured=provider in {"duckduckgo", "playwright"} or resolved.credential_configured,
+            coverage=provider_coverage(provider),
         ),
         budgets=ResearchBudgetStatus(
             quick_max_results=resolved.max_results,

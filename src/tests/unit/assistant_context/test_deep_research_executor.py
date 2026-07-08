@@ -161,6 +161,67 @@ def test_executor_deduplicates_sources_across_queries(tmp_path) -> None:
     assert len(result.evidence) == 1
 
 
+def test_executor_runs_empty_search_variants_and_reports_no_sources(tmp_path) -> None:
+    calls: list[str] = []
+    plan = ResearchPlan(
+        objective="Find a coding LLM for RTX 4090",
+        operations=[
+            ResearchOperation(operation="web_search", query="rtx 4090 coding llm"),
+            ResearchOperation(operation="web_search", query="rtx 4090 coding llm benchmark"),
+            ResearchOperation(operation="evaluate_evidence", evaluation_question="compare"),
+            ResearchOperation(operation="stop", reason="done"),
+        ],
+    )
+    execution = QuickSearchExecution(
+        diagnostics={
+            "provider": "duckduckgo",
+            "status": "empty",
+            "results": 0,
+        },
+        warnings=[
+            {"code": "limited_search_provider"},
+            {"code": "quick_search_empty"},
+        ],
+    )
+    executor = DeepResearchExecutor(
+        planner=FixedPlanner(plan),
+        source_store_factory=lambda: ResearchSourceStore(tmp_path / "sources.json"),
+        quick_search_factory=lambda remaining_sources, remaining_extracts: FakeQuickSearch(
+            execution, calls
+        ),
+    )
+
+    result = executor.execute(
+        DeepResearchJobInput(
+            session_id="session:one",
+            user_message_id="message:one",
+            question="Find a coding LLM for RTX 4090",
+            max_queries=2,
+        ),
+        lambda stage, message: None,
+        lambda: False,
+    )
+
+    assert calls == ["rtx 4090 coding llm", "rtx 4090 coding llm benchmark"]
+    assert result.research_status == "partial"
+    assert result.stop_reason == "no_reliable_sources"
+    assert result.search_diagnostics == [
+        {
+            "query": "rtx 4090 coding llm",
+            "provider": "duckduckgo",
+            "status": "empty",
+            "results": 0,
+        },
+        {
+            "query": "rtx 4090 coding llm benchmark",
+            "provider": "duckduckgo",
+            "status": "empty",
+            "results": 0,
+        },
+    ]
+    assert result.warnings == ["limited_search_provider", "quick_search_empty"]
+
+
 def test_executor_resumes_after_checkpoint_without_repeating_completed_query(tmp_path) -> None:
     existing = source_pair(1, "First query evidence.")
     later = source_pair(2, "Second query evidence.")

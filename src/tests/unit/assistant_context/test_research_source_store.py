@@ -68,7 +68,6 @@ def test_quick_search_persists_manifest_with_stable_citations(tmp_path) -> None:
         source_store_factory=lambda: store,
         extractor_factory=None,
         cache_store_factory=None,
-        rate_limiter_factory=None,
     ).search("current release", 5)
 
     assert len(result.items) == 1

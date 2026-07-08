@@ -24,7 +24,7 @@ class AssistantSettingsProfile(BaseModel):
     streaming_audio: bool = Field(default=True, alias="streamingAudio")
 
     research_default_mode: ResearchMode = Field(default="disabled", alias="researchDefaultMode")
-    research_provider: Literal["duckduckgo", "brave", "tavily"] = Field(
+    research_provider: Literal["duckduckgo", "brave", "tavily", "playwright"] = Field(
         default="duckduckgo",
         alias="researchProvider",
     )

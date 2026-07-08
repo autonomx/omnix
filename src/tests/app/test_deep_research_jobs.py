@@ -84,6 +84,8 @@ def test_deep_research_executor_persists_partial_message_and_completes_shared_jo
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
+    log_path = tmp_path / "deep-research.log"
+    monkeypatch.setenv("OMNIX_DEEP_RESEARCH_LOG_PATH", str(log_path))
     chat_store = ChatSessionStore(tmp_path / "chat.json")
     job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
     session = chat_store.create_session(CreateChatSessionRequest(title="Deep research"))
@@ -117,6 +119,18 @@ def test_deep_research_executor_persists_partial_message_and_completes_shared_jo
     assert assistant.metadata["research_status"] == "partial"
     assert assistant.metadata["research_job_id"] == job.id
     assert assistant.metadata["source_manifest_id"] == "manifest:deep"
+    log_records = [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    events = [record["event"] for record in log_records]
+    assert "job_start" in events
+    assert "workflow_result" in events
+    assert "job_completed" in events
+    completed_record = next(record for record in log_records if record["event"] == "job_completed")
+    assert completed_record["assistant_message_id"] == assistant.id
+    assert completed_record["assistant_content_length"] > 0
 
 
 def test_research_checkpoint_round_trips_on_job_stage(tmp_path, monkeypatch) -> None:

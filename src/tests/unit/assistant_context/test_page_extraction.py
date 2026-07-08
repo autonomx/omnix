@@ -62,7 +62,6 @@ def test_quick_search_updates_snapshot_without_mutating_source_identity(tmp_path
         source_store_factory=lambda: store,
         extractor_factory=lambda: extractor,
         cache_store_factory=None,
-        rate_limiter_factory=None,
     ).search("current release", 5)
 
     assert result.diagnostics["extracted_pages"] == 1
