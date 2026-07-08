@@ -4,12 +4,16 @@ on:
   push:
     branches:
       - tmp-sync-main-from-rpg
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   build-bridge-commit:
+    if: github.event_name == 'push' || github.head_ref == 'tmp-sync-main-from-rpg'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
