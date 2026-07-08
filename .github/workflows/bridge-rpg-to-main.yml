@@ -1,0 +1,34 @@
+name: Bridge rpg history into main
+
+on:
+  push:
+    branches:
+      - tmp-sync-main-from-rpg
+
+permissions:
+  contents: write
+
+jobs:
+  build-bridge-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create rpg-tree merge commit on bridge branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main rpg
+          main_sha="$(git rev-parse origin/main)"
+          rpg_sha="$(git rev-parse origin/rpg)"
+          rpg_tree="$(git rev-parse "${rpg_sha}^{tree}")"
+          bridge_sha="$(printf '%s\n\n%s\n' \
+            'Replace legacy main with current rpg' \
+            'Two-parent bridge commit. The resulting repository tree is exactly the latest rpg tree; legacy main content is not retained.' \
+            | git commit-tree "${rpg_tree}" -p "${main_sha}" -p "${rpg_sha}")"
+          git push origin "${bridge_sha}:refs/heads/tmp-sync-main-from-rpg"
