@@ -22,13 +22,26 @@ def register_character_routes(
     *,
     service_factory: Callable[[], CharacterService] = default_character_service,
 ) -> None:
-    @app.get("/api/characters", response_model=CharacterListResponse, tags=["characters"])
+    """Register typed routes while keeping the disabled feature out of public OpenAPI."""
+
+    @app.get(
+        "/api/characters",
+        response_model=CharacterListResponse,
+        tags=["characters"],
+        include_in_schema=False,
+    )
     async def list_characters(
         include_archived: bool = Query(default=False),
     ) -> CharacterListResponse:
         return service_factory().list(include_archived=include_archived)
 
-    @app.post("/api/characters", response_model=CharacterProfile, status_code=201, tags=["characters"])
+    @app.post(
+        "/api/characters",
+        response_model=CharacterProfile,
+        status_code=201,
+        tags=["characters"],
+        include_in_schema=False,
+    )
     async def create_character(request: CreateCharacterRequest) -> CharacterProfile:
         try:
             return service_factory().create(request)
@@ -37,7 +50,12 @@ def register_character_routes(
         except CharacterVoiceAssetError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.get("/api/characters/{character_id}", response_model=CharacterProfile, tags=["characters"])
+    @app.get(
+        "/api/characters/{character_id}",
+        response_model=CharacterProfile,
+        tags=["characters"],
+        include_in_schema=False,
+    )
     async def get_character(
         character_id: str,
         include_archived: bool = Query(default=False),
@@ -47,7 +65,12 @@ def register_character_routes(
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail="character not found") from exc
 
-    @app.patch("/api/characters/{character_id}", response_model=CharacterProfile, tags=["characters"])
+    @app.patch(
+        "/api/characters/{character_id}",
+        response_model=CharacterProfile,
+        tags=["characters"],
+        include_in_schema=False,
+    )
     async def update_character(
         character_id: str,
         request: UpdateCharacterRequest,
@@ -65,6 +88,7 @@ def register_character_routes(
         "/api/characters/{character_id}",
         response_model=ArchiveCharacterResponse,
         tags=["characters"],
+        include_in_schema=False,
     )
     async def archive_character(character_id: str) -> ArchiveCharacterResponse:
         try:
@@ -76,6 +100,7 @@ def register_character_routes(
         "/api/characters/{character_id}/versions",
         response_model=CharacterVersionListResponse,
         tags=["characters"],
+        include_in_schema=False,
     )
     async def list_character_versions(character_id: str) -> CharacterVersionListResponse:
         try:
