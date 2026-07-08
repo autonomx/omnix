@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from app.assistant_memory import default_memory_service, resolve_session_memory_scope
 from app.characters import (
     InteractionSelection,
     SetSessionInteractionRequest,
@@ -12,13 +13,7 @@ from app.characters import (
     resolve_interaction_context,
 )
 
-from .models import (
-    ChatMessage,
-    ChatSession,
-    ChatSessionSummary,
-    CreateChatSessionRequest,
-    SendChatMessageRequest,
-)
+from .models import ChatMessage, ChatSession, ChatSessionSummary, CreateChatSessionRequest, SendChatMessageRequest
 from .prompt_store import ChatSessionStore as BaseChatSessionStore, chat_sqlite_store_enabled
 from .sqlite_store import SQLiteChatSessionStore as BaseSQLiteChatSessionStore
 from .store import serialized_chat_mutation
@@ -38,6 +33,8 @@ class _CharacterSessionMixin:
             request.character_id,
             request.voice_asset_id,
             request.transcript_policy,
+            request.read_memory if request.interaction_mode == "character" else False,
+            request.write_memory if request.interaction_mode == "character" else False,
         )
         segment = _character_repository().create_segment(
             session_id=session_id,
@@ -45,21 +42,16 @@ class _CharacterSessionMixin:
             character_id=interaction.character_id,
             profile_version=interaction.character_profile_version,
             transcript_policy=interaction.transcript_policy,
-            read_memory=False,
-            write_memory=False,
+            read_memory=interaction.read_memory,
+            write_memory=interaction.write_memory,
             shared_memory_access="none",
         )
         messages: list[ChatMessage] = []
         if request.interaction_mode == "system" and request.system_prompt:
-            messages.append(
-                ChatMessage(
-                    id=f"msg:{uuid.uuid4().hex}",
-                    role="system",
-                    content=request.system_prompt,
-                    created_at=now,
-                    metadata={"source": "chat_session_request", "segment_id": segment.id},
-                )
-            )
+            messages.append(ChatMessage(
+                id=f"msg:{uuid.uuid4().hex}", role="system", content=request.system_prompt,
+                created_at=now, metadata={"source": "chat_session_request", "segment_id": segment.id},
+            ))
         _append_character_greeting(messages, character_profile, now, segment.id)
         session = ChatSession(
             id=session_id,
@@ -69,35 +61,31 @@ class _CharacterSessionMixin:
             interaction_mode=interaction.interaction_mode,
             character_id=interaction.character_id,
             voice_asset_id=interaction.voice_asset_id,
-            read_memory=False,
-            write_memory=False,
+            read_memory=interaction.read_memory,
+            write_memory=interaction.write_memory,
             shared_memory_access="none",
             transcript_policy=interaction.transcript_policy,
             active_segment_id=segment.id,
             character_profile_version=interaction.character_profile_version,
             effective_identity_hash=interaction.effective_identity_hash,
-            message_count=len(messages),
-            messages=messages,
-            created_at=now,
-            updated_at=now,
+            message_count=len(messages), messages=messages, created_at=now, updated_at=now,
         )
+        _attach_character_snapshot(session)
         sessions = self._load_sessions()
         sessions.append(session)
         self._save_sessions(sessions)
         return session
 
     @serialized_chat_mutation
-    def set_session_interaction(
-        self,
-        session_id: str,
-        request: SetSessionInteractionRequest,
-    ) -> ChatSession | None:
+    def set_session_interaction(self, session_id: str, request: SetSessionInteractionRequest) -> ChatSession | None:
         sessions = self._load_sessions()
         interaction, character_profile = _resolve_request(
             request.interaction_mode,
             request.character_id,
             request.voice_asset_id,
             request.transcript_policy,
+            request.read_memory if request.interaction_mode == "character" else False,
+            request.write_memory if request.interaction_mode == "character" else False,
         )
         now = _utcnow()
         for index, session in enumerate(sessions):
@@ -107,6 +95,8 @@ class _CharacterSessionMixin:
                 session.interaction_mode != interaction.interaction_mode
                 or session.character_id != interaction.character_id
                 or session.transcript_policy != interaction.transcript_policy
+                or session.read_memory != interaction.read_memory
+                or session.write_memory != interaction.write_memory
             )
             if context_changed:
                 carryover = _neutral_topic_carryover(session) if request.continue_topic else None
@@ -118,22 +108,27 @@ class _CharacterSessionMixin:
                     character_id=interaction.character_id,
                     profile_version=interaction.character_profile_version,
                     transcript_policy=interaction.transcript_policy,
-                    read_memory=False,
-                    write_memory=False,
+                    read_memory=interaction.read_memory,
+                    write_memory=interaction.write_memory,
                     shared_memory_access="none",
                     carryover_summary=carryover,
                 )
                 session.active_segment_id = segment.id
+                session.memory_snapshot_id = None
+                session.memory_snapshot_revision = None
+                session.memory_record_count = 0
+                session.memory_last_refreshed_at = None
                 _append_character_greeting(session.messages, character_profile, now, segment.id)
             session.interaction_mode = interaction.interaction_mode
             session.character_id = interaction.character_id
             session.voice_asset_id = interaction.voice_asset_id
-            session.read_memory = False
-            session.write_memory = False
+            session.read_memory = interaction.read_memory
+            session.write_memory = interaction.write_memory
             session.shared_memory_access = "none"
             session.transcript_policy = interaction.transcript_policy
             session.character_profile_version = interaction.character_profile_version
             session.effective_identity_hash = interaction.effective_identity_hash
+            _attach_character_snapshot(session)
             session.message_count = len(session.messages)
             session.updated_at = now
             sessions[index] = session
@@ -142,20 +137,8 @@ class _CharacterSessionMixin:
         return None
 
     @serialized_chat_mutation
-    def append_user_message(
-        self,
-        session_id: str,
-        request: SendChatMessageRequest,
-        *,
-        context_items: list[dict[str, Any]] | None = None,
-        context_diagnostics: dict[str, Any] | None = None,
-    ):
-        result = super().append_user_message(
-            session_id,
-            request,
-            context_items=context_items,
-            context_diagnostics=context_diagnostics,
-        )
+    def append_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None):
+        result = super().append_user_message(session_id, request, context_items=context_items, context_diagnostics=context_diagnostics)
         if result is None:
             return None
         session, user_message = result
@@ -163,20 +146,8 @@ class _CharacterSessionMixin:
         return session, user_message
 
     @serialized_chat_mutation
-    def begin_user_message(
-        self,
-        session_id: str,
-        request: SendChatMessageRequest,
-        *,
-        context_items: list[dict[str, Any]] | None = None,
-        context_diagnostics: dict[str, Any] | None = None,
-    ):
-        result = super().begin_user_message(
-            session_id,
-            request,
-            context_items=context_items,
-            context_diagnostics=context_diagnostics,
-        )
+    def begin_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None):
+        result = super().begin_user_message(session_id, request, context_items=context_items, context_diagnostics=context_diagnostics)
         if result is None:
             return None
         session, user_message = result
@@ -185,22 +156,10 @@ class _CharacterSessionMixin:
         return session, user_message
 
     @serialized_chat_mutation
-    def complete_streamed_reply(
-        self,
-        session_id: str,
-        user_message_id: str,
-        content: str,
-        metadata: dict[str, Any],
-    ) -> ChatSession | None:
+    def complete_streamed_reply(self, session_id: str, user_message_id: str, content: str, metadata: dict[str, Any]) -> ChatSession | None:
         before = self.get_session(session_id)
         segment_id = before.active_segment_id if before else None
-        tagged_metadata = {**metadata, "segment_id": segment_id}
-        session = super().complete_streamed_reply(
-            session_id,
-            user_message_id,
-            content,
-            tagged_metadata,
-        )
+        session = super().complete_streamed_reply(session_id, user_message_id, content, {**metadata, "segment_id": segment_id})
         if session is None:
             return None
         for message in session.messages:
@@ -233,54 +192,47 @@ def _character_repository():
     return default_character_service().repository
 
 
-def _resolve_request(interaction_mode: str, character_id: str | None, voice_asset_id: str | None, transcript_policy: str):
+def _resolve_request(interaction_mode: str, character_id: str | None, voice_asset_id: str | None, transcript_policy: str, read_memory: bool, write_memory: bool):
     selection = InteractionSelection(
         interaction_mode=interaction_mode,
         character_id=character_id,
         voice_asset_id=voice_asset_id,
-        read_memory=False,
-        write_memory=False,
+        read_memory=read_memory,
+        write_memory=write_memory,
         shared_memory_access="none",
         transcript_policy=transcript_policy,
     )
-    character_profile = None
-    if interaction_mode == "character":
-        character_profile = default_character_service().resolve_snapshot(character_id or "")
+    character_profile = default_character_service().resolve_snapshot(character_id or "") if interaction_mode == "character" else None
     return resolve_interaction_context(selection, character=character_profile), character_profile
+
+
+def _attach_character_snapshot(session: ChatSession) -> None:
+    if session.interaction_mode != "character" or not session.read_memory or session.memory_snapshot_id:
+        return
+    snapshot = default_memory_service().create_session_snapshot(
+        resolve_session_memory_scope(session), token_budget=4_000
+    )
+    session.memory_snapshot_id = snapshot.id
+    session.memory_snapshot_revision = snapshot.revision
+    session.memory_record_count = len(snapshot.items)
+    session.memory_last_refreshed_at = snapshot.created_at
 
 
 def _append_character_greeting(messages: list[ChatMessage], character_profile, now: str, segment_id: str) -> None:
     if character_profile is None or not character_profile.default_greeting.strip():
         return
-    messages.append(
-        ChatMessage(
-            id=f"msg:{uuid.uuid4().hex}",
-            role="assistant",
-            content=character_profile.default_greeting.strip(),
-            created_at=now,
-            metadata={
-                "source": "character_profile_greeting",
-                "character_id": character_profile.id,
-                "character_profile_version": character_profile.version,
-                "segment_id": segment_id,
-            },
-        )
-    )
+    messages.append(ChatMessage(
+        id=f"msg:{uuid.uuid4().hex}", role="assistant",
+        content=character_profile.default_greeting.strip(), created_at=now,
+        metadata={"source": "character_profile_greeting", "character_id": character_profile.id, "character_profile_version": character_profile.version, "segment_id": segment_id},
+    ))
 
 
 def _neutral_topic_carryover(session: ChatSession) -> str | None:
-    user_messages = [
-        message.content.strip()
-        for message in session.messages
-        if message.role == "user"
-        and (not session.active_segment_id or message.metadata.get("segment_id") == session.active_segment_id)
-        and message.content.strip()
-    ][-4:]
+    user_messages = [message.content.strip() for message in session.messages if message.role == "user" and (not session.active_segment_id or message.metadata.get("segment_id") == session.active_segment_id) and message.content.strip()][-4:]
     if not user_messages:
         return None
-    lines = ["User topics carried from the previous identity segment:"]
-    lines.extend(f"- {content[:500]}" for content in user_messages)
-    return "\n".join(lines)[:2400]
+    return "\n".join(["User topics carried from the previous identity segment:", *(f"- {content[:500]}" for content in user_messages)])[:2400]
 
 
 def _tag_turn_and_save(store, session: ChatSession, user_message_id: str) -> None:
