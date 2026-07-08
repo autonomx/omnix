@@ -68,6 +68,21 @@ class ChatSessionStore(JsonChatSessionStore):
             for message in rendered.messages
         ]
 
+    @staticmethod
+    def _active_memory_metadata(
+        assembly: PromptAssembly,
+        rendered: RenderedPrompt,
+    ) -> dict[str, Any]:
+        memory = assembly.diagnostics.get("memory")
+        if not isinstance(memory, dict) or not memory.get("memory_enabled"):
+            return {}
+        return {
+            "memory_context": {
+                **memory,
+                "budget": rendered.diagnostics.model_dump(mode="json"),
+            }
+        }
+
     def _generate_provider_reply(
         self,
         session: ChatSession,
@@ -98,10 +113,7 @@ class ChatSessionStore(JsonChatSessionStore):
             "provider_id": provider_id,
             "model_id": model_id,
             "resolved_model": getattr(response, "model", None) or model_name,
-            "prompt_diagnostics": {
-                **assembly.diagnostics,
-                "budget": rendered.diagnostics.model_dump(mode="json"),
-            },
+            **self._active_memory_metadata(assembly, rendered),
         }
         usage = getattr(response, "usage", None)
         if usage:
@@ -162,10 +174,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 "provider_id": provider_id,
                 "model_id": model_id,
                 "resolved_model": resolved_model,
-                "prompt_diagnostics": {
-                    **assembly.diagnostics,
-                    "budget": rendered.diagnostics.model_dump(mode="json"),
-                },
+                **self._active_memory_metadata(assembly, rendered),
                 **({"usage": usage} if usage else {}),
             },
         }
