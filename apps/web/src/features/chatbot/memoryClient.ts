@@ -1,0 +1,148 @@
+export type MemoryScope = 'global' | 'workspace' | 'project' | 'session';
+export type MemoryCategory = 'preference' | 'fact' | 'project' | 'relationship' | 'instruction';
+
+export interface ManagedMemoryRecord {
+  id: string;
+  scope: MemoryScope;
+  scope_id: string;
+  category: MemoryCategory;
+  source: string;
+  content: string;
+  confidence: number;
+  pinned: boolean;
+  trust_level: string;
+  provenance_type: string;
+  provenance_id?: string | null;
+  status: string;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+  expires_at?: string | null;
+}
+
+export interface ManagedMemoryCandidate {
+  id: string;
+  source_session_id: string;
+  source_message_id: string;
+  proposed_scope: MemoryScope;
+  proposed_scope_id: string;
+  proposed_category: MemoryCategory;
+  proposed_content: string;
+  confidence: number;
+  source: string;
+  trust_level: string;
+  status: string;
+  created_at: string;
+}
+
+export interface ManagedMemoryList {
+  records: ManagedMemoryRecord[];
+  total: number;
+  session_id: string;
+}
+
+export interface ManagedMemoryCandidateList {
+  candidates: ManagedMemoryCandidate[];
+  total: number;
+  session_id: string;
+}
+
+export interface SessionMemorySnapshotItem {
+  memory_record_id: string;
+  record_revision: number;
+  content: string;
+  active: boolean;
+  invalidation_reason?: string | null;
+}
+
+export interface SessionMemoryState {
+  session_id: string;
+  memory_enabled: boolean;
+  snapshot_id?: string | null;
+  snapshot_revision?: number | null;
+  memory_record_count: number;
+  last_refreshed_at?: string | null;
+  snapshot?: {
+    snapshot_id: string;
+    revision: number;
+    token_estimate: number;
+    active_count: number;
+    invalidated_count: number;
+    items: SessionMemorySnapshotItem[];
+  } | null;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, init);
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Memory request failed with status ${response.status}.`);
+  }
+  return response.json() as Promise<T>;
+}
+
+function jsonInit(method: string, body: unknown): RequestInit {
+  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+}
+
+export const memoryClient = {
+  list(sessionId: string, query = '', scope = '', category = ''): Promise<ManagedMemoryList> {
+    const params = new URLSearchParams({ session_id: sessionId });
+    if (query) params.set('query', query);
+    if (scope) params.set('scope', scope);
+    if (category) params.set('category', category);
+    return request(`/api/assistant/memory?${params.toString()}`);
+  },
+  create(sessionId: string, input: { scope: MemoryScope; category: MemoryCategory; content: string; pinned: boolean }): Promise<ManagedMemoryRecord> {
+    return request('/api/assistant/memory', jsonInit('POST', { session_id: sessionId, ...input }));
+  },
+  edit(sessionId: string, record: ManagedMemoryRecord, content: string): Promise<ManagedMemoryRecord> {
+    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}`, jsonInit('PATCH', {
+      session_id: sessionId,
+      expected_revision: record.revision,
+      content,
+    }));
+  },
+  pin(sessionId: string, record: ManagedMemoryRecord, pinned: boolean): Promise<ManagedMemoryRecord> {
+    const action = pinned ? 'pin' : 'unpin';
+    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/${action}`, jsonInit('POST', {
+      session_id: sessionId,
+      expected_revision: record.revision,
+    }));
+  },
+  move(sessionId: string, record: ManagedMemoryRecord, targetScope: MemoryScope): Promise<ManagedMemoryRecord> {
+    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/move`, jsonInit('POST', {
+      session_id: sessionId,
+      expected_revision: record.revision,
+      target_scope: targetScope,
+    }));
+  },
+  forget(sessionId: string, record: ManagedMemoryRecord): Promise<{ ok: true; memory_id: string }> {
+    const params = new URLSearchParams({ session_id: sessionId, expected_revision: String(record.revision) });
+    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}?${params.toString()}`, { method: 'DELETE' });
+  },
+  candidates(sessionId: string): Promise<ManagedMemoryCandidateList> {
+    return request(`/api/assistant/memory/candidates/pending?session_id=${encodeURIComponent(sessionId)}`);
+  },
+  approve(sessionId: string, candidateId: string): Promise<ManagedMemoryRecord> {
+    return request(`/api/assistant/memory/candidates/${encodeURIComponent(candidateId)}/approve`, jsonInit('POST', {
+      session_id: sessionId,
+      pinned: false,
+    }));
+  },
+  reject(sessionId: string, candidateId: string): Promise<ManagedMemoryCandidate> {
+    return request(`/api/assistant/memory/candidates/${encodeURIComponent(candidateId)}/reject`, jsonInit('POST', {
+      session_id: sessionId,
+      pinned: false,
+    }));
+  },
+  sessionState(sessionId: string): Promise<SessionMemoryState> {
+    return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/memory`);
+  },
+  refresh(sessionId: string, expectedRevision?: number | null): Promise<SessionMemoryState> {
+    return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/memory/refresh`, jsonInit('POST', {
+      expected_snapshot_revision: expectedRevision ?? null,
+      token_budget: 4000,
+    }));
+  },
+};
