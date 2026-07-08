@@ -74,9 +74,10 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Memory update failed.'),
   });
   const candidateMutation = useMutation({
-    mutationFn: (input: { id: string; action: 'approve' | 'reject' }) => input.action === 'approve'
-      ? memoryClient.approve(sessionId ?? '', input.id)
-      : memoryClient.reject(sessionId ?? '', input.id),
+    mutationFn: async (input: { id: string; action: 'approve' | 'reject' }) => {
+      if (input.action === 'approve') return await memoryClient.approve(sessionId ?? '', input.id);
+      return await memoryClient.reject(sessionId ?? '', input.id);
+    },
     onSuccess: async () => {
       setStatus('Memory suggestion reviewed.');
       await refreshAll();
