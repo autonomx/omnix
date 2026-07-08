@@ -1,0 +1,81 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CharacterModePanel } from './CharacterModePanel';
+
+function renderPanel() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  return render(<QueryClientProvider client={queryClient}><CharacterModePanel sessionId="chat:one" /></QueryClientProvider>);
+}
+
+const maya = {
+  id: 'maya',
+  display_name: 'Maya',
+  description: 'Easygoing character',
+  personality_prompt: 'Be warm and easygoing.',
+  default_greeting: 'Hey.',
+  default_voice_asset_id: 'voice-cloning:maya',
+  speech_style: {},
+  identity_policy: {},
+  shared_memory_policy: {},
+  active_version: 2,
+  enabled: true,
+  status: 'active',
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('CharacterModePanel', () => {
+  it('enables a server-owned character and keeps memory off', async () => {
+    const posted: unknown[] = [];
+    let interaction = {
+      id: 'chat:one', title: 'Chat', interaction_mode: 'system', character_id: null, voice_asset_id: null,
+      read_memory: false, write_memory: false, shared_memory_access: 'none', transcript_policy: 'persistent', messages: [],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input.toString(), 'http://localhost');
+      if (url.pathname === '/api/characters') return Response.json({ characters: [maya] });
+      if (url.pathname.endsWith('/interaction') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        posted.push(body);
+        interaction = { ...interaction, interaction_mode: body.interaction_mode, character_id: body.character_id, voice_asset_id: body.voice_asset_id };
+        return Response.json(interaction);
+      }
+      if (url.pathname.endsWith('/interaction')) return Response.json(interaction);
+      return new Response('not found', { status: 404 });
+    }));
+
+    renderPanel();
+    expect(await screen.findByRole('option', { name: 'Maya' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Enable Character Mode' }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toMatchObject({
+      interaction_mode: 'character',
+      character_id: 'maya',
+      voice_asset_id: 'voice-cloning:maya',
+      transcript_policy: 'persistent',
+    });
+    expect(await screen.findByRole('status')).toHaveTextContent('Talking to Maya · Memory off');
+  });
+
+  it('shows the persisted character identity badge', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input.toString(), 'http://localhost');
+      if (url.pathname === '/api/characters') return Response.json({ characters: [maya] });
+      if (url.pathname.endsWith('/interaction')) return Response.json({
+        id: 'chat:one', title: 'Chat', interaction_mode: 'character', character_id: 'maya',
+        voice_asset_id: 'voice-cloning:maya', read_memory: false, write_memory: false,
+        shared_memory_access: 'none', transcript_policy: 'persistent', character_profile_version: 2, messages: [],
+      });
+      return new Response('not found', { status: 404 });
+    }));
+
+    renderPanel();
+    expect(await screen.findByText('Talking to Maya')).toBeInTheDocument();
+    expect(screen.getByText('voice-cloning:maya')).toBeInTheDocument();
+    expect(screen.getByText('Off in CHAR-3')).toBeInTheDocument();
+  });
+});
