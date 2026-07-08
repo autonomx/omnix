@@ -9,6 +9,11 @@ from typing import Any
 from app.assistant_memory import MemoryService, default_memory_service
 from app.assistant_memory.jobs import enqueue_memory_suggestion_job
 
+from .history_search import (
+    SQLiteHistorySearchService,
+    default_history_search_service,
+    history_recall_enabled,
+)
 from .memory_commands import execute_memory_command, parse_memory_command
 from .memory_prompt import resolve_prompt_memory
 from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessageRequest
@@ -30,9 +35,11 @@ class ChatSessionStore(JsonChatSessionStore):
         path: str | Path | None = None,
         *,
         memory_service_factory: Callable[[], MemoryService] = default_memory_service,
+        history_search_factory: Callable[[], SQLiteHistorySearchService] = default_history_search_service,
     ) -> None:
         super().__init__(path)
         self.memory_service_factory = memory_service_factory
+        self.history_search_factory = history_search_factory
 
     def build_provider_prompt(
         self,
@@ -46,14 +53,35 @@ class ChatSessionStore(JsonChatSessionStore):
             session,
             memory_service_factory=self.memory_service_factory,
         )
+        history_result = None
+        if history_recall_enabled():
+            history_result = self.history_search_factory().search(
+                user_message.content,
+                profile_id=session.profile_id,
+                workspace_id=session.workspace_id,
+                project_id=session.project_id,
+                exclude_session_id=session.id,
+            )
         assembly = build_prompt_assembly(
             session,
             user_message,
             global_system_prompt=shared.get_global_system_prompt(),
             context_items=context_items or [],
             approved_memory=approved_memory,
+            retrieved_history=history_result.items if history_result is not None else [],
         )
         assembly.diagnostics["memory"] = memory_diagnostics
+        assembly.diagnostics["history_recall"] = (
+            {
+                "enabled": True,
+                "status": history_result.status.model_dump(mode="json"),
+                "query_terms": history_result.query_terms,
+                "retrieved_message_ids": [item.message_id for item in history_result.items],
+                "retrieved_count": len(history_result.items),
+            }
+            if history_result is not None
+            else {"enabled": False, "retrieved_count": 0}
+        )
         return assembly, render_prompt_assembly(assembly)
 
     def _provider_messages(
@@ -69,6 +97,13 @@ class ChatSessionStore(JsonChatSessionStore):
             ProviderMessage(role=message.role, content=message.content)
             for message in rendered.messages
         ]
+
+    @staticmethod
+    def _active_history_metadata(assembly: PromptAssembly) -> dict[str, Any]:
+        history = assembly.diagnostics.get("history_recall")
+        if not isinstance(history, dict) or not history.get("enabled"):
+            return {}
+        return {"history_recall": history}
 
     @staticmethod
     def _active_memory_metadata(
@@ -221,6 +256,7 @@ class ChatSessionStore(JsonChatSessionStore):
             "model_id": model_id,
             "resolved_model": getattr(response, "model", None) or model_name,
             **self._active_memory_metadata(assembly, rendered),
+            **self._active_history_metadata(assembly),
         }
         usage = getattr(response, "usage", None)
         if usage:
@@ -302,6 +338,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 "model_id": model_id,
                 "resolved_model": resolved_model,
                 **self._active_memory_metadata(assembly, rendered),
+            **self._active_history_metadata(assembly),
                 **({"usage": usage} if usage else {}),
             },
         }
