@@ -1,12 +1,23 @@
 # MEM-15 — Adversarial release gate
 
-Status: implementation complete pending exact-head required checks and merge.
+Status: complete and squash-merged into `rpg`.
+
+Implementation pull request: #1273.
+
+Exact verified head: `91954b6566e0c2503b0b9429d3bb3dafb34d2af0`.
+
+Squash merge SHA: `aefdc5e4d8d7bab43110b8806e760540382875ec`.
 
 ## Release scope
 
 MEM-0 through MEM-14 established the Chat memory architecture, contracts, prompt assembly, persistence, snapshot lifecycle, approved-memory injection, management UI, explicit commands, pending suggestions, consolidation policy, FTS5 history recall, long-session compaction, optional Hermes synchronization, and server-enforced privacy settings.
 
-MEM-15 adds the final adversarial integration gate and process-local concurrency hardening. Chat read-modify-write operations are serialized, snapshot refresh participates in the same mutation lock, and JSON fallback persistence uses atomic temporary-file replacement. SQLite remains the recommended durable Chat store.
+MEM-15 added the final adversarial integration gate and process-local concurrency hardening. Chat read-modify-write operations are serialized, snapshot refresh participates in the same mutation lock, and JSON fallback persistence uses atomic temporary-file replacement. SQLite remains the recommended durable Chat store.
+
+Both required GitHub Actions workflows passed on the exact MEM-15 head before squash merge:
+
+- `RPG Phase 0 architecture compliance`
+- `RPG deterministic PR gates`
 
 ## Adversarial evidence
 
@@ -39,20 +50,35 @@ Provider input is frozen when a generation begins. Forgetting a record cannot re
 
 A streaming provider failure leaves the persisted user turn in `running` state. The turn can be completed with explicit failure metadata or retried by higher-level orchestration without losing the user input. Non-streaming generation remains all-or-nothing: a failed provider call does not append a fabricated assistant response.
 
-## Rollout
+## Completed staged rollout evidence
 
-Recommended initial production settings:
+After MEM-15 merged, six independent rollout gates were implemented and verified:
+
+| Stage | Pull request | Capability boundary | Merge SHA |
+|---|---:|---|---|
+| 1 | #1274 | SQLite Chat storage | `ce44a70f79a9f13d8b000cbe64d0029d685838d1` |
+| 2 | #1275 | Explicit approved memory | `189552aedfd671ba15ae9160f03850cc3271c783` |
+| 3 | #1276 | Pending suggestions | `e37a88a5d2a30101d55d0ab26915e8cd85edbfcc` |
+| 4 | #1277 | Scoped history recall | `191c5bb5080e639d3b5b4887738bdf1b7098900f` |
+| 5 | #1278 | Long-session compaction | `5e9161af773ca486cc91770b20f8f47659891ffb` |
+| 6 | #1279 | Optional Hermes adapter | `d4de5d1233db8d9cb382153a8683e3bff7bc2746` |
+
+Each stage has a runbook, temporary-store preflight, unit coverage, rollback guidance, and exact-head workflow evidence. The consolidated matrix is in `chat-memory-release-evidence.md`.
+
+## Recommended operational posture
+
+The fully verified native configuration keeps Hermes off by default:
 
 ```text
 OMNIX_CHAT_SQLITE_STORE_ENABLED=1
-OMNIX_CHAT_MEMORY_ENABLED=0
-OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED=0
-OMNIX_CHAT_HISTORY_RECALL_ENABLED=0
-OMNIX_CHAT_COMPACTION_ENABLED=0
+OMNIX_CHAT_MEMORY_ENABLED=1
+OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED=1
+OMNIX_CHAT_HISTORY_RECALL_ENABLED=1
+OMNIX_CHAT_COMPACTION_ENABLED=1
 OMNIX_HERMES_MEMORY_SYNC_ENABLED=0
 ```
 
-Enable features independently after confirming migration counts and the Memory view. A safe sequence is SQLite Chat storage, curated read-only memory, explicit saves and management, pending suggestions, history recall, compaction, and finally Hermes synchronization.
+Hermes can be enabled later as a controlled optional pilot after backing up its directory and running the Stage 6 preflight.
 
 ## Rollback
 
@@ -63,9 +89,6 @@ Enable features independently after confirming migration counts and the Memory v
 - Switch off the SQLite Chat feature flag only while the preserved legacy JSON store remains an acceptable rollback source. Do not alternate writers between JSON and SQLite after new production-only messages have accumulated without first reconciling them.
 - Forget is intentionally irreversible for active content and frozen snapshot copies; audit events preserve only non-sensitive metadata.
 
-## Final merge requirement
+## Release conclusion
 
-MEM-15 is complete only after both required GitHub Actions workflows pass on the exact PR head and the PR is squash-merged into `rpg`:
-
-- RPG Phase 0 architecture compliance
-- RPG deterministic PR gates
+MEM-15 and the staged repository rollout are complete. Repository completion does not assert that every flag is enabled in production; deployment adoption remains an operational decision.

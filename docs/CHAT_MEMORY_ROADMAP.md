@@ -1,14 +1,16 @@
 # Omnix Chat Memory Roadmap
 
-Status: implementation complete through MEM-15; exact-head release gate required
+Status: implementation and repository rollout gates complete through MEM-15 and Stage 6
 
 Target branch: `rpg`
 
 ## Final implementation status
 
-MEM-0 through MEM-14 are merged into `rpg`. MEM-15 supplies the adversarial integration suite, process-local mutation serialization, atomic JSON fallback writes, rollout guidance, and rollback evidence. The roadmap is considered released only after the MEM-15 pull request passes both required GitHub Actions workflows on its exact head and is squash-merged.
+MEM-0 through MEM-15 are squash-merged into `rpg`. MEM-15 supplied the adversarial integration suite, process-local mutation serialization, atomic JSON fallback writes, rollout guidance, and rollback evidence. Six staged rollout gates then verified SQLite Chat storage, explicit approved memory, pending suggestions, scoped history recall, long-session compaction, and the optional Hermes adapter.
 
-Canonical phase evidence is stored under `docs/chat-memory/`, including the final `mem-15-release-gate.md` matrix.
+Every implementation and rollout pull request passed both required GitHub Actions workflows on its exact head before merge. Canonical pull-request, exact-head, workflow-run, and merge evidence is stored in `docs/chat-memory/chat-memory-release-evidence.md`.
+
+This status records repository completion, not production feature-flag adoption. Hermes remains optional and should stay disabled unless a controlled pilot is intentionally adopted.
 
 ## Objective
 
@@ -150,10 +152,11 @@ A true forget operation must remove active content, purge search indexes, purge 
 ## Feature flags
 
 ```text
+OMNIX_CHAT_SQLITE_STORE_ENABLED=0
 OMNIX_CHAT_MEMORY_ENABLED=0
 OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED=0
 OMNIX_CHAT_HISTORY_RECALL_ENABLED=0
-OMNIX_CHAT_SQLITE_STORE_ENABLED=0
+OMNIX_CHAT_COMPACTION_ENABLED=0
 OMNIX_HERMES_MEMORY_SYNC_ENABLED=0
 ```
 
@@ -304,9 +307,22 @@ Cover at minimum:
 
 Acceptance: required GitHub Actions checks pass on the exact release head; rollout and rollback evidence is documented.
 
+## Completed staged rollout
+
+| Stage | Pull request | Capability boundary |
+|---|---:|---|
+| 1 | #1274 | SQLite Chat storage only |
+| 2 | #1275 | Explicit approved memory |
+| 3 | #1276 | Pending memory suggestions |
+| 4 | #1277 | Scoped historical recall |
+| 5 | #1278 | Long-session compaction |
+| 6 | #1279 | Optional Hermes adapter |
+
+Each stage includes a runbook, temporary-store preflight, unit coverage, rollback instructions, and exact-head merge evidence. The fully verified native operational posture is Stages 1 through 5 with Hermes disabled by default.
+
 ## Required verification per phase
 
-Every implementation PR must use GitHub Actions as the source of truth and pass the required checks on the exact PR head before merge:
+Every implementation and rollout PR must use GitHub Actions as the source of truth and pass the required checks on the exact PR head before merge:
 
 - RPG Phase 0 architecture compliance
 - RPG deterministic PR gates
@@ -317,4 +333,6 @@ No verification result may be claimed unless it actually ran.
 
 ## Definition of done
 
-The roadmap is complete when new chats can use approved personal and project memory; scope is server-authoritative; users can inspect and control saved records; inferred memory remains pending until approved; active sessions use stable but safely revocable snapshots; historical conversations are retrieved through bounded FTS; long sessions no longer send the full transcript indefinitely; streaming, non-streaming, voice, and text use one prompt assembly; Hermes shares only approved compatible memory; normal Chat works with Hermes offline; and all capabilities have tested rollback controls.
+Complete.
+
+New chats can use approved personal and project memory; scope is server-authoritative; users can inspect and control saved records; inferred memory remains pending until approved; active sessions use stable but safely revocable snapshots; historical conversations are retrieved through bounded FTS; long sessions no longer send the full transcript indefinitely; streaming, non-streaming, voice, and text use one prompt assembly; Hermes shares only approved compatible memory when explicitly enabled; normal Chat works with Hermes offline; and all capabilities have tested rollback controls.
