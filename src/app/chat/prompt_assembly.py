@@ -1,0 +1,128 @@
+"""Typed, trust-separated provider prompt assembly."""
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from .context_budget import PromptBudget, prompt_budget_from_env
+from .models import ChatMessage, ChatSession
+
+PromptRole = Literal["system", "user", "assistant"]
+
+
+class PromptTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    role: PromptRole
+    content: str
+    message_id: str | None = None
+
+
+class PromptMemoryItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    memory_id: str
+    content: str
+    scope: str
+    category: str
+    revision: int = Field(ge=1)
+
+
+class PromptHistoryItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    session_id: str
+    message_id: str
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: str | None = None
+
+
+class PromptExternalContextItem(BaseModel):
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    source_id: str = "context"
+    title: str = "Context"
+    content: str
+    url: str | None = None
+
+
+class PromptAssembly(BaseModel):
+    """Canonical provider input before provider-specific message conversion."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    system_instructions: list[str] = Field(default_factory=list)
+    assistant_identity: list[str] = Field(default_factory=list)
+    approved_memory: list[PromptMemoryItem] = Field(default_factory=list)
+    session_summary: str | None = None
+    recent_messages: list[PromptTurn] = Field(default_factory=list)
+    retrieved_history: list[PromptHistoryItem] = Field(default_factory=list)
+    external_context: list[PromptExternalContextItem] = Field(default_factory=list)
+    current_user_message: PromptTurn
+    budget: PromptBudget = Field(default_factory=prompt_budget_from_env)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+
+
+def _external_item(payload: dict[str, Any], index: int) -> PromptExternalContextItem:
+    source_id = str(payload.get("source_id") or "context").strip() or "context"
+    title = str(payload.get("title") or source_id or f"Context {index}").strip()
+    content = str(payload.get("content") or "").strip()
+    url = str(payload.get("url") or "").strip() or None
+    return PromptExternalContextItem(
+        source_id=source_id,
+        title=title or f"Context {index}",
+        content=content,
+        url=url,
+    )
+
+
+def build_prompt_assembly(
+    session: ChatSession,
+    user_message: ChatMessage,
+    *,
+    global_system_prompt: str,
+    context_items: list[dict[str, Any]] | None = None,
+    approved_memory: list[PromptMemoryItem] | None = None,
+    session_summary: str | None = None,
+    retrieved_history: list[PromptHistoryItem] | None = None,
+    assistant_identity: list[str] | None = None,
+    budget: PromptBudget | None = None,
+) -> PromptAssembly:
+    """Build one stable structure for streaming and non-streaming generation."""
+
+    system_messages = [message.content for message in session.messages if message.role == "system"]
+    system_instructions = system_messages or [global_system_prompt]
+    recent_messages = [
+        PromptTurn(role=message.role, content=message.content, message_id=message.id)
+        for message in session.messages
+        if message.id != user_message.id and message.role != "system"
+    ]
+    external_context = [
+        _external_item(payload, index)
+        for index, payload in enumerate(context_items or [], start=1)
+    ]
+    return PromptAssembly(
+        system_instructions=system_instructions,
+        assistant_identity=assistant_identity or [],
+        approved_memory=approved_memory or [],
+        session_summary=session_summary,
+        recent_messages=recent_messages,
+        retrieved_history=retrieved_history or [],
+        external_context=external_context,
+        current_user_message=PromptTurn(
+            role="user",
+            content=user_message.content,
+            message_id=user_message.id,
+        ),
+        budget=budget or prompt_budget_from_env(),
+        diagnostics={
+            "session_id": session.id,
+            "system_instruction_count": len(system_instructions),
+            "approved_memory_count": len(approved_memory or []),
+            "recent_message_count": len(recent_messages),
+            "retrieved_history_count": len(retrieved_history or []),
+            "external_context_count": len(external_context),
+        },
+    )
