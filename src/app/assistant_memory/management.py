@@ -1,4 +1,4 @@
-"""Typed management contracts and scope-bound memory operations."""
+"""Typed management contracts and owner-bound memory operations."""
 from __future__ import annotations
 
 from typing import Literal
@@ -8,13 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.chat import ChatSession, ChatSessionStore
 
 from .models import MemoryCandidate, MemoryCategory, MemoryRecord, MemoryScope
-from .scope import resolve_chat_scope, scope_id_for
-from .service import MemoryService
+from .scope import resolve_session_memory_scope, scope_id_for
+from .service import MemoryPolicyError, MemoryService
 
 
 class MemoryListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     records: list[MemoryRecord]
     total: int = Field(ge=0)
     session_id: str
@@ -22,7 +21,6 @@ class MemoryListResponse(BaseModel):
 
 class MemoryCandidateListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     candidates: list[MemoryCandidate]
     total: int = Field(ge=0)
     session_id: str
@@ -30,7 +28,6 @@ class MemoryCandidateListResponse(BaseModel):
 
 class CreateManagedMemoryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     session_id: str = Field(min_length=1, max_length=200)
     scope: MemoryScope
     category: MemoryCategory
@@ -40,7 +37,6 @@ class CreateManagedMemoryRequest(BaseModel):
 
 class UpdateManagedMemoryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     session_id: str = Field(min_length=1, max_length=200)
     expected_revision: int = Field(ge=1)
     content: str = Field(min_length=1, max_length=4096)
@@ -48,7 +44,6 @@ class UpdateManagedMemoryRequest(BaseModel):
 
 class RevisionedMemoryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     session_id: str = Field(min_length=1, max_length=200)
     expected_revision: int = Field(ge=1)
 
@@ -59,14 +54,12 @@ class MoveManagedMemoryRequest(RevisionedMemoryRequest):
 
 class CandidateResolutionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     session_id: str = Field(min_length=1, max_length=200)
     pinned: bool = False
 
 
 class ForgetMemoryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     ok: Literal[True] = True
     memory_id: str
 
@@ -75,12 +68,12 @@ def resolve_session_scope(store: ChatSessionStore, session_id: str):
     session = store.get_session(session_id)
     if session is None:
         return None, None
-    return session, resolve_chat_scope(
-        session.id,
-        profile_id=session.profile_id,
-        workspace_id=session.workspace_id,
-        project_id=session.project_id,
-    )
+    return session, resolve_session_memory_scope(session)
+
+
+def require_memory_write(session: ChatSession) -> None:
+    if session.interaction_mode == "character" and not session.write_memory:
+        raise MemoryPolicyError("character_memory_write_disabled")
 
 
 def records_for_session(
@@ -119,34 +112,5 @@ def records_for_session(
     return MemoryListResponse(
         records=filtered[bounded_offset : bounded_offset + bounded_limit],
         total=total,
-        session_id=session_id,
-    )
-
-
-def candidates_for_session(
-    store: ChatSessionStore,
-    service: MemoryService,
-    session_id: str,
-    *,
-    limit: int = 100,
-) -> MemoryCandidateListResponse | None:
-    _, context = resolve_session_scope(store, session_id)
-    if context is None:
-        return None
-    allowed_scope_ids = {
-        scope_id
-        for scope in ("global", "workspace", "project", "session")
-        if (scope_id := scope_id_for(scope, context)) is not None
-    }
-    candidates = [
-        candidate
-        for candidate in service.repository.list_candidates(status="pending", limit=500)
-        if candidate.proposed_scope_id in allowed_scope_ids
-    ]
-    candidates.sort(key=lambda candidate: (candidate.created_at, candidate.id))
-    bounded_limit = max(0, min(limit, 500))
-    return MemoryCandidateListResponse(
-        candidates=candidates[:bounded_limit],
-        total=len(candidates),
         session_id=session_id,
     )
