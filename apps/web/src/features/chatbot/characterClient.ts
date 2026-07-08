@@ -60,12 +60,20 @@ export const characterClient = {
       interaction_mode: 'system' | 'character';
       character_id?: string | null;
       voice_asset_id?: string | null;
+      read_memory?: boolean;
+      write_memory?: boolean;
       transcript_policy?: 'persistent' | 'temporary' | 'none';
+      continue_topic?: boolean;
     },
   ): Promise<SessionInteraction> {
     return request(
       `/api/chat/sessions/${encodeURIComponent(sessionId)}/interaction`,
-      jsonInit('POST', { transcript_policy: 'persistent', ...input }),
+      jsonInit('POST', {
+        transcript_policy: 'persistent',
+        read_memory: false,
+        write_memory: false,
+        ...input,
+      }),
     );
   },
 };
