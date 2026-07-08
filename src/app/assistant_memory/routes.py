@@ -15,8 +15,9 @@ from app.chat.memory_session import (
 )
 
 from .management_routes import register_memory_management_routes
+from .owner_defaults import default_memory_service
+from .service import MemoryService
 from .settings_routes import register_memory_settings_routes
-from .service import MemoryService, default_memory_service
 
 _GET_ROUTE_NAME = "assistant_memory_session_state_endpoint"
 _REFRESH_ROUTE_NAME = "assistant_memory_session_refresh_endpoint"

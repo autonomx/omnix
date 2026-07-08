@@ -40,6 +40,8 @@ def resolve_snapshot_view(
     snapshot = service.repository.get_snapshot(snapshot_id)
     if snapshot is None or snapshot.session_id != context.session_id:
         return None
+    if (snapshot.owner_type, snapshot.owner_id) != (context.owner_type, context.owner_id):
+        return None
 
     items: list[MemorySnapshotViewItem] = []
     for item in snapshot.items:
@@ -48,6 +50,8 @@ def resolve_snapshot_view(
             reason = "snapshot_item_revoked"
         elif record is None:
             reason = "record_forgotten"
+        elif (record.owner_type, record.owner_id) != (context.owner_type, context.owner_id):
+            reason = "owner_mismatch"
         else:
             decision = prompt_eligibility(record, context)
             reason = None if decision.allowed else decision.reason
