@@ -219,9 +219,9 @@ describe('assistant PCM stream player', () => {
     await waitFor(() => expect(FakeAudioWorkletNode.nodes).toHaveLength(1));
     const [node] = FakeAudioWorkletNode.nodes;
     expect(node.options.processorOptions).toMatchObject({
-      startBufferSamples: 48_000,
-      rebufferSamples: 36_000,
-      maxRebufferSamples: 72_000,
+      startBufferSamples: 9_600,
+      rebufferSamples: 18_000,
+      maxRebufferSamples: 36_000,
       transitionFadeSamples: 192,
     });
     expect(node.connect).toHaveBeenCalledTimes(1);

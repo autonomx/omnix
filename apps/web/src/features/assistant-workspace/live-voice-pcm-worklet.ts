@@ -6,11 +6,11 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const settings = options.processorOptions || {};
-    this.startBufferSamples = Math.max(1, Number(settings.startBufferSamples) || sampleRate * 2);
-    this.rebufferSamples = Math.max(1, Number(settings.rebufferSamples) || sampleRate * 1.5);
+    this.startBufferSamples = Math.max(1, Number(settings.startBufferSamples) || sampleRate * 0.4);
+    this.rebufferSamples = Math.max(1, Number(settings.rebufferSamples) || sampleRate * 0.75);
     this.maxRebufferSamples = Math.max(
       this.rebufferSamples,
-      Number(settings.maxRebufferSamples) || sampleRate * 3,
+      Number(settings.maxRebufferSamples) || sampleRate * 1.5,
     );
     this.currentRebufferSamples = this.rebufferSamples;
     this.transitionFadeSamples = Math.max(

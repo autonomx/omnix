@@ -2,9 +2,9 @@ import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 
 const STREAM_AUDIO_STATUS_ATTRIBUTE = 'data-omnix-stream-audio-status';
 const STREAMING_TTS_SAMPLE_RATE = 24_000;
-const STREAMING_TTS_START_BUFFER_SECONDS = 2.0;
-const STREAMING_TTS_REBUFFER_SECONDS = 1.5;
-const STREAMING_TTS_MAX_REBUFFER_SECONDS = 3.0;
+const STREAMING_TTS_START_BUFFER_SECONDS = 0.4;
+const STREAMING_TTS_REBUFFER_SECONDS = 0.75;
+const STREAMING_TTS_MAX_REBUFFER_SECONDS = 1.5;
 const STREAMING_TTS_TRANSITION_FADE_SECONDS = 0.008;
 const STREAMING_TTS_WEBSOCKET_PATH = '/api/tts/stream/websocket';
 const STREAMING_TTS_CHUNK_SIZE = 8;
@@ -447,11 +447,11 @@ class OmnixAssistantPcmStreamProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const settings = options.processorOptions || {};
-    this.startBufferSamples = Math.max(1, Number(settings.startBufferSamples) || sampleRate * 2);
-    this.rebufferSamples = Math.max(1, Number(settings.rebufferSamples) || sampleRate * 1.5);
+    this.startBufferSamples = Math.max(1, Number(settings.startBufferSamples) || sampleRate * 0.4);
+    this.rebufferSamples = Math.max(1, Number(settings.rebufferSamples) || sampleRate * 0.75);
     this.maxRebufferSamples = Math.max(
       this.rebufferSamples,
-      Number(settings.maxRebufferSamples) || sampleRate * 3,
+      Number(settings.maxRebufferSamples) || sampleRate * 1.5,
     );
     this.currentRebufferSamples = this.rebufferSamples;
     this.transitionFadeSamples = Math.max(

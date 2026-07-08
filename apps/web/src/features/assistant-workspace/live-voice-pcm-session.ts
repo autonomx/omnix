@@ -2,9 +2,9 @@ import type { LiveCallDiagnosticsReporter } from './live-call-diagnostics-client
 import { LIVE_VOICE_PCM_WORKLET_NAME, liveVoicePcmWorkletSource } from './live-voice-pcm-worklet';
 
 const SAMPLE_RATE = 24_000;
-const START_BUFFER_SECONDS = 2.0;
-const REBUFFER_SECONDS = 1.5;
-const MAX_REBUFFER_SECONDS = 3.0;
+const START_BUFFER_SECONDS = 0.4;
+const REBUFFER_SECONDS = 0.75;
+const MAX_REBUFFER_SECONDS = 1.5;
 const TRANSITION_FADE_SECONDS = 0.008;
 const TTS_WEBSOCKET_PATH = '/api/tts/stream/websocket';
 const TTS_CHUNK_SIZE = 8;
@@ -90,6 +90,37 @@ export async function createLiveVoicePcmSession(
   const drainPromise = new Promise<void>((resolve) => {
     drainResolve = resolve;
   });
+
+  const resumeAudioContext = async (reason: string): Promise<void> => {
+    const before = audioContext.state;
+    if (before === 'closed') {
+      reporter.record('audio_context_resume_skipped', { reason, audio_context_state: before }, 'pcm_session');
+      return;
+    }
+    if (before !== 'running') {
+      await audioContext.resume().catch((error: unknown) => {
+        reporter.record('audio_context_resume_failed', {
+          reason,
+          audio_context_state: before,
+          error: error instanceof Error ? error.message : String(error),
+        }, 'pcm_session');
+      });
+    }
+    reporter.record('audio_context_resume_checked', {
+      reason,
+      audio_context_state_before: before,
+      audio_context_state_after: audioContext.state,
+      document_visibility: document.visibilityState,
+    }, 'pcm_session');
+  };
+
+  const handlePlaybackResumeSignal = (event: Event): void => {
+    if (closed) return;
+    void resumeAudioContext(event.type);
+  };
+  document.addEventListener('visibilitychange', handlePlaybackResumeSignal);
+  window.addEventListener('focus', handlePlaybackResumeSignal);
+  window.addEventListener('pageshow', handlePlaybackResumeSignal);
 
   const node = new AudioWorkletNodeCtor(audioContext, LIVE_VOICE_PCM_WORKLET_NAME, {
     numberOfInputs: 0,
@@ -299,6 +330,7 @@ export async function createLiveVoicePcmSession(
       text_length: text.length,
     }, 'pcm_session');
     const task = generationQueue.catch(() => undefined).then(() => {
+      void resumeAudioContext('phrase_generation_started');
       reporter.record('phrase_generation_started', {
         phrase_index: phraseIndex,
         text_length: text.length,
@@ -325,6 +357,9 @@ export async function createLiveVoicePcmSession(
     try { activeSocket?.close(1000, reason.slice(0, 120)); } catch { /* ignore cleanup failures */ }
     try { node.port.postMessage({ type: 'stop' }); } catch { /* ignore cleanup failures */ }
     try { node.disconnect(); } catch { /* ignore cleanup failures */ }
+    document.removeEventListener('visibilitychange', handlePlaybackResumeSignal);
+    window.removeEventListener('focus', handlePlaybackResumeSignal);
+    window.removeEventListener('pageshow', handlePlaybackResumeSignal);
     await audioContext.close().catch(() => undefined);
     if (!drained) drainResolve?.();
   };
@@ -335,6 +370,7 @@ export async function createLiveVoicePcmSession(
     reporter.record('turn_input_finished', {}, 'pcm_session');
     await generationQueue;
     if (closed) return;
+    await resumeAudioContext('turn_input_finished');
     node.port.postMessage({ type: 'end' });
     await withTimeout(drainPromise, DRAIN_TIMEOUT_MS, 'Live voice playback drain timed out.');
     reporter.record('turn_playback_drained', {

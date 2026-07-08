@@ -27,10 +27,16 @@ class FakePort {
 class FakeAudioWorkletNode {
   static instances: FakeAudioWorkletNode[] = [];
   readonly port = new FakePort();
+  readonly options: AudioWorkletNodeOptions;
   connect = vi.fn();
   disconnect = vi.fn();
 
-  constructor() {
+  constructor(
+    _context?: BaseAudioContext,
+    _name?: string,
+    options: AudioWorkletNodeOptions = {},
+  ) {
+    this.options = options;
     FakeAudioWorkletNode.instances.push(this);
   }
 }
@@ -41,7 +47,9 @@ class FakeAudioContext {
   sampleRate = 24_000;
   destination = {} as AudioDestinationNode;
   audioWorklet = { addModule: vi.fn().mockResolvedValue(undefined) };
-  resume = vi.fn().mockResolvedValue(undefined);
+  resume = vi.fn(async () => {
+    this.state = 'running';
+  });
   close = vi.fn().mockResolvedValue(undefined);
 
   constructor() {
@@ -147,6 +155,12 @@ describe('live voice PCM session', () => {
     const messages = FakeAudioWorkletNode.instances[0].port.messages;
     expect(messages.filter((message) => (message as { type?: string }).type === 'push')).toHaveLength(2);
     expect(messages.filter((message) => (message as { type?: string }).type === 'end')).toHaveLength(1);
+    expect(FakeAudioWorkletNode.instances[0].options.processorOptions).toMatchObject({
+      startBufferSamples: 9_600,
+      rebufferSamples: 18_000,
+      maxRebufferSamples: 36_000,
+      transitionFadeSamples: 192,
+    });
     expect(reporter.record).toHaveBeenCalledWith(
       'turn_playback_drained',
       expect.objectContaining({ total_frames: 2, underruns: 0 }),
@@ -165,5 +179,30 @@ describe('live voice PCM session', () => {
     expect(FakeAudioWorkletNode.instances[0].port.messages).toContainEqual({ type: 'stop' });
     expect(FakeAudioWorkletNode.instances[0].disconnect).toHaveBeenCalledTimes(1);
     expect(FakeAudioContext.instances[0].close).toHaveBeenCalledTimes(1);
+  });
+
+  it('resumes playback audio after page visibility or focus changes', async () => {
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    const context = FakeAudioContext.instances[0];
+    context.state = 'suspended';
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.waitFor(() => expect(context.resume).toHaveBeenCalledTimes(1));
+
+    await vi.waitFor(() => expect(reporter.record).toHaveBeenCalledWith(
+      'audio_context_resume_checked',
+      expect.objectContaining({
+        reason: 'visibilitychange',
+        audio_context_state_before: 'suspended',
+        audio_context_state_after: 'running',
+      }),
+      'pcm_session',
+    ));
+
+    await session.stop('test-cleanup');
+    context.state = 'suspended';
+    window.dispatchEvent(new Event('focus'));
+    await Promise.resolve();
+    expect(context.resume).toHaveBeenCalledTimes(1);
   });
 });
