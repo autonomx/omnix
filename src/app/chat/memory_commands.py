@@ -45,7 +45,7 @@ _SAVE_PATTERN = re.compile(
     r"(preference|fact|project|relationship|instruction)\s*:\s*(.+)$",
     re.IGNORECASE | re.DOTALL,
 )
-_UPDATE_PATTERN = re.compile(r"^update\s+memory\s+([^:]+)\s*:\s*(.+)$", re.IGNORECASE | re.DOTALL)
+_UPDATE_PATTERN = re.compile(r"^update\s+memory\s+(memory:[A-Za-z0-9_.-]+)\s*:\s*(.+)$", re.IGNORECASE | re.DOTALL)
 
 
 def parse_memory_command(content: str) -> MemoryCommand | None:
