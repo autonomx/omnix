@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import sqlite3
 
-CHAT_SCHEMA_VERSION = 1
+CHAT_SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS chat_schema_version (
@@ -24,6 +24,16 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     memory_snapshot_revision INTEGER,
     memory_record_count INTEGER NOT NULL,
     memory_last_refreshed_at TEXT,
+    interaction_mode TEXT NOT NULL DEFAULT 'system',
+    character_id TEXT,
+    voice_asset_id TEXT,
+    read_memory INTEGER NOT NULL DEFAULT 0,
+    write_memory INTEGER NOT NULL DEFAULT 0,
+    shared_memory_access TEXT NOT NULL DEFAULT 'none',
+    transcript_policy TEXT NOT NULL DEFAULT 'persistent',
+    active_segment_id TEXT,
+    character_profile_version INTEGER,
+    effective_identity_hash TEXT,
     message_count INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -67,6 +77,19 @@ CREATE TABLE IF NOT EXISTS chat_import_state (
 );
 """
 
+_INTERACTION_COLUMNS = {
+    "interaction_mode": "TEXT NOT NULL DEFAULT 'system'",
+    "character_id": "TEXT",
+    "voice_asset_id": "TEXT",
+    "read_memory": "INTEGER NOT NULL DEFAULT 0",
+    "write_memory": "INTEGER NOT NULL DEFAULT 0",
+    "shared_memory_access": "TEXT NOT NULL DEFAULT 'none'",
+    "transcript_policy": "TEXT NOT NULL DEFAULT 'persistent'",
+    "active_segment_id": "TEXT",
+    "character_profile_version": "INTEGER",
+    "effective_identity_hash": "TEXT",
+}
+
 
 def initialize_chat_schema(connection: sqlite3.Connection) -> None:
     connection.executescript(_SCHEMA)
@@ -77,7 +100,18 @@ def initialize_chat_schema(connection: sqlite3.Connection) -> None:
             (CHAT_SCHEMA_VERSION,),
         )
         return
-    if int(row[0]) != CHAT_SCHEMA_VERSION:
+    version = int(row[0])
+    if version == 1:
+        existing = {
+            item[1]
+            for item in connection.execute("PRAGMA table_info(chat_sessions)").fetchall()
+        }
+        for name, definition in _INTERACTION_COLUMNS.items():
+            if name not in existing:
+                connection.execute(f"ALTER TABLE chat_sessions ADD COLUMN {name} {definition}")
+        connection.execute("UPDATE chat_schema_version SET version = ?", (CHAT_SCHEMA_VERSION,))
+        return
+    if version != CHAT_SCHEMA_VERSION:
         raise RuntimeError(
-            f"unsupported Chat schema version: {row[0]} (expected {CHAT_SCHEMA_VERSION})"
+            f"unsupported Chat schema version: {version} (expected {CHAT_SCHEMA_VERSION})"
         )
