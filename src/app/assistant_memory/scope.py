@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+from typing import Any
 
 from .models import MemoryOwnerType, MemoryScope, MemoryScopeContext, SYSTEM_MEMORY_OWNER_ID
 
@@ -51,6 +52,25 @@ def resolve_chat_scope(
         session_id=_trusted_identifier(session_id) or session_id,
         owner_type=owner_type,
         owner_id=resolved_owner_id or SYSTEM_MEMORY_OWNER_ID,
+    )
+
+
+def resolve_session_memory_scope(session: Any) -> MemoryScopeContext:
+    """Resolve the active memory owner from a persisted server-side Chat session."""
+
+    interaction_mode = getattr(session, "interaction_mode", "system")
+    character_id = getattr(session, "character_id", None)
+    owner_type: MemoryOwnerType = "character" if interaction_mode == "character" else "system"
+    owner_id = character_id if owner_type == "character" else SYSTEM_MEMORY_OWNER_ID
+    if owner_type == "character" and not owner_id:
+        raise ValueError("character session is missing character_id")
+    return resolve_chat_scope(
+        getattr(session, "id"),
+        profile_id=getattr(session, "profile_id", None),
+        workspace_id=getattr(session, "workspace_id", None),
+        project_id=getattr(session, "project_id", None),
+        owner_type=owner_type,
+        owner_id=owner_id,
     )
 
 
