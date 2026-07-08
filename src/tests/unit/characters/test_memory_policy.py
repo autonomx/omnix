@@ -10,6 +10,7 @@ from app.chat import ChatMessage, CreateChatSessionRequest, default_chat_store
 def _configure(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_MEMORY_ENABLED", "1")
+    monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
     monkeypatch.setenv("OMNIX_ASSISTANT_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite3"))
