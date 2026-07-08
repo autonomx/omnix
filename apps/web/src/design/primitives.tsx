@@ -1,6 +1,7 @@
 import { Badge, Box, Group, Paper, Progress, Stack, Text, Title } from '@mantine/core';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { OmnixModuleId } from '../app/modules';
+import { getOmnixThemePreset, OMNIX_THEME_PRESETS, type OmnixThemeId } from './appearanceThemes';
 
 export function OmnixShellLayout({
   children,
@@ -89,10 +90,83 @@ export function OmnixNavItem({ active, moduleId, children }: { active: boolean; 
   );
 }
 
+function OmnixThemePicker({
+  themeId,
+  onThemeChange,
+}: {
+  themeId: OmnixThemeId;
+  onThemeChange?: (themeId: OmnixThemeId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const currentTheme = getOmnixThemePreset(themeId);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className="omnix-theme-picker" ref={rootRef}>
+      <button
+        className="omnix-theme-picker-trigger"
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Choose theme. Current theme: ${currentTheme.label}`}
+        title={`Theme: ${currentTheme.label}`}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="omnix-theme-swatch" style={{ background: currentTheme.preview }} aria-hidden="true" />
+        <span className="omnix-theme-picker-label">{currentTheme.label}</span>
+        <span className="omnix-theme-picker-chevron" aria-hidden="true">⌄</span>
+      </button>
+      {open ? (
+        <div className="omnix-theme-menu" role="listbox" aria-label="Omnix themes">
+          <div className="omnix-theme-menu-heading">
+            <strong>Choose a theme</strong>
+            <small>Palette changes apply instantly.</small>
+          </div>
+          {OMNIX_THEME_PRESETS.map((theme) => (
+            <button
+              key={theme.id}
+              className={theme.id === themeId ? 'omnix-theme-option active' : 'omnix-theme-option'}
+              type="button"
+              role="option"
+              aria-selected={theme.id === themeId}
+              onClick={() => {
+                onThemeChange?.(theme.id);
+                setOpen(false);
+              }}
+            >
+              <span className="omnix-theme-option-swatch" style={{ background: theme.preview }} aria-hidden="true" />
+              <span><strong>{theme.label}</strong><small>{theme.description}</small></span>
+              <b aria-hidden="true">✓</b>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function OmnixTopBar({
   isSidebarVisible = true,
   onToggleSidebar,
   onToggleTheme,
+  onThemeChange,
+  themeId = 'aurora',
   themeMode = 'dark',
   title,
   status = 'Local-first',
@@ -101,6 +175,8 @@ export function OmnixTopBar({
   isSidebarVisible?: boolean;
   onToggleSidebar?: () => void;
   onToggleTheme?: () => void;
+  onThemeChange?: (themeId: OmnixThemeId) => void;
+  themeId?: OmnixThemeId;
   themeMode?: 'light' | 'dark';
   title: string;
   status?: string;
@@ -128,6 +204,7 @@ export function OmnixTopBar({
       {children ? <div className="omnix-mode-tabs" aria-label="Workspace modes">{children}</div> : null}
 
       <div className="omnix-topbar-actions">
+        <OmnixThemePicker themeId={themeId} onThemeChange={onThemeChange} />
         <button
           className="omnix-theme-toggle"
           type="button"
