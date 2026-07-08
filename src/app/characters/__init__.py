@@ -1,0 +1,46 @@
+"""Character Mode contracts and server-side interaction resolution."""
+from .interaction import (
+    CharacterInteractionError,
+    CharacterModeDisabledError,
+    CharacterResolutionError,
+    character_hermes_sync_enabled,
+    character_memory_enabled,
+    character_mode_enabled,
+    character_shared_memory_enabled,
+    neutralize_legacy_system_prompt,
+    resolve_interaction_context,
+    resolve_system_session_identity,
+)
+from .models import (
+    SYSTEM_ASSISTANT_ID,
+    SYSTEM_ASSISTANT_IDENTITY,
+    SYSTEM_ASSISTANT_NAME,
+    CharacterProfileSnapshot,
+    InteractionMode,
+    InteractionSelection,
+    ResolvedInteractionContext,
+    SharedMemoryAccess,
+    TranscriptPolicy,
+)
+
+__all__ = [
+    "CharacterInteractionError",
+    "CharacterModeDisabledError",
+    "CharacterProfileSnapshot",
+    "CharacterResolutionError",
+    "InteractionMode",
+    "InteractionSelection",
+    "ResolvedInteractionContext",
+    "SYSTEM_ASSISTANT_ID",
+    "SYSTEM_ASSISTANT_IDENTITY",
+    "SYSTEM_ASSISTANT_NAME",
+    "SharedMemoryAccess",
+    "TranscriptPolicy",
+    "character_hermes_sync_enabled",
+    "character_memory_enabled",
+    "character_mode_enabled",
+    "character_shared_memory_enabled",
+    "neutralize_legacy_system_prompt",
+    "resolve_interaction_context",
+    "resolve_system_session_identity",
+]
