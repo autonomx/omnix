@@ -52,7 +52,7 @@ def test_deterministic_summary_preserves_recent_boundary_and_key_items():
     assert first.summary == second.summary
     assert first.durable_decisions
     assert first.unresolved_items
-    assert "Conversation detail 0" in first.summary
+    assert "Always preserve decision 0" in first.summary
     assert "Conversation detail 79" not in first.summary
 
 
