@@ -1,12 +1,13 @@
 """Scope-first FTS5 retrieval for historical Chat messages."""
 from __future__ import annotations
 
-import os
 import re
 import sqlite3
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.assistant_memory.settings import load_memory_runtime_settings
 
 from .prompt_assembly import PromptHistoryItem
 from .repository import default_chat_db_path
@@ -31,12 +32,7 @@ class HistorySearchResult(BaseModel):
 
 
 def history_recall_enabled() -> bool:
-    return (os.environ.get("OMNIX_CHAT_HISTORY_RECALL_ENABLED") or "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    return load_memory_runtime_settings().history_recall_enabled
 
 
 class SQLiteHistorySearchService:

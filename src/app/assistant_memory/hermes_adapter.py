@@ -8,6 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import MemoryRecord, MemoryScopeContext
+from .settings import load_memory_runtime_settings
 from .service import MemoryService
 
 _BEGIN = "<!-- OMNIX MANAGED MEMORY BEGIN -->"
@@ -38,12 +39,7 @@ class HermesSyncStatus(BaseModel):
 
 
 def hermes_memory_sync_enabled() -> bool:
-    return (os.environ.get("OMNIX_HERMES_MEMORY_SYNC_ENABLED") or "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    return load_memory_runtime_settings().hermes_sync_enabled
 
 
 def default_hermes_memory_dir() -> Path:

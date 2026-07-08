@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.assistant_memory.settings import load_memory_runtime_settings
 from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, SQLiteJobStore, default_job_store
 
 from .repository import default_chat_db_path
@@ -47,9 +48,7 @@ class CompactionJobInput(BaseModel):
 
 
 def compaction_enabled() -> bool:
-    return (os.environ.get("OMNIX_CHAT_COMPACTION_ENABLED") or "").strip().lower() in {
-        "1", "true", "yes", "on",
-    }
+    return load_memory_runtime_settings().compaction_enabled
 
 
 def compaction_threshold() -> int:

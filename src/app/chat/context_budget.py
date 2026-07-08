@@ -5,6 +5,8 @@ import os
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.assistant_memory.settings import load_memory_runtime_settings
+
 DEFAULT_INPUT_TOKEN_BUDGET = 65_536
 DEFAULT_OUTPUT_TOKEN_RESERVE = 4_096
 
@@ -68,11 +70,12 @@ def prompt_budget_from_env() -> PromptBudget:
         except ValueError:
             return fallback
 
+    memory_settings = load_memory_runtime_settings()
     return PromptBudget(
         max_input_tokens=max(1, integer("OMNIX_CHAT_INPUT_TOKEN_BUDGET", DEFAULT_INPUT_TOKEN_BUDGET)),
         reserved_output_tokens=integer("OMNIX_CHAT_OUTPUT_TOKEN_RESERVE", DEFAULT_OUTPUT_TOKEN_RESERVE),
-        memory_tokens=integer("OMNIX_CHAT_MEMORY_TOKEN_BUDGET", 4_000),
+        memory_tokens=memory_settings.memory_token_budget,
         summary_tokens=integer("OMNIX_CHAT_SUMMARY_TOKEN_BUDGET", 4_000),
-        history_tokens=integer("OMNIX_CHAT_HISTORY_TOKEN_BUDGET", 8_000),
+        history_tokens=memory_settings.history_token_budget,
         external_context_tokens=integer("OMNIX_CHAT_EXTERNAL_CONTEXT_TOKEN_BUDGET", 12_000),
     )

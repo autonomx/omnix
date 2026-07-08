@@ -1,11 +1,11 @@
 """Resolve an active frozen memory snapshot into trusted prompt items."""
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from typing import Any
 
 from app.assistant_memory import MemoryService, default_memory_service, resolve_chat_scope
+from app.assistant_memory.settings import load_memory_runtime_settings
 from app.assistant_memory.lifecycle import resolve_snapshot_view
 
 from .models import ChatSession
@@ -13,12 +13,7 @@ from .prompt_assembly import PromptMemoryItem
 
 
 def chat_memory_enabled() -> bool:
-    return (os.environ.get("OMNIX_CHAT_MEMORY_ENABLED") or "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    return load_memory_runtime_settings().curated_memory_enabled
 
 
 def resolve_prompt_memory(

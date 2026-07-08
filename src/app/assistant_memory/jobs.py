@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, SQLiteJobStore, default_job_store
 
 from .scope import resolve_chat_scope
+from .settings import load_memory_runtime_settings
 from .service import MemoryService, default_memory_service
 
 if TYPE_CHECKING:
@@ -39,9 +39,7 @@ class MemorySuggestionJobResult(BaseModel):
 
 
 def memory_suggestions_enabled() -> bool:
-    return (os.environ.get("OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED") or "").strip().lower() in {
-        "1", "true", "yes", "on",
-    }
+    return load_memory_runtime_settings().suggestions_enabled
 
 
 def suggestion_idempotency_key(session_id: str, user_message_id: str) -> str:
