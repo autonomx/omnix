@@ -102,7 +102,12 @@ def build_prompt_assembly(
     ]
     system_instructions = system_messages or [neutralize_legacy_system_prompt(global_system_prompt)]
     interaction = resolve_system_session_identity(session)
-    resolved_identity = assistant_identity if assistant_identity is not None else interaction.assistant_identity
+    if assistant_identity is not None:
+        resolved_identity = assistant_identity
+    elif interaction.interaction_mode == "character":
+        resolved_identity = interaction.assistant_identity
+    else:
+        resolved_identity = []
     eligible_recent_messages = [
         message
         for message in session.messages
