@@ -136,7 +136,7 @@ def test_existing_session_defaults_to_system_assistant() -> None:
     assert session.transcript_policy == "persistent"
 
 
-def test_prompt_assembly_adds_server_identity_and_neutralizes_legacy_default() -> None:
+def test_prompt_assembly_keeps_one_system_message_and_neutralizes_legacy_default() -> None:
     session = _session()
     user_message = ChatMessage(
         id="msg:user",
@@ -152,5 +152,5 @@ def test_prompt_assembly_adds_server_identity_and_neutralizes_legacy_default() -
     )
 
     assert assembly.system_instructions == [SYSTEM_ASSISTANT_IDENTITY]
-    assert assembly.assistant_identity == [SYSTEM_ASSISTANT_IDENTITY]
+    assert assembly.assistant_identity == []
     assert assembly.diagnostics["interaction"]["interaction_mode"] == "system"
