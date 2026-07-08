@@ -1,0 +1,152 @@
+"""Persisted server-enforced Chat memory settings and content-free diagnostics."""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.runtime_paths import resources_data_root
+
+
+class AssistantMemoryRuntimeSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    curated_memory_enabled: bool = False
+    suggestions_enabled: bool = False
+    history_recall_enabled: bool = False
+    compaction_enabled: bool = False
+    hermes_sync_enabled: bool = False
+    require_approval_for_inferred_memory: bool = True
+    memory_token_budget: int = Field(default=4_000, ge=0, le=64_000)
+    history_token_budget: int = Field(default=8_000, ge=0, le=64_000)
+    retention_days: int = Field(default=365, ge=1, le=3_650)
+    show_memory_use_indicator: bool = True
+
+
+class AssistantMemorySettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    curated_memory_enabled: bool | None = None
+    suggestions_enabled: bool | None = None
+    history_recall_enabled: bool | None = None
+    compaction_enabled: bool | None = None
+    hermes_sync_enabled: bool | None = None
+    require_approval_for_inferred_memory: bool | None = None
+    memory_token_budget: int | None = Field(default=None, ge=0, le=64_000)
+    history_token_budget: int | None = Field(default=None, ge=0, le=64_000)
+    retention_days: int | None = Field(default=None, ge=1, le=3_650)
+    show_memory_use_indicator: bool | None = None
+
+
+class AssistantMemoryRuntimeStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    settings: AssistantMemoryRuntimeSettings
+    settings_path: str
+    environment_overrides: list[str] = Field(default_factory=list)
+    approval_policy_locked: bool = True
+    diagnostics_policy: str = "content_free"
+
+
+def default_memory_settings_path() -> Path:
+    override = (os.environ.get("OMNIX_CHAT_MEMORY_SETTINGS_PATH") or "").strip()
+    return Path(override) if override else resources_data_root() / "omnix_chat_memory_settings.json"
+
+
+def _env_bool(name: str, fallback: bool) -> tuple[bool, bool]:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return fallback, False
+    return raw.strip().lower() in {"1", "true", "yes", "on"}, True
+
+
+def _env_int(name: str, fallback: int, minimum: int, maximum: int) -> tuple[int, bool]:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return fallback, False
+    try:
+        value = int(raw)
+    except ValueError:
+        return fallback, True
+    return min(maximum, max(minimum, value)), True
+
+
+class AssistantMemorySettingsStore:
+    def __init__(self, path: str | Path | None = None) -> None:
+        self.path = Path(path) if path is not None else default_memory_settings_path()
+
+    def load_persisted(self) -> AssistantMemoryRuntimeSettings:
+        if not self.path.is_file():
+            return AssistantMemoryRuntimeSettings()
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            return AssistantMemoryRuntimeSettings.model_validate(payload)
+        except (OSError, ValueError, TypeError):
+            return AssistantMemoryRuntimeSettings()
+
+    def load_effective(self) -> AssistantMemoryRuntimeStatus:
+        settings = self.load_persisted()
+        overrides: list[str] = []
+        values = settings.model_dump()
+        bool_fields = {
+            "curated_memory_enabled": "OMNIX_CHAT_MEMORY_ENABLED",
+            "suggestions_enabled": "OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED",
+            "history_recall_enabled": "OMNIX_CHAT_HISTORY_RECALL_ENABLED",
+            "compaction_enabled": "OMNIX_CHAT_COMPACTION_ENABLED",
+            "hermes_sync_enabled": "OMNIX_HERMES_MEMORY_SYNC_ENABLED",
+        }
+        for field, env_name in bool_fields.items():
+            value, overridden = _env_bool(env_name, bool(values[field]))
+            values[field] = value
+            if overridden:
+                overrides.append(field)
+        memory_budget, memory_overridden = _env_int(
+            "OMNIX_CHAT_MEMORY_TOKEN_BUDGET",
+            int(values["memory_token_budget"]),
+            0,
+            64_000,
+        )
+        history_budget, history_overridden = _env_int(
+            "OMNIX_CHAT_HISTORY_TOKEN_BUDGET",
+            int(values["history_token_budget"]),
+            0,
+            64_000,
+        )
+        values["memory_token_budget"] = memory_budget
+        values["history_token_budget"] = history_budget
+        if memory_overridden:
+            overrides.append("memory_token_budget")
+        if history_overridden:
+            overrides.append("history_token_budget")
+        values["require_approval_for_inferred_memory"] = True
+        return AssistantMemoryRuntimeStatus(
+            settings=AssistantMemoryRuntimeSettings.model_validate(values),
+            settings_path=str(self.path),
+            environment_overrides=sorted(overrides),
+        )
+
+    def update(self, request: AssistantMemorySettingsUpdate) -> AssistantMemoryRuntimeStatus:
+        current = self.load_persisted()
+        changes = request.model_dump(exclude_none=True)
+        if changes.get("require_approval_for_inferred_memory") is False:
+            raise ValueError("approval is required for inferred memory")
+        changes["require_approval_for_inferred_memory"] = True
+        updated = current.model_copy(update=changes)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(updated.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(self.path)
+        return self.load_effective()
+
+
+def load_memory_runtime_status() -> AssistantMemoryRuntimeStatus:
+    return AssistantMemorySettingsStore().load_effective()
+
+
+def load_memory_runtime_settings() -> AssistantMemoryRuntimeSettings:
+    return load_memory_runtime_status().settings
