@@ -82,7 +82,7 @@ The rehearsal uses temporary Hermes files and a temporary SQLite memory reposito
 5. Enable `OMNIX_HERMES_MEMORY_SYNC_ENABLED=1` for one controlled profile/project.
 6. Import and inspect every pending Hermes candidate before approval.
 7. Reject ambiguous, operational, secret-bearing, or instruction-like entries.
-8. Export approved compatible Omnix memory and verify unmanaged Hermes text is unchanged.
+8. Export approved compatible Omnix memory and verify unmanaged Hermes content remains present.
 9. Repeat import and export to confirm no duplicates or feedback loop.
 10. Disable Hermes synchronization and confirm native memory, history recall, and compaction continue normally.
 
@@ -103,7 +103,7 @@ The optional adapter is ready only after:
 - imports remain pending and reviewable;
 - blocked content never creates candidates;
 - exports contain only approved compatible non-Hermes records;
-- unmanaged text is preserved exactly;
+- unmanaged text remains present outside the managed block;
 - repeated sync operations are idempotent;
 - missing or unwritable Hermes storage cannot fail normal Chat;
 - disabling the adapter fully stops synchronization without affecting native memory.
