@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.assistant_memory import MemoryService, default_memory_service
 
+from .compaction import SQLiteConversationSummaryRepository
 from .history_search import SQLiteHistorySearchService, default_history_search_service
 from .json_import import import_legacy_chat_json
 from .models import ChatSession
@@ -22,11 +23,13 @@ class SQLiteChatSessionStore(PromptAssemblyChatSessionStore):
         import_legacy: bool = True,
         memory_service_factory: Callable[[], MemoryService] = default_memory_service,
         history_search_factory: Callable[[], SQLiteHistorySearchService] = default_history_search_service,
+        summary_repository_factory: Callable[[], SQLiteConversationSummaryRepository] = SQLiteConversationSummaryRepository,
     ) -> None:
         self.repository = SQLiteChatRepository(db_path)
         self.path = Path(legacy_json_path) if legacy_json_path is not None else Path(":sqlite:")
         self.memory_service_factory = memory_service_factory
         self.history_search_factory = history_search_factory
+        self.summary_repository_factory = summary_repository_factory
         self.import_state: ChatImportState | None = None
         if import_legacy:
             self.import_state = import_legacy_chat_json(

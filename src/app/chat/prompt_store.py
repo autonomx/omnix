@@ -9,6 +9,12 @@ from typing import Any
 from app.assistant_memory import MemoryService, default_memory_service
 from app.assistant_memory.jobs import enqueue_memory_suggestion_job
 
+from .compaction import (
+    DEFAULT_RECENT_MESSAGE_LIMIT,
+    SQLiteConversationSummaryRepository,
+    compaction_enabled,
+    enqueue_compaction_job,
+)
 from .history_search import (
     SQLiteHistorySearchService,
     default_history_search_service,
@@ -36,10 +42,12 @@ class ChatSessionStore(JsonChatSessionStore):
         *,
         memory_service_factory: Callable[[], MemoryService] = default_memory_service,
         history_search_factory: Callable[[], SQLiteHistorySearchService] = default_history_search_service,
+        summary_repository_factory: Callable[[], SQLiteConversationSummaryRepository] = SQLiteConversationSummaryRepository,
     ) -> None:
         super().__init__(path)
         self.memory_service_factory = memory_service_factory
         self.history_search_factory = history_search_factory
+        self.summary_repository_factory = summary_repository_factory
 
     def build_provider_prompt(
         self,
@@ -62,6 +70,10 @@ class ChatSessionStore(JsonChatSessionStore):
                 project_id=session.project_id,
                 exclude_session_id=session.id,
             )
+        summary_record = (
+            self.summary_repository_factory().latest(session.id)
+            if compaction_enabled() else None
+        )
         assembly = build_prompt_assembly(
             session,
             user_message,
@@ -69,8 +81,22 @@ class ChatSessionStore(JsonChatSessionStore):
             context_items=context_items or [],
             approved_memory=approved_memory,
             retrieved_history=history_result.items if history_result is not None else [],
+            session_summary=summary_record.summary if summary_record is not None else None,
+            recent_message_limit=(DEFAULT_RECENT_MESSAGE_LIMIT if summary_record is not None else None),
         )
         assembly.diagnostics["memory"] = memory_diagnostics
+        assembly.diagnostics["compaction"] = (
+            {
+                "enabled": True,
+                "summary_id": summary_record.id,
+                "summary_revision": summary_record.revision,
+                "through_message_id": summary_record.through_message_id,
+                "source_message_count": summary_record.source_message_count,
+                "recent_message_limit": DEFAULT_RECENT_MESSAGE_LIMIT,
+            }
+            if summary_record is not None
+            else {"enabled": compaction_enabled(), "summary_id": None}
+        )
         assembly.diagnostics["history_recall"] = (
             {
                 "enabled": True,
@@ -175,6 +201,7 @@ class ChatSessionStore(JsonChatSessionStore):
             )
             if appended is not None:
                 enqueue_memory_suggestion_job(session_id, appended[1].id)
+                enqueue_compaction_job(appended[0])
             return appended
         appended = self.begin_user_message(
             session_id,
@@ -223,6 +250,7 @@ class ChatSessionStore(JsonChatSessionStore):
             )
             if user_message is not None and not user_message.metadata.get("memory_command"):
                 enqueue_memory_suggestion_job(session_id, user_message_id)
+                enqueue_compaction_job(completed)
         return completed
 
     def _generate_provider_reply(

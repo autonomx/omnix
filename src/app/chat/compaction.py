@@ -96,6 +96,16 @@ class SQLiteConversationSummaryRepository:
 
     def save(self, summary: ConversationSummary) -> ConversationSummary:
         with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT revision FROM chat_conversation_summaries WHERE session_id = ? AND through_message_id = ?",
+                (summary.session_id, summary.through_message_id),
+            ).fetchone()
+            if existing is None:
+                latest = connection.execute(
+                    "SELECT COALESCE(MAX(revision), 0) FROM chat_conversation_summaries WHERE session_id = ?",
+                    (summary.session_id,),
+                ).fetchone()
+                summary = summary.model_copy(update={"revision": int(latest[0]) + 1})
             connection.execute(
                 """
                 INSERT OR IGNORE INTO chat_conversation_summaries(

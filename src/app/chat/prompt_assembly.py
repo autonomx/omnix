@@ -89,15 +89,22 @@ def build_prompt_assembly(
     retrieved_history: list[PromptHistoryItem] | None = None,
     assistant_identity: list[str] | None = None,
     budget: PromptBudget | None = None,
+    recent_message_limit: int | None = None,
 ) -> PromptAssembly:
     """Build one stable structure for streaming and non-streaming generation."""
 
     system_messages = [message.content for message in session.messages if message.role == "system"]
     system_instructions = system_messages or [global_system_prompt]
-    recent_messages = [
-        PromptTurn(role=message.role, content=message.content, message_id=message.id)
+    eligible_recent_messages = [
+        message
         for message in session.messages
         if message.id != user_message.id and message.role != "system"
+    ]
+    if recent_message_limit is not None:
+        eligible_recent_messages = eligible_recent_messages[-max(0, recent_message_limit):]
+    recent_messages = [
+        PromptTurn(role=message.role, content=message.content, message_id=message.id)
+        for message in eligible_recent_messages
     ]
     external_context = [
         _external_item(payload, index)
