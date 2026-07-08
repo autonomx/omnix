@@ -12,7 +12,15 @@ import {
 } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar } from '../design/primitives';
-import { applyAppearanceSettings, type ResolvedOmnixAppearanceMode } from '../features/settings/appearanceEffects';
+import { DEFAULT_OMNIX_THEME, type OmnixThemeId } from '../design/appearanceThemes';
+import {
+  commitAppearanceSettings,
+  loadStoredAppearancePreferences,
+  OMNIX_APPEARANCE_CHANGE_EVENT,
+  resolveAppearanceMode,
+  type OmnixAppearanceChangeDetail,
+  type OmnixAppearanceMode,
+} from '../features/settings/appearanceEffects';
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
 
@@ -22,7 +30,6 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
 >;
 const defaultModule = moduleById.chatbot;
 const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'voice', 'image-generation'];
-const appearanceModeStorageKey = 'omnix.appearance.mode';
 
 function moduleFromPath(pathname: string): OmnixModuleDefinition {
   return (
@@ -32,14 +39,12 @@ function moduleFromPath(pathname: string): OmnixModuleDefinition {
   );
 }
 
-function loadStoredAppearanceMode(): ResolvedOmnixAppearanceMode {
-  if (typeof window === 'undefined') return 'dark';
-  try {
-    const storedMode = window.localStorage.getItem(appearanceModeStorageKey);
-    return storedMode === 'light' || storedMode === 'dark' ? storedMode : 'dark';
-  } catch {
-    return 'dark';
-  }
+function initialAppearanceMode(): OmnixAppearanceMode {
+  return loadStoredAppearancePreferences().mode ?? 'dark';
+}
+
+function initialThemeId(): OmnixThemeId {
+  return loadStoredAppearancePreferences().theme ?? DEFAULT_OMNIX_THEME;
 }
 
 function OmnixShell() {
@@ -47,23 +52,34 @@ function OmnixShell() {
   const navigate = useNavigate();
   const { setColorScheme } = useMantineColorScheme();
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
-  const [appearanceMode, setAppearanceMode] = useState<ResolvedOmnixAppearanceMode>(loadStoredAppearanceMode);
+  const [appearanceMode, setAppearanceMode] = useState<OmnixAppearanceMode>(initialAppearanceMode);
+  const [themeId, setThemeId] = useState<OmnixThemeId>(initialThemeId);
   const activeModule = moduleFromPath(pathname);
   const modeModules = modeModuleIds.map((moduleId) => moduleById[moduleId]);
+  const resolvedAppearanceMode = resolveAppearanceMode(appearanceMode);
+
   useEffect(() => {
     const root = document.documentElement;
-    applyAppearanceSettings({
+    const detail = commitAppearanceSettings({
       mode: appearanceMode,
+      theme: themeId,
       density: root.dataset.omnixDensity ?? 'comfortable',
       reduceMotion: root.classList.contains('omnix-reduce-motion'),
     });
-    setColorScheme(appearanceMode);
-    try {
-      window.localStorage.setItem(appearanceModeStorageKey, appearanceMode);
-    } catch {
-      // Appearance persistence is best-effort in private or locked-down browser contexts.
-    }
-  }, [appearanceMode, setColorScheme]);
+    setColorScheme(detail.resolvedMode);
+  }, [appearanceMode, setColorScheme, themeId]);
+
+  useEffect(() => {
+    const syncAppearance = (event: Event) => {
+      const detail = (event as CustomEvent<OmnixAppearanceChangeDetail>).detail;
+      if (!detail) return;
+      setAppearanceMode(detail.mode);
+      setThemeId(detail.theme);
+      setColorScheme(detail.resolvedMode);
+    };
+    window.addEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, syncAppearance);
+    return () => window.removeEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, syncAppearance);
+  }, [setColorScheme]);
 
   return (
     <OmnixShellLayout
@@ -91,8 +107,10 @@ function OmnixShell() {
         <OmnixTopBar
           isSidebarVisible={isSidebarVisible}
           onToggleSidebar={() => setIsSidebarVisible((value) => !value)}
-          onToggleTheme={() => setAppearanceMode((value) => (value === 'light' ? 'dark' : 'light'))}
-          themeMode={appearanceMode}
+          onToggleTheme={() => setAppearanceMode(resolvedAppearanceMode === 'light' ? 'dark' : 'light')}
+          onThemeChange={setThemeId}
+          themeId={themeId}
+          themeMode={resolvedAppearanceMode}
           title={activeModule.label}
         >
           {modeModules.map((module) => (

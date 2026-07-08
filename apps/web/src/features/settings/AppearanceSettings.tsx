@@ -1,22 +1,69 @@
 import { useEffect } from 'react';
-import { applyAppearanceSettings } from './appearanceEffects';
+import { OMNIX_THEME_PRESETS } from '../../design/appearanceThemes';
+import { commitAppearanceSettings } from './appearanceEffects';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 
 export function AppearanceSettings() {
   const { state, dispatch } = useSettingsProfileContext();
   const value = state.draft.appearance;
-  useEffect(() => applyAppearanceSettings(value), [value]);
+  useEffect(() => { commitAppearanceSettings(value); }, [value]);
   return (
     <div className="settings-category-panel">
-      <div className="settings-category-title-row"><p className="eyebrow">Settings category</p><h2>Appearance & Accessibility</h2><p>Control theme, density, motion, and captions.</p></div>
-      <SettingsSection title="Appearance" scope="local">
-        <div className="settings-form-grid">
-          <SettingsField label="Appearance"><select value={value.mode} onChange={(event) => dispatch({ type: 'update', path: 'appearance.mode', value: event.currentTarget.value })}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></SettingsField>
-          <SettingsField label="Density"><select value={value.density} onChange={(event) => dispatch({ type: 'update', path: 'appearance.density', value: event.currentTarget.value })}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></SettingsField>
+      <div className="settings-category-title-row">
+        <p className="eyebrow">Settings category</p>
+        <h2>Appearance & Accessibility</h2>
+        <p>Choose an Omnix palette, light level, density, motion, and caption preferences.</p>
+      </div>
+      <SettingsSection title="Theme palette" scope="local">
+        <div className="settings-theme-grid" role="radiogroup" aria-label="Omnix theme palette">
+          {OMNIX_THEME_PRESETS.map((theme) => {
+            const selected = value.theme === theme.id;
+            return (
+              <button
+                key={theme.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className={selected ? 'settings-theme-card active' : 'settings-theme-card'}
+                onClick={() => dispatch({ type: 'update', path: 'appearance.theme', value: theme.id })}
+              >
+                <span className="settings-theme-preview" style={{ background: theme.preview }} aria-hidden="true">
+                  <i /><i /><i />
+                </span>
+                <span className="settings-theme-copy">
+                  <strong>{theme.label}</strong>
+                  <small>{theme.description}</small>
+                </span>
+                <span className="settings-theme-check" aria-hidden="true">✓</span>
+              </button>
+            );
+          })}
         </div>
       </SettingsSection>
-      <SettingsSection title="Accessibility" scope="local"><div className="settings-toggle-list"><label><input type="checkbox" checked={value.reduceMotion} onChange={(event) => dispatch({ type: 'update', path: 'appearance.reduceMotion', value: event.currentTarget.checked })} /><span>Reduce motion</span></label><label><input type="checkbox" checked={value.liveCaptions} onChange={(event) => dispatch({ type: 'update', path: 'appearance.liveCaptions', value: event.currentTarget.checked })} /><span>Live captions</span></label></div></SettingsSection>
+      <SettingsSection title="Display" scope="local">
+        <div className="settings-form-grid">
+          <SettingsField label="Light level">
+            <select value={value.mode} onChange={(event) => dispatch({ type: 'update', path: 'appearance.mode', value: event.currentTarget.value })}>
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </SettingsField>
+          <SettingsField label="Density">
+            <select value={value.density} onChange={(event) => dispatch({ type: 'update', path: 'appearance.density', value: event.currentTarget.value })}>
+              <option value="comfortable">Comfortable</option>
+              <option value="compact">Compact</option>
+            </select>
+          </SettingsField>
+        </div>
+      </SettingsSection>
+      <SettingsSection title="Accessibility" scope="local">
+        <div className="settings-toggle-list">
+          <label><input type="checkbox" checked={value.reduceMotion} onChange={(event) => dispatch({ type: 'update', path: 'appearance.reduceMotion', value: event.currentTarget.checked })} /><span>Reduce motion</span></label>
+          <label><input type="checkbox" checked={value.liveCaptions} onChange={(event) => dispatch({ type: 'update', path: 'appearance.liveCaptions', value: event.currentTarget.checked })} /><span>Live captions</span></label>
+        </div>
+      </SettingsSection>
     </div>
   );
 }

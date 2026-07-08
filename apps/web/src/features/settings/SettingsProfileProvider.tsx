@@ -2,16 +2,35 @@ import { useEffect, useReducer, useState, type ReactNode } from 'react';
 import { loadSettingsProfile } from './settingsApi';
 import { DEFAULT_SETTINGS_DOCUMENT } from './settingsDefaults';
 import { createSettingsDraftState, settingsDraftReducer } from './settingsDraft';
+import type { SettingsDocument } from './settingsDocumentTypes';
+import { loadStoredAppearancePreferences } from './appearanceEffects';
 import { SettingsProfileContext } from './SettingsProfileContext';
 
+function withLocalAppearancePreferences(document: SettingsDocument): SettingsDocument {
+  const stored = loadStoredAppearancePreferences();
+  if (!stored.mode && !stored.theme) return document;
+  return {
+    ...document,
+    appearance: {
+      ...document.appearance,
+      mode: stored.mode ?? document.appearance.mode,
+      theme: stored.theme ?? document.appearance.theme,
+    },
+  };
+}
+
 export function SettingsProfileProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(settingsDraftReducer, DEFAULT_SETTINGS_DOCUMENT, createSettingsDraftState);
+  const [state, dispatch] = useReducer(
+    settingsDraftReducer,
+    withLocalAppearancePreferences(DEFAULT_SETTINGS_DOCUMENT),
+    createSettingsDraftState,
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   useEffect(() => {
     let active = true;
     loadSettingsProfile().then((result) => {
-      if (active) dispatch({ type: 'load', document: result.profile });
+      if (active) dispatch({ type: 'load', document: withLocalAppearancePreferences(result.profile) });
     }).catch((error) => {
       if (active) setLoadError(error instanceof Error ? error.message : 'Settings are unavailable.');
     }).finally(() => {
