@@ -12,10 +12,14 @@ from .models import (
 )
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
-from .prompt_store import ChatSessionStore, default_chat_store
+from .prompt_store import ChatSessionStore, chat_sqlite_store_enabled, default_chat_store
+from .repository import ChatImportState, ChatRepository, SQLiteChatRepository
+from .sqlite_store import SQLiteChatSessionStore
 
 __all__ = [
+    "ChatImportState",
     "ChatMessage",
+    "ChatRepository",
     "ChatSession",
     "ChatSessionListResponse",
     "ChatSessionStore",
@@ -24,10 +28,13 @@ __all__ = [
     "DeleteChatSessionResponse",
     "PromptAssembly",
     "RenderedPrompt",
+    "SQLiteChatRepository",
+    "SQLiteChatSessionStore",
     "SendChatMessageRequest",
     "SendChatMessageResponse",
     "UpdateChatResearchModeRequest",
     "build_prompt_assembly",
+    "chat_sqlite_store_enabled",
     "default_chat_store",
     "render_prompt_assembly",
 ]
