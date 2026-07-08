@@ -10,7 +10,7 @@ from app.characters import (
     resolve_interaction_context,
 )
 
-from .models import ChatMessage, ChatSession, CreateChatSessionRequest
+from .models import ChatMessage, ChatSession, ChatSessionSummary, CreateChatSessionRequest
 from .prompt_store import ChatSessionStore as BaseChatSessionStore, chat_sqlite_store_enabled
 from .sqlite_store import SQLiteChatSessionStore as BaseSQLiteChatSessionStore
 from .store import serialized_chat_mutation
@@ -88,6 +88,12 @@ class _CharacterSessionMixin:
         sessions.append(session)
         self._save_sessions(sessions)
         return session
+
+    @staticmethod
+    def _summary(session: ChatSession) -> ChatSessionSummary:
+        payload = session.model_dump(exclude={"messages"}, mode="python")
+        payload["message_count"] = len(session.messages)
+        return ChatSessionSummary(**payload)
 
 
 class ChatSessionStore(_CharacterSessionMixin, BaseChatSessionStore):
