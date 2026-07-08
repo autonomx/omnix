@@ -1,0 +1,27 @@
+name: MEM-15 one-time roadmap patch
+
+on:
+  push:
+    branches:
+      - tmp-mem15-gate
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp-mem15-gate
+          fetch-depth: 0
+      - run: python scripts/mem15_roadmap_patch.py
+      - run: rm scripts/mem15_roadmap_patch.py .github/workflows/mem15-roadmap-patch.yml
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "MEM-15 mark canonical roadmap complete"
+          git push origin HEAD:tmp-mem15-gate
