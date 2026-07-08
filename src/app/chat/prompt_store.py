@@ -338,7 +338,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 "model_id": model_id,
                 "resolved_model": resolved_model,
                 **self._active_memory_metadata(assembly, rendered),
-            **self._active_history_metadata(assembly),
+                **self._active_history_metadata(assembly),
                 **({"usage": usage} if usage else {}),
             },
         }
