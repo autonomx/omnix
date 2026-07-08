@@ -79,9 +79,9 @@ def register_assistant_memory_routes(
                 raise HTTPException(status_code=404, detail="chat session not found")
             return state
 
+    register_memory_settings_routes(app)
     register_memory_management_routes(
         app,
         chat_store_factory=chat_store_factory,
         memory_service_factory=memory_service_factory,
     )
-    register_memory_settings_routes(app)
