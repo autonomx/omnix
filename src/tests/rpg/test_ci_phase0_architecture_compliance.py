@@ -28,6 +28,7 @@ REQUIRED_RPG_WORKFLOWS = [
     ".github/workflows/rpg-pr-deterministic.yml",
     ".github/workflows/rpg-phase0-architecture-compliance.yml",
 ]
+REQUIRED_CI_BRANCHES = "branches: [main, rpg]"
 
 
 def _read(path: str) -> str:
@@ -134,7 +135,7 @@ def test_phase0_required_rpg_ci_workflows_are_not_path_filtered():
     for workflow_path in REQUIRED_RPG_WORKFLOWS:
         workflow = _read(workflow_path)
         assert "pull_request:" in workflow
-        assert "branches: [rpg]" in workflow
+        assert REQUIRED_CI_BRANCHES in workflow
         assert "push:" in workflow
         assert "paths:" not in workflow
 
