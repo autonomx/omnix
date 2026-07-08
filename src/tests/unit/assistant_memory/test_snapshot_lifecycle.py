@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -80,7 +81,7 @@ def test_stale_refresh_is_rejected_without_changing_active_snapshot(tmp_path):
     first = refresh_session_memory(store, service, session.id, RefreshSessionMemoryRequest())
     assert first is not None
 
-    with __import__("pytest").raises(SessionMemoryConflictError):
+    with pytest.raises(SessionMemoryConflictError):
         refresh_session_memory(
             store,
             service,
@@ -112,7 +113,7 @@ def test_forget_purges_frozen_content_and_updates_projected_count(tmp_path):
     assert "Old sensitive environment fact" not in state.model_dump_json()
 
 
-def test_expiry_and_scope_loss_override_frozen_snapshot(tmp_path):
+def test_expiry_overrides_frozen_snapshot(tmp_path):
     store, service, session, context = setup_services(tmp_path)
     record = service.create_explicit_memory(
         context,
