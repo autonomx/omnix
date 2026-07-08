@@ -2,9 +2,9 @@ name: RPG deterministic PR gates
 
 on:
   pull_request:
-    branches: [rpg]
+    branches: [main, rpg]
   push:
-    branches: [rpg]
+    branches: [main, rpg]
   workflow_dispatch:
 
 permissions:
