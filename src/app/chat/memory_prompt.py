@@ -4,9 +4,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from app.assistant_memory import MemoryService, default_memory_service, resolve_chat_scope
+from app.assistant_memory import (
+    MemoryService,
+    default_memory_service,
+    resolve_session_memory_scope,
+    resolve_snapshot_view,
+)
 from app.assistant_memory.settings import load_memory_runtime_settings
-from app.assistant_memory.lifecycle import resolve_snapshot_view
 
 from .models import ChatSession
 from .prompt_assembly import PromptMemoryItem
@@ -21,8 +25,12 @@ def resolve_prompt_memory(
     *,
     memory_service_factory: Callable[[], MemoryService] = default_memory_service,
 ) -> tuple[list[PromptMemoryItem], dict[str, Any]]:
+    character_session = session.interaction_mode == "character"
+    read_allowed = session.read_memory if character_session else session.memory_enabled
     diagnostics: dict[str, Any] = {
-        "memory_enabled": bool(chat_memory_enabled() and session.memory_enabled),
+        "memory_enabled": bool(chat_memory_enabled() and read_allowed),
+        "owner_type": "character" if character_session else "system",
+        "owner_id": session.character_id if character_session else "system-assistant",
         "snapshot_id": session.memory_snapshot_id,
         "snapshot_revision": session.memory_snapshot_revision,
         "selected_memory_ids": [],
@@ -33,7 +41,7 @@ def resolve_prompt_memory(
     if not chat_memory_enabled():
         diagnostics["status"] = "disabled_by_feature_flag"
         return [], diagnostics
-    if not session.memory_enabled:
+    if not read_allowed:
         diagnostics["status"] = "disabled_for_session"
         return [], diagnostics
     if not session.memory_snapshot_id:
@@ -41,12 +49,7 @@ def resolve_prompt_memory(
         return [], diagnostics
 
     service = memory_service_factory()
-    context = resolve_chat_scope(
-        session.id,
-        profile_id=session.profile_id,
-        workspace_id=session.workspace_id,
-        project_id=session.project_id,
-    )
+    context = resolve_session_memory_scope(session)
     view = resolve_snapshot_view(service, context, session.memory_snapshot_id)
     if view is None:
         diagnostics["status"] = "snapshot_unavailable"
@@ -63,6 +66,9 @@ def resolve_prompt_memory(
         if record is None:
             excluded["record_forgotten"] = excluded.get("record_forgotten", 0) + 1
             continue
+        if (record.owner_type, record.owner_id) != (context.owner_type, context.owner_id):
+            excluded["owner_mismatch"] = excluded.get("owner_mismatch", 0) + 1
+            continue
         selected.append(
             PromptMemoryItem(
                 memory_id=item.memory_record_id,
@@ -73,14 +79,11 @@ def resolve_prompt_memory(
             )
         )
 
-    diagnostics.update(
-        {
-            "status": "ready",
-            "selected_memory_ids": [item.memory_id for item in selected],
-            "selected_memory_count": len(selected),
-            "invalidated_count": view.invalidated_count,
-            "excluded_reason_counts": excluded,
-            "memory_token_estimate": view.token_estimate,
-        }
-    )
+    diagnostics.update({
+        "status": "resolved",
+        "selected_memory_ids": [item.memory_id for item in selected],
+        "selected_memory_count": len(selected),
+        "invalidated_count": view.invalidated_count,
+        "excluded_reason_counts": excluded,
+    })
     return selected, diagnostics
