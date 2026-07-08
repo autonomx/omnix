@@ -1,8 +1,9 @@
-"""Character-aware Chat store adapters for JSON and SQLite persistence."""
+"""Character-aware Chat stores with durable provider-context segments."""
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from app.characters import (
     InteractionSelection,
@@ -11,7 +12,13 @@ from app.characters import (
     resolve_interaction_context,
 )
 
-from .models import ChatMessage, ChatSession, ChatSessionSummary, CreateChatSessionRequest
+from .models import (
+    ChatMessage,
+    ChatSession,
+    ChatSessionSummary,
+    CreateChatSessionRequest,
+    SendChatMessageRequest,
+)
 from .prompt_store import ChatSessionStore as BaseChatSessionStore, chat_sqlite_store_enabled
 from .sqlite_store import SQLiteChatSessionStore as BaseSQLiteChatSessionStore
 from .store import serialized_chat_mutation
@@ -25,12 +32,22 @@ class _CharacterSessionMixin:
     @serialized_chat_mutation
     def create_session(self, request: CreateChatSessionRequest) -> ChatSession:
         now = _utcnow()
-        title = (request.title or "New chat").strip() or "New chat"
+        session_id = f"chat:{uuid.uuid4().hex}"
         interaction, character_profile = _resolve_request(
             request.interaction_mode,
             request.character_id,
             request.voice_asset_id,
             request.transcript_policy,
+        )
+        segment = _character_repository().create_segment(
+            session_id=session_id,
+            interaction_mode=interaction.interaction_mode,
+            character_id=interaction.character_id,
+            profile_version=interaction.character_profile_version,
+            transcript_policy=interaction.transcript_policy,
+            read_memory=False,
+            write_memory=False,
+            shared_memory_access="none",
         )
         messages: list[ChatMessage] = []
         if request.interaction_mode == "system" and request.system_prompt:
@@ -40,13 +57,13 @@ class _CharacterSessionMixin:
                     role="system",
                     content=request.system_prompt,
                     created_at=now,
-                    metadata={"source": "chat_session_request"},
+                    metadata={"source": "chat_session_request", "segment_id": segment.id},
                 )
             )
-        _append_character_greeting(messages, character_profile, now)
+        _append_character_greeting(messages, character_profile, now, segment.id)
         session = ChatSession(
-            id=f"chat:{uuid.uuid4().hex}",
-            title=title,
+            id=session_id,
+            title=(request.title or "New chat").strip() or "New chat",
             provider_id=request.provider_id,
             model_id=request.model_id,
             interaction_mode=interaction.interaction_mode,
@@ -56,6 +73,7 @@ class _CharacterSessionMixin:
             write_memory=False,
             shared_memory_access="none",
             transcript_policy=interaction.transcript_policy,
+            active_segment_id=segment.id,
             character_profile_version=interaction.character_profile_version,
             effective_identity_hash=interaction.effective_identity_hash,
             message_count=len(messages),
@@ -85,10 +103,28 @@ class _CharacterSessionMixin:
         for index, session in enumerate(sessions):
             if session.id != session_id:
                 continue
-            changed_identity = (
+            context_changed = (
                 session.interaction_mode != interaction.interaction_mode
                 or session.character_id != interaction.character_id
+                or session.transcript_policy != interaction.transcript_policy
             )
+            if context_changed:
+                carryover = _neutral_topic_carryover(session) if request.continue_topic else None
+                if session.active_segment_id:
+                    _character_repository().close_segment(session.active_segment_id)
+                segment = _character_repository().create_segment(
+                    session_id=session.id,
+                    interaction_mode=interaction.interaction_mode,
+                    character_id=interaction.character_id,
+                    profile_version=interaction.character_profile_version,
+                    transcript_policy=interaction.transcript_policy,
+                    read_memory=False,
+                    write_memory=False,
+                    shared_memory_access="none",
+                    carryover_summary=carryover,
+                )
+                session.active_segment_id = segment.id
+                _append_character_greeting(session.messages, character_profile, now, segment.id)
             session.interaction_mode = interaction.interaction_mode
             session.character_id = interaction.character_id
             session.voice_asset_id = interaction.voice_asset_id
@@ -98,14 +134,81 @@ class _CharacterSessionMixin:
             session.transcript_policy = interaction.transcript_policy
             session.character_profile_version = interaction.character_profile_version
             session.effective_identity_hash = interaction.effective_identity_hash
-            if changed_identity:
-                _append_character_greeting(session.messages, character_profile, now)
             session.message_count = len(session.messages)
             session.updated_at = now
             sessions[index] = session
             self._save_sessions(sessions)
             return session
         return None
+
+    @serialized_chat_mutation
+    def append_user_message(
+        self,
+        session_id: str,
+        request: SendChatMessageRequest,
+        *,
+        context_items: list[dict[str, Any]] | None = None,
+        context_diagnostics: dict[str, Any] | None = None,
+    ):
+        result = super().append_user_message(
+            session_id,
+            request,
+            context_items=context_items,
+            context_diagnostics=context_diagnostics,
+        )
+        if result is None:
+            return None
+        session, user_message = result
+        _tag_turn_and_save(self, session, user_message.id)
+        return session, user_message
+
+    @serialized_chat_mutation
+    def begin_user_message(
+        self,
+        session_id: str,
+        request: SendChatMessageRequest,
+        *,
+        context_items: list[dict[str, Any]] | None = None,
+        context_diagnostics: dict[str, Any] | None = None,
+    ):
+        result = super().begin_user_message(
+            session_id,
+            request,
+            context_items=context_items,
+            context_diagnostics=context_diagnostics,
+        )
+        if result is None:
+            return None
+        session, user_message = result
+        user_message.metadata["segment_id"] = session.active_segment_id
+        self._save_sessions(_replace_session(self._load_sessions(), session))
+        return session, user_message
+
+    @serialized_chat_mutation
+    def complete_streamed_reply(
+        self,
+        session_id: str,
+        user_message_id: str,
+        content: str,
+        metadata: dict[str, Any],
+    ) -> ChatSession | None:
+        before = self.get_session(session_id)
+        segment_id = before.active_segment_id if before else None
+        tagged_metadata = {**metadata, "segment_id": segment_id}
+        session = super().complete_streamed_reply(
+            session_id,
+            user_message_id,
+            content,
+            tagged_metadata,
+        )
+        if session is None:
+            return None
+        for message in session.messages:
+            if message.id == user_message_id:
+                message.metadata["segment_id"] = segment_id
+                break
+        self._save_sessions(_replace_session(self._load_sessions(), session))
+        return session
 
     @staticmethod
     def _summary(session: ChatSession) -> ChatSessionSummary:
@@ -123,17 +226,14 @@ class SQLiteChatSessionStore(_CharacterSessionMixin, BaseSQLiteChatSessionStore)
 
 
 def default_chat_store() -> ChatSessionStore | SQLiteChatSessionStore:
-    if chat_sqlite_store_enabled():
-        return SQLiteChatSessionStore()
-    return ChatSessionStore()
+    return SQLiteChatSessionStore() if chat_sqlite_store_enabled() else ChatSessionStore()
 
 
-def _resolve_request(
-    interaction_mode: str,
-    character_id: str | None,
-    voice_asset_id: str | None,
-    transcript_policy: str,
-):
+def _character_repository():
+    return default_character_service().repository
+
+
+def _resolve_request(interaction_mode: str, character_id: str | None, voice_asset_id: str | None, transcript_policy: str):
     selection = InteractionSelection(
         interaction_mode=interaction_mode,
         character_id=character_id,
@@ -149,7 +249,7 @@ def _resolve_request(
     return resolve_interaction_context(selection, character=character_profile), character_profile
 
 
-def _append_character_greeting(messages: list[ChatMessage], character_profile, now: str) -> None:
+def _append_character_greeting(messages: list[ChatMessage], character_profile, now: str, segment_id: str) -> None:
     if character_profile is None or not character_profile.default_greeting.strip():
         return
     messages.append(
@@ -162,6 +262,40 @@ def _append_character_greeting(messages: list[ChatMessage], character_profile, n
                 "source": "character_profile_greeting",
                 "character_id": character_profile.id,
                 "character_profile_version": character_profile.version,
+                "segment_id": segment_id,
             },
         )
     )
+
+
+def _neutral_topic_carryover(session: ChatSession) -> str | None:
+    user_messages = [
+        message.content.strip()
+        for message in session.messages
+        if message.role == "user"
+        and (not session.active_segment_id or message.metadata.get("segment_id") == session.active_segment_id)
+        and message.content.strip()
+    ][-4:]
+    if not user_messages:
+        return None
+    lines = ["User topics carried from the previous identity segment:"]
+    lines.extend(f"- {content[:500]}" for content in user_messages)
+    return "\n".join(lines)[:2400]
+
+
+def _tag_turn_and_save(store, session: ChatSession, user_message_id: str) -> None:
+    segment_id = session.active_segment_id
+    found_user = False
+    for message in session.messages:
+        if message.id == user_message_id:
+            message.metadata["segment_id"] = segment_id
+            found_user = True
+            continue
+        if found_user and message.role == "assistant":
+            message.metadata["segment_id"] = segment_id
+            break
+    store._save_sessions(_replace_session(store._load_sessions(), session))
+
+
+def _replace_session(sessions: list[ChatSession], replacement: ChatSession) -> list[ChatSession]:
+    return [replacement if session.id == replacement.id else session for session in sessions]
