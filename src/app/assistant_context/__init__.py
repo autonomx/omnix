@@ -19,7 +19,10 @@ def register_assistant_context_routes(app, **kwargs: Any) -> None:
     if "chat_store_factory" in kwargs:
         memory_kwargs["chat_store_factory"] = kwargs["chat_store_factory"]
     register_assistant_memory_routes(app, **memory_kwargs)
-    register_character_routes(app)
+    register_character_routes(
+        app,
+        chat_store_factory=kwargs.get("chat_store_factory"),
+    )
 
 
 __all__ = [

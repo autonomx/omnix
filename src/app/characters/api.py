@@ -1,9 +1,12 @@
-"""FastAPI management routes for durable Character profiles."""
+"""FastAPI management routes for durable Character profiles and session mode."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
+
+from app.chat.models import ChatSession
 
 from .models import (
     ArchiveCharacterResponse,
@@ -15,33 +18,22 @@ from .models import (
 )
 from .repository import CharacterConflictError, CharacterNotFoundError
 from .service import CharacterService, CharacterVoiceAssetError, default_character_service
+from .session_models import SetSessionInteractionRequest
 
 
 def register_character_routes(
     app: FastAPI,
     *,
     service_factory: Callable[[], CharacterService] = default_character_service,
+    chat_store_factory: Callable[[], Any] | None = None,
 ) -> None:
-    """Register typed routes while keeping the disabled feature out of public OpenAPI."""
+    """Register typed routes while keeping the flagged feature out of public OpenAPI."""
 
-    @app.get(
-        "/api/characters",
-        response_model=CharacterListResponse,
-        tags=["characters"],
-        include_in_schema=False,
-    )
-    async def list_characters(
-        include_archived: bool = Query(default=False),
-    ) -> CharacterListResponse:
+    @app.get("/api/characters", response_model=CharacterListResponse, tags=["characters"], include_in_schema=False)
+    async def list_characters(include_archived: bool = Query(default=False)) -> CharacterListResponse:
         return service_factory().list(include_archived=include_archived)
 
-    @app.post(
-        "/api/characters",
-        response_model=CharacterProfile,
-        status_code=201,
-        tags=["characters"],
-        include_in_schema=False,
-    )
+    @app.post("/api/characters", response_model=CharacterProfile, status_code=201, tags=["characters"], include_in_schema=False)
     async def create_character(request: CreateCharacterRequest) -> CharacterProfile:
         try:
             return service_factory().create(request)
@@ -50,31 +42,15 @@ def register_character_routes(
         except CharacterVoiceAssetError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.get(
-        "/api/characters/{character_id}",
-        response_model=CharacterProfile,
-        tags=["characters"],
-        include_in_schema=False,
-    )
-    async def get_character(
-        character_id: str,
-        include_archived: bool = Query(default=False),
-    ) -> CharacterProfile:
+    @app.get("/api/characters/{character_id}", response_model=CharacterProfile, tags=["characters"], include_in_schema=False)
+    async def get_character(character_id: str, include_archived: bool = Query(default=False)) -> CharacterProfile:
         try:
             return service_factory().get(character_id, include_archived=include_archived)
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail="character not found") from exc
 
-    @app.patch(
-        "/api/characters/{character_id}",
-        response_model=CharacterProfile,
-        tags=["characters"],
-        include_in_schema=False,
-    )
-    async def update_character(
-        character_id: str,
-        request: UpdateCharacterRequest,
-    ) -> CharacterProfile:
+    @app.patch("/api/characters/{character_id}", response_model=CharacterProfile, tags=["characters"], include_in_schema=False)
+    async def update_character(character_id: str, request: UpdateCharacterRequest) -> CharacterProfile:
         try:
             return service_factory().update(character_id, request)
         except CharacterNotFoundError as exc:
@@ -84,29 +60,39 @@ def register_character_routes(
         except CharacterVoiceAssetError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.delete(
-        "/api/characters/{character_id}",
-        response_model=ArchiveCharacterResponse,
-        tags=["characters"],
-        include_in_schema=False,
-    )
+    @app.delete("/api/characters/{character_id}", response_model=ArchiveCharacterResponse, tags=["characters"], include_in_schema=False)
     async def archive_character(character_id: str) -> ArchiveCharacterResponse:
         try:
             return service_factory().archive(character_id)
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail="character not found") from exc
 
-    @app.get(
-        "/api/characters/{character_id}/versions",
-        response_model=CharacterVersionListResponse,
-        tags=["characters"],
-        include_in_schema=False,
-    )
+    @app.get("/api/characters/{character_id}/versions", response_model=CharacterVersionListResponse, tags=["characters"], include_in_schema=False)
     async def list_character_versions(character_id: str) -> CharacterVersionListResponse:
         try:
             return service_factory().versions(character_id)
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail="character not found") from exc
+
+    if chat_store_factory is None:
+        return
+
+    @app.get("/api/chat/sessions/{session_id}/interaction", response_model=ChatSession, tags=["characters"], include_in_schema=False)
+    async def get_session_interaction(session_id: str) -> ChatSession:
+        session = chat_store_factory().get_session(session_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+        return session
+
+    @app.post("/api/chat/sessions/{session_id}/interaction", response_model=ChatSession, tags=["characters"], include_in_schema=False)
+    async def set_session_interaction(session_id: str, request: SetSessionInteractionRequest) -> ChatSession:
+        try:
+            session = chat_store_factory().set_session_interaction(session_id, request)
+        except (CharacterNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if session is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+        return session
 
 
 __all__ = ["register_character_routes"]

@@ -39,11 +39,8 @@ from .repository import (
     CharacterRepository,
     default_character_db_path,
 )
-from .service import (
-    CharacterService,
-    CharacterVoiceAssetError,
-    default_character_service,
-)
+from .service import CharacterService, CharacterVoiceAssetError, default_character_service
+from .session_models import SetSessionInteractionRequest
 
 __all__ = [
     "ArchiveCharacterResponse",
@@ -71,6 +68,7 @@ __all__ = [
     "SYSTEM_ASSISTANT_ID",
     "SYSTEM_ASSISTANT_IDENTITY",
     "SYSTEM_ASSISTANT_NAME",
+    "SetSessionInteractionRequest",
     "SharedMemoryAccess",
     "TranscriptPolicy",
     "UpdateCharacterRequest",

@@ -1,4 +1,5 @@
 """Chat session platform contract."""
+from .character_store import ChatSessionStore, SQLiteChatSessionStore, default_chat_store
 from .models import (
     ChatMessage,
     ChatSession,
@@ -12,9 +13,8 @@ from .models import (
 )
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
-from .prompt_store import ChatSessionStore, chat_sqlite_store_enabled, default_chat_store
+from .prompt_store import chat_sqlite_store_enabled
 from .repository import ChatImportState, ChatRepository, SQLiteChatRepository
-from .sqlite_store import SQLiteChatSessionStore
 
 __all__ = [
     "ChatImportState",

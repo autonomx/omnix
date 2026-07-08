@@ -90,10 +90,7 @@ def resolve_interaction_context(
             "transcript_policy": selection.transcript_policy,
             "assistant_identity": [SYSTEM_ASSISTANT_IDENTITY],
         }
-        return ResolvedInteractionContext(
-            **payload,
-            effective_identity_hash=_identity_hash(payload),
-        )
+        return ResolvedInteractionContext(**payload, effective_identity_hash=_identity_hash(payload))
 
     if not character_mode_enabled():
         raise CharacterModeDisabledError("Character Mode is disabled")
@@ -134,14 +131,11 @@ def resolve_interaction_context(
         "character_profile_version": character.version,
         "assistant_identity": assistant_identity,
     }
-    return ResolvedInteractionContext(
-        **payload,
-        effective_identity_hash=_identity_hash(payload),
-    )
+    return ResolvedInteractionContext(**payload, effective_identity_hash=_identity_hash(payload))
 
 
 def resolve_system_session_identity(session: object) -> ResolvedInteractionContext:
-    """Resolve today's system-only Chat sessions without trusting client prompt text."""
+    """Resolve a persisted Chat session through backend-owned identity data."""
 
     selection = InteractionSelection(
         interaction_mode=getattr(session, "interaction_mode", "system"),
@@ -152,4 +146,12 @@ def resolve_system_session_identity(session: object) -> ResolvedInteractionConte
         shared_memory_access=getattr(session, "shared_memory_access", "none"),
         transcript_policy=getattr(session, "transcript_policy", "persistent"),
     )
-    return resolve_interaction_context(selection)
+    character = None
+    if selection.interaction_mode == "character":
+        try:
+            from .service import default_character_service
+
+            character = default_character_service().resolve_snapshot(selection.character_id or "")
+        except Exception as exc:
+            raise CharacterResolutionError("persisted character profile could not be resolved") from exc
+    return resolve_interaction_context(selection, character=character)
