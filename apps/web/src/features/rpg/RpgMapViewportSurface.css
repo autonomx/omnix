@@ -1,0 +1,71 @@
+@import './RpgMapObjectInteractions.css';
+@import './RpgMapLayerStyles.css';
+@import './RpgMapDynamicOverlay.css';
+
+.rpg-map-viewport-shell {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.rpg-map-viewport-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+
+.rpg-map-viewport-controls button,
+.rpg-map-viewport-controls span {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.55rem;
+  color: inherit;
+  display: inline-flex;
+  font-size: 0.78rem;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0.35rem 0.65rem;
+}
+
+.rpg-map-viewport-controls button:hover:not(:disabled),
+.rpg-map-viewport-controls button:focus-visible {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(247, 207, 107, 0.45);
+  outline: 2px solid rgba(247, 207, 107, 0.35);
+  outline-offset: 1px;
+}
+
+.rpg-map-viewport-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.rpg-map-canvas-frame {
+  cursor: grab;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+}
+
+.rpg-map-canvas-frame:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(247, 207, 107, 0.7), 0 1.4rem 3rem rgba(0, 0, 0, 0.3);
+}
+
+.rpg-map-canvas-dragging {
+  cursor: grabbing;
+}
+
+.rpg-map-canvas [data-map-viewport='true'] {
+  transform-box: fill-box;
+  transform-origin: 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rpg-map-object,
+  .rpg-map-canvas [data-map-viewport='true'] {
+    transition: none !important;
+  }
+}

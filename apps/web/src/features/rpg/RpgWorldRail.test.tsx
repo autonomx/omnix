@@ -1,4 +1,5 @@
 import { MantineProvider } from '@mantine/core';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,9 +9,12 @@ import { RpgWorldRail } from './RpgWorldRail';
 import { npcRelationships, previewEncounter, previewJobs, previewSessionSummary, previewWorldStateRows } from './rpgUiState';
 
 function renderWithTheme(element: ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      {element}
+      <QueryClientProvider client={queryClient}>
+        {element}
+      </QueryClientProvider>
     </MantineProvider>
   );
 }
@@ -81,6 +85,7 @@ describe('RpgWorldRail', () => {
         autoplayRunning={false}
         autoplayStatusLabel="Off"
         checkpointSummary={{ label: 'Latest checkpoint', detail: 'checkpoint-001.json', source: 'live' }}
+        currentMapId="settlement:frost_haven"
         encounter={previewEncounter}
         isAutoplayPending={false}
         isCreatingCheckpoint={false}
