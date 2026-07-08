@@ -1,7 +1,10 @@
 """ChatSessionStore adapter backed by the SQLite Chat repository."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+
+from app.assistant_memory import MemoryService, default_memory_service
 
 from .json_import import import_legacy_chat_json
 from .models import ChatSession
@@ -16,9 +19,11 @@ class SQLiteChatSessionStore(PromptAssemblyChatSessionStore):
         *,
         legacy_json_path: str | Path | None = None,
         import_legacy: bool = True,
+        memory_service_factory: Callable[[], MemoryService] = default_memory_service,
     ) -> None:
         self.repository = SQLiteChatRepository(db_path)
         self.path = Path(legacy_json_path) if legacy_json_path is not None else Path(":sqlite:")
+        self.memory_service_factory = memory_service_factory
         self.import_state: ChatImportState | None = None
         if import_legacy:
             self.import_state = import_legacy_chat_json(
