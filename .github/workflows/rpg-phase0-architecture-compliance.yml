@@ -2,9 +2,9 @@ name: RPG Phase 0 architecture compliance
 
 on:
   pull_request:
-    branches: [rpg]
+    branches: [main, rpg]
   push:
-    branches: [rpg]
+    branches: [main, rpg]
   workflow_dispatch:
 
 permissions:
