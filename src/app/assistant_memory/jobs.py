@@ -9,9 +9,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, SQLiteJobStore, default_job_store
 
+from .owner_defaults import default_memory_service
 from .scope import resolve_chat_scope
 from .settings import load_memory_runtime_settings
-from .service import MemoryService, default_memory_service
+from .service import MemoryService
 
 if TYPE_CHECKING:
     from app.chat import ChatSessionStore
