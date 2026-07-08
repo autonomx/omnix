@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from app.assistant_memory import MemoryService, default_memory_service
+from app.assistant_memory.jobs import enqueue_memory_suggestion_job
 
 from .memory_commands import execute_memory_command, parse_memory_command
-from app.assistant_memory.jobs import enqueue_memory_suggestion_job
 from .memory_prompt import resolve_prompt_memory
 from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessageRequest
 from .prompt_assembly import PromptAssembly, build_prompt_assembly

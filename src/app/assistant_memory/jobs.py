@@ -4,15 +4,17 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat import ChatSessionStore
 from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, SQLiteJobStore, default_job_store
 
 from .scope import resolve_chat_scope
 from .service import MemoryService, default_memory_service
+
+if TYPE_CHECKING:
+    from app.chat import ChatSessionStore
 
 MEMORY_SUGGEST_JOB_TYPE = "assistant.memory.suggest"
 MEMORY_IMPORT_JOB_TYPE = "assistant.memory.import"
