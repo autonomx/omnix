@@ -138,7 +138,8 @@ def _validate_profile(profile: SettingsProfile) -> None:
 def load_settings_profile(settings: dict[str, Any]) -> SettingsProfile:
     raw = settings.get(SETTINGS_PROFILE_KEY)
     legacy = _legacy_seed(settings)
-    source = _merge_known(legacy, raw) if isinstance(raw, dict) else legacy
+    default_profile = SettingsProfile.model_validate(legacy).model_dump(mode="json", by_alias=True)
+    source = _merge_known(default_profile, raw) if isinstance(raw, dict) else default_profile
     for key in ("openrouter", "cerebras"):
         legacy_key = str(_record(_record(legacy.get("providerConfigs")).get(key)).get("apiKey") or "")
         source_provider_configs = _record(source.get("providerConfigs"))

@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
+from datetime import date
+from html.parser import HTMLParser
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 
@@ -23,6 +27,20 @@ def should_search_automatically(query: str) -> bool:
     return any(re.search(pattern, normalized) for pattern in _AUTO_SEARCH_PATTERNS)
 
 
+def _search_query_variants(query: str, *, today: date) -> list[str]:
+    clean = " ".join(query.split()).strip()
+    if not clean:
+        return []
+    variants = [clean]
+    normalized = clean.casefold()
+    date_label = today.strftime("%B %-d, %Y") if os.name != "nt" else today.strftime("%B %#d, %Y")
+    if re.search(r"\b(today|tonight|yesterday|tomorrow|current|latest|recent|newest)\b", normalized):
+        variants.append(f"{clean} {date_label}")
+    if re.search(r"\b(result|results|score|scores|winner|won|price|release|status|schedule|news)\b", normalized):
+        variants.append(f"{clean} latest")
+    return list(dict.fromkeys(variants))
+
+
 class WebSearchClient:
     """Provider-neutral web retrieval with a keyless DuckDuckGo fallback."""
 
@@ -33,11 +51,13 @@ class WebSearchClient:
         api_key: str | None = None,
         timeout_seconds: float | None = None,
         client: httpx.Client | None = None,
+        today: Callable[[], date] = date.today,
     ) -> None:
         self.provider = (provider or os.environ.get("OMNIX_WEB_SEARCH_PROVIDER") or "duckduckgo").strip().lower()
         self.api_key = api_key if api_key is not None else os.environ.get("OMNIX_WEB_SEARCH_API_KEY", "")
         self.timeout_seconds = timeout_seconds or float(os.environ.get("OMNIX_WEB_SEARCH_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS))
         self.client = client
+        self.today = today
 
     def search(self, query: str, max_results: int = 5) -> list[AssistantContextItem]:
         clean_query = " ".join(query.split()).strip()
@@ -56,6 +76,17 @@ class WebSearchClient:
                 client.close()
 
     def _search_duckduckgo(self, client: httpx.Client, query: str, max_results: int) -> list[AssistantContextItem]:
+        rows: list[dict[str, str]] = []
+        for search_query in _search_query_variants(query, today=self.today()):
+            rows.extend(self._search_duckduckgo_rows(client, search_query, max_results))
+        return self._context_items(rows, max_results, provider="duckduckgo")
+
+    def _search_duckduckgo_rows(
+        self,
+        client: httpx.Client,
+        query: str,
+        max_results: int,
+    ) -> list[dict[str, str]]:
         response = client.get(
             "https://api.duckduckgo.com/",
             params={"q": query, "format": "json", "no_html": "1", "skip_disambig": "1", "no_redirect": "1"},
@@ -76,7 +107,25 @@ class WebSearchClient:
                     self._append_duckduckgo_row(rows, nested)
             else:
                 self._append_duckduckgo_row(rows, row)
-        return self._context_items(rows, max_results, provider="duckduckgo")
+        if not rows:
+            rows.extend(self._search_duckduckgo_html(client, query, max_results))
+        return rows
+
+    def _search_duckduckgo_html(
+        self,
+        client: httpx.Client,
+        query: str,
+        max_results: int,
+    ) -> list[dict[str, str]]:
+        response = client.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
+            headers={"User-Agent": "OmnixResearch/1.0"},
+        )
+        response.raise_for_status()
+        parser = _DuckDuckGoHtmlParser(max_results=max_results)
+        parser.feed(response.text)
+        return parser.rows
 
     def _search_brave(self, client: httpx.Client, query: str, max_results: int) -> list[AssistantContextItem]:
         if not self.api_key:
@@ -156,3 +205,58 @@ class WebSearchClient:
             if len(items) >= max_results:
                 break
         return items
+
+
+class _DuckDuckGoHtmlParser(HTMLParser):
+    def __init__(self, *, max_results: int) -> None:
+        super().__init__(convert_charrefs=True)
+        self.max_results = max(1, max_results)
+        self.rows: list[dict[str, str]] = []
+        self._in_title = False
+        self._in_snippet = False
+        self._title_parts: list[str] = []
+        self._snippet_parts: list[str] = []
+        self._pending_href = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr = {name: value or "" for name, value in attrs}
+        classes = set(attr.get("class", "").split())
+        if tag == "a" and "result__a" in classes:
+            self._in_title = True
+            self._title_parts = []
+            self._pending_href = _clean_duckduckgo_url(attr.get("href", ""))
+        elif "result__snippet" in classes:
+            self._in_snippet = True
+            self._snippet_parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            self._title_parts.append(data)
+        if self._in_snippet:
+            self._snippet_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a" and self._in_title:
+            title = " ".join("".join(self._title_parts).split()).strip()
+            if title and self._pending_href and len(self.rows) < self.max_results:
+                self.rows.append({"title": title, "url": self._pending_href, "snippet": title})
+            self._in_title = False
+            self._title_parts = []
+            self._pending_href = ""
+        elif self._in_snippet and tag in {"a", "div"}:
+            snippet = " ".join("".join(self._snippet_parts).split()).strip()
+            if snippet:
+                for row in reversed(self.rows):
+                    if row.get("snippet") == row.get("title"):
+                        row["snippet"] = snippet
+                        break
+            self._in_snippet = False
+            self._snippet_parts = []
+
+
+def _clean_duckduckgo_url(value: str) -> str:
+    parsed = urlparse(value)
+    uddg = parse_qs(parsed.query).get("uddg", [""])[0]
+    if uddg:
+        return unquote(uddg)
+    return value

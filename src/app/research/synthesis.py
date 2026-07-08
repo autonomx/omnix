@@ -80,7 +80,7 @@ class DeepResearchSynthesizer:
                     validation=validation,
                 )
             return DeepSynthesisResult(
-                content=render_structured_synthesis(answer, execution),
+                content=render_structured_synthesis(answer, execution, question=question),
                 sections=answer.sections,
                 backend="provider",
                 validation=validation,
@@ -122,7 +122,8 @@ def build_synthesis_messages(
         "task": (
             "Synthesize the answer from the supplied structured evidence only. "
             "Return JSON matching the schema. Facts require source_snapshot_ids. "
-            "Label inference and unresolved limitations explicitly."
+            "Label inference and unresolved limitations explicitly. "
+            "For direct result, score, winner, status, or price questions, put the shortest direct answer first."
         ),
         "schema": DeepSynthesisAnswer.model_json_schema(),
         "question": question,
@@ -195,35 +196,115 @@ def validate_structured_synthesis(
 def render_structured_synthesis(
     answer: DeepSynthesisAnswer,
     execution: ResearchExecutionResult,
+    *,
+    question: str = "",
 ) -> str:
     label_by_snapshot = {
         snapshot.snapshot_id: snapshot.citation_label for snapshot in execution.snapshots
     }
-    sections: list[str] = []
-    for section in answer.sections:
-        citations = " ".join(
-            f"[{label_by_snapshot[snapshot_id]}]"
-            for snapshot_id in section.source_snapshot_ids
-            if snapshot_id in label_by_snapshot
-        )
-        prefix = {
-            "fact": "",
-            "inference": "**Inference:** ",
-            "limitation": "**Limitation:** ",
-            "recommendation": "**Recommendation:** ",
-        }[section.kind]
-        sections.append(f"{prefix}{section.text}{(' ' + citations) if citations else ''}")
-    if execution.conflicts:
+    rendered_sections = [
+        _render_synthesis_section(section, label_by_snapshot)
+        for section in answer.sections
+    ]
+    sections = (
+        _format_direct_answer(answer.sections, rendered_sections)
+        if _is_direct_result_question(question)
+        else rendered_sections
+    )
+    conflicts = _displayable_conflicts(answer, execution, direct=_is_direct_result_question(question))
+    if conflicts:
         sections.append(
             "## Unresolved conflicts\n"
-            + "\n".join(f"- {item.summary}" for item in execution.conflicts)
+            + "\n".join(f"- {item.summary}" for item in conflicts)
         )
     if execution.research_status == "partial":
         sections.append(
             "## Limitations\n"
             f"Research completed with partial evidence because: {execution.stop_reason}."
         )
-    return "\n\n".join(sections).strip()
+    return "\n\n".join(section for section in sections if section).strip()
+
+
+def _render_synthesis_section(
+    section: DeepSynthesisSection,
+    label_by_snapshot: dict[str, str],
+) -> str:
+    citations = " ".join(
+        f"[{label_by_snapshot[snapshot_id]}]"
+        for snapshot_id in section.source_snapshot_ids
+        if snapshot_id in label_by_snapshot
+    )
+    prefix = {
+        "fact": "",
+        "inference": "**Inference:** ",
+        "limitation": "**Limitation:** ",
+        "recommendation": "**Recommendation:** ",
+    }[section.kind]
+    return f"{prefix}{section.text}{(' ' + citations) if citations else ''}"
+
+
+def _format_direct_answer(
+    source_sections: list[DeepSynthesisSection],
+    rendered_sections: list[str],
+) -> list[str]:
+    if not rendered_sections:
+        return []
+    first_fact_index = next(
+        (index for index, section in enumerate(source_sections) if section.kind == "fact"),
+        0,
+    )
+    direct_answer = rendered_sections[first_fact_index]
+    remaining = [
+        rendered
+        for index, rendered in enumerate(rendered_sections)
+        if index != first_fact_index and rendered
+    ]
+    if not remaining:
+        return [f"**Answer:** {direct_answer}"]
+    return [
+        f"**Answer:** {direct_answer}",
+        "## Details\n" + "\n".join(f"- {item}" for item in remaining),
+    ]
+
+
+def _displayable_conflicts(
+    answer: DeepSynthesisAnswer,
+    execution: ResearchExecutionResult,
+    *,
+    direct: bool,
+) -> list[Any]:
+    if not execution.conflicts:
+        return []
+    answer_mentions_conflict = any(
+        section.kind == "limitation"
+        and _contains_conflict_language(section.text)
+        for section in answer.sections
+    )
+    if direct and not answer_mentions_conflict:
+        return []
+    return execution.conflicts[:3]
+
+
+def _is_direct_result_question(question: str) -> bool:
+    text = f" {str(question or '').casefold()} "
+    direct_markers = (
+        " who won ",
+        " winner ",
+        " won ",
+        " result ",
+        " results ",
+        " score ",
+        " scores ",
+        " final score ",
+        " price ",
+        " status ",
+    )
+    return any(marker in text for marker in direct_markers)
+
+
+def _contains_conflict_language(value: str) -> bool:
+    text = str(value or "").casefold()
+    return any(word in text for word in ("conflict", "conflicting", "disagree", "disputed", "contradict"))
 
 
 def deterministic_synthesis_fallback(

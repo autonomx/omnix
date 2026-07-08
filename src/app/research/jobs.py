@@ -1,13 +1,14 @@
 """Durable Deep Research job construction and stage contracts."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from app.jobs.models import CreateJobRequest, JobStage, ResourceClass
-
 from .contracts import RESEARCH_JOB_MODULE, RESEARCH_JOB_TYPE
+
+if TYPE_CHECKING:
+    from app.jobs.models import CreateJobRequest, JobStage, ResourceClass
 
 
 class DeepResearchJobInput(BaseModel):
@@ -30,9 +31,12 @@ class DeepResearchJobInput(BaseModel):
 
 def deep_research_stages(
     *,
-    planner_resource: ResourceClass = ResourceClass.CPU,
-    synthesis_resource: ResourceClass = ResourceClass.NETWORK,
-) -> list[JobStage]:
+    planner_resource: "ResourceClass | None" = None,
+    synthesis_resource: "ResourceClass | None" = None,
+) -> list["JobStage"]:
+    _, JobStage, ResourceClass = _job_models()
+    planner_resource = planner_resource or ResourceClass.CPU
+    synthesis_resource = synthesis_resource or ResourceClass.NETWORK
     return [
         JobStage(id="planning", label="Planning research", resource_class=planner_resource),
         JobStage(id="searching", label="Searching the web", resource_class=ResourceClass.NETWORK),
@@ -46,9 +50,12 @@ def deep_research_stages(
 def create_deep_research_job_request(
     payload: DeepResearchJobInput,
     *,
-    planner_resource: ResourceClass = ResourceClass.CPU,
-    synthesis_resource: ResourceClass = ResourceClass.NETWORK,
-) -> CreateJobRequest:
+    planner_resource: "ResourceClass | None" = None,
+    synthesis_resource: "ResourceClass | None" = None,
+) -> "CreateJobRequest":
+    CreateJobRequest, _, ResourceClass = _job_models()
+    planner_resource = planner_resource or ResourceClass.CPU
+    synthesis_resource = synthesis_resource or ResourceClass.NETWORK
     return CreateJobRequest(
         owner_id=payload.session_id,
         module=RESEARCH_JOB_MODULE,
@@ -61,3 +68,9 @@ def create_deep_research_job_request(
         input_payload=payload.model_dump(mode="json"),
         compat={"contract": "assistant_deep_research_v1"},
     )
+
+
+def _job_models() -> tuple[type[Any], type[Any], Any]:
+    from app.jobs.models import CreateJobRequest, JobStage, ResourceClass
+
+    return CreateJobRequest, JobStage, ResourceClass

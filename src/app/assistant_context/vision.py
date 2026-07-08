@@ -16,6 +16,22 @@ _SUPPORTED_IMAGE_PREFIXES = (
     "data:image/webp;base64,",
 )
 FallbackMode = Literal["multi_image", "combined_sheet", "current_only"]
+_VISION_MODEL_HINTS = (
+    "vision",
+    "vl",
+    "v-l",
+    "llava",
+    "bakllava",
+    "moondream",
+    "minicpm",
+    "internvl",
+    "qwen2-vl",
+    "qwen2.5-vl",
+    "qwen-vl",
+    "gemma-3",
+    "gemma3",
+    "pixtral",
+)
 
 
 def _model_key(value: str | None) -> str | None:
@@ -64,10 +80,6 @@ class DesktopVisionClient:
         current = self._validate_image(image_data_url, "current desktop image")
         history = self._validate_optional_image(history_image_data_url, "desktop history image")
         combined = self._validate_optional_image(combined_image_data_url, "combined desktop image")
-        model = _model_key(self.default_model or model_id)
-        if not model:
-            raise RuntimeError("Configure OMNIX_VISION_MODEL or select a vision-capable model")
-
         attempts = self._attempts(current, history, combined)
         headers = {"Content-Type": "application/json"}
         if self.api_key:
@@ -76,6 +88,7 @@ class DesktopVisionClient:
         close_client = self.client is None
         errors: list[str] = []
         try:
+            model = self._resolve_model(client, headers, model_id)
             for index, (fallback_mode, images) in enumerate(attempts):
                 try:
                     content = self._request_content(
@@ -111,6 +124,50 @@ class DesktopVisionClient:
             if close_client:
                 client.close()
         raise RuntimeError("vision provider returned no usable observation")
+
+    def _resolve_model(
+        self,
+        client: httpx.Client,
+        headers: dict[str, str],
+        model_id: str | None,
+    ) -> str:
+        explicit = _model_key(self.default_model or model_id)
+        if explicit:
+            return explicit
+        try:
+            response = client.get(f"{self.base_url}/models", headers=headers)
+            response.raise_for_status()
+            models = self._extract_model_ids(response.json())
+        except Exception as exc:
+            raise RuntimeError(
+                "Configure OMNIX_VISION_MODEL, select a vision-capable model, "
+                "or expose a /models endpoint from the vision provider"
+            ) from exc
+        if not models:
+            raise RuntimeError("vision provider returned no models")
+        return self._choose_model(models)
+
+    @staticmethod
+    def _extract_model_ids(payload: dict[str, Any]) -> list[str]:
+        data = payload.get("data")
+        if not isinstance(data, list):
+            return []
+        ids: list[str] = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            model_id = item.get("id") or item.get("name")
+            if isinstance(model_id, str) and model_id.strip():
+                ids.append(model_id.strip())
+        return ids
+
+    @staticmethod
+    def _choose_model(models: list[str]) -> str:
+        for model in models:
+            lowered = model.lower()
+            if any(hint in lowered for hint in _VISION_MODEL_HINTS):
+                return model
+        return models[0]
 
     def _request_content(
         self,

@@ -25,8 +25,10 @@ type ClientPatch = {
 let activeSession: ChatSession | null = null;
 let activeJob: JobRecord | null = null;
 let pollTimer: number | null = null;
+let pollingJobId: string | null = null;
 let currentSessionId: string | null = null;
 let originalGetChatSession: ClientPatch['getChatSession'] | null = null;
+const dismissedJobIds = new Set<string>();
 
 export function installResearchProgressController(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -82,8 +84,9 @@ function captureSession(session: ChatSession): void {
 }
 
 function startPolling(jobId: string): void {
-  if (activeJob?.id === jobId && pollTimer !== null) return;
+  if (pollingJobId === jobId && pollTimer !== null) return;
   stopPolling();
+  pollingJobId = jobId;
   void pollResearchJob(jobId);
   pollTimer = window.setInterval(() => void pollResearchJob(jobId), POLL_INTERVAL_MS);
 }
@@ -91,6 +94,7 @@ function startPolling(jobId: string): void {
 function stopPolling(): void {
   if (pollTimer !== null) window.clearInterval(pollTimer);
   pollTimer = null;
+  pollingJobId = null;
 }
 
 async function pollResearchJob(jobId: string): Promise<void> {
@@ -124,6 +128,10 @@ function renderResearchUi(errorMessage?: string): void {
     panel?.remove();
     return;
   }
+  if (dismissedJobIds.has(jobId) && (!activeJob || !isActiveResearchJob(activeJob))) {
+    panel?.remove();
+    return;
+  }
   if (!panel) {
     panel = document.createElement('section');
     panel.setAttribute(PANEL_ATTRIBUTE, 'true');
@@ -131,10 +139,15 @@ function renderResearchUi(errorMessage?: string): void {
     messages.insertAdjacentElement('afterend', panel);
   }
   if (errorMessage && !activeJob) {
-    panel.innerHTML = `<p role="status">${escapeHtml(errorMessage)}</p>`;
+    setPanelHtml(panel, `<p role="status">${escapeHtml(errorMessage)}</p>`, `error:${errorMessage}`);
     return;
   }
   if (!activeJob || activeJob.id !== jobId) {
+    if (panel.dataset.renderKey === `restoring:${jobId}`) {
+      startPolling(jobId);
+      return;
+    }
+    panel.dataset.renderKey = `restoring:${jobId}`;
     panel.innerHTML = '<p role="status">Restoring research progress…</p>';
     startPolling(jobId);
     return;
@@ -142,16 +155,19 @@ function renderResearchUi(errorMessage?: string): void {
   renderJobPanel(panel, activeJob);
 }
 
-function renderJobPanel(panel: HTMLElement, job: JobRecord): void {
+export function renderJobPanel(panel: HTMLElement, job: JobRecord): void {
   const announcement = researchStageAnnouncement(job);
   const previousAnnouncement = panel.dataset.announcement;
   const details = researchJobOutput(job);
   const active = isActiveResearchJob(job);
   panel.className = `assistant-research-progress status-${String(job.status)}`;
-  panel.innerHTML = `
+  const html = `
     <header>
       <div><p class="eyebrow">Deep research</p><h3>${escapeHtml(researchStageLabel(job))}</h3></div>
-      <span class="assistant-research-status">${escapeHtml(humanizeCode(String(job.status)))}</span>
+      <div class="assistant-research-header-actions">
+        <span class="assistant-research-status">${escapeHtml(humanizeCode(String(job.status)))}</span>
+        ${active ? '' : '<button type="button" class="assistant-research-close" data-omnix-research-close aria-label="Close research progress">&times;</button>'}
+      </div>
     </header>
     <div class="assistant-research-progress-track" aria-hidden="true"><span style="width:${researchProgressPercent(job)}%"></span></div>
     <p class="assistant-research-announcement" aria-live="polite" aria-atomic="true">${escapeHtml(announcement)}</p>
@@ -161,11 +177,16 @@ function renderJobPanel(panel: HTMLElement, job: JobRecord): void {
     </div>
     ${details ? renderJobDetails(details) : ''}
   `;
+  if (!setPanelHtml(panel, html, researchPanelRenderKey(job, announcement, details))) return;
   panel.dataset.announcement = announcement;
   if (previousAnnouncement === announcement) {
     const live = panel.querySelector<HTMLElement>('.assistant-research-announcement');
     live?.removeAttribute('aria-live');
   }
+  panel.querySelector<HTMLButtonElement>('[data-omnix-research-close]')?.addEventListener('click', () => {
+    dismissedJobIds.add(job.id);
+    panel.remove();
+  });
   panel.querySelector<HTMLButtonElement>('[data-omnix-research-cancel]')?.addEventListener('click', (event) => {
     const button = event.currentTarget as HTMLButtonElement;
     button.disabled = true;
@@ -180,6 +201,24 @@ function renderJobPanel(panel: HTMLElement, job: JobRecord): void {
         button.textContent = 'Cancel research';
         button.insertAdjacentHTML('afterend', '<span role="alert">Cancellation failed.</span>');
       });
+  });
+}
+
+function setPanelHtml(panel: HTMLElement, html: string, renderKey: string): boolean {
+  if (panel.dataset.renderKey === renderKey) return false;
+  panel.dataset.renderKey = renderKey;
+  panel.innerHTML = html;
+  return true;
+}
+
+function researchPanelRenderKey(job: JobRecord, announcement: string, details: JobOutput | null): string {
+  return JSON.stringify({
+    id: job.id,
+    status: job.status,
+    announcement,
+    progress: researchProgressPercent(job),
+    stages: (job.stages ?? []).map((stage) => [stage.id, stage.status, stage.label]),
+    details,
   });
 }
 

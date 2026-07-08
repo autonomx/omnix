@@ -106,4 +106,27 @@ describe('research progress restoration', () => {
     expect(helpers.researchStageAnnouncement(complete)).toContain('Research complete');
     expect(helpers.isActiveResearchJob(complete)).toBe(false);
   });
+
+  it('renders a close button for completed progress panels', () => {
+    const panel = document.createElement('section');
+    document.body.append(panel);
+
+    helpers.renderJobPanel(panel, researchJob({ status: 'completed' }));
+    const close = panel.querySelector<HTMLButtonElement>('[data-omnix-research-close]');
+
+    expect(close).not.toBeNull();
+    close?.click();
+    expect(document.body.contains(panel)).toBe(false);
+  });
+
+  it('keeps active progress panels focused on cancellation instead of dismissal', () => {
+    const panel = document.createElement('section');
+    document.body.append(panel);
+
+    helpers.renderJobPanel(panel, researchJob());
+
+    expect(panel.querySelector('[data-omnix-research-close]')).toBeNull();
+    expect(panel.querySelector('[data-omnix-research-cancel]')).not.toBeNull();
+    panel.remove();
+  });
 });

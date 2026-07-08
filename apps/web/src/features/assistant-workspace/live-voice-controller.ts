@@ -516,8 +516,8 @@ function renderPanelStatus(card: HTMLElement, status: StreamingSttConnectionStat
   setText(card.querySelector('.assistant-live-state span:first-child'), stateText);
   setText(card.querySelector('.assistant-voice-status strong'), stateText);
   setText(card.querySelector('.assistant-voice-input-status'), inputText);
-  card.dataset.liveVoiceStatus = status;
-  card.dataset.voiceInput = status === 'connected' ? 'listening' : status;
+  setDataAttribute(card, 'liveVoiceStatus', status);
+  setDataAttribute(card, 'voiceInput', status === 'connected' ? 'listening' : status);
 
   const callButton = findCallButton(card);
   if (callButton) {
@@ -528,7 +528,7 @@ function renderPanelStatus(card: HTMLElement, status: StreamingSttConnectionStat
 
   const orb = card.querySelector<HTMLElement>('.assistant-voice-orb');
   if (orb && !(status === 'connected' && orb.dataset.voiceMode === 'speaking')) {
-    orb.dataset.voiceMode = status === 'connected' ? 'listening' : status === 'error' ? 'error' : 'idle';
+    setDataAttribute(orb, 'voiceMode', status === 'connected' ? 'listening' : status === 'error' ? 'error' : 'idle');
   }
 }
 
@@ -603,6 +603,10 @@ function dispatchLiveVoicePerfEvent(detail: Record<string, unknown>): void {
 
 function setText(element: Element | null, value: string): void {
   if (element && element.textContent !== value) element.textContent = value;
+}
+
+function setDataAttribute(element: HTMLElement, key: string, value: string): void {
+  if (element.dataset[key] !== value) element.dataset[key] = value;
 }
 
 if (typeof window !== 'undefined') {

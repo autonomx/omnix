@@ -147,6 +147,36 @@ def test_temporal_vision_falls_back_to_combined_sheet_when_multiple_images_are_r
     assert len(observation.metadata["fallback_errors"]) == 1
 
 
+def test_vision_client_auto_selects_available_vision_model_when_unconfigured():
+    payloads = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": "local-text-model"},
+                        {"id": "qwen2.5-vl-7b-instruct"},
+                    ]
+                },
+            )
+        payload = json.loads(request.content.decode("utf-8"))
+        payloads.append(payload)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "The desktop is visible."}}]})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    observation = DesktopVisionClient(client=client).describe(
+        image_data("CURRENT"),
+        "Can you see the screen?",
+    )
+    client.close()
+
+    assert payloads[0]["model"] == "qwen2.5-vl-7b-instruct"
+    assert observation.content == "The desktop is visible."
+    assert observation.metadata["model"] == "qwen2.5-vl-7b-instruct"
+
+
 def test_context_service_passes_temporal_images_and_records_resolution_mode():
     vision = RecordingVisionClient()
     service = AssistantContextService(desktop_vision_factory=lambda: vision)
@@ -169,6 +199,25 @@ def test_context_service_passes_temporal_images_and_records_resolution_mode():
     assert result.diagnostics["desktop_status"] == "completed"
     assert result.diagnostics["desktop_fallback_mode"] == "multi_image"
     assert result.diagnostics["desktop_image_count"] == 2
+
+
+def test_context_service_keeps_desktop_failure_visible_to_chat_prompt():
+    class FailingVisionClient:
+        def describe(self, *args, **kwargs):
+            raise RuntimeError("no vision model configured")
+
+    service = AssistantContextService(desktop_vision_factory=FailingVisionClient)
+    result = service.build(
+        AssistantContextChatRequest(
+            content="Can you see the screen?",
+            desktop_current_image_data_url=image_data("CURRENT"),
+        )
+    )
+
+    assert result.diagnostics["desktop_status"] == "failed"
+    assert result.items[0].source_id == "desktop_vision"
+    assert "desktop sharing is active" in result.items[0].content.lower()
+    assert "no vision model configured" in result.items[0].content
 
 
 def test_enriched_chat_route_keeps_visible_message_clean_and_injects_context(monkeypatch, tmp_path):

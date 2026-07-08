@@ -31,8 +31,8 @@ type ReleaseWindow = Window & typeof globalThis & {
 
 const CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
 const RELEASE_ATTRIBUTE = 'data-omnix-research-release';
-const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages$/;
-const ENHANCED_MESSAGE_PATH = /^\/api\/assistant\/context\/chat\/sessions\/([^/]+)\/messages$/;
+const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
+const ENHANCED_MESSAGE_PATH = /^\/api\/assistant\/context\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
 const releaseWindow = window as ReleaseWindow;
 
@@ -82,7 +82,7 @@ function installFetchWrapper(): void {
     if (method === 'GET' && sessionMatch) {
       const response = await originalFetch(input, init);
       if (response.ok) {
-        activeSessionId = sessionMatch[1] ?? null;
+        activeSessionId = sessionMatch[1] ? decodePathSegment(sessionMatch[1]) : null;
         void loadReleaseStatus(activeSessionId);
       }
       return response;
@@ -90,7 +90,7 @@ function installFetchWrapper(): void {
 
     const messageMatch = parsed.pathname.match(MESSAGE_PATH) ?? parsed.pathname.match(ENHANCED_MESSAGE_PATH);
     if (method !== 'POST' || !messageMatch) return originalFetch(input, init);
-    activeSessionId = messageMatch[1] ?? activeSessionId;
+    activeSessionId = messageMatch[1] ? decodePathSegment(messageMatch[1]) : activeSessionId;
     const body = await requestBodyText(input, init);
     let payload: Record<string, unknown>;
     try {
@@ -144,7 +144,8 @@ async function showUnavailableResponse(response: Response): Promise<void> {
 }
 
 function injectReleaseControls(root: ParentNode): void {
-  const container = root.querySelector<HTMLElement>(`[${CONTROLS_ATTRIBUTE}]`);
+  const container = root.querySelector<HTMLElement>(`.assistant-composer > [${CONTROLS_ATTRIBUTE}]`)
+    ?? root.querySelector<HTMLElement>(`[${CONTROLS_ATTRIBUTE}]`);
   if (!container || container.querySelector(`[${RELEASE_ATTRIBUTE}]`)) {
     renderReleaseControls();
     return;
@@ -180,30 +181,47 @@ function injectReleaseControls(root: ParentNode): void {
 }
 
 function renderReleaseControls(): void {
-  const select = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]');
+  const select = visibleResearchModeSelect();
   if (select) {
     const quickOption = select.querySelector<HTMLOptionElement>('option[value="quick"]');
     const deepOption = select.querySelector<HTMLOptionElement>('option[value="deep"]');
     if (quickOption) {
-      quickOption.disabled = !availability.quick;
-      quickOption.textContent = availability.quick ? 'Quick search' : 'Quick search · unavailable';
+      setBooleanProperty(quickOption, 'disabled', !availability.quick);
+      setText(quickOption, availability.quick ? 'Quick search' : 'Quick search · unavailable');
     }
     if (deepOption) {
-      deepOption.disabled = !availability.deep;
-      deepOption.textContent = availability.deep ? 'Deep research' : 'Deep research · unavailable';
+      setBooleanProperty(deepOption, 'disabled', !availability.deep);
+      setText(deepOption, availability.deep ? 'Deep research' : 'Deep research · unavailable');
     }
   }
   const mode = (select?.value ?? 'disabled') as ResearchMode;
   document.querySelectorAll<HTMLElement>('.assistant-research-fallback').forEach((element) => {
     const show = shouldOfferResearchDowngrade(mode, availability);
-    element.hidden = !show;
+    setBooleanProperty(element, 'hidden', !show);
   });
   document.querySelectorAll<HTMLInputElement>('input[aria-label="Allow Quick Search fallback"]').forEach((input) => {
-    input.checked = allowDowngrade;
+    setBooleanProperty(input, 'checked', allowDowngrade);
   });
   document.querySelectorAll<HTMLElement>('.assistant-research-release-status').forEach((element) => {
-    element.textContent = releaseMessage;
+    setText(element, releaseMessage);
   });
+}
+
+function visibleResearchModeSelect(): HTMLSelectElement | null {
+  return document.querySelector<HTMLSelectElement>('.assistant-composer > [data-omnix-context-controls] select[aria-label="Web research mode"]')
+    ?? document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]');
+}
+
+function setText(element: Element, value: string): void {
+  if (element.textContent !== value) element.textContent = value;
+}
+
+function setBooleanProperty<TElement extends Element, TKey extends keyof TElement>(
+  element: TElement,
+  key: TKey,
+  value: boolean,
+): void {
+  if (element[key] !== value) element[key] = value as TElement[TKey];
 }
 
 function releaseSummary(payload: ResearchStatusPayload, current: ReleaseAvailability): string {
@@ -222,6 +240,14 @@ async function requestBodyText(input: RequestInfo | URL, init?: RequestInit): Pr
 function humanize(value: string): string {
   const text = value.replaceAll('_', ' ').trim();
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : 'Research mode unavailable';
+}
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 if (document.readyState === 'loading') {

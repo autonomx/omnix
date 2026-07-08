@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.chat import ChatSessionStore, SendChatMessageRequest, SendChatMessageResponse, default_chat_store
 from app.chat.research_citations import validate_completed_research_reply
@@ -28,6 +31,7 @@ from .models import AssistantContextChatRequest
 from .service import AssistantContextService, default_assistant_context_service
 
 _ROUTE_NAME = "assistant_context_chat_message_endpoint"
+_STREAM_ROUTE_NAME = "assistant_context_stream_chat_message_endpoint"
 _STATUS_ROUTE_NAME = "assistant_research_runtime_status_endpoint"
 _ACTIVE_RESEARCH_STATUSES = {
     JobStatus.QUEUED,
@@ -221,6 +225,162 @@ def register_assistant_context_routes(
         )
         return SendChatMessageResponse(session=session, user_message=user_message, job=job)
 
+    @app.post(
+        "/api/assistant/context/chat/sessions/{session_id}/messages/stream",
+        include_in_schema=False,
+        name=_STREAM_ROUTE_NAME,
+    )
+    async def assistant_context_stream_chat_message_endpoint(
+        session_id: str,
+        request: AssistantContextChatRequest,
+    ) -> StreamingResponse:
+        settings = settings_factory()
+        release_policy = release_policy_factory()
+        decision = resolve_research_release(
+            request.web_research_mode,
+            settings,
+            release_policy,
+            identity=session_id,
+            allow_downgrade=request.allow_research_downgrade,
+        )
+        if decision.status == "unavailable":
+            availability = research_release_availability(
+                settings,
+                release_policy,
+                identity=session_id,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "research_mode_unavailable",
+                    "requested_mode": decision.requested_mode,
+                    "reason": decision.reason,
+                    "available_modes": [
+                        mode
+                        for mode, available in (
+                            ("disabled", availability.disabled),
+                            ("quick", availability.quick),
+                            ("deep", availability.deep),
+                        )
+                        if available
+                    ],
+                    "downgrade_available": (
+                        decision.requested_mode == "deep" and availability.quick
+                    ),
+                },
+            )
+
+        request.web_research_mode = decision.effective_mode
+        request.internal_research_warnings = [
+            *request.internal_research_warnings,
+            *decision.warnings,
+        ]
+        policy = policy_factory() if policy_factory is not None else settings.policy
+        request.internal_research_identity = session_id
+        request.internal_research_provider = settings.provider
+        request.internal_research_policy = {
+            "search_cache_ttl_seconds": policy.search_cache_ttl_seconds,
+            "extraction_cache_ttl_seconds": policy.extraction_cache_ttl_seconds,
+            "quick_requests_per_minute": policy.quick_requests_per_minute,
+            "deep_requests_per_hour": policy.deep_requests_per_hour,
+            "provider_requests_per_minute": policy.provider_requests_per_minute,
+            "raw_snapshot_retention_days": policy.raw_snapshot_retention_days,
+            "source_manifest_retention_days": policy.source_manifest_retention_days,
+            "max_active_deep_jobs_per_session": policy.max_active_deep_jobs_per_session,
+            "planner_receives_conversation_history": False,
+            "synthesis_receives_raw_page_bodies": False,
+        }
+        request.web_search_max_results = settings.max_results
+        limiter = rate_limiter_factory()
+        try:
+            if request.web_research_mode == "quick":
+                limiter.quick_request(session_id, policy)
+            elif request.web_research_mode == "deep":
+                limiter.deep_request(session_id, policy)
+        except ResearchRateLimitError as exc:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "research_rate_limited",
+                    "action": exc.action,
+                    "retry_after_seconds": exc.retry_after_seconds,
+                },
+            ) from exc
+
+        chat_store = chat_store_factory()
+        if request.web_research_mode == "deep":
+            response = _begin_deep_research(
+                session_id,
+                request,
+                chat_store=chat_store,
+                job_store=job_store_factory(),
+                policy=policy,
+                settings=settings,
+                decision=decision,
+            )
+
+            def generate_deep_research_ack():
+                yield _sse({"type": "user_message", "message": response.user_message.model_dump(mode="json")})
+                yield _sse({"type": "session", "session": response.session.model_dump(mode="json")})
+                yield _sse({"type": "done"})
+
+            return StreamingResponse(generate_deep_research_ack(), media_type="text/event-stream")
+
+        context = await asyncio.to_thread(context_service_factory().build, request)
+        context_items = [item.model_dump(mode="json") for item in context.items]
+        context_diagnostics = {
+            **context.diagnostics,
+            "research_requested_mode": decision.requested_mode,
+            "research_effective_mode": decision.effective_mode,
+            "research_release_status": decision.status,
+            "research_release_reason": decision.reason,
+            "research_release_warnings": decision.warnings,
+        }
+        appended = chat_store.begin_user_message(
+            session_id,
+            _send_request(request),
+            context_items=context_items,
+            context_diagnostics=context_diagnostics,
+        )
+        if appended is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+        session, user_message = appended
+
+        def generate():
+            yield _sse({"type": "user_message", "message": user_message.model_dump(mode="json")})
+            content = ""
+            metadata: dict[str, Any] = {"generation_status": "completed"}
+            try:
+                for event in chat_store.stream_provider_reply_chunks(
+                    session,
+                    user_message,
+                    provider_id=request.provider_id or session.provider_id,
+                    model_id=request.model_id or session.model_id,
+                    context_items=context_items,
+                ):
+                    if event.get("type") == "complete":
+                        content = str(event.get("content") or "").strip()
+                        metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else metadata
+                        if context_items:
+                            metadata["context_sources"] = [
+                                item.source_id for item in context.items
+                            ]
+                        metadata["context_diagnostics"] = context_diagnostics
+                    yield _sse(event)
+                completed = chat_store.complete_streamed_reply(
+                    session.id,
+                    user_message.id,
+                    content,
+                    metadata,
+                )
+                if completed is not None:
+                    yield _sse({"type": "session", "session": completed.model_dump(mode="json")})
+                yield _sse({"type": "done"})
+            except Exception as exc:
+                yield _sse({"type": "error", "message": str(exc) or "Chat stream failed."})
+
+        return StreamingResponse(generate(), media_type="text/event-stream")
+
 
 def _begin_deep_research(
     session_id: str,
@@ -305,3 +465,7 @@ def _send_request(request: AssistantContextChatRequest) -> SendChatMessageReques
         dry_run=request.dry_run,
         research_mode=request.web_research_mode,
     )
+
+
+def _sse(payload: dict[str, Any]) -> str:
+    return f"data: {json.dumps(payload, sort_keys=True)}\n\n"

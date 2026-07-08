@@ -1,0 +1,229 @@
+:root[data-omnix-appearance='light'] {
+  --omnix-page-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 255, 0.92));
+  --omnix-page-panel-flat: rgba(255, 255, 255, 0.82);
+  --omnix-page-panel-muted: rgba(238, 244, 255, 0.82);
+  --omnix-page-line: rgba(86, 102, 145, 0.22);
+  --omnix-page-line-strong: rgba(99, 67, 201, 0.28);
+  --omnix-page-shadow: 0 1rem 2.4rem rgba(37, 51, 86, 0.1);
+}
+
+:root[data-omnix-appearance='light'] .omnix-main {
+  background: linear-gradient(180deg, rgba(246, 249, 255, 0.92), rgba(241, 246, 255, 0.96));
+}
+
+:root[data-omnix-appearance='light'] .workspace-card,
+:root[data-omnix-appearance='light'] .workspace-card.assistant-chat-page,
+:root[data-omnix-appearance='light'] .workspace-card.image-workspace {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(34, 211, 238, 0.08), transparent 24rem),
+    var(--omnix-page-panel) !important;
+  border-color: var(--omnix-page-line) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-main,
+:root[data-omnix-appearance='light'] .assistant-chat-sidebar,
+:root[data-omnix-appearance='light'] .assistant-live-card,
+:root[data-omnix-appearance='light'] .assistant-tool-sidebar-card,
+:root[data-omnix-appearance='light'] .assistant-view-panel,
+:root[data-omnix-appearance='light'] .assistant-workspace-dashboard,
+:root[data-omnix-appearance='light'] .assistant-workspace-activity,
+:root[data-omnix-appearance='light'] .assistant-live-tools-grid,
+:root[data-omnix-appearance='light'] .assistant-supporting-panels > section,
+:root[data-omnix-appearance='light'] .assistant-supporting-panels > div,
+:root[data-omnix-appearance='light'] .storyteller-library,
+:root[data-omnix-appearance='light'] .storyteller-controls,
+:root[data-omnix-appearance='light'] .storyteller-outline,
+:root[data-omnix-appearance='light'] .storyteller-project-header,
+:root[data-omnix-appearance='light'] .storyteller-manuscript,
+:root[data-omnix-appearance='light'] .storyteller-action-bar,
+:root[data-omnix-appearance='light'] .storyteller-versions,
+:root[data-omnix-appearance='light'] .podcast-card,
+:root[data-omnix-appearance='light'] .relationship-map-clear,
+:root[data-omnix-appearance='light'] .relationship-node-card,
+:root[data-omnix-appearance='light'] .voice-studio-app,
+:root[data-omnix-appearance='light'] .voice-side-nav,
+:root[data-omnix-appearance='light'] .voice-panel-final,
+:root[data-omnix-appearance='light'] .voice-credit-card,
+:root[data-omnix-appearance='light'] .voice-user-card,
+:root[data-omnix-appearance='light'] .script-card,
+:root[data-omnix-appearance='light'] .assignment-card,
+:root[data-omnix-appearance='light'] .generate-card,
+:root[data-omnix-appearance='light'] .now-playing-bar,
+:root[data-omnix-appearance='light'] .rpg-shell,
+:root[data-omnix-appearance='light'] .rpg-panel,
+:root[data-omnix-appearance='light'] .rpg-card,
+:root[data-omnix-appearance='light'] .rpg-player-rail,
+:root[data-omnix-appearance='light'] .rpg-world-rail,
+:root[data-omnix-appearance='light'] .rpg-story-scene,
+:root[data-omnix-appearance='light'] .rpg-session-launcher,
+:root[data-omnix-appearance='light'] .rpg-item-panel,
+:root[data-omnix-appearance='light'] .image-flow-banner,
+:root[data-omnix-appearance='light'] .image-system-card,
+:root[data-omnix-appearance='light'] .image-surface,
+:root[data-omnix-appearance='light'] .settings-status-card,
+:root[data-omnix-appearance='light'] .settings-status-row,
+:root[data-omnix-appearance='light'] .provider-config-group,
+:root[data-omnix-appearance='light'] .provider-settings-card,
+:root[data-omnix-appearance='light'] .platform-section,
+:root[data-omnix-appearance='light'] .workspace-grid article,
+:root[data-omnix-appearance='light'] .feature-panel,
+:root[data-omnix-appearance='light'] .feature-mini-card {
+  background: var(--omnix-page-panel) !important;
+  border-color: var(--omnix-page-line) !important;
+  box-shadow: var(--omnix-page-shadow) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-sidebar-nav,
+:root[data-omnix-appearance='light'] .assistant-sidebar-section,
+:root[data-omnix-appearance='light'] .assistant-live-draft,
+:root[data-omnix-appearance='light'] .assistant-voice-toggle,
+:root[data-omnix-appearance='light'] .assistant-voice-input-indicator,
+:root[data-omnix-appearance='light'] .assistant-audio-devices,
+:root[data-omnix-appearance='light'] .assistant-audio-devices div,
+:root[data-omnix-appearance='light'] .assistant-message-action-menu,
+:root[data-omnix-appearance='light'] .assistant-tool-connection-panel,
+:root[data-omnix-appearance='light'] .assistant-tool-action-row,
+:root[data-omnix-appearance='light'] .assistant-view-panel article,
+:root[data-omnix-appearance='light'] .assistant-tool-config-list article,
+:root[data-omnix-appearance='light'] .assistant-settings-list div,
+:root[data-omnix-appearance='light'] .assistant-composer-controls label,
+:root[data-omnix-appearance='light'] .assistant-composer-chip,
+:root[data-omnix-appearance='light'] .image-readiness-inline,
+:root[data-omnix-appearance='light'] .relationship-edge-list p,
+:root[data-omnix-appearance='light'] .action-toast {
+  background: var(--omnix-page-panel-flat) !important;
+  border-color: var(--omnix-page-line) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-header,
+:root[data-omnix-appearance='light'] .assistant-composer {
+  background: linear-gradient(180deg, rgba(250, 252, 255, 0.7), rgba(235, 242, 253, 0.78)) !important;
+  border-color: var(--omnix-page-line) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-bubble p {
+  background: rgba(255, 255, 255, 0.86) !important;
+  border-color: var(--omnix-page-line) !important;
+  color: #24304a !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble {
+  background: linear-gradient(135deg, rgba(117, 85, 225, 0.92), rgba(37, 117, 205, 0.9)) !important;
+  border-color: rgba(99, 67, 201, 0.28) !important;
+  box-shadow: 0 0.8rem 1.8rem rgba(99, 67, 201, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
+  color: #ffffff !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble p {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-message-actions button,
+:root[data-omnix-appearance='light'] .assistant-chat-header-actions button,
+:root[data-omnix-appearance='light'] .assistant-message-action-menu button,
+:root[data-omnix-appearance='light'] .storyteller-panel-heading.compact button,
+:root[data-omnix-appearance='light'] .storyteller-project-actions button,
+:root[data-omnix-appearance='light'] .storyteller-action-bar button,
+:root[data-omnix-appearance='light'] .storyteller-versions button,
+:root[data-omnix-appearance='light'] .storyteller-trash,
+:root[data-omnix-appearance='light'] .storyteller-outline button,
+:root[data-omnix-appearance='light'] .storyteller-chip-row button,
+:root[data-omnix-appearance='light'] .storyteller-chapter-controls button,
+:root[data-omnix-appearance='light'] .storyteller-output-status button,
+:root[data-omnix-appearance='light'] .speaker-preview button,
+:root[data-omnix-appearance='light'] .quality-card button,
+:root[data-omnix-appearance='light'] .recent-card .card-heading-row button,
+:root[data-omnix-appearance='light'] .audio-transport-buttons button {
+  background: rgba(255, 255, 255, 0.78) !important;
+  border-color: var(--omnix-page-line) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-side-panel-toggle,
+:root[data-omnix-appearance='light'] .omnix-mode-tabs {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(235, 242, 253, 0.88)) !important;
+  border-color: var(--omnix-page-line) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-side-panel-toggle button,
+:root[data-omnix-appearance='light'] .omnix-mode-tabs button {
+  color: var(--omnix-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-side-panel-toggle button.active,
+:root[data-omnix-appearance='light'] .omnix-mode-tabs button.active,
+:root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-pill,
+:root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select,
+:root[data-omnix-appearance='light'] .assistant-send-button {
+  background: linear-gradient(135deg, #7455e1, #2580c8) !important;
+  border-color: rgba(99, 67, 201, 0.32) !important;
+  color: #ffffff !important;
+}
+
+:root[data-omnix-appearance='light'] input,
+:root[data-omnix-appearance='light'] select,
+:root[data-omnix-appearance='light'] textarea,
+:root[data-omnix-appearance='light'] .assistant-message-input textarea,
+:root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select select,
+:root[data-omnix-appearance='light'] .image-field input,
+:root[data-omnix-appearance='light'] .image-field select,
+:root[data-omnix-appearance='light'] .image-field textarea,
+:root[data-omnix-appearance='light'] .image-provider-filter select,
+:root[data-omnix-appearance='light'] .image-assets-search input {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: var(--omnix-page-line) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] input::placeholder,
+:root[data-omnix-appearance='light'] textarea::placeholder {
+  color: #6b778d !important;
+}
+
+:root[data-omnix-appearance='light'] h1,
+:root[data-omnix-appearance='light'] h2,
+:root[data-omnix-appearance='light'] h3,
+:root[data-omnix-appearance='light'] h4,
+:root[data-omnix-appearance='light'] strong,
+:root[data-omnix-appearance='light'] .assistant-chat-bubble header strong,
+:root[data-omnix-appearance='light'] .relationship-map-title b,
+:root[data-omnix-appearance='light'] .relationship-node-card span,
+:root[data-omnix-appearance='light'] .relationship-edge-list strong,
+:root[data-omnix-appearance='light'] .image-section-heading h3,
+:root[data-omnix-appearance='light'] .image-system-card strong,
+:root[data-omnix-appearance='light'] .image-readiness-inline strong {
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] p,
+:root[data-omnix-appearance='light'] li,
+:root[data-omnix-appearance='light'] small,
+:root[data-omnix-appearance='light'] time,
+:root[data-omnix-appearance='light'] dt,
+:root[data-omnix-appearance='light'] label,
+:root[data-omnix-appearance='light'] .eyebrow,
+:root[data-omnix-appearance='light'] .assistant-chat-bubble header,
+:root[data-omnix-appearance='light'] .assistant-chat-bubble time,
+:root[data-omnix-appearance='light'] .relationship-map-title small,
+:root[data-omnix-appearance='light'] .relationship-node-card small,
+:root[data-omnix-appearance='light'] .image-flow-banner p,
+:root[data-omnix-appearance='light'] .image-section-heading p,
+:root[data-omnix-appearance='light'] .image-system-card small,
+:root[data-omnix-appearance='light'] .image-field,
+:root[data-omnix-appearance='light'] .image-readiness-inline {
+  color: var(--omnix-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .status-pill,
+:root[data-omnix-appearance='light'] .workspace-heading code,
+:root[data-omnix-appearance='light'] .assistant-tool-config-list article > strong,
+:root[data-omnix-appearance='light'] .assistant-tool-action-row > strong {
+  background: rgba(99, 67, 201, 0.1) !important;
+  border-color: rgba(99, 67, 201, 0.22) !important;
+  color: #493088 !important;
+}

@@ -275,13 +275,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     onMutate: () => {
       markVoiceTurnPerformance('chatSubmitStartedAt');
     },
-    onSuccess: async (_result, values) => {
+    onSuccess: (_result, values) => {
       markVoiceTurnPerformance('chatResponseReceivedAt');
       reset({ content: '', providerId: values.providerId, modelId: values.modelId });
       setLiveTranscript('');
       setLiveInterimTranscript('');
-      await queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
-      await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
     onError: (error, values) => {
       const sessionId = selectedSessionId ?? undefined;
@@ -636,6 +636,14 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   function sendVoiceTranscript(): void {
     const content = (liveDraftText || composerContent).trim();
     void submitVoiceTranscriptContent(content, { manual: true });
+  }
+
+  function submitComposerMessage(values: ChatbotFormValues): void {
+    if (liveVoiceActiveRef.current) {
+      void submitVoiceTranscriptContent(values.content, { manual: true });
+      return;
+    }
+    sendMutation.mutate(values);
   }
 
   async function submitVoiceTranscriptContent(content: string, { manual = false }: { manual?: boolean } = {}): Promise<void> {
@@ -1287,7 +1295,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 )) : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
                 <div ref={messagesEndRef} aria-hidden="true" />
               </div>
-              <form className="assistant-composer" onSubmit={handleSubmit((values) => sendMutation.mutate(values))}>
+              <form className="assistant-composer" onSubmit={handleSubmit(submitComposerMessage)}>
                 <div className="assistant-suggestion-row" aria-label="Suggested prompts">
                   {suggestedPrompts.map((prompt) => <button key={prompt} type="button" onClick={() => applySuggestedPrompt(prompt)}>{prompt}</button>)}
                   <button type="button" onClick={() => applySuggestedPrompt('Give me more options for this conversation')}>More</button>

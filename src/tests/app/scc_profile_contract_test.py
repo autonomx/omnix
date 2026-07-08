@@ -65,6 +65,9 @@ def test_profile_persists_research_provider_budgets_and_retention() -> None:
     assert payload["researchShowDiagnostics"] is False
     assert payload["researchDeepEnabled"] is True
     assert payload["researchHermesPlannerEnabled"] is True
+    reloaded = profile_payload(load_settings_profile(settings))["assistant"]
+    assert reloaded["researchDeepEnabled"] is True
+    assert reloaded["researchHermesPlannerEnabled"] is True
 
 
 def test_profile_rejects_stale_revision() -> None:

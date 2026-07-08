@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.assistant_tools import AssistantToolRegistryPayload, assistant_tool_registry_payload
+from app.assistant_context import register_assistant_context_routes
 from app.assets import (
     AssetLegacyImportDryRun,
     AssetListResponse,
@@ -276,6 +277,12 @@ def create_gateway_app(
     get_replay_adapter = replay_adapter_factory or default_rpg_replay_adapter
     get_model_residency_store = model_residency_store_factory or default_model_residency_store
     gateway = FastAPI(title="Omnix Web Gateway", version="0.1.0", summary="Thin local-first gateway foundation for the Omnix web app redesign.")
+    _remove_hook_installed_assistant_context_routes(gateway)
+    register_assistant_context_routes(
+        gateway,
+        chat_store_factory=get_chat_store,
+        job_store_factory=get_job_store,
+    )
 
     @gateway.get("/health", response_model=GatewayHealth, tags=["gateway"])
     async def health() -> GatewayHealth:
@@ -661,6 +668,19 @@ def create_gateway_app(
         return job
 
     return gateway
+
+
+def _remove_hook_installed_assistant_context_routes(gateway: FastAPI) -> None:
+    assistant_context_route_names = {
+        "assistant_context_chat_message_endpoint",
+        "assistant_context_stream_chat_message_endpoint",
+        "assistant_research_runtime_status_endpoint",
+    }
+    gateway.router.routes = [
+        route
+        for route in gateway.router.routes
+        if getattr(route, "name", "") not in assistant_context_route_names
+    ]
 
 
 app = create_gateway_app()

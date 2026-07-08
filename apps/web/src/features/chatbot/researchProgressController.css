@@ -15,6 +15,12 @@
   gap: 1rem;
 }
 
+.assistant-research-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .assistant-research-progress h3,
 .assistant-research-progress p,
 .assistant-research-progress dl,
@@ -59,6 +65,7 @@
 }
 
 .assistant-research-progress-actions button,
+.assistant-research-close,
 .assistant-research-job-details a {
   min-height: 2rem;
   padding: 0.35rem 0.7rem;
@@ -67,6 +74,13 @@
   background: rgba(255, 255, 255, 0.06);
   color: inherit;
   cursor: pointer;
+}
+
+.assistant-research-close {
+  width: 2rem;
+  padding: 0;
+  font-size: 1.2rem;
+  line-height: 1;
 }
 
 .assistant-research-progress-actions button:disabled {

@@ -22,7 +22,7 @@ type DisplayMediaDevices = MediaDevices & {
 const CONTEXT_CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
 const DESKTOP_ACTION_ATTRIBUTE = 'data-omnix-desktop-action';
 const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
-const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages$/;
+const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
 const assistantContextWindow = window as AssistantContextWindow;
 
@@ -48,12 +48,11 @@ export function initializeAssistantContextController(root: ParentNode = document
 }
 
 export function assistantContextControlsMissing(root: ParentNode = document): boolean {
-  const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
   const composerActions = root.querySelector<HTMLElement>('.assistant-composer-actions');
   const audioDevices = root.querySelector<HTMLElement>('.assistant-audio-devices');
-  const composerMissing = Boolean(
-    composerControls && !composerControls.querySelector(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`),
-  );
+  const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
+  const contextHost = assistantContextHost(composerActions, composerControls);
+  const composerMissing = Boolean(contextHost && !contextHost.querySelector(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`));
   const desktopActionMissing = Boolean(
     composerActions && !composerActions.querySelector(`[${DESKTOP_ACTION_ATTRIBUTE}]`),
   );
@@ -72,7 +71,7 @@ export function enhancedAssistantMessageUrl(url: string): string | null {
   const parsed = new URL(url, window.location.origin);
   const match = parsed.pathname.match(MESSAGE_PATH);
   if (!match) return null;
-  parsed.pathname = `/api/assistant/context/chat/sessions/${match[1]}/messages`;
+  parsed.pathname = `/api/assistant/context/chat/sessions/${match[1]}/messages${match[2] ?? ''}`;
   return parsed.toString();
 }
 
@@ -102,13 +101,13 @@ function installFetchInterceptor(): void {
 
     if (method === 'GET' && sessionMatch) {
       const response = await originalFetch(input, init);
-      if (response.ok) void applySessionResearchMode(sessionMatch[1], response.clone());
+      if (response.ok) void applySessionResearchMode(decodePathSegment(sessionMatch[1]), response.clone());
       return response;
     }
     if (!isAssistantMessageRequest(inputUrl, method)) return originalFetch(input, init);
 
     const messageMatch = parsed.pathname.match(MESSAGE_PATH);
-    activeSessionId = messageMatch?.[1] ?? null;
+    activeSessionId = messageMatch?.[1] ? decodePathSegment(messageMatch[1]) : null;
     if (activeSessionId) await persistConversationResearchMode(activeSessionId, researchMode);
 
     const shouldEnhance = researchMode !== 'disabled' || desktopShare !== null;
@@ -211,8 +210,10 @@ async function requestBodyText(input: RequestInfo | URL, init?: RequestInit): Pr
 }
 
 function injectControls(root: ParentNode): void {
+  const composerActions = root.querySelector<HTMLElement>('.assistant-composer-actions');
   const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
-  if (composerControls && !composerControls.querySelector(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`)) {
+  const contextHost = assistantContextHost(composerActions, composerControls);
+  if (contextHost && !contextHost.querySelector(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`)) {
     const container = document.createElement('div');
     container.className = 'assistant-context-controls';
     container.setAttribute(CONTEXT_CONTROLS_ATTRIBUTE, 'true');
@@ -237,16 +238,10 @@ function injectControls(root: ParentNode): void {
     });
     webLabel.append(webCaption, webSelect);
 
-    const desktopButton = document.createElement('button');
-    desktopButton.type = 'button';
-    desktopButton.className = 'assistant-composer-chip assistant-context-desktop';
-    desktopButton.addEventListener('click', () => void toggleDesktopShare());
-
-    container.append(webLabel, desktopButton);
-    composerControls.append(container);
+    container.append(webLabel);
+    contextHost.append(container);
   }
 
-  const composerActions = root.querySelector<HTMLElement>('.assistant-composer-actions');
   if (composerActions && !composerActions.querySelector(`[${DESKTOP_ACTION_ATTRIBUTE}]`)) {
     const desktopAction = document.createElement('button');
     desktopAction.type = 'button';
@@ -272,6 +267,13 @@ function injectControls(root: ParentNode): void {
   renderControls();
 }
 
+function assistantContextHost(
+  composerActions: HTMLElement | null,
+  composerControls: HTMLElement | null,
+): HTMLElement | null {
+  return composerActions?.closest<HTMLElement>('.assistant-composer') ?? composerControls;
+}
+
 function renderControls(): void {
   document.querySelectorAll<HTMLSelectElement>('select[aria-label="Web research mode"]').forEach((select) => {
     select.value = researchMode;
@@ -285,6 +287,14 @@ function renderControls(): void {
   document.querySelectorAll<HTMLElement>('.assistant-desktop-status-value').forEach((element) => {
     element.textContent = desktopStatusLabel(desktopShare !== null, desktopStatus);
   });
+}
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 async function toggleDesktopShare(): Promise<void> {

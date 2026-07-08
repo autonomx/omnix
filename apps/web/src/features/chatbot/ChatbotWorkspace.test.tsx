@@ -506,6 +506,83 @@ describe('ChatbotWorkspace', () => {
     expect((await screen.findAllByText('Opening them now.')).length).toBeGreaterThan(0);
   });
 
+  it('streams main composer submissions while a live call is active', async () => {
+    class FakeSpeechRecognition {
+      continuous = false;
+      interimResults = false;
+      lang = '';
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      onend: (() => void) | null = null;
+      start = vi.fn();
+      stop = vi.fn();
+      abort = vi.fn();
+    }
+
+    vi.stubGlobal('SpeechRecognition', FakeSpeechRecognition);
+
+    let session = {
+      id: 'chat:live-typed',
+      title: 'Live typed',
+      provider_id: 'openai',
+      model_id: 'gpt-mini',
+      message_count: 0,
+      messages: [] as Array<{ id: string; role: 'system' | 'user' | 'assistant'; content: string; created_at: string }>,
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:00:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions' && init?.method === 'POST') return Response.json(session);
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      if (path === '/api/chat/sessions/chat%3Alive-typed/messages') {
+        return new Response('typed live call should stream', { status: 500 });
+      }
+      if (path === '/api/chat/sessions/chat%3Alive-typed/messages/stream') {
+        session = {
+          ...session,
+          message_count: 2,
+          messages: [
+            { id: 'msg:typed-user', role: 'user', content: 'can you see the screen?', created_at: '2026-06-14T00:00:01Z' },
+            { id: 'msg:typed-assistant', role: 'assistant', content: 'I can see it now.', created_at: '2026-06-14T00:00:02Z' },
+          ],
+        };
+        return new Response(
+          [
+            'data: {"type":"text_chunk","text":"I can see it now."}\n\n',
+            `data: ${JSON.stringify({ type: 'session', session })}\n\n`,
+            'data: {"type":"done"}\n\n',
+          ].join(''),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        );
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    await screen.findByText('No chat messages yet.');
+    fireEvent.click(screen.getByRole('button', { name: 'Start Call' }));
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'can you see the screen?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
+
+    await waitFor(() => {
+      const streamCall = fetchMock.mock.calls.find(
+        ([input, init]) => requestPath(input as RequestInfo | URL).endsWith('/messages/stream') && init?.method === 'POST',
+      );
+      expect(streamCall?.[1]?.body).toContain('"content":"can you see the screen?"');
+    });
+    expect(fetchMock.mock.calls.some(
+      ([input, init]) => requestPath(input as RequestInfo | URL).endsWith('/messages') && init?.method === 'POST',
+    )).toBe(false);
+    expect((await screen.findAllByText('I can see it now.')).length).toBeGreaterThan(0);
+  });
+
   it('submits the composer with Enter and preserves Shift+Enter for new lines', async () => {
     let session = {
       id: 'chat:enter',

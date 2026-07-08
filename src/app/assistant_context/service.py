@@ -111,6 +111,7 @@ class AssistantContextService:
             except Exception as exc:
                 diagnostics["desktop_status"] = "failed"
                 diagnostics["desktop_error"] = f"{type(exc).__name__}: {exc}"
+                items.append(_desktop_failure_item(str(diagnostics["desktop_error"])))
             diagnostics["desktop_ms"] = round((time.perf_counter() - started) * 1000)
         else:
             diagnostics["desktop_status"] = "skipped"
@@ -120,3 +121,17 @@ class AssistantContextService:
 
 def default_assistant_context_service() -> AssistantContextService:
     return AssistantContextService()
+
+
+def _desktop_failure_item(error: str) -> AssistantContextItem:
+    return AssistantContextItem(
+        source_id="desktop_vision",
+        title="Desktop sharing status",
+        content=(
+            "The user shared their desktop for this turn, but Omnix could not inspect the image. "
+            f"Vision resolver error: {error}. "
+            "Do not claim to see the screen. Tell the user desktop sharing is active but a "
+            "vision-capable model or vision provider configuration is needed."
+        ),
+        metadata={"status": "failed", "error": error},
+    )

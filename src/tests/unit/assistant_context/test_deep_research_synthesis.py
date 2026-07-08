@@ -101,6 +101,65 @@ def test_valid_structured_synthesis_renders_snapshot_bound_citations() -> None:
     assert result.provider_metadata["resolved_model"] == "fixture-model"
 
 
+def test_direct_result_synthesis_leads_with_answer_and_suppresses_noise_conflicts() -> None:
+    answer = {
+        "sections": [
+            {
+                "kind": "fact",
+                "text": "Argentina beat Egypt 3-2.",
+                "source_snapshot_ids": ["snapshot:one"],
+            },
+            {
+                "kind": "fact",
+                "text": "Argentina advanced to the next round.",
+                "source_snapshot_ids": ["snapshot:one"],
+            },
+        ]
+    }
+    result = DeepResearchSynthesizer(
+        completion_fn=lambda messages, provider, model: (json.dumps(answer), {})
+    ).synthesize(
+        execution_fixture(),
+        question="who won in today's game, Argentina vs Egypt?",
+        provider_id="fixture",
+        model_id="fixture-model",
+    )
+
+    assert result.backend == "provider"
+    assert result.content.startswith("**Answer:** Argentina beat Egypt 3-2. [S1]")
+    assert "## Details" in result.content
+    assert "- Argentina advanced to the next round. [S1]" in result.content
+    assert "## Unresolved conflicts" not in result.content
+
+
+def test_direct_result_synthesis_keeps_conflicts_when_answer_calls_them_out() -> None:
+    answer = {
+        "sections": [
+            {
+                "kind": "fact",
+                "text": "The reported result is not fully settled.",
+                "source_snapshot_ids": ["snapshot:one"],
+            },
+            {
+                "kind": "limitation",
+                "text": "Sources conflict on the final score.",
+                "source_snapshot_ids": [],
+            },
+        ]
+    }
+    result = DeepResearchSynthesizer(
+        completion_fn=lambda messages, provider, model: (json.dumps(answer), {})
+    ).synthesize(
+        execution_fixture(),
+        question="what was the score?",
+        provider_id="fixture",
+        model_id="fixture-model",
+    )
+
+    assert "## Unresolved conflicts" in result.content
+    assert "One secondary source disagreed" in result.content
+
+
 def test_unknown_snapshot_id_forces_visible_deterministic_fallback() -> None:
     answer = {
         "sections": [
