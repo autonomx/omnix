@@ -31,6 +31,7 @@ import './features/storyteller/story-extra-mount';
 import './features/podcast/PodcastWorkspaceLayoutFix.css';
 import './features/podcast/PodcastWorkspaceEditable.css';
 import './appearance-overrides.css';
+import './theme-presets.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
