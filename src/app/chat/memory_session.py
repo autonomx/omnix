@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.assistant_memory import MemoryService, resolve_chat_scope
 from app.assistant_memory.lifecycle import MemorySnapshotView, resolve_snapshot_view
 
+from .concurrency import CHAT_MUTATION_LOCK
 from .models import ChatSession
 
 _SESSION_MEMORY_LOCK = RLock()
@@ -87,7 +88,7 @@ def refresh_session_memory(
     session_id: str,
     request: RefreshSessionMemoryRequest,
 ) -> SessionMemoryState | None:
-    with _SESSION_MEMORY_LOCK:
+    with _SESSION_MEMORY_LOCK, CHAT_MUTATION_LOCK:
         sessions = store._load_sessions()
         for index, session in enumerate(sessions):
             if session.id != session_id:

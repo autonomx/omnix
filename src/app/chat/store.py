@@ -11,6 +11,8 @@ from typing import Any
 
 from app.runtime_paths import resources_data_root
 
+from .concurrency import serialized_chat_mutation
+
 from .models import (
     ChatMessage,
     ChatSession,
@@ -94,6 +96,7 @@ class ChatSessionStore:
         sessions.sort(key=lambda session: session.updated_at, reverse=True)
         return ChatSessionListResponse(sessions=sessions)
 
+    @serialized_chat_mutation
     def create_session(self, request: CreateChatSessionRequest) -> ChatSession:
         now = _utcnow()
         title = (request.title or "New chat").strip() or "New chat"
@@ -130,6 +133,7 @@ class ChatSessionStore:
                 return session
         return None
 
+    @serialized_chat_mutation
     def delete_session(self, session_id: str) -> bool:
         sessions = self._load_sessions()
         remaining = [session for session in sessions if session.id != session_id]
@@ -138,6 +142,7 @@ class ChatSessionStore:
         self._save_sessions(remaining)
         return True
 
+    @serialized_chat_mutation
     def append_user_message(
         self,
         session_id: str,
@@ -205,6 +210,7 @@ class ChatSessionStore:
 
         return None
 
+    @serialized_chat_mutation
     def begin_user_message(
         self,
         session_id: str,
@@ -295,6 +301,7 @@ class ChatSessionStore:
             },
         }
 
+    @serialized_chat_mutation
     def complete_streamed_reply(
         self,
         session_id: str,
@@ -441,7 +448,9 @@ class ChatSessionStore:
 
     def _save_sessions(self, sessions: list[ChatSession]) -> None:
         payload = {"sessions": [session.model_dump(mode="json") for session in sessions]}
-        self.path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
+        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        temporary.replace(self.path)
 
     @staticmethod
     def _summary(session: ChatSession) -> ChatSessionSummary:
