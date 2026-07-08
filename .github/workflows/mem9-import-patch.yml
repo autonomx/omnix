@@ -1,0 +1,27 @@
+name: MEM-9 one-time import patch
+
+on:
+  push:
+    branches:
+      - tmp-mem9-jobs
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp-mem9-jobs
+          fetch-depth: 0
+      - run: python scripts/mem9_import_patch.py
+      - run: rm scripts/mem9_import_patch.py .github/workflows/mem9-import-patch.yml
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "MEM-9 make suggestion jobs cycle-safe"
+          git push origin HEAD:tmp-mem9-jobs
