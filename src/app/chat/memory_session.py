@@ -1,4 +1,4 @@
-"""Atomic session metadata updates for frozen Chat memory snapshots."""
+"""Atomic session metadata updates for owner-bound Chat memory snapshots."""
 from __future__ import annotations
 
 from threading import RLock
@@ -6,7 +6,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.assistant_memory import MemoryService, resolve_chat_scope
+from app.assistant_memory import MemoryService, resolve_session_memory_scope
 from app.assistant_memory.lifecycle import MemorySnapshotView, resolve_snapshot_view
 
 from .concurrency import CHAT_MUTATION_LOCK
@@ -17,24 +17,24 @@ _SESSION_MEMORY_LOCK = RLock()
 
 class SessionStoreLike(Protocol):
     def get_session(self, session_id: str) -> ChatSession | None: ...
-
     def _load_sessions(self) -> list[ChatSession]: ...
-
     def _save_sessions(self, sessions: list[ChatSession]) -> None: ...
 
 
 class RefreshSessionMemoryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     expected_snapshot_revision: int | None = Field(default=None, ge=1)
     token_budget: int = Field(default=4_000, ge=0, le=64_000)
 
 
 class SessionMemoryState(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     session_id: str
     memory_enabled: bool
+    read_memory: bool = False
+    write_memory: bool = False
+    owner_type: str = "system"
+    owner_id: str = "system-assistant"
     snapshot_id: str | None = None
     snapshot_revision: int | None = Field(default=None, ge=1)
     memory_record_count: int = Field(default=0, ge=0)
@@ -46,13 +46,8 @@ class SessionMemoryConflictError(RuntimeError):
     pass
 
 
-def _scope_for(session: ChatSession):
-    return resolve_chat_scope(
-        session.id,
-        profile_id=session.profile_id,
-        workspace_id=session.workspace_id,
-        project_id=session.project_id,
-    )
+def _read_enabled(session: ChatSession) -> bool:
+    return session.read_memory if session.interaction_mode == "character" else session.memory_enabled
 
 
 def get_session_memory_state(
@@ -63,17 +58,18 @@ def get_session_memory_state(
     session = store.get_session(session_id)
     if session is None:
         return None
+    context = resolve_session_memory_scope(session)
     view = None
-    if session.memory_snapshot_id:
-        view = resolve_snapshot_view(
-            memory_service,
-            _scope_for(session),
-            session.memory_snapshot_id,
-        )
+    if _read_enabled(session) and session.memory_snapshot_id:
+        view = resolve_snapshot_view(memory_service, context, session.memory_snapshot_id)
     active_count = view.active_count if view is not None else 0
     return SessionMemoryState(
         session_id=session.id,
-        memory_enabled=session.memory_enabled,
+        memory_enabled=_read_enabled(session),
+        read_memory=session.read_memory,
+        write_memory=session.write_memory,
+        owner_type=context.owner_type,
+        owner_id=context.owner_id,
         snapshot_id=session.memory_snapshot_id,
         snapshot_revision=session.memory_snapshot_revision,
         memory_record_count=active_count,
@@ -93,22 +89,23 @@ def refresh_session_memory(
         for index, session in enumerate(sessions):
             if session.id != session_id:
                 continue
+            if session.interaction_mode == "character" and not session.read_memory:
+                raise SessionMemoryConflictError("character memory read is disabled")
             current_revision = session.memory_snapshot_revision
-            if (
-                request.expected_snapshot_revision is not None
-                and request.expected_snapshot_revision != current_revision
-            ):
+            if request.expected_snapshot_revision is not None and request.expected_snapshot_revision != current_revision:
                 raise SessionMemoryConflictError(
                     "memory snapshot revision conflict: "
                     f"expected {request.expected_snapshot_revision}, actual {current_revision}"
                 )
+            context = resolve_session_memory_scope(session)
             snapshot = memory_service.create_session_snapshot(
-                _scope_for(session),
+                context,
                 token_budget=request.token_budget,
                 refresh=current_revision is not None,
             )
             refreshed_at = snapshot.refreshed_at or snapshot.created_at
-            session.memory_enabled = True
+            if session.interaction_mode == "system":
+                session.memory_enabled = True
             session.memory_snapshot_id = snapshot.id
             session.memory_snapshot_revision = snapshot.revision
             session.memory_record_count = len(snapshot.items)
@@ -116,10 +113,14 @@ def refresh_session_memory(
             session.updated_at = refreshed_at
             sessions[index] = session
             store._save_sessions(sessions)
-            view = resolve_snapshot_view(memory_service, _scope_for(session), snapshot.id)
+            view = resolve_snapshot_view(memory_service, context, snapshot.id)
             return SessionMemoryState(
                 session_id=session.id,
                 memory_enabled=True,
+                read_memory=session.read_memory,
+                write_memory=session.write_memory,
+                owner_type=context.owner_type,
+                owner_id=context.owner_id,
                 snapshot_id=snapshot.id,
                 snapshot_revision=snapshot.revision,
                 memory_record_count=view.active_count if view else 0,
