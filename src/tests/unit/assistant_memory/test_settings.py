@@ -113,7 +113,9 @@ def test_settings_routes_return_content_free_diagnostics_and_are_hidden(tmp_path
     assert payload["settings"]["curated_memory_enabled"] is True
     assert payload["settings"]["history_recall_enabled"] is False
     assert payload["diagnostics_policy"] == "content_free"
-    assert "content" not in json.dumps(payload).casefold()
+    assert "records" not in payload
+    assert "candidates" not in payload
+    assert "memory_ids" not in payload
 
     rejected = client.post(
         "/api/assistant/memory/settings",

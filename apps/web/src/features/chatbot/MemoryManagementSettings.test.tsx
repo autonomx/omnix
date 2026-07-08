@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
+import type { AssistantMemoryRuntimeStatus } from './memoryClient';
 
 function renderPanel() {
   const queryClient = new QueryClient({
@@ -14,7 +15,7 @@ function renderPanel() {
   );
 }
 
-function settings(curated = false) {
+function settings(curated = false): AssistantMemoryRuntimeStatus {
   return {
     settings: {
       curated_memory_enabled: curated,
