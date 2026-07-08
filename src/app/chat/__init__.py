@@ -10,7 +10,9 @@ from .models import (
     SendChatMessageResponse,
     UpdateChatResearchModeRequest,
 )
-from .store import ChatSessionStore, default_chat_store
+from .prompt_assembly import PromptAssembly, build_prompt_assembly
+from .prompt_rendering import RenderedPrompt, render_prompt_assembly
+from .prompt_store import ChatSessionStore, default_chat_store
 
 __all__ = [
     "ChatMessage",
@@ -20,8 +22,12 @@ __all__ = [
     "ChatSessionSummary",
     "CreateChatSessionRequest",
     "DeleteChatSessionResponse",
+    "PromptAssembly",
+    "RenderedPrompt",
     "SendChatMessageRequest",
     "SendChatMessageResponse",
     "UpdateChatResearchModeRequest",
+    "build_prompt_assembly",
     "default_chat_store",
+    "render_prompt_assembly",
 ]
