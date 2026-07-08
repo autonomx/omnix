@@ -9,20 +9,11 @@ function renderPanel() {
 }
 
 const maya = {
-  id: 'maya',
-  display_name: 'Maya',
-  description: 'Easygoing character',
-  personality_prompt: 'Be warm and easygoing.',
-  default_greeting: 'Hey.',
-  default_voice_asset_id: 'voice-cloning:maya',
-  speech_style: {},
-  identity_policy: {},
-  shared_memory_policy: {},
-  active_version: 2,
-  enabled: true,
-  status: 'active',
-  created_at: '2026-01-01T00:00:00Z',
-  updated_at: '2026-01-01T00:00:00Z',
+  id: 'maya', display_name: 'Maya', description: 'Easygoing character',
+  personality_prompt: 'Be warm and easygoing.', default_greeting: 'Hey.',
+  default_voice_asset_id: 'voice-cloning:maya', speech_style: {}, identity_policy: {},
+  shared_memory_policy: {}, active_version: 2, enabled: true, status: 'active',
+  created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -40,7 +31,7 @@ describe('CharacterModePanel', () => {
       if (url.pathname.endsWith('/interaction') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body));
         posted.push(body);
-        interaction = { ...interaction, interaction_mode: body.interaction_mode, character_id: body.character_id, voice_asset_id: body.voice_asset_id };
+        interaction = { ...interaction, interaction_mode: body.interaction_mode, character_id: body.character_id, voice_asset_id: body.voice_asset_id, read_memory: body.read_memory, write_memory: body.write_memory };
         return Response.json(interaction);
       }
       if (url.pathname.endsWith('/interaction')) return Response.json(interaction);
@@ -53,15 +44,13 @@ describe('CharacterModePanel', () => {
 
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toMatchObject({
-      interaction_mode: 'character',
-      character_id: 'maya',
-      voice_asset_id: 'voice-cloning:maya',
-      transcript_policy: 'persistent',
+      interaction_mode: 'character', character_id: 'maya', voice_asset_id: 'voice-cloning:maya',
+      read_memory: false, write_memory: false, transcript_policy: 'persistent',
     });
     expect(await screen.findByRole('status')).toHaveTextContent('Talking to Maya · Memory off');
   });
 
-  it('shows the persisted character identity badge', async () => {
+  it('shows the persisted character identity badge and memory policy', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(input.toString(), 'http://localhost');
       if (url.pathname === '/api/characters') return Response.json({ characters: [maya] });
@@ -76,6 +65,6 @@ describe('CharacterModePanel', () => {
     renderPanel();
     expect(await screen.findByText('Talking to Maya')).toBeInTheDocument();
     expect(screen.getByText('voice-cloning:maya')).toBeInTheDocument();
-    expect(screen.getByText('Off in CHAR-3')).toBeInTheDocument();
+    expect(screen.getByText('Off')).toBeInTheDocument();
   });
 });
