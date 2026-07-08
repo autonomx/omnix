@@ -79,10 +79,7 @@ class SQLiteChatRepository:
                     metadata=json.loads(row["metadata_json"] or "{}"),
                 )
             )
-        return [
-            self._row_to_session(row, grouped.get(row["id"], []))
-            for row in session_rows
-        ]
+        return [self._row_to_session(row, grouped.get(row["id"], [])) for row in session_rows]
 
     def save_sessions(self, sessions: list[ChatSession]) -> None:
         with self._connect() as connection:
@@ -156,11 +153,7 @@ class SQLiteChatRepository:
             message_count = int(connection.execute("SELECT COUNT(*) FROM chat_messages").fetchone()[0])
         return session_count, message_count
 
-    def _upsert_sessions(
-        self,
-        connection: sqlite3.Connection,
-        sessions: list[ChatSession],
-    ) -> None:
+    def _upsert_sessions(self, connection: sqlite3.Connection, sessions: list[ChatSession]) -> None:
         for session in sessions:
             connection.execute(
                 """
@@ -168,8 +161,11 @@ class SQLiteChatRepository:
                     id, title, provider_id, model_id, research_mode_override,
                     profile_id, workspace_id, project_id, memory_enabled,
                     memory_snapshot_id, memory_snapshot_revision, memory_record_count,
-                    memory_last_refreshed_at, message_count, created_at, updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    memory_last_refreshed_at, interaction_mode, character_id,
+                    voice_asset_id, read_memory, write_memory, shared_memory_access,
+                    transcript_policy, active_segment_id, character_profile_version,
+                    effective_identity_hash, message_count, created_at, updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
                     title = excluded.title,
                     provider_id = excluded.provider_id,
@@ -183,6 +179,16 @@ class SQLiteChatRepository:
                     memory_snapshot_revision = excluded.memory_snapshot_revision,
                     memory_record_count = excluded.memory_record_count,
                     memory_last_refreshed_at = excluded.memory_last_refreshed_at,
+                    interaction_mode = excluded.interaction_mode,
+                    character_id = excluded.character_id,
+                    voice_asset_id = excluded.voice_asset_id,
+                    read_memory = excluded.read_memory,
+                    write_memory = excluded.write_memory,
+                    shared_memory_access = excluded.shared_memory_access,
+                    transcript_policy = excluded.transcript_policy,
+                    active_segment_id = excluded.active_segment_id,
+                    character_profile_version = excluded.character_profile_version,
+                    effective_identity_hash = excluded.effective_identity_hash,
                     message_count = excluded.message_count,
                     created_at = excluded.created_at,
                     updated_at = excluded.updated_at
@@ -201,15 +207,22 @@ class SQLiteChatRepository:
                     session.memory_snapshot_revision,
                     session.memory_record_count,
                     session.memory_last_refreshed_at,
+                    session.interaction_mode,
+                    session.character_id,
+                    session.voice_asset_id,
+                    int(session.read_memory),
+                    int(session.write_memory),
+                    session.shared_memory_access,
+                    session.transcript_policy,
+                    session.active_segment_id,
+                    session.character_profile_version,
+                    session.effective_identity_hash,
                     len(session.messages),
                     session.created_at,
                     session.updated_at,
                 ),
             )
-            connection.execute(
-                "DELETE FROM chat_messages WHERE session_id = ?",
-                (session.id,),
-            )
+            connection.execute("DELETE FROM chat_messages WHERE session_id = ?", (session.id,))
             for position, message in enumerate(session.messages):
                 connection.execute(
                     """
@@ -229,10 +242,7 @@ class SQLiteChatRepository:
                 )
 
     @staticmethod
-    def _delete_missing_sessions(
-        connection: sqlite3.Connection,
-        session_ids: list[str],
-    ) -> None:
+    def _delete_missing_sessions(connection: sqlite3.Connection, session_ids: list[str]) -> None:
         if not session_ids:
             connection.execute("DELETE FROM chat_sessions")
             return
@@ -258,6 +268,16 @@ class SQLiteChatRepository:
             memory_snapshot_revision=row["memory_snapshot_revision"],
             memory_record_count=int(row["memory_record_count"]),
             memory_last_refreshed_at=row["memory_last_refreshed_at"],
+            interaction_mode=row["interaction_mode"],
+            character_id=row["character_id"],
+            voice_asset_id=row["voice_asset_id"],
+            read_memory=bool(row["read_memory"]),
+            write_memory=bool(row["write_memory"]),
+            shared_memory_access=row["shared_memory_access"],
+            transcript_policy=row["transcript_policy"],
+            active_segment_id=row["active_segment_id"],
+            character_profile_version=row["character_profile_version"],
+            effective_identity_hash=row["effective_identity_hash"],
             message_count=len(messages),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -265,10 +285,7 @@ class SQLiteChatRepository:
         )
 
     @staticmethod
-    def _write_import_state(
-        connection: sqlite3.Connection,
-        state: ChatImportState,
-    ) -> None:
+    def _write_import_state(connection: sqlite3.Connection, state: ChatImportState) -> None:
         connection.execute(
             """
             INSERT INTO chat_import_state(
