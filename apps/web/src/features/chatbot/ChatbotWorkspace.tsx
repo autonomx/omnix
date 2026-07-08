@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CSSProperties, KeyboardEvent } from 'react';
+import type { CSSProperties, KeyboardEvent, UIEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
@@ -212,8 +212,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveVoiceActiveRef = useRef(false);
   const lastSubmittedVoiceTextRef = useRef('');
   const voiceTurnPerformanceRef = useRef<VoiceTurnPerformance | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const lastMessageScrollKeyRef = useRef('');
+  const shouldStickToLatestMessageRef = useRef(true);
   const recordingChunksRef = useRef<Blob[]>([]);
   const queryClient = useQueryClient();
   const runtimeConfig = useMemo(() => createAssistantWorkspaceRuntimeConfig(), []);
@@ -344,14 +346,20 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   useEffect(() => {
     if (!activeSession?.id || activeMessageCount === 0) return;
     const scrollKey = `${activeSession.id}:${activeMessageCount}`;
-    const behavior: ScrollBehavior = lastMessageScrollKeyRef.current.startsWith(`${activeSession.id}:`) ? 'smooth' : 'auto';
+    const alreadyInSession = lastMessageScrollKeyRef.current.startsWith(`${activeSession.id}:`);
     lastMessageScrollKeyRef.current = scrollKey;
-    const scheduleFrame = typeof window.requestAnimationFrame === 'function'
+    if (alreadyInSession && !shouldStickToLatestMessageRef.current) return;
+    const scheduleFrame: (callback: FrameRequestCallback) => number = typeof window.requestAnimationFrame === 'function'
       ? window.requestAnimationFrame.bind(window)
-      : (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 0);
-    scheduleFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ block: 'end', behavior });
+      : (callback: FrameRequestCallback) => Number(window.setTimeout(() => callback(performance.now()), 0));
+    const cancelFrame = typeof window.cancelAnimationFrame === 'function'
+      ? window.cancelAnimationFrame.bind(window)
+      : (id: number) => window.clearTimeout(id);
+    const frameId = scheduleFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' });
+      shouldStickToLatestMessageRef.current = true;
     });
+    return () => cancelFrame(frameId);
   }, [activeSession?.id, activeMessageCount]);
 
   useEffect(() => {
@@ -434,6 +442,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setActiveView(view);
     if (view === 'voice') setActiveUtilityPanel('voice');
     if (view === 'tools') setActiveUtilityPanel('tools');
+  }
+
+  function handleMessagesScroll(event: UIEvent<HTMLDivElement>): void {
+    shouldStickToLatestMessageRef.current = isScrolledNearBottom(event.currentTarget);
   }
 
   function updateAssistantSettings(next: AssistantSettings): void {
@@ -1283,7 +1295,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <button className="assistant-header-pill" type="button" onClick={() => showAssistantView('settings')}>Personality</button>
                 </div>
               </header>
-              <div className="assistant-chat-messages" role="log" aria-live="polite">
+              <div className="assistant-chat-messages" role="log" aria-live="polite" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
                 {activeSession?.messages?.length ? activeSession.messages.map((message) => (
                   <article key={message.id} className={`assistant-chat-message ${message.role}`}>
                     {message.role !== 'user' ? <span className="assistant-chat-avatar" aria-hidden="true" /> : null}
@@ -1415,6 +1427,7 @@ function getAssistantWorkspaceEventStorage(): AssistantWorkspaceEventStorage | u
 function createWorkspaceEventFilter(config: AssistantWorkspaceRuntimeConfig, sessionId?: string): AssistantWorkspaceEventStoreFilter { return { workspaceId: config.workspaceId, projectId: config.projectId, sessionId }; }
 function readAssistantToolReturn(): { message: string | null; toolId: string | null } { try { if (typeof window === 'undefined') return { message: null, toolId: null }; const params = new URLSearchParams(window.location.search); const toolId = params.get('assistant_tool'); return { message: params.get('assistant_tool_message'), toolId: toolId && /^[a-z][a-z0-9_-]*$/.test(toolId) ? toolId : null }; } catch { return { message: null, toolId: null }; } }
 function getLatestAssistantMessage(messages: ChatMessage[]): ChatMessage | undefined { return [...messages].reverse().find((message) => message.role === 'assistant' && message.content.trim()); }
+function isScrolledNearBottom(element: HTMLElement): boolean { return element.scrollHeight - element.scrollTop - element.clientHeight < 160; }
 function getSynthesizedAudioSource(response: TtsSynthesisResponse): string { if (response.audioUrl) return response.audioUrl; if (response.audioBase64) return `data:${response.mimeType ?? 'audio/wav'};base64,${response.audioBase64}`; throw new Error('TTS service did not return playable audio.'); }
 function isPinnedSession(session: ApiChatSession): boolean { const metadata = 'metadata' in session ? (session as { metadata?: Record<string, unknown> }).metadata : undefined; return metadata?.pinned === true || metadata?.starred === true; }
 function sessionTitle(session: ApiChatSession): string { return session.title?.trim() || 'Untitled chat'; }

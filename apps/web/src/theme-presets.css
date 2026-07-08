@@ -221,6 +221,170 @@
   background: var(--omnix-theme-gradient);
 }
 
+:root[data-omnix-theme][data-omnix-appearance='dark'] .workspace-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .workspace-card.assistant-chat-page,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .workspace-card.image-workspace {
+  background:
+    radial-gradient(circle at 15% 0%, var(--omnix-theme-soft), transparent 24rem),
+    var(--omnix-panel-bg) !important;
+  border-color: var(--omnix-border) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-main,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-sidebar,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-live-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-tool-sidebar-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-view-panel,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-workspace-dashboard,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-workspace-activity,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-live-tools-grid,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-supporting-panels > section,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-supporting-panels > div,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-library,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-controls,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-outline,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-project-header,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-manuscript,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-action-bar,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-versions,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .podcast-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .relationship-map-clear,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .relationship-node-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .voice-studio-app,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .voice-side-nav,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .voice-panel-final,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .voice-credit-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .voice-user-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .script-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assignment-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .generate-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .now-playing-bar,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .rpg-shell,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .rpg-panel,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .rpg-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .rpg-player-rail,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .rpg-world-rail,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .rpg-story-scene,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .rpg-session-launcher,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .rpg-item-panel,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .image-flow-banner,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .image-system-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .image-surface,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .settings-status-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .settings-status-row,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .provider-config-group,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .provider-settings-card,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .platform-section,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .workspace-grid article,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .feature-panel,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .feature-mini-card {
+  background: var(--omnix-panel-bg) !important;
+  border-color: var(--omnix-border) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-sidebar-nav,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-sidebar-section,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-live-draft,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-voice-toggle,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-voice-input-indicator,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-audio-devices,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-audio-devices div,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-message-action-menu,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-tool-connection-panel,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-tool-action-row,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-view-panel article,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-tool-config-list article,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-settings-list div,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-composer-controls label,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-composer-chip,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .image-readiness-inline,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .relationship-edge-list p,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .action-toast {
+  background: var(--omnix-panel-solid) !important;
+  border-color: var(--omnix-border) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-header,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-composer {
+  background: linear-gradient(180deg, var(--omnix-soft-bg), rgba(0, 0, 0, 0.16)) !important;
+  border-color: var(--omnix-border) !important;
+}
+
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-bubble p,
+:root[data-omnix-theme][data-omnix-appearance='dark'] input,
+:root[data-omnix-theme][data-omnix-appearance='dark'] select,
+:root[data-omnix-theme][data-omnix-appearance='dark'] textarea,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-message-input textarea,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-integrated-actions .assistant-header-voice-select select,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .image-field input,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .image-field select,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .image-field textarea,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .image-provider-filter select,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .image-assets-search input {
+  background: var(--omnix-control-bg) !important;
+  border-color: var(--omnix-border) !important;
+  color: var(--omnix-control-text) !important;
+}
+
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-message-actions button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-header-actions button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-message-action-menu button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-panel-heading.compact button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-project-actions button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-action-bar button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-versions button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-trash,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-outline button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-chip-row button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-chapter-controls button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .storyteller-output-status button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .speaker-preview button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .quality-card button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .recent-card .card-heading-row button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .audio-transport-buttons button {
+  background: var(--omnix-panel-solid) !important;
+  border-color: var(--omnix-border) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-side-panel-toggle,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .omnix-mode-tabs {
+  background: var(--omnix-panel-solid) !important;
+  border-color: var(--omnix-border) !important;
+}
+
+:root[data-omnix-theme][data-omnix-appearance='dark'] .omnix-mode-tabs button.active,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-side-panel-toggle button.active,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-integrated-actions .assistant-header-pill,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-integrated-actions .assistant-header-voice-select,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-send-button,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-mic-button {
+  background: var(--omnix-theme-gradient) !important;
+  border-color: var(--omnix-theme-line) !important;
+  box-shadow: var(--omnix-theme-gloss) !important;
+  color: var(--omnix-theme-on-accent) !important;
+}
+
+:root[data-omnix-theme][data-omnix-appearance='dark'] .omnix-nav a:hover,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .omnix-nav a:focus-visible,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .omnix-nav a.active,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-sidebar-nav button:hover,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-sidebar-nav button:focus-visible,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-sidebar-nav button.active,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-sidebar-list button:hover,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-sidebar-list button:focus-visible,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-sidebar-list button.active,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-sidebar-session-row.active > button:first-child,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-main .assistant-message-actions button.active,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-main .assistant-message-actions button[aria-expanded='true'] {
+  background: linear-gradient(135deg, var(--omnix-theme-soft-strong), var(--omnix-theme-soft)) !important;
+  border-color: var(--omnix-theme-line) !important;
+  color: var(--omnix-text) !important;
+}
+
 :root[data-omnix-theme='graphite'] .omnix-topbar,
 :root[data-omnix-theme='graphite'] .omnix-sidebar,
 :root[data-omnix-theme='graphite'] .workspace-card,
@@ -400,6 +564,108 @@
   background: linear-gradient(90deg, #9ddaf0, #88a7c8, #7d8794) !important;
 }
 
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .workspace-card.assistant-chat-page {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(166, 184, 202, 0.1), transparent 26rem),
+    linear-gradient(180deg, rgba(14, 20, 27, 0.88), rgba(8, 12, 17, 0.94)) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-sidebar,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-main,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-live-card,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-tool-sidebar-card,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-view-panel,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-workspace-dashboard,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-workspace-activity {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(142, 160, 178, 0.14), transparent 24rem),
+    linear-gradient(180deg, rgba(25, 33, 42, 0.94), rgba(10, 15, 21, 0.98)) !important;
+  border-color: rgba(174, 186, 199, 0.22) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(230, 238, 246, 0.08),
+    0 1.2rem 3rem rgba(3, 6, 10, 0.34) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-sidebar-nav,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-sidebar-section,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-side-panel-toggle,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-live-draft,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-voice-toggle,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-voice-input-indicator,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-message-actions button,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-message-action-menu,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-message-action-menu button,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-view-panel article,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-tool-config-list article,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-tool-connection-panel,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-tool-action-row,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-settings-list div {
+  background: linear-gradient(180deg, rgba(31, 40, 50, 0.78), rgba(14, 20, 28, 0.84)) !important;
+  border-color: rgba(174, 186, 199, 0.2) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-header,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-composer {
+  background: linear-gradient(180deg, rgba(22, 29, 37, 0.58), rgba(9, 14, 20, 0.78)) !important;
+  border-color: rgba(174, 186, 199, 0.18) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-bubble p,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-message-input textarea,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-integrated-actions .assistant-header-voice-select select,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-tool-oauth-form input,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-tool-policy-select select,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-settings-list select,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-settings-list textarea,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-settings-list input {
+  background: rgba(9, 15, 22, 0.9) !important;
+  border-color: rgba(174, 186, 199, 0.22) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-bubble p {
+  box-shadow: inset 0 1px 0 rgba(230, 238, 246, 0.05);
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-sidebar-nav button:hover,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-sidebar-nav button:focus-visible,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-sidebar-nav button.active,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-sidebar-list button:hover,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-sidebar-list button:focus-visible,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-sidebar-list button.active,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-sidebar-session-row.active > button:first-child,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-main .assistant-message-actions button.active,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-main .assistant-message-actions button[aria-expanded='true'],
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-side-panel-toggle button:hover,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-side-panel-toggle button:focus-visible {
+  background: linear-gradient(135deg, rgba(80, 94, 110, 0.48), rgba(30, 40, 52, 0.64)) !important;
+  border-color: rgba(190, 202, 214, 0.28) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-avatar {
+  background:
+    radial-gradient(circle at center, rgba(214, 224, 234, 0.9) 0 30%, transparent 31%),
+    conic-gradient(from 120deg, #73bdd3, #a7b1bc, #6f7d8d, #73bdd3) !important;
+  border-color: rgba(190, 202, 214, 0.38) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-voice-core {
+  background:
+    linear-gradient(#0a1119, #0a1119) padding-box,
+    conic-gradient(from 0deg, #dfe7f0, #73bdd3, #7d8794, #c0cad4, #dfe7f0) border-box !important;
+  box-shadow:
+    0 0 0 0.58rem rgba(174, 186, 199, 0.12),
+    0 0 2.2rem rgba(115, 189, 211, 0.22),
+    inset 0 0 2.2rem rgba(115, 189, 211, 0.08) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-voice-input-indicator i b,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-voice-meter i {
+  background: linear-gradient(180deg, #dfe7f0, #73bdd3 55%, #7d8794) !important;
+}
+
 :root[data-omnix-theme='evergreen'] .omnix-topbar,
 :root[data-omnix-theme='evergreen'] .omnix-sidebar,
 :root[data-omnix-theme='evergreen'] .workspace-card,
@@ -407,6 +673,115 @@
 :root[data-omnix-theme='evergreen'] .assistant-chat-main,
 :root[data-omnix-theme='evergreen'] .assistant-chat-sidebar {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38), 0 0.85rem 2rem rgba(5, 91, 67, 0.1);
+}
+
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .workspace-card.assistant-chat-page {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(39, 206, 149, 0.13), transparent 26rem),
+    linear-gradient(180deg, rgba(4, 18, 14, 0.86), rgba(3, 13, 10, 0.92)) !important;
+}
+
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-sidebar,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-main,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-live-card,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-tool-sidebar-card,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-view-panel,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-workspace-dashboard,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-workspace-activity {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(46, 192, 143, 0.16), transparent 24rem),
+    linear-gradient(180deg, rgba(13, 42, 33, 0.94), rgba(5, 18, 14, 0.98)) !important;
+  border-color: rgba(69, 201, 154, 0.24) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(192, 255, 232, 0.08),
+    0 1.2rem 3rem rgba(2, 10, 8, 0.32) !important;
+}
+
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-sidebar-nav,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-sidebar-section,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-side-panel-toggle,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-live-draft,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-voice-toggle,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-voice-input-indicator,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-message-actions button,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-message-action-menu,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-message-action-menu button,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-view-panel article,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-tool-config-list article,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-tool-connection-panel,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-tool-action-row,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-settings-list div {
+  background: linear-gradient(180deg, rgba(14, 48, 38, 0.78), rgba(6, 25, 20, 0.82)) !important;
+  border-color: rgba(78, 202, 158, 0.22) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-header,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-composer {
+  background: linear-gradient(180deg, rgba(9, 33, 27, 0.58), rgba(4, 18, 14, 0.76)) !important;
+  border-color: rgba(78, 202, 158, 0.18) !important;
+}
+
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-bubble p,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-message-input textarea,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-integrated-actions .assistant-header-voice-select select,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-tool-oauth-form input,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-tool-policy-select select,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-settings-list select,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-settings-list textarea,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-settings-list input {
+  background: rgba(5, 22, 18, 0.88) !important;
+  border-color: rgba(78, 202, 158, 0.24) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-bubble p {
+  box-shadow: inset 0 1px 0 rgba(192, 255, 232, 0.05);
+}
+
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-sidebar-nav button:hover,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-sidebar-nav button:focus-visible,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-sidebar-nav button.active,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-sidebar-list button:hover,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-sidebar-list button:focus-visible,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-sidebar-list button.active,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-sidebar-session-row.active > button:first-child,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-main .assistant-message-actions button.active,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-main .assistant-message-actions button[aria-expanded='true'],
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-side-panel-toggle button:hover,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-side-panel-toggle button:focus-visible {
+  background: linear-gradient(135deg, rgba(34, 162, 119, 0.36), rgba(10, 78, 61, 0.54)) !important;
+  border-color: rgba(85, 216, 141, 0.35) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-avatar {
+  background:
+    radial-gradient(circle at center, rgba(85, 216, 141, 0.95) 0 30%, transparent 31%),
+    conic-gradient(from 120deg, #4bdac7, #56d6a7, #1b8f6d, #4bdac7) !important;
+  border-color: rgba(85, 216, 141, 0.44) !important;
+}
+
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-voice-core {
+  background:
+    linear-gradient(#061711, #061711) padding-box,
+    conic-gradient(from 0deg, #55d88d, #4bdac7, #2f9b7b, #b7e596, #55d88d) border-box !important;
+  box-shadow:
+    0 0 0 0.58rem rgba(76, 213, 162, 0.12),
+    0 0 2.4rem rgba(28, 167, 123, 0.32),
+    inset 0 0 2.2rem rgba(75, 218, 199, 0.1) !important;
+}
+
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-voice-input-indicator i b,
+:root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-voice-meter i {
+  background: linear-gradient(180deg, #55d88d, #4bdac7 55%, #16956d) !important;
+}
+
+:root[data-omnix-theme] .assistant-chat-message.user .assistant-chat-bubble p {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: var(--omnix-theme-on-accent) !important;
 }
 
 /* Compact top-bar palette picker. */

@@ -524,14 +524,20 @@
   gap: 1.25rem;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 1.35rem 1.35rem 1rem;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
 }
 
 .assistant-chat-message {
   align-self: flex-start;
   column-gap: 0.85rem;
+  contain: layout paint style;
+  content-visibility: auto;
   display: grid;
   grid-template-columns: 2.8rem minmax(0, auto);
+  contain-intrinsic-size: auto 9rem;
   max-width: min(45rem, 82%);
 }
 

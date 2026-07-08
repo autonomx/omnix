@@ -6,6 +6,7 @@ import {
   type MemoryCategory,
   type MemoryScope,
 } from './memoryClient';
+import './MemoryManagementPanel.css';
 
 const scopes: MemoryScope[] = ['global', 'workspace', 'project', 'session'];
 const categories: MemoryCategory[] = ['preference', 'fact', 'project', 'relationship', 'instruction'];
@@ -107,7 +108,13 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
   });
 
   if (!sessionId) {
-    return <section className="assistant-view-panel" aria-label="Memory view"><p className="eyebrow">Omnix Assistant</p><h2>Memory</h2><p>Create or select a Chat session before managing memory.</p></section>;
+    return (
+      <section className="assistant-view-panel memory-management-panel" aria-label="Memory view">
+        <p className="eyebrow">Omnix Assistant</p>
+        <h2>Memory</h2>
+        <p>Create or select a Chat session before managing memory.</p>
+      </section>
+    );
   }
 
   const records = memoryQuery.data?.records ?? [];
@@ -115,74 +122,96 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
   const snapshot = snapshotQuery.data;
 
   return (
-    <section className="assistant-view-panel" aria-label="Memory view">
-      <p className="eyebrow">Omnix Assistant</p>
-      <h2>Memory</h2>
-      <p>Review exactly what Omnix has saved, approve inferred suggestions, and refresh what this Chat can use.</p>
-      {status ? <p role="status">{status}</p> : null}
+    <section className="assistant-view-panel memory-management-panel" aria-label="Memory view">
+      <header className="memory-page-header">
+        <div>
+          <p className="eyebrow">Omnix Assistant</p>
+          <h2>Memory</h2>
+          <p>Review saved memory, approve suggestions, and control what this Chat can use.</p>
+        </div>
+        <div className="memory-page-stats" aria-label="Memory totals">
+          <span><strong>{records.length}</strong> saved</span>
+          <span><strong>{candidates.length}</strong> pending</span>
+          <span><strong>{snapshot?.memory_record_count ?? 0}</strong> active</span>
+        </div>
+      </header>
+      {status ? <p className="memory-status" role="status">{status}</p> : null}
 
-      <div className="platform-grid">
-        <article>
-          <h3>Active for this Chat</h3>
-          {snapshotQuery.isPending ? <p>Loading snapshot…</p> : snapshot ? (
+      <div className="memory-overview-grid">
+        <article className="memory-card memory-card-primary">
+          <MemoryCardHeading icon="o" title="Active for this Chat" detail="Snapshot currently available to the assistant." />
+          {snapshotQuery.isPending ? <p>Loading snapshot...</p> : snapshot ? (
             <>
+              <div className="memory-metric-row">
+                <span><strong>{snapshot.memory_enabled ? snapshot.memory_record_count : 0}</strong> records</span>
+                <span><strong>{snapshot.snapshot?.token_estimate ?? 0}</strong> tokens</span>
+                <span><strong>{snapshot.snapshot_revision ?? 'none'}</strong> revision</span>
+              </div>
               <p>{snapshot.memory_enabled ? `${snapshot.memory_record_count} active records` : 'Memory is not active for this session.'}</p>
-              <p>Snapshot revision: {snapshot.snapshot_revision ?? 'none'} · Token estimate: {snapshot.snapshot?.token_estimate ?? 0}</p>
-              <button type="button" disabled={refreshMutation.isPending} onClick={() => refreshMutation.mutate()}>{refreshMutation.isPending ? 'Refreshing…' : 'Refresh active memory'}</button>
+              <p>Snapshot revision: {snapshot.snapshot_revision ?? 'none'} - Token estimate: {snapshot.snapshot?.token_estimate ?? 0}</p>
+              <button type="button" disabled={refreshMutation.isPending} onClick={() => refreshMutation.mutate()}>{refreshMutation.isPending ? 'Refreshing...' : 'Refresh active memory'}</button>
             </>
           ) : <p>Snapshot state is unavailable.</p>}
         </article>
-        <article>
-          <h3>Add explicit memory</h3>
-          <label>Scope<select aria-label="New memory scope" value={newScope} onChange={(event) => setNewScope(event.currentTarget.value as MemoryScope)}>{scopes.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-          <label>Category<select aria-label="New memory category" value={newCategory} onChange={(event) => setNewCategory(event.currentTarget.value as MemoryCategory)}>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-          <label>Memory<textarea aria-label="New memory content" rows={3} value={newContent} onChange={(event) => setNewContent(event.currentTarget.value)} /></label>
-          <button type="button" disabled={!newContent.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>Save memory</button>
+
+        <article className="memory-card memory-add-card">
+          <MemoryCardHeading icon="+" title="Add explicit memory" detail="Save a deliberate note for future recall." />
+          <div className="memory-field-row">
+            <label>Scope<select aria-label="New memory scope" value={newScope} onChange={(event) => setNewScope(event.currentTarget.value as MemoryScope)}>{scopes.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label>Category<select aria-label="New memory category" value={newCategory} onChange={(event) => setNewCategory(event.currentTarget.value as MemoryCategory)}>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+          </div>
+          <label className="memory-textarea-field">Memory<textarea aria-label="New memory content" rows={4} value={newContent} onChange={(event) => setNewContent(event.currentTarget.value)} /></label>
+          <div className="memory-card-actions"><button type="button" disabled={!newContent.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>Save memory</button></div>
         </article>
-        <article>
-          <h3>Memory and privacy settings</h3>
-          {settingsQuery.isPending ? <p>Loading settings…</p> : settingsQuery.data ? (
+
+        <article className="memory-card memory-settings-card">
+          <MemoryCardHeading icon="*" title="Memory and privacy settings" detail="Controls apply immediately on the server." />
+          {settingsQuery.isPending ? <p>Loading settings...</p> : settingsQuery.data ? (
             <>
-              {([
-                ['curated_memory_enabled', 'Use approved memory in Chat'],
-                ['suggestions_enabled', 'Create pending suggestions'],
-                ['history_recall_enabled', 'Search previous conversations'],
-                ['compaction_enabled', 'Compact long conversations'],
-                ['hermes_sync_enabled', 'Allow Hermes synchronization'],
-                ['show_memory_use_indicator', 'Show memory-use indicators'],
-              ] as const).map(([key, label]) => (
-                <label key={key}>
-                  <input
-                    type="checkbox"
-                    checked={settingsQuery.data.settings[key]}
-                    disabled={settingsMutation.isPending || settingsQuery.data.environment_overrides.includes(key)}
-                    onChange={(event) => settingsMutation.mutate({ [key]: event.currentTarget.checked })}
-                  />
-                  {label}
-                  {settingsQuery.data.environment_overrides.includes(key) ? ' · environment controlled' : ''}
-                </label>
-              ))}
+              <div className="memory-settings-grid">
+                {([
+                  ['curated_memory_enabled', 'Use approved memory in Chat'],
+                  ['suggestions_enabled', 'Create pending suggestions'],
+                  ['history_recall_enabled', 'Search previous conversations'],
+                  ['compaction_enabled', 'Compact long conversations'],
+                  ['hermes_sync_enabled', 'Allow Hermes synchronization'],
+                  ['show_memory_use_indicator', 'Show memory-use indicators'],
+                ] as const).map(([key, label]) => (
+                  <label className="memory-toggle-row" key={key}>
+                    <input
+                      type="checkbox"
+                      checked={settingsQuery.data.settings[key]}
+                      disabled={settingsMutation.isPending || settingsQuery.data.environment_overrides.includes(key)}
+                      onChange={(event) => settingsMutation.mutate({ [key]: event.currentTarget.checked })}
+                    />
+                    {label}
+                    {settingsQuery.data.environment_overrides.includes(key) ? ' - environment controlled' : ''}
+                  </label>
+                ))}
+              </div>
               <p>Inferred memory approval is required and cannot be disabled. Diagnostics are content-free.</p>
             </>
           ) : <p>Memory settings are unavailable.</p>}
         </article>
       </div>
 
-      <section aria-labelledby="saved-memory-heading">
-        <h3 id="saved-memory-heading">Saved memory</h3>
-        <div className="assistant-composer-controls">
-          <label>Search<input aria-label="Search saved memory" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
+      <section className="memory-section" aria-labelledby="saved-memory-heading">
+        <div className="memory-section-header">
+          <div><h3 id="saved-memory-heading">Saved memory</h3><p>Approved records Omnix can reuse when memory is enabled.</p></div>
+        </div>
+        <div className="memory-filter-bar">
+          <label>Search<input aria-label="Search saved memory" placeholder="Search content" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
           <label>Scope<select aria-label="Filter memory scope" value={scope} onChange={(event) => setScope(event.currentTarget.value)}><option value="">All scopes</option>{scopes.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label>Category<select aria-label="Filter memory category" value={category} onChange={(event) => setCategory(event.currentTarget.value)}><option value="">All categories</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
         </div>
-        {memoryQuery.isPending ? <p>Loading saved memory…</p> : records.length ? (
-          <div className="platform-grid">
+        {memoryQuery.isPending ? <p>Loading saved memory...</p> : records.length ? (
+          <div className="memory-record-grid">
             {records.map((record) => (
-              <article key={record.id}>
-                <header><h4>{record.category}</h4><strong>{record.scope}{record.pinned ? ' · pinned' : ''}</strong></header>
+              <article className="memory-record-card" key={record.id}>
+                <header><h4>{record.category}</h4><strong>{record.scope}{record.pinned ? ' - pinned' : ''}</strong></header>
                 <p>{record.content}</p>
-                <small>Source: {record.source} · Trust: {record.trust_level} · Revision {record.revision}</small>
-                <div>
+                <small>Source: {record.source} - Trust: {record.trust_level} - Revision {record.revision}</small>
+                <div className="memory-record-actions">
                   <button type="button" onClick={() => recordMutation.mutate({ action: 'pin', record })}>{record.pinned ? 'Unpin' : 'Pin'}</button>
                   <button type="button" onClick={() => { const value = window.prompt('Edit memory', record.content); if (value?.trim()) recordMutation.mutate({ action: 'edit', record, value }); }}>Edit</button>
                   <select aria-label={`Move ${record.content}`} value={record.scope} onChange={(event) => recordMutation.mutate({ action: 'move', record, value: event.currentTarget.value })}>{scopes.map((item) => <option key={item} value={item}>{item}</option>)}</select>
@@ -191,24 +220,35 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
               </article>
             ))}
           </div>
-        ) : <p>No saved memory matches the current filters.</p>}
+        ) : <p className="memory-empty-state">No saved memory matches the current filters.</p>}
       </section>
 
-      <section aria-labelledby="pending-memory-heading">
-        <h3 id="pending-memory-heading">Pending suggestions</h3>
-        {candidatesQuery.isPending ? <p>Loading suggestions…</p> : candidates.length ? (
-          <div className="platform-grid">
+      <section className="memory-section" aria-labelledby="pending-memory-heading">
+        <div className="memory-section-header">
+          <div><h3 id="pending-memory-heading">Pending suggestions</h3><p>Review inferred memories before they become available.</p></div>
+        </div>
+        {candidatesQuery.isPending ? <p>Loading suggestions...</p> : candidates.length ? (
+          <div className="memory-record-grid">
             {candidates.map((candidate) => (
-              <article key={candidate.id}>
+              <article className="memory-record-card" key={candidate.id}>
                 <header><h4>{candidate.proposed_category}</h4><strong>{candidate.proposed_scope}</strong></header>
                 <p>{candidate.proposed_content}</p>
-                <small>Source: {candidate.source} · Confidence: {Math.round(candidate.confidence * 100)}%</small>
-                <div><button type="button" onClick={() => candidateMutation.mutate({ id: candidate.id, action: 'approve' })}>Approve</button><button type="button" onClick={() => candidateMutation.mutate({ id: candidate.id, action: 'reject' })}>Reject</button></div>
+                <small>Source: {candidate.source} - Confidence: {Math.round(candidate.confidence * 100)}%</small>
+                <div className="memory-record-actions"><button type="button" onClick={() => candidateMutation.mutate({ id: candidate.id, action: 'approve' })}>Approve</button><button type="button" onClick={() => candidateMutation.mutate({ id: candidate.id, action: 'reject' })}>Reject</button></div>
               </article>
             ))}
           </div>
-        ) : <p>No pending memory suggestions.</p>}
+        ) : <p className="memory-empty-state">No pending memory suggestions.</p>}
       </section>
     </section>
+  );
+}
+
+function MemoryCardHeading({ detail, icon, title }: { detail: string; icon: string; title: string }) {
+  return (
+    <div className="memory-card-heading">
+      <span aria-hidden="true">{icon}</span>
+      <div><h3>{title}</h3><p>{detail}</p></div>
+    </div>
   );
 }
