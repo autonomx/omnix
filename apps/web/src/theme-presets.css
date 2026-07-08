@@ -10,45 +10,51 @@
 }
 
 :root[data-omnix-theme='graphite'] {
-  --omnix-theme-gradient: linear-gradient(145deg, #8e99a7 0%, #5d6876 48%, #303944 100%);
-  --omnix-theme-gradient-hover: linear-gradient(145deg, #a2acb8 0%, #697583 48%, #3b4652 100%);
-  --omnix-theme-soft: rgba(117, 130, 145, 0.14);
-  --omnix-theme-soft-strong: rgba(102, 116, 132, 0.25);
-  --omnix-theme-line: rgba(99, 113, 129, 0.34);
-  --omnix-theme-shadow: rgba(47, 57, 68, 0.2);
-  --omnix-theme-on-accent: #ffffff;
+  --omnix-theme-gradient: linear-gradient(180deg, #f9fbfd 0%, #cfd7e1 54%, #8c99a8 100%);
+  --omnix-theme-gradient-hover: linear-gradient(180deg, #ffffff 0%, #d9e1eb 54%, #98a5b3 100%);
+  --omnix-theme-soft: rgba(125, 145, 166, 0.12);
+  --omnix-theme-soft-strong: rgba(162, 185, 207, 0.26);
+  --omnix-theme-line: rgba(119, 136, 154, 0.36);
+  --omnix-theme-shadow: rgba(74, 90, 108, 0.18);
+  --omnix-theme-on-accent: #18212c;
+  --omnix-theme-gloss:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(92, 108, 126, 0.12),
+    0 0.65rem 1.4rem rgba(62, 76, 92, 0.14);
 }
 
 :root[data-omnix-theme='graphite'][data-omnix-appearance='light'] {
-  --omnix-body-bg: #edf0f3;
+  --omnix-body-bg: #f0f3f7;
   --omnix-body-surface:
-    radial-gradient(circle at 13% -8%, rgba(255, 255, 255, 0.98), transparent 31rem),
-    radial-gradient(circle at 88% 0%, rgba(142, 155, 170, 0.2), transparent 34rem),
-    linear-gradient(135deg, #fafbfc 0%, #e8edf1 52%, #f6f8fa 100%);
-  --omnix-border: rgba(77, 89, 103, 0.2);
-  --omnix-strong-border: rgba(80, 94, 109, 0.3);
-  --omnix-text: #1d2630;
-  --omnix-muted: #5b6876;
-  --omnix-muted-text: #5b6876;
-  --omnix-purple: #5f6c79;
-  --omnix-cyan: #397f99;
-  --omnix-main-bg: rgba(237, 241, 245, 0.82);
-  --omnix-sidebar-bg: linear-gradient(180deg, rgba(253, 254, 255, 0.96), rgba(231, 236, 241, 0.97));
-  --omnix-panel-bg: linear-gradient(160deg, rgba(255, 255, 255, 0.94), rgba(231, 235, 240, 0.88));
-  --omnix-panel-solid: rgba(248, 250, 252, 0.91);
-  --omnix-control-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(228, 233, 238, 0.9));
-  --omnix-control-text: #1d2630;
-  --omnix-soft-bg: rgba(102, 116, 132, 0.08);
-  --omnix-topbar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(225, 231, 237, 0.94));
-  --omnix-topbar-status-bg: rgba(90, 103, 118, 0.11);
-  --omnix-topbar-status-text: #3e4a57;
+    radial-gradient(circle at 13% -8%, rgba(255, 255, 255, 0.98), transparent 30rem),
+    radial-gradient(circle at 78% 3%, rgba(177, 193, 211, 0.26), transparent 34rem),
+    linear-gradient(135deg, #fbfcfe 0%, #e8edf3 52%, #f6f8fb 100%);
+  --omnix-border: rgba(104, 119, 137, 0.22);
+  --omnix-strong-border: rgba(126, 143, 163, 0.34);
+  --omnix-text: #18212c;
+  --omnix-muted: #667382;
+  --omnix-muted-text: #667382;
+  --omnix-purple: #6d7b8c;
+  --omnix-cyan: #4f8ba2;
+  --omnix-main-bg: rgba(238, 242, 247, 0.66);
+  --omnix-sidebar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(236, 241, 247, 0.94));
+  --omnix-panel-bg: linear-gradient(160deg, rgba(255, 255, 255, 0.82), rgba(239, 243, 248, 0.76));
+  --omnix-panel-solid: rgba(249, 251, 253, 0.78);
+  --omnix-control-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(234, 239, 245, 0.82));
+  --omnix-control-text: #18212c;
+  --omnix-soft-bg: rgba(125, 145, 166, 0.08);
+  --omnix-topbar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(235, 240, 246, 0.86));
+  --omnix-topbar-status-bg: rgba(124, 139, 157, 0.11);
+  --omnix-topbar-status-text: #43505f;
   --omnix-brand-core-bg: #f8fafc;
-  --omnix-page-panel: linear-gradient(160deg, rgba(255, 255, 255, 0.94), rgba(231, 235, 240, 0.88));
-  --omnix-page-panel-flat: rgba(250, 251, 252, 0.84);
-  --omnix-page-panel-muted: rgba(229, 234, 239, 0.84);
-  --omnix-page-line: rgba(77, 89, 103, 0.22);
-  --omnix-page-line-strong: rgba(80, 94, 109, 0.32);
-  --omnix-page-shadow: 0 1.1rem 2.5rem rgba(48, 58, 69, 0.12);
+  --omnix-page-panel: linear-gradient(160deg, rgba(255, 255, 255, 0.76), rgba(238, 243, 248, 0.74));
+  --omnix-page-panel-flat: rgba(252, 253, 255, 0.62);
+  --omnix-page-panel-muted: rgba(232, 238, 245, 0.72);
+  --omnix-page-line: rgba(109, 126, 146, 0.24);
+  --omnix-page-line-strong: rgba(126, 143, 163, 0.36);
+  --omnix-page-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 1rem 2.4rem rgba(64, 78, 96, 0.12);
 }
 
 :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] {
@@ -222,6 +228,176 @@
 :root[data-omnix-theme='graphite'] .assistant-chat-main,
 :root[data-omnix-theme='graphite'] .assistant-chat-sidebar {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 0.85rem 2rem rgba(47, 57, 68, 0.12);
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-main {
+  background: linear-gradient(180deg, rgba(238, 243, 248, 0.72), rgba(234, 240, 246, 0.78));
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-topbar,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .workspace-card.assistant-chat-page {
+  background:
+    radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.94), transparent 22rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(232, 238, 245, 0.74)) !important;
+  border-color: rgba(124, 141, 162, 0.28) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 1.1rem 2.2rem rgba(64, 78, 96, 0.13) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-sidebar,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-chat-sidebar,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-chat-main,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-live-card,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-tool-sidebar-card,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-view-panel {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.86), transparent 24rem),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.68), rgba(236, 241, 247, 0.72)) !important;
+  border-color: rgba(116, 132, 153, 0.25) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 0.95rem 2rem rgba(71, 86, 104, 0.1) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-sidebar-nav,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-sidebar-section,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-live-draft,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-voice-toggle,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-voice-input-indicator,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-message-actions button,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-message-action-menu button,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-view-panel article,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-settings-list div {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(237, 242, 248, 0.64)) !important;
+  border-color: rgba(113, 130, 151, 0.24) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78), 0 0.4rem 1rem rgba(73, 88, 106, 0.07) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-mode-tabs,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-side-panel-toggle {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(232, 238, 245, 0.72)) !important;
+  border-color: rgba(118, 135, 156, 0.28) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 0.7rem 1.45rem rgba(63, 77, 94, 0.08) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-mode-tabs button.active,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-shell-toggle,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-new-chat-button,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-pill,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select {
+  background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 54%, #b8c3cf 100%) !important;
+  border-color: rgba(137, 155, 178, 0.38) !important;
+  color: #18212c !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -0.22rem 0.55rem rgba(93, 109, 128, 0.13),
+    0 0 0 0.22rem rgba(179, 208, 232, 0.24),
+    0 0.58rem 1.2rem rgba(60, 75, 92, 0.12) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-side-panel-toggle button.active,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-send-button {
+  background: linear-gradient(180deg, #aab4c0 0%, #6c7886 48%, #3b4653 100%) !important;
+  border-color: rgba(63, 75, 89, 0.42) !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    inset 0 -0.3rem 0.7rem rgba(15, 22, 31, 0.22),
+    0 0.72rem 1.45rem rgba(56, 69, 84, 0.2) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-sidebar-nav button:hover,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-sidebar-nav button:focus-visible,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-sidebar-nav button.active,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-sidebar-list button:hover,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-sidebar-list button:focus-visible,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-sidebar-list button.active,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-sidebar-session-row.active > button:first-child {
+  background: linear-gradient(135deg, rgba(233, 239, 247, 0.95), rgba(218, 232, 244, 0.82)) !important;
+  border-color: rgba(130, 171, 205, 0.42) !important;
+  color: #18212c !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 0 0 1px rgba(255, 255, 255, 0.28) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-chat-header,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-composer {
+  background: linear-gradient(180deg, rgba(252, 254, 255, 0.64), rgba(235, 240, 247, 0.56)) !important;
+  border-color: rgba(116, 132, 153, 0.2) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-chat-bubble p {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(244, 247, 251, 0.82)) !important;
+  border-color: rgba(116, 132, 153, 0.26) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88), 0 0.45rem 1rem rgba(64, 78, 96, 0.06) !important;
+  color: #243044 !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble {
+  background: linear-gradient(180deg, #aeb8c4 0%, #778391 52%, #5b6775 100%) !important;
+  border-color: rgba(90, 105, 122, 0.38) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    0 0.95rem 1.8rem rgba(75, 89, 106, 0.16) !important;
+  color: #ffffff !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble p {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-message-input textarea,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select select,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] input,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] select,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] textarea {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(246, 248, 251, 0.78)) !important;
+  border-color: rgba(111, 128, 149, 0.26) !important;
+  color: #18212c !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-voice-core {
+  background:
+    radial-gradient(circle at 45% 38%, rgba(255, 255, 255, 0.08), transparent 36%) padding-box,
+    linear-gradient(180deg, #273340 0%, #151e29 62%, #0d1520 100%) padding-box,
+    conic-gradient(from 0deg, #dfe7f0, #9bcde2, #6d7b8c, #d8e0e9, #dfe7f0) border-box;
+  box-shadow:
+    0 0 0 0.58rem rgba(151, 170, 191, 0.28),
+    0 0 1.9rem rgba(75, 117, 155, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1rem 1.8rem rgba(0, 0, 0, 0.24);
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-shell-toggle {
+  background:
+    radial-gradient(circle at 45% 45%, rgba(255, 255, 255, 0.9) 0 0.2rem, transparent 0.22rem),
+    linear-gradient(135deg, #e5edf5 0%, #9fb0c5 48%, #6c7f96 100%) !important;
+  border-color: rgba(120, 147, 178, 0.38) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    0 0.6rem 1.2rem rgba(67, 98, 132, 0.18) !important;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-shell-toggle span {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 0 0.45rem rgba(255, 255, 255, 0.2);
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-voice-orb .assistant-voice-mic::before,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-voice-core::after {
+  background: linear-gradient(180deg, #ffffff, #e7edf5);
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-voice-orb .assistant-voice-mic::after {
+  border-color: #ffffff;
+}
+
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-voice-meter i,
+:root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-voice-input-indicator i b {
+  background: linear-gradient(90deg, #9ddaf0, #88a7c8, #7d8794) !important;
 }
 
 :root[data-omnix-theme='evergreen'] .omnix-topbar,
