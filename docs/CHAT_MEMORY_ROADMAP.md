@@ -1,8 +1,14 @@
 # Omnix Chat Memory Roadmap
 
-Status: canonical implementation roadmap
+Status: implementation complete through MEM-15; exact-head release gate required
 
 Target branch: `rpg`
+
+## Final implementation status
+
+MEM-0 through MEM-14 are merged into `rpg`. MEM-15 supplies the adversarial integration suite, process-local mutation serialization, atomic JSON fallback writes, rollout guidance, and rollback evidence. The roadmap is considered released only after the MEM-15 pull request passes both required GitHub Actions workflows on its exact head and is squash-merged.
+
+Canonical phase evidence is stored under `docs/chat-memory/`, including the final `mem-15-release-gate.md` matrix.
 
 ## Objective
 
@@ -10,7 +16,7 @@ Upgrade Omnix Chat from session-only transcript persistence to a controlled, per
 
 The system must remain local-first, deterministic at its policy boundaries, inspectable by the user, safe to disable, and fully usable when Hermes is unavailable.
 
-## Current-state audit
+## Initial-state audit before MEM-1
 
 The repository already contains frontend memory value objects and view-model actions for scopes, categories, pinning, approval, editing, forgetting, and moving scope. These contracts are not backed by an authoritative memory service.
 
