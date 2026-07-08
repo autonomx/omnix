@@ -35,6 +35,10 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
     queryFn: () => memoryClient.sessionState(sessionId ?? ''),
     enabled: Boolean(sessionId),
   });
+  const settingsQuery = useQuery({
+    queryKey: ['feature', 'chatbot', 'memory-settings'],
+    queryFn: () => memoryClient.settings(),
+  });
 
   async function refreshAll(): Promise<void> {
     await Promise.all([
@@ -42,6 +46,7 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
       queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'memory-candidates'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'memory-state'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'sessions'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'memory-settings'] }),
     ]);
   }
 
@@ -92,6 +97,14 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
     },
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Memory refresh failed.'),
   });
+  const settingsMutation = useMutation({
+    mutationFn: (update: Parameters<typeof memoryClient.updateSettings>[0]) => memoryClient.updateSettings(update),
+    onSuccess: async () => {
+      setStatus('Memory settings saved. New server-side behavior is active immediately.');
+      await refreshAll();
+    },
+    onError: (error) => setStatus(error instanceof Error ? error.message : 'Memory settings update failed.'),
+  });
 
   if (!sessionId) {
     return <section className="assistant-view-panel" aria-label="Memory view"><p className="eyebrow">Omnix Assistant</p><h2>Memory</h2><p>Create or select a Chat session before managing memory.</p></section>;
@@ -125,6 +138,33 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
           <label>Category<select aria-label="New memory category" value={newCategory} onChange={(event) => setNewCategory(event.currentTarget.value as MemoryCategory)}>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label>Memory<textarea aria-label="New memory content" rows={3} value={newContent} onChange={(event) => setNewContent(event.currentTarget.value)} /></label>
           <button type="button" disabled={!newContent.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>Save memory</button>
+        </article>
+        <article>
+          <h3>Memory and privacy settings</h3>
+          {settingsQuery.isPending ? <p>Loading settings…</p> : settingsQuery.data ? (
+            <>
+              {([
+                ['curated_memory_enabled', 'Use approved memory in Chat'],
+                ['suggestions_enabled', 'Create pending suggestions'],
+                ['history_recall_enabled', 'Search previous conversations'],
+                ['compaction_enabled', 'Compact long conversations'],
+                ['hermes_sync_enabled', 'Allow Hermes synchronization'],
+                ['show_memory_use_indicator', 'Show memory-use indicators'],
+              ] as const).map(([key, label]) => (
+                <label key={key}>
+                  <input
+                    type="checkbox"
+                    checked={settingsQuery.data.settings[key]}
+                    disabled={settingsMutation.isPending || settingsQuery.data.environment_overrides.includes(key)}
+                    onChange={(event) => settingsMutation.mutate({ [key]: event.currentTarget.checked })}
+                  />
+                  {label}
+                  {settingsQuery.data.environment_overrides.includes(key) ? ' · environment controlled' : ''}
+                </label>
+              ))}
+              <p>Inferred memory approval is required and cannot be disabled. Diagnostics are content-free.</p>
+            </>
+          ) : <p>Memory settings are unavailable.</p>}
         </article>
       </div>
 

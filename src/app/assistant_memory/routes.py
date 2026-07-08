@@ -15,6 +15,7 @@ from app.chat.memory_session import (
 )
 
 from .management_routes import register_memory_management_routes
+from .settings_routes import register_memory_settings_routes
 from .service import MemoryService, default_memory_service
 
 _GET_ROUTE_NAME = "assistant_memory_session_state_endpoint"
@@ -78,6 +79,7 @@ def register_assistant_memory_routes(
                 raise HTTPException(status_code=404, detail="chat session not found")
             return state
 
+    register_memory_settings_routes(app)
     register_memory_management_routes(
         app,
         chat_store_factory=chat_store_factory,

@@ -55,6 +55,27 @@ export interface SessionMemorySnapshotItem {
   invalidation_reason?: string | null;
 }
 
+export interface AssistantMemoryRuntimeSettings {
+  curated_memory_enabled: boolean;
+  suggestions_enabled: boolean;
+  history_recall_enabled: boolean;
+  compaction_enabled: boolean;
+  hermes_sync_enabled: boolean;
+  require_approval_for_inferred_memory: boolean;
+  memory_token_budget: number;
+  history_token_budget: number;
+  retention_days: number;
+  show_memory_use_indicator: boolean;
+}
+
+export interface AssistantMemoryRuntimeStatus {
+  settings: AssistantMemoryRuntimeSettings;
+  settings_path: string;
+  environment_overrides: string[];
+  approval_policy_locked: boolean;
+  diagnostics_policy: 'content_free';
+}
+
 export interface SessionMemoryState {
   session_id: string;
   memory_enabled: boolean;
@@ -144,5 +165,11 @@ export const memoryClient = {
       expected_snapshot_revision: expectedRevision ?? null,
       token_budget: 4000,
     }));
+  },
+  settings(): Promise<AssistantMemoryRuntimeStatus> {
+    return request('/api/assistant/memory/settings');
+  },
+  updateSettings(update: Partial<AssistantMemoryRuntimeSettings>): Promise<AssistantMemoryRuntimeStatus> {
+    return request('/api/assistant/memory/settings', jsonInit('POST', update));
   },
 };
