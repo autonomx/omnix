@@ -1,6 +1,7 @@
 """Chat store adapter that routes provider generation through PromptAssembly."""
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from .models import ChatMessage, ChatSession
@@ -43,5 +44,18 @@ class ChatSessionStore(JsonChatSessionStore):
         ]
 
 
+def chat_sqlite_store_enabled() -> bool:
+    return (os.environ.get("OMNIX_CHAT_SQLITE_STORE_ENABLED") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def default_chat_store() -> ChatSessionStore:
+    if chat_sqlite_store_enabled():
+        from .sqlite_store import SQLiteChatSessionStore
+
+        return SQLiteChatSessionStore()
     return ChatSessionStore()
