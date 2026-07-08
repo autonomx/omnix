@@ -1,5 +1,6 @@
 """Backend-owned curated memory contracts, persistence, and policy."""
 
+from .lifecycle import MemorySnapshotView, MemorySnapshotViewItem, resolve_snapshot_view
 from .models import (
     MemoryCandidate,
     MemoryCategory,
@@ -51,6 +52,8 @@ __all__ = [
     "MemoryService",
     "MemorySnapshot",
     "MemorySnapshotItem",
+    "MemorySnapshotView",
+    "MemorySnapshotViewItem",
     "SQLiteMemoryRepository",
     "candidate_acceptance",
     "default_memory_db_path",
@@ -62,6 +65,7 @@ __all__ = [
     "normalize_memory_content",
     "prompt_eligibility",
     "resolve_chat_scope",
+    "resolve_snapshot_view",
     "scope_id_for",
     "select_memory_records",
     "source_requires_approval",
