@@ -1,4 +1,4 @@
-"""Typed contracts for curated Chat memory and pending candidates."""
+"""Typed contracts for curated Chat and Character memory."""
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -6,44 +6,37 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 MemoryScope = Literal["global", "workspace", "project", "session"]
+MemoryOwnerType = Literal["system", "character"]
 MemoryCategory = Literal["preference", "fact", "project", "relationship", "instruction"]
 MemorySource = Literal["user_saved", "assistant_suggested", "imported", "hermes"]
 MemoryCandidateStatus = Literal["pending", "rejected", "accepted"]
 MemoryRecordStatus = Literal["active", "superseded", "archived"]
-MemoryTrustLevel = Literal[
-    "user_approved",
-    "system_trusted",
-    "unverified_import",
-    "unverified_agent",
-    "external_untrusted",
-]
+MemoryTrustLevel = Literal["user_approved", "system_trusted", "unverified_import", "unverified_agent", "external_untrusted"]
 MemorySensitivity = Literal["normal", "sensitive", "secret"]
-MemoryProvenanceType = Literal[
-    "user_message",
-    "assistant_inference",
-    "import",
-    "hermes",
-    "system",
-]
+MemoryProvenanceType = Literal["user_message", "assistant_inference", "import", "hermes", "system"]
+
+SYSTEM_MEMORY_OWNER_ID = "system-assistant"
 
 
 class MemoryScopeContext(BaseModel):
-    """Backend-resolved identity used for every memory policy decision."""
+    """Backend-resolved owner and scope identity used for every policy decision."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-
     profile_id: str = Field(min_length=1, max_length=160)
     workspace_id: str = Field(min_length=1, max_length=160)
     project_id: str | None = Field(default=None, max_length=160)
     session_id: str = Field(min_length=1, max_length=200)
+    owner_type: MemoryOwnerType = "system"
+    owner_id: str = Field(default=SYSTEM_MEMORY_OWNER_ID, min_length=1, max_length=160)
 
 
 class MemoryRecord(BaseModel):
     """Approved or otherwise active curated memory owned by Omnix."""
 
     model_config = ConfigDict(extra="forbid")
-
     id: str = Field(min_length=1, max_length=200)
+    owner_type: MemoryOwnerType = "system"
+    owner_id: str = Field(default=SYSTEM_MEMORY_OWNER_ID, min_length=1, max_length=160)
     scope: MemoryScope
     scope_id: str = Field(min_length=1, max_length=200)
     category: MemoryCategory
@@ -67,8 +60,9 @@ class MemoryCandidate(BaseModel):
     """Non-prompt-eligible proposal awaiting an explicit resolution."""
 
     model_config = ConfigDict(extra="forbid")
-
     id: str = Field(min_length=1, max_length=200)
+    owner_type: MemoryOwnerType = "system"
+    owner_id: str = Field(default=SYSTEM_MEMORY_OWNER_ID, min_length=1, max_length=160)
     source_session_id: str = Field(min_length=1, max_length=200)
     source_message_id: str = Field(min_length=1, max_length=200)
     candidate_fingerprint: str = Field(min_length=1, max_length=200)
@@ -90,7 +84,6 @@ class MemorySnapshotItem(BaseModel):
     """Frozen snapshot copy with revocation able to override immutability."""
 
     model_config = ConfigDict(extra="forbid")
-
     memory_record_id: str = Field(min_length=1, max_length=200)
     record_revision: int = Field(ge=1)
     frozen_content: str = Field(min_length=1, max_length=4096)
@@ -98,12 +91,13 @@ class MemorySnapshotItem(BaseModel):
 
 
 class MemorySnapshot(BaseModel):
-    """Stable per-session memory selection."""
+    """Stable per-session, per-owner memory selection."""
 
     model_config = ConfigDict(extra="forbid")
-
     id: str = Field(min_length=1, max_length=200)
     session_id: str = Field(min_length=1, max_length=200)
+    owner_type: MemoryOwnerType = "system"
+    owner_id: str = Field(default=SYSTEM_MEMORY_OWNER_ID, min_length=1, max_length=160)
     revision: int = Field(default=1, ge=1)
     items: list[MemorySnapshotItem] = Field(default_factory=list)
     token_estimate: int = Field(default=0, ge=0)
@@ -112,9 +106,6 @@ class MemorySnapshot(BaseModel):
 
 
 class MemoryPolicyDecision(BaseModel):
-    """Inspectable result from a pure memory policy check."""
-
     model_config = ConfigDict(extra="forbid", frozen=True)
-
     allowed: bool
     reason: str = Field(min_length=1, max_length=160)
