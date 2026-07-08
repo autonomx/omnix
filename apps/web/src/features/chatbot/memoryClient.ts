@@ -35,6 +35,8 @@ export interface ManagedMemoryCandidate {
   created_at: string;
 }
 
+export type MemoryCandidateReviewResult = ManagedMemoryRecord | ManagedMemoryCandidate;
+
 export interface ManagedMemoryList {
   records: ManagedMemoryRecord[];
   total: number;
@@ -145,13 +147,13 @@ export const memoryClient = {
   candidates(sessionId: string): Promise<ManagedMemoryCandidateList> {
     return request(`/api/assistant/memory/candidates/pending?session_id=${encodeURIComponent(sessionId)}`);
   },
-  approve(sessionId: string, candidateId: string): Promise<ManagedMemoryRecord> {
+  approve(sessionId: string, candidateId: string): Promise<MemoryCandidateReviewResult> {
     return request(`/api/assistant/memory/candidates/${encodeURIComponent(candidateId)}/approve`, jsonInit('POST', {
       session_id: sessionId,
       pinned: false,
     }));
   },
-  reject(sessionId: string, candidateId: string): Promise<ManagedMemoryCandidate> {
+  reject(sessionId: string, candidateId: string): Promise<MemoryCandidateReviewResult> {
     return request(`/api/assistant/memory/candidates/${encodeURIComponent(candidateId)}/reject`, jsonInit('POST', {
       session_id: sessionId,
       pinned: false,
