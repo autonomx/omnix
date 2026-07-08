@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.characters import neutralize_legacy_system_prompt, resolve_system_session_identity
+
 from .context_budget import PromptBudget, prompt_budget_from_env
 from .models import ChatMessage, ChatSession
 
@@ -93,8 +95,14 @@ def build_prompt_assembly(
 ) -> PromptAssembly:
     """Build one stable structure for streaming and non-streaming generation."""
 
-    system_messages = [message.content for message in session.messages if message.role == "system"]
-    system_instructions = system_messages or [global_system_prompt]
+    system_messages = [
+        neutralize_legacy_system_prompt(message.content)
+        for message in session.messages
+        if message.role == "system"
+    ]
+    system_instructions = system_messages or [neutralize_legacy_system_prompt(global_system_prompt)]
+    interaction = resolve_system_session_identity(session)
+    resolved_identity = assistant_identity if assistant_identity is not None else interaction.assistant_identity
     eligible_recent_messages = [
         message
         for message in session.messages
@@ -112,7 +120,7 @@ def build_prompt_assembly(
     ]
     return PromptAssembly(
         system_instructions=system_instructions,
-        assistant_identity=assistant_identity or [],
+        assistant_identity=resolved_identity,
         approved_memory=approved_memory or [],
         session_summary=session_summary,
         recent_messages=recent_messages,
@@ -127,9 +135,11 @@ def build_prompt_assembly(
         diagnostics={
             "session_id": session.id,
             "system_instruction_count": len(system_instructions),
+            "assistant_identity_count": len(resolved_identity),
             "approved_memory_count": len(approved_memory or []),
             "recent_message_count": len(recent_messages),
             "retrieved_history_count": len(retrieved_history or []),
             "external_context_count": len(external_context),
+            "interaction": interaction.model_dump(mode="json"),
         },
     )
