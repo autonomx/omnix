@@ -59,14 +59,27 @@ class FakeAudioContext {
 
 type Listener = (event: Event | MessageEvent) => void;
 
+type SentMessage = {
+  type?: string;
+  text?: string;
+  phrase_index?: number;
+  diagnostics_stream_id?: string;
+  non_streaming_mode?: boolean;
+  parity_mode?: boolean;
+};
+
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
   readonly url: string;
   binaryType: BinaryType = 'blob';
   readyState = 0;
   sent: string[] = [];
+  close = vi.fn((code = 1000, reason = '') => {
+    if (this.readyState === 3) return;
+    this.readyState = 3;
+    this.emit('close', { code, reason, wasClean: true } as CloseEvent);
+  });
   private listeners = new Map<string, Listener[]>();
-  private requestStarted = false;
 
   constructor(url: string | URL) {
     this.url = String(url);
@@ -88,21 +101,30 @@ class FakeWebSocket {
   send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
     const text = String(data);
     this.sent.push(text);
-    let message: { type?: string } = {};
-    try { message = JSON.parse(text) as { type?: string }; } catch { /* no-op */ }
-    if (message.type === 'diagnostic' || this.requestStarted) return;
-    this.requestStarted = true;
+    let message: SentMessage = {};
+    try { message = JSON.parse(text) as SentMessage; } catch { /* no-op */ }
+    if (message.type !== 'synthesize') return;
+    const streamId = message.diagnostics_stream_id;
+    const phraseIndex = message.phrase_index;
     queueMicrotask(() => {
-      this.emit('message', { data: JSON.stringify({ type: 'start', sample_rate: 24_000 }) } as MessageEvent);
+      this.emit('message', {
+        data: JSON.stringify({
+          type: 'start',
+          stream_id: streamId,
+          phrase_index: phraseIndex,
+          sample_rate: 24_000,
+        }),
+      } as MessageEvent);
       this.emit('message', { data: new Int16Array([1_000, -1_000]).buffer } as MessageEvent);
-      this.emit('message', { data: JSON.stringify({ type: 'done', partial: false }) } as MessageEvent);
+      this.emit('message', {
+        data: JSON.stringify({
+          type: 'done',
+          stream_id: streamId,
+          phrase_index: phraseIndex,
+          partial: false,
+        }),
+      } as MessageEvent);
     });
-  }
-
-  close(code = 1000, reason = ''): void {
-    if (this.readyState === 3) return;
-    this.readyState = 3;
-    this.emit('close', { code, reason, wasClean: true } as CloseEvent);
   }
 
   private emit(type: string, event: Event | MessageEvent): void {
@@ -133,7 +155,7 @@ afterEach(() => {
 });
 
 describe('live voice PCM session', () => {
-  it('keeps one AudioContext and worklet while buffering multiple phrase streams', async () => {
+  it('keeps one AudioContext, worklet, and websocket while buffering multiple phrases', async () => {
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
     const first = session.enqueuePhrase('First phrase.', 0);
     const second = session.enqueuePhrase('Second phrase.', 1);
@@ -143,15 +165,18 @@ describe('live voice PCM session', () => {
 
     expect(FakeAudioContext.instances).toHaveLength(1);
     expect(FakeAudioWorkletNode.instances).toHaveLength(1);
-    expect(FakeWebSocket.instances).toHaveLength(2);
-    const firstRequest = JSON.parse(FakeWebSocket.instances[0].sent[0]) as {
-      non_streaming_mode?: boolean;
-      parity_mode?: boolean;
-      diagnostics_stream_id?: string;
-    };
-    expect(firstRequest.non_streaming_mode).toBe(false);
-    expect(firstRequest.parity_mode).toBe(true);
-    expect(firstRequest.diagnostics_stream_id).toContain('chat-live-');
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances[0].url).toContain('/api/tts/live-call/websocket');
+    const sent = FakeWebSocket.instances[0].sent.map((message) => JSON.parse(message) as SentMessage);
+    const requests = sent.filter((message) => message.type === 'synthesize');
+    expect(requests).toHaveLength(2);
+    expect(requests.map((request) => request.text)).toEqual(['First phrase.', 'Second phrase.']);
+    expect(requests[0].non_streaming_mode).toBe(false);
+    expect(requests[0].parity_mode).toBe(true);
+    expect(requests[0].diagnostics_stream_id).toContain('chat-live-');
+    expect(sent.filter((message) => message.type === 'diagnostic')).toHaveLength(2);
+    expect(sent.at(-1)?.type).toBe('close');
+
     const messages = FakeAudioWorkletNode.instances[0].port.messages;
     expect(messages.filter((message) => (message as { type?: string }).type === 'push')).toHaveLength(2);
     expect(messages.filter((message) => (message as { type?: string }).type === 'end')).toHaveLength(1);
@@ -162,20 +187,33 @@ describe('live voice PCM session', () => {
       transitionFadeSamples: 192,
     });
     expect(reporter.record).toHaveBeenCalledWith(
+      'session_websocket_opened',
+      expect.objectContaining({ websocket_path: '/api/tts/live-call/websocket' }),
+      'pcm_session',
+    );
+    expect(reporter.record).toHaveBeenCalledWith(
+      'phrase_request_sent',
+      expect.objectContaining({ phrase_index: 1, websocket_reused: true }),
+      'pcm_session',
+    );
+    expect(reporter.record).toHaveBeenCalledWith(
       'turn_playback_drained',
       expect.objectContaining({ total_frames: 2, underruns: 0 }),
       'pcm_session',
     );
+    expect(FakeWebSocket.instances[0].close).toHaveBeenCalledTimes(1);
     expect(FakeAudioContext.instances[0].close).toHaveBeenCalledTimes(1);
   });
 
-  it('closes the active phrase socket and worklet on stop', async () => {
+  it('closes the turn websocket and worklet on stop', async () => {
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
     const phrase = session.enqueuePhrase('Interrupt this phrase.', 0);
     await phrase;
     await session.stop('barge-in');
 
     expect(session.isClosed()).toBe(true);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances[0].close).toHaveBeenCalledWith(1000, 'barge-in');
     expect(FakeAudioWorkletNode.instances[0].port.messages).toContainEqual({ type: 'stop' });
     expect(FakeAudioWorkletNode.instances[0].disconnect).toHaveBeenCalledTimes(1);
     expect(FakeAudioContext.instances[0].close).toHaveBeenCalledTimes(1);

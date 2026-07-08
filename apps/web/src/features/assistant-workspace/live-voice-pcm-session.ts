@@ -6,9 +6,11 @@ const START_BUFFER_SECONDS = 0.4;
 const REBUFFER_SECONDS = 0.75;
 const MAX_REBUFFER_SECONDS = 1.5;
 const TRANSITION_FADE_SECONDS = 0.008;
-const TTS_WEBSOCKET_PATH = '/api/tts/stream/websocket';
+const TTS_LIVE_CALL_WEBSOCKET_PATH = '/api/tts/live-call/websocket';
 const TTS_CHUNK_SIZE = 8;
 const DRAIN_TIMEOUT_MS = 120_000;
+
+const WEBSOCKET_OPEN = 1;
 
 type StreamingAudioWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
@@ -22,6 +24,7 @@ type ControlEvent = {
   message?: string;
   sample_rate?: number;
   stream_id?: string;
+  phrase_index?: number;
   partial?: boolean;
 };
 
@@ -45,6 +48,17 @@ type PhraseStats = {
   firstFrameAtMs: number | null;
   lastFrameAtMs: number | null;
   sampleRate: number;
+};
+
+type ActivePhrase = {
+  text: string;
+  phraseIndex: number;
+  phraseStreamId: string;
+  startedAtMs: number;
+  stats: PhraseStats;
+  completed: boolean;
+  resolve: () => void;
+  reject: (error: Error) => void;
 };
 
 export type LiveVoicePcmSession = {
@@ -80,7 +94,9 @@ export async function createLiveVoicePcmSession(
   let closed = false;
   let inputFinished = false;
   let generationQueue: Promise<void> = Promise.resolve();
-  let activeSocket: WebSocket | null = null;
+  let activePhrase: ActivePhrase | null = null;
+  let socketFailure: Error | null = null;
+  let socketOpened = false;
   let drained = false;
   let drainResolve: (() => void) | null = null;
   let totalFrames = 0;
@@ -163,164 +179,238 @@ export async function createLiveVoicePcmSession(
     rebuffer_samples: Math.round(audioContext.sampleRate * REBUFFER_SECONDS),
     max_rebuffer_samples: Math.round(audioContext.sampleRate * MAX_REBUFFER_SECONDS),
     transition_fade_samples: Math.round(audioContext.sampleRate * TRANSITION_FADE_SECONDS),
+    websocket_scope: 'turn',
   }, 'pcm_session');
 
-  const streamPhrase = (text: string, phraseIndex: number): Promise<void> => new Promise((resolve, reject) => {
-    if (closed) {
-      reject(new Error('Live voice PCM session is closed.'));
+  let socketReadyResolve: (() => void) | null = null;
+  let socketReadyReject: ((error: Error) => void) | null = null;
+  const socketReady = new Promise<void>((resolve, reject) => {
+    socketReadyResolve = resolve;
+    socketReadyReject = reject;
+  });
+  const socket = new WebSocketCtor(ttsWebSocketUrl());
+  socket.binaryType = 'arraybuffer';
+  reporter.record('session_websocket_created', {
+    websocket_path: TTS_LIVE_CALL_WEBSOCKET_PATH,
+  }, 'pcm_session');
+
+  const failActivePhrase = (error: Error): void => {
+    const phrase = activePhrase;
+    if (!phrase || phrase.completed) return;
+    phrase.completed = true;
+    activePhrase = null;
+    reporter.record('phrase_generation_failed', {
+      phrase_index: phrase.phraseIndex,
+      phrase_stream_id: phrase.phraseStreamId,
+      text: phrase.text,
+      text_length: phrase.text.length,
+      elapsed_ms: performance.now() - phrase.startedAtMs,
+      error: error.message,
+    }, 'pcm_session');
+    phrase.reject(error);
+  };
+
+  const handleBinaryFrame = (buffer: ArrayBuffer): void => {
+    const phrase = activePhrase;
+    if (!phrase || phrase.completed) {
+      reporter.record('unexpected_audio_frame', { bytes: buffer.byteLength }, 'pcm_session');
       return;
     }
-    const phraseStartedAtMs = performance.now();
-    const stats: PhraseStats = {
-      frameCount: 0,
-      receivedBytes: 0,
-      receivedSamples: 0,
-      firstFrameAtMs: null,
-      lastFrameAtMs: null,
-      sampleRate: SAMPLE_RATE,
-    };
-    const phraseStreamId = createPhraseStreamId(traceId, phraseIndex);
-    const socket = new WebSocketCtor(ttsWebSocketUrl());
-    activeSocket = socket;
-    socket.binaryType = 'arraybuffer';
-    let completed = false;
-
-    const fail = (error: Error) => {
-      if (completed) return;
-      completed = true;
-      reporter.record('phrase_generation_failed', {
-        phrase_index: phraseIndex,
-        phrase_stream_id: phraseStreamId,
-        text,
-        text_length: text.length,
-        elapsed_ms: performance.now() - phraseStartedAtMs,
-        error: error.message,
+    const now = performance.now();
+    if (phrase.stats.firstFrameAtMs === null) {
+      phrase.stats.firstFrameAtMs = now;
+      reporter.record('phrase_first_frame_received', {
+        phrase_index: phrase.phraseIndex,
+        phrase_stream_id: phrase.phraseStreamId,
+        first_frame_delay_ms: now - phrase.startedAtMs,
       }, 'pcm_session');
-      reject(error);
-    };
+    }
+    phrase.stats.lastFrameAtMs = now;
+    phrase.stats.frameCount += 1;
+    phrase.stats.receivedBytes += buffer.byteLength;
+    const sourceSamples = Math.floor(buffer.byteLength / 2);
+    phrase.stats.receivedSamples += sourceSamples;
+    totalFrames += 1;
+    totalReceivedSamples += sourceSamples;
+    const evenBytes = buffer.byteLength - (buffer.byteLength % 2);
+    const converted = pcm16ToFloat32(
+      new Int16Array(buffer.slice(0, evenBytes)),
+      phrase.stats.sampleRate,
+      audioContext.sampleRate,
+    );
+    node.port.postMessage({ type: 'push', samples: converted }, [converted.buffer]);
+  };
 
-    socket.addEventListener('open', () => {
-      if (closed) {
-        socket.close(1000, 'session-closed');
-        return;
+  const handleControlMessage = (message: ControlEvent): void => {
+    const phrase = activePhrase;
+    if (!phrase || phrase.completed) {
+      reporter.record('unexpected_control_message', { ...message }, 'pcm_session');
+      return;
+    }
+    if (message.stream_id && message.stream_id !== phrase.phraseStreamId) {
+      reporter.record('phrase_stream_id_mismatch', {
+        phrase_index: phrase.phraseIndex,
+        expected_stream_id: phrase.phraseStreamId,
+        received_stream_id: message.stream_id,
+        control_type: message.type,
+      }, 'pcm_session');
+      return;
+    }
+    if (message.type === 'start' || message.type === 'format') {
+      if (typeof message.sample_rate === 'number' && message.sample_rate > 0) {
+        phrase.stats.sampleRate = message.sample_rate;
       }
-      reporter.record('phrase_websocket_opened', {
+      return;
+    }
+    if (message.type === 'error') {
+      failActivePhrase(new Error(message.message || 'Live voice phrase generation failed.'));
+      return;
+    }
+    if (message.type !== 'done') return;
+
+    phrase.completed = true;
+    const elapsedMs = performance.now() - phrase.startedAtMs;
+    const audioMs = phrase.stats.receivedSamples * 1000 / Math.max(1, phrase.stats.sampleRate);
+    reporter.record('phrase_buffered', {
+      phrase_index: phrase.phraseIndex,
+      phrase_stream_id: phrase.phraseStreamId,
+      text: phrase.text,
+      text_length: phrase.text.length,
+      partial: message.partial ?? false,
+      frames: phrase.stats.frameCount,
+      received_bytes: phrase.stats.receivedBytes,
+      received_samples: phrase.stats.receivedSamples,
+      audio_ms: audioMs,
+      elapsed_ms: elapsedMs,
+      generation_rtf: audioMs > 0 ? elapsedMs / audioMs : null,
+      first_frame_delay_ms: phrase.stats.firstFrameAtMs === null
+        ? null
+        : phrase.stats.firstFrameAtMs - phrase.startedAtMs,
+    }, 'pcm_session');
+    try {
+      socket.send(JSON.stringify({
+        type: 'diagnostic',
+        stream_id: phrase.phraseStreamId,
+        event: 'playback_finished',
+        details: {
+          completion_scope: 'phrase_buffered_into_live_turn',
+          phrase_index: phrase.phraseIndex,
+          frames: phrase.stats.frameCount,
+          received_samples: phrase.stats.receivedSamples,
+          audio_ms: audioMs,
+          elapsed_ms: elapsedMs,
+        },
+      }));
+    } catch {
+      // The separate live-call log still records completion.
+    }
+    activePhrase = null;
+    phrase.resolve();
+  };
+
+  socket.addEventListener('open', () => {
+    if (closed) {
+      socket.close(1000, 'session-closed');
+      return;
+    }
+    socketOpened = true;
+    reporter.record('session_websocket_opened', {
+      websocket_path: TTS_LIVE_CALL_WEBSOCKET_PATH,
+      turn_elapsed_ms: performance.now() - startedAtMs,
+    }, 'pcm_session');
+    socketReadyResolve?.();
+  }, { once: true });
+
+  socket.addEventListener('message', (event: MessageEvent<string | ArrayBuffer>) => {
+    if (closed) return;
+    if (event.data instanceof ArrayBuffer) {
+      handleBinaryFrame(event.data);
+      return;
+    }
+    const message = parseControlEvent(event.data);
+    if (message) handleControlMessage(message);
+  });
+
+  socket.addEventListener('error', () => {
+    const error = new Error('Live voice session WebSocket failed.');
+    socketFailure = error;
+    if (!socketOpened) socketReadyReject?.(error);
+    failActivePhrase(error);
+  });
+
+  socket.addEventListener('close', (event: CloseEvent) => {
+    reporter.record('session_websocket_closed', {
+      close_code: event.code,
+      close_reason: event.reason,
+      clean: event.wasClean,
+      opened: socketOpened,
+      session_closed: closed,
+    }, 'pcm_session');
+    if (closed) return;
+    const error = new Error('Live voice session WebSocket closed before turn completion.');
+    socketFailure = error;
+    if (!socketOpened) socketReadyReject?.(error);
+    failActivePhrase(error);
+  });
+
+  const streamPhrase = async (text: string, phraseIndex: number): Promise<void> => {
+    if (closed) throw new Error('Live voice PCM session is closed.');
+    await socketReady;
+    if (closed) throw new Error('Live voice PCM session is closed.');
+    if (socketFailure) throw socketFailure;
+    if (socket.readyState !== WEBSOCKET_OPEN) throw new Error('Live voice session WebSocket is not open.');
+    if (activePhrase) throw new Error('Live voice phrase generation is already active.');
+
+    const phraseStartedAtMs = performance.now();
+    const phraseStreamId = createPhraseStreamId(traceId, phraseIndex);
+    return new Promise<void>((resolve, reject) => {
+      activePhrase = {
+        text,
+        phraseIndex,
+        phraseStreamId,
+        startedAtMs: phraseStartedAtMs,
+        completed: false,
+        resolve,
+        reject,
+        stats: {
+          frameCount: 0,
+          receivedBytes: 0,
+          receivedSamples: 0,
+          firstFrameAtMs: null,
+          lastFrameAtMs: null,
+          sampleRate: SAMPLE_RATE,
+        },
+      };
+      reporter.record('phrase_request_sent', {
         phrase_index: phraseIndex,
         phrase_stream_id: phraseStreamId,
         text_length: text.length,
         turn_elapsed_ms: phraseStartedAtMs - startedAtMs,
+        websocket_reused: true,
       }, 'pcm_session');
-      socket.send(JSON.stringify({
-        text,
-        speaker: voiceId,
-        language: 'English',
-        chunk_size: TTS_CHUNK_SIZE,
-        temperature: 0.6,
-        top_k: 20,
-        top_p: 0.85,
-        repetition_penalty: 1.0,
-        append_silence: false,
-        non_streaming_mode: false,
-        parity_mode: true,
-        diagnostics_stream_id: phraseStreamId,
-      }));
-    }, { once: true });
-
-    socket.addEventListener('message', (event: MessageEvent<string | ArrayBuffer>) => {
-      if (closed || completed) return;
-      if (event.data instanceof ArrayBuffer) {
-        const now = performance.now();
-        if (stats.firstFrameAtMs === null) {
-          stats.firstFrameAtMs = now;
-          reporter.record('phrase_first_frame_received', {
-            phrase_index: phraseIndex,
-            phrase_stream_id: phraseStreamId,
-            first_frame_delay_ms: now - phraseStartedAtMs,
-          }, 'pcm_session');
-        }
-        stats.lastFrameAtMs = now;
-        stats.frameCount += 1;
-        stats.receivedBytes += event.data.byteLength;
-        const sourceSamples = Math.floor(event.data.byteLength / 2);
-        stats.receivedSamples += sourceSamples;
-        totalFrames += 1;
-        totalReceivedSamples += sourceSamples;
-        const evenBytes = event.data.byteLength - (event.data.byteLength % 2);
-        const converted = pcm16ToFloat32(
-          new Int16Array(event.data.slice(0, evenBytes)),
-          stats.sampleRate,
-          audioContext.sampleRate,
-        );
-        node.port.postMessage({ type: 'push', samples: converted }, [converted.buffer]);
-        return;
-      }
-
-      const message = parseControlEvent(event.data);
-      if (!message) return;
-      if (message.type === 'start' || message.type === 'format') {
-        if (typeof message.sample_rate === 'number' && message.sample_rate > 0) {
-          stats.sampleRate = message.sample_rate;
-        }
-        return;
-      }
-      if (message.type === 'error') {
-        fail(new Error(message.message || 'Live voice phrase generation failed.'));
-        return;
-      }
-      if (message.type === 'done') {
-        completed = true;
-        const elapsedMs = performance.now() - phraseStartedAtMs;
-        const audioMs = stats.receivedSamples * 1000 / Math.max(1, stats.sampleRate);
-        reporter.record('phrase_buffered', {
+      try {
+        socket.send(JSON.stringify({
+          type: 'synthesize',
+          request_id: phraseStreamId,
           phrase_index: phraseIndex,
-          phrase_stream_id: phraseStreamId,
           text,
-          text_length: text.length,
-          partial: message.partial ?? false,
-          frames: stats.frameCount,
-          received_bytes: stats.receivedBytes,
-          received_samples: stats.receivedSamples,
-          audio_ms: audioMs,
-          elapsed_ms: elapsedMs,
-          generation_rtf: audioMs > 0 ? elapsedMs / audioMs : null,
-          first_frame_delay_ms: stats.firstFrameAtMs === null ? null : stats.firstFrameAtMs - phraseStartedAtMs,
-        }, 'pcm_session');
-        try {
-          socket.send(JSON.stringify({
-            type: 'diagnostic',
-            stream_id: phraseStreamId,
-            event: 'playback_finished',
-            details: {
-              completion_scope: 'phrase_buffered_into_live_turn',
-              phrase_index: phraseIndex,
-              frames: stats.frameCount,
-              received_samples: stats.receivedSamples,
-              audio_ms: audioMs,
-              elapsed_ms: elapsedMs,
-            },
-          }));
-        } catch {
-          // The separate live-call log still records completion.
-        }
-        resolve();
-        try { socket.close(1000, 'phrase-buffered'); } catch { /* ignore close failures */ }
+          speaker: voiceId,
+          language: 'English',
+          chunk_size: TTS_CHUNK_SIZE,
+          temperature: 0.6,
+          top_k: 20,
+          top_p: 0.85,
+          repetition_penalty: 1.0,
+          append_silence: false,
+          non_streaming_mode: false,
+          parity_mode: true,
+          diagnostics_stream_id: phraseStreamId,
+        }));
+      } catch (error) {
+        failActivePhrase(error instanceof Error ? error : new Error(String(error)));
       }
     });
-
-    socket.addEventListener('error', () => fail(new Error('Live voice phrase WebSocket failed.')));
-    socket.addEventListener('close', (event: CloseEvent) => {
-      if (activeSocket === socket) activeSocket = null;
-      reporter.record('phrase_websocket_closed', {
-        phrase_index: phraseIndex,
-        phrase_stream_id: phraseStreamId,
-        close_code: event.code,
-        close_reason: event.reason,
-        clean: event.wasClean,
-        completed,
-      }, 'pcm_session');
-      if (!closed && !completed) fail(new Error('Live voice phrase WebSocket closed before completion.'));
-    });
-  });
+  };
 
   const enqueuePhrase = (text: string, phraseIndex: number): Promise<void> => {
     if (closed || inputFinished) return Promise.reject(new Error('Live voice input is already closed.'));
@@ -353,8 +443,13 @@ export async function createLiveVoicePcmSession(
       total_received_audio_ms: totalReceivedSamples * 1000 / SAMPLE_RATE,
       underruns,
       resumes,
+      websocket_scope: 'turn',
     }, 'pcm_session');
-    try { activeSocket?.close(1000, reason.slice(0, 120)); } catch { /* ignore cleanup failures */ }
+    failActivePhrase(new Error(`Live voice PCM session stopped: ${reason}`));
+    if (socket.readyState === WEBSOCKET_OPEN) {
+      try { socket.send(JSON.stringify({ type: 'close', reason })); } catch { /* ignore cleanup failures */ }
+    }
+    try { socket.close(1000, reason.slice(0, 120)); } catch { /* ignore cleanup failures */ }
     try { node.port.postMessage({ type: 'stop' }); } catch { /* ignore cleanup failures */ }
     try { node.disconnect(); } catch { /* ignore cleanup failures */ }
     document.removeEventListener('visibilitychange', handlePlaybackResumeSignal);
@@ -398,7 +493,7 @@ function createPhraseStreamId(traceId: string, phraseIndex: number): string {
 }
 
 function ttsWebSocketUrl(): string {
-  const url = new URL(TTS_WEBSOCKET_PATH, window.location.href);
+  const url = new URL(TTS_LIVE_CALL_WEBSOCKET_PATH, window.location.href);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();
 }
