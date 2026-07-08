@@ -114,3 +114,27 @@ def records_for_session(
         total=total,
         session_id=session_id,
     )
+
+
+def candidates_for_session(
+    store: ChatSessionStore,
+    service: MemoryService,
+    session_id: str,
+    *,
+    limit: int = 100,
+) -> MemoryCandidateListResponse | None:
+    _, context = resolve_session_scope(store, session_id)
+    if context is None:
+        return None
+    candidates = service.repository.list_candidates(status="pending", limit=max(0, min(limit, 500)))
+    visible = [
+        candidate
+        for candidate in candidates
+        if (candidate.owner_type, candidate.owner_id) == (context.owner_type, context.owner_id)
+        and scope_id_for(candidate.proposed_scope, context) == candidate.proposed_scope_id
+    ]
+    return MemoryCandidateListResponse(
+        candidates=visible,
+        total=len(visible),
+        session_id=session_id,
+    )
