@@ -33,6 +33,7 @@ import { createChatbotActivityEvents, createChatbotFailureEvent } from '../assis
 import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
 import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
+import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
 
 interface ChatbotFormValues {
   content: string;
@@ -220,6 +221,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const queryClient = useQueryClient();
   const runtimeConfig = useMemo(() => createAssistantWorkspaceRuntimeConfig(), []);
   const [assistantSettings, setAssistantSettings] = useState<AssistantSettings>(() => loadAssistantSettings(runtimeConfig));
+  const [liveCallRuntime, setLiveCallRuntime] = useState<CharacterLiveCallRuntime | null>(null);
+  const liveCallRuntimeRef = useRef<CharacterLiveCallRuntime | null>(null);
   const eventStore = useMemo(() => createChatbotWorkspaceEventStore(runtimeConfig), [runtimeConfig]);
   const [activityEvents, setActivityEvents] = useState<AssistantWorkspaceEvent[]>(() =>
     eventStore.list(createWorkspaceEventFilter(runtimeConfig)),
@@ -337,7 +340,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveVoiceVisualMode = isAssistantSpeaking ? 'speaking' : liveVoiceActive ? 'listening' : voiceCaptureMode === 'error' ? 'error' : 'idle';
   const liveCallTimerLabel = formatCallDuration(callElapsedMs);
   const liveDraftText = [liveTranscript, liveInterimTranscript].filter(Boolean).join(' ').trim();
-  const activeVoiceId = assistantSettings.voiceId || runtimeConfig.ttsVoice || '';
+  const configuredVoiceId = assistantSettings.voiceId || runtimeConfig.ttsVoice || '';
+  const activeVoiceId = liveCallRuntime?.voice_asset_id || configuredVoiceId;
   const activeVoiceLabel = voiceLabelForId(activeVoiceId, voiceProfiles);
   const selectedPersonalityLabel = personalityLabel(assistantSettings.personalityId);
   const speechInputLabel = runtimeConfig.sttServiceUrl ? 'STT service recording' : getSpeechRecognitionConstructor() ? 'Browser speech-to-text' : 'No STT input configured';
@@ -461,13 +465,71 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setSettingsStatus('Assistant settings reset to defaults.');
   }
 
+  function currentLiveCallVoiceId(): string {
+    return liveCallRuntimeRef.current?.voice_asset_id || assistantSettings.voiceId || runtimeConfig.ttsVoice || '';
+  }
+
+  function currentLiveCallSpeechStyle(): LiveCallSpeechStyle {
+    return liveCallRuntimeRef.current?.speech_style ?? {
+      speed: 1,
+      temperature: 0.6,
+      top_k: 20,
+      top_p: 0.85,
+      repetition_penalty: 1,
+      expressiveness: 'neutral',
+      emotion: 'neutral',
+      interruption_style: 'balanced',
+    };
+  }
+
+  function currentLiveCallDisplayName(): string {
+    return liveCallRuntimeRef.current?.display_name || 'Omnix Assistant';
+  }
+
   async function startLiveCall(): Promise<void> {
     if (callStartedAt !== null) return;
-    liveVoiceActiveRef.current = true;
     setActiveUtilityPanel('voice');
-    setCallStartedAt(Date.now());
-    setCallElapsedMs(0);
-    await startVoiceInput();
+    setAudioStatus('Preloading live-call identity, voice, and memory context…');
+    try {
+      let sessionId = selectedSessionId;
+      if (!sessionId) {
+        const personalityPrompt = createPersonalityPrompt(assistantSettings);
+        const created = await omnixApiClient.createChatSession({
+          title: 'Live voice call',
+          provider_id: selectedProviderId || undefined,
+          model_id: selectedModelId || undefined,
+          system_prompt: personalityPrompt || undefined,
+        });
+        sessionId = created.id;
+        setSelectedSessionId(sessionId);
+      }
+      const runtime = await characterClient.liveCallRuntime(sessionId);
+      liveCallRuntimeRef.current = runtime;
+      setLiveCallRuntime(runtime);
+      liveVoiceActiveRef.current = true;
+      setCallStartedAt(Date.now());
+      setCallElapsedMs(0);
+      console.info('[Omnix Voice Perf] live-call runtime preloaded', {
+        sessionId,
+        interactionMode: runtime.interaction_mode,
+        characterId: runtime.character_id,
+        profileVersion: runtime.character_profile_version,
+        identityHash: runtime.effective_identity_hash,
+        voiceAssetId: runtime.voice_asset_id,
+        memoryRecordCount: runtime.preload.memory_record_count,
+        preloadMs: runtime.preload.preload_ms,
+      });
+      setAudioStatus(`${runtime.display_name} call ready · preload ${Math.round(runtime.preload.preload_ms)}ms`);
+      if (runtime.greeting.trim()) await playAssistantResponseAudio(runtime.greeting);
+      await startVoiceInput();
+    } catch (error) {
+      liveVoiceActiveRef.current = false;
+      liveCallRuntimeRef.current = null;
+      setLiveCallRuntime(null);
+      setCallStartedAt(null);
+      setCallElapsedMs(0);
+      setAudioStatus(error instanceof Error ? error.message : 'Live-call preload failed.');
+    }
   }
 
   function stopLiveCall(): void {
@@ -478,6 +540,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     stopAssistantResponseAudio();
     setCallStartedAt(null);
     setCallElapsedMs(0);
+    liveCallRuntimeRef.current = null;
+    setLiveCallRuntime(null);
     setAudioStatus('Live voice call ended.');
   }
 
@@ -875,6 +939,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       }
       setIsAssistantSpeaking(true);
       audio.preload = 'auto';
+      audio.playbackRate = currentLiveCallSpeechStyle().speed;
       const playing = waitForAudioElementPlaying(audio);
       await audio.play();
       await playing;
@@ -916,6 +981,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
     const requestId = `tts:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
     const requestStartedAt = performance.now();
+    const speechStyle = currentLiveCallSpeechStyle();
+    const resolvedVoiceId = currentLiveCallVoiceId();
     const audioContext = new AudioContextCtor({ latencyHint: 'interactive', sampleRate: STREAMING_TTS_SAMPLE_RATE });
     if (audioContext.state !== 'running') await audioContext.resume();
     const abortController = new AbortController();
@@ -924,7 +991,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       requestId,
       url: streamingUrl,
       textChars: text.length,
-      speaker: activeVoiceId || null,
+      speaker: resolvedVoiceId || null,
       nonStreamingMode: false,
       parityMode: true,
       chunkSize: 8,
@@ -944,13 +1011,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text,
-        speaker: activeVoiceId || null,
+        speaker: resolvedVoiceId || null,
         language: 'English',
         chunk_size: 8,
-        temperature: 0.6,
-        top_k: 20,
-        top_p: 0.85,
-        repetition_penalty: 1.0,
+        temperature: speechStyle.temperature,
+        top_k: speechStyle.top_k,
+        top_p: speechStyle.top_p,
+        repetition_penalty: speechStyle.repetition_penalty,
         append_silence: false,
         max_new_tokens: 180,
         non_streaming_mode: false,
@@ -1013,13 +1080,15 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         const audioBuffer = pcm16ArrayBufferToAudioBuffer(audioContext, pcm, sampleRate);
         const source = audioContext.createBufferSource();
         source.buffer = audioBuffer;
+        source.playbackRate.value = speechStyle.speed;
         source.connect(audioContext.destination);
         const underrunSeconds = Math.max(0, audioContext.currentTime - nextStartAt);
         const startAt = Math.max(nextStartAt, audioContext.currentTime + STREAMING_TTS_RECOVERY_DELAY_SECONDS);
         source.start(startAt);
         playback.sources.push(source);
-        nextStartAt = startAt + audioBuffer.duration;
-        scheduledAudioSeconds += audioBuffer.duration;
+        const effectiveDuration = audioBuffer.duration / speechStyle.speed;
+        nextStartAt = startAt + effectiveDuration;
+        scheduledAudioSeconds += effectiveDuration;
         source.addEventListener('ended', () => {
           playback.sources = playback.sources.filter((entry) => entry !== source);
           if (playback.sources.length === 0 && streamingTtsRef.current === playback) {
@@ -1095,6 +1164,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
+      source.playbackRate.value = currentLiveCallSpeechStyle().speed;
       source.connect(audioContext.destination);
       const startAt = audioContext.currentTime + STREAMING_TTS_RECOVERY_DELAY_SECONDS;
       source.start(startAt);
@@ -1190,9 +1260,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     const ttsClient = createTtsServiceClient({ baseUrl: runtimeConfig.ttsServiceUrl, transport: createFetchSpeechServiceTransport() });
     const response = await ttsClient.synthesizeSpeech({
       text,
-      voice: activeVoiceId || undefined,
+      voice: currentLiveCallVoiceId() || undefined,
       format: 'wav',
-      metadata: { source: 'chatbot_response_playback', sessionId: activeSession?.id, providerId: selectedProviderId || runtimeConfig.defaultProviderId, modelId: selectedModelId || runtimeConfig.defaultModelId },
+      metadata: { source: 'chatbot_response_playback', sessionId: activeSession?.id, providerId: selectedProviderId || runtimeConfig.defaultProviderId, modelId: selectedModelId || runtimeConfig.defaultModelId, speechStyle: currentLiveCallSpeechStyle(), characterId: liveCallRuntimeRef.current?.character_id, characterProfileVersion: liveCallRuntimeRef.current?.character_profile_version },
     });
     return getSynthesizedAudioSource(response);
   }
@@ -1207,12 +1277,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       input_payload: {
         text,
         provider_id: null,
-        speaker: 'Omnix Assistant',
-        voice_id: activeVoiceId || null,
+        speaker: currentLiveCallDisplayName(),
+        voice_id: currentLiveCallVoiceId() || null,
         script_mode: 'single_speaker',
-        script_speakers: [{ name: 'Omnix Assistant', count: 1 }],
-        script_segments: [{ index: 0, speaker: 'Omnix Assistant', text }],
-        character_voice_assignments: [{ speaker: 'Omnix Assistant', voice_id: activeVoiceId || null, style: selectedPersonalityLabel, line_count: 1 }],
+        script_speakers: [{ name: currentLiveCallDisplayName(), count: 1 }],
+        script_segments: [{ index: 0, speaker: currentLiveCallDisplayName(), text }],
+        character_voice_assignments: [{ speaker: currentLiveCallDisplayName(), voice_id: currentLiveCallVoiceId() || null, style: liveCallRuntimeRef.current?.speech_style.expressiveness || selectedPersonalityLabel, line_count: 1 }],
         save_output: true,
       },
       stages: [
