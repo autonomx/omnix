@@ -1,6 +1,6 @@
 # Character Mode staged rollout and rollback guide
 
-Status: repository implementation complete; Stage 1 preflight available; deployment adoption pending.
+Status: repository implementation complete; Stage 1 passed on the local deployment on 2026-07-09; Stage 2 read-only character-memory pilot is next.
 
 Baseline: `c37a2610275723235cf3b5ccceb350385a9050b8` or a later `main` commit containing it.
 
@@ -8,7 +8,7 @@ Character Mode must be enabled incrementally. Passing repository CI is necessary
 
 Stage 1 operator guide: `docs/character-mode/stage-1-identity-rollout.md`
 
-Stage 1 result template: `docs/character-mode/stage-1-rehearsal-results.md`
+Stage 1 evidence: `docs/character-mode/stage-1-rehearsal-results.md`
 
 ## Before Stage 1
 
@@ -50,6 +50,8 @@ python scripts/character_mode_stage1_preflight.py verify-restart ...
 ```
 
 The prepare decision is normally `needs_review` until restart verification. Stage 1 is approved only when the final automated report is `pass` and the browser checklist in the operator guide is complete.
+
+Local deployment result: passed on 2026-07-09 using LM Studio model `gemma-4-e4b-uncensored-hauhaucs-aggressive`, gateway `http://127.0.0.1:8000`, no cloned voice, and all character-memory capabilities disabled. See `docs/character-mode/stage-1-rehearsal-results.md`.
 
 Rollback: set `OMNIX_CHARACTER_MODE_ENABLED=0`. Profiles and versions remain stored but cannot become active interactions.
 
