@@ -8,8 +8,10 @@ from fastapi import FastAPI, HTTPException, Query
 from app.chat import ChatSessionStore, default_chat_store
 
 from .management import (
+    CandidateCleanupRequest,
     CandidateResolutionRequest,
     CreateManagedMemoryRequest,
+    ForgetCandidateResponse,
     ForgetMemoryResponse,
     MemoryCandidateListResponse,
     MemoryListResponse,
@@ -302,3 +304,24 @@ def register_memory_management_routes(
                 return memory_service_factory().reject_candidate(candidate_id)
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
+
+        @app.delete(
+            "/api/assistant/memory/candidates/{candidate_id}",
+            response_model=ForgetCandidateResponse,
+            include_in_schema=False,
+            name="assistant_memory_candidate_forget_endpoint",
+        )
+        async def assistant_memory_candidate_forget_endpoint(
+            candidate_id: str,
+            request: CandidateCleanupRequest,
+        ) -> ForgetCandidateResponse:
+            context = write_context(request.session_id)
+            try:
+                memory_service_factory().delete_resolved_candidate(
+                    context,
+                    candidate_id,
+                    expected_status=request.expected_status,
+                )
+            except Exception as exc:
+                raise _translate_memory_error(exc) from exc
+            return ForgetCandidateResponse(candidate_id=candidate_id)

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from .models import (
     MemoryCandidate,
+    MemoryCandidateStatus,
     MemoryCategory,
     MemoryRecord,
     MemoryScope,
@@ -207,6 +208,30 @@ class OwnerAwareMemoryService(MemoryService):
             updated_at=now,
         )
         return self.owner_repository.accept_candidate(candidate.id, record, resolved_at=now)
+
+    def delete_resolved_candidate(
+        self,
+        context: MemoryScopeContext,
+        candidate_id: str,
+        *,
+        expected_status: MemoryCandidateStatus,
+    ) -> bool:
+        if expected_status == "pending":
+            raise MemoryPolicyError("candidate_cleanup_requires_resolved_status")
+        candidate = self.owner_repository.get_candidate(candidate_id)
+        if candidate is None:
+            raise MemoryNotFoundError(candidate_id)
+        if (candidate.owner_type, candidate.owner_id) != (context.owner_type, context.owner_id):
+            raise MemoryPolicyError("owner_mismatch")
+        if candidate.status != expected_status:
+            raise MemoryPolicyError("candidate_status_mismatch")
+        expected_scope_id = scope_id_for(candidate.proposed_scope, context)
+        if expected_scope_id != candidate.proposed_scope_id:
+            raise MemoryPolicyError("candidate_scope_mismatch")
+        return self.owner_repository.delete_candidate(
+            candidate_id,
+            expected_status=expected_status,
+        )
 
     def resolve_active_memory(self, context: MemoryScopeContext, *, token_budget: int) -> MemorySelection:
         return select_memory_records(self.list_active(context), context, token_budget=token_budget)

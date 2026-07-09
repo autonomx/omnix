@@ -7,7 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.chat import ChatSession, ChatSessionStore
 
-from .models import MemoryCandidate, MemoryCategory, MemoryRecord, MemoryScope
+from .models import (
+    MemoryCandidate,
+    MemoryCandidateStatus,
+    MemoryCategory,
+    MemoryRecord,
+    MemoryScope,
+)
 from .scope import resolve_session_memory_scope, scope_id_for
 from .service import MemoryPolicyError, MemoryService
 
@@ -58,10 +64,22 @@ class CandidateResolutionRequest(BaseModel):
     pinned: bool = False
 
 
+class CandidateCleanupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    session_id: str = Field(min_length=1, max_length=200)
+    expected_status: MemoryCandidateStatus
+
+
 class ForgetMemoryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ok: Literal[True] = True
     memory_id: str
+
+
+class ForgetCandidateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ok: Literal[True] = True
+    candidate_id: str
 
 
 def resolve_session_scope(store: ChatSessionStore, session_id: str):
@@ -126,7 +144,19 @@ def candidates_for_session(
     _, context = resolve_session_scope(store, session_id)
     if context is None:
         return None
-    candidates = service.repository.list_candidates(status="pending", limit=max(0, min(limit, 500)))
+    bounded_limit = max(0, min(limit, 500))
+    try:
+        candidates = service.repository.list_candidates(
+            owner_type=context.owner_type,
+            owner_id=context.owner_id,
+            status="pending",
+            limit=bounded_limit,
+        )
+    except TypeError:
+        candidates = service.repository.list_candidates(
+            status="pending",
+            limit=bounded_limit,
+        )
     visible = [
         candidate
         for candidate in candidates
