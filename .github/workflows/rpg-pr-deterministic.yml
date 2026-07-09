@@ -2,9 +2,9 @@ name: RPG deterministic PR gates
 
 on:
   pull_request:
-    branches: [rpg]
+    branches: [main, rpg]
   push:
-    branches: [rpg]
+    branches: [main, rpg]
   workflow_dispatch:
 
 permissions:
@@ -145,6 +145,18 @@ jobs:
         with:
           name: chat-generation-pytest-output
           path: chat-generation-pytest-output.txt
+
+      - name: Character persistence regression
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/unit/characters src/tests/unit/assistant_memory/test_hermes_adapter.py src/tests/app/test_character_api.py src/tests/app/test_character_live_call_api.py src/tests/app/test_voice_governance_api.py src/tests/app/test_character_hermes_api.py -q --tb=short 2>&1 | tee character-persistence-pytest-output.txt
+
+      - name: Upload character persistence diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: character-persistence-pytest-output
+          path: character-persistence-pytest-output.txt
 
       - name: Web typecheck
         run: |

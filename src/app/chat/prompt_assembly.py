@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.characters import CharacterRepository, neutralize_legacy_system_prompt, resolve_system_session_identity
+
 from .context_budget import PromptBudget, prompt_budget_from_env
 from .models import ChatMessage, ChatSession
 
@@ -13,7 +15,6 @@ PromptRole = Literal["system", "user", "assistant"]
 
 class PromptTurn(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
     role: PromptRole
     content: str
     message_id: str | None = None
@@ -21,7 +22,6 @@ class PromptTurn(BaseModel):
 
 class PromptMemoryItem(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
     memory_id: str
     content: str
     scope: str
@@ -31,7 +31,6 @@ class PromptMemoryItem(BaseModel):
 
 class PromptHistoryItem(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
     session_id: str
     message_id: str
     role: Literal["user", "assistant"]
@@ -41,7 +40,6 @@ class PromptHistoryItem(BaseModel):
 
 class PromptExternalContextItem(BaseModel):
     model_config = ConfigDict(extra="allow", frozen=True)
-
     source_id: str = "context"
     title: str = "Context"
     content: str
@@ -52,7 +50,6 @@ class PromptAssembly(BaseModel):
     """Canonical provider input before provider-specific message conversion."""
 
     model_config = ConfigDict(extra="forbid")
-
     system_instructions: list[str] = Field(default_factory=list)
     assistant_identity: list[str] = Field(default_factory=list)
     approved_memory: list[PromptMemoryItem] = Field(default_factory=list)
@@ -70,12 +67,18 @@ def _external_item(payload: dict[str, Any], index: int) -> PromptExternalContext
     title = str(payload.get("title") or source_id or f"Context {index}").strip()
     content = str(payload.get("content") or "").strip()
     url = str(payload.get("url") or "").strip() or None
-    return PromptExternalContextItem(
-        source_id=source_id,
-        title=title or f"Context {index}",
-        content=content,
-        url=url,
-    )
+    return PromptExternalContextItem(source_id=source_id, title=title or f"Context {index}", content=content, url=url)
+
+
+def _active_segment_summary(session: ChatSession) -> str | None:
+    if not session.active_segment_id:
+        return None
+    try:
+        segments = CharacterRepository().segments(session.id)
+    except Exception:
+        return None
+    segment = next((item for item in segments if item.id == session.active_segment_id), None)
+    return segment.carryover_summary if segment else None
 
 
 def build_prompt_assembly(
@@ -93,43 +96,51 @@ def build_prompt_assembly(
 ) -> PromptAssembly:
     """Build one stable structure for streaming and non-streaming generation."""
 
-    system_messages = [message.content for message in session.messages if message.role == "system"]
-    system_instructions = system_messages or [global_system_prompt]
+    system_messages = [
+        neutralize_legacy_system_prompt(message.content)
+        for message in session.messages
+        if message.role == "system"
+        and (not session.active_segment_id or message.metadata.get("segment_id") == session.active_segment_id)
+    ]
+    system_instructions = system_messages or [neutralize_legacy_system_prompt(global_system_prompt)]
+    interaction = resolve_system_session_identity(session)
+    if assistant_identity is not None:
+        resolved_identity = assistant_identity
+    elif interaction.interaction_mode == "character":
+        resolved_identity = interaction.assistant_identity
+    else:
+        resolved_identity = []
     eligible_recent_messages = [
         message
         for message in session.messages
-        if message.id != user_message.id and message.role != "system"
+        if message.id != user_message.id
+        and message.role != "system"
+        and (not session.active_segment_id or message.metadata.get("segment_id") == session.active_segment_id)
     ]
     if recent_message_limit is not None:
         eligible_recent_messages = eligible_recent_messages[-max(0, recent_message_limit):]
-    recent_messages = [
-        PromptTurn(role=message.role, content=message.content, message_id=message.id)
-        for message in eligible_recent_messages
-    ]
-    external_context = [
-        _external_item(payload, index)
-        for index, payload in enumerate(context_items or [], start=1)
-    ]
+    recent_messages = [PromptTurn(role=message.role, content=message.content, message_id=message.id) for message in eligible_recent_messages]
+    external_context = [_external_item(payload, index) for index, payload in enumerate(context_items or [], start=1)]
+    resolved_summary = session_summary if session_summary is not None else _active_segment_summary(session)
     return PromptAssembly(
         system_instructions=system_instructions,
-        assistant_identity=assistant_identity or [],
+        assistant_identity=resolved_identity,
         approved_memory=approved_memory or [],
-        session_summary=session_summary,
+        session_summary=resolved_summary,
         recent_messages=recent_messages,
         retrieved_history=retrieved_history or [],
         external_context=external_context,
-        current_user_message=PromptTurn(
-            role="user",
-            content=user_message.content,
-            message_id=user_message.id,
-        ),
+        current_user_message=PromptTurn(role="user", content=user_message.content, message_id=user_message.id),
         budget=budget or prompt_budget_from_env(),
         diagnostics={
             "session_id": session.id,
+            "active_segment_id": session.active_segment_id,
             "system_instruction_count": len(system_instructions),
+            "assistant_identity_count": len(resolved_identity),
             "approved_memory_count": len(approved_memory or []),
             "recent_message_count": len(recent_messages),
             "retrieved_history_count": len(retrieved_history or []),
             "external_context_count": len(external_context),
+            "interaction": interaction.model_dump(mode="json"),
         },
     )
