@@ -107,11 +107,14 @@ def resolve_live_call_runtime(
 
     started = time.perf_counter()
     interaction = resolve_system_session_identity(session)
+    character_service = character_service_factory()
     character: CharacterProfileSnapshot | None = None
     if interaction.interaction_mode == "character":
-        character = character_service_factory().resolve_snapshot(interaction.character_id or "")
+        character = character_service.resolve_snapshot(interaction.character_id or "")
 
     voice_asset_id = interaction.voice_asset_id
+    if character is not None and voice_asset_id:
+        character_service.validate_voice_for_use(voice_asset_id, "live_call")
     greeting = character.default_greeting.strip() if character else ""
     speech_style = normalize_speech_style(character.speech_style if character else None)
     resolved_at = _utcnow()
