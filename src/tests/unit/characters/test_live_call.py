@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.assets import AssetRecord, AssetType, SharedAssetStore
 from app.characters import CharacterRepository, CreateCharacterRequest, SetSessionInteractionRequest
 from app.characters.live_call import normalize_speech_style, resolve_live_call_runtime
+from app.characters.voice_consent import (
+    UpdateVoiceProfileGovernanceRequest,
+    VoiceProfileGovernanceService,
+)
 from app.chat import CreateChatSessionRequest, default_chat_store
 
 
@@ -12,6 +17,36 @@ def _configure(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_MEMORY_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
+    manifest = tmp_path / "assets.json"
+    assets = SharedAssetStore(manifest)
+    for voice_id in ("maya", "alternate"):
+        audio = tmp_path / f"{voice_id}.wav"
+        audio.write_bytes(f"RIFF-{voice_id}".encode())
+        assets.upsert_asset(
+            AssetRecord(
+                id=f"voice-cloning:{voice_id}",
+                owner_id="user:local",
+                module="voice-cloning",
+                type=AssetType.VOICE_PROFILE,
+                mime_type="audio/wav",
+                storage_path=str(audio),
+                metadata={},
+                created_at="2026-01-01T00:00:00+00:00",
+            )
+        )
+        VoiceProfileGovernanceService(asset_store_factory=lambda: assets).update(
+            f"voice-cloning:{voice_id}",
+            UpdateVoiceProfileGovernanceRequest(
+                subject_owner=f"{voice_id} voice subject",
+                source_type="test_recording",
+                source_reference=f"test:{voice_id}",
+                creator_id="user:local",
+                consent_status="granted",
+                allowed_uses=["character", "live_call"],
+                deletion_state="active",
+            ),
+        )
+    monkeypatch.setenv("OMNIX_ASSETS_MANIFEST_PATH", str(manifest))
     CharacterRepository().create(
         CreateCharacterRequest(
             id="maya",
