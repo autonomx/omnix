@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Query
 
 from app.chat.models import ChatSession
 
+from .live_call import CharacterLiveCallRuntime, resolve_live_call_runtime
 from .models import (
     ArchiveCharacterResponse,
     CharacterListResponse,
@@ -93,6 +94,24 @@ def register_character_routes(
         if session is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         return session
+
+    @app.get(
+        "/api/chat/sessions/{session_id}/live-call/runtime",
+        response_model=CharacterLiveCallRuntime,
+        tags=["characters"],
+        include_in_schema=False,
+    )
+    async def get_live_call_runtime(session_id: str) -> CharacterLiveCallRuntime:
+        session = chat_store_factory().get_session(session_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+        try:
+            return resolve_live_call_runtime(
+                session,
+                character_service_factory=service_factory,
+            )
+        except (CharacterNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 __all__ = ["register_character_routes"]
