@@ -13,6 +13,7 @@ from app.characters import (
     resolve_interaction_context,
 )
 
+from .assistant_turns import default_assistant_turn_coordinator
 from .models import ChatMessage, ChatSession, ChatSessionSummary, CreateChatSessionRequest, SendChatMessageRequest
 from .prompt_store import ChatSessionStore as BaseChatSessionStore, chat_sqlite_store_enabled
 from .sqlite_store import SQLiteChatSessionStore as BaseSQLiteChatSessionStore
@@ -141,33 +142,114 @@ class _CharacterSessionMixin:
 
     @serialized_chat_mutation
     def append_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None):
+        existing = _find_idempotent_user_turn(self.get_session(session_id), request.user_turn_id)
+        if existing is not None:
+            return existing
         result = super().append_user_message(session_id, request, context_items=context_items, context_diagnostics=context_diagnostics)
         if result is None:
             return None
         session, user_message = result
-        _tag_turn_and_save(self, session, user_message.id)
+        record = _start_assistant_turn(session, user_message, request)
+        record = default_assistant_turn_coordinator().mark_streaming(record.assistant_turn_id) or record
+        default_assistant_turn_coordinator().try_complete(record.assistant_turn_id)
+        _tag_turn_and_save(self, session, user_message.id, record.assistant_turn_id, record.user_turn_id, record.speech_segment_id)
         return session, user_message
 
     @serialized_chat_mutation
     def begin_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None):
+        existing = _find_idempotent_user_turn(self.get_session(session_id), request.user_turn_id)
+        if existing is not None:
+            return existing
         result = super().begin_user_message(session_id, request, context_items=context_items, context_diagnostics=context_diagnostics)
         if result is None:
             return None
         session, user_message = result
-        user_message.metadata["segment_id"] = session.active_segment_id
+        record = _start_assistant_turn(session, user_message, request)
+        user_message.metadata.update({
+            "segment_id": session.active_segment_id,
+            "user_turn_id": record.user_turn_id,
+            "speech_segment_id": record.speech_segment_id,
+            "assistant_turn_id": record.assistant_turn_id,
+            "assistant_turn": record.model_dump(mode="json"),
+        })
         self._save_sessions(_replace_session(self._load_sessions(), session))
         return session, user_message
+
+    def stream_provider_reply_chunks(self, session: ChatSession, user_message: ChatMessage, **kwargs):
+        coordinator = default_assistant_turn_coordinator()
+        assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
+        if assistant_turn_id:
+            coordinator.mark_streaming(assistant_turn_id)
+        generated_parts: list[str] = []
+        saw_completion = False
+        try:
+            for event in super().stream_provider_reply_chunks(session, user_message, **kwargs):
+                if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
+                    break
+                if event.get("type") == "text_chunk" and isinstance(event.get("text"), str):
+                    generated_parts.append(str(event["text"]))
+                if event.get("type") == "complete":
+                    saw_completion = True
+                yield event
+        except GeneratorExit:
+            if assistant_turn_id:
+                coordinator.request_cancel(assistant_turn_id, "client_disconnected")
+                coordinator.mark_provider_cancelled(assistant_turn_id)
+            raise
+        except Exception:
+            if assistant_turn_id:
+                coordinator.mark_failed(assistant_turn_id)
+            raise
+        finally:
+            if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
+                coordinator.mark_provider_cancelled(assistant_turn_id)
+            elif assistant_turn_id and not saw_completion:
+                coordinator.request_cancel(assistant_turn_id, "stream_closed_before_completion")
+                coordinator.mark_provider_cancelled(assistant_turn_id)
+        if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
+            yield {
+                "type": "complete",
+                "content": " ".join(part.strip() for part in generated_parts if part.strip()).strip(),
+                "metadata": {
+                    "generation_status": "interrupted",
+                    "delivery_status": "interrupted",
+                    "assistant_turn_id": assistant_turn_id,
+                },
+            }
 
     @serialized_chat_mutation
     def complete_streamed_reply(self, session_id: str, user_message_id: str, content: str, metadata: dict[str, Any]) -> ChatSession | None:
         before = self.get_session(session_id)
         segment_id = before.active_segment_id if before else None
-        session = super().complete_streamed_reply(session_id, user_message_id, content, {**metadata, "segment_id": segment_id})
+        user_message = next((message for message in before.messages if message.id == user_message_id), None) if before else None
+        assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip() if user_message else ""
+        coordinator = default_assistant_turn_coordinator()
+        if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
+            return _persist_interrupted_reply(
+                self,
+                session_id=session_id,
+                user_message_id=user_message_id,
+                assistant_turn_id=assistant_turn_id,
+                content=content,
+                metadata={**metadata, "segment_id": segment_id},
+            )
+        if assistant_turn_id and not coordinator.try_complete(assistant_turn_id):
+            return self.get_session(session_id)
+        session = super().complete_streamed_reply(
+            session_id,
+            user_message_id,
+            content,
+            {**metadata, "segment_id": segment_id, **({"assistant_turn_id": assistant_turn_id} if assistant_turn_id else {})},
+        )
         if session is None:
             return None
         for message in session.messages:
             if message.id == user_message_id:
                 message.metadata["segment_id"] = segment_id
+                if assistant_turn_id:
+                    turn = coordinator.get(assistant_turn_id)
+                    if turn is not None:
+                        message.metadata["assistant_turn"] = turn.model_dump(mode="json")
                 break
         self._save_sessions(_replace_session(self._load_sessions(), session))
         return session
@@ -246,18 +328,93 @@ def _neutral_topic_carryover(session: ChatSession) -> str | None:
     return "\n".join(["User topics carried from the previous identity segment:", *(f"- {content[:500]}" for content in user_messages)])[:2400]
 
 
-def _tag_turn_and_save(store, session: ChatSession, user_message_id: str) -> None:
+def _find_idempotent_user_turn(session: ChatSession | None, user_turn_id: str | None):
+    if session is None or not user_turn_id:
+        return None
+    message = next(
+        (item for item in session.messages if item.role == "user" and item.metadata.get("user_turn_id") == user_turn_id),
+        None,
+    )
+    return (session, message) if message is not None else None
+
+
+def _start_assistant_turn(session: ChatSession, user_message: ChatMessage, request: SendChatMessageRequest):
+    user_turn_id = request.user_turn_id or f"user-turn:{uuid.uuid4().hex}"
+    record = default_assistant_turn_coordinator().start(
+        session_id=session.id,
+        user_message_id=user_message.id,
+        user_turn_id=user_turn_id,
+        speech_segment_id=request.speech_segment_id,
+    )
+    user_message.metadata.update({
+        "user_turn_id": record.user_turn_id,
+        "speech_segment_id": record.speech_segment_id,
+        "assistant_turn_id": record.assistant_turn_id,
+        "assistant_turn": record.model_dump(mode="json"),
+    })
+    return record
+
+
+def _tag_turn_and_save(store, session: ChatSession, user_message_id: str, assistant_turn_id: str, user_turn_id: str, speech_segment_id: str | None) -> None:
     segment_id = session.active_segment_id
     found_user = False
+    coordinator = default_assistant_turn_coordinator()
     for message in session.messages:
         if message.id == user_message_id:
-            message.metadata["segment_id"] = segment_id
+            message.metadata.update({
+                "segment_id": segment_id,
+                "user_turn_id": user_turn_id,
+                "speech_segment_id": speech_segment_id,
+                "assistant_turn_id": assistant_turn_id,
+            })
+            turn = coordinator.get(assistant_turn_id)
+            if turn is not None:
+                message.metadata["assistant_turn"] = turn.model_dump(mode="json")
             found_user = True
             continue
         if found_user and message.role == "assistant":
-            message.metadata["segment_id"] = segment_id
+            message.metadata.update({"segment_id": segment_id, "assistant_turn_id": assistant_turn_id})
             break
     store._save_sessions(_replace_session(store._load_sessions(), session))
+
+
+def _persist_interrupted_reply(store, *, session_id: str, user_message_id: str, assistant_turn_id: str, content: str, metadata: dict[str, Any]) -> ChatSession | None:
+    sessions = store._load_sessions()
+    coordinator = default_assistant_turn_coordinator()
+    for index, session in enumerate(sessions):
+        if session.id != session_id:
+            continue
+        user_message = next((message for message in session.messages if message.id == user_message_id), None)
+        if user_message is None:
+            return None
+        user_message.metadata["generation_status"] = "interrupted"
+        turn = coordinator.get(assistant_turn_id)
+        if turn is not None:
+            user_message.metadata["assistant_turn"] = turn.model_dump(mode="json")
+        already_persisted = any(
+            message.role == "assistant" and message.metadata.get("assistant_turn_id") == assistant_turn_id
+            for message in session.messages
+        )
+        generated = content.strip()
+        if generated and not already_persisted:
+            session.messages.append(ChatMessage(
+                id=f"msg:{uuid.uuid4().hex}",
+                role="assistant",
+                content=generated,
+                created_at=_utcnow(),
+                metadata={
+                    **metadata,
+                    "generation_status": "interrupted",
+                    "delivery_status": "interrupted",
+                    "assistant_turn_id": assistant_turn_id,
+                },
+            ))
+        session.message_count = len(session.messages)
+        session.updated_at = _utcnow()
+        sessions[index] = session
+        store._save_sessions(sessions)
+        return session
+    return None
 
 
 def _replace_session(sessions: list[ChatSession], replacement: ChatSession) -> list[ChatSession]:
