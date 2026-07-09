@@ -1,14 +1,16 @@
-"""HTTP transport for the live Stage 1 Character Mode rehearsal."""
+"""Gateway transport for the live Stage 1 Character Mode rehearsal."""
 from __future__ import annotations
 
 import json
 import time
 from typing import Any, Protocol
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import requests
 
 from .stage1_contracts import duration_ms
+
+TTS_PCM_WEBSOCKET_PATH = "/api/tts/stream/websocket"
 
 
 class Stage1Gateway(Protocol):
@@ -30,7 +32,7 @@ class Stage1Gateway(Protocol):
 
 
 class HttpStage1Gateway:
-    """Requests-based gateway client used by the deployment rehearsal CLI."""
+    """Requests/websocket client used by the deployment rehearsal CLI."""
 
     def __init__(self, base_url: str, timeout_seconds: float = 120) -> None:
         self.base_url = base_url.rstrip("/")
@@ -39,6 +41,27 @@ class HttpStage1Gateway:
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
+
+    def _websocket_url(self, path: str) -> str:
+        parts = urlsplit(self.base_url)
+        if parts.scheme not in {"http", "https", "ws", "wss"} or not parts.netloc:
+            raise RuntimeError("Stage 1 base URL must include an HTTP(S) scheme and host")
+        scheme = "wss" if parts.scheme in {"https", "wss"} else "ws"
+        prefix = parts.path.rstrip("/")
+        return urlunsplit((scheme, parts.netloc, f"{prefix}{path}", "", ""))
+
+    def _open_websocket(self, path: str):
+        try:
+            from websockets.sync.client import connect
+        except ImportError as exc:  # pragma: no cover - deployment dependency diagnostic.
+            raise RuntimeError(
+                "The Stage 1 PCM websocket check requires websockets>=12.0; install requirements.txt"
+            ) from exc
+        return connect(
+            self._websocket_url(path),
+            open_timeout=self.timeout_seconds,
+            close_timeout=min(10.0, self.timeout_seconds),
+        )
 
     @staticmethod
     def _encoded(value: str) -> str:
@@ -193,25 +216,43 @@ class HttpStage1Gateway:
         return first_token_ms, response_text.strip()
 
     def stream_tts(self, payload: dict[str, Any]) -> tuple[float, int]:
+        """Measure the active gateway's first raw PCM websocket frame."""
         started = time.perf_counter()
-        with self.session.post(
-            self._url("/api/tts/stream/server-sent-events"),
-            json=payload,
-            timeout=self.timeout_seconds,
-            stream=True,
-        ) as response:
-            if not response.ok:
-                raise RuntimeError(
-                    f"POST tts/stream/server-sent-events returned HTTP {response.status_code}"
-                )
-            for event in self._sse_events(response):
-                if event.get("type") == "error":
-                    raise RuntimeError(str(event.get("message") or "TTS stream failed"))
-                if event.get("type") == "chunk" and isinstance(event.get("audio_b64"), str):
-                    encoded = event["audio_b64"]
-                    if encoded:
-                        return duration_ms(started), max(0, len(encoded) * 3 // 4)
-        raise RuntimeError("TTS stream completed without an audio chunk")
+        stream_id = str(payload.get("diagnostics_stream_id") or "character-stage1")
+        with self._open_websocket(TTS_PCM_WEBSOCKET_PATH) as websocket:
+            websocket.send(json.dumps(payload))
+            while True:
+                message = websocket.recv(timeout=self.timeout_seconds)
+                if isinstance(message, bytes):
+                    if not message:
+                        continue
+                    try:
+                        websocket.send(
+                            json.dumps(
+                                {
+                                    "type": "diagnostic",
+                                    "stream_id": stream_id,
+                                    "event": "playback_stopped",
+                                    "details": {
+                                        "reason": "stage1_first_frame_measured",
+                                        "network_frames": 1,
+                                    },
+                                }
+                            )
+                        )
+                    except Exception:
+                        pass
+                    return duration_ms(started), len(message)
+                try:
+                    control = json.loads(message)
+                except (TypeError, json.JSONDecodeError) as exc:
+                    raise RuntimeError("TTS websocket returned invalid control JSON") from exc
+                if not isinstance(control, dict):
+                    raise RuntimeError("TTS websocket returned a non-object control message")
+                if control.get("type") == "error":
+                    raise RuntimeError(str(control.get("message") or "TTS stream failed"))
+                if control.get("type") == "done":
+                    raise RuntimeError("TTS websocket completed without an audio frame")
 
 
-__all__ = ["HttpStage1Gateway", "Stage1Gateway"]
+__all__ = ["HttpStage1Gateway", "Stage1Gateway", "TTS_PCM_WEBSOCKET_PATH"]
