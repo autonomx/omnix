@@ -18,6 +18,7 @@ from .management import (
     UpdateManagedMemoryRequest,
     candidates_for_session,
     records_for_session,
+    require_memory_write,
     resolve_session_scope,
 )
 from .models import MemoryCandidate, MemoryCategory, MemoryRecord, MemoryScope
@@ -46,6 +47,16 @@ def register_memory_management_routes(
     memory_service_factory: Callable[[], MemoryService] = default_memory_service,
 ) -> None:
     names = {getattr(route, "name", "") for route in app.routes}
+
+    def write_context(session_id: str):
+        session, context = resolve_session_scope(chat_store_factory(), session_id)
+        if session is None or context is None:
+            raise _not_found("chat session not found")
+        try:
+            require_memory_write(session)
+        except Exception as exc:
+            raise _translate_memory_error(exc) from exc
+        return context
 
     if "assistant_memory_list_endpoint" not in names:
 
@@ -86,9 +97,7 @@ def register_memory_management_routes(
             name="assistant_memory_create_endpoint",
         )
         async def assistant_memory_create_endpoint(request: CreateManagedMemoryRequest) -> MemoryRecord:
-            _, context = resolve_session_scope(chat_store_factory(), request.session_id)
-            if context is None:
-                raise _not_found("chat session not found")
+            context = write_context(request.session_id)
             try:
                 return memory_service_factory().create_explicit_memory(
                     context,
@@ -131,9 +140,7 @@ def register_memory_management_routes(
             memory_id: str,
             request: UpdateManagedMemoryRequest,
         ) -> MemoryRecord:
-            _, context = resolve_session_scope(chat_store_factory(), request.session_id)
-            if context is None:
-                raise _not_found("chat session not found")
+            context = write_context(request.session_id)
             try:
                 return memory_service_factory().edit_memory(
                     context,
@@ -155,9 +162,7 @@ def register_memory_management_routes(
             session_id: str,
             expected_revision: int = Query(ge=1),
         ) -> ForgetMemoryResponse:
-            _, context = resolve_session_scope(chat_store_factory(), session_id)
-            if context is None:
-                raise _not_found("chat session not found")
+            context = write_context(session_id)
             try:
                 memory_service_factory().forget_memory(
                     context,
@@ -178,9 +183,7 @@ def register_memory_management_routes(
             memory_id: str,
             request: RevisionedMemoryRequest,
         ) -> MemoryRecord:
-            _, context = resolve_session_scope(chat_store_factory(), request.session_id)
-            if context is None:
-                raise _not_found("chat session not found")
+            context = write_context(request.session_id)
             try:
                 return memory_service_factory().set_pinned(
                     context,
@@ -201,9 +204,7 @@ def register_memory_management_routes(
             memory_id: str,
             request: RevisionedMemoryRequest,
         ) -> MemoryRecord:
-            _, context = resolve_session_scope(chat_store_factory(), request.session_id)
-            if context is None:
-                raise _not_found("chat session not found")
+            context = write_context(request.session_id)
             try:
                 return memory_service_factory().set_pinned(
                     context,
@@ -224,9 +225,7 @@ def register_memory_management_routes(
             memory_id: str,
             request: MoveManagedMemoryRequest,
         ) -> MemoryRecord:
-            _, context = resolve_session_scope(chat_store_factory(), request.session_id)
-            if context is None:
-                raise _not_found("chat session not found")
+            context = write_context(request.session_id)
             try:
                 return memory_service_factory().move_memory(
                     context,
@@ -267,9 +266,7 @@ def register_memory_management_routes(
             candidate_id: str,
             request: CandidateResolutionRequest,
         ) -> MemoryRecord:
-            _, context = resolve_session_scope(chat_store_factory(), request.session_id)
-            if context is None:
-                raise _not_found("chat session not found")
+            context = write_context(request.session_id)
             try:
                 return memory_service_factory().approve_candidate(
                     context,
@@ -289,9 +286,7 @@ def register_memory_management_routes(
             candidate_id: str,
             request: CandidateResolutionRequest,
         ) -> MemoryCandidate:
-            _, context = resolve_session_scope(chat_store_factory(), request.session_id)
-            if context is None:
-                raise _not_found("chat session not found")
+            write_context(request.session_id)
             candidate = memory_service_factory().repository.get_candidate(candidate_id)
             if candidate is None:
                 raise _not_found("memory candidate not found")
