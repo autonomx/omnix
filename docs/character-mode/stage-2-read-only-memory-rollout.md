@@ -42,11 +42,13 @@ The two character setup sessions temporarily use `write_memory=true` only to cre
 After successful restart verification, the preflight:
 
 1. forgets the Maya synthetic record;
-2. confirms Maya snapshot invalidation without affecting Alex or System Assistant records;
+2. confirms Maya snapshot projection no longer exposes the forgotten record without affecting Alex or System Assistant records;
 3. refreshes Maya's snapshot and confirms the forgotten record is absent;
 4. deletes the Alex and System Assistant synthetic records;
 5. disables the setup-session character write policies;
 6. deletes all temporary setup sessions and the Alex isolation-control session.
+
+The canonical repository forget behavior purges matching `memory_snapshot_items` rows immediately. A missing snapshot item is therefore successful propagation, not a cleanup failure. A retained but inactive item is also accepted for compatible repository implementations, provided its content is not active.
 
 The Maya pilot session remains as content-free deployment evidence.
 
@@ -64,7 +66,7 @@ The Maya pilot session remains as content-free deployment evidence.
 10. Turning memory off creates a new segment and removes the active snapshot and provider memory context.
 11. Turning read-only memory back on creates another clean segment and a fresh owner-bound snapshot.
 12. Profile identity, segment, policy, snapshot, and selected owner memory survive restart.
-13. Forget invalidation and refreshed snapshots remain owner-isolated.
+13. Forget propagation and refreshed snapshots remain owner-isolated.
 
 Reports contain only IDs, hashes, counts, policies, and timings. Synthetic memory text and model output are not written to reports.
 
@@ -149,9 +151,41 @@ decision = pass
 
 A successful final run also cleans up the synthetic memory records and temporary setup/control sessions. If cleanup fails, the result is `blocked`; do not proceed to Stage 3 until the owner-isolation cleanup check passes.
 
+## Recovery from the known snapshot-purge assertion
+
+An early Stage 2 harness incorrectly required the forgotten Maya record to remain represented as an inactive snapshot item. The repository actually purges the snapshot item, so the server had already completed the forget operation before the harness blocked.
+
+Use recovery only when the failed final report shows all three restart checks passing and this exact cleanup failure:
+
+```text
+cleanup.forget_isolation: forget did not invalidate the active Maya snapshot item
+```
+
+Pull the patched `main`, keep Omnix running with the same Stage 2 flags, and run:
+
+```bat
+python scripts\character_mode_stage2_preflight.py resume-cleanup
+```
+
+The command validates the failed report against the checkpoint, confirms the Maya record is absent from both the owner listing and active snapshot, verifies Alex and System Assistant records were preserved, refreshes Maya's snapshot, deletes the remaining synthetic records, disables temporary write policies, and removes the temporary setup/control sessions.
+
+Default recovery report:
+
+```text
+resources/data/test-results/character-mode-stage2-recovery-report.json
+```
+
+Expected recovery decision:
+
+```text
+decision = pass
+```
+
+Do not use `resume-cleanup` for a different failed check. It rejects unrelated failures and performs no cleanup.
+
 ## Browser confirmation
 
-After the final automated report passes:
+After the final automated or recovery report passes:
 
 - Open the retained Maya Stage 2 pilot session.
 - Confirm the Character badge shows Maya Stage 2.
@@ -183,11 +217,11 @@ For a full Character Mode rollback, also set `OMNIX_CHARACTER_MODE_ENABLED=0`.
 
 Advance to Stage 3 explicit character-memory writes only when:
 
-- the Stage 2 final report is `pass`;
+- the Stage 2 final or recovery report is `pass`;
 - browser confirmation is complete;
 - prompt metadata selected only the active character owner;
 - no pending suggestions or approved records were created by the read-only pilot;
 - explicit command and management writes were rejected;
 - memory-off and read-only transitions created clean segments and snapshots;
-- forget invalidation preserved other owners;
+- forget propagation preserved other owners;
 - synthetic fixtures were cleaned up successfully.

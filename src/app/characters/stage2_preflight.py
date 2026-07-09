@@ -13,7 +13,8 @@ from .stage2_contracts import (
     write_report,
 )
 from .stage2_http import HttpStage2Gateway, Stage2Gateway
-from .stage2_runner import prepare_stage2, verify_stage2_restart
+from .stage2_runner import prepare_stage2
+from .stage2_verification import resume_stage2_cleanup, verify_stage2_restart
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -60,7 +61,41 @@ def _parser() -> argparse.ArgumentParser:
         "--report",
         default="resources/data/test-results/character-mode-stage2-final-report.json",
     )
+
+    recovery = subparsers.add_parser(
+        "resume-cleanup",
+        help=(
+            "Resume cleanup after the known snapshot-purge assertion blocked an otherwise "
+            "passing restart verification."
+        ),
+    )
+    recovery.add_argument(
+        "--checkpoint",
+        default="resources/data/test-results/character-mode-stage2-checkpoint.json",
+    )
+    recovery.add_argument(
+        "--failed-report",
+        default="resources/data/test-results/character-mode-stage2-final-report.json",
+    )
+    recovery.add_argument("--base-url")
+    recovery.add_argument("--timeout-seconds", type=float, default=120)
+    recovery.add_argument("--token-budget", type=int, default=4_000)
+    recovery.add_argument(
+        "--report",
+        default="resources/data/test-results/character-mode-stage2-recovery-report.json",
+    )
     return parser
+
+
+def _checkpoint(path: str) -> Stage2Checkpoint:
+    return Stage2Checkpoint.model_validate_json(Path(path).read_text(encoding="utf-8"))
+
+
+def _with_base_url(checkpoint: Stage2Checkpoint, base_url: str | None) -> Stage2Checkpoint:
+    resolved = base_url or checkpoint.base_url
+    if resolved == checkpoint.base_url:
+        return checkpoint
+    return checkpoint.model_copy(update={"base_url": resolved})
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -83,18 +118,24 @@ def main(argv: list[str] | None = None) -> int:
             checkpoint_path=args.checkpoint,
         )
         write_report(report, args.report)
-    else:
-        checkpoint_path = Path(args.checkpoint)
-        checkpoint = Stage2Checkpoint.model_validate_json(
-            checkpoint_path.read_text(encoding="utf-8")
-        )
-        base_url = args.base_url or checkpoint.base_url
-        if base_url != checkpoint.base_url:
-            checkpoint = checkpoint.model_copy(update={"base_url": base_url})
+    elif args.command == "verify-restart":
+        checkpoint = _with_base_url(_checkpoint(args.checkpoint), args.base_url)
         report = verify_stage2_restart(
-            HttpStage2Gateway(base_url, args.timeout_seconds),
+            HttpStage2Gateway(checkpoint.base_url, args.timeout_seconds),
             checkpoint,
             settle_seconds=args.settle_seconds,
+            token_budget=args.token_budget,
+        )
+        write_report(report, args.report)
+    else:
+        checkpoint = _with_base_url(_checkpoint(args.checkpoint), args.base_url)
+        failed_report = Stage2Report.model_validate_json(
+            Path(args.failed_report).read_text(encoding="utf-8")
+        )
+        report = resume_stage2_cleanup(
+            HttpStage2Gateway(checkpoint.base_url, args.timeout_seconds),
+            checkpoint,
+            failed_report,
             token_budget=args.token_budget,
         )
         write_report(report, args.report)
@@ -112,6 +153,7 @@ __all__ = [
     "Stage2Report",
     "main",
     "prepare_stage2",
+    "resume_stage2_cleanup",
     "verify_stage2_restart",
     "write_report",
 ]
