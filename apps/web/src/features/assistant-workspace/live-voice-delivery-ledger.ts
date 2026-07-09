@@ -131,16 +131,13 @@ export function instrumentDeliveryReporter(
   getLedger: () => LiveVoiceDeliveryLedger | null,
   onChanged: (ledger: LiveVoiceDeliveryLedger) => void,
 ): LiveCallDiagnosticsReporter {
-  return {
-    traceId: reporter.traceId,
-    record(event, details = {}, source = 'browser') {
-      reporter.record(event, details, source);
-      const ledger = getLedger();
-      if (ledger && handleDeliveryDiagnostic(ledger, event, details)) onChanged(ledger);
-    },
-    flush: () => reporter.flush(),
-    close: (event, details) => reporter.close(event, details),
+  const originalRecord = reporter.record.bind(reporter);
+  reporter.record = (event, details = {}, source = 'browser') => {
+    originalRecord(event, details, source);
+    const ledger = getLedger();
+    if (ledger && handleDeliveryDiagnostic(ledger, event, details)) onChanged(ledger);
   };
+  return reporter;
 }
 
 function finiteNumber(value: unknown, fallback: number): number {
