@@ -8,15 +8,17 @@ const mocks = vi.hoisted(() => {
     stop: vi.fn(async () => undefined),
     isClosed: vi.fn(() => false),
   };
+  const recordSpy = vi.fn();
   const reporter = {
     traceId: 'live-call:s1:test-trace',
-    record: vi.fn(),
+    record: recordSpy,
     flush: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
   };
   return {
     session,
     reporter,
+    recordSpy,
     createSession: vi.fn(async () => session),
     createReporter: vi.fn(() => reporter),
     createTraceId: vi.fn(() => 'live-call:s1:test-trace'),
@@ -78,7 +80,8 @@ beforeEach(() => {
   mocks.session.finish.mockReset().mockResolvedValue(undefined);
   mocks.session.stop.mockReset().mockResolvedValue(undefined);
   mocks.session.isClosed.mockReset().mockReturnValue(false);
-  mocks.reporter.record.mockReset();
+  mocks.recordSpy.mockReset();
+  mocks.reporter.record = mocks.recordSpy;
   mocks.reporter.flush.mockReset().mockResolvedValue(undefined);
   mocks.reporter.close.mockReset().mockResolvedValue(undefined);
   mocks.createSession.mockReset().mockResolvedValue(mocks.session);
@@ -98,7 +101,7 @@ afterEach(() => {
 
 describe('live voice unified audio controller', () => {
   it('records installation and uses one persistent PCM session for every phrase', async () => {
-    expect(mocks.reporter.record).toHaveBeenCalledWith(
+    expect(mocks.recordSpy).toHaveBeenCalledWith(
       'controller_installed',
       expect.objectContaining({ fetch_wrapped: true }),
       'controller',
@@ -137,7 +140,7 @@ describe('live voice unified audio controller', () => {
       'The second phrase should enter the same continuous queue.',
       1,
     );
-    expect(mocks.reporter.record).toHaveBeenCalledWith(
+    expect(mocks.recordSpy).toHaveBeenCalledWith(
       'assistant_turn_linked',
       expect.objectContaining({ assistant_turn_id: 'assistant-turn:t1' }),
       'controller',
@@ -168,7 +171,7 @@ describe('live voice unified audio controller', () => {
       'Here is a complete spoken answer for the live call.',
       0,
     );
-    expect(mocks.reporter.record).toHaveBeenCalledWith(
+    expect(mocks.recordSpy).toHaveBeenCalledWith(
       'phrase_skipped',
       expect.objectContaining({ reason: 'non-speech-only', text: '☀️ ✨' }),
       'controller',
