@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { characterClient, type CharacterDataExport, type CharacterProfile } from './characterClient';
+import { CharacterHermesPanel } from './CharacterHermesPanel';
 import { VoiceGovernancePanel } from './VoiceGovernancePanel';
 import './CharacterManagementPanel.css';
 
@@ -126,6 +127,7 @@ export function CharacterManagementPanel() {
 
             <VoiceGovernancePanel assetId={selected.default_voice_asset_id} />
             <CharacterDataSummary data={dataQuery.data} loading={dataQuery.isPending} />
+            <CharacterHermesPanel characterId={selected.id} />
 
             <section className="character-danger-zone">
               <h4>Independent data actions</h4>
