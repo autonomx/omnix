@@ -76,6 +76,8 @@ def normalize_trace_id(value: Any = None) -> str:
 
 def live_voice_log(trace_id: str, source: str, event: str, **details: Any) -> None:
     """Queue one JSON-line live-call diagnostics record without blocking audio work."""
+    if event == "delivery_checkpoint":
+        _persist_delivery(details)
     record = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         "monotonic_ms": round(time.perf_counter_ns() / 1_000_000, 3),
@@ -102,6 +104,37 @@ def live_voice_log(trace_id: str, source: str, event: str, **details: Any) -> No
                 sort_keys=True,
             )
         )
+
+
+def _persist_delivery(details: dict[str, Any]) -> None:
+    turn_id = str(details.get("assistant_turn_id") or "").strip()
+    if not turn_id:
+        return
+    try:
+        from app.chat.assistant_turns import default_assistant_turn_coordinator
+
+        active_index = details.get("audio_interrupted_phrase_index")
+        default_assistant_turn_coordinator().record_delivery(
+            turn_id,
+            generated_phrase_count=_count(details.get("generated_phrase_count")),
+            audio_delivered_phrase_count=_count(details.get("audio_delivered_phrase_count")),
+            audio_interrupted_phrase_index=_count(active_index) if active_index is not None else None,
+            audio_played_samples=_count(details.get("audio_played_samples")),
+            visual_delivered_text_end=_count(details.get("visual_delivered_text_end")),
+            context_delivered_text_end=_count(details.get("context_delivered_text_end")),
+            delivery_policy="reveal_as_spoken",
+        )
+    except Exception:
+        return
+
+
+def _count(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 live_voice_log(
