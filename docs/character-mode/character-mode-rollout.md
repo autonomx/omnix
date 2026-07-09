@@ -1,6 +1,6 @@
 # Character Mode staged rollout and rollback guide
 
-Status: repository implementation complete; Stages 1 through 4 passed on the local deployment on 2026-07-09; Stage 5 governed voice and live-call pilot is next.
+Status: repository implementation complete; Stages 1 through 5 passed on the local deployment on 2026-07-09; optional Stage 6 Character Hermes remains disabled.
 
 Baseline: `c37a2610275723235cf3b5ccceb350385a9050b8` or a later `main` commit containing it.
 
@@ -21,6 +21,10 @@ Stage 3 evidence: `docs/character-mode/stage-3-rehearsal-results.md`
 Stage 4 operator guide: `docs/character-mode/stage-4-shared-memory-rollout.md`
 
 Stage 4 evidence: `docs/character-mode/stage-4-rehearsal-results.md`
+
+Stage 5 operator guide: `docs/character-mode/stage-5-governed-voice-rollout.md`
+
+Stage 5 evidence: `docs/character-mode/stage-5-rehearsal-results.md`
 
 ## Before Stage 1
 

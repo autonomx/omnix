@@ -24,6 +24,9 @@ def test_default_service_specs_keep_image_disabled_by_default(monkeypatch) -> No
     assert by_id["gateway"].env["OMNIX_IMAGE_ENABLED"] == "0"
     assert by_id["gateway"].env["OMNIX_IMAGE_URL"] == ""
     assert by_id["gateway"].env["OMNIX_LAUNCHER_KILL_PORT"] == "1"
+    expected_tts_model = "F:\\LLM\\omnix\\resources\\models\\tts\\Qwen3-TTS-12Hz-0.6B-Base"
+    assert by_id["gateway"].env["OMNIX_TTS_MODEL_DIR"] == expected_tts_model
+    assert by_id["gateway"].env["OMNIX_QWEN3_TTS_MODEL_DIR"] == expected_tts_model
     assert by_id["gateway"].ports == (8000,)
     assert by_id["web"].ports == (5173,)
     assert by_id["web"].command[-2:] == ["run", "web:dev"]

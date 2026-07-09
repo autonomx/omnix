@@ -333,7 +333,11 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             label="Omnix Gateway",
             command=[app_python, "-m", "uvicorn", "app.gateway.main:app", "--host", "127.0.0.1", "--port", "8000"],
             cwd=root,
-            env=dict(common),
+            env={
+                **common,
+                "OMNIX_TTS_MODEL_DIR": tts_model_dir,
+                "OMNIX_QWEN3_TTS_MODEL_DIR": tts_model_dir,
+            },
             ports=(8000,),
             description="FastAPI gateway for the redesigned web app on 127.0.0.1:8000.",
         ),
