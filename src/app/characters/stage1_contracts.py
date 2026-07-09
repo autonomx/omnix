@@ -89,7 +89,7 @@ class Stage1Report(BaseModel):
 class Stage1PrepareConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    base_url: str = "http://127.0.0.1:5050"
+    base_url: str = "http://127.0.0.1:8000"
     character_id: str = "stage1-maya"
     display_name: str = "Maya Stage 1"
     personality_prompt: str = (

@@ -26,7 +26,7 @@ def _parser() -> argparse.ArgumentParser:
         "prepare",
         help="Run Stage 1 and create a restart checkpoint.",
     )
-    prepare.add_argument("--base-url", default="http://127.0.0.1:5050")
+    prepare.add_argument("--base-url", default=Stage1PrepareConfig().base_url)
     prepare.add_argument("--character-id", default="stage1-maya")
     prepare.add_argument("--display-name", default="Maya Stage 1")
     prepare.add_argument(
