@@ -183,6 +183,51 @@ def test_session_can_switch_between_system_and_character_mode(tmp_path: Path, mo
     assert system.json()["character_id"] is None
 
 
+def test_character_session_persists_shared_read_only_policy(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
+    monkeypatch.setenv("OMNIX_CHARACTER_SHARED_MEMORY_ENABLED", "1")
+    monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
+    monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
+    client = TestClient(create_gateway_app())
+    _create_maya(client)
+    updated = client.patch(
+        "/api/characters/maya",
+        json={
+            "expected_version": 1,
+            "shared_memory_policy": {
+                "access": "read_only",
+                "allowed_categories": ["fact", "preference"],
+            },
+        },
+    )
+    assert updated.status_code == 200
+
+    created = client.post(
+        "/api/chat/sessions",
+        json={
+            "interaction_mode": "character",
+            "character_id": "maya",
+            "shared_memory_access": "read_only",
+        },
+    )
+    assert created.status_code == 200
+    session = created.json()
+    assert session["shared_memory_access"] == "read_only"
+    first_segment = session["active_segment_id"]
+
+    disabled = client.post(
+        f"/api/chat/sessions/{session['id']}/interaction",
+        json={
+            "interaction_mode": "character",
+            "character_id": "maya",
+            "shared_memory_access": "none",
+        },
+    )
+    assert disabled.status_code == 200
+    assert disabled.json()["shared_memory_access"] == "none"
+    assert disabled.json()["active_segment_id"] != first_segment
+
+
 def test_chat_sqlite_v1_migrates_interaction_columns(tmp_path: Path) -> None:
     path = tmp_path / "chat.sqlite3"
     with sqlite3.connect(path) as connection:

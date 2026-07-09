@@ -1,6 +1,6 @@
 # Character Mode staged rollout and rollback guide
 
-Status: repository implementation complete; Stage 1 and Stage 2 passed on the local deployment on 2026-07-09; Stage 3 explicit character-memory write pilot tooling is ready.
+Status: repository implementation complete; Stages 1 through 4 passed on the local deployment on 2026-07-09; Stage 5 governed voice and live-call pilot is next.
 
 Baseline: `c37a2610275723235cf3b5ccceb350385a9050b8` or a later `main` commit containing it.
 
@@ -16,7 +16,11 @@ Stage 2 evidence: `docs/character-mode/stage-2-rehearsal-results.md`
 
 Stage 3 operator guide: `docs/character-mode/stage-3-write-memory-rollout.md`
 
-Stage 3 result template: `docs/character-mode/stage-3-rehearsal-results.md`
+Stage 3 evidence: `docs/character-mode/stage-3-rehearsal-results.md`
+
+Stage 4 operator guide: `docs/character-mode/stage-4-shared-memory-rollout.md`
+
+Stage 4 evidence: `docs/character-mode/stage-4-rehearsal-results.md`
 
 ## Before Stage 1
 

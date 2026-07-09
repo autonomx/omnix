@@ -35,6 +35,7 @@ class _CharacterSessionMixin:
             request.transcript_policy,
             request.read_memory if request.interaction_mode == "character" else False,
             request.write_memory if request.interaction_mode == "character" else False,
+            request.shared_memory_access if request.interaction_mode == "character" else "none",
         )
         segment = _character_repository().create_segment(
             session_id=session_id,
@@ -44,7 +45,7 @@ class _CharacterSessionMixin:
             transcript_policy=interaction.transcript_policy,
             read_memory=interaction.read_memory,
             write_memory=interaction.write_memory,
-            shared_memory_access="none",
+            shared_memory_access=interaction.shared_memory_access,
         )
         messages: list[ChatMessage] = []
         if request.interaction_mode == "system" and request.system_prompt:
@@ -63,7 +64,7 @@ class _CharacterSessionMixin:
             voice_asset_id=interaction.voice_asset_id,
             read_memory=interaction.read_memory,
             write_memory=interaction.write_memory,
-            shared_memory_access="none",
+            shared_memory_access=interaction.shared_memory_access,
             transcript_policy=interaction.transcript_policy,
             active_segment_id=segment.id,
             character_profile_version=interaction.character_profile_version,
@@ -86,6 +87,7 @@ class _CharacterSessionMixin:
             request.transcript_policy,
             request.read_memory if request.interaction_mode == "character" else False,
             request.write_memory if request.interaction_mode == "character" else False,
+            request.shared_memory_access if request.interaction_mode == "character" else "none",
         )
         now = _utcnow()
         for index, session in enumerate(sessions):
@@ -97,6 +99,7 @@ class _CharacterSessionMixin:
                 or session.transcript_policy != interaction.transcript_policy
                 or session.read_memory != interaction.read_memory
                 or session.write_memory != interaction.write_memory
+                or session.shared_memory_access != interaction.shared_memory_access
             )
             if context_changed:
                 carryover = _neutral_topic_carryover(session) if request.continue_topic else None
@@ -110,7 +113,7 @@ class _CharacterSessionMixin:
                     transcript_policy=interaction.transcript_policy,
                     read_memory=interaction.read_memory,
                     write_memory=interaction.write_memory,
-                    shared_memory_access="none",
+                    shared_memory_access=interaction.shared_memory_access,
                     carryover_summary=carryover,
                 )
                 session.active_segment_id = segment.id
@@ -124,7 +127,7 @@ class _CharacterSessionMixin:
             session.voice_asset_id = interaction.voice_asset_id
             session.read_memory = interaction.read_memory
             session.write_memory = interaction.write_memory
-            session.shared_memory_access = "none"
+            session.shared_memory_access = interaction.shared_memory_access
             session.transcript_policy = interaction.transcript_policy
             session.character_profile_version = interaction.character_profile_version
             session.effective_identity_hash = interaction.effective_identity_hash
@@ -192,14 +195,22 @@ def _character_repository():
     return default_character_service().repository
 
 
-def _resolve_request(interaction_mode: str, character_id: str | None, voice_asset_id: str | None, transcript_policy: str, read_memory: bool, write_memory: bool):
+def _resolve_request(
+    interaction_mode: str,
+    character_id: str | None,
+    voice_asset_id: str | None,
+    transcript_policy: str,
+    read_memory: bool,
+    write_memory: bool,
+    shared_memory_access: str,
+):
     selection = InteractionSelection(
         interaction_mode=interaction_mode,
         character_id=character_id,
         voice_asset_id=voice_asset_id,
         read_memory=read_memory,
         write_memory=write_memory,
-        shared_memory_access="none",
+        shared_memory_access=shared_memory_access,
         transcript_policy=transcript_policy,
     )
     character_profile = default_character_service().resolve_snapshot(character_id or "") if interaction_mode == "character" else None

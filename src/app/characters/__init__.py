@@ -9,6 +9,7 @@ from .interaction import (
     character_shared_memory_enabled,
     neutralize_legacy_system_prompt,
     resolve_interaction_context,
+    resolve_shared_memory_categories,
     resolve_system_session_identity,
 )
 from .models import (
@@ -80,5 +81,6 @@ __all__ = [
     "default_character_service",
     "neutralize_legacy_system_prompt",
     "resolve_interaction_context",
+    "resolve_shared_memory_categories",
     "resolve_system_session_identity",
 ]

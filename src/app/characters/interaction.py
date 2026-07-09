@@ -59,6 +59,27 @@ def character_hermes_sync_enabled() -> bool:
     return _env_flag("OMNIX_CHARACTER_HERMES_SYNC_ENABLED")
 
 
+def resolve_shared_memory_categories(session: object) -> list[str]:
+    """Resolve the server-owned System Assistant category allowlist for a session."""
+
+    if getattr(session, "interaction_mode", "system") != "character":
+        return []
+    if getattr(session, "shared_memory_access", "none") != "read_only":
+        return []
+    if not character_shared_memory_enabled():
+        raise CharacterInteractionError("shared character memory access is disabled")
+    character_id = str(getattr(session, "character_id", "") or "")
+    if not character_id:
+        raise CharacterResolutionError("character session is missing character_id")
+    try:
+        from .service import default_character_service
+
+        character = default_character_service().resolve_snapshot(character_id)
+    except Exception as exc:
+        raise CharacterResolutionError("persisted character profile could not be resolved") from exc
+    return _validate_shared_memory_policy(character)
+
+
 def neutralize_legacy_system_prompt(prompt: str) -> str:
     """Replace only the old built-in Maya default, preserving user custom prompts."""
 

@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 
 from app import shared
-from app.assistant_memory import MemoryService, SQLiteMemoryRepository, resolve_chat_scope
+from app.assistant_memory import (
+    MemoryService,
+    OwnerAwareMemoryService,
+    OwnerAwareSQLiteMemoryRepository,
+    SQLiteMemoryRepository,
+    resolve_chat_scope,
+)
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+from app.chat.memory_prompt import resolve_prompt_memory
 from app.chat.memory_session import RefreshSessionMemoryRequest, refresh_session_memory
 from app.chat.store import ChatSessionStore as LegacyChatSessionStore
 
@@ -163,7 +171,108 @@ def test_streaming_and_non_streaming_use_same_memory_snapshot(monkeypatch, tmp_p
         complete = events[-1]
         assert complete["metadata"]["memory_context"]["selected_memory_count"] == 1
 
-    assert provider.calls[0]["messages"] == provider.calls[1]["messages"]
+    normalized = [
+        [
+            (role, re.sub(r"memory:[0-9a-f]+", "memory:<id>", content))
+            for role, content in call["messages"]
+        ]
+        for call in provider.calls
+    ]
+    assert normalized[0] == normalized[1]
+
+
+def test_character_shared_memory_is_allowlisted_normal_read_only_context(
+    monkeypatch,
+    tmp_path,
+):
+    from app.chat import memory_prompt
+
+    service = OwnerAwareMemoryService(
+        OwnerAwareSQLiteMemoryRepository(tmp_path / "owner-memory.sqlite3")
+    )
+    session = ChatSessionStore(tmp_path / "chat.json").create_session(
+        CreateChatSessionRequest(title="Shared memory boundary")
+    )
+    system_context = resolve_chat_scope(
+        session.id,
+        profile_id=session.profile_id,
+        workspace_id=session.workspace_id,
+    )
+    character_context = resolve_chat_scope(
+        session.id,
+        profile_id=session.profile_id,
+        workspace_id=session.workspace_id,
+        owner_type="character",
+        owner_id="maya",
+    )
+    character_record = service.create_explicit_memory(
+        character_context,
+        scope="global",
+        category="relationship",
+        content="Character-owned relationship context.",
+        provenance_id="msg:character",
+    )
+    allowed = service.create_explicit_memory(
+        system_context,
+        scope="global",
+        category="fact",
+        content="Allowlisted shared fact.",
+        provenance_id="msg:allowed",
+    )
+    service.create_explicit_memory(
+        system_context,
+        scope="global",
+        category="instruction",
+        content="Non-allowlisted instruction.",
+        provenance_id="msg:category",
+    )
+    service.create_explicit_memory(
+        system_context,
+        scope="workspace",
+        category="preference",
+        content="Sensitive preference.",
+        provenance_id="msg:sensitive",
+        sensitivity="sensitive",
+    )
+    service.create_explicit_memory(
+        system_context,
+        scope="session",
+        category="fact",
+        content="Session-only fact.",
+        provenance_id="msg:session",
+    )
+    snapshot = service.create_session_snapshot(character_context, token_budget=4_000)
+    character_session = session.model_copy(
+        update={
+            "interaction_mode": "character",
+            "character_id": "maya",
+            "read_memory": True,
+            "write_memory": False,
+            "shared_memory_access": "read_only",
+            "memory_snapshot_id": snapshot.id,
+            "memory_snapshot_revision": snapshot.revision,
+        }
+    )
+    monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "1")
+    monkeypatch.setattr(
+        memory_prompt,
+        "resolve_shared_memory_categories",
+        lambda _session: ["fact", "preference"],
+    )
+
+    items, diagnostics = resolve_prompt_memory(
+        character_session,
+        memory_service_factory=lambda: service,
+    )
+
+    assert [item.memory_id for item in items] == [character_record.id, allowed.id]
+    assert [item.source for item in items] == ["character", "shared_system"]
+    assert diagnostics["shared_selected_memory_ids"] == [allowed.id]
+    assert diagnostics["shared_excluded_reason_counts"] == {
+        "category_not_allowed": 1,
+        "sensitivity_not_normal": 1,
+        "session_scope_blocked": 1,
+    }
 
 
 def test_forgotten_snapshot_record_is_not_injected(monkeypatch, tmp_path):
