@@ -80,8 +80,12 @@ export function advanceDeliveryLedger(
   ledger: LiveVoiceDeliveryLedger,
   playedSamples: number,
 ): boolean {
-  ledger.audioPlayedSamples = Number.isFinite(playedSamples)
-    ? Math.max(ledger.audioPlayedSamples, playedSamples)
+  const finalSample = ledger.phrases.at(-1)?.audioSampleEnd ?? ledger.audioPlayedSamples;
+  const boundedSamples = playedSamples === Number.MAX_SAFE_INTEGER
+    ? finalSample
+    : playedSamples;
+  ledger.audioPlayedSamples = Number.isFinite(boundedSamples)
+    ? Math.max(ledger.audioPlayedSamples, boundedSamples)
     : ledger.audioPlayedSamples;
   let changed = false;
   for (const phrase of ledger.phrases) {
