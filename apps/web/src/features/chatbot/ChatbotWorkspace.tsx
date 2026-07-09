@@ -489,6 +489,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   async function startLiveCall(): Promise<void> {
     if (callStartedAt !== null) return;
     setActiveUtilityPanel('voice');
+    liveVoiceActiveRef.current = true;
+    setCallStartedAt(Date.now());
+    setCallElapsedMs(0);
     setAudioStatus('Preloading live-call identity, voice, and memory context…');
     try {
       let sessionId = selectedSessionId;
@@ -540,9 +543,6 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       }
       liveCallRuntimeRef.current = runtime;
       setLiveCallRuntime(runtime);
-      liveVoiceActiveRef.current = true;
-      setCallStartedAt(Date.now());
-      setCallElapsedMs(0);
       console.info('[Omnix Voice Perf] live-call runtime preloaded', {
         sessionId,
         interactionMode: runtime.interaction_mode,
