@@ -34,6 +34,41 @@ export interface SessionInteraction {
   messages: Array<{ id: string; role: string; content: string; created_at: string }>;
 }
 
+export interface LiveCallSpeechStyle {
+  speed: number;
+  temperature: number;
+  top_k: number;
+  top_p: number;
+  repetition_penalty: number;
+  expressiveness: string;
+  emotion: string;
+  interruption_style: string;
+}
+
+export interface CharacterLiveCallRuntime {
+  session_id: string;
+  interaction_mode: 'system' | 'character';
+  display_name: string;
+  character_id?: string | null;
+  character_profile_version?: number | null;
+  effective_identity_hash?: string | null;
+  voice_asset_id?: string | null;
+  greeting: string;
+  speech_style: LiveCallSpeechStyle;
+  read_memory: boolean;
+  write_memory: boolean;
+  shared_memory_access: 'none' | 'read_only';
+  memory_snapshot_id?: string | null;
+  preload: {
+    profile_loaded: boolean;
+    voice_resolved: boolean;
+    memory_snapshot_loaded: boolean;
+    memory_record_count: number;
+    preload_ms: number;
+    resolved_at: string;
+  };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
@@ -54,6 +89,9 @@ export const characterClient = {
   session(sessionId: string): Promise<SessionInteraction> {
     return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/interaction`);
   },
+  liveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
+    return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`);
+  },
   setSession(
     sessionId: string,
     input: {
@@ -62,6 +100,7 @@ export const characterClient = {
       voice_asset_id?: string | null;
       read_memory?: boolean;
       write_memory?: boolean;
+      shared_memory_access?: 'none' | 'read_only';
       transcript_policy?: 'persistent' | 'temporary' | 'none';
       continue_topic?: boolean;
     },
@@ -72,6 +111,7 @@ export const characterClient = {
         transcript_policy: 'persistent',
         read_memory: false,
         write_memory: false,
+        shared_memory_access: 'none',
         ...input,
       }),
     );
