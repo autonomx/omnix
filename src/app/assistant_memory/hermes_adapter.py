@@ -47,6 +47,17 @@ def default_hermes_memory_dir() -> Path:
     return Path(override).expanduser() if override else Path.home() / ".hermes" / "memories"
 
 
+def _system_owner_required(context: MemoryScopeContext, root: Path) -> HermesSyncStatus | None:
+    if context.owner_type == "system" and context.owner_id == "system-assistant":
+        return None
+    return HermesSyncStatus(
+        enabled=hermes_memory_sync_enabled(),
+        available=root.is_dir(),
+        memory_dir=str(root),
+        skipped_reasons=["system_owner_required"],
+    )
+
+
 def _candidate_lines(path: Path) -> list[str]:
     if not path.is_file():
         return []
@@ -77,6 +88,9 @@ def import_hermes_memory(
     memory_dir: str | Path | None = None,
 ) -> HermesSyncStatus:
     root = Path(memory_dir) if memory_dir is not None else default_hermes_memory_dir()
+    owner_error = _system_owner_required(context, root)
+    if owner_error is not None:
+        return owner_error
     if not hermes_memory_sync_enabled():
         return HermesSyncStatus(
             enabled=False,
@@ -113,6 +127,8 @@ def import_hermes_memory(
                     "adapter": "hermes_file_v1",
                     "filename": filename,
                     "content_sha256": digest,
+                    "owner_type": "system",
+                    "owner_id": "system-assistant",
                 },
             )
             imported.append(candidate.id)
@@ -128,6 +144,8 @@ def _compatible_export_records(records: list[MemoryRecord]) -> tuple[list[Memory
     user_records: list[MemoryRecord] = []
     operational_records: list[MemoryRecord] = []
     for record in records:
+        if (record.owner_type, record.owner_id) != ("system", "system-assistant"):
+            continue
         if record.status != "active" or record.trust_level != "user_approved":
             continue
         if record.source == "hermes" or record.sensitivity != "normal":
@@ -168,6 +186,9 @@ def export_approved_memory_to_hermes(
     memory_dir: str | Path | None = None,
 ) -> HermesSyncStatus:
     root = Path(memory_dir) if memory_dir is not None else default_hermes_memory_dir()
+    owner_error = _system_owner_required(context, root)
+    if owner_error is not None:
+        return owner_error
     if not hermes_memory_sync_enabled():
         return HermesSyncStatus(
             enabled=False,
