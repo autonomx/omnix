@@ -492,7 +492,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     liveVoiceActiveRef.current = true;
     setCallStartedAt(Date.now());
     setCallElapsedMs(0);
-    setAudioStatus('Preloading live-call identity, voice, and memory context…');
+    setAudioStatus('Live voice call started.');
     try {
       let sessionId = selectedSessionId;
       let createdSystemSession = false;
