@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.characters import CharacterRepository, neutralize_legacy_system_prompt, resolve_system_session_identity
 
 from .context_budget import PromptBudget, prompt_budget_from_env
-from .models import ChatMessage, ChatSession
+from .models import ChatMessage, ChatSession, MessageContentPurpose, project_message_content
 
 PromptRole = Literal["system", "user", "assistant"]
 
@@ -120,7 +120,11 @@ def build_prompt_assembly(
     ]
     if recent_message_limit is not None:
         eligible_recent_messages = eligible_recent_messages[-max(0, recent_message_limit):]
-    recent_messages = [PromptTurn(role=message.role, content=message.content, message_id=message.id) for message in eligible_recent_messages]
+    recent_messages: list[PromptTurn] = []
+    for message in eligible_recent_messages:
+        content = project_message_content(message, MessageContentPurpose.MODEL)
+        if content:
+            recent_messages.append(PromptTurn(role=message.role, content=content, message_id=message.id))
     external_context = [_external_item(payload, index) for index, payload in enumerate(context_items or [], start=1)]
     resolved_summary = session_summary if session_summary is not None else _active_segment_summary(session)
     return PromptAssembly(
