@@ -9,6 +9,12 @@ from fastapi import FastAPI, HTTPException, Query
 from app.chat.models import ChatSession
 
 from .live_call import CharacterLiveCallRuntime, resolve_live_call_runtime
+from .management import (
+    CharacterDataActionRequest,
+    CharacterDataActionResponse,
+    CharacterDataExport,
+    CharacterManagementService,
+)
 from .models import (
     ArchiveCharacterResponse,
     CharacterListResponse,
@@ -78,6 +84,38 @@ def register_character_routes(
     if chat_store_factory is None:
         return
 
+    def management_service() -> CharacterManagementService:
+        return CharacterManagementService(service_factory(), chat_store_factory())
+
+    @app.get(
+        "/api/characters/{character_id}/data",
+        response_model=CharacterDataExport,
+        tags=["characters"],
+        include_in_schema=False,
+    )
+    async def export_character_data(character_id: str) -> CharacterDataExport:
+        try:
+            return management_service().export(character_id)
+        except CharacterNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="character not found") from exc
+
+    @app.post(
+        "/api/characters/{character_id}/data/actions",
+        response_model=CharacterDataActionResponse,
+        tags=["characters"],
+        include_in_schema=False,
+    )
+    async def apply_character_data_actions(
+        character_id: str,
+        request: CharacterDataActionRequest,
+    ) -> CharacterDataActionResponse:
+        try:
+            return management_service().apply(character_id, request)
+        except CharacterNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="character not found") from exc
+        except (CharacterConflictError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @app.get("/api/chat/sessions/{session_id}/interaction", response_model=ChatSession, tags=["characters"], include_in_schema=False)
     async def get_session_interaction(session_id: str) -> ChatSession:
         session = chat_store_factory().get_session(session_id)
@@ -106,10 +144,7 @@ def register_character_routes(
         if session is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         try:
-            return resolve_live_call_runtime(
-                session,
-                character_service_factory=service_factory,
-            )
+            return resolve_live_call_runtime(session, character_service_factory=service_factory)
         except (CharacterNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

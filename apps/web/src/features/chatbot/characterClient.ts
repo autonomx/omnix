@@ -15,9 +15,7 @@ export interface CharacterProfile {
   updated_at: string;
 }
 
-export interface CharacterListResponse {
-  characters: CharacterProfile[];
-}
+export interface CharacterListResponse { characters: CharacterProfile[]; }
 
 export interface SessionInteraction {
   id: string;
@@ -69,6 +67,26 @@ export interface CharacterLiveCallRuntime {
   };
 }
 
+export interface CharacterDataExport {
+  character: CharacterProfile;
+  versions: Array<{ character_id: string; version: number; personality_prompt: string; created_at: string }>;
+  memories: Array<{ id: string; category: string; scope: string; content: string; pinned: boolean; revision: number }>;
+  pending_suggestions: Array<{ id: string; proposed_category: string; proposed_content: string; confidence: number; created_at: string }>;
+  sessions: Array<{ id: string; title: string; message_count: number; character_message_count: number; created_at: string; updated_at: string }>;
+  generated_at: string;
+}
+
+export interface CharacterDataActionResponse {
+  ok: boolean;
+  character_id: string;
+  deleted_memory_records: number;
+  deleted_memory_candidates: number;
+  deleted_memory_snapshots: number;
+  deleted_transcript_messages: number;
+  voice_unlinked: boolean;
+  profile_archived: boolean;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
@@ -83,8 +101,29 @@ function jsonInit(method: string, body: unknown): RequestInit {
 }
 
 export const characterClient = {
-  list(): Promise<CharacterListResponse> {
-    return request('/api/characters');
+  list(includeArchived = false): Promise<CharacterListResponse> {
+    return request(`/api/characters${includeArchived ? '?include_archived=true' : ''}`);
+  },
+  create(input: Pick<CharacterProfile, 'display_name' | 'personality_prompt'> & Partial<CharacterProfile>): Promise<CharacterProfile> {
+    return request('/api/characters', jsonInit('POST', input));
+  },
+  update(characterId: string, input: Record<string, unknown>): Promise<CharacterProfile> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}`, jsonInit('PATCH', input));
+  },
+  data(characterId: string): Promise<CharacterDataExport> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}/data`);
+  },
+  applyDataActions(
+    characterId: string,
+    input: {
+      confirm_character_id: string;
+      delete_memories?: boolean;
+      delete_transcripts?: boolean;
+      unlink_voice?: boolean;
+      archive_profile?: boolean;
+    },
+  ): Promise<CharacterDataActionResponse> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}/data/actions`, jsonInit('POST', input));
   },
   session(sessionId: string): Promise<SessionInteraction> {
     return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/interaction`);
