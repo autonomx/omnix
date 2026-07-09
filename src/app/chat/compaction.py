@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.assistant_memory.settings import load_memory_runtime_settings
 from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, SQLiteJobStore, default_job_store
 
+from .models import MessageContentPurpose, project_message_content
 from .repository import default_chat_db_path
 
 if TYPE_CHECKING:
@@ -177,7 +178,8 @@ def build_deterministic_summary(session, *, recent_message_limit: int = DEFAULT_
     decisions: list[str] = []
     unresolved: list[str] = []
     for message in older:
-        content = " ".join(message.content.strip().split())
+        projected = project_message_content(message, MessageContentPurpose.SUMMARY)
+        content = " ".join(projected.strip().split())
         if not content:
             continue
         clipped = content[:500] + ("…" if len(content) > 500 else "")
