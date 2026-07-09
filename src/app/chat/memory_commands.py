@@ -6,7 +6,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from app.assistant_memory import MemoryService, resolve_chat_scope
+from app.assistant_memory import MemoryService, resolve_session_memory_scope
 
 from .memory_session import RefreshSessionMemoryRequest, refresh_session_memory
 from .models import ChatSession
@@ -78,11 +78,30 @@ def parse_memory_command(content: str) -> MemoryCommand | None:
 
 
 def _scope(session: ChatSession):
-    return resolve_chat_scope(
-        session.id,
-        profile_id=session.profile_id,
-        workspace_id=session.workspace_id,
-        project_id=session.project_id,
+    return resolve_session_memory_scope(session)
+
+
+def _write_rejected(session: ChatSession, command: MemoryCommand) -> MemoryCommandResult | None:
+    if session.interaction_mode != "character" or session.write_memory:
+        return None
+    if command.kind not in {"save", "forget", "update"}:
+        return None
+    return MemoryCommandResult(
+        content="Character memory write is disabled for this Chat. No memory was changed.",
+        command=command.kind,
+        mutated=False,
+    )
+
+
+def _read_rejected(session: ChatSession, command: MemoryCommand) -> MemoryCommandResult | None:
+    if session.interaction_mode != "character" or session.read_memory:
+        return None
+    if command.kind not in {"list", "refresh"}:
+        return None
+    return MemoryCommandResult(
+        content="Character memory read is disabled for this Chat.",
+        command=command.kind,
+        mutated=False,
     )
 
 
@@ -96,6 +115,12 @@ def execute_memory_command(
     session = store.get_session(session_id)
     if session is None:
         return MemoryCommandResult(content="The Chat session no longer exists.", command=command.kind, mutated=False)
+    write_rejected = _write_rejected(session, command)
+    if write_rejected is not None:
+        return write_rejected
+    read_rejected = _read_rejected(session, command)
+    if read_rejected is not None:
+        return read_rejected
     context = _scope(session)
 
     if command.kind == "save":
@@ -153,7 +178,16 @@ def execute_memory_command(
         for index, current in enumerate(sessions):
             if current.id != session_id:
                 continue
-            current.memory_enabled = False
+            if current.interaction_mode == "character":
+                current.read_memory = False
+                current.write_memory = False
+                current.shared_memory_access = "none"
+                current.memory_snapshot_id = None
+                current.memory_snapshot_revision = None
+                current.memory_record_count = 0
+                current.memory_last_refreshed_at = None
+            else:
+                current.memory_enabled = False
             sessions[index] = current
             store._save_sessions(sessions)
             return MemoryCommandResult(content="Memory is disabled for this Chat. Saved records were not deleted.", command="disable", mutated=True)
