@@ -6,6 +6,11 @@ import {
   semanticFinalizeDelay,
 } from './live-voice-floor-manager';
 import {
+  type OverlapIntent,
+  classifyOverlap,
+  shouldConfirmInterruption,
+} from './live-voice-overlap-classifier';
+import {
   StreamingSttWebSocketClient,
   calculateRms,
   getDefaultStreamingSttWebSocketUrl,
@@ -39,6 +44,8 @@ type LiveVoiceSession = {
   sttFinalRequestedAt: number | null;
   partialTranscript: string;
   floorState: UserFloorState;
+  overlapIntent: OverlapIntent | null;
+  interruptionDispatched: boolean;
 };
 
 type PendingStart = { card: HTMLElement; token: number };
@@ -182,6 +189,8 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       sttFinalRequestedAt: null,
       partialTranscript: '',
       floorState: reduceUserFloor('idle', { type: 'listen' }),
+      overlapIntent: null,
+      interruptionDispatched: false,
     };
     audioPipeline = await createLiveVoiceAudioPipeline(audioContext, (audio) => {
       const session = activeSession;
@@ -280,18 +289,33 @@ registerProcessor('omnix-live-voice-processor', OmnixLiveVoiceProcessor);
 }
 
 function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void {
-  const orb = session.card.querySelector<HTMLElement>('.assistant-voice-orb');
-  const assistantSpeaking = orb?.dataset.voiceMode === 'speaking';
+  const assistantSpeaking = assistantIsSpeaking(session.card);
   const rms = calculateRms(audio);
   updateVoiceVisualizer(session, rms);
   if (session.finalRequested) return;
   const speechStarted = rms >= liveVoiceSpeechThreshold();
   session.speechFrameCount = speechStarted ? session.speechFrameCount + 1 : 0;
   const confirmedSpeech = session.speechFrameCount >= INTERRUPT_CONFIRMATION_FRAMES;
-  if (assistantSpeaking && confirmedSpeech && !session.speechDetected) dispatchAssistantVoiceInterrupt(session.card);
+  if (assistantSpeaking && confirmedSpeech && !session.speechDetected) {
+    session.overlapIntent = 'uncertain';
+    session.floorState = reduceUserFloor(session.floorState, {
+      type: 'speech_confirmed',
+      assistantSpeaking: true,
+    });
+    dispatchLiveVoicePerfEvent({
+      stage: 'overlap_candidate',
+      timestamp: new Date().toISOString(),
+      rms,
+    });
+  }
   if (confirmedSpeech) {
     session.speechDetected = true;
-    session.floorState = reduceUserFloor(session.floorState, { type: 'speech_confirmed', assistantSpeaking });
+    if (!assistantSpeaking) {
+      session.floorState = reduceUserFloor(session.floorState, {
+        type: 'speech_confirmed',
+        assistantSpeaking: false,
+      });
+    }
     if (session.silenceTimer) {
       clearTimeout(session.silenceTimer);
       session.silenceTimer = null;
@@ -307,8 +331,30 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
 
 function handlePartialTranscript(card: HTMLElement, text: string): void {
   const session = activeSession;
-  if (session?.card === card) session.partialTranscript = text.trim();
+  if (session?.card === card) {
+    session.partialTranscript = text.trim();
+    if (session.floorState === 'overlap_candidate' && assistantIsSpeaking(card)) {
+      assessOverlapCandidate(session);
+    }
+  }
   renderTranscript(card, 'You', text, 'draft');
+}
+
+function assessOverlapCandidate(session: LiveVoiceSession): void {
+  const assessment = classifyOverlap(session.partialTranscript, currentAssistantSpeechText());
+  session.overlapIntent = assessment.intent;
+  dispatchLiveVoicePerfEvent({
+    stage: 'overlap_classified',
+    timestamp: new Date().toISOString(),
+    intent: assessment.intent,
+    confidence: assessment.confidence,
+    reason: assessment.reason,
+    transcriptChars: session.partialTranscript.length,
+  });
+  if (!session.interruptionDispatched && shouldConfirmInterruption(assessment)) {
+    session.interruptionDispatched = true;
+    dispatchAssistantVoiceInterrupt(session.card, assessment.intent, assessment.confidence);
+  }
 }
 
 function scheduleSemanticFinalization(session: LiveVoiceSession): void {
@@ -336,12 +382,18 @@ function handleExternalStop(): void {
   }
 }
 
-function dispatchAssistantVoiceInterrupt(card: HTMLElement): void {
+function dispatchAssistantVoiceInterrupt(
+  card: HTMLElement,
+  intent: OverlapIntent = 'interrupt',
+  confidence = 1,
+): void {
   window.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
     detail: {
       source: 'live-voice',
       status: panelStatuses.get(card) ?? 'connected',
       timestamp: new Date().toISOString(),
+      intent,
+      confidence,
     },
   }));
 }
@@ -349,6 +401,7 @@ function dispatchAssistantVoiceInterrupt(card: HTMLElement): void {
 function requestFinalTranscript(session: LiveVoiceSession): void {
   session.silenceTimer = null;
   if (activeSession !== session || session.finalRequested) return;
+  if (session.floorState === 'overlap_candidate' && session.partialTranscript) assessOverlapCandidate(session);
   session.floorState = reduceUserFloor(session.floorState, { type: 'commit' });
   session.finalRequested = true;
   session.perfTurnId = `voice-turn:${Date.now()}`;
@@ -385,6 +438,8 @@ function handleFinalTranscript(card: HTMLElement, text: string): void {
   if (!session || session.card !== card) return;
   const receivedAt = performance.now();
   const transcript = text.trim();
+  const overlapIntent = session.overlapIntent;
+  const interruptionDispatched = session.interruptionDispatched;
   if (transcript) {
     dispatchLiveVoicePerfEvent({
       stage: 'stt_final_received',
@@ -394,8 +449,14 @@ function handleFinalTranscript(card: HTMLElement, text: string): void {
       sttFinalizeMs: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),
     });
   }
+  const suppressTurn = Boolean(
+    overlapIntent === 'hard_stop'
+    || overlapIntent === 'backchannel'
+    || overlapIntent === 'noise'
+    || (overlapIntent === 'uncertain' && !interruptionDispatched),
+  );
   resetTurnState(session);
-  if (!transcript) {
+  if (!transcript || suppressTurn) {
     setPanelStatus(card, 'connected');
     return;
   }
@@ -416,6 +477,8 @@ function resetTurnState(session: LiveVoiceSession): void {
   session.perfTurnId = null;
   session.sttFinalRequestedAt = null;
   session.partialTranscript = '';
+  session.overlapIntent = null;
+  session.interruptionDispatched = false;
   session.floorState = reduceUserFloor(session.floorState, { type: 'reset' });
   session.floorState = reduceUserFloor(session.floorState, { type: 'listen' });
 }
@@ -445,6 +508,14 @@ function readLiveVoiceSensitivity(): number {
 function readConversationPace(): ConversationPace {
   const value = readSettings().conversationPace;
   return value === 'quick' || value === 'reflective' ? value : DEFAULT_CONVERSATION_PACE;
+}
+
+function assistantIsSpeaking(card: HTMLElement): boolean {
+  return card.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode === 'speaking';
+}
+
+function currentAssistantSpeechText(): string {
+  return document.querySelector<HTMLElement>('[data-omnix-live-delivery]')?.textContent ?? '';
 }
 
 function stopLiveVoice(card: HTMLElement, nextStatus: StreamingSttConnectionStatus): void {
