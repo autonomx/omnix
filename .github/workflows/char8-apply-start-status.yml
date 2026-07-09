@@ -1,0 +1,33 @@
+name: CHAR-8 apply live-call start status
+
+on:
+  push:
+    branches: [tmp-char8-live-call]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-start-status:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp-char8-live-call
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/apply_char8_start_status.py
+      - name: Commit status integration
+        run: |
+          if git diff --quiet -- apps/web/src/features/chatbot/ChatbotWorkspace.tsx; then
+            echo 'Status patch already applied.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/src/features/chatbot/ChatbotWorkspace.tsx
+          git commit -m 'CHAR-8 preserve immediate live-call status'
+          git push origin HEAD:tmp-char8-live-call
