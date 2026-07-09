@@ -1,6 +1,6 @@
 # Character Mode staged rollout and rollback guide
 
-Status: repository implementation complete; Stage 1 passed on the local deployment on 2026-07-09; Stage 2 read-only character-memory pilot is next.
+Status: repository implementation complete; Stage 1 passed on the local deployment on 2026-07-09; Stage 2 read-only character-memory pilot tooling is ready.
 
 Baseline: `c37a2610275723235cf3b5ccceb350385a9050b8` or a later `main` commit containing it.
 
@@ -9,6 +9,10 @@ Character Mode must be enabled incrementally. Passing repository CI is necessary
 Stage 1 operator guide: `docs/character-mode/stage-1-identity-rollout.md`
 
 Stage 1 evidence: `docs/character-mode/stage-1-rehearsal-results.md`
+
+Stage 2 operator guide: `docs/character-mode/stage-2-read-only-memory-rollout.md`
+
+Stage 2 result template: `docs/character-mode/stage-2-rehearsal-results.md`
 
 ## Before Stage 1
 
@@ -63,6 +67,8 @@ Prerequisites:
 OMNIX_CHARACTER_MODE_ENABLED=1
 OMNIX_CHARACTER_MEMORY_ENABLED=1
 OMNIX_CHAT_MEMORY_ENABLED=1
+OMNIX_CHARACTER_SHARED_MEMORY_ENABLED=0
+OMNIX_CHARACTER_HERMES_SYNC_ENABLED=0
 ```
 
 Keep each pilot session at:
@@ -81,6 +87,16 @@ Verify:
 - a read-only session cannot create pending suggestions or approved records;
 - switching character or memory policy starts a new context segment and clears stale snapshots;
 - forget and relationship reset remove the selected character's content without affecting other owners.
+
+Run the automated two-part pilot:
+
+```text
+python scripts/character_mode_stage2_preflight.py prepare --model-id "<loaded-model-id>"
+# restart Omnix with the same Stage 2 flags
+python scripts/character_mode_stage2_preflight.py verify-restart
+```
+
+The Stage 2 harness creates controlled synthetic owner fixtures, validates provider prompt diagnostics and every read-only write guard, verifies persistence across restart, then checks forget isolation and cleans up the synthetic records and temporary fixture sessions. See `docs/character-mode/stage-2-read-only-memory-rollout.md`.
 
 Rollback: turn off `OMNIX_CHARACTER_MEMORY_ENABLED` or return pilot sessions to `read_memory=false`. Existing records remain isolated and retained.
 
