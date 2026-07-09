@@ -39,6 +39,7 @@ class CharacterProfileSnapshot(BaseModel):
     default_voice_asset_id: str | None = Field(default=None, max_length=240)
     speech_style: dict[str, Any] = Field(default_factory=dict)
     identity_policy: dict[str, Any] = Field(default_factory=dict)
+    shared_memory_policy: dict[str, Any] = Field(default_factory=dict)
     version: int = Field(default=1, ge=1)
     enabled: bool = True
 
@@ -72,6 +73,7 @@ class CharacterProfile(BaseModel):
             default_voice_asset_id=self.default_voice_asset_id,
             speech_style=dict(self.speech_style),
             identity_policy=dict(self.identity_policy),
+            shared_memory_policy=dict(self.shared_memory_policy),
             version=self.active_version,
             enabled=self.enabled and self.status == "active",
         )

@@ -20,6 +20,7 @@ LEGACY_MAYA_SYSTEM_PROMPT = (
     "filler and tangents. Be clear and concise, admit uncertainty when needed, and "
     "maintain a natural, human-like presence."
 )
+_ALLOWED_SHARED_CATEGORIES = {"preference", "fact", "project", "relationship", "instruction"}
 
 
 class CharacterInteractionError(ValueError):
@@ -68,6 +69,19 @@ def _identity_hash(payload: dict[str, object]) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def _validate_shared_memory_policy(character: CharacterProfileSnapshot) -> list[str]:
+    policy = dict(character.shared_memory_policy or {})
+    if policy.get("access") != "read_only":
+        raise CharacterInteractionError("character profile does not permit shared memory access")
+    raw_categories = policy.get("allowed_categories") or []
+    if not isinstance(raw_categories, list):
+        raise CharacterInteractionError("character shared memory categories are invalid")
+    categories = [str(value) for value in raw_categories if str(value) in _ALLOWED_SHARED_CATEGORIES]
+    if not categories:
+        raise CharacterInteractionError("character profile has no permitted shared memory categories")
+    return sorted(set(categories))
+
+
 def resolve_interaction_context(
     selection: InteractionSelection,
     *,
@@ -102,8 +116,12 @@ def resolve_interaction_context(
         raise CharacterResolutionError("resolved character does not match character_id")
     if not character.enabled:
         raise CharacterResolutionError("character profile is disabled")
-    if selection.shared_memory_access != "none" and not character_shared_memory_enabled():
-        raise CharacterInteractionError("shared character memory access is disabled")
+
+    shared_categories: list[str] = []
+    if selection.shared_memory_access != "none":
+        if not character_shared_memory_enabled():
+            raise CharacterInteractionError("shared character memory access is disabled")
+        shared_categories = _validate_shared_memory_policy(character)
     if (selection.read_memory or selection.write_memory) and not character_memory_enabled():
         raise CharacterInteractionError("character memory is disabled")
 
@@ -116,6 +134,12 @@ def resolve_interaction_context(
         assistant_identity.append(
             "Character identity policy (server controlled): "
             + json.dumps(character.identity_policy, sort_keys=True, separators=(",", ":"))
+        )
+    if shared_categories:
+        assistant_identity.append(
+            "Shared System Assistant memory is read-only and limited to these categories: "
+            + ", ".join(shared_categories)
+            + ". Never treat shared memory as permission to write System Assistant memory."
         )
     payload = {
         "interaction_mode": "character",
