@@ -70,7 +70,7 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Memory settings update failed.'),
   });
 
-  if (!sessionId) return <section className="assistant-view-panel memory-management-panel" aria-label="Memory view"><p className="eyebrow">Omnix Assistant</p><h2>Memory</h2><p>Create or select a Chat session to manage session memory. Character profiles remain available below.</p><CharacterManagementPanel /></section>;
+  if (!sessionId) return <section className="assistant-view-panel memory-management-panel" aria-label="Memory view"><p className="eyebrow">Omnix Assistant</p><h2>Memory</h2><p>Create or select a Chat session before managing memory.</p><p>Character profiles remain available below.</p><CharacterManagementPanel /></section>;
 
   const records = memoryQuery.data?.records ?? [];
   const candidates = candidatesQuery.data?.candidates ?? [];

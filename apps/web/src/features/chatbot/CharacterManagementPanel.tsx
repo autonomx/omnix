@@ -159,7 +159,7 @@ function CharacterDataSummary({ data, loading }: { data?: CharacterDataExport; l
       <span><strong>{data.pending_suggestions.length}</strong> pending suggestions</span>
       <span><strong>{data.sessions.reduce((total, item) => total + item.character_message_count, 0)}</strong> transcript messages</span>
     </div>
-    {data.memories.length ? <details><summary>Character memories</summary><ul>{data.memories.map((memory) => <li key={memory.id}><strong>{memory.category}</strong> · {memory.content}</li>)}</ul></details> : null}
-    {data.pending_suggestions.length ? <details><summary>Pending suggestions</summary><ul>{data.pending_suggestions.map((candidate) => <li key={candidate.id}><strong>{candidate.proposed_category}</strong> · {candidate.proposed_content}</li>)}</ul></details> : null}
+    {data.memories.length ? <details open><summary>Character memories</summary><ul>{data.memories.map((memory) => <li key={memory.id}><strong>{memory.category}</strong> · {memory.content}</li>)}</ul></details> : null}
+    {data.pending_suggestions.length ? <details open><summary>Pending suggestions</summary><ul>{data.pending_suggestions.map((candidate) => <li key={candidate.id}><strong>{candidate.proposed_category}</strong> · {candidate.proposed_content}</li>)}</ul></details> : null}
   </section>;
 }
