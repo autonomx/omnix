@@ -34,6 +34,7 @@ Do not paste prompts, model output, memory contents, synthetic markers, access c
 |---|---|---|
 | Prepare report | Pending | Expected `needs_review` until restart |
 | Restart-verification report | Pending | Must be `pass` |
+| Discovery recovery report | Pending | Use only if checkpoint/final artifacts cannot be recovered |
 
 ## Automated metrics
 
