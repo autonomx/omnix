@@ -112,9 +112,10 @@ def _persist_delivery(details: dict[str, Any]) -> None:
         return
     try:
         from app.chat.assistant_turns import default_assistant_turn_coordinator
+        from app.chat.delivery_sync import sync_delivery_metadata
 
         active_index = details.get("audio_interrupted_phrase_index")
-        default_assistant_turn_coordinator().record_delivery(
+        record = default_assistant_turn_coordinator().record_delivery(
             turn_id,
             generated_phrase_count=_count(details.get("generated_phrase_count")),
             audio_delivered_phrase_count=_count(details.get("audio_delivered_phrase_count")),
@@ -124,6 +125,8 @@ def _persist_delivery(details: dict[str, Any]) -> None:
             context_delivered_text_end=_count(details.get("context_delivered_text_end")),
             delivery_policy="reveal_as_spoken",
         )
+        if record is not None:
+            sync_delivery_metadata(record)
     except Exception:
         return
 
