@@ -1,10 +1,14 @@
 # Character Mode staged rollout and rollback guide
 
-Status: repository implementation complete; deployment adoption pending.
+Status: repository implementation complete; Stage 1 preflight available; deployment adoption pending.
 
-Baseline: `cc42b5d18c02886ef3d51996f345cb74aea07058` or a later `main` commit containing it.
+Baseline: `c37a2610275723235cf3b5ccceb350385a9050b8` or a later `main` commit containing it.
 
 Character Mode must be enabled incrementally. Passing repository CI is necessary but does not replace a deployment-specific rehearsal with the actual model, TTS provider, voice assets, data stores, and retention configuration.
+
+Stage 1 operator guide: `docs/character-mode/stage-1-identity-rollout.md`
+
+Stage 1 result template: `docs/character-mode/stage-1-rehearsal-results.md`
 
 ## Before Stage 1
 
@@ -36,6 +40,16 @@ Verify:
 - changing only the renderer voice does not change character identity;
 - Character Mode with memory off performs no character-memory reads or writes;
 - a character without a linked voice can use the deployment's normal renderer voice.
+
+Run the automated two-part rehearsal from the repository root:
+
+```text
+python scripts/character_mode_stage1_preflight.py prepare ...
+# restart Omnix with the same Stage 1 flags
+python scripts/character_mode_stage1_preflight.py verify-restart ...
+```
+
+The prepare decision is normally `needs_review` until restart verification. Stage 1 is approved only when the final automated report is `pass` and the browser checklist in the operator guide is complete.
 
 Rollback: set `OMNIX_CHARACTER_MODE_ENABLED=0`. Profiles and versions remain stored but cannot become active interactions.
 
