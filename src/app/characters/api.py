@@ -26,6 +26,12 @@ from .models import (
 from .repository import CharacterConflictError, CharacterNotFoundError
 from .service import CharacterService, CharacterVoiceAssetError, default_character_service
 from .session_models import SetSessionInteractionRequest
+from .voice_consent import (
+    UpdateVoiceProfileGovernanceRequest,
+    VoiceConsentError,
+    VoiceProfileGovernance,
+    default_voice_governance_service,
+)
 
 
 def register_character_routes(
@@ -80,6 +86,33 @@ def register_character_routes(
             return service_factory().versions(character_id)
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail="character not found") from exc
+
+    @app.get(
+        "/api/voice-profiles/{asset_id}/governance",
+        response_model=VoiceProfileGovernance,
+        tags=["characters"],
+        include_in_schema=False,
+    )
+    async def get_voice_profile_governance(asset_id: str) -> VoiceProfileGovernance:
+        try:
+            return default_voice_governance_service().get(asset_id)
+        except VoiceConsentError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.patch(
+        "/api/voice-profiles/{asset_id}/governance",
+        response_model=VoiceProfileGovernance,
+        tags=["characters"],
+        include_in_schema=False,
+    )
+    async def update_voice_profile_governance(
+        asset_id: str,
+        request: UpdateVoiceProfileGovernanceRequest,
+    ) -> VoiceProfileGovernance:
+        try:
+            return default_voice_governance_service().update(asset_id, request)
+        except VoiceConsentError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     if chat_store_factory is None:
         return
