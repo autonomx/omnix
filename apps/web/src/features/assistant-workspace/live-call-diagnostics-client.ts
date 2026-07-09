@@ -1,6 +1,10 @@
 const LIVE_CALL_DIAGNOSTICS_PATH = '/api/tts/live-call/diagnostics';
 const FLUSH_DELAY_MS = 250;
 const MAX_BATCH_EVENTS = 24;
+const TRANSCRIPT_LOGGING_KEY = 'omnix.liveCall.transcriptLogging';
+const TRANSCRIPT_DETAIL_PATTERN = /(^|_)(transcript|user_text|speech_text)(_|$)/i;
+
+export type TranscriptLoggingMode = 'none' | 'lengths_only' | 'redacted' | 'full_local_debug';
 
 type LiveCallDiagnosticEvent = {
   source: string;
@@ -65,7 +69,7 @@ export function createLiveCallDiagnosticsReporter(traceId: string): LiveCallDiag
         client_wall_time_ms: Date.now(),
         client_monotonic_ms: performance.now(),
         document_visibility: document.visibilityState,
-        ...details,
+        ...sanitizeDiagnosticDetails(details, readTranscriptLoggingMode()),
       },
     });
     if (queue.length >= MAX_BATCH_EVENTS) void flush();
@@ -88,6 +92,38 @@ export function createLiveCallDiagnosticsReporter(traceId: string): LiveCallDiag
 
   record('reporter_created', {}, 'controller');
   return { traceId, record, flush, close };
+}
+
+export function sanitizeDiagnosticDetails(
+  details: Record<string, unknown>,
+  mode: TranscriptLoggingMode = 'lengths_only',
+): Record<string, unknown> {
+  if (mode === 'full_local_debug') return { ...details };
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (!TRANSCRIPT_DETAIL_PATTERN.test(key)) {
+      sanitized[key] = value;
+      continue;
+    }
+    if (mode === 'none') continue;
+    if (mode === 'redacted') {
+      sanitized[key] = '[redacted]';
+      continue;
+    }
+    const length = typeof value === 'string' ? value.length : 0;
+    sanitized[`${key}_chars`] = length;
+  }
+  return sanitized;
+}
+
+function readTranscriptLoggingMode(): TranscriptLoggingMode {
+  try {
+    const value = window.localStorage.getItem(TRANSCRIPT_LOGGING_KEY);
+    if (value === 'none' || value === 'redacted' || value === 'full_local_debug') return value;
+  } catch {
+    // Storage access may be unavailable in hardened browser contexts.
+  }
+  return 'lengths_only';
 }
 
 export function createLiveCallTraceId(sessionId: string): string {
