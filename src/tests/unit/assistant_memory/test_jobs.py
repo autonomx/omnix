@@ -135,8 +135,8 @@ def test_missing_messages_and_explicit_commands_complete_without_candidates(tmp_
     assert memory_service.repository.list_candidates(status="pending") == []
 
 
-def test_non_streaming_and_streaming_completion_enqueue_one_job_each(tmp_path, monkeypatch):
-    job_store, _, chat_store, session = setup_runtime(tmp_path, monkeypatch)
+def test_non_streaming_and_streaming_completion_enqueue_and_process_one_job_each(tmp_path, monkeypatch):
+    job_store, memory_service, chat_store, session = setup_runtime(tmp_path, monkeypatch)
 
     regular = chat_store.append_user_message(
         session.id,
@@ -168,7 +168,14 @@ def test_non_streaming_and_streaming_completion_enqueue_one_job_each(tmp_path, m
 
     jobs = [job for job in job_store.list_jobs() if job.type == MEMORY_SUGGEST_JOB_TYPE]
     assert len(jobs) == 2
+    assert {getattr(job.status, "value", str(job.status)) for job in jobs} == {"completed"}
     assert {job.input_payload["user_message_id"] for job in jobs} == {
         regular[1].id,
         message.id,
+    }
+    candidates = memory_service.repository.list_candidates(status="pending")
+    assert len(candidates) == 2
+    assert {candidate.proposed_content for candidate in candidates} == {
+        "concise summaries",
+        "preserve rollback controls",
     }

@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from app.assistant_memory import MemoryService, default_memory_service
-from app.assistant_memory.jobs import enqueue_memory_suggestion_job
+from app.assistant_memory.jobs import (
+    enqueue_memory_suggestion_job,
+    process_memory_suggestion_job,
+)
 
 from .compaction import (
     DEFAULT_RECENT_MESSAGE_LIMIT,
@@ -159,6 +162,28 @@ class ChatSessionStore(JsonChatSessionStore):
             self._save_sessions(sessions)
             return
 
+    def _enqueue_memory_suggestion_job(self, session_id: str, user_message_id: str) -> None:
+        job = enqueue_memory_suggestion_job(session_id, user_message_id)
+        if job is None:
+            return
+        try:
+            process_memory_suggestion_job(
+                job,
+                chat_store=self,
+                memory_service=self.memory_service_factory(),
+            )
+        except Exception as exc:
+            from app.jobs import FailJobRequest, default_job_store
+
+            default_job_store().fail_job(
+                job.id,
+                FailJobRequest(
+                    code="memory_suggestion_inline_failed",
+                    message=str(exc)[:500] or "Memory suggestion job failed.",
+                    retryable=True,
+                ),
+            )
+
     def begin_user_message(
         self,
         session_id: str,
@@ -200,7 +225,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 context_diagnostics=context_diagnostics,
             )
             if appended is not None:
-                enqueue_memory_suggestion_job(session_id, appended[1].id)
+                self._enqueue_memory_suggestion_job(session_id, appended[1].id)
                 enqueue_compaction_job(appended[0])
             return appended
         appended = self.begin_user_message(
@@ -249,7 +274,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 None,
             )
             if user_message is not None and not user_message.metadata.get("memory_command"):
-                enqueue_memory_suggestion_job(session_id, user_message_id)
+                self._enqueue_memory_suggestion_job(session_id, user_message_id)
                 enqueue_compaction_job(completed)
         return completed
 

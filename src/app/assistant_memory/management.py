@@ -144,7 +144,19 @@ def candidates_for_session(
     _, context = resolve_session_scope(store, session_id)
     if context is None:
         return None
-    candidates = service.repository.list_candidates(status="pending", limit=max(0, min(limit, 500)))
+    bounded_limit = max(0, min(limit, 500))
+    try:
+        candidates = service.repository.list_candidates(
+            owner_type=context.owner_type,
+            owner_id=context.owner_id,
+            status="pending",
+            limit=bounded_limit,
+        )
+    except TypeError:
+        candidates = service.repository.list_candidates(
+            status="pending",
+            limit=bounded_limit,
+        )
     visible = [
         candidate
         for candidate in candidates

@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assistant_memory import MemoryService, SQLiteMemoryRepository, resolve_chat_scope
+from app.assistant_memory import (
+    MemoryService,
+    OwnerAwareMemoryService,
+    OwnerAwareSQLiteMemoryRepository,
+    SQLiteMemoryRepository,
+    resolve_chat_scope,
+)
+from app.assistant_memory.management import candidates_for_session
 from app.assistant_memory.routes import register_assistant_memory_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 
@@ -217,6 +226,49 @@ def test_candidate_management_never_crosses_session_or_scope(tmp_path):
     assert deleted.status_code == 200
     assert deleted.json() == {"ok": True, "candidate_id": candidate.id}
     assert service.repository.get_candidate(candidate.id) is None
+
+
+def test_character_candidate_listing_uses_active_owner(tmp_path):
+    service = OwnerAwareMemoryService(OwnerAwareSQLiteMemoryRepository(tmp_path / "memory.sqlite3"))
+    session = SimpleNamespace(
+        id="chat:maya",
+        interaction_mode="character",
+        character_id="stage3-maya",
+        profile_id="profile:local",
+        workspace_id="workspace:default",
+        project_id=None,
+    )
+    other = SimpleNamespace(
+        id="chat:alex",
+        interaction_mode="character",
+        character_id="stage3-alex",
+        profile_id="profile:local",
+        workspace_id="workspace:default",
+        project_id=None,
+    )
+    store = SimpleNamespace(get_session=lambda session_id: session if session_id == session.id else other)
+    context = resolve_chat_scope(
+        session.id,
+        owner_type="character",
+        owner_id="stage3-maya",
+    )
+    candidate = service.propose_memory(
+        context,
+        source_session_id=session.id,
+        source_message_id="msg:maya",
+        scope="global",
+        category="fact",
+        content="stage three candidate is visible",
+        confidence=0.8,
+    )
+
+    visible = candidates_for_session(store, service, session.id)
+    isolated = candidates_for_session(store, service, other.id)
+
+    assert visible is not None
+    assert [item.id for item in visible.candidates] == [candidate.id]
+    assert isolated is not None
+    assert isolated.candidates == []
 
 
 def test_management_routes_are_hidden_from_generated_openapi(tmp_path):
