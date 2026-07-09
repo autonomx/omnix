@@ -44,6 +44,7 @@ import {
 
 let cleanup: (() => void) | null = null;
 let streamEvents: Array<Record<string, unknown>> | null = null;
+let fetchMock: ReturnType<typeof vi.fn>;
 
 function renderLiveVoice(active = true, autoSpeak = true): void {
   document.body.innerHTML = `
@@ -56,7 +57,7 @@ function renderLiveVoice(active = true, autoSpeak = true): void {
 }
 
 function chatStreamResponse(events: Array<Record<string, unknown>> = [
-  { type: 'user_message', message: { id: 'u1' } },
+  { type: 'user_message', message: { id: 'u1', metadata: { assistant_turn_id: 'assistant-turn:t1' } } },
   { type: 'text_chunk', text: 'Hello there. This first phrase is ready for speech.' },
   { type: 'text_chunk', text: 'The second phrase should enter the same continuous queue.' },
   { type: 'session', session: { id: 's1', messages: [{ id: 'a1', role: 'assistant' }] } },
@@ -71,7 +72,8 @@ beforeEach(() => {
   streamEvents = null;
   window.localStorage.clear();
   window.localStorage.setItem('omnix.chatbot.assistantSettings', JSON.stringify({ voiceId: 'Jinx' }));
-  vi.stubGlobal('fetch', vi.fn(async () => chatStreamResponse(streamEvents ?? undefined)));
+  fetchMock = vi.fn(async () => chatStreamResponse(streamEvents ?? undefined));
+  vi.stubGlobal('fetch', fetchMock);
   mocks.session.enqueuePhrase.mockReset().mockResolvedValue(undefined);
   mocks.session.finish.mockReset().mockResolvedValue(undefined);
   mocks.session.stop.mockReset().mockResolvedValue(undefined);
@@ -101,13 +103,22 @@ describe('live voice unified audio controller', () => {
       expect.objectContaining({ fetch_wrapped: true }),
       'controller',
     );
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'hello' }),
+    });
     const applicationEvents = await response.text();
 
     expect(applicationEvents).not.toContain('text_chunk');
     expect(applicationEvents).toContain('user_message');
     expect(applicationEvents).toContain('session');
     expect(applicationEvents).toContain('done');
+    const forwardedInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const forwardedBody = JSON.parse(String(forwardedInit.body)) as Record<string, unknown>;
+    expect(forwardedBody.user_turn_id).toMatch(/^voice-user-turn:/);
+    expect(forwardedBody.speech_segment_id).toMatch(/^voice-segment:/);
+    expect(forwardedInit.signal).toBeInstanceOf(AbortSignal);
 
     await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
     expect(mocks.createSession).toHaveBeenCalledWith(
@@ -126,17 +137,22 @@ describe('live voice unified audio controller', () => {
       'The second phrase should enter the same continuous queue.',
       1,
     );
+    expect(mocks.reporter.record).toHaveBeenCalledWith(
+      'assistant_turn_linked',
+      expect.objectContaining({ assistant_turn_id: 'assistant-turn:t1' }),
+      'controller',
+    );
     await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_finished',
-      expect.objectContaining({ phrases: 2, text_chunks: 2 }),
+      expect.objectContaining({ phrases: 2, text_chunks: 2, assistant_turn_id: 'assistant-turn:t1' }),
     ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
   });
 
   it('skips non-speech-only trailing chunks without stopping the turn', async () => {
     streamEvents = [
-      { type: 'user_message', message: { id: 'u1' } },
+      { type: 'user_message', message: { id: 'u1', metadata: { assistant_turn_id: 'assistant-turn:t2' } } },
       { type: 'text_chunk', text: 'Here is a complete spoken answer for the live call.' },
       { type: 'text_chunk', text: '☀️' },
       { type: 'text_chunk', text: '✨' },
@@ -175,7 +191,7 @@ describe('live voice unified audio controller', () => {
     expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'GET' })).toBe(false);
   });
 
-  it('stops the persistent live session on interruption', async () => {
+  it('aborts the active request and stops the persistent session on interruption', async () => {
     let finishResolve: () => void = () => undefined;
     mocks.session.finish.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
       finishResolve = () => resolve(undefined);
@@ -184,13 +200,18 @@ describe('live voice unified audio controller', () => {
     const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
     await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
+    const forwardedInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const signal = forwardedInit.signal as AbortSignal;
+    expect(signal.aborted).toBe(false);
+
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-interrupt'));
 
+    await waitFor(() => expect(signal.aborted).toBe(true));
     await waitFor(() => expect(mocks.session.stop).toHaveBeenCalledWith('voice-interrupt'));
     expect(mocks.stopButtonStream).toHaveBeenCalled();
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_stopped',
-      { reason: 'voice-interrupt' },
+      expect.objectContaining({ reason: 'voice-interrupt', assistant_turn_id: 'assistant-turn:t1' }),
     ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
     finishResolve();
