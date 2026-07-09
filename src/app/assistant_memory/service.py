@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from .models import (
     MemoryCandidate,
+    MemoryCandidateStatus,
     MemoryCategory,
     MemoryRecord,
     MemoryScope,
@@ -207,6 +208,28 @@ class MemoryService:
 
     def reject_candidate(self, candidate_id: str) -> MemoryCandidate:
         return self.repository.reject_candidate(candidate_id, resolved_at=_utcnow())
+
+    def delete_resolved_candidate(
+        self,
+        context: MemoryScopeContext,
+        candidate_id: str,
+        *,
+        expected_status: MemoryCandidateStatus,
+    ) -> bool:
+        if expected_status == "pending":
+            raise MemoryPolicyError("candidate_cleanup_requires_resolved_status")
+        candidate = self.repository.get_candidate(candidate_id)
+        if candidate is None:
+            raise MemoryNotFoundError(candidate_id)
+        if candidate.status != expected_status:
+            raise MemoryPolicyError("candidate_status_mismatch")
+        expected_scope_id = scope_id_for(candidate.proposed_scope, context)
+        if expected_scope_id != candidate.proposed_scope_id:
+            raise MemoryPolicyError("candidate_scope_mismatch")
+        return self.repository.delete_candidate(
+            candidate_id,
+            expected_status=expected_status,
+        )
 
     def edit_memory(
         self,

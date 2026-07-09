@@ -193,11 +193,36 @@ def test_candidate_management_never_crosses_session_or_scope(tmp_path):
     assert approved.json()["pinned"] is True
     assert service.repository.get_candidate(candidate.id).status == "accepted"
 
+    pending_delete = client.request(
+        "DELETE",
+        f"/api/assistant/memory/candidates/{candidate.id}",
+        json={"session_id": session.id, "expected_status": "pending"},
+    )
+    assert pending_delete.status_code == 403
+    assert service.repository.get_candidate(candidate.id).status == "accepted"
+
+    forbidden_delete = client.request(
+        "DELETE",
+        f"/api/assistant/memory/candidates/{candidate.id}",
+        json={"session_id": other_session.id, "expected_status": "accepted"},
+    )
+    assert forbidden_delete.status_code == 403
+    assert service.repository.get_candidate(candidate.id).status == "accepted"
+
+    deleted = client.request(
+        "DELETE",
+        f"/api/assistant/memory/candidates/{candidate.id}",
+        json={"session_id": session.id, "expected_status": "accepted"},
+    )
+    assert deleted.status_code == 200
+    assert deleted.json() == {"ok": True, "candidate_id": candidate.id}
+    assert service.repository.get_candidate(candidate.id) is None
+
 
 def test_management_routes_are_hidden_from_generated_openapi(tmp_path):
     client, _, _, session, _ = setup_client(tmp_path)
     schema = client.get("/openapi.json").json()
 
     assert "/api/assistant/memory" not in schema["paths"]
-    assert f"/api/chat/sessions/{{session_id}}/memory" not in schema["paths"]
+    assert "/api/chat/sessions/{session_id}/memory" not in schema["paths"]
     assert client.get("/api/assistant/memory", params={"session_id": session.id}).status_code == 200

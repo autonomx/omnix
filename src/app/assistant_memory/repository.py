@@ -208,6 +208,24 @@ class SQLiteMemoryRepository:
     def reject_candidate(self, candidate_id: str, *, resolved_at: str) -> MemoryCandidate:
         return self._resolve_candidate(candidate_id, "rejected", resolved_at)
 
+    def delete_candidate(self, candidate_id: str, *, expected_status: str | None = None) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT status FROM memory_candidates WHERE id = ?",
+                (candidate_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            if expected_status is not None and row["status"] != expected_status:
+                raise MemoryConflictError(
+                    f"candidate {candidate_id} is {row['status']}, expected {expected_status}"
+                )
+            connection.execute("DELETE FROM memory_candidates WHERE id = ?", (candidate_id,))
+            self._append_event(connection, "candidate", candidate_id, "memory.candidate_deleted", {
+                "deleted_status": row["status"],
+            })
+        return True
+
     def accept_candidate(
         self,
         candidate_id: str,

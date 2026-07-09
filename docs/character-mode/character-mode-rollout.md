@@ -1,6 +1,6 @@
 # Character Mode staged rollout and rollback guide
 
-Status: repository implementation complete; Stage 1 passed on the local deployment on 2026-07-09; Stage 2 read-only character-memory pilot tooling is ready.
+Status: repository implementation complete; Stage 1 and Stage 2 passed on the local deployment on 2026-07-09; Stage 3 explicit character-memory write pilot tooling is ready.
 
 Baseline: `c37a2610275723235cf3b5ccceb350385a9050b8` or a later `main` commit containing it.
 
@@ -12,7 +12,11 @@ Stage 1 evidence: `docs/character-mode/stage-1-rehearsal-results.md`
 
 Stage 2 operator guide: `docs/character-mode/stage-2-read-only-memory-rollout.md`
 
-Stage 2 result template: `docs/character-mode/stage-2-rehearsal-results.md`
+Stage 2 evidence: `docs/character-mode/stage-2-rehearsal-results.md`
+
+Stage 3 operator guide: `docs/character-mode/stage-3-write-memory-rollout.md`
+
+Stage 3 result template: `docs/character-mode/stage-3-rehearsal-results.md`
 
 ## Before Stage 1
 
@@ -98,6 +102,8 @@ python scripts/character_mode_stage2_preflight.py verify-restart
 
 The Stage 2 harness creates controlled synthetic owner fixtures, validates provider prompt diagnostics and every read-only write guard, verifies persistence across restart, then checks forget isolation and cleans up the synthetic records and temporary fixture sessions. See `docs/character-mode/stage-2-read-only-memory-rollout.md`.
 
+Local deployment result: passed on 2026-07-09 using LM Studio model `gemma-4-e4b-uncensored-hauhaucs-aggressive`, gateway `http://127.0.0.1:8000`, character memory read enabled, character writes disabled, shared memory disabled, and Character Hermes disabled. See `docs/character-mode/stage-2-rehearsal-results.md`.
+
 Rollback: turn off `OMNIX_CHARACTER_MEMORY_ENABLED` or return pilot sessions to `read_memory=false`. Existing records remain isolated and retained.
 
 ## Stage 3 — Explicit character-memory writes
@@ -123,6 +129,16 @@ Verify:
 - rejected suggestions remain excluded;
 - retries do not create duplicate candidates;
 - first-token and first-audio latency do not wait for post-turn extraction.
+
+Run the automated two-part pilot:
+
+```text
+python scripts/character_mode_stage3_preflight.py prepare --model-id "<loaded-model-id>"
+# restart Omnix with the same Stage 3 flags
+python scripts/character_mode_stage3_preflight.py verify-restart
+```
+
+The Stage 3 harness creates controlled synthetic owner fixtures, validates explicit write ownership, write-only behavior, pending/approved/rejected candidate lifecycle, owner isolation, restart persistence, and cleanup of synthetic records, candidate rows, and temporary fixture sessions. See `docs/character-mode/stage-3-write-memory-rollout.md`.
 
 Rollback: set session `write_memory=false`, disable memory suggestions, or disable `OMNIX_CHARACTER_MEMORY_ENABLED`. Previously approved character memory remains intact.
 

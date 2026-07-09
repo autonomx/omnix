@@ -1,6 +1,6 @@
 # Character Mode Stage 2 rehearsal results
 
-Status: recovery and browser confirmation passed; documentation evidence PR pending.
+Status: recovery, browser confirmation, and documentation evidence passed.
 
 Do not paste prompts, model output, memory contents, synthetic markers, access credentials, or private data into this document. Generated JSON reports under `resources/data/test-results/` remain ignored runtime artifacts.
 
@@ -10,7 +10,7 @@ Do not paste prompts, model output, memory contents, synthetic markers, access c
 |---|---|
 | Date | 2026-07-09 |
 | Operator | Codex-assisted local rollout |
-| `main` SHA | `9c034187dc33ba47aeced8434e745eb151e08fd8` |
+| `main` SHA | `b2d897b123f3a57454e23ff432cb8d854def13d6` |
 | Gateway URL | `http://127.0.0.1:8000` |
 | Provider | `lmstudio` |
 | Model | `gemma-4-e4b-uncensored-hauhaucs-aggressive` |
@@ -18,6 +18,7 @@ Do not paste prompts, model output, memory contents, synthetic markers, access c
 | Alex character ID | `stage2-alex` |
 | Run ID | `stage2-readonly-v1` |
 | Recovery implementation PR | `#1300` |
+| Evidence PR | `#1301` |
 
 ## Flags
 
@@ -120,4 +121,4 @@ Decision owner: Codex-assisted local rollout
 
 Decision date: 2026-07-09
 
-Follow-up issue/PR: Documentation evidence PR pending
+Follow-up issue/PR: None for Stage 2. Proceed to Stage 3 tooling and rehearsal.
