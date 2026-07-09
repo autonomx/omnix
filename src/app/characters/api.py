@@ -6,8 +6,14 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 
+from app.assistant_memory import default_memory_service, resolve_chat_scope
 from app.chat.models import ChatSession
 
+from .hermes_adapter import (
+    CharacterHermesSyncStatus,
+    export_character_memory_to_hermes,
+    import_character_hermes_memory,
+)
 from .live_call import CharacterLiveCallRuntime, resolve_live_call_runtime
 from .management import (
     CharacterDataActionRequest,
@@ -86,6 +92,50 @@ def register_character_routes(
             return service_factory().versions(character_id)
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail="character not found") from exc
+
+    def character_hermes_context(character_id: str):
+        service_factory().get(character_id)
+        return resolve_chat_scope(
+            f"character-hermes:{character_id}",
+            owner_type="character",
+            owner_id=character_id,
+        )
+
+    @app.post(
+        "/api/characters/{character_id}/hermes/import",
+        response_model=CharacterHermesSyncStatus,
+        tags=["characters"],
+        include_in_schema=False,
+    )
+    async def import_character_hermes(character_id: str) -> CharacterHermesSyncStatus:
+        try:
+            return import_character_hermes_memory(
+                default_memory_service(),
+                character_hermes_context(character_id),
+                character_id,
+            )
+        except CharacterNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="character not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post(
+        "/api/characters/{character_id}/hermes/export",
+        response_model=CharacterHermesSyncStatus,
+        tags=["characters"],
+        include_in_schema=False,
+    )
+    async def export_character_hermes(character_id: str) -> CharacterHermesSyncStatus:
+        try:
+            return export_character_memory_to_hermes(
+                default_memory_service(),
+                character_hermes_context(character_id),
+                character_id,
+            )
+        except CharacterNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="character not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get(
         "/api/voice-profiles/{asset_id}/governance",
