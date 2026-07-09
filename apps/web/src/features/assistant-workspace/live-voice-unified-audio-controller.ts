@@ -21,6 +21,9 @@ const SPEAKABLE_TEXT_PATTERN = /[\p{L}\p{N}]/u;
 type ChatStreamEvent = {
   type?: string;
   text?: string;
+  message?: {
+    metadata?: Record<string, unknown>;
+  };
 };
 
 type LiveVoiceWindow = Window & typeof globalThis & {
@@ -33,8 +36,17 @@ type ActiveLiveTurn = {
   startedAtMs: number;
   reporter: LiveCallDiagnosticsReporter;
   sessionPromise: Promise<LiveVoicePcmSession>;
+  abortController: AbortController;
+  userTurnId: string;
+  speechSegmentId: string;
+  assistantTurnId: string | null;
   phraseCount: number;
   textChunkCount: number;
+};
+
+type LiveTurnIds = {
+  userTurnId: string;
+  speechSegmentId: string;
 };
 
 let originalFetch: typeof window.fetch | null = null;
@@ -72,14 +84,20 @@ export function initializeLiveVoiceUnifiedAudioController(): () => void {
 
 async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
-  const response = await fetchImpl(input, init);
-  if (!shouldUseUnifiedLiveVoiceAudio(input, init) || !response.body || !response.ok) return response;
+  if (!shouldUseUnifiedLiveVoiceAudio(input, init)) return fetchImpl(input, init);
 
   void stopActiveTurn('superseded-by-new-turn');
   stopAssistantPcmStream(document);
   const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
   const url = new URL(rawUrl, window.location.origin);
   const sessionId = CHAT_STREAM_PATH.exec(url.pathname)?.[1] ?? 'unknown';
+  const ids = createLiveTurnIds();
+  const abortController = new AbortController();
+  connectAbortSignal(init?.signal, abortController);
+  const preparedInit = injectLiveTurnIds(init, ids, abortController.signal);
+  const response = await fetchImpl(input, preparedInit);
+  if (!response.body || !response.ok) return response;
+
   const generation = ++playbackGeneration;
   const traceId = createLiveCallTraceId(sessionId);
   const reporter = createLiveCallDiagnosticsReporter(traceId);
@@ -92,6 +110,10 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
     startedAtMs,
     reporter,
     sessionPromise,
+    abortController,
+    userTurnId: ids.userTurnId,
+    speechSegmentId: ids.speechSegmentId,
+    assistantTurnId: null,
     phraseCount: 0,
     textChunkCount: 0,
   };
@@ -100,11 +122,13 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
     request_path: url.pathname,
     voice_id: voiceId,
     auto_speak: true,
+    user_turn_id: ids.userTurnId,
+    speech_segment_id: ids.speechSegmentId,
   }, 'controller');
 
   const [applicationBranch, audioBranch] = response.body.tee();
   void consumeLiveVoiceText(audioBranch, activeTurn).catch(async (error: unknown) => {
-    if (generation !== playbackGeneration) return;
+    if (generation !== playbackGeneration || abortController.signal.aborted) return;
     const message = error instanceof Error ? error.message : 'Live voice audio streaming failed.';
     reporter.record('turn_failed', { error: message }, 'controller');
     setInlineStatus(message);
@@ -138,7 +162,7 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
   let pending = '';
   let phrase = '';
 
-  while (turn.generation === playbackGeneration) {
+  while (turn.generation === playbackGeneration && !turn.abortController.signal.aborted) {
     const { value, done } = await reader.read();
     if (done) break;
     pending += decoder.decode(value, { stream: true });
@@ -146,6 +170,7 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
     pending = blocks.pop() ?? '';
     for (const block of blocks) {
       const event = parseSseBlock(block);
+      captureAssistantTurnId(turn, event);
       if (event?.type !== 'text_chunk' || typeof event.text !== 'string') continue;
       turn.textChunkCount += 1;
       turn.reporter.record('llm_text_chunk_received', {
@@ -162,9 +187,14 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
     }
   }
 
+  if (turn.abortController.signal.aborted) {
+    await reader.cancel('live-turn-aborted').catch(() => undefined);
+    return;
+  }
   pending += decoder.decode();
   if (pending.trim()) {
     const event = parseSseBlock(pending);
+    captureAssistantTurnId(turn, event);
     if (event?.type === 'text_chunk' && typeof event.text === 'string') {
       turn.textChunkCount += 1;
       phrase = mergeText(phrase, event.text);
@@ -175,6 +205,7 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
     elapsed_ms: performance.now() - turn.startedAtMs,
     text_chunks: turn.textChunkCount,
     phrases: turn.phraseCount,
+    assistant_turn_id: turn.assistantTurnId,
   }, 'controller');
 
   let audioIssue: string | null = null;
@@ -208,13 +239,14 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
     phrases: turn.phraseCount,
     audio_degraded: Boolean(audioIssue),
     audio_error: audioIssue,
+    assistant_turn_id: turn.assistantTurnId,
   });
   if (activeTurn?.generation === turn.generation) activeTurn = null;
 }
 
 function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
   const phrase = text.trim();
-  if (!phrase || turn.generation !== playbackGeneration) return;
+  if (!phrase || turn.generation !== playbackGeneration || turn.abortController.signal.aborted) return;
   if (!SPEAKABLE_TEXT_PATTERN.test(phrase)) {
     turn.reporter.record('phrase_skipped', {
       reason: 'non-speech-only',
@@ -236,6 +268,7 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
     elapsed_ms: performance.now() - turn.startedAtMs,
   }, 'controller');
   void turn.sessionPromise.then((session) => session.enqueuePhrase(phrase, phraseIndex)).catch((error: unknown) => {
+    if (turn.abortController.signal.aborted) return;
     turn.reporter.record('phrase_queue_failed', {
       phrase_index: phraseIndex,
       error: error instanceof Error ? error.message : String(error),
@@ -261,10 +294,60 @@ async function stopActiveTurn(reason: string): Promise<void> {
     elapsed_ms: performance.now() - turn.startedAtMs,
     text_chunks: turn.textChunkCount,
     phrases: turn.phraseCount,
+    assistant_turn_id: turn.assistantTurnId,
   }, 'controller');
+  turn.abortController.abort(reason);
   const session = await turn.sessionPromise.catch(() => null);
   await session?.stop(reason);
-  await turn.reporter.close('turn_stopped', { reason });
+  await turn.reporter.close('turn_stopped', { reason, assistant_turn_id: turn.assistantTurnId });
+}
+
+function createLiveTurnIds(): LiveTurnIds {
+  const suffix = typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return {
+    userTurnId: `voice-user-turn:${suffix}`,
+    speechSegmentId: `voice-segment:${suffix}`,
+  };
+}
+
+function injectLiveTurnIds(init: RequestInit | undefined, ids: LiveTurnIds, signal: AbortSignal): RequestInit {
+  if (typeof init?.body !== 'string') return { ...init, signal };
+  try {
+    const payload = JSON.parse(init.body) as Record<string, unknown>;
+    return {
+      ...init,
+      signal,
+      body: JSON.stringify({
+        ...payload,
+        user_turn_id: ids.userTurnId,
+        speech_segment_id: ids.speechSegmentId,
+      }),
+    };
+  } catch {
+    return { ...init, signal };
+  }
+}
+
+function connectAbortSignal(source: AbortSignal | null | undefined, target: AbortController): void {
+  if (!source) return;
+  if (source.aborted) {
+    target.abort(source.reason);
+    return;
+  }
+  source.addEventListener('abort', () => target.abort(source.reason), { once: true });
+}
+
+function captureAssistantTurnId(turn: ActiveLiveTurn, event: ChatStreamEvent | null): void {
+  if (event?.type !== 'user_message') return;
+  const candidate = event.message?.metadata?.assistant_turn_id;
+  if (typeof candidate !== 'string' || !candidate.trim()) return;
+  turn.assistantTurnId = candidate.trim();
+  turn.reporter.record('assistant_turn_linked', {
+    assistant_turn_id: turn.assistantTurnId,
+    user_turn_id: turn.userTurnId,
+  }, 'controller');
 }
 
 function isAutoSpeakEnabled(): boolean {
