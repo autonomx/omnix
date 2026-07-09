@@ -130,12 +130,16 @@ export function instrumentDeliveryReporter(
   reporter: LiveCallDiagnosticsReporter,
   getLedger: () => LiveVoiceDeliveryLedger | null,
   onChanged: (ledger: LiveVoiceDeliveryLedger) => void,
-): void {
-  const record = reporter.record.bind(reporter);
-  reporter.record = (event, details = {}, source = 'browser') => {
-    record(event, details, source);
-    const ledger = getLedger();
-    if (ledger && handleDeliveryDiagnostic(ledger, event, details)) onChanged(ledger);
+): LiveCallDiagnosticsReporter {
+  return {
+    traceId: reporter.traceId,
+    record(event, details = {}, source = 'browser') {
+      reporter.record(event, details, source);
+      const ledger = getLedger();
+      if (ledger && handleDeliveryDiagnostic(ledger, event, details)) onChanged(ledger);
+    },
+    flush: () => reporter.flush(),
+    close: (event, details) => reporter.close(event, details),
   };
 }
 
