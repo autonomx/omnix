@@ -1,0 +1,39 @@
+name: CHAR-8 apply live-call workspace integration
+
+on:
+  push:
+    branches: [tmp-char8-live-call]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-workspace-integration:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out phase branch
+        uses: actions/checkout@v4
+        with:
+          ref: tmp-char8-live-call
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply exact workspace patch
+        run: python scripts/apply_char8_live_call_workspace.py
+
+      - name: Commit generated integration
+        run: |
+          if git diff --quiet -- apps/web/src/features/chatbot/ChatbotWorkspace.tsx; then
+            echo 'Workspace integration already applied.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/src/features/chatbot/ChatbotWorkspace.tsx
+          git commit -m 'CHAR-8 integrate character runtime with live calls'
+          git push origin HEAD:tmp-char8-live-call
