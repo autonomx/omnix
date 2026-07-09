@@ -1,0 +1,33 @@
+name: CHAR-9 apply UI compatibility
+
+on:
+  push:
+    branches: [tmp-char9-management]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-ui-compat:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp-char9-management
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/apply_char9_ui_compat.py
+      - name: Commit UI compatibility
+        run: |
+          if git diff --quiet -- apps/web/src/features/chatbot/CharacterManagementPanel.tsx apps/web/src/features/chatbot/MemoryManagementPanel.tsx; then
+            echo 'UI compatibility already applied.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/src/features/chatbot/CharacterManagementPanel.tsx apps/web/src/features/chatbot/MemoryManagementPanel.tsx
+          git commit -m 'CHAR-9 preserve memory view compatibility'
+          git push origin HEAD:tmp-char9-management
