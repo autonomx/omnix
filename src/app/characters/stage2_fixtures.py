@@ -102,18 +102,19 @@ def ensure_synthetic_memory(
     content = marker_memory(run_id, owner_label)
     existing = gateway.list_memory(session_id)
     records = existing.get("records") if isinstance(existing.get("records"), list) else []
-    match = next(
-        (
-            item
-            for item in records
-            if isinstance(item, dict)
-            and item.get("content") == content
-            and item.get("status") == "active"
-        ),
-        None,
-    )
-    if match is not None:
-        return match
+    matches = [
+        item
+        for item in records
+        if isinstance(item, dict)
+        and item.get("content") == content
+        and item.get("status") == "active"
+    ]
+    if len(matches) > 1:
+        raise RuntimeError(
+            f"duplicate active Stage 2 fixture memories exist for {owner_label}; clean them before rerunning"
+        )
+    if matches:
+        return matches[0]
     return gateway.create_memory(
         {
             "session_id": session_id,
