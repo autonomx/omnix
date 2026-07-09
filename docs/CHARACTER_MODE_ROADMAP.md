@@ -1,8 +1,16 @@
 # Omnix Character Mode Roadmap
 
-Status: CHAR-0 architecture contract
+Status: repository implementation complete through CHAR-11; production rollout remains disabled by default
 
 Target branch: `main`
+
+Release baseline after CHAR-11: `cc42b5d18c02886ef3d51996f345cb74aea07058`
+
+Canonical completion evidence: `docs/character-mode/character-mode-release-evidence.md`
+
+Staged deployment and rollback guide: `docs/character-mode/character-mode-rollout.md`
+
+Repository completion records merged implementation, tests, and exact-head gates. It does not claim that Character Mode or its high-risk capabilities are enabled in a production deployment.
 
 ## Objective
 
@@ -368,4 +376,4 @@ Acceptance: ordinary Hermes sync never exports character memory; Hermes availabi
 6. Shared-memory read-only permissions.
 7. Optional controlled Hermes compatibility.
 
-Each stage requires exact-head GitHub Actions evidence and a documented rollback path.
+The repository implementation for all seven stages is complete. Operational adoption must still proceed stage by stage using `docs/character-mode/character-mode-rollout.md`; later flags must not be enabled merely because the code is merged.
