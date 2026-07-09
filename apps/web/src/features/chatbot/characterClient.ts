@@ -17,6 +17,38 @@ export interface CharacterProfile {
 
 export interface CharacterListResponse { characters: CharacterProfile[]; }
 
+export type VoiceConsentStatus = 'unverified' | 'granted' | 'revoked';
+export type VoiceDeletionState = 'active' | 'pending_deletion' | 'deleted';
+export type VoiceAllowedUse = 'character' | 'live_call' | 'system_assistant' | 'general_tts';
+
+export interface VoiceProfileGovernance {
+  asset_id: string;
+  subject_owner: string;
+  source_type: string;
+  source_reference: string;
+  creator_id: string;
+  consent_status: VoiceConsentStatus;
+  consent_recorded_at?: string | null;
+  allowed_uses: VoiceAllowedUse[];
+  source_sha256?: string | null;
+  deletion_state: VoiceDeletionState;
+  deletion_requested_at?: string | null;
+  deleted_at?: string | null;
+  deletion_reason: string;
+  updated_at: string;
+}
+
+export interface UpdateVoiceProfileGovernanceInput {
+  subject_owner: string;
+  source_type: string;
+  source_reference?: string;
+  creator_id: string;
+  consent_status: VoiceConsentStatus;
+  allowed_uses: VoiceAllowedUse[];
+  deletion_state: VoiceDeletionState;
+  deletion_reason?: string;
+}
+
 export interface SessionInteraction {
   id: string;
   title: string;
@@ -124,6 +156,18 @@ export const characterClient = {
     },
   ): Promise<CharacterDataActionResponse> {
     return request(`/api/characters/${encodeURIComponent(characterId)}/data/actions`, jsonInit('POST', input));
+  },
+  voiceGovernance(assetId: string): Promise<VoiceProfileGovernance> {
+    return request(`/api/voice-profiles/${encodeURIComponent(assetId)}/governance`);
+  },
+  updateVoiceGovernance(
+    assetId: string,
+    input: UpdateVoiceProfileGovernanceInput,
+  ): Promise<VoiceProfileGovernance> {
+    return request(
+      `/api/voice-profiles/${encodeURIComponent(assetId)}/governance`,
+      jsonInit('PATCH', input),
+    );
   },
   session(sessionId: string): Promise<SessionInteraction> {
     return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/interaction`);

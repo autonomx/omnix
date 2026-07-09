@@ -149,7 +149,7 @@ jobs:
       - name: Character persistence regression
         run: |
           set -o pipefail
-          python -m pytest src/tests/unit/characters src/tests/app/test_character_api.py src/tests/app/test_character_live_call_api.py -q --tb=short 2>&1 | tee character-persistence-pytest-output.txt
+          python -m pytest src/tests/unit/characters src/tests/app/test_character_api.py src/tests/app/test_character_live_call_api.py src/tests/app/test_voice_governance_api.py -q --tb=short 2>&1 | tee character-persistence-pytest-output.txt
 
       - name: Upload character persistence diagnostics
         if: failure()

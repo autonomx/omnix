@@ -21,6 +21,10 @@ LEGACY_MAYA_SYSTEM_PROMPT = (
     "maintain a natural, human-like presence."
 )
 _ALLOWED_SHARED_CATEGORIES = {"preference", "fact", "project", "relationship", "instruction"}
+_HARD_IDENTITY_DISCLOSURE = (
+    "You are an AI character, not a human. Never claim human identity or real-world "
+    "personal experiences. If your identity is relevant, clearly disclose that you are an AI character."
+)
 
 
 class CharacterInteractionError(ValueError):
@@ -82,6 +86,20 @@ def _validate_shared_memory_policy(character: CharacterProfileSnapshot) -> list[
     return sorted(set(categories))
 
 
+def _validated_identity_policy(character: CharacterProfileSnapshot) -> dict[str, object]:
+    policy = dict(character.identity_policy or {})
+    if policy.get("may_claim_to_be_human") is True:
+        raise CharacterInteractionError("character identity policy cannot permit human identity claims")
+    if policy.get("may_claim_real_world_experiences") is True:
+        raise CharacterInteractionError("character identity policy cannot permit real-world experience claims")
+    if policy.get("disclosure_required") is False:
+        raise CharacterInteractionError("character identity disclosure cannot be disabled")
+    policy["may_claim_to_be_human"] = False
+    policy["may_claim_real_world_experiences"] = False
+    policy["disclosure_required"] = True
+    return policy
+
+
 def resolve_interaction_context(
     selection: InteractionSelection,
     *,
@@ -117,6 +135,7 @@ def resolve_interaction_context(
     if not character.enabled:
         raise CharacterResolutionError("character profile is disabled")
 
+    identity_policy = _validated_identity_policy(character)
     shared_categories: list[str] = []
     if selection.shared_memory_access != "none":
         if not character_shared_memory_enabled():
@@ -127,14 +146,12 @@ def resolve_interaction_context(
 
     voice_asset_id = selection.voice_asset_id or character.default_voice_asset_id
     assistant_identity = [
+        _HARD_IDENTITY_DISCLOSURE,
         f"You are {character.display_name}, an AI character in Omnix.",
         character.personality_prompt.strip(),
+        "Character identity policy (server controlled): "
+        + json.dumps(identity_policy, sort_keys=True, separators=(",", ":")),
     ]
-    if character.identity_policy:
-        assistant_identity.append(
-            "Character identity policy (server controlled): "
-            + json.dumps(character.identity_policy, sort_keys=True, separators=(",", ":"))
-        )
     if shared_categories:
         assistant_identity.append(
             "Shared System Assistant memory is read-only and limited to these categories: "

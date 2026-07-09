@@ -14,11 +14,8 @@ from .models import (
     CreateCharacterRequest,
     UpdateCharacterRequest,
 )
-from .repository import (
-    CharacterConflictError,
-    CharacterNotFoundError,
-    CharacterRepository,
-)
+from .repository import CharacterConflictError, CharacterNotFoundError, CharacterRepository
+from .voice_consent import VoiceConsentError, VoiceProfileGovernanceService
 
 
 class CharacterVoiceAssetError(ValueError):
@@ -64,6 +61,14 @@ class CharacterService:
     def resolve_snapshot(self, character_id: str):
         return self.get(character_id).snapshot()
 
+    def validate_voice_for_use(self, asset_id: str, use: str = "character") -> None:
+        try:
+            VoiceProfileGovernanceService(
+                asset_store_factory=self.asset_store_factory
+            ).validate_use(asset_id, use)  # type: ignore[arg-type]
+        except VoiceConsentError as exc:
+            raise CharacterVoiceAssetError(str(exc)) from exc
+
     def _validate_voice_asset(self, asset_id: str | None) -> None:
         if not asset_id:
             return
@@ -84,6 +89,7 @@ class CharacterService:
         storage_path = Path(asset.storage_path)
         if asset.mime_type == "audio/wav" and not storage_path.is_file():
             raise CharacterVoiceAssetError(f"voice profile audio is missing: {asset_id}")
+        self.validate_voice_for_use(asset_id, "character")
 
 
 def default_character_service() -> CharacterService:

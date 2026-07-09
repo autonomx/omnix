@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { characterClient, type CharacterDataExport, type CharacterProfile } from './characterClient';
+import { VoiceGovernancePanel } from './VoiceGovernancePanel';
 import './CharacterManagementPanel.css';
 
 export function CharacterManagementPanel() {
@@ -123,6 +124,7 @@ export function CharacterManagementPanel() {
               <button type="button" disabled={updateMutation.isPending || selected.status === 'archived'} onClick={() => updateMutation.mutate()}>Save new profile version</button>
             </section>
 
+            <VoiceGovernancePanel assetId={selected.default_voice_asset_id} />
             <CharacterDataSummary data={dataQuery.data} loading={dataQuery.isPending} />
 
             <section className="character-danger-zone">
