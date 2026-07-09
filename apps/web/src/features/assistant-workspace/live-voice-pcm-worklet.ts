@@ -19,6 +19,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     );
     this.progressIntervalSamples = Math.max(128, Math.round(sampleRate * 0.5));
     this.queue = [];
+    this.endedPhrases = new Set();
     this.headOffset = 0;
     this.queuedSamples = 0;
     this.started = false;
@@ -31,17 +32,21 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     this.renderClockSamples = 0;
     this.playedSamples = 0;
     this.lastProgressSamples = 0;
+    this.currentPhraseIndex = null;
+    this.currentPhrasePlayedSamples = 0;
     this.port.onmessage = (event) => {
       const message = event.data || {};
       if (message.type === 'push' && message.samples) {
         const samples = message.samples instanceof Float32Array
           ? message.samples
           : new Float32Array(message.samples);
+        const phraseIndex = Number.isInteger(message.phraseIndex) ? message.phraseIndex : -1;
         if (samples.length > 0) {
-          this.queue.push(samples);
+          this.queue.push({ phraseIndex, samples });
           this.queuedSamples += samples.length;
           this.port.postMessage({
             type: 'buffered',
+            phrase_index: phraseIndex,
             buffered_samples: this.queuedSamples,
             incoming_samples: samples.length,
             target_samples: this.waitingForBuffer ? this.currentRebufferSamples : this.startBufferSamples,
@@ -53,6 +58,11 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
           });
           this.maybeStartOrResume();
         }
+        return;
+      }
+      if (message.type === 'phrase_end' && Number.isInteger(message.phraseIndex)) {
+        this.endedPhrases.add(message.phraseIndex);
+        this.maybeCompleteCurrentPhrase();
         return;
       }
       if (message.type === 'end') {
@@ -69,6 +79,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
         return;
       }
       if (message.type === 'stop') {
+        this.signalPhraseInterrupted();
         this.stopped = true;
         this.port.postMessage({
           type: 'stopped',
@@ -116,6 +127,48 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     }
   }
 
+  beginPhrase(phraseIndex) {
+    if (this.currentPhraseIndex === phraseIndex) return;
+    this.maybeCompleteCurrentPhrase();
+    this.currentPhraseIndex = phraseIndex;
+    this.currentPhrasePlayedSamples = 0;
+    this.port.postMessage({
+      type: 'phrase_started',
+      phrase_index: phraseIndex,
+      render_clock_samples: this.renderClockSamples,
+      played_samples: this.playedSamples,
+    });
+  }
+
+  maybeCompleteCurrentPhrase() {
+    if (this.currentPhraseIndex === null) return;
+    const hasQueuedSamples = this.queue.some((item) => item.phraseIndex === this.currentPhraseIndex);
+    if (hasQueuedSamples || !this.endedPhrases.has(this.currentPhraseIndex)) return;
+    this.port.postMessage({
+      type: 'phrase_completed',
+      phrase_index: this.currentPhraseIndex,
+      phrase_played_samples: this.currentPhrasePlayedSamples,
+      render_clock_samples: this.renderClockSamples,
+      played_samples: this.playedSamples,
+    });
+    this.endedPhrases.delete(this.currentPhraseIndex);
+    this.currentPhraseIndex = null;
+    this.currentPhrasePlayedSamples = 0;
+  }
+
+  signalPhraseInterrupted() {
+    if (this.currentPhraseIndex === null) return;
+    this.port.postMessage({
+      type: 'phrase_interrupted',
+      phrase_index: this.currentPhraseIndex,
+      phrase_played_samples: this.currentPhrasePlayedSamples,
+      render_clock_samples: this.renderClockSamples,
+      played_samples: this.playedSamples,
+    });
+    this.currentPhraseIndex = null;
+    this.currentPhrasePlayedSamples = 0;
+  }
+
   applyFadeIn(channel, written) {
     let index = 0;
     while (index < written && this.fadeInRemaining > 0) {
@@ -156,6 +209,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   }
 
   signalDrained() {
+    this.maybeCompleteCurrentPhrase();
     if (!this.drained) {
       this.drained = true;
       this.port.postMessage({
@@ -174,6 +228,8 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     this.lastProgressSamples = this.renderClockSamples;
     this.port.postMessage({
       type: 'render_progress',
+      phrase_index: this.currentPhraseIndex,
+      phrase_played_samples: this.currentPhrasePlayedSamples,
       buffered_samples: this.queuedSamples,
       target_samples: this.waitingForBuffer ? this.currentRebufferSamples : 0,
       waiting_for_buffer: this.waitingForBuffer,
@@ -202,15 +258,18 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     let written = 0;
     while (written < channel.length && this.queue.length > 0) {
       const head = this.queue[0];
-      const available = head.length - this.headOffset;
+      this.beginPhrase(head.phraseIndex);
+      const available = head.samples.length - this.headOffset;
       const take = Math.min(available, channel.length - written);
-      channel.set(head.subarray(this.headOffset, this.headOffset + take), written);
+      channel.set(head.samples.subarray(this.headOffset, this.headOffset + take), written);
       written += take;
       this.headOffset += take;
       this.queuedSamples -= take;
-      if (this.headOffset >= head.length) {
+      this.currentPhrasePlayedSamples += take;
+      if (this.headOffset >= head.samples.length) {
         this.queue.shift();
         this.headOffset = 0;
+        this.maybeCompleteCurrentPhrase();
       }
     }
 
@@ -218,6 +277,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     this.applyFadeIn(channel, written);
     if (this.queuedSamples === 0) {
       this.applyFadeOut(channel, written);
+      this.maybeCompleteCurrentPhrase();
       if (this.inputEnded) return this.signalDrained();
       this.beginRebuffering();
     }

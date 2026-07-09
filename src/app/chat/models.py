@@ -1,6 +1,7 @@
 """Shared chat session contract for the web gateway."""
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -25,6 +26,40 @@ class ChatMessage(BaseModel):
     content: str
     created_at: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MessageContentPurpose(StrEnum):
+    MODEL = "model"
+    MEMORY = "memory"
+    SUMMARY = "summary"
+    SEARCH = "search"
+    TRANSCRIPT = "transcript"
+    AUDIT = "audit"
+    EXPORT = "export"
+
+
+def project_message_content(message: ChatMessage, purpose: MessageContentPurpose) -> str:
+    content = message.content
+    if message.role != "assistant" or message.metadata.get("delivery_status") != "interrupted":
+        return content
+    if purpose in {MessageContentPurpose.AUDIT, MessageContentPurpose.EXPORT}:
+        return content
+    key = "visual_delivered_text_end" if purpose == MessageContentPurpose.TRANSCRIPT else "context_delivered_text_end"
+    end = _bounded_content_end(message.metadata.get(key), len(content))
+    projected = content[:end].rstrip()
+    if purpose == MessageContentPurpose.TRANSCRIPT:
+        return f"{projected}\n\n[Response interrupted]" if projected else "[Response interrupted]"
+    return projected
+
+
+def _bounded_content_end(value: object, maximum: int) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(maximum, parsed))
 
 
 class ChatSessionSummary(BaseModel):

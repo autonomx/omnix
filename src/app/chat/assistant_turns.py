@@ -38,6 +38,7 @@ ToolExecution = Literal[
     "committed",
     "failed",
 ]
+DeliveryPolicy = Literal["audio_only", "visual_or_audio", "reveal_as_spoken"]
 
 _TERMINAL_LIFECYCLES = {"completed", "interrupted", "failed"}
 
@@ -63,6 +64,13 @@ class AssistantTurnRecord(BaseModel):
     tool_execution: ToolExecution = "none"
     terminal_version: int = Field(default=0, ge=0)
     cancellation_reason: str | None = None
+    generated_phrase_count: int = Field(default=0, ge=0)
+    audio_delivered_phrase_count: int = Field(default=0, ge=0)
+    audio_interrupted_phrase_index: int | None = Field(default=None, ge=0)
+    audio_played_samples: int = Field(default=0, ge=0)
+    visual_delivered_text_end: int = Field(default=0, ge=0)
+    context_delivered_text_end: int = Field(default=0, ge=0)
+    delivery_policy: DeliveryPolicy = "reveal_as_spoken"
     created_at: str = Field(default_factory=_utcnow)
     updated_at: str = Field(default_factory=_utcnow)
 
@@ -72,12 +80,7 @@ class AssistantTurnRecord(BaseModel):
 
 
 class AssistantTurnCoordinator:
-    """Thread-safe, durable logical cancellation boundary.
-
-    Physical provider cancellation is adapter-dependent. Once a turn is marked
-    interrupted, all late provider output is logically inert and completion is
-    rejected even if the provider continues consuming compute briefly.
-    """
+    """Thread-safe, durable logical cancellation and delivery boundary."""
 
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path) if path is not None else default_assistant_turn_store_path()
@@ -127,6 +130,45 @@ class AssistantTurnCoordinator:
             provider_execution="running",
             allow_terminal=False,
         )
+
+    def record_delivery(
+        self,
+        assistant_turn_id: str,
+        *,
+        generated_phrase_count: int,
+        audio_delivered_phrase_count: int,
+        audio_interrupted_phrase_index: int | None,
+        audio_played_samples: int,
+        visual_delivered_text_end: int,
+        context_delivered_text_end: int,
+        delivery_policy: DeliveryPolicy = "reveal_as_spoken",
+    ) -> AssistantTurnRecord | None:
+        with self._lock:
+            record = self._records.get(assistant_turn_id)
+            if record is None:
+                return None
+            record.generated_phrase_count = max(record.generated_phrase_count, generated_phrase_count)
+            record.audio_delivered_phrase_count = max(
+                record.audio_delivered_phrase_count,
+                min(audio_delivered_phrase_count, record.generated_phrase_count),
+            )
+            if audio_interrupted_phrase_index is not None:
+                record.audio_interrupted_phrase_index = max(0, audio_interrupted_phrase_index)
+            record.audio_played_samples = max(record.audio_played_samples, audio_played_samples)
+            record.visual_delivered_text_end = max(
+                record.visual_delivered_text_end,
+                visual_delivered_text_end,
+            )
+            record.context_delivered_text_end = max(
+                record.context_delivered_text_end,
+                min(context_delivered_text_end, record.visual_delivered_text_end),
+            )
+            record.delivery_policy = delivery_policy
+            if record.context_delivered_text_end > 0:
+                record.delivery = "partial" if not record.terminal else record.delivery
+            record.updated_at = _utcnow()
+            self._save()
+            return record.model_copy(deep=True)
 
     def request_cancel(self, assistant_turn_id: str, reason: str) -> AssistantTurnRecord | None:
         """Atomically make a confirmed interruption authoritative and idempotent."""

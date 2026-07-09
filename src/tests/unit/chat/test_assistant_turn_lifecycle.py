@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from app import shared
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.chat.assistant_turns import AssistantTurnCoordinator
+from app.chat.compaction import build_deterministic_summary
+from app.chat.models import (
+    ChatMessage,
+    ChatSession,
+    MessageContentPurpose,
+    project_message_content,
+)
+from app.chat.prompt_assembly import build_prompt_assembly
 
 
 class StreamingProvider:
@@ -100,3 +109,73 @@ def test_streamed_turn_ids_are_idempotent_and_interruption_blocks_completion(mon
     assert assistant_messages[0].metadata["generation_status"] == "interrupted"
     assert assistant_messages[0].metadata["assistant_turn_id"] == assistant_turn_id
     assert coordinator.get(assistant_turn_id).lifecycle == "interrupted"
+
+
+def test_projection_preserves_audit_text_but_hides_unheard_suffix() -> None:
+    text = "Delivered phrase. Unheard phrase."
+    delivered_end = len("Delivered phrase.")
+    message = ChatMessage(
+        id="msg:a1",
+        role="assistant",
+        content=text,
+        created_at=datetime.now(timezone.utc).isoformat(),
+        metadata={
+            "delivery_status": "interrupted",
+            "visual_delivered_text_end": delivered_end,
+            "context_delivered_text_end": delivered_end,
+        },
+    )
+
+    assert project_message_content(message, MessageContentPurpose.MODEL) == "Delivered phrase."
+    assert project_message_content(message, MessageContentPurpose.MEMORY) == "Delivered phrase."
+    assert project_message_content(message, MessageContentPurpose.SUMMARY) == "Delivered phrase."
+    assert project_message_content(message, MessageContentPurpose.SEARCH) == "Delivered phrase."
+    assert project_message_content(message, MessageContentPurpose.AUDIT) == text
+    assert project_message_content(message, MessageContentPurpose.TRANSCRIPT).endswith("[Response interrupted]")
+
+
+def test_prompt_and_summary_exclude_unheard_assistant_content() -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    messages = [
+        ChatMessage(id="u0", role="user", content="Earlier question", created_at=now),
+        ChatMessage(
+            id="a0",
+            role="assistant",
+            content="Known answer. Hidden continuation.",
+            created_at=now,
+            metadata={
+                "delivery_status": "interrupted",
+                "visual_delivered_text_end": len("Known answer."),
+                "context_delivered_text_end": len("Known answer."),
+            },
+        ),
+    ]
+    for index in range(25):
+        messages.append(ChatMessage(
+            id=f"u{index + 1}",
+            role="user",
+            content=f"Follow-up {index}",
+            created_at=now,
+        ))
+    current = messages[-1]
+    session = ChatSession(
+        id="chat:projection",
+        title="Projection",
+        messages=messages,
+        message_count=len(messages),
+        created_at=now,
+        updated_at=now,
+    )
+
+    assembly = build_prompt_assembly(
+        session,
+        current,
+        global_system_prompt="System",
+    )
+    rendered_history = "\n".join(item.content for item in assembly.recent_messages)
+    assert "Hidden continuation" not in rendered_history
+
+    summary = build_deterministic_summary(session, recent_message_limit=2)
+    assert summary is not None
+    assert "Known answer." in summary.summary
+    assert "Hidden continuation" not in summary.summary
