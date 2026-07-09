@@ -11,13 +11,6 @@ from .interaction import (
     resolve_interaction_context,
     resolve_system_session_identity,
 )
-from .live_call import (
-    CharacterLiveCallRuntime,
-    LiveCallPreloadState,
-    LiveCallSpeechStyle,
-    normalize_speech_style,
-    resolve_live_call_runtime,
-)
 from .models import (
     DEFAULT_CHARACTER_IDENTITY_POLICY,
     DEFAULT_CHARACTER_SHARED_MEMORY_POLICY,
@@ -54,7 +47,6 @@ __all__ = [
     "CharacterConflictError",
     "CharacterInteractionError",
     "CharacterListResponse",
-    "CharacterLiveCallRuntime",
     "CharacterModeDisabledError",
     "CharacterNotFoundError",
     "CharacterProfile",
@@ -72,8 +64,6 @@ __all__ = [
     "DEFAULT_CHARACTER_SHARED_MEMORY_POLICY",
     "InteractionMode",
     "InteractionSelection",
-    "LiveCallPreloadState",
-    "LiveCallSpeechStyle",
     "ResolvedInteractionContext",
     "SYSTEM_ASSISTANT_ID",
     "SYSTEM_ASSISTANT_IDENTITY",
@@ -89,8 +79,6 @@ __all__ = [
     "default_character_db_path",
     "default_character_service",
     "neutralize_legacy_system_prompt",
-    "normalize_speech_style",
     "resolve_interaction_context",
-    "resolve_live_call_runtime",
     "resolve_system_session_identity",
 ]
