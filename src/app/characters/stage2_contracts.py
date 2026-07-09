@@ -116,7 +116,7 @@ class Stage2Report(BaseModel):
 
     format_version: Literal["character-stage2-report-v1"] = "character-stage2-report-v1"
     generated_at: str
-    mode: Literal["prepare", "verify-restart"]
+    mode: Literal["prepare", "verify-restart", "discover-cleanup"]
     decision: Stage2Decision
     base_url: str
     run_id: str

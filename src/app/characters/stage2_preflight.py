@@ -13,6 +13,7 @@ from .stage2_contracts import (
     write_report,
 )
 from .stage2_http import HttpStage2Gateway, Stage2Gateway
+from .stage2_discovery import discover_stage2_cleanup
 from .stage2_runner import prepare_stage2
 from .stage2_verification import resume_stage2_cleanup, verify_stage2_restart
 
@@ -84,6 +85,27 @@ def _parser() -> argparse.ArgumentParser:
         "--report",
         default="resources/data/test-results/character-mode-stage2-recovery-report.json",
     )
+    discover = subparsers.add_parser(
+        "discover-cleanup",
+        help=(
+            "Discover and recover Stage 2 cleanup state from live application APIs "
+            "when checkpoint artifacts are unavailable."
+        ),
+    )
+    discover.add_argument("--base-url", default=Stage2PrepareConfig().base_url)
+    discover.add_argument("--provider-id", default="lmstudio")
+    discover.add_argument("--model-id")
+    discover.add_argument("--maya-character-id", default="stage2-maya")
+    discover.add_argument("--alex-character-id", default="stage2-alex")
+    discover.add_argument("--run-id", default="stage2-readonly-v1")
+    discover.add_argument("--timeout-seconds", type=float, default=120)
+    discover.add_argument("--token-budget", type=int, default=4_000)
+    discover.add_argument("--dry-run", action="store_true", default=True)
+    discover.add_argument("--apply", action="store_true")
+    discover.add_argument(
+        "--report",
+        default="resources/data/test-results/character-mode-stage2-discovered-recovery-report.json",
+    )
     return parser
 
 
@@ -127,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
             token_budget=args.token_budget,
         )
         write_report(report, args.report)
-    else:
+    elif args.command == "resume-cleanup":
         checkpoint = _with_base_url(_checkpoint(args.checkpoint), args.base_url)
         failed_report = Stage2Report.model_validate_json(
             Path(args.failed_report).read_text(encoding="utf-8")
@@ -138,7 +160,23 @@ def main(argv: list[str] | None = None) -> int:
             failed_report,
             token_budget=args.token_budget,
         )
-        write_report(report, args.report)
+    else:
+        config = Stage2PrepareConfig(
+            base_url=args.base_url,
+            provider_id=args.provider_id,
+            model_id=args.model_id,
+            maya_character_id=args.maya_character_id,
+            alex_character_id=args.alex_character_id,
+            run_id=args.run_id,
+            timeout_seconds=args.timeout_seconds,
+            token_budget=args.token_budget,
+        )
+        report = discover_stage2_cleanup(
+            HttpStage2Gateway(config.base_url, config.timeout_seconds),
+            config,
+            apply=args.apply,
+        )
+    write_report(report, args.report)
     print(report.model_dump_json(indent=2))
     return 2 if report.decision == "blocked" else 0
 
@@ -153,6 +191,7 @@ __all__ = [
     "Stage2Report",
     "main",
     "prepare_stage2",
+    "discover_stage2_cleanup",
     "resume_stage2_cleanup",
     "verify_stage2_restart",
     "write_report",

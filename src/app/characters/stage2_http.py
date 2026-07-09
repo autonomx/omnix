@@ -10,6 +10,7 @@ from .stage2_contracts import duration_ms
 
 class Stage2Gateway(Protocol):
     def health(self) -> dict[str, Any]: ...
+    def list_sessions(self) -> dict[str, Any] | list[dict[str, Any]]: ...
     def list_characters(self) -> list[dict[str, Any]]: ...
     def create_character(self, payload: dict[str, Any]) -> dict[str, Any]: ...
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]: ...
@@ -27,6 +28,9 @@ class Stage2Gateway(Protocol):
 
 
 class HttpStage2Gateway(HttpStage1Gateway):
+    def list_sessions(self) -> dict[str, Any]:
+        return self._json("GET", "/api/chat/sessions")
+
     def delete_session(self, session_id: str) -> dict[str, Any]:
         return self._json("DELETE", f"/api/chat/sessions/{self._encoded(session_id)}")
 

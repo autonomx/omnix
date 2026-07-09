@@ -183,6 +183,55 @@ decision = pass
 
 Do not use `resume-cleanup` for a different failed check. It rejects unrelated failures and performs no cleanup.
 
+## Artifact-free discovery recovery
+
+If the checkpoint or failed final report was written under an unexpected working
+directory and cannot be recovered, do not rerun `prepare` against the partially
+mutated live state. First ask the live application to discover the exact Stage 2
+fixture posture:
+
+```bat
+python scripts\character_mode_stage2_preflight.py discover-cleanup ^
+  --base-url http://127.0.0.1:8000 ^
+  --run-id stage2-readonly-v1 ^
+  --maya-character-id stage2-maya ^
+  --alex-character-id stage2-alex
+```
+
+The command is a dry-run by default and writes:
+
+```text
+resources/data/test-results/character-mode-stage2-discovered-recovery-report.json
+```
+
+Inspect the content-free plan. It must identify unique exact Stage 2 session
+titles, the retained Maya pilot, expected owner dimensions, marker hashes, and
+the remaining synthetic record IDs without printing memory text. If the plan is
+ambiguous or blocked, stop and investigate rather than guessing.
+
+After a clean dry-run plan, apply the recovery:
+
+```bat
+python scripts\character_mode_stage2_preflight.py discover-cleanup ^
+  --base-url http://127.0.0.1:8000 ^
+  --run-id stage2-readonly-v1 ^
+  --maya-character-id stage2-maya ^
+  --alex-character-id stage2-alex ^
+  --apply
+```
+
+Expected recovery decision:
+
+```text
+decision = pass
+```
+
+Discovery recovery only deletes exact matched synthetic Stage 2 memory records
+and temporary setup/control sessions. It keeps the Maya read-only pilot session
+as deployment evidence, does not delete character profiles, and reports
+`blocked` on duplicate titles, duplicate marker records, wrong owners, missing
+required state, or cross-owner snapshot exposure.
+
 ## Browser confirmation
 
 After the final automated or recovery report passes:
