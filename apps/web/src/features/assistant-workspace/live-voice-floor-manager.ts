@@ -1,0 +1,117 @@
+export type ConversationPace = 'quick' | 'balanced' | 'reflective';
+
+export type UserFloorState =
+  | 'idle'
+  | 'listening'
+  | 'speech_candidate'
+  | 'speaking'
+  | 'paused'
+  | 'completion_pending'
+  | 'overlap_candidate';
+
+export type SemanticTurnReason =
+  | 'definitive_statement'
+  | 'complete_question'
+  | 'complete_command'
+  | 'trailing_hesitation'
+  | 'unfinished_clause'
+  | 'self_correction'
+  | 'enumeration_in_progress'
+  | 'insufficient_text'
+  | 'timeout';
+
+export type SemanticTurnAssessment = {
+  probabilityDone: number;
+  reason: SemanticTurnReason;
+  recommendedWaitMs: number;
+};
+
+export type FloorTimingProfile = {
+  minimumPauseMs: number;
+  clearTurnWaitMs: number;
+  ambiguousWaitMs: number;
+  maximumWaitMs: number;
+};
+
+export type UserFloorEvent =
+  | { type: 'listen' }
+  | { type: 'speech_candidate' }
+  | { type: 'speech_confirmed'; assistantSpeaking: boolean }
+  | { type: 'pause' }
+  | { type: 'resume' }
+  | { type: 'completion_check' }
+  | { type: 'commit' }
+  | { type: 'reset' };
+
+const PROFILES: Record<ConversationPace, FloorTimingProfile> = {
+  quick: { minimumPauseMs: 220, clearTurnWaitMs: 320, ambiguousWaitMs: 700, maximumWaitMs: 1_050 },
+  balanced: { minimumPauseMs: 320, clearTurnWaitMs: 450, ambiguousWaitMs: 1_100, maximumWaitMs: 1_700 },
+  reflective: { minimumPauseMs: 450, clearTurnWaitMs: 650, ambiguousWaitMs: 1_800, maximumWaitMs: 2_800 },
+};
+
+const HESITATION_PATTERN = /(?:\b(?:um+|uh+|erm|hmm|let me think|one moment|give me a second)\b)[,.…\s-]*$/i;
+const UNFINISHED_PATTERN = /(?:\b(?:and|or|but|because|so|then|if|when|while|with|to|from|about|like|that|which|who|first|second|also)\b|[,;:\-–—])\s*$/i;
+const SELF_CORRECTION_PATTERN = /(?:\b(?:actually|rather|I mean|no wait|correction)\b)[,.…\s-]*$/i;
+const ENUMERATION_PATTERN = /(?:\b(?:first|second|third|next)|\d+[.)])\s*$/i;
+const COMPLETE_QUESTION_PATTERN = /(?:[?？]|\b(?:what|why|when|where|who|how|can|could|would|should|is|are|do|does|did)\b.+)$/i;
+const COMPLETE_COMMAND_PATTERN = /^(?:please\s+)?(?:open|close|show|hide|start|stop|send|create|delete|save|load|continue|explain|tell|give|find|search|go|move|call|cancel)\b.+/i;
+
+export function conversationTimingProfile(pace: ConversationPace): FloorTimingProfile {
+  return PROFILES[pace];
+}
+
+export function reduceUserFloor(state: UserFloorState, event: UserFloorEvent): UserFloorState {
+  switch (event.type) {
+    case 'reset': return 'idle';
+    case 'listen': return state === 'idle' ? 'listening' : state;
+    case 'speech_candidate': return 'speech_candidate';
+    case 'speech_confirmed': return event.assistantSpeaking ? 'overlap_candidate' : 'speaking';
+    case 'pause': return state === 'speaking' || state === 'overlap_candidate' ? 'paused' : state;
+    case 'resume': return 'speaking';
+    case 'completion_check': return state === 'paused' ? 'completion_pending' : state;
+    case 'commit': return 'listening';
+    default: return state;
+  }
+}
+
+export function assessSemanticTurn(
+  transcript: string,
+  pace: ConversationPace = 'balanced',
+): SemanticTurnAssessment {
+  const profile = conversationTimingProfile(pace);
+  const text = transcript.trim();
+  if (text.length < 2) {
+    return { probabilityDone: 0.1, reason: 'insufficient_text', recommendedWaitMs: profile.maximumWaitMs };
+  }
+  if (HESITATION_PATTERN.test(text)) {
+    return { probabilityDone: 0.08, reason: 'trailing_hesitation', recommendedWaitMs: profile.maximumWaitMs };
+  }
+  if (SELF_CORRECTION_PATTERN.test(text)) {
+    return { probabilityDone: 0.12, reason: 'self_correction', recommendedWaitMs: profile.maximumWaitMs };
+  }
+  if (ENUMERATION_PATTERN.test(text)) {
+    return { probabilityDone: 0.2, reason: 'enumeration_in_progress', recommendedWaitMs: profile.ambiguousWaitMs };
+  }
+  if (UNFINISHED_PATTERN.test(text)) {
+    return { probabilityDone: 0.18, reason: 'unfinished_clause', recommendedWaitMs: profile.ambiguousWaitMs };
+  }
+  if (COMPLETE_QUESTION_PATTERN.test(text)) {
+    return { probabilityDone: 0.92, reason: 'complete_question', recommendedWaitMs: profile.clearTurnWaitMs };
+  }
+  if (COMPLETE_COMMAND_PATTERN.test(text)) {
+    return { probabilityDone: 0.94, reason: 'complete_command', recommendedWaitMs: profile.clearTurnWaitMs };
+  }
+  return { probabilityDone: 0.78, reason: 'definitive_statement', recommendedWaitMs: profile.clearTurnWaitMs };
+}
+
+export function semanticFinalizeDelay(
+  transcript: string,
+  pace: ConversationPace = 'balanced',
+): number {
+  const profile = conversationTimingProfile(pace);
+  const assessment = assessSemanticTurn(transcript, pace);
+  return Math.min(
+    profile.maximumWaitMs,
+    Math.max(profile.minimumPauseMs, assessment.recommendedWaitMs),
+  );
+}
