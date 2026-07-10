@@ -21,8 +21,14 @@ from .models import ChatMessage, ChatSession
 from .store import _pop_ready_sentences
 
 _HOOK = "_omnix_live_agent_stream_installed"
-_CONFIRM = re.compile(r"^(?:yes|yes[, ]+do it|confirm|confirmed|approve|go ahead|proceed|do it)[.!\s]*$", re.I)
-_REJECT = re.compile(r"^(?:no|nope|cancel|reject|do not|don't do it|never mind|nevermind)[.!\s]*$", re.I)
+_CONFIRM = re.compile(
+    r"^(?:yes|yes[, ]+do it|confirm|confirmed|approve|go ahead|proceed|do it)[.!\s]*$",
+    re.I,
+)
+_REJECT = re.compile(
+    r"^(?:no|nope|cancel|reject|do not|don't do it|never mind|nevermind)[.!\s]*$",
+    re.I,
+)
 
 
 def install_live_agent_store_hooks(*store_classes: type) -> None:
@@ -47,7 +53,7 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                 proposal_message, request = pending
                 payload = hermes_assistant_tool_execute_payload(
                     user_message.content,
-                    request.model_copy(update={"approved": True}),
+                    request.model_copy(update={"approved": True, "session_id": session.id}),
                 )
                 status = "executed" if payload.execution_result.error is None else "failed"
                 _mark_kasa_proposal(
@@ -125,7 +131,12 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                         metadata={"source": "explicit_live_agent", "proposal_only": True},
                     )
                 )
-            yield from _agent_events(user_message, decision, response)
+            yield from _agent_events(
+                user_message,
+                decision,
+                response,
+                session_id=session.id,
+            )
 
         store_class.stream_provider_reply_chunks = wrapped
         setattr(store_class, _HOOK, True)
@@ -143,7 +154,13 @@ def _decision(user_message: ChatMessage) -> LiveAgentRouteDecision:
     )
 
 
-def _agent_events(user_message: ChatMessage, decision: LiveAgentRouteDecision, response):
+def _agent_events(
+    user_message: ChatMessage,
+    decision: LiveAgentRouteDecision,
+    response,
+    *,
+    session_id: str,
+):
     coordinator = default_assistant_turn_coordinator()
     assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
     if assistant_turn_id:
@@ -151,11 +168,9 @@ def _agent_events(user_message: ChatMessage, decision: LiveAgentRouteDecision, r
     payload = response.result
     pending = first_pending_kasa_write(
         payload,
-        session_id=str(user_message.metadata.get("session_id") or "") or "unknown",
+        session_id=session_id,
         approved=False,
     )
-    if pending is not None:
-        pending = pending.model_copy(update={"session_id": _session_id_from_turn(user_message)})
     read_executed = any(
         bool(row.get("executed"))
         for row in payload.get("tool_results", [])
@@ -305,27 +320,35 @@ def _kasa_execution_events(user_message: ChatMessage, payload):
     if assistant_turn_id:
         coordinator.mark_streaming(assistant_turn_id)
     result = payload.execution_result
-    content = result.result_summary or ("Kasa action failed." if result.error else "Kasa action completed.")
+    content = result.result_summary or (
+        "Kasa action failed." if result.error else "Kasa action completed."
+    )
     if result.error:
         content = f"{content} {result.error}".strip()
-    if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
-        yield _interrupted(assistant_turn_id, "")
-        return
-    yield {"type": "text_chunk", "text": content}
-    yield {
-        "type": "complete",
-        "content": content,
-        "metadata": {
-            "generation_status": "completed",
-            "agent_mode": True,
-            "live_agent": True,
-            "backend": "omnix_kasa",
-            "proposal_only": False,
-            "review_required": False,
-            "executes": result.error is None,
-            "tool_execution": payload.model_dump(mode="json"),
-        },
-    }
+    try:
+        if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
+            yield _interrupted(assistant_turn_id, "")
+            return
+        yield {"type": "text_chunk", "text": content}
+        yield {
+            "type": "complete",
+            "content": content,
+            "metadata": {
+                "generation_status": "completed",
+                "agent_mode": True,
+                "live_agent": True,
+                "backend": "omnix_kasa",
+                "proposal_only": False,
+                "review_required": False,
+                "executes": result.error is None,
+                "tool_execution": payload.model_dump(mode="json"),
+            },
+        }
+    except GeneratorExit:
+        if assistant_turn_id:
+            coordinator.request_cancel(assistant_turn_id, "client_disconnected")
+            coordinator.mark_provider_cancelled(assistant_turn_id)
+        raise
 
 
 def _kasa_rejection_events(user_message: ChatMessage, request: AssistantToolRequest):
@@ -363,10 +386,6 @@ def _confirmation_prompt(request: AssistantToolRequest) -> str:
     action = "turn on" if request.action_id == "kasa.turn_on" else "turn off"
     target = str(request.input.get("target") or "the selected Kasa plug")
     return f"This will {action} {target}. Say 'confirm' to run it or 'cancel' to reject it."
-
-
-def _session_id_from_turn(user_message: ChatMessage) -> str:
-    return str(user_message.metadata.get("session_id") or "") or "unknown"
 
 
 def _contextual_content(content: str, context_items: list[dict[str, Any]]) -> str:
