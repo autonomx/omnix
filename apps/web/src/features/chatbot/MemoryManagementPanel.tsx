@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { CharacterManagementPanel } from './CharacterManagementPanel';
 import { CharacterModePanel } from './CharacterModePanel';
 import {
   memoryClient,
@@ -70,7 +69,7 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Memory settings update failed.'),
   });
 
-  if (!sessionId) return <section className="assistant-view-panel memory-management-panel" aria-label="Memory view"><p className="eyebrow">Omnix Assistant</p><h2>Memory</h2><p>Create or select a Chat session before managing memory.</p><p>Character profiles remain available below.</p><CharacterManagementPanel /></section>;
+  if (!sessionId) return <section className="assistant-view-panel memory-management-panel" aria-label="Memory view"><p className="eyebrow">Omnix Assistant</p><h2>Memory</h2><p>Create or select a Chat session before managing memory.</p></section>;
 
   const records = memoryQuery.data?.records ?? [];
   const candidates = candidatesQuery.data?.candidates ?? [];
@@ -84,7 +83,6 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
       </header>
       {status ? <p className="memory-status" role="status">{status}</p> : null}
       <CharacterModePanel sessionId={sessionId} />
-      <CharacterManagementPanel />
 
       <div className="memory-overview-grid">
         <article className="memory-card memory-card-primary">
