@@ -23,7 +23,12 @@ _ACTION = re.compile(
 _ACTION_TARGET = re.compile(
     r"\b(?:light|brightness|thermostat|calendar|event|meeting|email|message|file|folder|"
     r"document|app|application|service|job|task|reminder|reservation|booking|device|"
-    r"room|system|repository|branch|pull request|issue|download|upload)\b",
+    r"plug|outlet|kasa|room|system|repository|branch|pull request|issue|download|upload)\b",
+    re.IGNORECASE,
+)
+_KASA_READ = re.compile(
+    r"\b(?:kasa|smart\s+plug|plug|outlet)\b.*\b(?:status|state|on|off|discover|find|list)\b|"
+    r"^(?:is|are|what|find|discover|list).+\b(?:kasa|smart\s+plug|plug|outlet)\b",
     re.IGNORECASE,
 )
 _INFORMATIONAL = re.compile(
@@ -84,6 +89,8 @@ def classify_live_agent_intent(text: str) -> tuple[bool, float, str]:
         return False, 0.98, "casual_conversation"
     if _EXPLICIT_AGENT.search(normalized):
         return True, 0.99, "explicit_agent_request"
+    if _KASA_READ.search(normalized):
+        return True, 0.94, "kasa_device_request"
     action = bool(_ACTION.search(normalized))
     target = bool(_ACTION_TARGET.search(normalized))
     if _POLITE_ACTION.match(normalized) and action and target:

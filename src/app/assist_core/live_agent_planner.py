@@ -5,7 +5,14 @@ import os
 from dataclasses import asdict
 from typing import Any
 
-from .core import AssistantRequest
+from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
+from app.assistant_tools.kasa_plan import (
+    KASA_READ_TOOLS,
+    is_kasa_tool_name,
+    kasa_request_from_tool_call,
+)
+
+from .core import AssistantRequest, ToolResult
 from .hermes_client import HermesSidecarClient
 from .hermes_status import hermes_runtime_config
 from .mode_apply import apply_mode_result
@@ -47,13 +54,46 @@ def plan_live_agent_proposal(
         ).plan(request)
     except Exception as exc:
         raise LiveAgentUnavailable(str(exc) or "Hermes planner is unavailable") from exc
-    result = apply_mode_result(result, dry_run=True)
+    has_kasa_call = any(is_kasa_tool_name(call.name) for call in result.tool_calls)
+    if not has_kasa_call:
+        result = apply_mode_result(result, dry_run=True)
+    _apply_kasa_reads(result, content=content, session_id=session_id)
     for row in result.tool_results:
-        row.executed = False
-    result.requires_confirmation = True
+        if row.name not in KASA_READ_TOOLS:
+            row.executed = False
+    kasa_read_only = bool(result.tool_calls) and all(
+        call.name in KASA_READ_TOOLS for call in result.tool_calls
+    )
+    result.requires_confirmation = not kasa_read_only
     return ModeChatResponse(
         ok=result.success,
         mode="agent",
         backend="hermes",
         result=asdict(result),
     )
+
+
+def _apply_kasa_reads(result, *, content: str, session_id: str) -> None:
+    rows = list(result.tool_results)
+    for call in result.tool_calls:
+        if call.name not in KASA_READ_TOOLS:
+            continue
+        request = kasa_request_from_tool_call(call, session_id=session_id, approved=False)
+        if request is None:
+            continue
+        payload = hermes_assistant_tool_execute_payload(content, request)
+        execution = payload.execution_result
+        rows.append(
+            ToolResult(
+                name=call.name,
+                ok=execution.error is None,
+                output=execution.output,
+                error=execution.error,
+                executed=execution.error is None,
+            )
+        )
+        if execution.result_summary:
+            result.response = execution.result_summary
+    if rows:
+        result.tool_results = rows
+        result.success = all(row.ok for row in rows)

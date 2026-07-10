@@ -1,0 +1,72 @@
+"""Helpers that translate Hermes Kasa plans into governed Omnix tool requests."""
+from __future__ import annotations
+
+from typing import Any
+
+from app.assist_core.core import ToolCall
+
+from .models import AssistantToolRequest
+
+HERMES_KASA_ACTIONS: dict[str, str] = {
+    "kasa_discover_devices": "kasa.discover_devices",
+    "kasa_get_state": "kasa.get_state",
+    "kasa_turn_on": "kasa.turn_on",
+    "kasa_turn_off": "kasa.turn_off",
+}
+KASA_READ_TOOLS = {"kasa_discover_devices", "kasa_get_state"}
+KASA_WRITE_TOOLS = {"kasa_turn_on", "kasa_turn_off"}
+
+
+def is_kasa_tool_name(name: str) -> bool:
+    return name in HERMES_KASA_ACTIONS
+
+
+def kasa_request_from_tool_call(
+    call: ToolCall | dict[str, Any],
+    *,
+    session_id: str,
+    approved: bool = False,
+) -> AssistantToolRequest | None:
+    if isinstance(call, ToolCall):
+        name = call.name
+        args = dict(call.args)
+    else:
+        name = str(call.get("name") or call.get("tool") or "")
+        args = dict(call.get("args") or {})
+    action_id = HERMES_KASA_ACTIONS.get(name)
+    if action_id is None:
+        return None
+    target = str(
+        args.get("target")
+        or args.get("alias")
+        or args.get("device")
+        or args.get("host")
+        or ""
+    ).strip()
+    normalized_input = {"target": target} if target else {}
+    return AssistantToolRequest(
+        tool_id="kasa",
+        action_id=action_id,
+        session_id=session_id,
+        input=normalized_input,
+        approved=approved,
+    )
+
+
+def first_pending_kasa_write(
+    mode_result: dict[str, Any],
+    *,
+    session_id: str,
+    approved: bool = False,
+) -> AssistantToolRequest | None:
+    calls = mode_result.get("tool_calls")
+    if not isinstance(calls, list):
+        return None
+    for call in calls:
+        if not isinstance(call, dict):
+            continue
+        name = str(call.get("name") or call.get("tool") or "")
+        if name not in KASA_WRITE_TOOLS:
+            continue
+        return kasa_request_from_tool_call(call, session_id=session_id, approved=approved)
+    return None
