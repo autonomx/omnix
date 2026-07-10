@@ -19,13 +19,12 @@ export function CharacterHermesPanel({ characterId }: { characterId: string }) {
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Character Hermes operation failed.'),
   });
 
-  return <section className="character-hermes-panel">
-    <h4>Optional Hermes compatibility</h4>
-    <p>Imports become pending suggestions owned by <code>{characterId}</code>. Exports include only approved, normal-sensitivity memories for this character.</p>
-    <div className="character-management-actions">
+  return <div className="character-hermes-panel">
+    <div><strong>Optional Hermes compatibility</strong><p>Import suggestions for review or export approved, normal-sensitivity character memories.</p></div>
+    <div className="character-hermes-actions">
       <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate('import')}>Import for review</button>
       <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate('export')}>Export approved character memory</button>
     </div>
     {status ? <p role="status">{status}</p> : null}
-  </section>;
+  </div>;
 }

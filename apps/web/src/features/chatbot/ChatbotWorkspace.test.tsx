@@ -141,6 +141,29 @@ describe('ChatbotWorkspace', () => {
     expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
   });
 
+  it('opens a dedicated Characters destination from the assistant sidebar', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      if (path === '/api/characters') return Response.json({ characters: [] });
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Characters view' }));
+
+    expect(await screen.findByRole('heading', { name: 'Characters' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Profiles and relationship data' })).toBeInTheDocument();
+    expect(await screen.findByText('No characters have been created.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Memory' })).not.toBeInTheDocument();
+  });
+
   it('opens an existing chat scrolled to the latest message', async () => {
     const scrollIntoViewMock = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {

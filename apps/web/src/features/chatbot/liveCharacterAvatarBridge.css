@@ -1,0 +1,152 @@
+.assistant-live-visual-stage {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  min-height: 17rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.assistant-live-visual-stage > .assistant-voice-orb,
+.assistant-live-visual-stage > .assistant-live-character-avatar {
+  grid-area: 1 / 1;
+}
+
+.assistant-live-visual-stage[data-has-character-avatar='true'] {
+  min-height: 23rem;
+}
+
+.assistant-live-character-avatar {
+  position: relative;
+  width: min(100%, 22rem);
+  aspect-ratio: 4 / 5;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent, #4f8cff) 34%, transparent);
+  border-radius: 1.25rem;
+  min-height: 22rem;
+  background: radial-gradient(circle at 50% 42%, rgba(72, 92, 170, 0.24), rgba(8, 13, 28, 0.94));
+  background-position: center;
+  background-size: cover;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.28);
+  isolation: isolate;
+}
+
+.assistant-live-character-avatar::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  box-shadow: inset 0 -5rem 5rem rgba(3, 6, 17, 0.28);
+  content: '';
+  pointer-events: none;
+}
+
+.assistant-live-character-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transform-origin: 50% 72%;
+  transition: transform 180ms ease, filter 180ms ease;
+  animation: character-avatar-breathe 4.8s ease-in-out infinite;
+}
+
+.assistant-live-character-avatar[data-voice-mode='speaking'] img {
+  transform: scale(1.014);
+  animation-duration: 2.8s;
+}
+
+.assistant-live-character-avatar[data-voice-mode='listening'] img {
+  filter: brightness(1.055) saturate(1.025);
+  transform: scale(1.008) translateY(-0.1%);
+}
+
+.assistant-live-character-avatar[data-voice-mode='thinking'] img {
+  filter: brightness(0.98) saturate(0.96);
+  transform: scale(1.006) translateX(-0.15%);
+}
+
+.assistant-live-character-avatar[data-voice-mode='error'] img {
+  filter: grayscale(0.7);
+  animation-play-state: paused;
+}
+
+.assistant-live-character-avatar figcaption {
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  z-index: 2;
+  transform: translateX(-50%);
+  max-width: calc(100% - 1.5rem);
+  padding: 0.4rem 0.75rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(5, 9, 20, 0.76);
+  color: #f5f7ff;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+
+.assistant-live-card .assistant-voice-transcript {
+  background: rgba(9, 14, 28, 0.72);
+  border: 1px solid rgba(132, 148, 196, 0.22);
+  border-radius: 0.8rem;
+  min-height: 20rem;
+  max-height: 32rem;
+  overflow: auto;
+  padding: 0.85rem;
+  scrollbar-gutter: stable;
+}
+
+.assistant-live-card .assistant-voice-transcript-header {
+  align-items: center;
+  background: rgba(9, 14, 28, 0.94);
+  display: flex;
+  justify-content: space-between;
+  margin: -0.85rem -0.85rem 0.75rem;
+  padding: 0.75rem 0.85rem;
+  position: sticky;
+  top: -0.85rem;
+  z-index: 2;
+}
+
+.assistant-live-card .assistant-voice-transcript-header h3 {
+  margin: 0;
+}
+
+.assistant-live-card .assistant-voice-transcript-header button {
+  min-height: 2rem;
+  padding: 0 0.7rem;
+}
+
+@keyframes character-avatar-breathe {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50% { transform: scale(1.006) translateY(-0.18%); }
+}
+
+@media (max-width: 760px) {
+  .assistant-live-visual-stage,
+  .assistant-live-visual-stage[data-has-character-avatar='true'] {
+    min-height: 18rem;
+  }
+
+  .assistant-live-character-avatar {
+    min-height: 17rem;
+    width: min(100%, 18rem);
+  }
+
+  .assistant-live-card .assistant-voice-transcript {
+    min-height: 16rem;
+    max-height: 26rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-live-character-avatar img {
+    animation: none;
+    transition: none;
+  }
+}
