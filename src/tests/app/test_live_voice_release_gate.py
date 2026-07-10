@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from app.gateway.live_voice_release_gate import (
+    REQUIRED_LIVE_VOICE_SCENARIOS,
     LiveVoiceReleaseThresholds,
     evaluate_live_voice_log,
     evaluate_live_voice_release_gate,
@@ -50,13 +51,24 @@ def _passing_events(samples: int = 5, trials: int = 10):
     return events
 
 
+def _single_scenario_thresholds(**changes):
+    return LiveVoiceReleaseThresholds(
+        required_scenarios=("system-normal",),
+        **changes,
+    )
+
+
 def test_release_gate_passes_complete_bounded_evidence() -> None:
-    report = evaluate_live_voice_release_gate(_passing_events())
+    report = evaluate_live_voice_release_gate(
+        _passing_events(),
+        thresholds=_single_scenario_thresholds(),
+    )
 
     assert report.status == "pass"
     assert report.failures == []
     assert report.insufficient == []
     assert report.scenarios == ["system-normal"]
+    assert report.missing_scenarios == []
     assert all(metric.status == "pass" for metric in report.metrics)
 
 
@@ -67,15 +79,20 @@ def test_release_gate_fails_latency_and_quality_thresholds() -> None:
         "trace_id": f"slow:{index}",
         "metric_name": "interruption_to_silence_ms",
         "value_ms": 900,
+        "scenario": "system-normal",
     } for index in range(5))
     events.extend({
         "event": "release_quality",
         "trace_id": f"false:{index}",
         "quality_name": "false_interruption",
         "occurred": True,
+        "scenario": "system-normal",
     } for index in range(2))
 
-    report = evaluate_live_voice_release_gate(events)
+    report = evaluate_live_voice_release_gate(
+        events,
+        thresholds=_single_scenario_thresholds(),
+    )
 
     assert report.status == "fail"
     assert any("interruption_to_silence_ms" in failure for failure in report.failures)
@@ -94,7 +111,17 @@ def test_release_gate_reports_insufficient_evidence_without_guessing() -> None:
 
     assert report.status == "insufficient"
     assert report.failures == []
-    assert len(report.insufficient) == 7
+    assert len(report.insufficient) == 8
+    assert set(report.missing_scenarios) == set(REQUIRED_LIVE_VOICE_SCENARIOS)
+
+
+def test_release_gate_requires_the_complete_runtime_scenario_matrix() -> None:
+    report = evaluate_live_voice_release_gate(_passing_events())
+
+    assert report.status == "insufficient"
+    assert "system-normal" not in report.missing_scenarios
+    assert "character-normal" in report.missing_scenarios
+    assert "rapid-interruption-soak" in report.missing_scenarios
 
 
 def test_release_gate_reads_jsonl_and_ignores_invalid_records(tmp_path) -> None:
@@ -106,7 +133,11 @@ def test_release_gate_reads_jsonl_and_ignores_invalid_records(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    report = evaluate_live_voice_log(path, hours=24)
+    report = evaluate_live_voice_log(
+        path,
+        hours=24,
+        thresholds=_single_scenario_thresholds(),
+    )
 
     assert report.status == "pass"
     assert report.records_scanned == len(records)
@@ -123,6 +154,7 @@ def test_release_gate_route_evaluates_supplied_evidence() -> None:
             "thresholds": {
                 "minimum_latency_samples": 2,
                 "minimum_quality_trials": 2,
+                "required_scenarios": ["system-normal"],
             },
         },
     )
@@ -148,4 +180,6 @@ def test_release_gate_route_reads_current_log(monkeypatch, tmp_path) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "insufficient"
+    payload = response.json()
+    assert payload["status"] == "insufficient"
+    assert set(payload["missing_scenarios"]) == set(REQUIRED_LIVE_VOICE_SCENARIOS)
