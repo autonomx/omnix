@@ -5,6 +5,9 @@ from typing import Any
 
 from app.assistant_memory.routes import register_assistant_memory_routes
 from app.characters.api import register_character_routes
+from app.characters.avatar_api import register_character_avatar_routes
+from app.characters.avatar_generation_api import register_character_avatar_generation_routes
+from app.characters.avatar_viseme_api import register_character_avatar_viseme_routes
 
 from .models import AssistantContextChatRequest, AssistantContextItem
 from .routes import register_assistant_context_routes as _register_assistant_context_routes
@@ -23,6 +26,9 @@ def register_assistant_context_routes(app, **kwargs: Any) -> None:
         app,
         chat_store_factory=kwargs.get("chat_store_factory"),
     )
+    register_character_avatar_routes(app)
+    register_character_avatar_generation_routes(app)
+    register_character_avatar_viseme_routes(app)
 
 
 __all__ = [
