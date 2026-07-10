@@ -7,6 +7,11 @@ from collections.abc import Callable
 from typing import Any
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.image.reference_assets import (
+    ImageReferenceError,
+    close_image_references,
+    load_image_reference_assets,
+)
 from app.jobs import CreateJobRequest, JobRecord, JobStatus, ResourceClass, SQLiteJobStore, default_job_store
 
 from .avatar_generation_models import (
@@ -63,13 +68,24 @@ class CharacterAvatarGenerationService:
         request: CreateCharacterAvatarGenerationRequest,
     ) -> CharacterAvatarGenerationBatch:
         character = self.character_service_factory().get(character_id)
+        source_asset_id = request.source_asset_id.strip()
+        reference_asset_ids: list[str] = []
+        prompt = _base_prompt(character.display_name, request.appearance_prompt)
+        if source_asset_id:
+            self._govern_uploaded_source(
+                character.id,
+                source_asset_id,
+                consent_confirmed=request.source_image_consent_confirmed,
+            )
+            reference_asset_ids = [source_asset_id]
+            prompt = _uploaded_base_prompt(character.display_name, request.appearance_prompt)
         job = self.job_store_factory().create_job(
             self._image_job_request(
                 character_id=character.id,
                 variant="base",
-                prompt=_base_prompt(character.display_name, request.appearance_prompt),
+                prompt=prompt,
                 request=request,
-                reference_asset_ids=[],
+                reference_asset_ids=reference_asset_ids,
             )
         )
         return self.repository.create(character.id, request, job.id)
@@ -357,6 +373,59 @@ class CharacterAvatarGenerationService:
             )
         return prompts
 
+    def _govern_uploaded_source(
+        self,
+        character_id: str,
+        source_asset_id: str,
+        *,
+        consent_confirmed: bool,
+    ) -> AssetRecord:
+        if not consent_confirmed:
+            raise ValueError("avatar_source_consent_required")
+        store = self.asset_store_factory()
+        asset = next(
+            (candidate for candidate in store.list_assets().assets if candidate.id == source_asset_id),
+            None,
+        )
+        if asset is None:
+            raise ValueError(f"avatar_source_not_found:{source_asset_id}")
+        if asset.type != AssetType.IMAGE:
+            raise ValueError(f"avatar_source_not_image:{source_asset_id}")
+        if not bool(asset.metadata.get("reference_upload")):
+            raise ValueError(f"avatar_source_must_be_uploaded_image:{source_asset_id}")
+        images: list[Any] = []
+        try:
+            images = load_image_reference_assets([source_asset_id], store=store)
+        except ImageReferenceError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            close_image_references(images)
+        metadata = dict(asset.metadata)
+        linked_character_ids = [
+            str(value)
+            for value in metadata.get("linked_character_ids", [])
+            if str(value).strip()
+        ]
+        if character_id not in linked_character_ids:
+            linked_character_ids.append(character_id)
+        metadata.update(
+            {
+                "character_avatar_source": True,
+                "source_image_consent_confirmed": True,
+                "linked_character_ids": linked_character_ids,
+            }
+        )
+        compat = dict(asset.compat)
+        compat["character_avatar_source"] = True
+        governed = asset.model_copy(
+            update={
+                "owner_id": asset.owner_id or "user:local",
+                "metadata": metadata,
+                "compat": compat,
+            }
+        )
+        return store.upsert_asset(governed)
+
     def _image_job_request(
         self,
         *,
@@ -392,6 +461,7 @@ class CharacterAvatarGenerationService:
                     "character_id": character_id,
                     "avatar_variant": variant,
                     "avatar_generation_contract": "character_avatar_v1",
+                    "source_asset_id": request.source_asset_id or None,
                 },
             },
             compat={"character_id": character_id, "avatar_variant": variant},
@@ -407,6 +477,20 @@ def _base_prompt(display_name: str, appearance_prompt: str) -> str:
         "mouth fully closed, consistent hair and clothing, clean even lighting, no text. "
         "This canonical portrait will be reused as a locked reference for live-chat animation frames. "
         "Do not depict or imitate a real public person."
+    )
+
+
+def _uploaded_base_prompt(display_name: str, appearance_prompt: str) -> str:
+    custom = appearance_prompt.strip()
+    return (
+        f"Using the supplied user-provided image as the authoritative identity reference for {display_name}, "
+        "create one faithful front-facing head-and-shoulders live-avatar portrait. "
+        "Preserve the person's recognizable facial identity, skin tone, face proportions, hair, and other "
+        "defining features. Do not replace them with a different person. "
+        f"{custom + ' ' if custom else ''}"
+        "Center the face, keep both eyes open, use a neutral relaxed expression and a fully closed mouth, "
+        "with clean even lighting and no text. This canonical portrait will be reused as a locked reference "
+        "for mouth, blink, expression, and viseme frames."
     )
 
 
