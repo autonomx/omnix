@@ -78,6 +78,16 @@
   gap: 0.75rem;
 }
 
+.character-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.character-avatar-actions button {
+  flex: 1 1 13rem;
+}
+
 .character-avatar-progress,
 .character-avatar-status {
   display: flex;

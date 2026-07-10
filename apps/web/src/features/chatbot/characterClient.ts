@@ -1,11 +1,15 @@
 import { publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
+import './liveCharacterVisemeBridge';
 
 export type CharacterAvatarRenderMode = 'audio_envelope' | 'viseme' | 'static';
+export type CharacterAvatarRenderer = 'sprite' | 'live2d' | 'rive';
 
 export interface CharacterAvatarPack {
   character_id: string;
   version: number;
   render_mode: CharacterAvatarRenderMode;
+  renderer: CharacterAvatarRenderer;
+  rig_asset_id?: string | null;
   base_asset_id?: string | null;
   mouth_frames: Record<string, string>;
   blink_frames: Record<string, string>;
@@ -22,6 +26,8 @@ export interface CharacterAvatarPack {
 export interface UpsertCharacterAvatarPackInput {
   expected_version?: number | null;
   render_mode?: CharacterAvatarRenderMode;
+  renderer?: CharacterAvatarRenderer;
+  rig_asset_id?: string | null;
   base_asset_id?: string | null;
   mouth_frames?: Record<string, string>;
   blink_frames?: Record<string, string>;

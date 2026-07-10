@@ -1,6 +1,7 @@
 import type { CharacterAvatarPack } from './characterClient';
 
 export type AvatarGenerationStatus = 'queued' | 'generating_base' | 'generating_variants' | 'completed' | 'failed';
+export type VisemeGenerationStatus = 'generating' | 'completed' | 'failed';
 
 export interface CreateCharacterAvatarGenerationInput {
   appearance_prompt?: string;
@@ -30,6 +31,18 @@ export interface CharacterAvatarGenerationBatch {
   };
   base_job_id: string;
   variant_job_ids: Record<string, string>;
+  asset_ids: Record<string, string>;
+  avatar_pack_version?: number | null;
+  error: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CharacterVisemeGenerationBatch {
+  id: string;
+  character_id: string;
+  status: VisemeGenerationStatus;
+  job_ids: Record<string, string>;
   asset_ids: Record<string, string>;
   avatar_pack_version?: number | null;
   error: string;
@@ -75,6 +88,12 @@ export const characterAvatarClient = {
   },
   generation(batchId: string): Promise<CharacterAvatarGenerationBatch> {
     return request(`/api/character-avatar-generations/${encodeURIComponent(batchId)}`);
+  },
+  createVisemeGeneration(characterId: string): Promise<CharacterVisemeGenerationBatch> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-visemes`, { method: 'POST' });
+  },
+  visemeGeneration(batchId: string): Promise<CharacterVisemeGenerationBatch> {
+    return request(`/api/character-avatar-visemes/${encodeURIComponent(batchId)}`);
   },
   backfillClonedVoices(input: {
     queue_avatar_generation?: boolean;

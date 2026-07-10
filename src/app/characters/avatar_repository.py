@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS character_avatar_packs (
     character_id TEXT PRIMARY KEY,
     version INTEGER NOT NULL,
     render_mode TEXT NOT NULL,
+    renderer TEXT NOT NULL DEFAULT 'sprite',
+    rig_asset_id TEXT,
     base_asset_id TEXT,
     mouth_frames_json TEXT NOT NULL,
     blink_frames_json TEXT NOT NULL,
@@ -37,6 +39,11 @@ class CharacterAvatarRepository:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(character_avatar_packs)")}
+            if "renderer" not in columns:
+                connection.execute("ALTER TABLE character_avatar_packs ADD COLUMN renderer TEXT NOT NULL DEFAULT 'sprite'")
+            if "rig_asset_id" not in columns:
+                connection.execute("ALTER TABLE character_avatar_packs ADD COLUMN rig_asset_id TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(str(self.db_path), timeout=5.0)
@@ -74,6 +81,8 @@ class CharacterAvatarRepository:
                 character_id=character_id,
                 version=(current.version + 1) if current else 1,
                 render_mode=request.render_mode,
+                renderer=request.renderer,
+                rig_asset_id=request.rig_asset_id,
                 base_asset_id=request.base_asset_id,
                 mouth_frames=dict(request.mouth_frames),
                 blink_frames=dict(request.blink_frames),
@@ -89,14 +98,16 @@ class CharacterAvatarRepository:
             connection.execute(
                 """
                 INSERT INTO character_avatar_packs(
-                    character_id, version, render_mode, base_asset_id,
+                    character_id, version, render_mode, renderer, rig_asset_id, base_asset_id,
                     mouth_frames_json, blink_frames_json, expression_frames_json,
                     outfit_frames_json, background_asset_ids_json, active_outfit,
                     active_background, mouth_anchor_json, created_at, updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(character_id) DO UPDATE SET
                     version=excluded.version,
                     render_mode=excluded.render_mode,
+                    renderer=excluded.renderer,
+                    rig_asset_id=excluded.rig_asset_id,
                     base_asset_id=excluded.base_asset_id,
                     mouth_frames_json=excluded.mouth_frames_json,
                     blink_frames_json=excluded.blink_frames_json,
@@ -134,6 +145,8 @@ def _pack_values(pack: CharacterAvatarPack) -> tuple[Any, ...]:
         pack.character_id,
         pack.version,
         pack.render_mode,
+        pack.renderer,
+        pack.rig_asset_id,
         pack.base_asset_id,
         _json(pack.mouth_frames),
         _json(pack.blink_frames),
@@ -149,10 +162,13 @@ def _pack_values(pack: CharacterAvatarPack) -> tuple[Any, ...]:
 
 
 def _row_to_pack(row: sqlite3.Row) -> CharacterAvatarPack:
+    keys = set(row.keys())
     return CharacterAvatarPack(
         character_id=row["character_id"],
         version=int(row["version"]),
         render_mode=row["render_mode"],
+        renderer=row["renderer"] if "renderer" in keys else "sprite",
+        rig_asset_id=row["rig_asset_id"] if "rig_asset_id" in keys else None,
         base_asset_id=row["base_asset_id"],
         mouth_frames=json.loads(row["mouth_frames_json"] or "{}"),
         blink_frames=json.loads(row["blink_frames_json"] or "{}"),
