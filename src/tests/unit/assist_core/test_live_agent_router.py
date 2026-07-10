@@ -43,6 +43,7 @@ def test_live_agent_router_routes_clear_live_actions_to_agent() -> None:
         "Send an email to Alex",
         "Create a reminder for six",
         "Use the agent to update the repository issue",
+        "Turn off the Kasa desk plug",
     ):
         decision = resolve_live_agent_route(
             content=text,
@@ -54,6 +55,24 @@ def test_live_agent_router_routes_clear_live_actions_to_agent() -> None:
         assert decision.proposal_only is True
         assert decision.review_required is True
         assert decision.executes is False
+
+
+def test_kasa_state_questions_route_to_agent_read_path() -> None:
+    for text in (
+        "Is the Kasa plug on?",
+        "What is the state of my smart plug?",
+        "Find my Kasa devices",
+    ):
+        task, confidence, reason = classify_live_agent_intent(text)
+        assert task is True
+        assert confidence >= 0.9
+        assert reason == "kasa_device_request"
+        decision = resolve_live_agent_route(
+            content=text,
+            user_turn_id="voice-user-turn:kasa",
+            config=_config(),
+        )
+        assert decision.route == "agent_plan"
 
 
 def test_live_agent_router_is_disabled_and_hermes_independent_by_default() -> None:
