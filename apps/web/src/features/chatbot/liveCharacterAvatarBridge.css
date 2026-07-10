@@ -1,11 +1,30 @@
+.assistant-live-visual-stage {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  min-height: 17rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.assistant-live-visual-stage > .assistant-voice-orb,
+.assistant-live-visual-stage > .assistant-live-character-avatar {
+  grid-area: 1 / 1;
+}
+
+.assistant-live-visual-stage[data-has-character-avatar='true'] {
+  min-height: 23rem;
+}
+
 .assistant-live-character-avatar {
   position: relative;
   width: min(100%, 22rem);
-  aspect-ratio: 1 / 1;
-  margin: 0.75rem auto;
+  aspect-ratio: 4 / 5;
+  margin: 0 auto;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent, #4f8cff) 34%, transparent);
   border-radius: 1.25rem;
+  min-height: 22rem;
   background: radial-gradient(circle at 50% 42%, rgba(72, 92, 170, 0.24), rgba(8, 13, 28, 0.94));
   background-position: center;
   background-size: cover;
@@ -71,9 +90,58 @@
   backdrop-filter: blur(8px);
 }
 
+.assistant-live-card .assistant-voice-transcript {
+  background: rgba(9, 14, 28, 0.72);
+  border: 1px solid rgba(132, 148, 196, 0.22);
+  border-radius: 0.8rem;
+  min-height: 20rem;
+  max-height: 32rem;
+  overflow: auto;
+  padding: 0.85rem;
+  scrollbar-gutter: stable;
+}
+
+.assistant-live-card .assistant-voice-transcript-header {
+  align-items: center;
+  background: rgba(9, 14, 28, 0.94);
+  display: flex;
+  justify-content: space-between;
+  margin: -0.85rem -0.85rem 0.75rem;
+  padding: 0.75rem 0.85rem;
+  position: sticky;
+  top: -0.85rem;
+  z-index: 2;
+}
+
+.assistant-live-card .assistant-voice-transcript-header h3 {
+  margin: 0;
+}
+
+.assistant-live-card .assistant-voice-transcript-header button {
+  min-height: 2rem;
+  padding: 0 0.7rem;
+}
+
 @keyframes character-avatar-breathe {
   0%, 100% { transform: scale(1) translateY(0); }
   50% { transform: scale(1.006) translateY(-0.18%); }
+}
+
+@media (max-width: 760px) {
+  .assistant-live-visual-stage,
+  .assistant-live-visual-stage[data-has-character-avatar='true'] {
+    min-height: 18rem;
+  }
+
+  .assistant-live-character-avatar {
+    min-height: 17rem;
+    width: min(100%, 18rem);
+  }
+
+  .assistant-live-card .assistant-voice-transcript {
+    min-height: 16rem;
+    max-height: 26rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
