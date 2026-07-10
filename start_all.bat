@@ -19,6 +19,13 @@ if not defined OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED set "OMNIX_LIVE_AGENT_AUTO_RO
 if not defined OMNIX_LIVE_AGENT_REQUIRE_HERMES set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=1"
 if not defined OMNIX_LIVE_AGENT_TIMEOUT_SECONDS set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=6"
 
+REM Local TP-Link Kasa smart-plug defaults. Host and alias are optional when only one device is discovered.
+if not defined OMNIX_KASA_ENABLED set "OMNIX_KASA_ENABLED=1"
+if not defined OMNIX_KASA_DISCOVERY_TARGET set "OMNIX_KASA_DISCOVERY_TARGET=255.255.255.255"
+if not defined OMNIX_KASA_TIMEOUT_SECONDS set "OMNIX_KASA_TIMEOUT_SECONDS=4"
+if not defined OMNIX_KASA_DEVICE_HOST set "OMNIX_KASA_DEVICE_HOST="
+if not defined OMNIX_KASA_DEVICE_ALIAS set "OMNIX_KASA_DEVICE_ALIAS="
+
 REM Start the lightweight image service, but keep FLUX.2 [klein] 4B unloaded.
 REM The model is loaded and unloaded on demand from the Image Generation page.
 REM Override these before running start_all.bat only when intentionally changing behavior.
@@ -55,6 +62,11 @@ echo [LIVE AGENT] Planner timeout: %OMNIX_LIVE_AGENT_TIMEOUT_SECONDS%s
 echo [HERMES] Enabled: %HERMES_ENABLED%
 echo [HERMES] Base URL: %HERMES_BASE_URL%
 echo [HERMES] Auto-start: %OMNIX_START_HERMES%
+echo [KASA] Enabled: %OMNIX_KASA_ENABLED%
+echo [KASA] Discovery target: %OMNIX_KASA_DISCOVERY_TARGET%
+echo [KASA] Device host: %OMNIX_KASA_DEVICE_HOST%
+echo [KASA] Device alias: %OMNIX_KASA_DEVICE_ALIAS%
+echo [KASA] Timeout: %OMNIX_KASA_TIMEOUT_SECONDS%s
 echo.
 echo [IMAGE] Service enabled: %OMNIX_IMAGE_ENABLED%
 echo [IMAGE] Start lightweight service: %OMNIX_START_IMAGE_SERVICE%
@@ -120,6 +132,13 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+if /I "%OMNIX_KASA_ENABLED%"=="1" (
+    "%RPG_FLUX_PYTHON%" -c "import kasa; print('[KASA] python-kasa OK')"
+    if errorlevel 1 (
+        echo WARNING: python-kasa is not installed in rpg-flux.
+        echo          Run: "%RPG_FLUX_PYTHON%" -m pip install "python-kasa^>=0.10.2,^<1.0"
+    )
+)
 
 echo.
 echo Starting launcher dashboard in this window...
@@ -145,6 +164,13 @@ set "OMNIX_LIVE_AGENT_ENABLED=%OMNIX_LIVE_AGENT_ENABLED%"
 set "OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=%OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED%"
 set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=%OMNIX_LIVE_AGENT_REQUIRE_HERMES%"
 set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=%OMNIX_LIVE_AGENT_TIMEOUT_SECONDS%"
+set "OMNIX_KASA_ENABLED=%OMNIX_KASA_ENABLED%"
+set "OMNIX_KASA_DISCOVERY_TARGET=%OMNIX_KASA_DISCOVERY_TARGET%"
+set "OMNIX_KASA_TIMEOUT_SECONDS=%OMNIX_KASA_TIMEOUT_SECONDS%"
+set "OMNIX_KASA_DEVICE_HOST=%OMNIX_KASA_DEVICE_HOST%"
+set "OMNIX_KASA_DEVICE_ALIAS=%OMNIX_KASA_DEVICE_ALIAS%"
+set "KASA_USERNAME=%KASA_USERNAME%"
+set "KASA_PASSWORD=%KASA_PASSWORD%"
 
 "%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host 127.0.0.1 --port 5055
 

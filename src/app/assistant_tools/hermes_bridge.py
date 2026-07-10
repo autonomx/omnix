@@ -6,6 +6,7 @@ from .contacts_adapter import run_contacts_tool_request
 from .gate import review_assistant_tool_request
 from .gmail_adapter import run_gmail_tool_request
 from .hermes_payloads import HermesAssistantToolExecutePayload, HermesAssistantToolReviewPayload
+from .kasa_adapter import run_kasa_tool_request
 from .ledger import (
     AssistantToolLedgerEntry,
     append_assistant_tool_ledger_entry,
@@ -17,7 +18,10 @@ from .repo_adapter import run_repository_tool_request
 from .result_context import tool_result_to_chat_context
 
 
-def hermes_assistant_tool_review_payload(user_request: str, request: AssistantToolRequest) -> HermesAssistantToolReviewPayload:
+def hermes_assistant_tool_review_payload(
+    user_request: str,
+    request: AssistantToolRequest,
+) -> HermesAssistantToolReviewPayload:
     decision = review_assistant_tool_request(request)
     return HermesAssistantToolReviewPayload(
         user_request=user_request,
@@ -28,7 +32,10 @@ def hermes_assistant_tool_review_payload(user_request: str, request: AssistantTo
     )
 
 
-def _run_assistant_tool_request(request: AssistantToolRequest, risk_level: ToolRiskLevel) -> AssistantToolResult:
+def _run_assistant_tool_request(
+    request: AssistantToolRequest,
+    risk_level: ToolRiskLevel,
+) -> AssistantToolResult:
     if request.tool_id == "gmail":
         result = run_gmail_tool_request(request)
         result.risk_level = risk_level
@@ -45,6 +52,10 @@ def _run_assistant_tool_request(request: AssistantToolRequest, risk_level: ToolR
         result = run_repository_tool_request(request)
         result.risk_level = risk_level
         return result
+    if request.tool_id == "kasa":
+        result = run_kasa_tool_request(request)
+        result.risk_level = risk_level
+        return result
     return AssistantToolResult(
         tool_id=request.tool_id,
         action_id=request.action_id,
@@ -56,7 +67,10 @@ def _run_assistant_tool_request(request: AssistantToolRequest, risk_level: ToolR
     )
 
 
-def hermes_assistant_tool_execute_payload(user_request: str, request: AssistantToolRequest) -> HermesAssistantToolExecutePayload:
+def hermes_assistant_tool_execute_payload(
+    user_request: str,
+    request: AssistantToolRequest,
+) -> HermesAssistantToolExecutePayload:
     decision = review_assistant_tool_request(request)
     existing = assistant_tool_execution_for_proposal(request.proposal_id or "") if request.approved else None
     if existing is not None:

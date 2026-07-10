@@ -55,11 +55,13 @@ def default_assistant_tools_config() -> AssistantToolsConfigPayload:
             )
             for action in tool.actions
         ]
+        enabled = _default_tool_enabled(tool.id)
         tools.append(
             AssistantToolConfigRecord(
                 tool_id=tool.id,
-                enabled=False,
-                connection_status="not_configured",
+                enabled=enabled,
+                connection_status=_default_connection_status(tool.id, enabled),
+                account_label=_default_account_label(tool.id),
                 actions=actions,
             )
         )
@@ -103,7 +105,10 @@ def load_assistant_tools_config(path: Path | None = None) -> AssistantToolsConfi
     return _merge_known_config(AssistantToolsConfigPayload.model_validate(data))
 
 
-def save_assistant_tools_config(payload: AssistantToolsConfigPayload, path: Path | None = None) -> AssistantToolsConfigPayload:
+def save_assistant_tools_config(
+    payload: AssistantToolsConfigPayload,
+    path: Path | None = None,
+) -> AssistantToolsConfigPayload:
     config_path = path or assistant_tool_config_path()
     normalized = _merge_known_config(payload)
     if path is None:
@@ -113,3 +118,32 @@ def save_assistant_tools_config(payload: AssistantToolsConfigPayload, path: Path
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(normalized.model_dump_json(indent=2), encoding="utf-8")
     return normalized
+
+
+def _default_tool_enabled(tool_id: str) -> bool:
+    if tool_id == "kasa":
+        return _flag("OMNIX_KASA_ENABLED")
+    return False
+
+
+def _default_connection_status(tool_id: str, enabled: bool) -> ConnectionStatus:
+    if tool_id == "kasa" and enabled:
+        return "connected"
+    return "not_configured"
+
+
+def _default_account_label(tool_id: str) -> str | None:
+    if tool_id != "kasa":
+        return None
+    return (
+        os.environ.get("OMNIX_KASA_DEVICE_ALIAS", "").strip()
+        or os.environ.get("OMNIX_KASA_DEVICE_HOST", "").strip()
+        or "Local Kasa network"
+    )
+
+
+def _flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}

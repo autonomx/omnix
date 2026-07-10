@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import hashlib
 import json
 import os
@@ -201,6 +202,10 @@ def run_preflight() -> dict[str, Any]:
 
         if exported_text is not None:
             check("rollback.non_destructive", rollback_check)
+
+        # sqlite3 connection context managers commit/rollback but do not close;
+        # collect short-lived connection objects before Windows removes the temp DB.
+        gc.collect()
 
     return {
         "format_version": "character-stage6-preflight-v1",
