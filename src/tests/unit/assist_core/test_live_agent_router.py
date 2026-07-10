@@ -8,13 +8,14 @@ from app.assist_core.live_agent_router import (
 
 
 def _config(**changes) -> LiveAgentRuntimeConfig:
-    return LiveAgentRuntimeConfig(
-        enabled=True,
-        auto_route_enabled=True,
-        require_hermes=True,
-        hermes_enabled=True,
-        **changes,
-    )
+    values = {
+        "enabled": True,
+        "auto_route_enabled": True,
+        "require_hermes": True,
+        "hermes_enabled": True,
+    }
+    values.update(changes)
+    return LiveAgentRuntimeConfig(**values)
 
 
 def test_live_agent_router_keeps_conversation_and_information_on_chat() -> None:
