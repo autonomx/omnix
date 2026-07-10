@@ -19,6 +19,8 @@ export interface CreateCharacterAvatarGenerationInput {
   include_outfit?: boolean;
   include_background?: boolean;
   unload_after_generation?: boolean;
+  source_asset_id?: string;
+  source_image_consent_confirmed?: boolean;
 }
 
 export interface CharacterAvatarGenerationBatch {
@@ -63,6 +65,15 @@ export interface ClonedVoiceBackfillResponse {
   items: ClonedVoiceBackfillItem[];
 }
 
+export interface UploadedAvatarSourceAsset {
+  id: string;
+  module: string;
+  type: 'image';
+  mime_type: string;
+  storage_path: string;
+  metadata: Record<string, unknown>;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
@@ -82,6 +93,17 @@ export const characterAvatarClient = {
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(await response.text() || `Avatar request failed with status ${response.status}.`);
     return response.json() as Promise<CharacterAvatarPack>;
+  },
+  async uploadSourceImage(file: File): Promise<UploadedAvatarSourceAsset> {
+    const payload = await request<{ ok: true; asset: UploadedAvatarSourceAsset }>(
+      `/api/image-generation/references?filename=${encodeURIComponent(file.name || 'avatar-source')}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      },
+    );
+    return payload.asset;
   },
   createGeneration(characterId: string, input: CreateCharacterAvatarGenerationInput): Promise<CharacterAvatarGenerationBatch> {
     return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-generations`, jsonInit('POST', input));
