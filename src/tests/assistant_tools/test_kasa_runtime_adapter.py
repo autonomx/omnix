@@ -133,7 +133,9 @@ def test_kasa_write_requires_approval_before_bridge_dispatch(monkeypatch, tmp_pa
 
     assert blocked.approval_decision.approval_required is True
     assert blocked.execution_result.error == "approval_required"
-    assert calls == [approved.approval_decision and calls[0]]
+    assert len(calls) == 1
+    assert calls[0].approved is True
+    assert calls[0].session_id == "chat:1"
     assert approved.execution_result.error is None
     assert approved.execution_result.output["after"]["is_on"] is True
 
