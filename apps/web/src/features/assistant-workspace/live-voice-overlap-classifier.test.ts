@@ -11,14 +11,14 @@ describe('live voice overlap classifier', () => {
     expect(classifyOverlap('stop').intent).toBe('hard_stop');
     expect(classifyOverlap('No, I meant the eastern road').intent).toBe('interrupt');
     expect(classifyOverlap('Where did you say the entrance was?').intent).toBe('interrupt');
-    expect(shouldConfirmInterruption(classifyOverlap('I need to change the destination now'))).toBe(true);
+    expect(shouldConfirmInterruption(classifyOverlap('I need to change the destination now'), 'balanced')).toBe(true);
   });
 
   it('keeps acknowledgements and noise non-authoritative', () => {
     expect(classifyOverlap('mhm').intent).toBe('backchannel');
     expect(classifyOverlap('yeah').intent).toBe('backchannel');
     expect(classifyOverlap('[cough]').intent).toBe('noise');
-    expect(shouldConfirmInterruption(classifyOverlap('right'))).toBe(false);
+    expect(shouldConfirmInterruption(classifyOverlap('right'), 'easy')).toBe(false);
   });
 
   it('recognizes likely assistant echo', () => {
@@ -26,5 +26,15 @@ describe('live voice overlap classifier', () => {
     const echo = 'entrance beneath the old watchtower near the river';
     expect(isLikelyEcho(echo, assistant)).toBe(true);
     expect(classifyOverlap(echo, assistant).intent).toBe('noise');
+  });
+
+  it('allows users to tune ambiguous sustained overlap without weakening hard stops', () => {
+    const sustained = classifyOverlap('I need to change the destination now');
+    const hardStop = classifyOverlap('stop');
+    expect(sustained.confidence).toBe(0.74);
+    expect(shouldConfirmInterruption(sustained, 'easy')).toBe(true);
+    expect(shouldConfirmInterruption(sustained, 'balanced')).toBe(true);
+    expect(shouldConfirmInterruption(sustained, 'finish_more')).toBe(false);
+    expect(shouldConfirmInterruption(hardStop, 'finish_more')).toBe(true);
   });
 });
