@@ -1,7 +1,14 @@
 """Backend mirror of the Chat assistant tool registry."""
 from __future__ import annotations
 
-from .models import AssistantToolAction, AssistantToolRegistryPayload, AssistantToolSpec, ApprovalPolicy, ToolActionCategory, ToolRiskLevel
+from .models import (
+    ApprovalPolicy,
+    AssistantToolAction,
+    AssistantToolRegistryPayload,
+    AssistantToolSpec,
+    ToolActionCategory,
+    ToolRiskLevel,
+)
 from .validation import is_valid_action_id, is_valid_tool_id
 
 
@@ -210,10 +217,55 @@ def default_assistant_tools() -> list[AssistantToolSpec]:
                 ),
             ],
         ),
+        AssistantToolSpec(
+            id="kasa",
+            name="TP-Link Kasa",
+            description="Discover, inspect, and control approved Kasa smart plugs on the local network.",
+            category="smart-home",
+            provider="TP-Link",
+            actions=[
+                tool_action(
+                    tool_id="kasa",
+                    action_id="kasa.discover_devices",
+                    label="Discover Kasa devices",
+                    description="Discover supported Kasa devices on the local network.",
+                    category="read",
+                ),
+                tool_action(
+                    tool_id="kasa",
+                    action_id="kasa.get_state",
+                    label="Read plug state",
+                    description="Read the verified on/off state of one Kasa device.",
+                    category="read",
+                ),
+                tool_action(
+                    tool_id="kasa",
+                    action_id="kasa.turn_on",
+                    label="Turn on plug",
+                    description="Turn on one selected Kasa plug and verify its resulting state.",
+                    category="write",
+                    risk_level="medium",
+                    requires_confirmation=True,
+                    approval_policy="always_ask",
+                ),
+                tool_action(
+                    tool_id="kasa",
+                    action_id="kasa.turn_off",
+                    label="Turn off plug",
+                    description="Turn off one selected Kasa plug and verify its resulting state.",
+                    category="write",
+                    risk_level="medium",
+                    requires_confirmation=True,
+                    approval_policy="always_ask",
+                ),
+            ],
+        ),
     ]
 
 
-def assistant_tool_registry_payload(tools: list[AssistantToolSpec] | None = None) -> AssistantToolRegistryPayload:
+def assistant_tool_registry_payload(
+    tools: list[AssistantToolSpec] | None = None,
+) -> AssistantToolRegistryPayload:
     registry_tools = tools or default_assistant_tools()
     return AssistantToolRegistryPayload(
         tools=registry_tools,
@@ -221,9 +273,18 @@ def assistant_tool_registry_payload(tools: list[AssistantToolSpec] | None = None
     )
 
 
-def get_registered_tool(tool_id: str, tools: list[AssistantToolSpec] | None = None) -> AssistantToolSpec | None:
+def get_registered_tool(
+    tool_id: str,
+    tools: list[AssistantToolSpec] | None = None,
+) -> AssistantToolSpec | None:
     return next((tool for tool in (tools or default_assistant_tools()) if tool.id == tool_id), None)
 
 
-def get_registered_action(action_id: str, tools: list[AssistantToolSpec] | None = None) -> AssistantToolAction | None:
-    return next((action for tool in (tools or default_assistant_tools()) for action in tool.actions if action.id == action_id), None)
+def get_registered_action(
+    action_id: str,
+    tools: list[AssistantToolSpec] | None = None,
+) -> AssistantToolAction | None:
+    return next(
+        (action for tool in (tools or default_assistant_tools()) for action in tool.actions if action.id == action_id),
+        None,
+    )
