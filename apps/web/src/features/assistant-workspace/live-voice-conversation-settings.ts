@@ -8,7 +8,8 @@ export type LiveConversationSettings = {
   backchannelMode: BackchannelMode;
 };
 
-const STORAGE_KEY = 'omnix.chatbot.assistantSettings';
+const STORAGE_KEY = 'omnix.liveConversation.settings';
+const LEGACY_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const SETTINGS_HOST_SELECTOR = '.assistant-settings-list';
 const CONTROLS_ATTRIBUTE = 'data-omnix-conversation-controls';
 
@@ -23,7 +24,9 @@ let initialized = false;
 export function readLiveConversationSettings(): LiveConversationSettings {
   try {
     if (typeof window === 'undefined') return DEFAULT_LIVE_CONVERSATION_SETTINGS;
-    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '{}') as Record<string, unknown>;
+    const canonical = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '{}') as Record<string, unknown>;
+    const legacy = JSON.parse(window.localStorage.getItem(LEGACY_SETTINGS_KEY) || '{}') as Record<string, unknown>;
+    const parsed = { ...legacy, ...canonical };
     return {
       conversationPace: isConversationPace(parsed.conversationPace)
         ? parsed.conversationPace
@@ -57,8 +60,8 @@ export function updateLiveConversationSettings(
   };
   try {
     if (typeof window !== 'undefined') {
-      const existing = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '{}') as Record<string, unknown>;
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...existing, ...next }));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      mirrorConversationSettings(next);
       window.dispatchEvent(new CustomEvent('omnix:live-conversation-settings-changed', { detail: next }));
     }
   } catch {
@@ -75,6 +78,21 @@ export function initializeLiveConversationSettingsControls(): void {
     childList: true,
     subtree: true,
   });
+  const remirror = (event: Event) => {
+    if (!(event.target instanceof Element) || !event.target.closest(SETTINGS_HOST_SELECTOR)) return;
+    window.setTimeout(() => mirrorConversationSettings(readLiveConversationSettings()), 0);
+  };
+  document.addEventListener('change', remirror, true);
+  document.addEventListener('click', remirror, true);
+}
+
+function mirrorConversationSettings(settings: LiveConversationSettings): void {
+  try {
+    const existing = JSON.parse(window.localStorage.getItem(LEGACY_SETTINGS_KEY) || '{}') as Record<string, unknown>;
+    window.localStorage.setItem(LEGACY_SETTINGS_KEY, JSON.stringify({ ...existing, ...settings }));
+  } catch {
+    // The canonical conversation settings key remains authoritative.
+  }
 }
 
 function installControls(): void {
