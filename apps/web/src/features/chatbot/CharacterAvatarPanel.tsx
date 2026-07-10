@@ -5,6 +5,7 @@ import { characterAvatarAssetUrl, characterAvatarClient } from './characterAvata
 import './CharacterAvatarPanel.css';
 
 const ACTIVE_GENERATION_STATES = new Set(['queued', 'generating_base', 'generating_variants']);
+const VISEME_KEYS = ['A', 'E', 'O', 'U', 'MBP', 'FV', 'L', 'WQ', 'other'] as const;
 
 export function CharacterAvatarPanel({ character }: { character: CharacterProfile }) {
   const queryClient = useQueryClient();
@@ -39,7 +40,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
     mutationFn: () => characterAvatarClient.createVisemeGeneration(character.id),
     onSuccess: (batch) => {
       setVisemeGenerationId(batch.id);
-      setStatus('Expanded viseme frame generation queued. Audio-envelope lip sync remains active until it completes.');
+      setStatus('Expanded viseme generation queued. Audio-envelope lip sync remains active until it completes.');
     },
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Viseme generation could not be queued.'),
   });
@@ -91,7 +92,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
       setGenerationId(batch.id);
       setVisemeGenerationId(null);
       setVisemeRequestedForGenerationId(null);
-      setStatus('Canonical portrait generation queued. Mouth, expression, and precise viseme frames follow automatically.');
+      setStatus('Canonical portrait generation queued. Presentation and precise viseme frames follow automatically.');
     },
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Avatar generation could not be queued.'),
   });
@@ -105,39 +106,51 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
   const generationActive = ACTIVE_GENERATION_STATES.has(generation?.status ?? '');
   const visemeActive = visemeMutation.isPending || visemeGeneration?.status === 'generating';
 
-  return <section className="character-avatar-panel" aria-labelledby={`character-avatar-${character.id}`}>
-    <header>
-      <div>
-        <h4 id={`character-avatar-${character.id}`}>Live avatar</h4>
-        <p>Generate a locked portrait plus mouth, blink, expression, outfit, background, and timed viseme frames through Omnix Image Generation.</p>
-      </div>
+  return <section className="character-dashboard-section character-avatar-panel" aria-labelledby={`character-avatar-${character.id}`}>
+    <header className="character-section-heading">
+      <div><span>3</span><h4 id={`character-avatar-${character.id}`}>Live avatar</h4></div>
     </header>
 
     <div className="character-avatar-layout">
       <div className="character-avatar-preview">
-        {previewAssetId ? <img src={characterAvatarAssetUrl(previewAssetId)} alt={`${character.display_name} avatar preview`} /> : <div className="character-avatar-empty"><span aria-hidden="true">◌</span><strong>No avatar pack</strong><small>Generate one from the character profile.</small></div>}
-        {pack ? <p><strong>Pack v{pack.version}</strong><span>{pack.render_mode.replace('_', ' ')} · {pack.renderer}</span></p> : null}
+        {previewAssetId ? <img src={characterAvatarAssetUrl(previewAssetId)} alt={`${character.display_name} avatar preview`} /> : <div className="character-avatar-empty"><span aria-hidden="true">◌</span><strong>No avatar pack</strong><small>Generate one from this character profile.</small></div>}
+        {pack ? <div className="character-avatar-meta"><span><small>Pack version</small><strong>v{pack.version}</strong></span><span><small>Render mode</small><strong>{pack.render_mode.replace('_', ' ')}</strong></span><span><small>Renderer</small><strong>{pack.renderer}</strong></span></div> : null}
       </div>
 
       <div className="character-avatar-form">
         <label>Appearance direction<textarea rows={3} value={appearancePrompt} placeholder="Hair, clothing, age range, visual mood, framing…" onChange={(event) => setAppearancePrompt(event.currentTarget.value)} /></label>
         <label>Visual style<input value={style} onChange={(event) => setStyle(event.currentTarget.value)} /></label>
         <div className="character-avatar-form-grid">
-          <label>Alternate outfit<input value={outfitPrompt} placeholder="Optional" onChange={(event) => setOutfitPrompt(event.currentTarget.value)} /></label>
-          <label>Alternate background<input value={backgroundPrompt} placeholder="Optional" onChange={(event) => setBackgroundPrompt(event.currentTarget.value)} /></label>
+          <label>Alternate outfit<input value={outfitPrompt} placeholder="Optional outfit direction" onChange={(event) => setOutfitPrompt(event.currentTarget.value)} /></label>
+          <label>Alternate background<input value={backgroundPrompt} placeholder="Optional room or scene" onChange={(event) => setBackgroundPrompt(event.currentTarget.value)} /></label>
         </div>
         <div className="character-avatar-actions">
           <button type="button" disabled={generateMutation.isPending || generationActive || visemeActive} onClick={() => generateMutation.mutate()}>
-            {generateMutation.isPending ? 'Queueing…' : generationActive ? 'Generating avatar pack…' : pack ? 'Regenerate full avatar pack' : 'Generate avatar pack'}
+            {generateMutation.isPending ? 'Queueing…' : generationActive ? 'Generating avatar pack…' : pack ? 'Regenerate avatar pack' : 'Generate avatar pack'}
           </button>
           {pack ? <button type="button" disabled={generationActive || visemeActive} onClick={() => visemeMutation.mutate()}>
             {visemeActive ? 'Generating visemes…' : pack.render_mode === 'viseme' ? 'Regenerate precise visemes' : 'Generate precise visemes'}
           </button> : null}
         </div>
-        {generation ? <div className="character-avatar-progress"><strong>{generation.status.replaceAll('_', ' ')}</strong><span>{generatedVariants} base/presentation assets ready</span>{generation.error ? <small>{generation.error}</small> : null}</div> : null}
+        {generation ? <div className="character-avatar-progress"><strong>{generation.status.replaceAll('_', ' ')}</strong><span>{generatedVariants} base and presentation assets ready</span>{generation.error ? <small>{generation.error}</small> : null}</div> : null}
         {visemeGeneration ? <div className="character-avatar-progress"><strong>{visemeGeneration.status.replaceAll('_', ' ')}</strong><span>{generatedVisemes} precise mouth shapes ready</span>{visemeGeneration.error ? <small>{visemeGeneration.error}</small> : null}</div> : null}
       </div>
     </div>
+
+    <div className="character-viseme-panel">
+      <header><strong>Viseme support (9 mouth shapes)</strong><span>{pack?.render_mode === 'viseme' ? 'Precise lip sync ready' : 'Audio-envelope fallback active'}</span></header>
+      <div className="character-viseme-strip">
+        {VISEME_KEYS.map((viseme) => {
+          const assetId = pack?.mouth_frames[viseme] || '';
+          return <span className={assetId ? 'ready' : undefined} key={viseme}>
+            {assetId ? <img src={characterAvatarAssetUrl(assetId)} alt={`${viseme} mouth shape`} /> : <i aria-hidden="true" />}
+            <small>{viseme === 'other' ? 'Other' : viseme}</small>
+          </span>;
+        })}
+      </div>
+      <p>Used for low-latency lip sync in Omnix Chat live calls. Missing shapes fall back to the four-frame audio envelope.</p>
+    </div>
+
     {status ? <p className="character-avatar-status" role="status">{status}</p> : null}
   </section>;
 }
