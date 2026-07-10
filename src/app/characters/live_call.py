@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.chat.models import ChatSession
 
+from .avatar_models import CharacterAvatarPack
+from .avatar_service import CharacterAvatarService, default_character_avatar_service
 from .interaction import resolve_system_session_identity
 from .models import SYSTEM_ASSISTANT_NAME, CharacterProfileSnapshot
 from .service import CharacterService, default_character_service
@@ -55,6 +57,7 @@ class LiveCallPreloadState(BaseModel):
 
     profile_loaded: bool
     voice_resolved: bool
+    avatar_pack_loaded: bool = False
     memory_snapshot_loaded: bool
     memory_record_count: int = Field(default=0, ge=0)
     preload_ms: float = Field(ge=0)
@@ -74,6 +77,7 @@ class CharacterLiveCallRuntime(BaseModel):
     effective_identity_hash: str | None = Field(default=None, min_length=64, max_length=64)
     voice_asset_id: str | None = None
     greeting: str = Field(default="", max_length=2_000)
+    avatar_pack: CharacterAvatarPack | None = None
     speech_style: LiveCallSpeechStyle
     read_memory: bool = False
     write_memory: bool = False
@@ -102,6 +106,7 @@ def resolve_live_call_runtime(
     session: ChatSession,
     *,
     character_service_factory: Callable[[], CharacterService] = default_character_service,
+    avatar_service_factory: Callable[[], CharacterAvatarService] = default_character_avatar_service,
 ) -> CharacterLiveCallRuntime:
     """Resolve one session without accepting prompt, namespace, or profile data from the browser."""
 
@@ -109,8 +114,10 @@ def resolve_live_call_runtime(
     interaction = resolve_system_session_identity(session)
     character_service = character_service_factory()
     character: CharacterProfileSnapshot | None = None
+    avatar_pack: CharacterAvatarPack | None = None
     if interaction.interaction_mode == "character":
         character = character_service.resolve_snapshot(interaction.character_id or "")
+        avatar_pack = avatar_service_factory().resolve(interaction.character_id)
 
     voice_asset_id = interaction.voice_asset_id
     if character is not None and voice_asset_id:
@@ -129,6 +136,7 @@ def resolve_live_call_runtime(
         effective_identity_hash=interaction.effective_identity_hash,
         voice_asset_id=voice_asset_id,
         greeting=greeting,
+        avatar_pack=avatar_pack,
         speech_style=speech_style,
         read_memory=interaction.read_memory,
         write_memory=interaction.write_memory,
@@ -137,6 +145,7 @@ def resolve_live_call_runtime(
         preload=LiveCallPreloadState(
             profile_loaded=character is not None,
             voice_resolved=bool(voice_asset_id),
+            avatar_pack_loaded=avatar_pack is not None,
             memory_snapshot_loaded=memory_loaded,
             memory_record_count=session.memory_record_count if memory_loaded else 0,
             preload_ms=preload_ms,

@@ -1,3 +1,38 @@
+import { publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
+
+export type CharacterAvatarRenderMode = 'audio_envelope' | 'viseme' | 'static';
+
+export interface CharacterAvatarPack {
+  character_id: string;
+  version: number;
+  render_mode: CharacterAvatarRenderMode;
+  base_asset_id?: string | null;
+  mouth_frames: Record<string, string>;
+  blink_frames: Record<string, string>;
+  expression_frames: Record<string, string>;
+  outfit_frames: Record<string, string>;
+  background_asset_ids: Record<string, string>;
+  active_outfit?: string | null;
+  active_background?: string | null;
+  mouth_anchor: Record<string, number>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpsertCharacterAvatarPackInput {
+  expected_version?: number | null;
+  render_mode?: CharacterAvatarRenderMode;
+  base_asset_id?: string | null;
+  mouth_frames?: Record<string, string>;
+  blink_frames?: Record<string, string>;
+  expression_frames?: Record<string, string>;
+  outfit_frames?: Record<string, string>;
+  background_asset_ids?: Record<string, string>;
+  active_outfit?: string | null;
+  active_background?: string | null;
+  mouth_anchor?: Record<string, number>;
+}
+
 export interface CharacterProfile {
   id: string;
   display_name: string;
@@ -84,6 +119,7 @@ export interface CharacterLiveCallRuntime {
   effective_identity_hash?: string | null;
   voice_asset_id?: string | null;
   greeting: string;
+  avatar_pack?: CharacterAvatarPack | null;
   speech_style: LiveCallSpeechStyle;
   read_memory: boolean;
   write_memory: boolean;
@@ -92,6 +128,7 @@ export interface CharacterLiveCallRuntime {
   preload: {
     profile_loaded: boolean;
     voice_resolved: boolean;
+    avatar_pack_loaded?: boolean;
     memory_snapshot_loaded: boolean;
     memory_record_count: number;
     preload_ms: number;
@@ -157,6 +194,15 @@ export const characterClient = {
   ): Promise<CharacterDataActionResponse> {
     return request(`/api/characters/${encodeURIComponent(characterId)}/data/actions`, jsonInit('POST', input));
   },
+  avatarPack(characterId: string): Promise<CharacterAvatarPack> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-pack`);
+  },
+  upsertAvatarPack(characterId: string, input: UpsertCharacterAvatarPackInput): Promise<CharacterAvatarPack> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-pack`, jsonInit('PUT', input));
+  },
+  deleteAvatarPack(characterId: string): Promise<{ ok: boolean; character_id: string }> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-pack`, { method: 'DELETE' });
+  },
   voiceGovernance(assetId: string): Promise<VoiceProfileGovernance> {
     return request(`/api/voice-profiles/${encodeURIComponent(assetId)}/governance`);
   },
@@ -172,8 +218,10 @@ export const characterClient = {
   session(sessionId: string): Promise<SessionInteraction> {
     return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/interaction`);
   },
-  liveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
-    return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`);
+  async liveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
+    const runtime = await request<CharacterLiveCallRuntime>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`);
+    publishCharacterAvatarRuntime(runtime);
+    return runtime;
   },
   setSession(
     sessionId: string,
