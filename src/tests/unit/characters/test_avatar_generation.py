@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from app.assets import AssetRecord, AssetType, SharedAssetStore
 from app.characters import CharacterRepository, CreateCharacterRequest
 from app.characters.avatar_generation_models import (
@@ -83,6 +85,25 @@ def _complete_image_job(
     return asset_id
 
 
+def _uploaded_source(tmp_path: Path, assets: SharedAssetStore, name: str = "user-face") -> str:
+    path = tmp_path / f"{name}.png"
+    path.write_bytes(b"PNG")
+    asset_id = f"image-reference:{name}"
+    assets.upsert_asset(
+        AssetRecord(
+            id=asset_id,
+            module="image-reference",
+            type=AssetType.IMAGE,
+            mime_type="image/png",
+            storage_path=str(path),
+            metadata={"reference_upload": True, "filename": path.name},
+            created_at="2026-01-01T00:00:00+00:00",
+            compat={"uploaded_reference": True},
+        )
+    )
+    return asset_id
+
+
 def test_generation_reconciles_base_variants_and_avatar_pack(tmp_path: Path, monkeypatch) -> None:
     characters, avatars, generations, jobs, assets = _runtime(tmp_path, monkeypatch)
     characters.create(
@@ -117,6 +138,73 @@ def test_generation_reconciles_base_variants_and_avatar_pack(tmp_path: Path, mon
     assert pack.mouth_frames["wide"] == "image:maya-mouth_wide"
     assert pack.blink_frames["closed"] == "image:maya-blink_closed"
     assert pack.expression_frames["thinking"] == "image:maya-expression_thinking"
+
+
+def test_uploaded_image_is_governed_and_used_as_base_reference(tmp_path: Path, monkeypatch) -> None:
+    characters, avatars, generations, jobs, assets = _runtime(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "app.characters.avatar_generation_service.load_image_reference_assets",
+        lambda *_args, **_kwargs: [],
+    )
+    characters.create(
+        CreateCharacterRequest(
+            id="self-avatar",
+            display_name="My Avatar",
+            personality_prompt="Be a conversational companion.",
+        )
+    )
+    source_asset_id = _uploaded_source(tmp_path, assets)
+
+    batch = generations.create(
+        "self-avatar",
+        CreateCharacterAvatarGenerationRequest(
+            source_asset_id=source_asset_id,
+            source_image_consent_confirmed=True,
+            style="faithful photographic portrait",
+            include_outfit=False,
+            include_background=False,
+        ),
+    )
+
+    base_job = jobs.get_job(batch.base_job_id)
+    assert base_job is not None
+    assert base_job.input_payload["reference_asset_ids"] == [source_asset_id]
+    assert base_job.input_payload["no_cache"] is True
+    assert base_job.input_payload["metadata"]["source_asset_id"] == source_asset_id
+    source = next(asset for asset in assets.list_assets().assets if asset.id == source_asset_id)
+    assert source.owner_id == "user:local"
+    assert source.metadata["source_image_consent_confirmed"] is True
+    assert source.metadata["linked_character_ids"] == ["self-avatar"]
+
+    _complete_image_job(tmp_path, jobs, assets, batch.base_job_id, "self-avatar-base")
+    batch = generations.get(batch.id)
+    for variant, job_id in batch.variant_job_ids.items():
+        _complete_image_job(tmp_path, jobs, assets, job_id, f"self-avatar-{variant}")
+    batch = generations.get(batch.id)
+
+    assert batch.status == "completed"
+    pack = avatars.get("self-avatar")
+    assert pack.base_asset_id == "image:self-avatar-base"
+    assert pack.mouth_frames["closed"] == "image:self-avatar-base"
+    assert pack.mouth_frames["wide"] == "image:self-avatar-mouth_wide"
+
+
+def test_uploaded_image_requires_rights_confirmation(tmp_path: Path, monkeypatch) -> None:
+    characters, _, generations, _, assets = _runtime(tmp_path, monkeypatch)
+    characters.create(
+        CreateCharacterRequest(
+            id="self-avatar",
+            display_name="My Avatar",
+            personality_prompt="Be a conversational companion.",
+        )
+    )
+    source_asset_id = _uploaded_source(tmp_path, assets)
+
+    with pytest.raises(ValueError, match="avatar_source_consent_required"):
+        generations.create(
+            "self-avatar",
+            CreateCharacterAvatarGenerationRequest(source_asset_id=source_asset_id),
+        )
 
 
 def test_governed_voice_backfill_creates_profiles_and_skips_reference_voice(tmp_path: Path, monkeypatch) -> None:

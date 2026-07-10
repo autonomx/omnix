@@ -32,6 +32,8 @@ class CreateCharacterAvatarGenerationRequest(BaseModel):
     include_outfit: bool = True
     include_background: bool = True
     unload_after_generation: bool = False
+    source_asset_id: str = Field(default="", max_length=300)
+    source_image_consent_confirmed: bool = False
 
 
 class CharacterAvatarGenerationBatch(BaseModel):

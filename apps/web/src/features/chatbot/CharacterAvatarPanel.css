@@ -104,6 +104,110 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.character-avatar-upload-card {
+  align-items: start;
+  background: linear-gradient(135deg, rgba(65, 44, 133, 0.22), rgba(10, 18, 38, 0.76));
+  border: 1px solid rgba(151, 126, 255, 0.25);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  padding: 0.75rem;
+}
+
+.character-avatar-upload-preview {
+  align-items: center;
+  aspect-ratio: 1 / 1;
+  background: rgba(4, 8, 19, 0.72);
+  border: 1px dashed rgba(151, 126, 255, 0.4);
+  border-radius: 0.65rem;
+  color: #9d8cff;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.character-avatar-upload-preview img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.character-avatar-upload-preview span {
+  font-size: 1.5rem;
+}
+
+.character-avatar-upload-copy {
+  display: grid;
+  gap: 0.48rem;
+  min-width: 0;
+}
+
+.character-avatar-upload-copy > strong {
+  color: #eef2ff;
+  font-size: 0.78rem;
+}
+
+.character-avatar-upload-copy > p {
+  color: #8f9cba;
+  font-size: 0.65rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.character-avatar-upload-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.character-avatar-form .character-avatar-upload-picker {
+  display: inline-flex;
+  width: fit-content;
+}
+
+.character-avatar-upload-picker span {
+  background: rgba(124, 92, 255, 0.18);
+  border: 1px solid rgba(151, 126, 255, 0.34);
+  border-radius: 0.5rem;
+  color: #dcd5ff;
+  cursor: pointer;
+  padding: 0.42rem 0.65rem;
+}
+
+.character-avatar-upload-picker input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.character-avatar-upload-actions small {
+  color: #71809f;
+  font-size: 0.6rem;
+  overflow-wrap: anywhere;
+}
+
+.character-avatar-form .character-avatar-upload-consent {
+  align-items: start;
+  display: flex;
+  font-size: 0.64rem;
+  font-weight: 600;
+  gap: 0.45rem;
+  line-height: 1.35;
+}
+
+.character-avatar-upload-consent input {
+  accent-color: #7c5cff;
+  margin-top: 0.1rem;
+}
+
+.character-avatar-upload-copy > button {
+  justify-self: start;
+}
+
 .character-avatar-actions {
   display: flex;
   flex-wrap: wrap;
@@ -226,12 +330,17 @@
 
 @media (max-width: 720px) {
   .character-avatar-layout,
-  .character-avatar-form-grid {
+  .character-avatar-form-grid,
+  .character-avatar-upload-card {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .character-avatar-preview {
     max-width: 16rem;
+  }
+
+  .character-avatar-upload-preview {
+    max-width: 9rem;
   }
 
   .character-viseme-strip {

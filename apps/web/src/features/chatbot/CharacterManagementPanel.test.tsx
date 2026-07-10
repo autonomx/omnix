@@ -142,8 +142,71 @@ describe('CharacterManagementPanel dashboard', () => {
     expect(screen.getByRole('heading', { name: 'Danger zone / cleanup' })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search characters')).toBeInTheDocument();
     expect(await screen.findByAltText('Maya avatar preview')).toBeInTheDocument();
+    expect(screen.getByText('Use your own image')).toBeInTheDocument();
+    expect(screen.getByLabelText('Upload source image')).toBeInTheDocument();
     expect(screen.getByText('Viseme support (9 mouth shapes)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create characters from cloned voices' })).toBeInTheDocument();
+  });
+
+  it('uploads an owned image and queues the full avatar pipeline', async () => {
+    const generationBodies: Array<Record<string, unknown>> = [];
+    const batch = {
+      id: 'avatar-generation:upload',
+      character_id: 'maya',
+      status: 'generating_base',
+      request: {},
+      base_job_id: 'job:base',
+      variant_job_ids: {},
+      asset_ids: {},
+      avatar_pack_version: null,
+      error: '',
+      created_at: '2026-07-10T00:00:00Z',
+      updated_at: '2026-07-10T00:00:00Z',
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/characters') return Response.json({ characters: [legacyCharacter] });
+      if (path === '/api/characters/maya/data') return Response.json(legacyData);
+      if (path === '/api/characters/maya/avatar-pack') return new Response('not found', { status: 404 });
+      if (path === '/api/voice-profiles/voice-cloning%3Amaya/governance') return new Response('not found', { status: 404 });
+      if (path === '/api/image-generation/references') return Response.json({
+        ok: true,
+        asset: {
+          id: 'image-reference:user-face',
+          module: 'image-reference',
+          type: 'image',
+          mime_type: 'image/png',
+          storage_path: '/tmp/user-face.png',
+          metadata: { reference_upload: true },
+        },
+      });
+      if (path === '/api/characters/maya/avatar-generations') {
+        generationBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return Response.json(batch, { status: 202 });
+      }
+      if (path === '/api/character-avatar-generations/avatar-generation%3Aupload') return Response.json(batch);
+      return new Response('not found', { status: 404 });
+    }));
+
+    renderPanel();
+    await screen.findByRole('button', { name: /Maya/ });
+    const submit = screen.getByRole('button', { name: 'Upload image and generate avatar pack' });
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Upload source image'), {
+      target: { files: [new File(['avatar'], 'my-face.png', { type: 'image/png' })] },
+    });
+    fireEvent.click(screen.getByLabelText('Confirm avatar source image rights'));
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(generationBodies).toHaveLength(1));
+    expect(generationBodies[0]).toMatchObject({
+      source_asset_id: 'image-reference:user-face',
+      source_image_consent_confirmed: true,
+      include_blink: true,
+      include_expressions: true,
+    });
+    expect(await screen.findByText(/Uploaded image accepted/)).toBeInTheDocument();
   });
 
   it('shows profile and owned backend data', async () => {
