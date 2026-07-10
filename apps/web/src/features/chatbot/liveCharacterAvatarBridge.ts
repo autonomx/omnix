@@ -14,7 +14,7 @@ let currentRuntime: CharacterLiveCallRuntime | null = null;
 let currentMouthFrame: AvatarMouthFrame = 'closed';
 let nextAudioFrameAt = 0;
 let blinkClosed = false;
-let blinkTimer: number | null = null;
+let blinkTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function publishCharacterAvatarRuntime(runtime: CharacterLiveCallRuntime | null): void {
   currentRuntime = runtime;
@@ -195,7 +195,7 @@ function dispatchAvatarFrame(frame: AvatarMouthFrame): void {
 
 function scheduleBlink(): void {
   if (typeof window === 'undefined') return;
-  if (blinkTimer !== null) window.clearTimeout(blinkTimer);
+  if (blinkTimer !== null) clearTimeout(blinkTimer);
   const pack = currentRuntime?.avatar_pack;
   if (!pack?.blink_frames.closed) return;
   blinkTimer = window.setTimeout(() => {
