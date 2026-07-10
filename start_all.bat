@@ -10,6 +10,15 @@ set "OMNIX_STT_URL=http://127.0.0.1:5201"
 set "OMNIX_LAUNCHER_URL=http://127.0.0.1:5055"
 if not defined OMNIX_APP_OPEN_URL set "OMNIX_APP_OPEN_URL=http://localhost:5173/"
 
+REM Live Agent pilot defaults. Override these before running start_all.bat to disable or tune the pilot.
+if not defined HERMES_ENABLED set "HERMES_ENABLED=1"
+if not defined HERMES_BASE_URL set "HERMES_BASE_URL=http://127.0.0.1:8642"
+if not defined OMNIX_START_HERMES set "OMNIX_START_HERMES=1"
+if not defined OMNIX_LIVE_AGENT_ENABLED set "OMNIX_LIVE_AGENT_ENABLED=1"
+if not defined OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED set "OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=1"
+if not defined OMNIX_LIVE_AGENT_REQUIRE_HERMES set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=1"
+if not defined OMNIX_LIVE_AGENT_TIMEOUT_SECONDS set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=6"
+
 REM Start the lightweight image service, but keep FLUX.2 [klein] 4B unloaded.
 REM The model is loaded and unloaded on demand from the Image Generation page.
 REM Override these before running start_all.bat only when intentionally changing behavior.
@@ -39,6 +48,14 @@ echo This starts one launcher dashboard instead of opening separate service term
 echo Dashboard: %OMNIX_LAUNCHER_URL%
 echo Private app button: %OMNIX_APP_OPEN_URL%
 echo.
+echo [LIVE AGENT] Enabled: %OMNIX_LIVE_AGENT_ENABLED%
+echo [LIVE AGENT] Automatic routing: %OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED%
+echo [LIVE AGENT] Proposal-only Hermes required: %OMNIX_LIVE_AGENT_REQUIRE_HERMES%
+echo [LIVE AGENT] Planner timeout: %OMNIX_LIVE_AGENT_TIMEOUT_SECONDS%s
+echo [HERMES] Enabled: %HERMES_ENABLED%
+echo [HERMES] Base URL: %HERMES_BASE_URL%
+echo [HERMES] Auto-start: %OMNIX_START_HERMES%
+echo.
 echo [IMAGE] Service enabled: %OMNIX_IMAGE_ENABLED%
 echo [IMAGE] Start lightweight service: %OMNIX_START_IMAGE_SERVICE%
 echo [IMAGE] Preload model: %OMNIX_IMAGE_PRELOAD%
@@ -49,6 +66,27 @@ if defined OMNIX_IMAGE_URL (
     echo [IMAGE] FLUX.2 [klein] 4B will remain unloaded until requested in the web UI.
 ) else (
     echo [IMAGE] Service disabled for this startup.
+)
+
+if /I "%HERMES_ENABLED%"=="1" (
+    powershell -NoProfile -Command "try { Invoke-RestMethod -Uri '%HERMES_BASE_URL%/health' -TimeoutSec 1 ^| Out-Null; exit 0 } catch { exit 1 }" >nul 2>nul
+    if errorlevel 1 (
+        if /I "%OMNIX_START_HERMES%"=="1" (
+            where hermes >nul 2>nul
+            if errorlevel 1 (
+                echo WARNING: Hermes is enabled but the 'hermes' command was not found.
+                echo          Live Agent task requests will fall back to normal chat.
+            ) else (
+                echo [HERMES] Starting the local proposal planner...
+                start "Omnix Hermes" /min cmd /c "hermes serve"
+            )
+        ) else (
+            echo WARNING: Hermes is not reachable and auto-start is disabled.
+            echo          Live Agent task requests will fall back to normal chat.
+        )
+    ) else (
+        echo [HERMES] Existing sidecar is reachable.
+    )
 )
 
 if not exist "%RPG_FLUX_PYTHON%" (
@@ -101,6 +139,12 @@ set "OMNIX_IMAGE_URL=%OMNIX_IMAGE_URL%"
 set "OMNIX_APP_OPEN_URL=%OMNIX_APP_OPEN_URL%"
 set "OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"
 set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"
+set "HERMES_ENABLED=%HERMES_ENABLED%"
+set "HERMES_BASE_URL=%HERMES_BASE_URL%"
+set "OMNIX_LIVE_AGENT_ENABLED=%OMNIX_LIVE_AGENT_ENABLED%"
+set "OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=%OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED%"
+set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=%OMNIX_LIVE_AGENT_REQUIRE_HERMES%"
+set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=%OMNIX_LIVE_AGENT_TIMEOUT_SECONDS%"
 
 "%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host 127.0.0.1 --port 5055
 

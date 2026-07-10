@@ -1,6 +1,6 @@
 # Milestone 7 — Live Agent via Hermes
 
-Status: repository implementation complete; disabled by default pending Milestone 6 target-runtime evidence and an intentional controlled rollout.
+Status: repository implementation complete; the Windows `start_all.bat` launcher now enables the proposal-only Live Agent pilot and attempts to start the local Hermes sidecar.
 
 ## Objective
 
@@ -18,24 +18,37 @@ deterministic cheap router
 
 Hermes is a planner, not an execution owner. Omnix continues to own identity, memory policy, approval, execution, persistence, cancellation, and auditability.
 
-## Feature flags
+## Windows pilot defaults
+
+Unless explicitly overridden before launch, `start_all.bat` exports:
 
 ```text
-OMNIX_LIVE_AGENT_ENABLED=0
-OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=0
+OMNIX_LIVE_AGENT_ENABLED=1
+OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=1
 OMNIX_LIVE_AGENT_REQUIRE_HERMES=1
 OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=6
-HERMES_ENABLED=0
+HERMES_ENABLED=1
 HERMES_BASE_URL=http://127.0.0.1:8642
+OMNIX_START_HERMES=1
 ```
 
-Recommended staged enablement:
+The launcher checks `HERMES_BASE_URL/health`. When Hermes is not already reachable and the `hermes` command is installed, it starts `hermes serve` in a minimized process. When Hermes cannot be started or reached, task requests fall back to the existing provider chat stream.
 
-1. Complete Milestone 6 physical runtime evidence and obtain a `pass` report.
-2. Enable `HERMES_ENABLED=1` and verify Hermes health separately.
-3. Enable `OMNIX_LIVE_AGENT_ENABLED=1` with auto-route still disabled.
-4. Exercise explicit Agent Mode and confirm every tool result is non-executing or review-held.
-5. Enable `OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=1` for a controlled live-call pilot.
+Other launch paths retain their environment-driven defaults. This keeps the pilot scoped to the standard Windows launcher used by the target machine.
+
+## Test procedure
+
+1. Pull current `main`.
+2. Ensure Hermes has completed its one-time `hermes setup` and `hermes model` configuration.
+3. Run `start_all.bat`.
+4. Confirm the launcher reports Live Agent enabled, automatic routing enabled, and either an existing or newly started Hermes sidecar.
+5. Start a live call and compare:
+   - “Hello, how are you?” → direct conversational provider path.
+   - “Explain how the thermostat works.” → direct informational provider path.
+   - “Turn off the kitchen light.” → Hermes proposal with review required.
+   - “Schedule a meeting for tomorrow.” → Hermes proposal with review required.
+6. Confirm no proposal reports an executed tool result.
+7. Interrupt an agent response and confirm late output does not reappear in the transcript or context.
 
 ## Routing policy
 
@@ -80,6 +93,7 @@ A later approval/execution phase must use the existing Omnix confirmation and to
 - Auto-route disabled: direct provider chat.
 - Hermes disabled while required: direct provider chat without attempting a connection.
 - Hermes enabled but unreachable: bounded planner attempt, then original provider stream.
+- Hermes command missing during launcher auto-start: warning plus normal-chat fallback.
 - Ambiguous intent: direct provider chat.
 - Client interruption: authoritative assistant-turn cancellation remains in force; late Hermes output is inert.
 
@@ -98,11 +112,12 @@ The adapter wraps the final character-aware JSON and SQLite Chat store classes. 
 
 ## Rollback
 
-Set:
+Before running `start_all.bat`, set:
 
-```text
-OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=0
-OMNIX_LIVE_AGENT_ENABLED=0
+```bat
+set OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=0
+set OMNIX_LIVE_AGENT_ENABLED=0
+set OMNIX_START_HERMES=0
 ```
 
 This immediately restores the direct live-chat path without deleting sessions, route diagnostics, Hermes configuration, or Agent Mode support. Removing the Chat adapter import is the code-level rollback.
