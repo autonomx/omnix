@@ -28,7 +28,7 @@ _ACTION_TARGET = re.compile(
 )
 _KASA_READ = re.compile(
     r"\b(?:kasa|smart\s+plug|plug|outlet)\b.*\b(?:status|state|on|off|discover|find|list)\b|"
-    r"^(?:is|are|what).+\b(?:kasa|smart\s+plug|plug|outlet)\b",
+    r"^(?:is|are|what|find|discover|list).+\b(?:kasa|smart\s+plug|plug|outlet)\b",
     re.IGNORECASE,
 )
 _INFORMATIONAL = re.compile(
