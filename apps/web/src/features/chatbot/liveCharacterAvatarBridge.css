@@ -12,6 +12,10 @@
   grid-area: 1 / 1;
 }
 
+.assistant-live-visual-stage > .assistant-voice-orb[hidden] {
+  display: none !important;
+}
+
 .assistant-live-visual-stage[data-has-character-avatar='true'] {
   min-height: 23rem;
 }

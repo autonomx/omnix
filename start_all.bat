@@ -18,6 +18,7 @@ if not defined OMNIX_LIVE_AGENT_ENABLED set "OMNIX_LIVE_AGENT_ENABLED=1"
 if not defined OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED set "OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=1"
 if not defined OMNIX_LIVE_AGENT_REQUIRE_HERMES set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=1"
 if not defined OMNIX_LIVE_AGENT_TIMEOUT_SECONDS set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=6"
+if not defined OMNIX_CHARACTER_MODE_ENABLED set "OMNIX_CHARACTER_MODE_ENABLED=1"
 
 REM Local TP-Link Kasa smart-plug defaults. Host and alias are optional when only one device is discovered.
 if not defined OMNIX_KASA_ENABLED set "OMNIX_KASA_ENABLED=1"
@@ -78,27 +79,6 @@ if defined OMNIX_IMAGE_URL (
     echo [IMAGE] FLUX.2 [klein] 4B will remain unloaded until requested in the web UI.
 ) else (
     echo [IMAGE] Service disabled for this startup.
-)
-
-if /I "%HERMES_ENABLED%"=="1" (
-    powershell -NoProfile -Command "try { Invoke-RestMethod -Uri '%HERMES_BASE_URL%/health' -TimeoutSec 1 ^| Out-Null; exit 0 } catch { exit 1 }" >nul 2>nul
-    if errorlevel 1 (
-        if /I "%OMNIX_START_HERMES%"=="1" (
-            where hermes >nul 2>nul
-            if errorlevel 1 (
-                echo WARNING: Hermes is enabled but the 'hermes' command was not found.
-                echo          Live Agent task requests will fall back to normal chat.
-            ) else (
-                echo [HERMES] Starting the local proposal planner...
-                start "Omnix Hermes" /min cmd /c "hermes gateway"
-            )
-        ) else (
-            echo WARNING: Hermes is not reachable and auto-start is disabled.
-            echo          Live Agent task requests will fall back to normal chat.
-        )
-    ) else (
-        echo [HERMES] Existing sidecar is reachable.
-    )
 )
 
 if not exist "%RPG_FLUX_PYTHON%" (
@@ -164,6 +144,7 @@ set "OMNIX_LIVE_AGENT_ENABLED=%OMNIX_LIVE_AGENT_ENABLED%"
 set "OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=%OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED%"
 set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=%OMNIX_LIVE_AGENT_REQUIRE_HERMES%"
 set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=%OMNIX_LIVE_AGENT_TIMEOUT_SECONDS%"
+set "OMNIX_CHARACTER_MODE_ENABLED=%OMNIX_CHARACTER_MODE_ENABLED%"
 set "OMNIX_KASA_ENABLED=%OMNIX_KASA_ENABLED%"
 set "OMNIX_KASA_DISCOVERY_TARGET=%OMNIX_KASA_DISCOVERY_TARGET%"
 set "OMNIX_KASA_TIMEOUT_SECONDS=%OMNIX_KASA_TIMEOUT_SECONDS%"

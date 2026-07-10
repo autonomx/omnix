@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CharacterLiveCallRuntime } from './characterClient';
 import {
   characterAvatarAssetUrl,
@@ -24,7 +24,7 @@ const runtime: CharacterLiveCallRuntime = {
     renderer: 'sprite',
     rig_asset_id: null,
     base_asset_id: 'image:maya-base',
-    mouth_frames: { closed: 'image:maya-closed' },
+    mouth_frames: { closed: 'image:maya-closed', wide: 'image:maya-wide' },
     blink_frames: {},
     expression_frames: {},
     outfit_frames: {},
@@ -61,6 +61,7 @@ const runtime: CharacterLiveCallRuntime = {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
   publishCharacterAvatarRuntime(null);
   document.body.innerHTML = '';
 });
@@ -126,5 +127,30 @@ describe('live character avatar audio envelope', () => {
     expect(stage?.querySelector('.assistant-live-character-avatar')).toBeNull();
     expect(orb?.hidden).toBe(false);
     expect(stage?.dataset.hasCharacterAvatar).toBeUndefined();
+  });
+
+  it('animates mouth frames from live-call WebSocket PCM events', () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <section class="assistant-live-card">
+        <div class="assistant-voice-orb" data-voice-mode="speaking"></div>
+        <div class="assistant-voice-controls"></div>
+        <div class="assistant-voice-transcript"></div>
+      </section>
+      <div class="assistant-inline-status"></div>
+    `;
+    publishCharacterAvatarRuntime(runtime);
+
+    const samples = new Int16Array(2_400);
+    samples.fill(16_000);
+    window.dispatchEvent(new CustomEvent('omnix:character-avatar-pcm', {
+      detail: { samples, sampleRate: 24_000 },
+    }));
+    vi.advanceTimersByTime(30);
+
+    const avatar = document.querySelector<HTMLElement>('.assistant-live-character-avatar');
+    const image = avatar?.querySelector<HTMLImageElement>('img');
+    expect(avatar?.dataset.mouthFrame).toBe('wide');
+    expect(image?.getAttribute('src')).toBe('/api/assets/image%3Amaya-wide/file');
   });
 });

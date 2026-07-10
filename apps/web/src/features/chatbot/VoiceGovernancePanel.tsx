@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { omnixApiClient } from '../../api/client';
 import {
   characterClient,
+  type CharacterProfile,
   type UpdateVoiceProfileGovernanceInput,
   type VoiceAllowedUse,
   type VoiceConsentStatus,
@@ -15,18 +17,28 @@ const useOptions: Array<{ id: VoiceAllowedUse; label: string }> = [
   { id: 'general_tts', label: 'Use for general text-to-speech' },
 ];
 
-export function VoiceGovernancePanel({ assetId }: { assetId?: string | null }) {
+export function VoiceGovernancePanel({ assetId, character }: { assetId?: string | null; character?: CharacterProfile }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<UpdateVoiceProfileGovernanceInput>({
     subject_owner: '', source_type: 'unknown', source_reference: '', creator_id: '',
     consent_status: 'unverified', allowed_uses: [], deletion_state: 'active', deletion_reason: '',
   });
   const [status, setStatus] = useState<string | null>(null);
+  const [selectedVoiceId, setSelectedVoiceId] = useState(assetId ?? '');
+  const voiceAssetsQuery = useQuery({
+    queryKey: ['platform', 'assets', 'character-voice-selector'],
+    queryFn: () => omnixApiClient.listAssets(),
+    enabled: Boolean(character),
+  });
   const governanceQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'voice-governance', assetId],
     queryFn: () => characterClient.voiceGovernance(assetId ?? ''),
     enabled: Boolean(assetId),
   });
+
+  useEffect(() => {
+    setSelectedVoiceId(assetId ?? '');
+  }, [assetId]);
 
   useEffect(() => {
     const value = governanceQuery.data;
@@ -52,6 +64,22 @@ export function VoiceGovernancePanel({ assetId }: { assetId?: string | null }) {
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Voice governance update failed.'),
   });
 
+  const assignmentMutation = useMutation({
+    mutationFn: () => characterClient.update(character?.id ?? '', {
+      expected_version: character?.active_version,
+      default_voice_asset_id: selectedVoiceId,
+    }),
+    onSuccess: async (updated) => {
+      setStatus(`${voiceLabel(selectedVoiceId)} is now ${updated.display_name}'s live-call voice.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'characters'] }),
+        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'interaction'] }),
+        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'live-call-runtime'] }),
+      ]);
+    },
+    onError: (error) => setStatus(error instanceof Error ? error.message : 'Character voice assignment failed.'),
+  });
+
   function toggleUse(use: VoiceAllowedUse, enabled: boolean): void {
     const next = enabled ? [...new Set([...draft.allowed_uses, use])] : draft.allowed_uses.filter((item) => item !== use);
     setDraft({ ...draft, allowed_uses: next });
@@ -60,11 +88,25 @@ export function VoiceGovernancePanel({ assetId }: { assetId?: string | null }) {
   const current = governanceQuery.data;
   const displayName = current?.subject_owner || (assetId ? 'Linked cloned voice' : 'No linked voice');
   const consentReady = current?.consent_status === 'granted' && current.deletion_state === 'active';
+  const clonedVoices = (voiceAssetsQuery.data?.assets ?? []).filter(isUsableClonedVoice);
 
   return <section className="character-dashboard-section character-voice-section">
     <header className="character-section-heading">
       <div><span>2</span><h4>Voice governance</h4></div>
     </header>
+
+    {character ? <div className="character-voice-assignment">
+      <label>
+        <span>Character live-call voice</span>
+        <select aria-label="Character live-call voice" value={selectedVoiceId} onChange={(event) => setSelectedVoiceId(event.currentTarget.value)}>
+          <option value="">Select a cloned voice</option>
+          {clonedVoices.map((voice) => <option key={voice.id} value={voice.id}>{voiceLabel(voice.id, voice.metadata)}</option>)}
+        </select>
+      </label>
+      <button type="button" disabled={!selectedVoiceId || selectedVoiceId === assetId || assignmentMutation.isPending} onClick={() => assignmentMutation.mutate()}>
+        {assignmentMutation.isPending ? 'Assigning…' : 'Use for character live calls'}
+      </button>
+    </div> : null}
 
     {!assetId ? <div className="voice-governance-empty"><span aria-hidden="true">◉</span><div><strong>No default voice is linked to this character.</strong><p>Link a governed cloned voice before starting a Character Mode live call.</p></div></div> : governanceQuery.isPending ? <p>Loading voice governance…</p> : <>
       <div className="voice-governance-summary">
@@ -111,4 +153,19 @@ export function VoiceGovernancePanel({ assetId }: { assetId?: string | null }) {
 function abbreviateAsset(assetId: string): string {
   if (assetId.length <= 42) return assetId;
   return `${assetId.slice(0, 22)}…${assetId.slice(-12)}`;
+}
+
+function isUsableClonedVoice(asset: { module: string; type: string; metadata?: Record<string, unknown> }): boolean {
+  if (asset.module !== 'voice-cloning' || asset.type !== 'voice_profile') return false;
+  const governance = asset.metadata?.voice_governance as Record<string, unknown> | undefined;
+  const allowedUses = Array.isArray(governance?.allowed_uses) ? governance.allowed_uses : [];
+  return governance?.consent_status === 'granted'
+    && governance?.deletion_state === 'active'
+    && allowedUses.includes('character')
+    && allowedUses.includes('live_call');
+}
+
+function voiceLabel(assetId: string, metadata?: Record<string, unknown>): string {
+  const metadataLabel = String(metadata?.voice_clone_id || metadata?.voice_id || '').trim();
+  return metadataLabel || assetId.replace(/^voice-cloning:/, '').replaceAll('-', ' ');
 }

@@ -9,6 +9,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 LAUNCHER_MANAGER_VERSION = "omnix_launcher_service_manager_v1"
 DEFAULT_LOG_LIMIT = 1200
@@ -32,6 +33,13 @@ def _python_env(name: str, fallback: str) -> str:
 
 def _npm_command() -> str:
     return "npm.cmd" if os.name == "nt" else "npm"
+
+
+def _url_port(value: str, default: int) -> int:
+    try:
+        return int(urlparse(value).port or default)
+    except (TypeError, ValueError):
+        return default
 
 
 @dataclass(frozen=True)
@@ -300,12 +308,16 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     tts_python = _python_env("RPG_TTS_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe")
     stt_python = _python_env("RPG_STT_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe")
     image_enabled = _env_flag("OMNIX_IMAGE_ENABLED") and _env_flag("OMNIX_START_IMAGE_SERVICE")
+    hermes_enabled = _env_flag("HERMES_ENABLED")
+    hermes_auto_start = hermes_enabled and _env_flag("OMNIX_START_HERMES")
+    hermes_base_url = os.environ.get("HERMES_BASE_URL", "http://127.0.0.1:8642")
     common = {
         "PYTHONPATH": str(root / "src"),
         "OMNIX_TTS_URL": os.environ.get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
         "OMNIX_STT_URL": os.environ.get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
         "OMNIX_IMAGE_ENABLED": os.environ.get("OMNIX_IMAGE_ENABLED", "0"),
         "OMNIX_IMAGE_URL": "http://127.0.0.1:5301" if image_enabled else "",
+        "OMNIX_CHARACTER_MODE_ENABLED": os.environ.get("OMNIX_CHARACTER_MODE_ENABLED", "1"),
         "OMNIX_LAUNCHER_KILL_PORT": "1",
     }
     tts_model_dir = os.environ.get("OMNIX_TTS_MODEL_DIR", str(root / "resources" / "models" / "tts" / "Qwen3-TTS-12Hz-0.6B-Base"))
@@ -349,6 +361,20 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             env=dict(common),
             ports=(5173,),
             description="React/Vite browser app on 127.0.0.1:5173.",
+        ),
+        ServiceSpec(
+            service_id="hermes",
+            label="Hermes Gateway",
+            command=["hermes", "gateway"],
+            cwd=root,
+            env={**common, "HERMES_BASE_URL": hermes_base_url},
+            ports=(_url_port(hermes_base_url, 8642),),
+            optional=True,
+            enabled=hermes_enabled,
+            auto_start=hermes_auto_start,
+            description=(
+                f"Optional Hermes messaging and planner gateway on {hermes_base_url}."
+            ),
         ),
         ServiceSpec(
             service_id="image",

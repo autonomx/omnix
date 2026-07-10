@@ -26,7 +26,7 @@ from .avatar_generation_repository import CharacterAvatarGenerationRepository
 from .avatar_models import UpsertCharacterAvatarPackRequest
 from .avatar_service import CharacterAvatarService, default_character_avatar_service
 from .models import CreateCharacterRequest
-from .repository import CharacterConflictError, CharacterNotFoundError
+from .repository import CharacterConflictError
 from .service import CharacterService, default_character_service
 from .voice_consent import VoiceConsentError, VoiceProfileGovernanceService
 
@@ -70,7 +70,11 @@ class CharacterAvatarGenerationService:
         character = self.character_service_factory().get(character_id)
         source_asset_id = request.source_asset_id.strip()
         reference_asset_ids: list[str] = []
-        prompt = _base_prompt(character.display_name, request.appearance_prompt)
+        prompt = _base_prompt(
+            character.display_name,
+            request.appearance_prompt,
+            str(character.speech_style.get("gender") or ""),
+        )
         if source_asset_id:
             self._govern_uploaded_source(
                 character.id,
@@ -257,9 +261,15 @@ class CharacterAvatarGenerationService:
         asset_ids.setdefault("mouth_closed", base_asset_id)
 
         variant_job_ids = dict(batch.variant_job_ids)
-        if not variant_job_ids:
-            character = self.character_service_factory().get(batch.character_id)
-            for variant, prompt in self._variant_prompts(batch.request).items():
+        variant_prompts = self._variant_prompts(batch.request)
+        if not variant_prompts:
+            return self._finalize(batch, asset_ids)
+
+        character = None
+        for variant, prompt in variant_prompts.items():
+            job_id = variant_job_ids.get(variant)
+            if not job_id:
+                character = character or self.character_service_factory().get(batch.character_id)
                 job = job_store.create_job(
                     self._image_job_request(
                         character_id=batch.character_id,
@@ -270,17 +280,13 @@ class CharacterAvatarGenerationService:
                     )
                 )
                 variant_job_ids[variant] = job.id
-            if not variant_job_ids:
-                return self._finalize(batch, asset_ids)
-            return self.repository.update(
-                batch.id,
-                status="generating_variants",
-                variant_job_ids=variant_job_ids,
-                asset_ids=asset_ids,
-            )
+                return self.repository.update(
+                    batch.id,
+                    status="generating_variants",
+                    variant_job_ids=variant_job_ids,
+                    asset_ids=asset_ids,
+                )
 
-        all_completed = True
-        for variant, job_id in variant_job_ids.items():
             job = job_store.get_job(job_id)
             if job is None:
                 return self.repository.update(
@@ -297,8 +303,12 @@ class CharacterAvatarGenerationService:
                     error=_job_error(job, f"avatar variant failed: {variant}"),
                 )
             if job.status != JobStatus.COMPLETED:
-                all_completed = False
-                continue
+                return self.repository.update(
+                    batch.id,
+                    status="generating_variants",
+                    variant_job_ids=variant_job_ids,
+                    asset_ids=asset_ids,
+                )
             asset_id = _job_asset_id(job)
             if not asset_id:
                 return self.repository.update(
@@ -309,12 +319,6 @@ class CharacterAvatarGenerationService:
                 )
             asset_ids[variant] = asset_id
 
-        if not all_completed:
-            return self.repository.update(
-                batch.id,
-                status="generating_variants",
-                asset_ids=asset_ids,
-            )
         return self._finalize(batch, asset_ids)
 
     def _finalize(
@@ -343,13 +347,25 @@ class CharacterAvatarGenerationService:
                 background_asset_ids={"alternate": asset_ids["background_alternate"]} if asset_ids.get("background_alternate") else {},
             ),
         )
-        return self.repository.update(
+        completed = self.repository.update(
             batch.id,
             status="completed",
             asset_ids=asset_ids,
             avatar_pack_version=pack.version,
             error="",
         )
+        from .avatar_viseme_generation import (
+            CharacterVisemeGenerationRepository,
+            CharacterVisemeGenerationService,
+        )
+
+        CharacterVisemeGenerationService(
+            CharacterVisemeGenerationRepository(self.repository.db_path),
+            character_service=self.character_service_factory(),
+            avatar_service=self.avatar_service_factory(),
+            job_store=self.job_store_factory(),
+        ).ensure(batch.character_id)
+        return completed
 
     def _variant_prompts(
         self,
@@ -468,10 +484,14 @@ class CharacterAvatarGenerationService:
         )
 
 
-def _base_prompt(display_name: str, appearance_prompt: str) -> str:
+def _base_prompt(display_name: str, appearance_prompt: str, gender: str = "") -> str:
     custom = appearance_prompt.strip()
+    gender_direction = (
+        f"The character's gender presentation is {gender.strip()}. " if gender.strip() else ""
+    )
     return (
         f"Create one original fictional character portrait for {display_name}. "
+        f"{gender_direction}"
         f"{custom + ' ' if custom else ''}"
         "Front-facing head-and-shoulders composition, centered, eyes open, neutral relaxed expression, "
         "mouth fully closed, consistent hair and clothing, clean even lighting, no text. "

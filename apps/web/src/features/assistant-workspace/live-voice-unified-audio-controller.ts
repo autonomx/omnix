@@ -487,6 +487,8 @@ function shouldFlushPhrase(text: string): boolean {
 }
 
 function selectedVoiceId(): string | null {
+  const liveCallVoice = document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceId?.trim();
+  if (liveCallVoice) return liveCallVoice;
   const mounted = document.querySelector<HTMLSelectElement>('select[aria-label="Cloned voice"]')?.value.trim();
   if (mounted) return mounted;
   try {

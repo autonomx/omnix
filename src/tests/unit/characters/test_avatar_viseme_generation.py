@@ -113,11 +113,16 @@ def test_viseme_generation_upgrades_existing_pack_and_preserves_fallbacks(tmp_pa
 
     batch = service.create("maya")
     assert batch.status == "generating"
-    assert {"A", "E", "O", "U", "MBP", "FV", "L", "WQ", "other"} == set(batch.job_ids)
-    for viseme, job_id in batch.job_ids.items():
+    assert list(batch.job_ids) == ["A"]
+    completed: set[str] = set()
+    while batch.status != "completed":
+        pending = [(viseme, job_id) for viseme, job_id in batch.job_ids.items() if viseme not in completed]
+        assert len(pending) == 1
+        viseme, job_id = pending[0]
         _complete_image_job(tmp_path, jobs, assets, job_id, f"maya-viseme-{viseme.lower()}")
+        completed.add(viseme)
+        batch = service.get(batch.id)
 
-    batch = service.get(batch.id)
     assert batch.status == "completed"
     assert batch.avatar_pack_version == 2
     pack = avatar_service.get("maya")

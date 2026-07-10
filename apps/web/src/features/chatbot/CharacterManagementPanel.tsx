@@ -8,18 +8,21 @@ import { CharacterVoiceBackfillButton } from './CharacterVoiceBackfillButton';
 import { VoiceGovernancePanel } from './VoiceGovernancePanel';
 import './CharacterManagementPanel.css';
 
+const SELECTED_CHARACTER_STORAGE_KEY = 'omnix.chatbot.selectedCharacterId';
+
 export function CharacterManagementPanel() {
   const queryClient = useQueryClient();
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState(() => window.localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY) ?? '');
   const [search, setSearch] = useState('');
-  const [draft, setDraft] = useState({ display_name: '', description: '', personality_prompt: '', default_greeting: '' });
+  const [draft, setDraft] = useState({ display_name: '', description: '', personality_prompt: '', default_greeting: '', gender: '' });
   const [confirmation, setConfirmation] = useState('');
   const [actions, setActions] = useState({ delete_memories: false, delete_transcripts: false, unlink_voice: false, archive_profile: false });
   const [status, setStatus] = useState<string | null>(null);
+  const [profileSaveStatus, setProfileSaveStatus] = useState<{ kind: 'saving' | 'saved' | 'error'; message: string } | null>(null);
 
   const charactersQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'characters', 'management'],
-    queryFn: () => characterClient.list(true),
+    queryFn: () => characterClient.list(),
   });
   const characters = charactersQuery.data?.characters ?? [];
   const filteredCharacters = useMemo(() => {
@@ -42,14 +45,20 @@ export function CharacterManagementPanel() {
   }, [characters, selectedId]);
 
   useEffect(() => {
+    if (selectedId) window.localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, selectedId);
+  }, [selectedId]);
+
+  useEffect(() => {
     if (!selected) return;
     setDraft({
       display_name: selected.display_name,
       description: selected.description,
       personality_prompt: selected.personality_prompt,
       default_greeting: selected.default_greeting,
+      gender: typeof selected.speech_style.gender === 'string' ? selected.speech_style.gender : '',
     });
     setConfirmation('');
+    setProfileSaveStatus(null);
     setActions({ delete_memories: false, delete_transcripts: false, unlink_voice: false, archive_profile: false });
   }, [selected?.id, selected?.active_version]);
 
@@ -80,13 +89,24 @@ export function CharacterManagementPanel() {
   const updateMutation = useMutation({
     mutationFn: () => characterClient.update(selected?.id ?? '', {
       expected_version: selected?.active_version,
-      ...draft,
+      display_name: draft.display_name,
+      description: draft.description,
+      personality_prompt: draft.personality_prompt,
+      default_greeting: draft.default_greeting,
+      speech_style: { ...(selected?.speech_style ?? {}), gender: draft.gender },
     }),
-    onSuccess: async () => {
-      setStatus('Character profile saved as a new version.');
+    onMutate: () => setProfileSaveStatus({ kind: 'saving', message: 'Saving profile…' }),
+    onSuccess: async (updated) => {
+      const message = `Profile saved successfully as version ${updated.active_version}.`;
+      setProfileSaveStatus({ kind: 'saved', message });
+      setStatus(message);
       await refresh();
     },
-    onError: (error) => setStatus(error instanceof Error ? error.message : 'Character update failed.'),
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Character update failed.';
+      setProfileSaveStatus({ kind: 'error', message });
+      setStatus(message);
+    },
   });
 
   const actionMutation = useMutation({
@@ -166,13 +186,16 @@ export function CharacterManagementPanel() {
               <section className="character-dashboard-section character-profile-section">
                 <header className="character-section-heading">
                   <div><span>1</span><h4>Character profile</h4></div>
-                  <button
-                    type="button"
-                    disabled={updateMutation.isPending || selected.status === 'archived'}
-                    onClick={() => updateMutation.mutate()}
-                  >
-                    Save profile version
-                  </button>
+                  <aside className="character-profile-save-actions">
+                    {profileSaveStatus ? <p className={`character-profile-save-confirmation ${profileSaveStatus.kind}`} role={profileSaveStatus.kind === 'error' ? 'alert' : 'status'}>{profileSaveStatus.message}</p> : null}
+                    <button
+                      type="button"
+                      disabled={updateMutation.isPending || selected.status === 'archived'}
+                      onClick={() => updateMutation.mutate()}
+                    >
+                      {updateMutation.isPending ? 'Saving…' : 'Save profile version'}
+                    </button>
+                  </aside>
                 </header>
                 <div className="character-form-grid">
                   <label>
@@ -180,22 +203,32 @@ export function CharacterManagementPanel() {
                     <input aria-label="Character name" value={draft.display_name} onChange={(event) => setDraft({ ...draft, display_name: event.currentTarget.value })} />
                   </label>
                   <label>
+                    <span>Gender</span>
+                    <select aria-label="Character gender" value={draft.gender} onChange={(event) => setDraft({ ...draft, gender: event.currentTarget.value })}>
+                      <option value="">Not specified</option>
+                      <option value="female">Female</option>
+                      <option value="male">Male</option>
+                      <option value="nonbinary">Nonbinary</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                  <label>
                     <span>Short description <small>{draft.description.length} / 1000</small></span>
-                    <textarea aria-label="Character description" rows={3} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.currentTarget.value })} />
+                    <textarea aria-label="Character description" rows={2} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.currentTarget.value })} />
                   </label>
                   <label>
                     <span>Default greeting <small>{draft.default_greeting.length} / 2000</small></span>
-                    <textarea aria-label="Character greeting" rows={3} value={draft.default_greeting} onChange={(event) => setDraft({ ...draft, default_greeting: event.currentTarget.value })} />
+                    <textarea aria-label="Character greeting" rows={2} value={draft.default_greeting} onChange={(event) => setDraft({ ...draft, default_greeting: event.currentTarget.value })} />
                   </label>
                   <label>
                     <span>Personality prompt <small>{draft.personality_prompt.length} / 12000</small></span>
-                    <textarea aria-label="Character personality" rows={7} value={draft.personality_prompt} onChange={(event) => setDraft({ ...draft, personality_prompt: event.currentTarget.value })} />
+                    <textarea aria-label="Character personality" rows={4} value={draft.personality_prompt} onChange={(event) => setDraft({ ...draft, personality_prompt: event.currentTarget.value })} />
                   </label>
                 </div>
                 <p className="character-section-note">Profile instructions apply to this Character Mode identity and its Omnix Chat conversations.</p>
               </section>
 
-              <VoiceGovernancePanel assetId={selected.default_voice_asset_id} />
+              <VoiceGovernancePanel assetId={selected.default_voice_asset_id} character={selected} />
               <CharacterAvatarPanel character={selected} />
 
               <section className="character-dashboard-section character-backfill-section">

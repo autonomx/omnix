@@ -366,6 +366,7 @@ def test_generate_audio_stream_retries_graph_failure_before_first_chunk(monkeypa
     class FreshGraphStreamModel:
         def __init__(self) -> None:
             self.calls: list[bool] = []
+            self._cuda_graphs_enabled = True
 
         def generate_voice_clone_streaming(self, **kwargs):
             self.calls.append(bool(kwargs.get("parity_mode")))
@@ -385,4 +386,5 @@ def test_generate_audio_stream_retries_graph_failure_before_first_chunk(monkeypa
     assert len(chunks) == 1
     assert poisoned_model.calls == [False]
     assert fresh_model.calls == [True]
+    assert fresh_model._cuda_graphs_enabled is False
     assert reset_calls == [True]

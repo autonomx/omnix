@@ -121,7 +121,25 @@ def execute_image_job(
             logs=[{"level": "info", "message": "Image generated and stored", "asset_id": asset.id}],
         ),
     )
+    _advance_character_avatar_generation(job)
     return completed or job
+
+
+def _advance_character_avatar_generation(job: JobRecord) -> None:
+    if job.module != "character-avatar":
+        return
+    character_id = str((job.input_payload or {}).get("metadata", {}).get("character_id") or "").strip()
+    if not character_id:
+        return
+    try:
+        from app.characters.avatar_generation_service import CharacterAvatarGenerationService
+        from app.characters.avatar_viseme_generation import CharacterVisemeGenerationService
+
+        CharacterAvatarGenerationService().list(character_id)
+        CharacterVisemeGenerationService().reconcile_character(character_id)
+    except Exception:
+        # The durable batch remains recoverable through its GET/list reconciliation path.
+        return
 
 
 def _store_image_asset(

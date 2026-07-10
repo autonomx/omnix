@@ -104,7 +104,7 @@ def test_character_live_call_runtime_resolves_profile_voice_and_delivery(tmp_pat
     assert runtime.preload.preload_ms >= 0
 
 
-def test_voice_override_changes_renderer_without_changing_character_identity(tmp_path: Path, monkeypatch) -> None:
+def test_character_default_voice_overrides_stale_session_voice_for_live_call(tmp_path: Path, monkeypatch) -> None:
     _configure(tmp_path, monkeypatch)
     store = default_chat_store()
     session = store.create_session(CreateChatSessionRequest(title="Voice override"))
@@ -122,7 +122,7 @@ def test_voice_override_changes_renderer_without_changing_character_identity(tmp
 
     assert runtime.character_id == "maya"
     assert runtime.display_name == "Maya"
-    assert runtime.voice_asset_id == "voice-cloning:alternate"
+    assert runtime.voice_asset_id == "voice-cloning:maya"
     assert runtime.character_profile_version == 1
 
 

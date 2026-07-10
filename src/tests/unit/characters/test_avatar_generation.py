@@ -104,6 +104,30 @@ def _uploaded_source(tmp_path: Path, assets: SharedAssetStore, name: str = "user
     return asset_id
 
 
+def _complete_variant_jobs_sequentially(
+    tmp_path: Path,
+    generations: CharacterAvatarGenerationService,
+    jobs: SQLiteJobStore,
+    assets: SharedAssetStore,
+    batch_id: str,
+    name: str,
+):
+    completed: set[str] = set()
+    while True:
+        batch = generations.get(batch_id)
+        if batch.status == "completed":
+            return batch
+        pending = [
+            (variant, job_id)
+            for variant, job_id in batch.variant_job_ids.items()
+            if variant not in completed
+        ]
+        assert len(pending) == 1
+        variant, job_id = pending[0]
+        _complete_image_job(tmp_path, jobs, assets, job_id, f"{name}-{variant}")
+        completed.add(variant)
+
+
 def test_generation_reconciles_base_variants_and_avatar_pack(tmp_path: Path, monkeypatch) -> None:
     characters, avatars, generations, jobs, assets = _runtime(tmp_path, monkeypatch)
     characters.create(
@@ -126,11 +150,11 @@ def test_generation_reconciles_base_variants_and_avatar_pack(tmp_path: Path, mon
 
     batch = generations.get(batch.id)
     assert batch.status == "generating_variants"
-    assert {"mouth_small", "mouth_medium", "mouth_wide", "blink_closed"}.issubset(batch.variant_job_ids)
-    for variant, job_id in batch.variant_job_ids.items():
-        _complete_image_job(tmp_path, jobs, assets, job_id, f"maya-{variant}")
+    assert list(batch.variant_job_ids) == ["mouth_small"]
 
-    batch = generations.get(batch.id)
+    batch = _complete_variant_jobs_sequentially(
+        tmp_path, generations, jobs, assets, batch.id, "maya"
+    )
     assert batch.status == "completed"
     assert batch.avatar_pack_version == 1
     pack = avatars.get("maya")
@@ -177,10 +201,9 @@ def test_uploaded_image_is_governed_and_used_as_base_reference(tmp_path: Path, m
     assert source.metadata["linked_character_ids"] == ["self-avatar"]
 
     _complete_image_job(tmp_path, jobs, assets, batch.base_job_id, "self-avatar-base")
-    batch = generations.get(batch.id)
-    for variant, job_id in batch.variant_job_ids.items():
-        _complete_image_job(tmp_path, jobs, assets, job_id, f"self-avatar-{variant}")
-    batch = generations.get(batch.id)
+    batch = _complete_variant_jobs_sequentially(
+        tmp_path, generations, jobs, assets, batch.id, "self-avatar"
+    )
 
     assert batch.status == "completed"
     pack = avatars.get("self-avatar")

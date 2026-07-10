@@ -18,5 +18,5 @@ def test_windows_launcher_enables_proposal_only_live_agent_pilot() -> None:
         'set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=1"'
     ) in source
     assert 'if not defined OMNIX_START_HERMES set "OMNIX_START_HERMES=1"' in source
-    assert 'start "Omnix Hermes" /min cmd /c "hermes gateway"' in source
-    assert "Live Agent task requests will fall back to normal chat." in source
+    assert 'start "Omnix Hermes"' not in source
+    assert "app.launcher.runtime_control_app:app" in source

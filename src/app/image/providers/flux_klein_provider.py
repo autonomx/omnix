@@ -401,6 +401,16 @@ class FluxKleinImageProvider(BaseImageProvider):
                     with contextlib.suppress(Exception):
                         signature = inspect.signature(pipe.__call__)
                         params = signature.parameters
+                        accepts_extra_kwargs = any(
+                            parameter.kind is inspect.Parameter.VAR_KEYWORD
+                            for parameter in params.values()
+                        )
+                        if (
+                            "negative_prompt" in kwargs
+                            and "negative_prompt" not in params
+                            and not accepts_extra_kwargs
+                        ):
+                            kwargs.pop("negative_prompt")
                         if reference_input is not None and "image" not in params:
                             raise RuntimeError("flux_klein_image_to_image_unsupported_by_runtime")
                         if "callback_on_step_end" in params:

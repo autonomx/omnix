@@ -10,20 +10,28 @@ from app.launcher.control_app import app
 from app.launcher.service_manager import LauncherServiceManager, ServiceSpec, build_default_service_specs, reset_default_manager_for_tests
 
 
-def test_default_service_specs_keep_image_disabled_by_default(monkeypatch) -> None:
+def test_default_service_specs_keep_optional_services_disabled_by_default(monkeypatch) -> None:
     monkeypatch.delenv("OMNIX_IMAGE_ENABLED", raising=False)
     monkeypatch.delenv("OMNIX_START_IMAGE_SERVICE", raising=False)
+    monkeypatch.delenv("HERMES_ENABLED", raising=False)
+    monkeypatch.delenv("OMNIX_START_HERMES", raising=False)
 
     specs = build_default_service_specs(Path("F:/LLM/omnix"))
     by_id = {spec.service_id: spec for spec in specs}
 
-    assert {"stt", "tts", "gateway", "web", "image"}.issubset(by_id)
+    assert {"stt", "tts", "gateway", "web", "hermes", "image"}.issubset(by_id)
     assert by_id["image"].enabled is False
     assert by_id["image"].auto_start is False
     assert by_id["image"].optional is True
+    assert by_id["hermes"].enabled is False
+    assert by_id["hermes"].auto_start is False
+    assert by_id["hermes"].optional is True
+    assert by_id["hermes"].command == ["hermes", "gateway"]
+    assert by_id["hermes"].ports == (8642,)
     assert by_id["gateway"].env["OMNIX_IMAGE_ENABLED"] == "0"
     assert by_id["gateway"].env["OMNIX_IMAGE_URL"] == ""
     assert by_id["gateway"].env["OMNIX_LAUNCHER_KILL_PORT"] == "1"
+    assert by_id["gateway"].env["OMNIX_CHARACTER_MODE_ENABLED"] == "1"
     expected_tts_model = "F:\\LLM\\omnix\\resources\\models\\tts\\Qwen3-TTS-12Hz-0.6B-Base"
     assert by_id["gateway"].env["OMNIX_TTS_MODEL_DIR"] == expected_tts_model
     assert by_id["gateway"].env["OMNIX_QWEN3_TTS_MODEL_DIR"] == expected_tts_model
@@ -46,6 +54,20 @@ def test_default_service_specs_image_is_explicit_opt_in(monkeypatch) -> None:
     assert image.auto_start is True
     assert image.env["OMNIX_IMAGE_ENABLED"] == "1"
     assert "app.image_service_app:app" in image.command
+
+
+def test_default_service_specs_hermes_uses_launcher_flags_and_base_url(monkeypatch) -> None:
+    monkeypatch.setenv("HERMES_ENABLED", "1")
+    monkeypatch.setenv("OMNIX_START_HERMES", "1")
+    monkeypatch.setenv("HERMES_BASE_URL", "http://127.0.0.1:9864")
+
+    specs = build_default_service_specs(Path("F:/LLM/omnix"))
+    hermes = {spec.service_id: spec for spec in specs}["hermes"]
+
+    assert hermes.enabled is True
+    assert hermes.auto_start is True
+    assert hermes.ports == (9864,)
+    assert hermes.env["HERMES_BASE_URL"] == "http://127.0.0.1:9864"
 
 
 def test_launcher_dashboard_lists_services_without_starting_processes() -> None:
@@ -205,7 +227,7 @@ def test_launcher_dashboard_private_app_button_opens_private_browser(monkeypatch
 def test_start_all_routes_through_launcher_dashboard() -> None:
     text = Path("start_all.bat").read_text(encoding="utf-8")
 
-    assert "app.launcher.control_app:app" in text
+    assert "app.launcher.runtime_control_app:app" in text
     assert "--port 5055" in text
     assert "Launcher Control" in text
     assert "OMNIX_APP_OPEN_URL" in text
@@ -215,3 +237,4 @@ def test_start_all_routes_through_launcher_dashboard() -> None:
     assert 'start "Omnix TTS"' not in text
     assert 'start "Omnix FastAPI"' not in text
     assert 'start "Omnix Image Service"' not in text
+    assert 'start "Omnix Hermes"' not in text

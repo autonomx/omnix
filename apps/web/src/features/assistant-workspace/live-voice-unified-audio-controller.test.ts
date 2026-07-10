@@ -153,6 +153,21 @@ describe('live voice unified audio controller', () => {
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
   });
 
+  it('uses the authoritative live-call voice instead of the chat voice setting', async () => {
+    const card = document.querySelector<HTMLElement>('.assistant-live-card');
+    if (card) card.dataset.liveVoiceId = 'Maya';
+
+    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    await response.text();
+
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
+    expect(mocks.createSession).toHaveBeenCalledWith(
+      'live-call:s1:test-trace',
+      'Maya',
+      mocks.reporter,
+    );
+  });
+
   it('skips non-speech-only trailing chunks without stopping the turn', async () => {
     streamEvents = [
       { type: 'user_message', message: { id: 'u1', metadata: { assistant_turn_id: 'assistant-turn:t2' } } },

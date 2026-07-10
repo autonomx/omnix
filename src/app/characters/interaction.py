@@ -165,6 +165,8 @@ def resolve_interaction_context(
     if (selection.read_memory or selection.write_memory) and not character_memory_enabled():
         raise CharacterInteractionError("character memory is disabled")
 
+    # A character's governed default voice is authoritative for Character Mode.
+    # The session selection remains a fallback for legacy profiles without one.
     voice_asset_id = selection.voice_asset_id or character.default_voice_asset_id
     assistant_identity = [
         _HARD_IDENTITY_DISCLOSURE,

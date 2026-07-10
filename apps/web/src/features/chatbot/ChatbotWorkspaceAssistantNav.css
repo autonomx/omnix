@@ -1127,6 +1127,23 @@
   background: color-mix(in srgb, var(--omnix-panel, #111827) 88%, var(--omnix-accent, #7dd3fc) 12%);
 }
 
+.assistant-live-identity {
+  display: inline-flex;
+  margin-top: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid rgba(132, 148, 196, 0.28);
+  border-radius: 999px;
+  color: var(--text-muted, #aeb8d2);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.assistant-live-identity.active {
+  border-color: rgba(91, 225, 174, 0.38);
+  background: rgba(27, 133, 94, 0.16);
+  color: #71e9b8;
+}
+
 .assistant-tool-proposal > header,
 .assistant-tool-proposal > footer {
   display: flex;

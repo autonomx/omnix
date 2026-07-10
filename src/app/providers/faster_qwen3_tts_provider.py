@@ -117,6 +117,12 @@ def _reset_cached_model_after_generation_error(error: BaseException) -> None:
             logger.warning("Failed to reset FasterQwen3TTS model cache after generation error: %s", reset_exc)
 
 
+def _disable_cuda_graphs_for_retry(model: Any) -> None:
+    """Force eager decoding after the model's CUDA graph has proven unusable."""
+    if hasattr(model, "_cuda_graphs_enabled"):
+        model._cuda_graphs_enabled = False
+
+
 def _generate_audio_with_streaming_fallback(model: Any, gen_kwargs: dict[str, Any]) -> tuple[list[Any], int]:
     stream_kwargs = dict(gen_kwargs)
     stream_kwargs["parity_mode"] = True
@@ -850,6 +856,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 )
                 _reset_cached_model_after_generation_error(stream_exc)
                 model = self._get_model()
+                _disable_cuda_graphs_for_retry(model)
                 try:
                     for audio_chunk, sr, timing in model.generate_voice_clone_streaming(**retry_kwargs):
                         if not _is_valid_audio(audio_chunk):
@@ -868,6 +875,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                     )
                     _reset_cached_model_after_generation_error(retry_exc)
                     model = self._get_model()
+                    _disable_cuda_graphs_for_retry(model)
                     for audio_chunk, sr, timing in model.generate_voice_clone_streaming(**retry_kwargs):
                         if not _is_valid_audio(audio_chunk):
                             logger.warning("[TTS] Skipping corrupt streaming fresh retry chunk %d", chunk_idx)

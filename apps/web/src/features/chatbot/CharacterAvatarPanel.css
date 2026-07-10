@@ -5,8 +5,8 @@
 
 .character-avatar-layout {
   display: grid;
-  gap: 0.85rem;
-  grid-template-columns: minmax(10.5rem, 13rem) minmax(0, 1fr);
+  gap: 1rem;
+  grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
 }
 
 .character-avatar-preview {
@@ -111,8 +111,8 @@
   border-radius: 0.75rem;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: 6.5rem minmax(0, 1fr);
-  padding: 0.75rem;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  padding: 0.85rem;
 }
 
 .character-avatar-upload-preview {
@@ -150,7 +150,7 @@
 
 .character-avatar-upload-copy > p {
   color: #8f9cba;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   line-height: 1.45;
   margin: 0;
 }
@@ -206,6 +206,7 @@
 
 .character-avatar-upload-copy > button {
   justify-self: start;
+  max-width: 24rem;
 }
 
 .character-avatar-actions {

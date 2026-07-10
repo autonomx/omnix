@@ -99,11 +99,20 @@ class CharacterVisemeGenerationRepository:
             ).fetchone()
         return _row(row) if row else None
 
+    def list(self, character_id: str) -> list[CharacterVisemeGenerationBatch]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM character_avatar_viseme_batches WHERE character_id = ? ORDER BY created_at DESC",
+                (character_id,),
+            ).fetchall()
+        return [_row(row) for row in rows]
+
     def update(
         self,
         batch_id: str,
         *,
         status: VisemeGenerationStatus | None = None,
+        job_ids: dict[str, str] | None = None,
         asset_ids: dict[str, str] | None = None,
         avatar_pack_version: int | None = None,
         error: str | None = None,
@@ -113,6 +122,7 @@ class CharacterVisemeGenerationRepository:
             raise KeyError(batch_id)
         updated = current.model_copy(update={
             "status": status or current.status,
+            "job_ids": dict(job_ids) if job_ids is not None else current.job_ids,
             "asset_ids": dict(asset_ids) if asset_ids is not None else current.asset_ids,
             "avatar_pack_version": avatar_pack_version if avatar_pack_version is not None else current.avatar_pack_version,
             "error": error if error is not None else current.error,
@@ -121,10 +131,10 @@ class CharacterVisemeGenerationRepository:
         with self._connect() as connection:
             connection.execute(
                 """
-                UPDATE character_avatar_viseme_batches SET status = ?, asset_ids_json = ?,
-                    avatar_pack_version = ?, error = ?, updated_at = ? WHERE id = ?
+                UPDATE character_avatar_viseme_batches SET status = ?, job_ids_json = ?,
+                    asset_ids_json = ?, avatar_pack_version = ?, error = ?, updated_at = ? WHERE id = ?
                 """,
-                (updated.status, _json(updated.asset_ids), updated.avatar_pack_version, updated.error, updated.updated_at, updated.id),
+                (updated.status, _json(updated.job_ids), _json(updated.asset_ids), updated.avatar_pack_version, updated.error, updated.updated_at, updated.id),
             )
         return updated
 
@@ -144,15 +154,32 @@ class CharacterVisemeGenerationService:
         self.job_store = job_store or default_job_store()
 
     def create(self, character_id: str) -> CharacterVisemeGenerationBatch:
-        character = self.character_service.get(character_id)
+        self.character_service.get(character_id)
+        self.avatar_service.get(character_id)
+        batch = self.repository.create(character_id, {})
+        return self.get(batch.id)
+
+    def ensure(self, character_id: str) -> CharacterVisemeGenerationBatch | None:
         pack = self.avatar_service.get(character_id)
+        if pack.render_mode == "viseme":
+            batches = self.repository.list(character_id)
+            return batches[0] if batches else None
+        active = next((batch for batch in self.repository.list(character_id) if batch.status == "generating"), None)
+        return active or self.create(character_id)
+
+    def reconcile_character(self, character_id: str) -> None:
+        for batch in self.repository.list(character_id):
+            if batch.status == "generating":
+                self.get(batch.id)
+
+    def _create_job(self, batch: CharacterVisemeGenerationBatch, viseme: str, description: str) -> CharacterVisemeGenerationBatch:
+        character = self.character_service.get(batch.character_id)
+        pack = self.avatar_service.get(batch.character_id)
         reference_asset_id = pack.mouth_frames.get("closed") or pack.base_asset_id
         if not reference_asset_id:
             raise ValueError("character avatar has no canonical portrait")
-        job_ids: dict[str, str] = {}
-        for viseme, description in _VISEME_PROMPTS.items():
-            job = self.job_store.create_job(CreateJobRequest(
-                owner_id=f"character:{character_id}",
+        job = self.job_store.create_job(CreateJobRequest(
+                owner_id=f"character:{batch.character_id}",
                 module="character-avatar",
                 type="image.generate",
                 resource_class=ResourceClass.GPU_IMAGE,
@@ -168,12 +195,11 @@ class CharacterVisemeGenerationService:
                     "style": "locked character lip-sync frame",
                     "reference_asset_ids": [reference_asset_id],
                     "no_cache": True,
-                    "metadata": {"character_id": character_id, "avatar_viseme": viseme},
+                    "metadata": {"character_id": batch.character_id, "avatar_viseme": viseme},
                 },
-                compat={"character_id": character_id, "avatar_viseme": viseme},
+                compat={"character_id": batch.character_id, "avatar_viseme": viseme},
             ))
-            job_ids[viseme] = job.id
-        return self.repository.create(character_id, job_ids)
+        return self.repository.update(batch.id, job_ids={**batch.job_ids, viseme: job.id})
 
     def get(self, batch_id: str) -> CharacterVisemeGenerationBatch:
         batch = self.repository.get(batch_id)
@@ -182,8 +208,10 @@ class CharacterVisemeGenerationService:
         if batch.status in {"completed", "failed"}:
             return batch
         assets = dict(batch.asset_ids)
-        all_completed = True
-        for viseme, job_id in batch.job_ids.items():
+        for viseme, description in _VISEME_PROMPTS.items():
+            job_id = batch.job_ids.get(viseme)
+            if not job_id:
+                return self._create_job(batch, viseme, description)
             job = self.job_store.get_job(job_id)
             if job is None:
                 return self.repository.update(batch.id, status="failed", error=f"viseme job missing: {viseme}")
@@ -191,14 +219,11 @@ class CharacterVisemeGenerationService:
                 message = job.error.message if job.error and job.error.message else f"viseme generation failed: {viseme}"
                 return self.repository.update(batch.id, status="failed", asset_ids=assets, error=message)
             if job.status != JobStatus.COMPLETED:
-                all_completed = False
-                continue
+                return self.repository.update(batch.id, asset_ids=assets)
             asset_id = next((str(ref.get("asset_id") or "") for ref in job.output_refs if ref.get("asset_id")), "")
             if not asset_id:
                 return self.repository.update(batch.id, status="failed", asset_ids=assets, error=f"viseme returned no asset: {viseme}")
             assets[viseme] = asset_id
-        if not all_completed:
-            return self.repository.update(batch.id, asset_ids=assets)
 
         current = self.avatar_service.get(batch.character_id)
         mouth_frames = dict(current.mouth_frames)

@@ -74,10 +74,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
     if (!batch) return;
     if (batch.status === 'completed') {
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-avatar-pack', character.id] });
-      if (visemeRequestedForGenerationId !== batch.id) {
-        setVisemeRequestedForGenerationId(batch.id);
-        visemeMutation.mutate();
-      }
+      setStatus('Avatar presentation pack is ready. Precise visemes are continuing in the background.');
     } else if (batch.status === 'failed') {
       setStatus(batch.error || 'Avatar generation failed.');
     }

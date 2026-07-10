@@ -545,6 +545,23 @@ describe('ChatbotWorkspace', () => {
       expect(streamCall?.[1]?.body).toContain('"content":"open the pod bay doors"');
     });
     expect((await screen.findAllByText('Opening them now.')).length).toBeGreaterThan(0);
+
+    act(() => {
+      recognitionInstance?.onresult?.({
+        resultIndex: 0,
+        results: {
+          length: 1,
+          0: { isFinal: true, 0: { transcript: 'Open the pod bay doors!' } },
+        },
+      });
+    });
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 950));
+    });
+    const streamCalls = fetchMock.mock.calls.filter(
+      ([input, init]) => requestPath(input as RequestInfo | URL).endsWith('/messages/stream') && init?.method === 'POST',
+    );
+    expect(streamCalls).toHaveLength(1);
   });
 
   it('streams main composer submissions while a live call is active', async () => {

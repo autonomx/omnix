@@ -30,11 +30,16 @@ def _json_request(url: str, *, method: str = "GET", payload: dict[str, Any] | No
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"{method} {url} failed with {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"Could not reach the Omnix gateway at {url}. "
+            "Start it with start_all.bat or pass --base-url with the active gateway URL."
+        ) from exc
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-url", default="http://127.0.0.1:5000", help="Omnix gateway URL")
+    parser.add_argument("--base-url", default="http://127.0.0.1:8000", help="Omnix gateway URL")
     parser.add_argument("--provider-id", default="", help="Optional Image Generation provider")
     parser.add_argument("--style", default="illustrated character portrait")
     parser.add_argument("--include-reference-profiles", action="store_true")
@@ -105,4 +110,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(2)

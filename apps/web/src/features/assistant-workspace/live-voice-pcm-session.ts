@@ -9,6 +9,7 @@ const TRANSITION_FADE_SECONDS = 0.008;
 const TTS_LIVE_CALL_WEBSOCKET_PATH = '/api/tts/live-call/websocket';
 const TTS_CHUNK_SIZE = 8;
 const DRAIN_TIMEOUT_MS = 120_000;
+const CHARACTER_AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 
 const WEBSOCKET_OPEN = 1;
 
@@ -233,6 +234,12 @@ export async function createLiveVoicePcmSession(
     totalFrames += 1;
     totalReceivedSamples += sourceSamples;
     const evenBytes = buffer.byteLength - (buffer.byteLength % 2);
+    window.dispatchEvent(new CustomEvent(CHARACTER_AVATAR_PCM_EVENT, {
+      detail: {
+        samples: new Int16Array(buffer.slice(0, evenBytes)),
+        sampleRate: phrase.stats.sampleRate,
+      },
+    }));
     const converted = pcm16ToFloat32(
       new Int16Array(buffer.slice(0, evenBytes)),
       phrase.stats.sampleRate,

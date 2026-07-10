@@ -119,7 +119,13 @@ def resolve_live_call_runtime(
         character = character_service.resolve_snapshot(interaction.character_id or "")
         avatar_pack = avatar_service_factory().resolve(interaction.character_id)
 
-    voice_asset_id = interaction.voice_asset_id
+    # The character profile's governed voice is authoritative for live calls,
+    # even when an older session still carries a previous voice override.
+    voice_asset_id = (
+        character.default_voice_asset_id
+        if character and character.default_voice_asset_id
+        else interaction.voice_asset_id
+    )
     if character is not None and voice_asset_id:
         character_service.validate_voice_for_use(voice_asset_id, "live_call")
     greeting = character.default_greeting.strip() if character else ""

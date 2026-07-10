@@ -6,6 +6,7 @@ export type AvatarPresentationState = 'idle' | 'listening' | 'thinking' | 'speak
 
 const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
 const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
+const AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 const AVATAR_HOST_CLASS = 'assistant-live-character-avatar';
 const LIVE_VISUAL_STAGE_CLASS = 'assistant-live-visual-stage';
 const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
@@ -104,6 +105,11 @@ function installLiveCharacterAvatarBridge(): void {
     updateAvatarImage();
   });
   window.addEventListener(AVATAR_RUNTIME_EVENT, () => renderAvatarHost());
+  window.addEventListener(AVATAR_PCM_EVENT, (event) => {
+    const detail = (event as CustomEvent<{ samples?: Int16Array; sampleRate?: number }>).detail;
+    if (!(detail?.samples instanceof Int16Array)) return;
+    schedulePcmSamples(detail.samples, Number(detail.sampleRate) || 24_000);
+  });
 
   installTtsFetchMonitor();
 }
@@ -175,6 +181,10 @@ function schedulePcmFrames(audioBase64: string, sampleRate: number): void {
   const evenLength = bytes.byteLength - (bytes.byteLength % 2);
   if (!evenLength) return;
   const samples = new Int16Array(bytes.buffer, bytes.byteOffset, evenLength / 2);
+  schedulePcmSamples(samples, sampleRate);
+}
+
+function schedulePcmSamples(samples: Int16Array, sampleRate: number): void {
   const now = performance.now();
   const startAt = Math.max(nextAudioFrameAt, now + 25);
   const timeline = pcmMouthTimeline(samples, sampleRate);
@@ -291,21 +301,25 @@ function updateAvatarImage(): void {
   const presentationState = currentPresentationState();
   const assetId = resolveFrameAsset(pack, currentMouthFrame, presentationState);
   if (!host || !image || !caption || !assetId || !currentRuntime) return;
-  host.dataset.mouthFrame = currentMouthFrame;
-  host.dataset.voiceMode = presentationState;
-  image.src = characterAvatarAssetUrl(assetId);
-  image.alt = `${currentRuntime.display_name} live avatar`;
+  if (host.dataset.mouthFrame !== currentMouthFrame) host.dataset.mouthFrame = currentMouthFrame;
+  if (host.dataset.voiceMode !== presentationState) host.dataset.voiceMode = presentationState;
+  const imageUrl = characterAvatarAssetUrl(assetId);
+  if (image.getAttribute('src') !== imageUrl) image.src = imageUrl;
+  const imageAlt = `${currentRuntime.display_name} live avatar`;
+  if (image.alt !== imageAlt) image.alt = imageAlt;
   const backgroundId = pack?.active_background ? pack.background_asset_ids[pack.active_background] : '';
-  host.style.backgroundImage = backgroundId
+  const backgroundImage = backgroundId
     ? `linear-gradient(rgba(6, 10, 22, 0.12), rgba(6, 10, 22, 0.42)), url("${characterAvatarAssetUrl(backgroundId)}")`
     : '';
-  caption.textContent = presentationState === 'speaking'
+  if (host.style.backgroundImage !== backgroundImage) host.style.backgroundImage = backgroundImage;
+  const captionText = presentationState === 'speaking'
     ? `${currentRuntime.display_name} is speaking`
     : presentationState === 'listening'
       ? `${currentRuntime.display_name} is listening`
       : presentationState === 'thinking'
         ? `${currentRuntime.display_name} is thinking`
         : currentRuntime.display_name;
+  if (caption.textContent !== captionText) caption.textContent = captionText;
 }
 
 function resolveFrameAsset(

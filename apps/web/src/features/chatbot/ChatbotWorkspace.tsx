@@ -105,6 +105,7 @@ const CALL_TIMER_TICK_MS = 1_000;
 const DEFAULT_SPEECH_LANGUAGE = 'en-US';
 const DEFAULT_LIVE_VOICE_SENSITIVITY = 55;
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
+const ASSISTANT_VIEW_STORAGE_KEY = 'omnix.chatbot.activeView';
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
@@ -112,7 +113,11 @@ const STREAMING_TTS_SAMPLE_RATE = 24_000;
 const STREAMING_TTS_START_DELAY_SECONDS = 0.09;
 const STREAMING_TTS_RECOVERY_DELAY_SECONDS = 0.05;
 const STREAMED_TTS_MIN_PHRASE_CHARS = 90;
-const LIVE_VOICE_AUTO_SEND_DELAY_MS = 900;
+const LIVE_VOICE_AUTO_SEND_DELAY_MS = 600;
+
+function liveVoiceSubmissionKey(content: string): string {
+  return content.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}']+/gu, ' ').trim();
+}
 
 type VoicePerformanceStage = {
   stage?: unknown;
@@ -190,7 +195,11 @@ const personalityOptions: Array<{ id: PersonalityId; label: string; prompt: stri
 export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const assistantToolReturn = useMemo(() => readAssistantToolReturn(), []);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<AssistantView>(() => assistantToolReturn.toolId ? 'tools' : 'chats');
+  const [activeView, setActiveView] = useState<AssistantView>(() => {
+    if (assistantToolReturn.toolId) return 'tools';
+    const stored = window.localStorage.getItem(ASSISTANT_VIEW_STORAGE_KEY);
+    return assistantSidebarItems.some((item) => item.id === stored) ? stored as AssistantView : 'chats';
+  });
   const [activeUtilityPanel, setActiveUtilityPanel] = useState<UtilityPanel>('voice');
   const [audioStatus, setAudioStatus] = useState<string | null>(null);
   const [assistantMessageFeedback, setAssistantMessageFeedback] = useState<Record<string, AssistantMessageFeedback>>({});
@@ -213,6 +222,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const assistantPlaybackTokenRef = useRef(0);
   const streamedSpeechQueueRef = useRef<Promise<void>>(Promise.resolve());
   const liveVoiceAutoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveVoiceSubmissionInFlightRef = useRef(false);
   const liveVoiceActiveRef = useRef(false);
   const lastSubmittedVoiceTextRef = useRef('');
   const voiceTurnPerformanceRef = useRef<VoiceTurnPerformance | null>(null);
@@ -242,6 +252,24 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     queryFn: () => omnixApiClient.getChatSession(selectedSessionId ?? ''),
     enabled: Boolean(selectedSessionId),
   });
+  const interactionQuery = useQuery({
+    queryKey: ['feature', 'chatbot', 'interaction', selectedSessionId],
+    queryFn: () => characterClient.session(selectedSessionId ?? ''),
+    enabled: Boolean(selectedSessionId),
+  });
+  const liveCallRuntimeQuery = useQuery({
+    queryKey: [
+      'feature',
+      'chatbot',
+      'live-call-runtime',
+      selectedSessionId,
+      interactionQuery.data?.interaction_mode,
+      interactionQuery.data?.character_id,
+      interactionQuery.data?.character_profile_version,
+    ],
+    queryFn: () => characterClient.liveCallRuntime(selectedSessionId ?? ''),
+    enabled: Boolean(selectedSessionId && interactionQuery.data),
+  });
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<ChatbotFormValues>({
     defaultValues: { content: '', providerId: runtimeConfig.defaultProviderId ?? '', modelId: runtimeConfig.defaultModelId ?? '' },
   });
@@ -262,6 +290,16 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   useEffect(() => {
     if (!selectedSessionId && sessionsQuery.data?.sessions[0]) setSelectedSessionId(sessionsQuery.data.sessions[0].id);
   }, [selectedSessionId, sessionsQuery.data]);
+
+  useEffect(() => {
+    window.localStorage.setItem(ASSISTANT_VIEW_STORAGE_KEY, activeView);
+  }, [activeView]);
+
+  useEffect(() => {
+    if (!liveCallRuntimeQuery.data || liveVoiceActiveRef.current) return;
+    liveCallRuntimeRef.current = liveCallRuntimeQuery.data;
+    setLiveCallRuntime(liveCallRuntimeQuery.data);
+  }, [liveCallRuntimeQuery.data]);
 
   const sendMutation = useMutation({
     mutationFn: async (values: ChatbotFormValues) => {
@@ -340,6 +378,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveVoiceActive = callStartedAt !== null;
   const liveVoiceState = liveVoiceActive ? voiceCaptureLabel(voiceCaptureMode) : voiceCaptureMode === 'error' ? 'Error' : 'Idle';
   const liveConnectionLabel = liveVoiceActive ? 'Connected' : 'Disconnected';
+  const liveIdentityLabel = liveCallRuntime?.interaction_mode === 'character'
+    ? `Character Mode · ${liveCallRuntime.display_name}`
+    : 'System Assistant';
   const liveVoiceVisualMode = isAssistantSpeaking ? 'speaking' : liveVoiceActive ? 'listening' : voiceCaptureMode === 'error' ? 'error' : 'idle';
   const liveCallTimerLabel = formatCallDuration(callElapsedMs);
   const liveDraftText = [liveTranscript, liveInterimTranscript].filter(Boolean).join(' ').trim();
@@ -469,7 +510,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
 
   function currentLiveCallVoiceId(): string {
-    return liveCallRuntimeRef.current?.voice_asset_id || assistantSettings.voiceId || runtimeConfig.ttsVoice || '';
+    const runtimeVoiceAssetId = liveCallRuntimeRef.current?.voice_asset_id;
+    if (runtimeVoiceAssetId) {
+      const asset = voiceProfiles.find((candidate) => candidate.id === runtimeVoiceAssetId);
+      return asset ? voiceProfileId(asset) : runtimeVoiceAssetId.replace(/^voice-cloning:/, '');
+    }
+    return assistantSettings.voiceId || runtimeConfig.ttsVoice || '';
   }
 
   function currentLiveCallSpeechStyle(): LiveCallSpeechStyle {
@@ -767,9 +813,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       setAudioStatus('Speak or type a message before sending voice text.');
       return;
     }
-    if (trimmed === lastSubmittedVoiceTextRef.current) return;
-    lastSubmittedVoiceTextRef.current = trimmed;
+    const submissionKey = liveVoiceSubmissionKey(trimmed);
+    if (liveVoiceSubmissionInFlightRef.current || submissionKey === lastSubmittedVoiceTextRef.current) return;
+    lastSubmittedVoiceTextRef.current = submissionKey;
     if (liveVoiceActiveRef.current) {
+      setLiveTranscript('');
+      setLiveInterimTranscript('');
+      setValue('content', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
       await sendStreamingVoiceTranscript(trimmed);
       return;
     }
@@ -792,6 +842,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
 
   async function sendStreamingVoiceTranscript(content: string): Promise<void> {
+    liveVoiceSubmissionInFlightRef.current = true;
     markVoiceTurnPerformance('chatSubmitStartedAt');
     setAudioStatus('Sending voice text.');
     const providerId = selectedProviderId || undefined;
@@ -849,14 +900,14 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       }
       setLiveTranscript('');
       setLiveInterimTranscript('');
-      lastSubmittedVoiceTextRef.current = '';
       setValue('content', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
       if (autoSpeakResponses && speechBuffer.trim()) queueStreamedAssistantAudio(speechBuffer);
       await queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
       setAudioStatus(responseText ? 'Response ready.' : 'Voice text sent.');
     } catch (error) {
-      lastSubmittedVoiceTextRef.current = '';
       setAudioStatus(error instanceof Error ? error.message : 'Voice text stream failed.');
+    } finally {
+      liveVoiceSubmissionInFlightRef.current = false;
     }
   }
 
@@ -1394,7 +1445,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <div className="assistant-chat-header-actions assistant-chat-integrated-actions">
                   <label className="assistant-header-voice-select">
                     <span>Voice</span>
-                    <select aria-label="Cloned voice" value={assistantSettings.voiceId} onChange={(event) => updateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}>
+                    <select aria-label="Cloned voice" value={liveCallRuntime?.interaction_mode === 'character' ? currentLiveCallVoiceId() : assistantSettings.voiceId} disabled={liveCallRuntime?.interaction_mode === 'character'} onChange={(event) => updateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}>
                       <option value="">{runtimeConfig.ttsVoice ? `Default (${runtimeConfig.ttsVoice})` : 'Default voice'}</option>
                       {voiceProfiles.map((asset) => <option key={asset.id} value={voiceProfileId(asset)}>{voiceProfileLabel(asset)}</option>)}
                     </select>
@@ -1470,8 +1521,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <aside className="assistant-chat-side" aria-label="Live voice, tools, and workspace activity">
           <div className="assistant-side-panel-toggle" aria-label="Assistant utility panel"><button type="button" className={activeUtilityPanel === 'voice' ? 'active' : undefined} onClick={() => setActiveUtilityPanel('voice')}>Live Voice</button><button type="button" className={activeUtilityPanel === 'tools' ? 'active' : undefined} onClick={() => setActiveUtilityPanel('tools')}>Tools</button></div>
           <div className="assistant-live-tools-grid" data-active-panel={activeUtilityPanel}>
-            <section className="assistant-live-card">
-              <header><div><p className="eyebrow">Live Voice</p></div><strong>{liveConnectionLabel}</strong></header>
+            <section className="assistant-live-card" data-live-voice-id={currentLiveCallVoiceId()}>
+              <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><strong>{liveConnectionLabel}</strong></header>
               <div className="assistant-live-state" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>
               <div className="assistant-voice-orb" data-voice-mode={liveVoiceVisualMode} aria-hidden="true">
                 <div className="assistant-voice-meter assistant-voice-meter-left">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`left-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
