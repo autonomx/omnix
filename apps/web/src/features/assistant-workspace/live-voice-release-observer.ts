@@ -1,6 +1,7 @@
 import { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
+const DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const QUALITY_EVENT = 'omnix:assistant-voice-release-quality';
 const SCENARIO_KEY = 'omnix.liveCall.releaseScenario';
@@ -22,6 +23,13 @@ type PerfDetail = {
   sttFinalizeMs?: unknown;
 };
 
+type DiagnosticDetail = {
+  traceId?: unknown;
+  source?: unknown;
+  event?: unknown;
+  details?: Record<string, unknown>;
+};
+
 type QualityDetail = {
   qualityName?: unknown;
   occurred?: unknown;
@@ -35,6 +43,7 @@ type ReleaseState = {
   firstAudioAt: number | null;
   interruptionAt: number | null;
   turnId: string | null;
+  activeTraceId: string | null;
 };
 
 const reporter = typeof window === 'undefined'
@@ -47,6 +56,7 @@ export function initializeLiveVoiceReleaseObserver(): void {
   if (initialized || typeof window === 'undefined') return;
   initialized = true;
   window.addEventListener(PERF_EVENT, handlePerfEvent);
+  window.addEventListener(DIAGNOSTIC_EVENT, handleDiagnosticEvent);
   window.addEventListener(INTERRUPT_EVENT, handleInterruption);
   window.addEventListener(QUALITY_EVENT, handleQualityEvent);
 }
@@ -85,23 +95,32 @@ function handlePerfEvent(event: Event): void {
     recordLatency('stt_finalize_ms', observed);
     state.sttFinalAt = now;
     if (typeof detail.turnId === 'string') state.turnId = detail.turnId;
+  }
+}
+
+function handleDiagnosticEvent(event: Event): void {
+  const detail = (event as CustomEvent<DiagnosticDetail>).detail ?? {};
+  const diagnosticEvent = typeof detail.event === 'string' ? detail.event : '';
+  const traceId = typeof detail.traceId === 'string' ? detail.traceId : null;
+  if (!traceId || traceId === 'live-call:release-observer') return;
+  const now = performance.now();
+
+  if (diagnosticEvent === 'turn_intercepted') {
+    state.activeTraceId = traceId;
     return;
   }
-  if (stage === 'user_turn_submitted') {
-    if (state.sttFinalAt === null) state.sttFinalAt = now;
-    return;
-  }
-  if (stage === 'llm_first_token' && state.firstTokenAt === null) {
+  if (state.activeTraceId && traceId !== state.activeTraceId) return;
+  if (diagnosticEvent === 'llm_text_chunk_received' && state.firstTokenAt === null) {
     state.firstTokenAt = now;
     recordLatency('final_to_first_token_ms', elapsed(state.sttFinalAt, now));
     return;
   }
-  if (stage === 'audio_first_frame' && state.firstAudioAt === null) {
+  if (diagnosticEvent === 'phrase_first_frame_received' && state.firstAudioAt === null) {
     state.firstAudioAt = now;
     recordLatency('first_token_to_first_audio_ms', elapsed(state.firstTokenAt, now));
     return;
   }
-  if (stage === 'audio_silenced' && state.interruptionAt !== null) {
+  if (diagnosticEvent === 'turn_stopped' && state.interruptionAt !== null) {
     recordLatency('interruption_to_silence_ms', elapsed(state.interruptionAt, now));
     state.interruptionAt = null;
   }
@@ -129,6 +148,7 @@ function recordLatency(metricName: LiveVoiceLatencyMetric, valueMs: number | nul
     value_ms: Math.round(valueMs * 1000) / 1000,
     scenario: currentScenario(),
     turn_id: state.turnId,
+    observed_trace_id: state.activeTraceId,
   }, 'release_observer');
 }
 
@@ -163,6 +183,7 @@ function emptyState(): ReleaseState {
     firstAudioAt: null,
     interruptionAt: null,
     turnId: null,
+    activeTraceId: null,
   };
 }
 
