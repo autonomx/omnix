@@ -74,6 +74,17 @@ export function cancelEphemeralBackchannel(): void {
   window.speechSynthesis?.cancel();
 }
 
+export function resolveBackchannelTranscript(detailTranscript: unknown): string {
+  if (typeof detailTranscript === 'string' && detailTranscript.trim()) return detailTranscript.trim();
+  const draft = document.querySelector<HTMLElement>(
+    '.assistant-voice-transcript [data-live-voice-id="live-voice-draft"]',
+  );
+  if (!draft) return '';
+  const clone = draft.cloneNode(true) as HTMLElement;
+  clone.querySelector('span')?.remove();
+  return clone.textContent?.trim() ?? '';
+}
+
 export function initializeEphemeralBackchannels(): void {
   if (initialized || typeof window === 'undefined') return;
   initialized = true;
@@ -86,8 +97,7 @@ export function initializeEphemeralBackchannels(): void {
 function handleVoicePerfEvent(event: Event): void {
   const detail = (event as CustomEvent<VoicePerfDetail>).detail;
   if (detail?.stage !== 'overlap_classified' || detail.intent !== 'backchannel') return;
-  const transcript = typeof detail.transcript === 'string' ? detail.transcript : '';
-  requestEphemeralBackchannel(transcript);
+  requestEphemeralBackchannel(resolveBackchannelTranscript(detail.transcript));
 }
 
 function handleBackchannelEvent(event: CustomEvent<BackchannelDetail>): void {
