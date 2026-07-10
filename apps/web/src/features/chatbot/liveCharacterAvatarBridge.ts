@@ -2,6 +2,7 @@ import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterC
 import './liveCharacterAvatarBridge.css';
 
 export type AvatarMouthFrame = 'closed' | 'small' | 'medium' | 'wide';
+export type AvatarPresentationState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
 const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
 const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
@@ -12,10 +13,14 @@ const INSTALL_KEY = '__omnixCharacterAvatarBridgeInstalled';
 let currentRuntime: CharacterLiveCallRuntime | null = null;
 let currentMouthFrame: AvatarMouthFrame = 'closed';
 let nextAudioFrameAt = 0;
+let blinkClosed = false;
+let blinkTimer: number | null = null;
 
 export function publishCharacterAvatarRuntime(runtime: CharacterLiveCallRuntime | null): void {
   currentRuntime = runtime;
   currentMouthFrame = 'closed';
+  blinkClosed = false;
+  scheduleBlink();
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(AVATAR_RUNTIME_EVENT, { detail: runtime }));
   }
@@ -58,6 +63,18 @@ export function characterAvatarAssetUrl(assetId: string): string {
   return `/api/assets/${encodeURIComponent(assetId)}/file`;
 }
 
+export function presentationStateFromDom(
+  voiceMode: string | undefined,
+  inlineStatus: string,
+): AvatarPresentationState {
+  if (voiceMode === 'speaking') return 'speaking';
+  if (voiceMode === 'error') return 'error';
+  const normalized = inlineStatus.toLowerCase();
+  if (/contacting|sending|streaming|synthesizing|generating|response ready/.test(normalized)) return 'thinking';
+  if (voiceMode === 'listening') return 'listening';
+  return 'idle';
+}
+
 function installLiveCharacterAvatarBridge(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   const state = window as typeof window & Record<string, unknown>;
@@ -67,7 +84,13 @@ function installLiveCharacterAvatarBridge(): void {
   const observer = new MutationObserver(() => renderAvatarHost());
   const observe = () => {
     if (!document.body) return;
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-voice-mode'] });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['data-voice-mode'],
+    });
     renderAvatarHost();
   };
   if (document.body) observe();
@@ -170,12 +193,32 @@ function dispatchAvatarFrame(frame: AvatarMouthFrame): void {
   window.dispatchEvent(new CustomEvent(AVATAR_FRAME_EVENT, { detail: { frame } }));
 }
 
+function scheduleBlink(): void {
+  if (typeof window === 'undefined') return;
+  if (blinkTimer !== null) window.clearTimeout(blinkTimer);
+  const pack = currentRuntime?.avatar_pack;
+  if (!pack?.blink_frames.closed) return;
+  blinkTimer = window.setTimeout(() => {
+    if (currentMouthFrame !== 'closed' || currentPresentationState() === 'speaking') {
+      scheduleBlink();
+      return;
+    }
+    blinkClosed = true;
+    updateAvatarImage();
+    window.setTimeout(() => {
+      blinkClosed = false;
+      updateAvatarImage();
+      scheduleBlink();
+    }, 120);
+  }, 3_800 + Math.round(Math.random() * 2_400));
+}
+
 function renderAvatarHost(): void {
   if (typeof document === 'undefined') return;
   const orb = document.querySelector<HTMLElement>('.assistant-live-card .assistant-voice-orb');
   const existing = document.querySelector<HTMLElement>(`.${AVATAR_HOST_CLASS}`);
   const pack = currentRuntime?.avatar_pack;
-  const assetId = resolveFrameAsset(pack, currentMouthFrame);
+  const assetId = resolveFrameAsset(pack, currentMouthFrame, currentPresentationState());
   if (!orb || !assetId || !currentRuntime) {
     if (orb) orb.hidden = false;
     existing?.remove();
@@ -185,7 +228,6 @@ function renderAvatarHost(): void {
   orb.hidden = true;
   const host = existing ?? document.createElement('figure');
   host.className = AVATAR_HOST_CLASS;
-  host.dataset.voiceMode = orb.dataset.voiceMode || 'idle';
   host.dataset.mouthFrame = currentMouthFrame;
   if (!existing) {
     const image = document.createElement('img');
@@ -197,28 +239,50 @@ function renderAvatarHost(): void {
   updateAvatarImage();
 }
 
+function currentPresentationState(): AvatarPresentationState {
+  const orb = document.querySelector<HTMLElement>('.assistant-live-card .assistant-voice-orb');
+  const statusText = document.querySelector<HTMLElement>('.assistant-inline-status')?.textContent ?? '';
+  return presentationStateFromDom(orb?.dataset.voiceMode, statusText);
+}
+
 function updateAvatarImage(): void {
   const host = document.querySelector<HTMLElement>(`.${AVATAR_HOST_CLASS}`);
   const image = host?.querySelector<HTMLImageElement>('img');
   const caption = host?.querySelector<HTMLElement>('figcaption');
   const pack = currentRuntime?.avatar_pack;
-  const assetId = resolveFrameAsset(pack, currentMouthFrame);
+  const presentationState = currentPresentationState();
+  const assetId = resolveFrameAsset(pack, currentMouthFrame, presentationState);
   if (!host || !image || !caption || !assetId || !currentRuntime) return;
   host.dataset.mouthFrame = currentMouthFrame;
-  const orb = document.querySelector<HTMLElement>('.assistant-live-card .assistant-voice-orb');
-  host.dataset.voiceMode = orb?.dataset.voiceMode || host.dataset.voiceMode || 'idle';
+  host.dataset.voiceMode = presentationState;
   image.src = characterAvatarAssetUrl(assetId);
   image.alt = `${currentRuntime.display_name} live avatar`;
-  caption.textContent = host.dataset.voiceMode === 'speaking'
+  const backgroundId = pack?.active_background ? pack.background_asset_ids[pack.active_background] : '';
+  host.style.backgroundImage = backgroundId
+    ? `linear-gradient(rgba(6, 10, 22, 0.12), rgba(6, 10, 22, 0.42)), url("${characterAvatarAssetUrl(backgroundId)}")`
+    : '';
+  caption.textContent = presentationState === 'speaking'
     ? `${currentRuntime.display_name} is speaking`
-    : host.dataset.voiceMode === 'listening'
+    : presentationState === 'listening'
       ? `${currentRuntime.display_name} is listening`
-      : currentRuntime.display_name;
+      : presentationState === 'thinking'
+        ? `${currentRuntime.display_name} is thinking`
+        : currentRuntime.display_name;
 }
 
-function resolveFrameAsset(pack: CharacterAvatarPack | null | undefined, frame: AvatarMouthFrame): string {
+function resolveFrameAsset(
+  pack: CharacterAvatarPack | null | undefined,
+  frame: AvatarMouthFrame,
+  state: AvatarPresentationState,
+): string {
   if (!pack) return '';
-  return pack.mouth_frames[frame] || pack.mouth_frames.closed || pack.base_asset_id || '';
+  if (blinkClosed && pack.blink_frames.closed) return pack.blink_frames.closed;
+  if (state === 'speaking' && frame !== 'closed') {
+    return pack.mouth_frames[frame] || pack.mouth_frames.closed || pack.base_asset_id || '';
+  }
+  if (pack.expression_frames[state]) return pack.expression_frames[state];
+  if (pack.active_outfit && pack.outfit_frames[pack.active_outfit]) return pack.outfit_frames[pack.active_outfit];
+  return pack.mouth_frames.closed || pack.base_asset_id || '';
 }
 
 installLiveCharacterAvatarBridge();

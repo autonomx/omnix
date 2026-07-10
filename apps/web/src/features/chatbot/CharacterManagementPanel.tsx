@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { CharacterAvatarPanel } from './CharacterAvatarPanel';
 import { characterClient, type CharacterDataExport, type CharacterProfile } from './characterClient';
 import { CharacterHermesPanel } from './CharacterHermesPanel';
+import { CharacterVoiceBackfillButton } from './CharacterVoiceBackfillButton';
 import { VoiceGovernancePanel } from './VoiceGovernancePanel';
 import './CharacterManagementPanel.css';
 
@@ -98,8 +100,11 @@ export function CharacterManagementPanel() {
   return (
     <article className="character-management-card" aria-label="Character management">
       <header>
-        <div><p className="eyebrow">Characters</p><h3>Profiles and relationship data</h3><p>Edit versioned profiles, inspect owned data, export it, or perform explicit cleanup.</p></div>
-        <button type="button" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>New character</button>
+        <div><p className="eyebrow">Characters</p><h3>Profiles and relationship data</h3><p>Edit versioned profiles, generate live avatars, inspect owned data, export it, or perform explicit cleanup.</p></div>
+        <div className="character-management-header-actions">
+          <CharacterVoiceBackfillButton />
+          <button type="button" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>New character</button>
+        </div>
       </header>
 
       {charactersQuery.isPending ? <p>Loading characters…</p> : characters.length ? (
@@ -125,13 +130,14 @@ export function CharacterManagementPanel() {
               <button type="button" disabled={updateMutation.isPending || selected.status === 'archived'} onClick={() => updateMutation.mutate()}>Save new profile version</button>
             </section>
 
+            <CharacterAvatarPanel character={selected} />
             <VoiceGovernancePanel assetId={selected.default_voice_asset_id} />
             <CharacterDataSummary data={dataQuery.data} loading={dataQuery.isPending} />
             <CharacterHermesPanel characterId={selected.id} />
 
             <section className="character-danger-zone">
               <h4>Independent data actions</h4>
-              <p>Choose only the data to remove. The cloned voice, profile, memories, and transcripts are separate resources.</p>
+              <p>Choose only the data to remove. The cloned voice, profile, avatar, memories, and transcripts are separate resources.</p>
               <div className="character-action-options">
                 <label><input type="checkbox" checked={actions.delete_memories} onChange={(event) => setActions({ ...actions, delete_memories: event.currentTarget.checked })} />Delete character memories and pending suggestions</label>
                 <label><input type="checkbox" checked={actions.delete_transcripts} onChange={(event) => setActions({ ...actions, delete_transcripts: event.currentTarget.checked })} />Delete character transcript messages</label>
@@ -146,7 +152,7 @@ export function CharacterManagementPanel() {
             </section>
           </div> : null}
         </div>
-      ) : <p>No characters have been created.</p>}
+      ) : <div className="character-empty-state"><p>No characters have been created.</p><p>Use cloned-voice discovery above to create governed profiles and queue their avatar images.</p></div>}
       {status ? <p role="status">{status}</p> : null}
     </article>
   );

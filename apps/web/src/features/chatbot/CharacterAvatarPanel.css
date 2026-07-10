@@ -1,0 +1,103 @@
+.character-avatar-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.character-avatar-panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.character-avatar-panel > header p {
+  max-width: 52rem;
+  margin: 0.25rem 0 0;
+}
+
+.character-avatar-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 17rem) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.character-avatar-preview {
+  overflow: hidden;
+  border: 1px solid rgba(128, 145, 190, 0.28);
+  border-radius: 1rem;
+  background: rgba(7, 12, 25, 0.52);
+}
+
+.character-avatar-preview img,
+.character-avatar-empty {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+.character-avatar-preview img {
+  display: block;
+  object-fit: cover;
+}
+
+.character-avatar-empty {
+  display: grid;
+  place-content: center;
+  gap: 0.35rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+.character-avatar-empty span { font-size: 2rem; }
+.character-avatar-empty small { opacity: 0.7; }
+
+.character-avatar-preview > p {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-top: 1px solid rgba(128, 145, 190, 0.2);
+}
+
+.character-avatar-preview > p span { opacity: 0.72; }
+
+.character-avatar-form {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.character-avatar-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.character-avatar-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.character-avatar-progress,
+.character-avatar-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.75rem;
+  background: rgba(71, 99, 174, 0.12);
+}
+
+.character-avatar-progress small { flex-basis: 100%; }
+.character-avatar-status { margin: 0; }
+
+@media (max-width: 760px) {
+  .character-avatar-panel > header,
+  .character-avatar-layout {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .character-avatar-form-grid { grid-template-columns: 1fr; }
+}

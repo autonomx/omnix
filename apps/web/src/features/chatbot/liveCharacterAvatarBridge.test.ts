@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { characterAvatarAssetUrl, mouthFrameForRms, pcmMouthTimeline } from './liveCharacterAvatarBridge';
+import {
+  characterAvatarAssetUrl,
+  mouthFrameForRms,
+  pcmMouthTimeline,
+  presentationStateFromDom,
+} from './liveCharacterAvatarBridge';
 
 describe('live character avatar audio envelope', () => {
   it('maps RMS levels to four stable mouth states', () => {
@@ -19,5 +24,13 @@ describe('live character avatar audio envelope', () => {
     expect(timeline[0]).toEqual({ offsetMs: 0, frame: 'closed' });
     expect(timeline.some((point) => point.frame === 'wide')).toBe(true);
     expect(characterAvatarAssetUrl('image:maya closed')).toBe('/api/assets/image%3Amaya%20closed/file');
+  });
+
+  it('derives listening, thinking, speaking, and error presentation states', () => {
+    expect(presentationStateFromDom('listening', '')).toBe('listening');
+    expect(presentationStateFromDom('listening', 'Assistant response streaming.')).toBe('thinking');
+    expect(presentationStateFromDom('speaking', 'Synthesizing response voice…')).toBe('speaking');
+    expect(presentationStateFromDom('error', '')).toBe('error');
+    expect(presentationStateFromDom('idle', '')).toBe('idle');
   });
 });

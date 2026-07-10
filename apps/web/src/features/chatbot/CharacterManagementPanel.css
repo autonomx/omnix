@@ -1,6 +1,10 @@
 .character-management-card { background: rgba(12, 18, 34, .78); border: 1px solid rgba(124, 92, 255, .28); border-radius: .8rem; display: grid; gap: 1rem; padding: 1rem; }
 .character-management-card > header { align-items: start; display: flex; gap: 1rem; justify-content: space-between; }
 .character-management-card h3, .character-management-card h4, .character-management-card p { margin-top: 0; }
+.character-management-header-actions { align-items: flex-end; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; }
+.character-voice-backfill { align-items: flex-end; display: grid; gap: .3rem; justify-items: end; }
+.character-voice-backfill small { color: var(--omnix-muted); max-width: 24rem; text-align: right; }
+.character-empty-state { border: 1px dashed rgba(255,255,255,.14); border-radius: .7rem; padding: 1rem; }
 .character-management-layout { display: grid; gap: 1rem; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); }
 .character-management-layout > nav { display: grid; align-content: start; gap: .45rem; }
 .character-management-layout > nav button { align-items: start; background: rgba(8, 13, 26, .5); border: 1px solid rgba(255,255,255,.08); display: grid; gap: .2rem; text-align: left; }
@@ -21,4 +25,4 @@
 .character-action-options input { min-height: auto; width: auto; }
 .character-management-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .75rem; }
 .character-management-actions .danger { border-color: rgba(239,68,68,.65); color: #fecaca; }
-@media (max-width: 850px) { .character-management-layout, .character-form-grid, .character-data-metrics { grid-template-columns: 1fr; } .character-form-grid .wide { grid-column: auto; } .character-management-card > header { flex-direction: column; } }
+@media (max-width: 850px) { .character-management-layout, .character-form-grid, .character-data-metrics { grid-template-columns: 1fr; } .character-form-grid .wide { grid-column: auto; } .character-management-card > header { flex-direction: column; } .character-management-header-actions { align-items: stretch; justify-content: stretch; width: 100%; } .character-voice-backfill { justify-items: stretch; } .character-voice-backfill small { text-align: left; } }
