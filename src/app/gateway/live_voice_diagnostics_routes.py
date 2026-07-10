@@ -4,9 +4,16 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any, Callable
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
 
+from .live_voice_release_gate import (
+    LiveVoiceReleaseEvent,
+    LiveVoiceReleaseGateReport,
+    LiveVoiceReleaseThresholds,
+    evaluate_live_voice_log,
+    evaluate_live_voice_release_gate,
+)
 from .live_voice_stream_diagnostics import diagnostics_log_path, live_voice_log, normalize_trace_id
 
 _ROUTE_SENTINEL = "_omnix_live_voice_diagnostics_registered"
@@ -23,6 +30,11 @@ class LiveVoiceDiagnosticEvent(BaseModel):
 class LiveVoiceDiagnosticBatch(BaseModel):
     trace_id: str = Field(min_length=1, max_length=160)
     events: list[LiveVoiceDiagnosticEvent] = Field(min_length=1, max_length=200)
+
+
+class LiveVoiceReleaseGateEvaluationRequest(BaseModel):
+    events: list[LiveVoiceReleaseEvent] = Field(min_length=1, max_length=100_000)
+    thresholds: LiveVoiceReleaseThresholds = Field(default_factory=LiveVoiceReleaseThresholds)
 
 
 def register_live_voice_diagnostics_routes(gateway: FastAPI) -> None:
@@ -45,6 +57,39 @@ def register_live_voice_diagnostics_routes(gateway: FastAPI) -> None:
     @gateway.get(f"{LIVE_VOICE_DIAGNOSTICS_PATH}/status", include_in_schema=False)
     async def live_voice_diagnostics_status() -> dict[str, Any]:
         return {"ready": True, "log_path": diagnostics_log_path()}
+
+    @gateway.get(
+        f"{LIVE_VOICE_DIAGNOSTICS_PATH}/release-gate",
+        response_model=LiveVoiceReleaseGateReport,
+        include_in_schema=False,
+    )
+    async def live_voice_release_gate(
+        hours: int = Query(default=24, ge=1, le=24 * 30),
+        minimum_latency_samples: int = Query(default=5, ge=1, le=10_000),
+        minimum_quality_trials: int = Query(default=10, ge=1, le=10_000),
+    ) -> LiveVoiceReleaseGateReport:
+        thresholds = LiveVoiceReleaseThresholds(
+            minimum_latency_samples=minimum_latency_samples,
+            minimum_quality_trials=minimum_quality_trials,
+        )
+        return evaluate_live_voice_log(
+            diagnostics_log_path(),
+            hours=hours,
+            thresholds=thresholds,
+        )
+
+    @gateway.post(
+        f"{LIVE_VOICE_DIAGNOSTICS_PATH}/release-gate/evaluate",
+        response_model=LiveVoiceReleaseGateReport,
+        include_in_schema=False,
+    )
+    async def evaluate_live_voice_release_gate_payload(
+        request: LiveVoiceReleaseGateEvaluationRequest,
+    ) -> LiveVoiceReleaseGateReport:
+        return evaluate_live_voice_release_gate(
+            request.events,
+            thresholds=request.thresholds,
+        )
 
 
 def install_live_voice_diagnostics_hook() -> None:

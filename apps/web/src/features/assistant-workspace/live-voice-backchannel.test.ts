@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   decideBackchannel,
   requestEphemeralBackchannel,
+  resolveBackchannelTranscript,
 } from './live-voice-backchannel';
 
 describe('ephemeral live voice acknowledgements', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    document.body.innerHTML = '';
   });
 
   it('is opt-in and blocks sensitive or semantic speech', () => {
@@ -32,5 +34,15 @@ describe('ephemeral live voice acknowledgements', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect((listener.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ token: 'mhm', expiresAfterMs: 900 });
     expect(document.querySelector('.assistant-chat-message')).toBeNull();
+  });
+
+  it('recovers the classified acknowledgement from the current draft row', () => {
+    document.body.innerHTML = `
+      <div class="assistant-voice-transcript">
+        <p data-live-voice-id="live-voice-draft"><span><strong>You</strong></span>mhm</p>
+      </div>`;
+
+    expect(resolveBackchannelTranscript(undefined)).toBe('mhm');
+    expect(resolveBackchannelTranscript('yeah')).toBe('yeah');
   });
 });
