@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PIL import Image
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
 from app.characters import CharacterRepository, CreateCharacterRequest
@@ -88,7 +87,7 @@ def _complete_image_job(
 
 def _uploaded_source(tmp_path: Path, assets: SharedAssetStore, name: str = "user-face") -> str:
     path = tmp_path / f"{name}.png"
-    Image.new("RGB", (320, 400), (120, 90, 80)).save(path, format="PNG")
+    path.write_bytes(b"PNG")
     asset_id = f"image-reference:{name}"
     assets.upsert_asset(
         AssetRecord(
@@ -143,6 +142,10 @@ def test_generation_reconciles_base_variants_and_avatar_pack(tmp_path: Path, mon
 
 def test_uploaded_image_is_governed_and_used_as_base_reference(tmp_path: Path, monkeypatch) -> None:
     characters, avatars, generations, jobs, assets = _runtime(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "app.characters.avatar_generation_service.load_image_reference_assets",
+        lambda *_args, **_kwargs: [],
+    )
     characters.create(
         CreateCharacterRequest(
             id="self-avatar",
