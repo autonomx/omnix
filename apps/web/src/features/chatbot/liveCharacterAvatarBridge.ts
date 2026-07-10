@@ -7,6 +7,7 @@ export type AvatarPresentationState = 'idle' | 'listening' | 'thinking' | 'speak
 const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
 const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
 const AVATAR_HOST_CLASS = 'assistant-live-character-avatar';
+const LIVE_VISUAL_STAGE_CLASS = 'assistant-live-visual-stage';
 const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
 const INSTALL_KEY = '__omnixCharacterAvatarBridgeInstalled';
 
@@ -213,19 +214,56 @@ function scheduleBlink(): void {
   }, 3_800 + Math.round(Math.random() * 2_400));
 }
 
+function normalizeLiveVoiceLayout(): {
+  card: HTMLElement;
+  stage: HTMLElement;
+  orb: HTMLElement;
+} | null {
+  if (typeof document === 'undefined') return null;
+  const card = document.querySelector<HTMLElement>('.assistant-live-card');
+  const orb = card?.querySelector<HTMLElement>('.assistant-voice-orb') ?? null;
+  if (!card || !orb) return null;
+
+  let stage = card.querySelector<HTMLElement>(`.${LIVE_VISUAL_STAGE_CLASS}`);
+  if (!stage) {
+    stage = document.createElement('div');
+    stage.className = LIVE_VISUAL_STAGE_CLASS;
+    stage.setAttribute('aria-label', 'Live character visual');
+    orb.insertAdjacentElement('beforebegin', stage);
+  }
+  if (orb.parentElement !== stage) stage.append(orb);
+
+  const controls = card.querySelector<HTMLElement>('.assistant-voice-controls');
+  const transcript = card.querySelector<HTMLElement>('.assistant-voice-transcript');
+  if (controls && transcript) {
+    controls.setAttribute('role', 'group');
+    controls.setAttribute('aria-label', 'Live voice controls');
+    transcript.setAttribute('role', 'region');
+    transcript.setAttribute('aria-label', 'Live voice transcript');
+    if (controls.nextElementSibling !== transcript) controls.insertAdjacentElement('afterend', transcript);
+  }
+
+  return { card, stage, orb };
+}
+
 function renderAvatarHost(): void {
-  if (typeof document === 'undefined') return;
-  const orb = document.querySelector<HTMLElement>('.assistant-live-card .assistant-voice-orb');
-  const existing = document.querySelector<HTMLElement>(`.${AVATAR_HOST_CLASS}`);
+  const layout = normalizeLiveVoiceLayout();
+  const existing = typeof document === 'undefined'
+    ? null
+    : document.querySelector<HTMLElement>(`.${AVATAR_HOST_CLASS}`);
   const pack = currentRuntime?.avatar_pack;
   const assetId = resolveFrameAsset(pack, currentMouthFrame, currentPresentationState());
-  if (!orb || !assetId || !currentRuntime) {
-    if (orb) orb.hidden = false;
+  if (!layout || !assetId || !currentRuntime) {
+    if (layout) {
+      delete layout.stage.dataset.hasCharacterAvatar;
+      layout.orb.hidden = false;
+    }
     existing?.remove();
     return;
   }
 
-  orb.hidden = true;
+  layout.stage.dataset.hasCharacterAvatar = 'true';
+  layout.orb.hidden = true;
   const host = existing ?? document.createElement('figure');
   host.className = AVATAR_HOST_CLASS;
   host.dataset.mouthFrame = currentMouthFrame;
@@ -234,8 +272,8 @@ function renderAvatarHost(): void {
     image.alt = `${currentRuntime.display_name} live avatar`;
     const caption = document.createElement('figcaption');
     host.append(image, caption);
-    orb.insertAdjacentElement('afterend', host);
   }
+  if (host.parentElement !== layout.stage) layout.stage.append(host);
   updateAvatarImage();
 }
 
