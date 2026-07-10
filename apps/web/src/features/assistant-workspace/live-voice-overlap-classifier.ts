@@ -1,3 +1,11 @@
+import './live-voice-backchannel';
+import './live-voice-conversation-settings';
+
+import {
+  type InterruptionPreference,
+  readLiveConversationSettings,
+} from './live-voice-conversation-settings';
+
 export type OverlapIntent = 'hard_stop' | 'interrupt' | 'backchannel' | 'noise' | 'uncertain';
 
 export type OverlapAssessment = {
@@ -40,9 +48,14 @@ export function isLikelyEcho(transcript: string, assistantText: string): boolean
   return overlap / inputWords.size >= 0.78;
 }
 
-export function shouldConfirmInterruption(assessment: OverlapAssessment): boolean {
-  return assessment.intent === 'hard_stop'
-    || (assessment.intent === 'interrupt' && assessment.confidence >= 0.7);
+export function shouldConfirmInterruption(
+  assessment: OverlapAssessment,
+  preference: InterruptionPreference = readLiveConversationSettings().interruptionPreference,
+): boolean {
+  if (assessment.intent === 'hard_stop') return true;
+  if (assessment.intent !== 'interrupt') return false;
+  const threshold = preference === 'easy' ? 0.58 : preference === 'finish_more' ? 0.86 : 0.7;
+  return assessment.confidence >= threshold;
 }
 
 function normalize(value: string): string {
