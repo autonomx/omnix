@@ -1,5 +1,6 @@
 import './live-voice-backchannel';
 import './live-voice-conversation-settings';
+import './live-voice-release-observer';
 
 import {
   type InterruptionPreference,
