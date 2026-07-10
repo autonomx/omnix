@@ -1,4 +1,5 @@
 const LIVE_CALL_DIAGNOSTICS_PATH = '/api/tts/live-call/diagnostics';
+const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const FLUSH_DELAY_MS = 250;
 const MAX_BATCH_EVENTS = 24;
 const TRANSCRIPT_LOGGING_KEY = 'omnix.liveCall.transcriptLogging';
@@ -62,16 +63,16 @@ export function createLiveCallDiagnosticsReporter(traceId: string): LiveCallDiag
     source = 'browser',
   ): void => {
     if (closed) return;
-    queue.push({
-      source,
-      event,
-      details: {
-        client_wall_time_ms: Date.now(),
-        client_monotonic_ms: performance.now(),
-        document_visibility: document.visibilityState,
-        ...sanitizeDiagnosticDetails(details, readTranscriptLoggingMode()),
-      },
-    });
+    const sanitizedDetails = {
+      client_wall_time_ms: Date.now(),
+      client_monotonic_ms: performance.now(),
+      document_visibility: document.visibilityState,
+      ...sanitizeDiagnosticDetails(details, readTranscriptLoggingMode()),
+    };
+    queue.push({ source, event, details: sanitizedDetails });
+    window.dispatchEvent(new CustomEvent(LIVE_CALL_DIAGNOSTIC_EVENT, {
+      detail: { traceId, source, event, details: sanitizedDetails },
+    }));
     if (queue.length >= MAX_BATCH_EVENTS) void flush();
     else scheduleFlush();
   };
