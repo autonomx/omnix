@@ -1,6 +1,6 @@
 # Character Mode staged rollout and rollback guide
 
-Status: repository implementation complete; Stages 1 through 5 passed on the local deployment on 2026-07-09; optional Stage 6 Character Hermes remains disabled.
+Status: repository implementation complete; Stages 1 through 6 passed on the local deployment on 2026-07-09. Optional Character Hermes was returned to disabled after its isolated pilot.
 
 Baseline: `c37a2610275723235cf3b5ccceb350385a9050b8` or a later `main` commit containing it.
 
@@ -25,6 +25,10 @@ Stage 4 evidence: `docs/character-mode/stage-4-rehearsal-results.md`
 Stage 5 operator guide: `docs/character-mode/stage-5-governed-voice-rollout.md`
 
 Stage 5 evidence: `docs/character-mode/stage-5-rehearsal-results.md`
+
+Stage 6 operator guide: `docs/character-mode/stage-6-character-hermes-rollout.md`
+
+Stage 6 evidence: `docs/character-mode/stage-6-rehearsal-results.md`
 
 ## Before Stage 1
 
