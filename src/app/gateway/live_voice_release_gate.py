@@ -23,12 +23,32 @@ QualityMetric = Literal[
 ]
 GateStatus = Literal["pass", "fail", "insufficient"]
 
+REQUIRED_LIVE_VOICE_SCENARIOS = (
+    "system-normal",
+    "character-normal",
+    "memory-off",
+    "private-call",
+    "hard-stop",
+    "correction-overlap",
+    "question-overlap",
+    "sustained-overlap",
+    "backchannel",
+    "assistant-echo",
+    "background-noise",
+    "provider-reconnect",
+    "stt-failure",
+    "tts-failure",
+    "browser-reload",
+    "rapid-interruption-soak",
+)
+
 
 class LiveVoiceReleaseThresholds(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     minimum_latency_samples: int = Field(default=5, ge=1, le=10_000)
     minimum_quality_trials: int = Field(default=10, ge=1, le=10_000)
+    required_scenarios: tuple[str, ...] = REQUIRED_LIVE_VOICE_SCENARIOS
     stt_finalize_p95_ms: float = Field(default=1_500.0, gt=0)
     final_to_first_token_p95_ms: float = Field(default=5_000.0, gt=0)
     first_token_to_first_audio_p95_ms: float = Field(default=3_500.0, gt=0)
@@ -71,6 +91,7 @@ class LiveVoiceReleaseGateReport(BaseModel):
     records_scanned: int = 0
     traces: int = 0
     scenarios: list[str] = Field(default_factory=list)
+    missing_scenarios: list[str] = Field(default_factory=list)
     metrics: list[LiveVoiceMetricResult] = Field(default_factory=list)
     failures: list[str] = Field(default_factory=list)
     insufficient: list[str] = Field(default_factory=list)
@@ -125,6 +146,9 @@ def evaluate_live_voice_release_gate(
     results: list[LiveVoiceMetricResult] = []
     failures: list[str] = []
     insufficient: list[str] = []
+    missing_scenarios = sorted(set(limits.required_scenarios) - scenarios)
+    if missing_scenarios:
+        insufficient.append("missing scenarios: " + ", ".join(missing_scenarios))
 
     for name, field in _LATENCY_LIMIT_FIELDS.items():
         values = latency[name]
@@ -176,6 +200,7 @@ def evaluate_live_voice_release_gate(
         records_scanned=scanned,
         traces=len(traces),
         scenarios=sorted(scenarios),
+        missing_scenarios=missing_scenarios,
         metrics=results,
         failures=failures,
         insufficient=insufficient,
