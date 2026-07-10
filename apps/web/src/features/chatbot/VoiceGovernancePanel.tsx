@@ -9,10 +9,10 @@ import {
 } from './characterClient';
 
 const useOptions: Array<{ id: VoiceAllowedUse; label: string }> = [
-  { id: 'character', label: 'character' },
-  { id: 'live_call', label: 'live_call' },
-  { id: 'system_assistant', label: 'system_assistant' },
-  { id: 'general_tts', label: 'general_tts' },
+  { id: 'character', label: 'Link to a character' },
+  { id: 'live_call', label: 'Use in live calls' },
+  { id: 'system_assistant', label: 'Use for System Assistant' },
+  { id: 'general_tts', label: 'Use for general text-to-speech' },
 ];
 
 export function VoiceGovernancePanel({ assetId }: { assetId?: string | null }) {
@@ -66,7 +66,7 @@ export function VoiceGovernancePanel({ assetId }: { assetId?: string | null }) {
       <div><span>2</span><h4>Voice governance</h4></div>
     </header>
 
-    {!assetId ? <div className="voice-governance-empty"><span aria-hidden="true">◉</span><div><strong>No default voice linked</strong><p>Link a governed cloned voice before starting a Character Mode live call.</p></div></div> : governanceQuery.isPending ? <p>Loading voice governance…</p> : <>
+    {!assetId ? <div className="voice-governance-empty"><span aria-hidden="true">◉</span><div><strong>No default voice is linked to this character.</strong><p>Link a governed cloned voice before starting a Character Mode live call.</p></div></div> : governanceQuery.isPending ? <p>Loading voice governance…</p> : <>
       <div className="voice-governance-summary">
         <span className="voice-governance-icon" aria-hidden="true">≋</span>
         <div>

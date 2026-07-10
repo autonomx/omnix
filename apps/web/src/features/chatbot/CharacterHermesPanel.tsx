@@ -23,7 +23,7 @@ export function CharacterHermesPanel({ characterId }: { characterId: string }) {
     <div><strong>Optional Hermes compatibility</strong><p>Import suggestions for review or export approved, normal-sensitivity character memories.</p></div>
     <div className="character-hermes-actions">
       <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate('import')}>Import for review</button>
-      <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate('export')}>Export approved memory</button>
+      <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate('export')}>Export approved character memory</button>
     </div>
     {status ? <p role="status">{status}</p> : null}
   </div>;

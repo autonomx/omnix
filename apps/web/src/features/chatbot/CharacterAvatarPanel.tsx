@@ -108,7 +108,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
 
   return <section className="character-dashboard-section character-avatar-panel" aria-labelledby={`character-avatar-${character.id}`}>
     <header className="character-section-heading">
-      <div><span>3</span><h4 id={`character-avatar-${character.id}`}>Live avatar</h4></div>
+      <div><span>03</span><h4 id={`character-avatar-${character.id}`}>Live avatar</h4></div>
     </header>
 
     <div className="character-avatar-layout">
