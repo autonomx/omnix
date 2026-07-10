@@ -1117,3 +1117,56 @@
   background: #ffffff;
   color: var(--omnix-text);
 }
+.assistant-tool-proposal {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+  padding: 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--omnix-accent, #7dd3fc) 42%, transparent);
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--omnix-panel, #111827) 88%, var(--omnix-accent, #7dd3fc) 12%);
+}
+
+.assistant-tool-proposal > header,
+.assistant-tool-proposal > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.assistant-tool-proposal > header div,
+.assistant-tool-proposal-fields,
+.assistant-tool-proposal-fields label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.assistant-tool-proposal > header span,
+.assistant-tool-proposal > header small {
+  font-size: 0.75rem;
+  opacity: 0.78;
+}
+
+.assistant-tool-proposal-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.assistant-tool-proposal-fields input {
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 0.55rem;
+  color: inherit;
+  background: color-mix(in srgb, var(--omnix-panel, #111827) 92%, transparent);
+}
+
+.assistant-tool-proposal button {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--omnix-accent, #7dd3fc) 55%, transparent);
+  border-radius: 0.55rem;
+}
+
+@media (max-width: 760px) {
+  .assistant-tool-proposal-fields { grid-template-columns: 1fr; }
+}

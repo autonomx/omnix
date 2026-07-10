@@ -83,6 +83,7 @@ def test_hermes_execute_payload_records_approved_gmail_state_change(monkeypatch,
 def test_hermes_execute_payload_dispatches_calendar_adapter(monkeypatch, tmp_path):
     path = tmp_path / "assistant_tools_config.json"
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
+    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_FAKE_CALENDAR", "1")
     save_assistant_tools_config(_connected_config("calendar"), path)
 
     payload = hermes_assistant_tool_execute_payload(
@@ -99,6 +100,35 @@ def test_hermes_execute_payload_dispatches_calendar_adapter(monkeypatch, tmp_pat
     assert payload.execution_result.error is None
     assert payload.execution_result.output["events"][0]["title"] == "Focus block"
     assert payload.state_changed is False
+
+
+def test_approved_calendar_proposal_is_idempotent(monkeypatch, tmp_path):
+    config_path = tmp_path / "assistant_tools_config.json"
+    ledger_path = tmp_path / "assistant_tools_ledger.jsonl"
+    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(config_path))
+    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_LEDGER_PATH", str(ledger_path))
+    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_FAKE_CALENDAR", "1")
+    save_assistant_tools_config(_connected_config("calendar"), config_path)
+    request = AssistantToolRequest(
+        tool_id="calendar",
+        action_id="calendar.create_event",
+        session_id="chat:1",
+        proposal_id="proposal-once",
+        approved=True,
+        input={
+            "title": "Review",
+            "start_time": "2026-07-10T09:00:00-07:00",
+            "end_time": "2026-07-10T09:30:00-07:00",
+            "timezone": "America/Vancouver",
+        },
+    )
+
+    first = hermes_assistant_tool_execute_payload("Create review", request)
+    second = hermes_assistant_tool_execute_payload("Create review", request)
+
+    assert first.state_changed is True
+    assert second.state_changed is False
+    assert second.execution_result.output["already_executed"] is True
 
 
 def test_hermes_execute_payload_dispatches_repository_adapter(monkeypatch, tmp_path):

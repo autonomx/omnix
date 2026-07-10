@@ -78,7 +78,7 @@ if /I "%HERMES_ENABLED%"=="1" (
                 echo          Live Agent task requests will fall back to normal chat.
             ) else (
                 echo [HERMES] Starting the local proposal planner...
-                start "Omnix Hermes" /min cmd /c "hermes serve"
+                start "Omnix Hermes" /min cmd /c "hermes gateway"
             )
         ) else (
             echo WARNING: Hermes is not reachable and auto-start is disabled.

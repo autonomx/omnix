@@ -10,6 +10,7 @@ from app.assist_core.live_agent_router import (
     resolve_live_agent_route,
 )
 from app.assist_core.mode_chat import ModeChatRequest, plan_mode_chat
+from app.assistant_tools.live_agent_proposals import live_agent_planner_context, live_agent_tool_proposals
 
 from .assistant_turns import default_assistant_turn_coordinator
 from .models import ChatMessage, ChatSession
@@ -54,7 +55,7 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                     response = plan_live_agent_proposal(
                         content=_contextual_content(user_message.content, context_items or []),
                         session_id=session.id,
-                        context={"route_reason": decision.reason},
+                        context={"route_reason": decision.reason, **live_agent_planner_context()},
                         timeout_seconds=live_agent_runtime_config().planner_timeout_seconds,
                     )
                 except LiveAgentUnavailable as exc:
@@ -84,7 +85,7 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                     dry_run=True,
                     metadata={"source": "explicit_live_agent", "proposal_only": True},
                 ))
-            yield from _agent_events(user_message, decision, response)
+            yield from _agent_events(user_message, session.id, decision, response)
 
         store_class.stream_provider_reply_chunks = wrapped
         setattr(store_class, _HOOK, True)
@@ -102,12 +103,18 @@ def _decision(user_message: ChatMessage) -> LiveAgentRouteDecision:
     )
 
 
-def _agent_events(user_message: ChatMessage, decision: LiveAgentRouteDecision, response):
+def _agent_events(user_message: ChatMessage, session_id: str, decision: LiveAgentRouteDecision, response):
     coordinator = default_assistant_turn_coordinator()
     assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
     if assistant_turn_id:
         coordinator.mark_streaming(assistant_turn_id)
     payload = response.result
+    tool_proposals = live_agent_tool_proposals(
+        user_request=user_message.content,
+        session_id=session_id,
+        source_message_id=user_message.id,
+        mode_result=payload,
+    )
     content = str(payload.get("response") or "Live Agent returned no proposal.").strip()
     try:
         if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
@@ -134,6 +141,7 @@ def _agent_events(user_message: ChatMessage, decision: LiveAgentRouteDecision, r
                 "live_agent": True,
                 "backend": response.backend,
                 "mode_result": payload,
+                "assistant_tool_proposals": tool_proposals,
                 "error": response.error,
                 "proposal_only": True,
                 "review_required": True,

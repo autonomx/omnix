@@ -67,6 +67,7 @@ class AssistantToolRequest(BaseModel):
     tool_id: str
     action_id: str
     session_id: str | None = None
+    proposal_id: str | None = None
     input: dict[str, Any] = Field(default_factory=dict)
     approval_policy: ApprovalPolicy | None = None
     approved: bool = False

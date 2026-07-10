@@ -1,7 +1,7 @@
 """Shared chat session contract for the web gateway."""
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -28,7 +28,7 @@ class ChatMessage(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class MessageContentPurpose(StrEnum):
+class MessageContentPurpose(str, Enum):
     MODEL = "model"
     MEMORY = "memory"
     SUMMARY = "summary"

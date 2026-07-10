@@ -63,6 +63,28 @@ export type AssistantToolIntent = {
   input: Record<string, unknown>;
 };
 
+export type LiveAgentToolProposal = {
+  proposal_id: string;
+  tool_id: string;
+  action_id: string;
+  title: string;
+  summary: string;
+  input: Record<string, unknown>;
+  risk_level: 'low' | 'medium' | 'high';
+  approval_required: boolean;
+  ready_for_approval: boolean;
+  connection_required: boolean;
+  missing_fields: string[];
+  reason?: string | null;
+  executes: false;
+};
+
+export type AssistantToolExecutionPayload = {
+  approval_decision: { executable: boolean; approval_required: boolean; reason?: string | null };
+  execution_result: { state_changed: boolean; result_summary: string; output: Record<string, unknown>; error?: string | null };
+  state_changed: boolean;
+};
+
 export type AssistantCapabilityStatus = {
   tool_id: string;
   name: string;
@@ -127,6 +149,30 @@ export async function detectAssistantToolIntent(message: string): Promise<Assist
   return readJsonResponse<AssistantToolIntent>(
     await fetch('/api/assistant/tools/intent', {
       body: JSON.stringify({ message }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    }),
+  );
+}
+
+export async function executeLiveAgentToolProposal(
+  proposal: LiveAgentToolProposal,
+  input: Record<string, unknown>,
+  sessionId?: string | null,
+): Promise<AssistantToolExecutionPayload> {
+  return readJsonResponse<AssistantToolExecutionPayload>(
+    await fetch('/api/hermes/assistant/tools/execute', {
+      body: JSON.stringify({
+        user_request: String(input.query ?? ''),
+        request: {
+          tool_id: proposal.tool_id,
+          action_id: proposal.action_id,
+          session_id: sessionId ?? null,
+          proposal_id: proposal.proposal_id,
+          input,
+          approved: true,
+        },
+      }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
     }),

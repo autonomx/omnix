@@ -32,7 +32,7 @@ HERMES_BASE_URL=http://127.0.0.1:8642
 OMNIX_START_HERMES=1
 ```
 
-The launcher checks `HERMES_BASE_URL/health`. When Hermes is not already reachable and the `hermes` command is installed, it starts `hermes serve` in a minimized process. When Hermes cannot be started or reached, task requests fall back to the existing provider chat stream.
+The launcher checks `HERMES_BASE_URL/health`. When Hermes is not already reachable and the `hermes` command is installed, it starts `hermes gateway` in a minimized process. Current Hermes releases expose the OpenAI-compatible `/v1/chat/completions` planner through the gateway when `API_SERVER_ENABLED=true`; `hermes serve` runs the dashboard and is not the planner API. When Hermes cannot be started or reached, task requests fall back to the existing provider chat stream.
 
 Other launch paths retain their environment-driven defaults. This keeps the pilot scoped to the standard Windows launcher used by the target machine.
 
@@ -85,7 +85,7 @@ executes = false
 
 Hermes may return structured tool calls. `apply_mode_result` may evaluate readouts or dry-run adapters, but every returned tool result is forced to `executed=false`. No automatically routed request can apply a real action.
 
-A later approval/execution phase must use the existing Omnix confirmation and tool-policy system. This milestone does not add automatic approval.
+Calendar proposals now use the existing Omnix confirmation and tool-policy system described in `milestone-8-google-calendar.md`. This milestone still does not add automatic approval: a proposed calendar write remains inert until the user completes missing details and selects **Approve and create**.
 
 ## Failure behavior
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 import json
+import secrets
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
@@ -16,6 +18,7 @@ from .credentials import (
     AssistantToolOAuthClientRecord,
     credential_for_tool,
     expires_at_from_now,
+    is_expired,
     oauth_client_for_provider,
     upsert_oauth_client,
     upsert_tool_credential,
@@ -46,6 +49,53 @@ class AssistantToolOAuthClientPayload(BaseModel):
 
 
 GOOGLE_TOOL_IDS = {"gmail", "calendar", "contacts"}
+_OAUTH_STATE_TTL_SECONDS = 600.0
+_PENDING_OAUTH_STATES: dict[str, tuple[str, str, float]] = {}
+
+
+class AssistantToolConnectionError(RuntimeError):
+    pass
+
+
+def google_access_token_for_tool(tool_id: str) -> str:
+    """Return a usable Google token, refreshing the persisted credential when needed."""
+
+    _load_local_env()
+    credential = credential_for_tool(tool_id)
+    if credential is None or credential.provider.lower() != "google":
+        raise AssistantToolConnectionError(f"Google {tool_id} is not connected.")
+    if credential.access_token and not is_expired(credential.expires_at):
+        return credential.access_token
+    if not credential.refresh_token:
+        raise AssistantToolConnectionError(f"Google {tool_id} needs to be reconnected.")
+    client_id, client_secret = _oauth_client_credentials("google")
+    if not client_id or not client_secret:
+        raise AssistantToolConnectionError("Google OAuth client credentials are unavailable.")
+    token_payload = _post_form_json(
+        "https://oauth2.googleapis.com/token",
+        {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "grant_type": "refresh_token",
+            "refresh_token": credential.refresh_token,
+        },
+    )
+    access_token = _safe_str(token_payload.get("access_token"))
+    if not access_token:
+        raise AssistantToolConnectionError(f"Google {tool_id} token refresh failed.")
+    scopes = _safe_str(token_payload.get("scope")).split() or credential.scopes
+    upsert_tool_credential(
+        credential.model_copy(
+            update={
+                "access_token": access_token,
+                "token_type": _safe_str(token_payload.get("token_type")) or credential.token_type,
+                "scopes": scopes,
+                "expires_at": expires_at_from_now(token_payload.get("expires_in")),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+    )
+    return access_token
 
 
 def assistant_tool_connection_start_payload(tool_id: str, request_base_url: str | None = None) -> AssistantToolConnectionStartPayload:
@@ -106,7 +156,7 @@ def _google_connection_start_payload(tool_id: str, request_base_url: str | None 
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": " ".join(_google_scopes_for_tool(tool_id)),
-        "state": tool_id,
+        "state": _issue_oauth_state("google", tool_id),
     }
     return AssistantToolConnectionStartPayload(
         tool_id=tool_id,
@@ -155,7 +205,7 @@ def _github_connection_start_payload(tool_id: str, request_base_url: str | None 
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "scope": "repo read:user user:email",
-        "state": tool_id,
+        "state": _issue_oauth_state("github", tool_id),
     }
     return AssistantToolConnectionStartPayload(
         tool_id=tool_id,
@@ -169,8 +219,14 @@ def _github_connection_start_payload(tool_id: str, request_base_url: str | None 
 
 def complete_google_connection(code: str, state: str, request_base_url: str | None = None) -> AssistantToolConnectionCompletePayload:
     _load_local_env()
-    tool_id = state if state in GOOGLE_TOOL_IDS else "gmail"
+    tool_id = _consume_oauth_state("google", state)
     provider = "Google"
+    if tool_id not in GOOGLE_TOOL_IDS:
+        return AssistantToolConnectionCompletePayload(
+            tool_id="calendar",
+            provider=provider,
+            message="Google OAuth state is invalid or expired. Start the connection again.",
+        )
     client_id, client_secret = _oauth_client_credentials("google")
     redirect_uri = _oauth_redirect_uri("google", request_base_url)
     if not client_id or not client_secret or not redirect_uri:
@@ -209,8 +265,14 @@ def complete_google_connection(code: str, state: str, request_base_url: str | No
 
 def complete_github_connection(code: str, state: str, request_base_url: str | None = None) -> AssistantToolConnectionCompletePayload:
     _load_local_env()
-    tool_id = state if state == "github" else "github"
+    tool_id = _consume_oauth_state("github", state)
     provider = "GitHub"
+    if tool_id != "github":
+        return AssistantToolConnectionCompletePayload(
+            tool_id="github",
+            provider=provider,
+            message="GitHub OAuth state is invalid or expired. Start the connection again.",
+        )
     client_id, client_secret = _oauth_client_credentials("github")
     redirect_uri = _oauth_redirect_uri("github", request_base_url)
     if not client_id or not client_secret or not redirect_uri:
@@ -342,6 +404,26 @@ def _provider_for_tool(tool_id: str) -> str:
     if tool_id == "github":
         return "github"
     return ""
+
+
+def _issue_oauth_state(provider: str, tool_id: str) -> str:
+    now = time.monotonic()
+    for token, (_provider, _tool_id, expires_at) in list(_PENDING_OAUTH_STATES.items()):
+        if expires_at <= now:
+            _PENDING_OAUTH_STATES.pop(token, None)
+    token = secrets.token_urlsafe(32)
+    _PENDING_OAUTH_STATES[token] = (provider, tool_id, now + _OAUTH_STATE_TTL_SECONDS)
+    return token
+
+
+def _consume_oauth_state(provider: str, token: str) -> str | None:
+    value = _PENDING_OAUTH_STATES.pop(token, None)
+    if value is None:
+        return None
+    stored_provider, tool_id, expires_at = value
+    if stored_provider != provider or expires_at <= time.monotonic():
+        return None
+    return tool_id
 
 
 def _load_local_env() -> None:

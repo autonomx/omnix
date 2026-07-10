@@ -29,8 +29,8 @@ def detect_assistant_tool_intent(message: str) -> AssistantToolIntent:
             preview_summary="Review a Gmail action before it runs.",
             input={"query": message},
         )
-    if any(term in text for term in ("schedule", "calendar", "availability", "meeting")):
-        action_id = "calendar.create_event" if any(term in text for term in ("schedule", "create", "book")) else "calendar.read_availability"
+    if any(term in text for term in ("schedule", "calendar", "availability", "meeting", "reminder", "remind me")):
+        action_id = "calendar.create_event" if any(term in text for term in ("schedule", "create", "book", "reminder", "remind me")) else "calendar.read_availability"
         return AssistantToolIntent(
             detected=True,
             tool_id="calendar",

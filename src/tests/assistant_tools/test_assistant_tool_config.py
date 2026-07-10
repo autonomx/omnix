@@ -1,3 +1,5 @@
+from urllib.parse import parse_qs, urlparse
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -147,11 +149,11 @@ def test_assistant_tool_google_callback_reports_missing_secret(monkeypatch, tmp_
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
     client = TestClient(create_gateway_app())
 
-    response = client.get("/api/assistant/tools/connect/google/callback?code=abc&state=gmail", follow_redirects=False)
+    response = client.get("/api/assistant/tools/connect/google/callback?code=abc&state=invalid", follow_redirects=False)
 
     assert response.status_code == 303
     assert "assistant_tool_connected=0" in response.headers["location"]
-    assert "Google+OAuth+callback+is+not+configured" in response.headers["location"]
+    assert "Google+OAuth+state+is+invalid+or+expired" in response.headers["location"]
 
 
 def test_assistant_tool_google_callback_saves_account_and_credentials(monkeypatch, tmp_path):
@@ -184,8 +186,10 @@ def test_assistant_tool_google_callback_saves_account_and_credentials(monkeypatc
     monkeypatch.setattr("app.assistant_tools.connections._post_form_json", fake_post_form_json)
     monkeypatch.setattr("app.assistant_tools.connections._get_bearer_json", fake_get_bearer_json)
     client = TestClient(create_gateway_app())
+    start = client.get("/api/assistant/tools/connect/gmail").json()
+    state = parse_qs(urlparse(start["auth_url"]).query)["state"][0]
 
-    response = client.get("/api/assistant/tools/connect/google/callback?code=abc&state=gmail", follow_redirects=False)
+    response = client.get(f"/api/assistant/tools/connect/google/callback?code=abc&state={state}", follow_redirects=False)
 
     assert response.status_code == 303
     assert "assistant_tool_connected=1" in response.headers["location"]

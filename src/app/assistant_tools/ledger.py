@@ -15,6 +15,7 @@ DEFAULT_LEDGER_PATH = Path("resources/data/assistant_tools_ledger.jsonl")
 class AssistantToolLedgerEntry(BaseModel):
     execution_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     session_id: str | None = None
+    proposal_id: str | None = None
     tool_id: str
     action_id: str
     approval_source: str = "system"
@@ -74,3 +75,16 @@ def load_assistant_tool_ledger(path: Path | None = None, *, limit: int = 100) ->
             continue
     entries.sort(key=lambda item: item.created_at, reverse=True)
     return AssistantToolLedgerPayload(entries=entries)
+
+
+def assistant_tool_execution_for_proposal(proposal_id: str, path: Path | None = None) -> AssistantToolLedgerEntry | None:
+    if not proposal_id:
+        return None
+    return next(
+        (
+            entry
+            for entry in load_assistant_tool_ledger(path, limit=1000).entries
+            if entry.proposal_id == proposal_id and entry.state_changed and not entry.error
+        ),
+        None,
+    )

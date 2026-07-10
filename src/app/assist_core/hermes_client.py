@@ -16,6 +16,17 @@ from .hermes_contract import (
 )
 
 
+_PROPOSAL_ONLY_SYSTEM_PROMPT = (
+    "You are a non-executing JSON proposal formatter. Your entire final answer MUST be one JSON "
+    "object beginning with { and ending with }. Do not use markdown fences, preambles, explanations, "
+    "or follow-up questions. Never execute tools. Use exactly these top-level fields: state, response, "
+    "domain, actions, requires_review, trace, error. Each action must use exactly these fields: tool, "
+    "args, risk, reason. Actions may contain only allowlisted tools from the request; if no tool can "
+    "satisfy the request, return an empty actions list and explain that in response. Set "
+    "requires_review to true."
+)
+
+
 class HermesSidecarError(RuntimeError):
     pass
 
@@ -122,8 +133,9 @@ class HermesSidecarClient:
         payload = {
             "model": "hermes-agent",
             "stream": False,
+            "response_format": {"type": "json_object"},
             "messages": [
-                {"role": "system", "content": "Return only valid JSON matching the requested schema."},
+                {"role": "system", "content": _PROPOSAL_ONLY_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
         }
