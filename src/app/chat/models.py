@@ -44,12 +44,32 @@ def project_message_content(message: ChatMessage, purpose: MessageContentPurpose
         return content
     if purpose in {MessageContentPurpose.AUDIT, MessageContentPurpose.EXPORT}:
         return content
+    metadata = _delivery_metadata(message)
     key = "visual_delivered_text_end" if purpose == MessageContentPurpose.TRANSCRIPT else "context_delivered_text_end"
-    end = _bounded_content_end(message.metadata.get(key), len(content))
+    end = _bounded_content_end(metadata.get(key), len(content))
     projected = content[:end].rstrip()
     if purpose == MessageContentPurpose.TRANSCRIPT:
         return f"{projected}\n\n[Response interrupted]" if projected else "[Response interrupted]"
     return projected
+
+
+def _delivery_metadata(message: ChatMessage) -> dict[str, Any]:
+    metadata = dict(message.metadata)
+    if "context_delivered_text_end" in metadata and "visual_delivered_text_end" in metadata:
+        return metadata
+    turn_id = str(metadata.get("assistant_turn_id") or "").strip()
+    if not turn_id:
+        return metadata
+    try:
+        from .assistant_turns import default_assistant_turn_coordinator
+
+        record = default_assistant_turn_coordinator().get(turn_id)
+    except Exception:
+        record = None
+    if record is not None:
+        metadata.setdefault("visual_delivered_text_end", record.visual_delivered_text_end)
+        metadata.setdefault("context_delivered_text_end", record.context_delivered_text_end)
+    return metadata
 
 
 def _bounded_content_end(value: object, maximum: int) -> int:
