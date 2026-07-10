@@ -157,7 +157,7 @@ def test_casual_live_voice_stays_on_original_provider_path(monkeypatch) -> None:
     completion = next(event for event in events if event["type"] == "complete")
     assert store.provider_calls == 1
     assert completion["metadata"]["live_agent_route"]["route"] == "direct_chat"
-    assert completion["metadata"]["live_agent_route"]["reason"] == "informational_request"
+    assert completion["metadata"]["live_agent_route"]["reason"] == "casual_conversation"
 
 
 def test_typed_chat_never_auto_routes_even_for_action_wording(monkeypatch) -> None:
