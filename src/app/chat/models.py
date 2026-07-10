@@ -169,7 +169,6 @@ class SendChatMessageRequest(BaseModel):
     model_id: str | None = None
     agent_mode: bool = False
     dry_run: bool = False
-    live_agent_route: Literal["off", "auto", "agent"] = "off"
     research_mode: ResearchMode | None = None
     user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
     speech_segment_id: str | None = Field(default=None, min_length=1, max_length=160)
