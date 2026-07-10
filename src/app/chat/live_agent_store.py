@@ -176,6 +176,8 @@ def _agent_events(
         for row in payload.get("tool_results", [])
         if isinstance(row, dict)
     )
+    review_required = pending is not None or bool(payload.get("requires_confirmation"))
+    proposal_only = review_required or not read_executed
     content = str(payload.get("response") or "Live Agent returned no proposal.").strip()
     if pending is not None:
         content = f"{content} {_confirmation_prompt(pending)}".strip()
@@ -207,8 +209,8 @@ def _agent_events(
                 "backend": response.backend,
                 "mode_result": payload,
                 "error": response.error,
-                "proposal_only": pending is not None or not read_executed,
-                "review_required": pending is not None,
+                "proposal_only": proposal_only,
+                "review_required": review_required,
                 "executes": read_executed,
                 "pending_tool_request": pending.model_dump(mode="json") if pending else None,
                 "kasa_execution_status": "pending" if pending else None,
