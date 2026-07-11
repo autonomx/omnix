@@ -13,9 +13,9 @@ const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const DELIVERED_EVENT = 'omnix:live-conversation-proactive-delivered';
-const INSTALL_FLAG = '__omnixLiveConversationInitiativeInstalled';
 const SCHEDULER_INTERVAL_MS = 750;
 const DEFAULT_COOLDOWN_MS = 30_000;
+const AUDIO_START_TIMEOUT_MS = 5_000;
 const THINKING_PATTERN = /\b(?:give me (?:a )?(?:second|minute|moment)|let me think|one moment|hold on|I need a minute)\b/i;
 const SENSITIVE_PATTERN = /\b(?:password|passcode|pin|account|card number|security code|address|phone number|email address)\b|\b\d{4,}\b/i;
 
@@ -32,7 +32,7 @@ type PendingProactive = {
   committing: boolean;
 };
 
-type ParsedProactiveStream = {
+export type ParsedProactiveStream = {
   turnId: string;
   content: string;
   initiativeReason: string;
@@ -47,6 +47,7 @@ let previousPromptIgnored = false;
 let requestController: AbortController | null = null;
 let pending: PendingProactive | null = null;
 let assistantSpeaking = false;
+let audioStartTimer: number | null = null;
 
 export function initializeLiveConversationInitiativeController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
@@ -73,20 +74,19 @@ export function initializeLiveConversationInitiativeController(): () => void {
     requestController?.abort('user-speech');
     requestController = null;
     if (hadPlayingPrompt) previousPromptIgnored = true;
-    else pending = null;
+    else clearPending('user-spoke-before-playback');
     lastActivityAtMs = performance.now();
     promptCount = 0;
   };
   const handleInterrupt = () => {
     if (pending?.audioStarted) void commitPending('interrupted');
-    else pending = null;
+    else clearPending('interrupted-before-playback');
     lastActivityAtMs = performance.now();
   };
   const handleStop = () => {
     callConnected = false;
     requestController?.abort('call-stopped');
     requestController = null;
-    pending = null;
     resetQuietPeriod('call-stopped');
   };
   const handleProfile = () => resetQuietPeriod('profile-changed');
@@ -121,7 +121,7 @@ export function initializeLiveConversationInitiativeController(): () => void {
     window.removeEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
     requestController?.abort('controller-disposed');
     requestController = null;
-    pending = null;
+    clearPending('controller-disposed');
     liveWindow.__omnixLiveConversationInitiativeInstalled = false;
   };
 }
@@ -136,21 +136,22 @@ export function parseProactiveSse(text: string): ParsedProactiveStream | null {
       .map((line) => line.slice(5).trimStart())
       .join('\n');
     if (!data) continue;
+    let event: Record<string, unknown>;
     try {
-      const event = JSON.parse(data) as Record<string, unknown>;
-      if (event.type === 'initiative') {
-        if (typeof event.turn_id === 'string') turnId = event.turn_id;
-        if (typeof event.initiative_reason === 'string') initiativeReason = event.initiative_reason;
-      }
-      if (event.type === 'complete') {
-        if (typeof event.content === 'string') content = event.content.trim();
-        const metadata = event.metadata as Record<string, unknown> | undefined;
-        if (!turnId && typeof metadata?.turn_id === 'string') turnId = metadata.turn_id;
-        if (!initiativeReason && typeof metadata?.initiative_reason === 'string') initiativeReason = metadata.initiative_reason;
-      }
-      if (event.type === 'error') throw new Error(String(event.message || 'Proactive turn failed.'));
-    } catch (error) {
-      if (error instanceof Error && error.message === 'Proactive turn failed.') throw error;
+      event = JSON.parse(data) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (event.type === 'error') throw new Error(String(event.message || 'Proactive turn failed.'));
+    if (event.type === 'initiative') {
+      if (typeof event.turn_id === 'string') turnId = event.turn_id;
+      if (typeof event.initiative_reason === 'string') initiativeReason = event.initiative_reason;
+    }
+    if (event.type === 'complete') {
+      if (typeof event.content === 'string') content = event.content.trim();
+      const metadata = event.metadata as Record<string, unknown> | undefined;
+      if (!turnId && typeof metadata?.turn_id === 'string') turnId = metadata.turn_id;
+      if (!initiativeReason && typeof metadata?.initiative_reason === 'string') initiativeReason = metadata.initiative_reason;
     }
   }
   return turnId && content ? { turnId, content, initiativeReason: initiativeReason || 'continue_current_topic' } : null;
@@ -193,20 +194,17 @@ function evaluateInitiative(): void {
     maxPrompts: profile.max_idle_prompts,
   });
   dispatchPerf('initiative_policy_decision', { action: decision.action, reason: decision.reason, eligible_in_ms: decision.eligibleInMs });
-  if (decision.action === 'speak' && reason && isAutoSpeakEnabled()) {
-    void startProactiveTurn(selectedSessionId, reason, profile);
-  }
+  if (decision.action === 'speak' && reason && isAutoSpeakEnabled()) void startProactiveTurn(selectedSessionId, reason, profile);
 }
 
 async function startProactiveTurn(sessionId: string, reason: string, profile: LiveConversationProfile): Promise<void> {
   if (requestController || pending) return;
   const controller = new AbortController();
   requestController = controller;
-  const summary = conversationStateSummary(profile);
   const params = new URLSearchParams({
     purpose: 'proactive_reengagement',
     initiative_reason: reason,
-    state_summary: summary,
+    state_summary: conversationStateSummary(profile),
   });
   dispatchPerf('initiative_generation_started', { session_id: sessionId, initiative_reason: reason });
   try {
@@ -217,7 +215,7 @@ async function startProactiveTurn(sessionId: string, reason: string, profile: Li
     if (!response.ok) throw new Error(`Proactive turn failed with status ${response.status}.`);
     const parsed = parseProactiveSse(await response.text());
     if (!parsed || controller.signal.aborted) return;
-    pending = {
+    const turn: PendingProactive = {
       sessionId,
       turnId: parsed.turnId,
       content: parsed.content,
@@ -225,8 +223,14 @@ async function startProactiveTurn(sessionId: string, reason: string, profile: Li
       audioStarted: isAssistantSpeaking(),
       committing: false,
     };
+    pending = turn;
     dispatchPerf('initiative_generation_completed', { turn_id: parsed.turnId, content_chars: parsed.content.length });
-    if (!pending.audioStarted) window.setTimeout(handleVoiceOrbMutation, 0);
+    if (!turn.audioStarted) {
+      audioStartTimer = window.setTimeout(() => {
+        if (pending === turn && !turn.audioStarted) clearPending('audio-never-started');
+      }, AUDIO_START_TIMEOUT_MS);
+      window.setTimeout(handleVoiceOrbMutation, 0);
+    }
   } catch (error) {
     if (!controller.signal.aborted) dispatchPerf('initiative_generation_failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -242,7 +246,10 @@ function handleVoiceOrbMutation(): void {
   const wasSpeaking = assistantSpeaking;
   assistantSpeaking = speaking;
   lastActivityAtMs = performance.now();
-  if (pending && speaking) pending.audioStarted = true;
+  if (pending && speaking) {
+    pending.audioStarted = true;
+    clearAudioStartTimer();
+  }
   if (pending?.audioStarted && wasSpeaking && !speaking) void commitPending('completed');
 }
 
@@ -250,6 +257,7 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
   const turn = pending;
   if (!turn || turn.committing) return;
   turn.committing = true;
+  clearAudioStartTimer();
   try {
     const response = await fetch(`/api/chat/sessions/${encodeURIComponent(turn.sessionId)}/live-conversation/proactive/delivery`, {
       method: 'POST',
@@ -277,11 +285,22 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
 function resetQuietPeriod(reason: string): void {
   requestController?.abort(reason);
   requestController = null;
-  pending = null;
+  clearPending(reason);
   promptCount = 0;
   previousPromptIgnored = false;
   lastPromptAtMs = null;
   lastActivityAtMs = performance.now();
+}
+
+function clearPending(reason: string): void {
+  if (pending) dispatchPerf('initiative_pending_cleared', { turn_id: pending.turnId, reason });
+  pending = null;
+  clearAudioStartTimer();
+}
+
+function clearAudioStartTimer(): void {
+  if (audioStartTimer !== null) window.clearTimeout(audioStartTimer);
+  audioStartTimer = null;
 }
 
 function currentDraftOrTranscript(): string {
