@@ -3,6 +3,10 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Mapping
 
+from app.rpg.session.response_builder import (
+    build_apply_turn_response as _PHASE8_PART40_BASE_BUILD_APPLY_TURN_RESPONSE,
+)
+
 from .runtime_part19 import apply_turn as _PHASE8_PART40_BASE_APPLY_TURN
 from .runtime_part39 import _canonicalize_publication, _persist_soft_truth
 
@@ -13,6 +17,31 @@ def _safe_dict(value: Any) -> dict[str, Any]:
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
+
+
+def build_apply_turn_response(
+    authoritative_result: Dict[str, Any],
+    _base_builder: Any = _PHASE8_PART40_BASE_BUILD_APPLY_TURN_RESPONSE,
+) -> Dict[str, Any]:
+    """Retain the authoritative queued fallback through later presentation selection."""
+
+    payload = _base_builder(authoritative_result)
+    source = _safe_dict(authoritative_result)
+    authoritative = _safe_dict(source.get("authoritative"))
+    source_result = _safe_dict(source.get("result"))
+    fallback = _safe_str(
+        authoritative.get("deterministic_fallback_narration")
+        or source_result.get("deterministic_fallback_narration")
+    ).strip()
+    if not fallback:
+        return payload
+
+    result = dict(_safe_dict(payload))
+    nested = dict(_safe_dict(result.get("result")))
+    nested["deterministic_fallback_narration"] = fallback
+    result["result"] = nested
+    result["deterministic_fallback_narration"] = fallback
+    return result
 
 
 def _queued_narration_snapshot(payload: Dict[str, Any]) -> dict[str, Any]:
@@ -113,4 +142,4 @@ def apply_turn(
     return _persist_soft_truth(canonical, session_id)
 
 
-__all__ = ["apply_turn"]
+__all__ = ["apply_turn", "build_apply_turn_response"]
