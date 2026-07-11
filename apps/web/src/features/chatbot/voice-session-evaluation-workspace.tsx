@@ -17,7 +17,7 @@ export function initializeVoiceSessionEvaluationWorkspace(): () => void {
   if (liveWindow.__omnixVoiceSessionEvaluationWorkspaceInstalled) return () => undefined;
   liveWindow.__omnixVoiceSessionEvaluationWorkspaceInstalled = true;
 
-  const observer = new MutationObserver(mountVoiceSessionEvaluation);
+  const observer = new MutationObserver(() => mountVoiceSessionEvaluation());
   observer.observe(document.documentElement, { childList: true, subtree: true });
   mountVoiceSessionEvaluation();
 
