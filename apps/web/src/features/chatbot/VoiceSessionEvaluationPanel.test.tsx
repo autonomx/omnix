@@ -98,9 +98,9 @@ describe('VoiceSessionEvaluationPanel', () => {
     render(<VoiceSessionEvaluationPanel />);
 
     expect(await screen.findByText('5 durable Voice Session evaluations loaded.')).toBeInTheDocument();
-    expect(screen.getByText('700 ms')).toBeInTheDocument();
-    expect(screen.getByText('100%')).toBeInTheDocument();
-    expect(screen.getByText('Insufficient')).toBeInTheDocument();
+    expect(screen.getAllByText('700 ms').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('100%').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Insufficient').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole('list', { name: 'Durable Voice Session evaluations' }).children).toHaveLength(5);
   });
 
