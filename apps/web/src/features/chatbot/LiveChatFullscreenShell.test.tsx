@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { liveConversationStore } from '../assistant-workspace/live-conversation-store';
@@ -61,8 +61,9 @@ describe('LiveChatFullscreenShell', () => {
     enterLiveChatFullscreen('header');
     render(<LiveChatFullscreenShell />);
 
-    expect(screen.getByRole('dialog', { name: 'Immersive Live Chat with Maya' })).toBeInTheDocument();
-    expect(screen.getByAltText('Maya live avatar')).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: 'Immersive Live Chat with Maya' });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByAltText('Maya live avatar')).toBeInTheDocument();
     expect(screen.getByText('Welcome to our corner of the stars.')).toBeInTheDocument();
     expect(screen.getByText('Can you tell me a story?')).toBeInTheDocument();
     expect(screen.getByText('Maya is speaking')).toBeInTheDocument();
