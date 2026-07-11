@@ -11,8 +11,8 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 | 0 | complete | labeled deterministic corpus, metrics, holdout manifest, opt-in live benchmark, CI test entry point | exact-head GitHub Actions passed at `7bf797d1cd4953b12042662d3ded5f3f81cac952` |
 | 1 | complete | core contracts, thin orchestrator, response modes, field-aware renderer, legacy shadow adapters | exact-head GitHub Actions passed at `2170a2a80309c94583bd9caf621eb56d98b724b9` |
 | 2 | complete | hard gates, eligible-only ranking, final quality repair, rewrite revalidation | exact-head GitHub Actions passed after repair at `363a1fad0b43196240deba26fdf58e6747493fb1` |
-| 3 | implemented, CI pending | compact current-turn context, typed claim ledger, semantic claim validation | exact-head GitHub Actions pending |
-| 4 | pending | intent hypotheses, local retrieval, narrative affordances | pending |
+| 3 | complete | compact current-turn context, typed claim ledger, semantic claim validation | exact-head GitHub Actions passed at `12f2aad071a5ec42eb52a58da7bcc451fbf07fb2` |
+| 4 | implemented, CI pending | intent hypotheses, deterministic local retrieval, speaker boundaries, affordance analysis | exact-head GitHub Actions pending |
 | 5 | pending | forward strategies and deterministic fallbacks | pending |
 | 6 | pending | proposal-only Hermes recovery | pending |
 | 7 | pending | truth lifetimes and bounded proposal promotion | pending |
@@ -54,3 +54,12 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 - Added compact, current-turn-first `NarrationContext` with scene, entity, speaker, evidence, continuity, agency, style, budget, and truncation traces.
 - Hidden evidence is excluded before prompt payload construction.
 - Added semantic-plan validation requiring factual sections to reference ledger claims or explicitly allowed soft truth.
+
+## Phase 4 implementation notes
+
+- Added deterministic intent hypotheses and narrative-affordance families for unknown entities, unsupported powers, impossible technology, travel, social ambiguity, prior-history claims, and broad questions.
+- Low-confidence unresolved input prefers inspection or in-world clarification rather than a generic response.
+- Added ordered local retrieval across resolved turn, scene, speaker, party, journal, campaign, lorebook, and approved proposals.
+- Hidden evidence and out-of-scope speaker knowledge are excluded before response generation.
+- Alias matching, partial knowledge, and conflicting evidence remain explicit in retrieval results.
+- The local coordinator only marks Hermes useful after local evidence is exhausted and avoids Hermes for high-ambiguity clarification turns.
