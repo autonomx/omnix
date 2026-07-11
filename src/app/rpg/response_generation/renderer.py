@@ -16,6 +16,7 @@ from .contracts import (
 
 
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+_TOKEN_PATTERN = re.compile(r"[a-z0-9']+")
 
 
 class ResponseRenderer:
@@ -87,7 +88,16 @@ class ResponseRenderer:
         shorter, longer = sorted((left, right), key=len)
         if len(shorter) < 18:
             return False
-        return shorter in longer and len(shorter) / max(1, len(longer)) >= 0.72
+        if shorter in longer and len(shorter) / max(1, len(longer)) >= 0.72:
+            return True
+        left_tokens = set(_TOKEN_PATTERN.findall(left))
+        right_tokens = set(_TOKEN_PATTERN.findall(right))
+        if min(len(left_tokens), len(right_tokens)) < 5:
+            return False
+        union = left_tokens | right_tokens
+        if not union:
+            return False
+        return len(left_tokens & right_tokens) / len(union) >= 0.72
 
     @staticmethod
     def _order_sections(
@@ -126,16 +136,14 @@ class ResponseRenderer:
             },
         }
         mode_priorities = priorities.get(mode, {})
-        return tuple(
-            sorted(
-                enumerate(sections),
-                key=lambda item: (
-                    mode_priorities.get(item[1].section_type, 10),
-                    item[0],
-                ),
-            )[index][1]
-            for index in range(len(sections))
+        ordered = sorted(
+            enumerate(sections),
+            key=lambda item: (
+                mode_priorities.get(item[1].section_type, 10),
+                item[0],
+            ),
         )
+        return tuple(item[1] for item in ordered)
 
     @staticmethod
     def _join_sections(
