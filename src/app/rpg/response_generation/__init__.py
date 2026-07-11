@@ -14,12 +14,7 @@ from .baseline import (
 )
 from .candidate_ranker import CandidateRanker, NoEligibleCandidateError
 from .claim_ledger import ClaimLedger, ClaimRecord, derive_claim_ledger
-from .context_compiler import (
-    ContextTrace,
-    EvidenceCard,
-    NarrationContext,
-    NarrationContextCompiler,
-)
+from .context_compiler import ContextTrace, EvidenceCard, NarrationContext, NarrationContextCompiler
 from .contracts import (
     AgencyEffect,
     CandidateSource,
@@ -34,6 +29,7 @@ from .contracts import (
     SemanticSection,
 )
 from .eligibility import EligibilityPolicy, eligibility_reasons
+from .intent_affordance import IntentAnalysis, IntentHypothesis, NarrativeAffordanceClassifier
 from .orchestration import (
     RpgResponseGenerator,
     build_runtime_shadow_report,
@@ -41,7 +37,9 @@ from .orchestration import (
     semantic_plan_from_legacy_payload,
 )
 from .quality_gate import QualityGate, QualityReport
+from .recovery import LocalRecoveryAnalysis, LocalRecoveryCoordinator
 from .renderer import ResponseRenderer
+from .retrieval import EvidenceRecord, LocalKnowledgeRetriever, RetrievalResult, build_retrieval_sources
 from .semantic_plan import SemanticPlanValidation, validate_semantic_plan
 
 __all__ = [
@@ -56,9 +54,16 @@ __all__ = [
     "ContextTrace",
     "EligibilityPolicy",
     "EvidenceCard",
+    "EvidenceRecord",
     "GateDecision",
+    "IntentAnalysis",
+    "IntentHypothesis",
+    "LocalKnowledgeRetriever",
+    "LocalRecoveryAnalysis",
+    "LocalRecoveryCoordinator",
     "NarrationContext",
     "NarrationContextCompiler",
+    "NarrativeAffordanceClassifier",
     "NoEligibleCandidateError",
     "QualityGate",
     "QualityReport",
@@ -67,12 +72,14 @@ __all__ = [
     "ResponseMode",
     "ResponseRenderer",
     "ResponseRequest",
+    "RetrievalResult",
     "Reversibility",
     "RpgResponseGenerator",
     "SectionType",
     "SemanticPlanValidation",
     "SemanticResponsePlan",
     "SemanticSection",
+    "build_retrieval_sources",
     "build_runtime_shadow_report",
     "build_world_scene_shadow_report",
     "derive_claim_ledger",
