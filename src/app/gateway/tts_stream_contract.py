@@ -11,15 +11,22 @@ DEFAULT_SAMPLE_RATE = 24_000
 STREAM_OUTPUT_BLOCK_SAMPLES = 2_048
 STREAM_INITIAL_SILENCE_THRESHOLD = 0.01
 STREAM_INITIAL_PREROLL_MS = 40.0
-CHAT_STREAM_MIN_NEW_TOKENS = 192
+CHAT_STREAM_MIN_NEW_TOKENS = 96
 CHAT_STREAM_MAX_NEW_TOKENS = 1_024
-CHAT_STREAM_TOKEN_OVERHEAD = 48
+CHAT_STREAM_TOKEN_NUMERATOR = 9
+CHAT_STREAM_TOKEN_DENOMINATOR = 8
+CHAT_STREAM_TOKEN_OVERHEAD = 24
+CHAT_STREAM_MIN_REPETITION_PENALTY = 1.05
 
 
 def estimate_chat_stream_max_new_tokens(text: str) -> int:
-    """Bound chat speech length while leaving generous room to finish the text."""
+    """Bound chat speech while leaving headroom above normal English speech duration."""
     normalized = remove_emojis(text or "").strip()
-    estimated = ((len(normalized) * 5) + 3) // 4 + CHAT_STREAM_TOKEN_OVERHEAD
+    estimated = (
+        (len(normalized) * CHAT_STREAM_TOKEN_NUMERATOR + CHAT_STREAM_TOKEN_DENOMINATOR - 1)
+        // CHAT_STREAM_TOKEN_DENOMINATOR
+        + CHAT_STREAM_TOKEN_OVERHEAD
+    )
     return max(CHAT_STREAM_MIN_NEW_TOKENS, min(CHAT_STREAM_MAX_NEW_TOKENS, estimated))
 
 
@@ -43,13 +50,18 @@ class TtsStreamRequest(BaseModel):
 
     @model_validator(mode="after")
     def apply_chat_stream_runtime_policy(self) -> "TtsStreamRequest":
-        """Use CUDA graphs for chat streams; the provider safely falls back on graph failures."""
+        """Use bounded CUDA-graph chat decoding with safe provider fallback on graph failures."""
         stream_id = (self.diagnostics_stream_id or "").strip()
         if not stream_id.startswith("chat-"):
             return self
         self.parity_mode = False
-        if self.max_new_tokens is None:
-            self.max_new_tokens = estimate_chat_stream_max_new_tokens(self.text)
+        token_budget = estimate_chat_stream_max_new_tokens(self.text)
+        if self.max_new_tokens is None or self.max_new_tokens > token_budget:
+            self.max_new_tokens = token_budget
+        self.repetition_penalty = max(
+            self.repetition_penalty,
+            CHAT_STREAM_MIN_REPETITION_PENALTY,
+        )
         return self
 
 
