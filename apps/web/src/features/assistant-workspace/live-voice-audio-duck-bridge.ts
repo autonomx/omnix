@@ -1,7 +1,6 @@
 import { LIVE_VOICE_PCM_WORKLET_NAME } from './live-voice-pcm-worklet';
 
 const DUCK_EVENT = 'omnix:assistant-audio-duck';
-const INSTALL_FLAG = '__omnixLiveVoiceDuckBridgeInstalled';
 const activeGains = new Set<GainNode>();
 let currentGain = 1;
 
@@ -14,17 +13,15 @@ export function initializeLiveVoiceAudioDuckBridge(): () => void {
   if (typeof window === 'undefined') return () => undefined;
   const liveWindow = window as DuckBridgeWindow;
   const OriginalCtor = liveWindow.AudioWorkletNode;
-  if (!OriginalCtor || liveWindow[INSTALL_FLAG]) return () => undefined;
-  liveWindow[INSTALL_FLAG] = true;
+  if (!OriginalCtor || liveWindow.__omnixLiveVoiceDuckBridgeInstalled) return () => undefined;
+  liveWindow.__omnixLiveVoiceDuckBridgeInstalled = true;
 
   const WrappedCtor = new Proxy(OriginalCtor, {
     construct(target, args, newTarget) {
       const node = Reflect.construct(target, args, newTarget) as AudioWorkletNode;
       const context = args[0] as BaseAudioContext | undefined;
       const name = args[1];
-      if (name === LIVE_VOICE_PCM_WORKLET_NAME && context && 'createGain' in context) {
-        installGainStage(node, context as AudioContext);
-      }
+      if (name === LIVE_VOICE_PCM_WORKLET_NAME && context) installGainStage(node, context);
       return node;
     },
   });
@@ -33,25 +30,28 @@ export function initializeLiveVoiceAudioDuckBridge(): () => void {
   const handleDuck = (event: Event): void => {
     const detail = (event as CustomEvent<{ gain?: number }>).detail;
     currentGain = clampGain(detail?.gain);
-    const now = performance.now();
-    for (const gain of activeGains) applyGain(gain, currentGain, now);
+    for (const gain of activeGains) applyGain(gain, currentGain);
   };
   window.addEventListener(DUCK_EVENT, handleDuck);
 
   return () => {
     window.removeEventListener(DUCK_EVENT, handleDuck);
     if (liveWindow.AudioWorkletNode === WrappedCtor) liveWindow.AudioWorkletNode = OriginalCtor;
-    liveWindow[INSTALL_FLAG] = false;
+    liveWindow.__omnixLiveVoiceDuckBridgeInstalled = false;
     activeGains.clear();
     currentGain = 1;
   };
 }
 
-function installGainStage(node: AudioWorkletNode, context: AudioContext): void {
+function installGainStage(node: AudioWorkletNode, context: BaseAudioContext): void {
   const gain = context.createGain();
   gain.gain.value = currentGain;
   activeGains.add(gain);
-  const originalConnect = node.connect.bind(node) as (...args: unknown[]) => unknown;
+  const originalConnect = node.connect.bind(node) as (
+    destination: AudioNode,
+    output?: number,
+    input?: number,
+  ) => AudioNode;
   const originalDisconnect = node.disconnect.bind(node) as (...args: unknown[]) => void;
   let destinationBridged = false;
 
@@ -74,10 +74,9 @@ function installGainStage(node: AudioWorkletNode, context: AudioContext): void {
   }) as typeof node.disconnect;
 }
 
-function applyGain(gain: GainNode, value: number, timestampMs: number): void {
-  const audioTime = gain.context.currentTime + Math.max(0, timestampMs - performance.now()) / 1000;
+function applyGain(gain: GainNode, value: number): void {
   if (typeof gain.gain.setTargetAtTime === 'function') {
-    gain.gain.setTargetAtTime(value, audioTime, 0.025);
+    gain.gain.setTargetAtTime(value, gain.context.currentTime, 0.025);
   } else {
     gain.gain.value = value;
   }
