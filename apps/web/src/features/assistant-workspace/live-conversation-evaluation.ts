@@ -56,17 +56,17 @@ export function evaluateLiveConversation(events: LiveConversationEvaluationEvent
 
   return {
     eventCount: ordered.length,
-    firstAudioLatencyMs: distribution(firstAudio),
+    firstAudioLatencyMs: averageDistribution(firstAudio),
     falseEndpointRate: rate(endpoints.filter((event) => event.falsePositive).length, endpoints.length),
     talkOverDurationMs: Math.round(talkOver),
     interruptionSuccessRate: rate(interruptions.filter((event) => event.success).length, interruptions.length),
-    cancellationLatencyMs: distribution(cancellationLatencies),
+    cancellationLatencyMs: averageDistribution(cancellationLatencies),
     silenceFillRegretRate: rate(resolvedProactive.filter((event) => event.accepted === false).length, resolvedProactive.length),
     proactiveAcceptanceRate: rate(resolvedProactive.filter((event) => event.accepted === true).length, resolvedProactive.length),
     backchannelCollisionRate: rate(backchannels.filter((event) => event.collision).length, backchannels.length),
     questionDensity: rate(assistantTurns.filter((event) => /[?？]\s*$/.test(event.content.trim())).length, assistantTurns.length),
     assistantUserSpeakingRatio: userDuration > 0 ? round(assistantDuration / userDuration) : null,
-    turnDurationMs: distribution(turnDurations, true),
+    turnDurationMs: turnDistribution(turnDurations),
     repairSuccessRate: rate(repairs.filter((event) => event.success).length, repairs.length),
     repeatedTopicRate: rate(topics.filter((event) => event.repeated).length, topics.length),
     unansweredObligationRate: rate(obligations.filter((event) => !event.answered).length, obligations.length),
@@ -79,14 +79,22 @@ function isType<T extends LiveConversationEvaluationEvent['type']>(type: T) {
   return (event: LiveConversationEvaluationEvent): event is Extract<LiveConversationEvaluationEvent, { type: T }> => event.type === type;
 }
 
-function distribution(values: number[], medianInsteadOfAverage = false): { average: number | null; p95: number | null } & { median?: number | null } {
-  if (!values.length) return medianInsteadOfAverage
-    ? { average: null, median: null, p95: null }
-    : { average: null, p95: null };
+function averageDistribution(values: number[]): { average: number | null; p95: number | null } {
+  if (!values.length) return { average: null, p95: null };
   const sorted = [...values].sort((a, b) => a - b);
-  const average = medianInsteadOfAverage ? percentile(sorted, 0.5) : sorted.reduce((sum, value) => sum + value, 0) / sorted.length;
-  const result = { average: Math.round(average), p95: Math.round(percentile(sorted, 0.95)) };
-  return medianInsteadOfAverage ? { ...result, median: result.average } : result;
+  return {
+    average: Math.round(sorted.reduce((sum, value) => sum + value, 0) / sorted.length),
+    p95: Math.round(percentile(sorted, 0.95)),
+  };
+}
+
+function turnDistribution(values: number[]): { median: number | null; p95: number | null } {
+  if (!values.length) return { median: null, p95: null };
+  const sorted = [...values].sort((a, b) => a - b);
+  return {
+    median: Math.round(percentile(sorted, 0.5)),
+    p95: Math.round(percentile(sorted, 0.95)),
+  };
 }
 
 function percentile(sorted: number[], percentileValue: number): number {
