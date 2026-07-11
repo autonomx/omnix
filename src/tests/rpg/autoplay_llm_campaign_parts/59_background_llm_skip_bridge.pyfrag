@@ -1,0 +1,37 @@
+"""Apply autoplay background-LLM skip policy to pipeline class methods.
+
+The campaign loader historically wrapped free functions whose names contained
+``submit_combined_background``. The real runner calls the method on
+``AutoplayBackgroundPipeline`` instead, so CI skip mode did not prevent local
+provider retries. This late fragment replaces the loader hook with a class-aware
+wrapper while preserving the existing ``auto`` behavior.
+"""
+
+
+def _wrap_combined_background_llm_submit_functions(namespace: Dict[str, object]) -> None:
+    pipeline_cls = namespace.get("AutoplayBackgroundPipeline")
+    if not isinstance(pipeline_cls, type):
+        return
+
+    original = getattr(pipeline_cls, "submit_combined_background_llm", None)
+    if not callable(original):
+        return
+    if getattr(original, "_autoplay_skip_redundant_background_wrapped", False):
+        return
+
+    def _wrapped(self, *args, __fn=original, **kwargs):
+        mode = _combined_background_skip_mode()
+        if mode == "all" or (
+            mode == "auto"
+            and _should_skip_combined_background_llm(args, kwargs)
+        ):
+            print(
+                "[AUTOPLAY-PROBE] "
+                "event=submit_combined_background_llm.skipped "
+                f"reason={'background_llm_disabled' if mode == 'all' else 'foreground_llm_called'}"
+            )
+            return ""
+        return __fn(self, *args, **kwargs)
+
+    _wrapped._autoplay_skip_redundant_background_wrapped = True
+    setattr(pipeline_cls, "submit_combined_background_llm", _wrapped)

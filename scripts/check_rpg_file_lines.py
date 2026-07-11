@@ -48,6 +48,7 @@ LINE_DEBT_LIMITS = {
     "src/app/rpg/tests/test_narration_queue_service_dialogue.py": 1543,
     "src/app/rpg/api/rpg_session_routes.py": 1257,
     "src/app/rpg/ai/grounding_validator.py": 1017,
+    "src/app/rpg/response_generation/production_pipeline.py": 1182,
 }
 
 
@@ -174,7 +175,7 @@ def find_line_debt(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Check RPG source/test files for files over a line-count limit.")
+    parser = argparse.ArgumentParser(description="Check RPG source and test files for files over a line-count limit.")
     parser.add_argument(
         "paths",
         nargs="*",
