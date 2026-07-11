@@ -9,6 +9,12 @@ export type LiveAssistantTurnSummary = {
   createsObligation: boolean;
 };
 
+type PendingDiagnosticSummary = {
+  text: string;
+  turnId: string | null;
+  turnKind: 'greeting' | 'response';
+};
+
 const OBLIGATION_PATTERN = /(?:\?|\b(?:would you like|do you want|can you|could you|will you|should we|shall we|tell me|let me know)\b)/i;
 const STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by', 'for', 'from', 'had', 'has', 'have',
@@ -16,6 +22,7 @@ const STOP_WORDS = new Set([
   'she', 'so', 'that', 'the', 'their', 'them', 'there', 'they', 'this', 'to', 'was', 'we', 'were',
   'what', 'when', 'where', 'which', 'who', 'why', 'will', 'with', 'would', 'you', 'your',
 ]);
+const pendingDiagnostics = new Map<string, PendingDiagnosticSummary>();
 
 export function summarizeAssistantTurn(
   text: string,
@@ -35,9 +42,46 @@ export function summarizeAssistantTurn(
   };
 }
 
+export function observeAssistantDiagnostic(
+  traceId: string,
+  event: string,
+  details: Record<string, unknown>,
+): void {
+  if (event === 'turn_intercepted') {
+    pendingDiagnostics.set(traceId, {
+      text: '',
+      turnId: null,
+      turnKind: details.turn_kind === 'greeting' ? 'greeting' : 'response',
+    });
+    return;
+  }
+  const pending = pendingDiagnostics.get(traceId);
+  if (!pending) return;
+  if (event === 'assistant_turn_linked' && typeof details.assistant_turn_id === 'string') {
+    pending.turnId = details.assistant_turn_id;
+    return;
+  }
+  if (event === 'llm_text_chunk_received' && typeof details.text === 'string') {
+    pending.text = `${pending.text}${details.text}`.slice(-12_000);
+    return;
+  }
+  if (event === 'turn_finished') {
+    dispatchAssistantTurnSummary(summarizeAssistantTurn(pending.text, pending.turnId, pending.turnKind));
+    pendingDiagnostics.delete(traceId);
+    return;
+  }
+  if (event === 'turn_failed' || event === 'turn_stopped') {
+    pendingDiagnostics.delete(traceId);
+  }
+}
+
 export function dispatchAssistantTurnSummary(summary: LiveAssistantTurnSummary): void {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, { detail: summary }));
+}
+
+export function resetAssistantDiagnosticSummaries(): void {
+  pendingDiagnostics.clear();
 }
 
 function fingerprintTopic(words: string[]): string | null {
