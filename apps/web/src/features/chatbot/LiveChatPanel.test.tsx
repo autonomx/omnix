@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -37,9 +38,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function renderPanel(sessionId: string | null) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <LiveChatPanel sessionId={sessionId} />
+    </QueryClientProvider>,
+  );
+}
+
 describe('LiveChatPanel', () => {
   it('uses user defaults when no chat session is selected', async () => {
-    render(<LiveChatPanel sessionId={null} />);
+    renderPanel(null);
     expect(screen.getByRole('heading', { name: 'Live Chat' })).toBeInTheDocument();
     expect(screen.getByText('Select a Chat session')).toBeInTheDocument();
     expect(await screen.findByLabelText('Presence')).toHaveValue('natural');
@@ -56,7 +66,7 @@ describe('LiveChatPanel', () => {
       duplex: { resolvedMode: 'echo_aware', reason: 'calibration_confident', confidence: 0.9 },
     });
 
-    render(<LiveChatPanel sessionId="chat:one" />);
+    renderPanel('chat:one');
     expect(screen.getByText('Call connected')).toBeInTheDocument();
     expect(screen.getByText('Maya is listening')).toBeInTheDocument();
     expect(screen.getByText('Echo-aware barge-in')).toBeInTheDocument();
