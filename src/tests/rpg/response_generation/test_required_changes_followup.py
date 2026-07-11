@@ -10,7 +10,11 @@ from app.rpg.response_generation.contracts import (
     SemanticSection,
 )
 from app.rpg.response_generation.eligibility import EligibilityPolicy, eligibility_reasons
-from app.rpg.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
+from app.rpg.response_generation.profiles import DeliveryMode, ResponseGenerationProfile
+from app.rpg.response_generation.strict_pipeline import (
+    AuthoritativeProfileBoundProvider,
+    StrictRpgProductionResponsePipeline,
+)
 
 
 def _candidate(
@@ -134,6 +138,91 @@ def test_prepare_generation_inputs_runs_before_provider_generation():
     assert prepared["simulation_state"]["runtime_settings"][
         "canonical_context_compiled_before_generation"
     ] is True
+
+
+class _TimeoutRecordingProvider:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def chat(self, messages, **kwargs):
+        self.calls.append(dict(kwargs))
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+
+def test_authoritative_profile_binds_timeout_before_provider_call():
+    provider = _TimeoutRecordingProvider()
+    profile = ResponseGenerationProfile(
+        profile_id="followup-profile",
+        mode=ResponseMode.RECOVERY,
+        task="narration",
+        provider="openai_compatible",
+        model="followup-model",
+        temperature=0.2,
+        max_tokens=222,
+        timeout_seconds=3.5,
+        retry_count=1,
+        execution_mode="blocking",
+        delivery_mode=DeliveryMode.SENTENCE,
+        use_provider=True,
+        allow_hermes=True,
+        blocking_budget_ms=5000,
+    )
+
+    AuthoritativeProfileBoundProvider(provider, profile).chat(
+        [{"role": "user", "content": "hello"}],
+        max_tokens=999,
+    )
+
+    call = provider.calls[0]
+    assert call["model"] == "followup-model"
+    assert call["temperature"] == 0.2
+    assert call["max_tokens"] == 222
+    assert call["timeout"] == 3.5
+    assert call["timeout_seconds"] == 3.5
+
+
+def test_scene_provider_receives_precompiled_canonical_brief(monkeypatch):
+    from app.rpg.response_generation import legacy_bridge
+
+    captured: dict = {}
+
+    def fake_legacy(scene, context, **kwargs):
+        captured.update(context)
+        return {
+            "narration": "The abbey courtyard is quiet.",
+            "narration_json": {
+                "narration": "The abbey courtyard is quiet.",
+                "action": "",
+                "npc": {},
+            },
+        }
+
+    monkeypatch.setattr(legacy_bridge, "_legacy_narrate_scene", fake_legacy)
+    payload = legacy_bridge.narrate_scene_canonical(
+        {"scene_id": "abbey-yard"},
+        {
+            "turn_id": "followup-scene-turn",
+            "player_input": "Look around.",
+            "response_rollout_stage": "canonical_default",
+            "turn_contract": {
+                "turn_id": "followup-scene-turn",
+                "ok": True,
+                "response_mode": "observation",
+                "resolved_result": {"ok": True, "summary": "The player looks around."},
+            },
+            "simulation_state": {
+                "session_id": "followup-session",
+                "scene_id": "abbey-yard",
+                "response_rollout_stage": "canonical_default",
+            },
+        },
+    )
+
+    assert captured["narration_brief"]["must_answer"] == "Look around."
+    assert captured["runtime_settings"][
+        "canonical_context_compiled_before_generation"
+    ] is True
+    assert payload["canonical_response"]["quality_report"]["ok"] is True
 
 
 def test_public_apply_turn_wrapper_canonicalizes_early_return():
