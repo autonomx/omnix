@@ -24,6 +24,14 @@ beforeEach(() => {
   window.localStorage.setItem('omnix.liveConversation.serverProfileMigrated.v1', 'done');
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = input.toString();
+    if (url === '/api/characters') return Response.json({ characters: [] });
+    if (url.includes('/interaction')) {
+      return Response.json({
+        id: 'chat:one', title: 'Test chat', interaction_mode: 'system', character_id: null,
+        voice_asset_id: null, read_memory: false, write_memory: false,
+        shared_memory_access: 'none', transcript_policy: 'persistent', messages: [],
+      });
+    }
     if (url.includes('/live-conversation/pronunciations')) {
       return Response.json({ session_id: 'chat:one', entries: [] });
     }
