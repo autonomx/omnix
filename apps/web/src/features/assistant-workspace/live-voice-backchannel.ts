@@ -96,16 +96,18 @@ export function initializeEphemeralBackchannels(): () => void {
     const startedAt = performance.now();
     const runtime = liveConversationStore.getState();
     const profile = runtime.profile ?? readEffectiveLiveConversationProfile();
-    const frequency = runtime.presencePolicy?.preset === profile?.presence_preset
-      ? runtime.presencePolicy.values.listener_backchannel_frequency
+    const policy = runtime.presencePolicy;
+    const frequency = policy && policy.preset === profile?.presence_preset
+      ? policy.values.listener_backchannel_frequency
       : DEFAULT_FREQUENCY;
     const cadence = resolveBackchannelCadence(frequency);
     if (!cadence.enabled) return;
     speechTimer = setTimeout(() => {
       const current = liveConversationStore.getState();
       const currentProfile = current.profile ?? readEffectiveLiveConversationProfile();
-      const currentFrequency = current.presencePolicy?.preset === currentProfile?.presence_preset
-        ? current.presencePolicy.values.listener_backchannel_frequency
+      const currentPolicy = current.presencePolicy;
+      const currentFrequency = currentPolicy && currentPolicy.preset === currentProfile?.presence_preset
+        ? currentPolicy.values.listener_backchannel_frequency
         : frequency;
       const decision = decideAssistantListenerBackchannel(
         resolveBackchannelTranscript(undefined),
