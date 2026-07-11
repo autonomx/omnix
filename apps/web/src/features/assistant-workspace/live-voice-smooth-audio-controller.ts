@@ -1,4 +1,5 @@
 import { playBufferedTts, stopBufferedTtsPlayback } from './assistant-buffered-tts-player';
+import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
@@ -41,26 +42,37 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
   if (!shouldUseSmoothLiveVoiceAudio(input, init)) return fetchImpl(input, init);
 
   stopLiveVoiceAudio();
+  stopAssistantPcmStream(document);
   const abortController = new AbortController();
   activeTurn = abortController;
   connectAbortSignal(init?.signal, abortController);
-  const response = await fetchImpl(input, { ...init, signal: abortController.signal });
-  if (!response.ok || !response.body) return response;
 
-  const [applicationBranch, audioBranch] = response.body.tee();
-  void consumeAssistantText(audioBranch, abortController).catch((error: unknown) => {
-    if (abortController.signal.aborted) return;
-    setVoiceSpeaking(false);
-    setInlineStatus(error instanceof Error ? error.message : 'Live response audio failed.');
-  });
+  try {
+    const response = await fetchImpl(input, { ...init, signal: abortController.signal });
+    if (!response.ok || !response.body) {
+      if (activeTurn === abortController) activeTurn = null;
+      return response;
+    }
 
-  const headers = new Headers(response.headers);
-  headers.delete('content-length');
-  return new Response(filterLiveVoiceTextChunks(applicationBranch), {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+    const [applicationBranch, audioBranch] = response.body.tee();
+    void consumeAssistantText(audioBranch, abortController).catch((error: unknown) => {
+      if (abortController.signal.aborted) return;
+      if (activeTurn === abortController) activeTurn = null;
+      setVoiceSpeaking(false);
+      setInlineStatus(error instanceof Error ? error.message : 'Live response audio failed.');
+    });
+
+    const headers = new Headers(response.headers);
+    headers.delete('content-length');
+    return new Response(filterLiveVoiceTextChunks(applicationBranch), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch (error) {
+    if (activeTurn === abortController) activeTurn = null;
+    throw error;
+  }
 }
 
 export function shouldUseSmoothLiveVoiceAudio(input: RequestInfo | URL, init?: RequestInit): boolean {
@@ -181,6 +193,7 @@ function stopLiveVoiceAudio(): void {
   activeTurn?.abort('live-audio-stopped');
   activeTurn = null;
   stopBufferedTtsPlayback();
+  stopAssistantPcmStream(document);
   setVoiceSpeaking(false);
 }
 
@@ -220,7 +233,7 @@ function setVoiceSpeaking(speaking: boolean): void {
     orb.dataset.voiceMode = speaking ? 'speaking' : live ? 'listening' : 'idle';
   });
   window.dispatchEvent(new CustomEvent('omnix:assistant-audio-playback-state', {
-    detail: { speaking },
+    detail: { speaking, source: 'live-response' },
   }));
 }
 
