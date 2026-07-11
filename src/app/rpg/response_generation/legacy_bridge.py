@@ -10,12 +10,50 @@ from app.rpg.ai.world_scene_narrator_runtime import (
 )
 
 from .contracts import ResponseMode, coerce_response_mode
-from .production_pipeline import CANONICAL_NARRATION_SOURCE, ProfileBoundProvider
-from .strict_pipeline import StrictRpgProductionResponsePipeline
+from .production_pipeline import CANONICAL_NARRATION_SOURCE
+from .strict_pipeline import (
+    AuthoritativeProfileBoundProvider,
+    StrictRpgProductionResponsePipeline,
+)
+
+
+_CONTEXT_CONTROL_KEYS = (
+    "turn_id",
+    "response_rollout_stage",
+    "response_mode",
+    "resolver_status",
+    "recovery_needed",
+    "mechanic_resolved",
+    "clear_player_intent",
+    "state_delta",
+    "resolved_result",
+    "provider_policy",
+)
 
 
 def _pipeline() -> StrictRpgProductionResponsePipeline:
     return StrictRpgProductionResponsePipeline()
+
+
+def _inherit_context_controls(
+    context: Mapping[str, Any],
+    contract: Mapping[str, Any] | None,
+    state: Mapping[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    enriched_contract = dict(contract or {})
+    enriched_state = dict(state or {})
+    for key in _CONTEXT_CONTROL_KEYS:
+        value = context.get(key)
+        if value not in (None, "", [], {}):
+            enriched_contract.setdefault(key, value)
+    rollout = context.get("response_rollout_stage")
+    if rollout not in (None, ""):
+        enriched_state.setdefault("response_rollout_stage", rollout)
+    for key in ("session_id", "world_id", "scene_id", "location_id"):
+        value = context.get(key)
+        if value not in (None, ""):
+            enriched_state.setdefault(key, value)
+    return enriched_contract, enriched_state
 
 
 def narrate_scene_canonical(
@@ -32,12 +70,16 @@ def narrate_scene_canonical(
     scene_payload = dict(scene or {})
     context = dict(narration_context or {})
     player_input = str(context.get("player_input") or "")
-    raw_contract = _mapping(context.get("turn_contract"))
-    raw_state = _mapping(
-        context.get("simulation_state")
-        or context.get("state_snapshot")
-        or context.get("state")
+    raw_contract, raw_state = _inherit_context_controls(
+        context,
+        _mapping(context.get("turn_contract")),
+        _mapping(
+            context.get("simulation_state")
+            or context.get("state_snapshot")
+            or context.get("state")
+        ),
     )
+    raw_state.setdefault("scene_id", scene_payload.get("scene_id"))
     pipeline = _pipeline()
     prepared = pipeline.prepare_generation_inputs(
         player_input=player_input,
@@ -52,6 +94,10 @@ def narrate_scene_canonical(
     context["turn_contract"] = turn_contract
     context["narration_brief"] = turn_contract.get("narration_brief", {})
     context["response_profile"] = profile.debug_payload()
+    context["response_rollout_stage"] = state.get(
+        "response_rollout_stage",
+        turn_contract.get("response_rollout_stage"),
+    )
     mode = profile.mode
     recovery_needed = bool(
         context.get("recovery_needed")
@@ -60,7 +106,7 @@ def narrate_scene_canonical(
         or mode in {ResponseMode.RECOVERY, ResponseMode.INVESTIGATION}
     )
     profile_gateway = (
-        ProfileBoundProvider(llm_gateway, profile)
+        AuthoritativeProfileBoundProvider(llm_gateway, profile)
         if llm_gateway is not None and profile.use_provider
         else None
     )
@@ -108,9 +154,12 @@ def narrate_scene_canonical(
         "production_rpg_response": True,
         "strict_claim_refs": True,
         "grounding_required": True,
-        "mechanic_resolved": bool(context.get("mechanic_resolved")),
+        "mechanic_resolved": bool(
+            context.get("mechanic_resolved")
+            or turn_contract.get("mechanic_resolved")
+        ),
         "recovery_needed": recovery_needed,
-        "resolver_status": context.get("resolver_status"),
+        "resolver_status": context.get("resolver_status") or turn_contract.get("resolver_status"),
         "speaker_id": npc.get("speaker") or "",
         "provider_policy": _mapping(
             context.get("provider_policy") or context.get("response_profile")
@@ -151,12 +200,16 @@ class SceneNarrator(_LegacySceneNarrator):
     ):
         pipeline = _pipeline()
         player_input = str(state.get("player_input") or "")
+        raw_contract, raw_state = _inherit_context_controls(
+            state,
+            _mapping(state.get("turn_contract")),
+            _mapping(state.get("simulation_state") or state.get("state_snapshot") or state),
+        )
+        raw_state.setdefault("scene_id", scene.get("scene_id"))
         prepared = pipeline.prepare_generation_inputs(
             player_input=player_input,
-            simulation_state=_mapping(
-                state.get("simulation_state") or state.get("state_snapshot") or state
-            ),
-            turn_contract=_mapping(state.get("turn_contract") or state),
+            simulation_state=raw_state,
+            turn_contract=raw_contract,
         )
         generation_state = dict(state)
         generation_state["simulation_state"] = prepared["simulation_state"]
@@ -165,13 +218,17 @@ class SceneNarrator(_LegacySceneNarrator):
             "narration_brief", {}
         )
         generation_state["response_profile"] = prepared["profile"].debug_payload()
+        generation_state["response_rollout_stage"] = prepared["simulation_state"].get(
+            "response_rollout_stage",
+            prepared["turn_contract"].get("response_rollout_stage"),
+        )
         profile = prepared["profile"]
         ignored = prepared["ignored_profile_overrides"]
         mode = profile.mode
         original_gateway = self.llm_gateway
         profile_gateway = None
         if original_gateway is not None and profile.use_provider:
-            profile_gateway = ProfileBoundProvider(original_gateway, profile)
+            profile_gateway = AuthoritativeProfileBoundProvider(original_gateway, profile)
             self.llm_gateway = profile_gateway
         try:
             result = super().narrate_scene(scene, generation_state, tone=tone)
@@ -188,7 +245,7 @@ class SceneNarrator(_LegacySceneNarrator):
             player_input=player_input,
             authoritative_turn_result={
                 **prepared["turn_contract"],
-                "turn_id": state.get("turn_id"),
+                "turn_id": state.get("turn_id") or prepared["turn_contract"].get("turn_id"),
                 "response_mode": mode.value,
                 "production_rpg_response": True,
                 "strict_claim_refs": True,
