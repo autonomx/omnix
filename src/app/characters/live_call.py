@@ -128,7 +128,9 @@ def resolve_live_call_runtime(
     )
     if character is not None and voice_asset_id:
         character_service.validate_voice_for_use(voice_asset_id, "live_call")
-    greeting = character.default_greeting.strip() if character else ""
+    # Live-call greetings are generated ephemerally by the active LLM. Keep the
+    # legacy field empty so old browser playback code cannot race that stream.
+    greeting = ""
     speech_style = normalize_speech_style(character.speech_style if character else None)
     resolved_at = _utcnow()
     preload_ms = round((time.perf_counter() - started) * 1000, 3)
