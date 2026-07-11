@@ -288,6 +288,7 @@ function renderAvatarHost(): void {
 }
 
 function currentPresentationState(): AvatarPresentationState {
+  if (currentMouthFrame !== 'closed') return 'speaking';
   const orb = document.querySelector<HTMLElement>('.assistant-live-card .assistant-voice-orb');
   const statusText = document.querySelector<HTMLElement>('.assistant-inline-status')?.textContent ?? '';
   return presentationStateFromDom(orb?.dataset.voiceMode, statusText);
@@ -329,7 +330,7 @@ function resolveFrameAsset(
 ): string {
   if (!pack) return '';
   if (blinkClosed && pack.blink_frames.closed) return pack.blink_frames.closed;
-  if (state === 'speaking' && frame !== 'closed') {
+  if (frame !== 'closed') {
     return pack.mouth_frames[frame] || pack.mouth_frames.closed || pack.base_asset_id || '';
   }
   if (pack.expression_frames[state]) return pack.expression_frames[state];
