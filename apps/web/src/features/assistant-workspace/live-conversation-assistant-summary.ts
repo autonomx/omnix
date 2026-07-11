@@ -65,7 +65,7 @@ export function observeAssistantDiagnostic(
     pending.text = `${pending.text}${details.text}`.slice(-12_000);
     return;
   }
-  if (event === 'turn_finished') {
+  if (event === 'llm_stream_finished') {
     dispatchAssistantTurnSummary(summarizeAssistantTurn(pending.text, pending.turnId, pending.turnKind));
     pendingDiagnostics.delete(traceId);
     return;
