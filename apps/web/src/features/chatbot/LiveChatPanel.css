@@ -3,7 +3,17 @@
 }
 
 [data-omnix-live-chat-host] {
+  box-sizing: border-box;
+  height: 100%;
   min-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.assistant-chat-main.omnix-live-chat-active {
+  display: block;
+  overflow: hidden;
 }
 
 .assistant-sidebar-nav.omnix-live-chat-nav-active > button.active:not([data-omnix-live-chat-nav]) {
@@ -14,6 +24,8 @@
 .live-chat-panel {
   display: grid;
   gap: 1rem;
+  min-height: min-content;
+  padding-bottom: 1rem;
 }
 
 .live-chat-page-header,

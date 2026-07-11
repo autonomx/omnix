@@ -10,8 +10,12 @@ import {
   type LiveConversationProfile,
   type LiveConversationProfilePatch,
   type LongPauseBehavior,
+  type EmotionalAttunement,
+  type PronunciationSavePolicy,
   type PresencePreset,
   type ResponseLength,
+  type ResponseOnsetStyle,
+  type TopicContinuity,
   liveConversationProfileClient,
   migrateLegacyConversationSettingsOnce,
   mirrorProfileForLegacyRuntime,
@@ -32,8 +36,7 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
     setStatus(null);
     void (async () => {
       try {
-        await migrateLegacyConversationSettingsOnce();
-        if (cancelled) return;
+        const migration = migrateLegacyConversationSettingsOnce().catch(() => false);
         if (sessionId) {
           const envelope = await liveConversationProfileClient.get(sessionId);
           if (cancelled) return;
@@ -47,6 +50,28 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
           setSource('user_defaults');
           mirrorProfileForLegacyRuntime(defaults);
         }
+        // Migration is best-effort and must never block the visible controls. If it
+        // changes defaults, refresh the effective profile once it completes.
+        void migration.then(async (migrated) => {
+          if (!migrated || cancelled) return;
+          try {
+            if (sessionId) {
+              const envelope = await liveConversationProfileClient.get(sessionId);
+              if (cancelled) return;
+              setProfile(envelope.effective);
+              setSource(envelope.source);
+              mirrorProfileForLegacyRuntime(envelope.effective);
+            } else {
+              const defaults = await liveConversationProfileClient.defaults();
+              if (cancelled) return;
+              setProfile(defaults);
+              setSource('user_defaults');
+              mirrorProfileForLegacyRuntime(defaults);
+            }
+          } catch {
+            // Keep the already loaded profile when the optional refresh fails.
+          }
+        });
       } catch (error) {
         if (!cancelled) setStatus(error instanceof Error ? error.message : 'Live Chat profile could not be loaded.');
       }
@@ -137,7 +162,19 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
           <SelectControl label="Long-pause behavior" value={profile.long_pause_behavior} disabled={saving} onChange={(value) => void update({ long_pause_behavior: value as LongPauseBehavior })} options={[
             ['wait', 'Wait silently'], ['reassure', 'Gentle reassurance'], ['ask_to_continue', 'Ask whether to continue'],
           ]} />
-          <label><span>First idle prompt</span><input aria-label="First idle prompt seconds" type="number" min="8" max="120" step="1" value={Math.round(profile.idle_threshold_ms / 1000)} disabled={saving} onChange={(event) => void update({ idle_threshold_ms: Number(event.currentTarget.value) * 1000 })} /><strong>seconds</strong></label>
+          <SelectControl label="Response onset" value={profile.response_onset_style} disabled={saving} onChange={(value) => void update({ response_onset_style: value as ResponseOnsetStyle })} options={[
+            ['adaptive', 'Adaptive'], ['immediate', 'Immediate'], ['natural', 'Natural pause'], ['reflective', 'Reflective pause'],
+          ]} />
+          <SelectControl label="Emotional attunement" value={profile.emotional_attunement} disabled={saving} onChange={(value) => void update({ emotional_attunement: value as EmotionalAttunement })} options={[
+            ['off', 'Off'], ['subtle', 'Subtle'], ['expressive', 'Expressive'],
+          ]} />
+          <SelectControl label="Topic continuity" value={profile.topic_continuity} disabled={saving} onChange={(value) => void update({ topic_continuity: value as TopicContinuity })} options={[
+            ['focused', 'Focused'], ['natural', 'Natural'], ['exploratory', 'Exploratory'],
+          ]} />
+          <SelectControl label="Pronunciation saving" value={profile.pronunciation_save_policy} disabled={saving} onChange={(value) => void update({ pronunciation_save_policy: value as PronunciationSavePolicy })} options={[
+            ['ask', 'Ask before saving'], ['session_only', 'This session only'], ['allow', 'Allow saving'],
+          ]} />
+          <label><span>First idle prompt</span><input aria-label="First idle prompt seconds" type="number" min="1" max="120" step="1" value={Math.round(profile.idle_threshold_ms / 1000)} disabled={saving} onChange={(event) => void update({ idle_threshold_ms: Number(event.currentTarget.value) * 1000 })} /><strong>seconds</strong></label>
           <label><span>Maximum prompts per quiet period</span><input aria-label="Maximum prompts per quiet period" type="number" min="0" max="3" step="1" value={profile.max_idle_prompts} disabled={saving} onChange={(event) => void update({ max_idle_prompts: Number(event.currentTarget.value) })} /></label>
         </div> : null}
 

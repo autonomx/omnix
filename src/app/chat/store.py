@@ -443,14 +443,27 @@ class ChatSessionStore:
     def _load_sessions(self) -> list[ChatSession]:
         if not self.path.exists():
             return []
-        payload = json.loads(self.path.read_text(encoding="utf-8"))
+        raw = self.path.read_text(encoding="utf-8")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as error:
+            # A complete first document is recoverable when an interrupted or
+            # competing legacy writer left a duplicate fragment after it.
+            payload, end = json.JSONDecoder().raw_decode(raw)
+            if not isinstance(payload, dict) or "sessions" not in payload or not raw[end:].strip():
+                raise error
         return [ChatSession.model_validate(session) for session in payload.get("sessions", [])]
 
     def _save_sessions(self, sessions: list[ChatSession]) -> None:
         payload = {"sessions": [session.model_dump(mode="json") for session in sessions]}
-        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
-        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-        temporary.replace(self.path)
+        temporary = self.path.with_name(
+            f".{self.path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+        )
+        try:
+            temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            temporary.replace(self.path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     @staticmethod
     def _summary(session: ChatSession) -> ChatSessionSummary:

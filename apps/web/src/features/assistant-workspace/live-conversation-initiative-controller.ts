@@ -172,11 +172,10 @@ export function resolveInitiativePolicyTiming(
     };
   }
   return {
-    idleThresholdMs: Math.max(
-      profileIdleThresholdMs,
-      policy.silence_tolerance_ms,
-      policy.initiative_threshold_ms,
-    ),
+    // The explicit Live Chat profile/session setting owns when the first idle
+    // prompt is eligible. Presence policy still tunes cooldown, length, and
+    // response onset, but must not silently lengthen the configured delay.
+    idleThresholdMs: profileIdleThresholdMs,
     cooldownMs: policy.initiative_cooldown_ms,
     typicalTurnWords: policy.typical_turn_words,
     responseOnsetMs: policy.response_onset_ms,
@@ -196,7 +195,12 @@ function evaluateInitiative(): void {
   const transcript = currentDraftOrTranscript();
   const userSpeaking = runtime.conversation.userTurn === 'speaking'
     || runtime.conversation.userTurn === 'speech_candidate';
-  const reason = proactiveReasonFromTranscript(transcript);
+  const reason = proactiveReasonFromTranscript(transcript)
+    ?? (profile.long_pause_behavior === 'reassure'
+      ? 'gentle_reassurance'
+      : profile.long_pause_behavior === 'ask_to_continue'
+        ? 'ask_to_continue'
+        : null);
   const decision = decideInitiative({
     mode: profile.initiative_mode,
     callConnected,

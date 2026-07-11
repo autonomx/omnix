@@ -50,6 +50,30 @@ describe('LiveConversationControls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show advanced controls' }));
     expect(screen.getByLabelText('Conversation pace')).toHaveValue('balanced');
     expect(screen.getByLabelText('Assistant listener backchannels')).toHaveValue('off');
+    expect(screen.getByLabelText('Response onset')).toHaveValue('adaptive');
+    expect(screen.getByLabelText('Emotional attunement')).toHaveValue('subtle');
+    expect(screen.getByLabelText('Topic continuity')).toHaveValue('natural');
+    expect(screen.getByLabelText('Pronunciation saving')).toHaveValue('ask');
+    expect(screen.getByLabelText('First idle prompt seconds')).toHaveAttribute('min', '1');
+  });
+
+  it('shows profile controls without waiting for a stalled legacy migration', async () => {
+    window.localStorage.removeItem('omnix.liveConversation.serverProfileMigrated.v1');
+    window.localStorage.setItem('omnix.liveConversation.settings', JSON.stringify({ conversationPace: 'balanced' }));
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PATCH') return new Promise<Response>(() => undefined);
+      return Promise.resolve(Response.json({
+        user_defaults: profile,
+        session_override: null,
+        effective: profile,
+        source: 'user_defaults',
+      }));
+    }));
+
+    render(<LiveConversationControls sessionId="chat:one" />);
+
+    expect(await screen.findByLabelText('Presence')).toHaveValue('natural');
+    expect(screen.getByRole('button', { name: 'Show advanced controls' })).toBeInTheDocument();
   });
 
   it('persists a session override and mirrors runtime-compatible fields', async () => {

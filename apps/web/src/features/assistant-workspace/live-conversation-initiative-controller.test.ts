@@ -35,7 +35,7 @@ describe('live conversation initiative controller', () => {
     expect(proactiveReasonFromTranscript('')).toBeNull();
   });
 
-  it('applies active policy silence, cooldown, length, and onset values conservatively', () => {
+  it('keeps the explicit profile idle delay while applying other active policy timing', () => {
     expect(resolveInitiativePolicyTiming(12_000, {
       silence_tolerance_ms: 16_000,
       initiative_threshold_ms: 20_000,
@@ -45,7 +45,7 @@ describe('live conversation initiative controller', () => {
       interruption_sensitivity: 0.74,
       response_onset_ms: 450,
     })).toEqual({
-      idleThresholdMs: 20_000,
+      idleThresholdMs: 12_000,
       cooldownMs: 50_000,
       typicalTurnWords: 65,
       responseOnsetMs: 450,

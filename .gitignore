@@ -77,7 +77,10 @@ resources/data/
 
 # Logs
 *.log
-logs/
+/resources/logs/
+
+# Generated runtime and rehearsal artifacts
+/resources/artifacts/
 
 # Environment variables
 .env

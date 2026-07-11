@@ -3,7 +3,7 @@ Parakeet TDT 0.6B STT Server
 FastAPI server for speech-to-text using NVIDIA NeMo Parakeet model
 
 This file is placed in the root to avoid import conflicts with the 
-local nemo folder in models/stt/parakeet-tdt-0.6b-v2/
+local nemo folder in resources/models/stt/parakeet-tdt-0.6b-v2/
 """
 # Fix PyTorch DLL loading hang on Windows (PyTorch 2.9+)
 import os

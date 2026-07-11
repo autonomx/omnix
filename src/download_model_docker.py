@@ -4,7 +4,7 @@
 try:
     from huggingface_hub import hf_hub_download
     
-    # Download the Q4_K_M quantized model to models/llm
+    # Download the Q4_K_M quantized model to the container path /app/models/llm
     filename = hf_hub_download(
         repo_id='TheBloke/Mistral-7B-Instruct-v0.2-GGUF',
         filename='mistral-7b-instruct-v0.2.Q4_K_M.gguf',

@@ -29,9 +29,10 @@ export {
 
 export type LiveChatPanelProps = {
   sessionId: string | null;
+  onSessionResolved?: (sessionId: string) => void;
 };
 
-export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
+export function LiveChatPanel({ sessionId, onSessionResolved }: LiveChatPanelProps) {
   const runtimeState = useLiveConversationState();
   const snapshot = selectLiveChatSnapshot(runtimeState);
   const fullscreen = useLiveChatFullscreenState();
@@ -92,7 +93,7 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
           <p>Choose or create a Chat session to configure its character. Presence changes below update your user defaults.</p>
         </article>
       ) : (
-        <CharacterModePanel sessionId={sessionId} />
+        <CharacterModePanel sessionId={sessionId} onSessionResolved={onSessionResolved} />
       )}
 
       <LiveConversationControls sessionId={sessionId} />

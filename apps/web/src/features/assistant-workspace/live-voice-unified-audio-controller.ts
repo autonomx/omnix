@@ -26,6 +26,7 @@ const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const LIVE_VOICE_CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 const LIVE_VOICE_CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
 const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
+const AUDIO_PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const MIN_SENTENCE_CHARS = 36;
 const MAX_PHRASE_CHARS = 120;
@@ -85,6 +86,7 @@ let playbackGeneration = 0;
 let activeTurn: ActiveLiveTurn | null = null;
 let greetingStartup: GreetingStartup | null = null;
 let greetingStartupToken = 0;
+let reportedSpeaking = false;
 
 export function initializeLiveVoiceUnifiedAudioController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
@@ -561,6 +563,12 @@ function setVoiceSpeaking(speaking: boolean, kind?: LiveTurnKind): void {
       else delete card.dataset.liveVoiceOutputKind;
     }
   });
+  if (reportedSpeaking !== speaking) {
+    reportedSpeaking = speaking;
+    window.dispatchEvent(new CustomEvent(AUDIO_PLAYBACK_STATE_EVENT, {
+      detail: { speaking, source: 'unified-live-voice', kind: kind ?? null },
+    }));
+  }
 }
 
 function setInlineStatus(message: string): void {

@@ -250,6 +250,21 @@ describe('live voice unified audio controller', () => {
     );
   });
 
+  it('publishes authoritative playback state until unified response audio drains', async () => {
+    const states: boolean[] = [];
+    window.addEventListener('omnix:assistant-audio-playback-state', ((event: CustomEvent<{ speaking: boolean }>) => {
+      states.push(event.detail.speaking);
+    }) as EventListener);
+
+    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    await response.text();
+
+    await waitFor(() => expect(states).toContain(true));
+    await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(states.at(-1)).toBe(false));
+    expect(states).toEqual([true, false]);
+  });
+
   it('reuses the speech turn id as the end-to-end diagnostics trace', async () => {
     const response = await window.fetch('/api/chat/sessions/s1/messages/stream', {
       method: 'POST',

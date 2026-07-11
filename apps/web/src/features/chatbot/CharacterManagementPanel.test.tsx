@@ -140,7 +140,7 @@ describe('CharacterManagementPanel dashboard', () => {
     expect(screen.getByRole('heading', { name: 'Cloned-voice backfill' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Character data / relationship data' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Danger zone / cleanup' })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Search characters')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Select character' })).toHaveValue('character:maya');
     expect(await screen.findByAltText('Maya avatar preview')).toBeInTheDocument();
     expect(screen.getByText('Use your own image')).toBeInTheDocument();
     expect(screen.getByLabelText('Upload source image')).toBeInTheDocument();
@@ -189,7 +189,7 @@ describe('CharacterManagementPanel dashboard', () => {
     }));
 
     renderPanel();
-    await screen.findByRole('button', { name: /Maya/ });
+    await screen.findByRole('heading', { name: 'Character profile' });
     const submit = screen.getByRole('button', { name: 'Upload image and generate avatar pack' });
     expect(submit).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Upload source image'), {
@@ -219,7 +219,7 @@ describe('CharacterManagementPanel dashboard', () => {
 
     renderPanel();
 
-    expect(await screen.findByRole('button', { name: /Maya/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Select character' })).toHaveValue('maya'));
     expect(await screen.findByText('Rainy hike joke.')).toBeInTheDocument();
     expect(screen.getByText('User likes tea.')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
@@ -248,7 +248,7 @@ describe('CharacterManagementPanel dashboard', () => {
     }));
 
     renderPanel();
-    await screen.findByRole('button', { name: /Maya/ });
+    await screen.findByRole('heading', { name: 'Danger zone / cleanup' });
     fireEvent.click(screen.getByLabelText('Delete character memories and pending suggestions'));
     const apply = screen.getByRole('button', { name: 'Apply selected actions' });
     expect(apply).toBeDisabled();

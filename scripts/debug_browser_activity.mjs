@@ -7,7 +7,7 @@ const targetUrl = process.env.TARGET_URL || '';
 const durationMs = Number(process.env.DURATION_MS || 180_000);
 const slowRequestMs = Number(process.env.SLOW_REQUEST_MS || 5_000);
 
-const logDir = resolve('logs');
+const logDir = resolve('resources', 'logs');
 mkdirSync(logDir, { recursive: true });
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');

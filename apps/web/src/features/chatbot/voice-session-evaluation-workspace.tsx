@@ -31,7 +31,10 @@ export function initializeVoiceSessionEvaluationWorkspace(): () => void {
 export function mountVoiceSessionEvaluation(root: ParentNode = document): HTMLElement | null {
   if (mountedHost && !mountedHost.isConnected) disposeMountedPanel();
   const view = root.querySelector<HTMLElement>('[aria-label="Voice Sessions view"]');
-  if (!view) return null;
+  if (!view) {
+    disposeMountedPanel();
+    return null;
+  }
   const existing = view.querySelector<HTMLElement>(`[${HOST_ATTRIBUTE}]`);
   if (existing) return existing;
 

@@ -14,7 +14,7 @@ import tempfile
 
 # Set paths based on platform
 if platform.system() == 'Windows':
-    DEST_DIR = os.path.join(os.getcwd(), 'models', 'server')
+    DEST_DIR = os.path.join(os.getcwd(), 'resources', 'models', 'server')
     LLAMA_DIR = os.path.join(tempfile.gettempdir(), 'llama.cpp')
 else:
     DEST_DIR = '/app/models/server'

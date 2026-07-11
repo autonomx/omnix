@@ -43,7 +43,7 @@ services:
       "
 
   # Note: llama.cpp server removed - use local installation or run separately
-  # To enable LLM: download GGUF model to models/llm/ and run llama.cpp locally
+  # To enable LLM: download GGUF model to resources/models/llm/ and run llama.cpp locally
 
   # Optional: Separate STT service (Parakeet)
   # Uncomment if running STT as separate container

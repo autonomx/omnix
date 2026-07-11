@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { omnixApiClient } from '../../api/client';
 import { characterClient } from './characterClient';
 import './CharacterModePanel.css';
 
-export function CharacterModePanel({ sessionId }: { sessionId: string }) {
+export function CharacterModePanel({ sessionId, onSessionResolved }: { sessionId: string; onSessionResolved?: (sessionId: string) => void }) {
   const queryClient = useQueryClient();
   const [selectedCharacterId, setSelectedCharacterId] = useState('');
   const [readMemory, setReadMemory] = useState(false);
@@ -32,18 +33,28 @@ export function CharacterModePanel({ sessionId }: { sessionId: string }) {
   }, [characters, interaction?.character_id, interaction?.read_memory, interaction?.write_memory, selectedCharacterId]);
 
   const mutation = useMutation({
-    mutationFn: (mode: 'system' | 'character') => {
+    mutationFn: async (mode: 'system' | 'character') => {
       const characterId = mode === 'character' ? effectiveSelectedCharacterId : null;
       const character = characters.find((item) => item.id === characterId);
-      return characterClient.setSession(sessionId, {
+      const input = {
         interaction_mode: mode,
         character_id: characterId,
         voice_asset_id: mode === 'character' ? character?.default_voice_asset_id ?? null : null,
         read_memory: mode === 'character' ? readMemory : false,
         write_memory: mode === 'character' ? writeMemory : false,
-      });
+      } as const;
+      try {
+        return { next: await characterClient.setSession(sessionId, input), resolvedSessionId: sessionId };
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        if (mode !== 'character' || !message.includes('chat session not found')) throw error;
+        const created = await omnixApiClient.createChatSession({ title: `Live Chat with ${character?.display_name ?? 'character'}` });
+        const next = await characterClient.setSession(created.id, input);
+        onSessionResolved?.(created.id);
+        return { next, resolvedSessionId: created.id };
+      }
     },
-    onSuccess: async (next) => {
+    onSuccess: async ({ next, resolvedSessionId }) => {
       const memoryLabel = next.read_memory && next.write_memory
         ? 'Memory read/write on'
         : next.read_memory
@@ -51,12 +62,13 @@ export function CharacterModePanel({ sessionId }: { sessionId: string }) {
           : next.write_memory
             ? 'Memory write-only'
             : 'Memory off';
+      const character = characters.find((item) => item.id === next.character_id);
       setStatus(next.interaction_mode === 'character'
-        ? `Talking to ${characters.find((item) => item.id === next.character_id)?.display_name ?? 'character'} · ${memoryLabel}`
-        : 'Switched to System Assistant · Character memory inactive');
+        ? `Character Mode enabled. ${character?.display_name ?? 'Character'} loaded${next.voice_asset_id ? ' with linked voice' : ''}. ${memoryLabel}.`
+        : 'System Assistant enabled. Character identity and memory are inactive.');
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'interaction', sessionId] }),
-        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'session', sessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'interaction', resolvedSessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'session', resolvedSessionId] }),
         queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'sessions'] }),
         queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'memory'] }),
         queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'memory-state'] }),

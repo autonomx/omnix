@@ -3,9 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CharacterModePanel } from './CharacterModePanel';
 
-function renderPanel() {
+function renderPanel(onSessionResolved?: (sessionId: string) => void) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={queryClient}><CharacterModePanel sessionId="chat:one" /></QueryClientProvider>);
+  return render(<QueryClientProvider client={queryClient}><CharacterModePanel sessionId="chat:one" onSessionResolved={onSessionResolved} /></QueryClientProvider>);
 }
 
 const maya = {
@@ -47,7 +47,41 @@ describe('CharacterModePanel', () => {
       interaction_mode: 'character', character_id: 'maya', voice_asset_id: 'voice-cloning:maya',
       read_memory: false, write_memory: false, transcript_policy: 'persistent',
     });
-    expect(await screen.findByRole('status')).toHaveTextContent('Talking to Maya · Memory off');
+    expect(await screen.findByRole('status')).toHaveTextContent('Character Mode enabled. Maya loaded with linked voice. Memory off.');
+  });
+
+  it('creates a persisted session when the selected chat is missing and confirms the loaded character', async () => {
+    const resolved = vi.fn();
+    const postedSessionIds: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input.toString(), 'http://localhost');
+      if (url.pathname === '/api/characters') return Response.json({ characters: [maya] });
+      if (url.pathname === '/api/chat/sessions' && init?.method === 'POST') {
+        return Response.json({ id: 'chat:created', title: 'Live Chat with Maya', messages: [], message_count: 0 });
+      }
+      if (url.pathname.endsWith('/interaction') && init?.method === 'POST') {
+        const sessionId = decodeURIComponent(url.pathname.split('/')[4] ?? '');
+        postedSessionIds.push(sessionId);
+        if (sessionId === 'chat:one') return Response.json({ detail: 'chat session not found' }, { status: 404 });
+        const body = JSON.parse(String(init.body));
+        return Response.json({
+          id: sessionId, title: 'Live Chat with Maya', interaction_mode: body.interaction_mode,
+          character_id: body.character_id, voice_asset_id: body.voice_asset_id,
+          read_memory: body.read_memory, write_memory: body.write_memory,
+          shared_memory_access: 'none', transcript_policy: 'persistent', messages: [],
+        });
+      }
+      if (url.pathname.endsWith('/interaction')) return Response.json({ detail: 'chat session not found' }, { status: 404 });
+      return new Response('not found', { status: 404 });
+    }));
+
+    renderPanel(resolved);
+    expect(await screen.findByRole('option', { name: 'Maya' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Enable Character Mode' }));
+
+    await waitFor(() => expect(resolved).toHaveBeenCalledWith('chat:created'));
+    expect(postedSessionIds).toEqual(['chat:one', 'chat:created']);
+    expect(await screen.findByRole('status')).toHaveTextContent('Character Mode enabled. Maya loaded with linked voice. Memory off.');
   });
 
   it('shows the persisted character identity badge and memory policy', async () => {

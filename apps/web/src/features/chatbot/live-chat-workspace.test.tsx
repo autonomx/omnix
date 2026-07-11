@@ -34,7 +34,7 @@ function installWorkspaceShell(): void {
   document.body.innerHTML = `
     <nav class="assistant-sidebar-nav">
       <button type="button"><span>Chats</span></button>
-      <button type="button"><span>Voice Sessions</span></button>
+      <button type="button" class="active" aria-current="page"><span>Voice Sessions</span></button>
     </nav>
     <main class="assistant-chat-main"><div data-existing-view>Chats view</div></main>
   `;
@@ -59,6 +59,10 @@ describe('live chat workspace controller', () => {
     openLiveChat();
     expect(document.querySelector('.assistant-chat-main')).toHaveClass('omnix-live-chat-active');
     expect(document.querySelectorAll('[data-omnix-live-chat-host]')).toHaveLength(1);
+    expect(button).toHaveClass('active');
+    expect(button).toHaveAttribute('aria-current', 'page');
+    expect(button?.parentElement?.querySelectorAll('button.active')).toHaveLength(1);
+    expect(button?.nextElementSibling).not.toHaveClass('active');
 
     openLiveChat();
     expect(document.querySelectorAll('[data-omnix-live-chat-host]')).toHaveLength(1);

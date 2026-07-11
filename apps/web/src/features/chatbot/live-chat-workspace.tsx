@@ -116,7 +116,19 @@ export function closeLiveChat(): void {
   document.querySelector<HTMLElement>('.assistant-chat-main')?.classList.remove('omnix-live-chat-active');
   const nav = document.querySelector<HTMLElement>('.assistant-sidebar-nav');
   nav?.classList.remove('omnix-live-chat-nav-active');
-  nav?.querySelector<HTMLButtonElement>(`button[${NAV_ATTRIBUTE}]`)?.classList.remove('active');
+  const liveChatButton = nav?.querySelector<HTMLButtonElement>(`button[${NAV_ATTRIBUTE}]`);
+  liveChatButton?.classList.remove('active');
+  liveChatButton?.removeAttribute('aria-current');
+}
+
+function selectLiveChatNavigation(nav: HTMLElement): void {
+  const liveChatButton = nav.querySelector<HTMLButtonElement>(`button[${NAV_ATTRIBUTE}]`);
+  nav.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
+    const selected = button === liveChatButton;
+    button.classList.toggle('active', selected);
+    if (selected) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
 }
 
 function renderLiveChat(): void {
@@ -128,7 +140,7 @@ function renderLiveChat(): void {
 
   main.classList.add('omnix-live-chat-active');
   nav.classList.add('omnix-live-chat-nav-active');
-  nav.querySelector<HTMLButtonElement>(`button[${NAV_ATTRIBUTE}]`)?.classList.add('active');
+  selectLiveChatNavigation(nav);
 
   if (!mountedHost || !mountedHost.isConnected) {
     mountedRoot?.unmount();
@@ -139,7 +151,11 @@ function renderLiveChat(): void {
   }
   mountedRoot?.render(
     <QueryClientProvider client={queryClient}>
-      <LiveChatPanel sessionId={selectedSessionId} />
+      <LiveChatPanel sessionId={selectedSessionId} onSessionResolved={(sessionId) => {
+        selectedSessionId = sessionId;
+        window.dispatchEvent(new CustomEvent(SESSION_CHANGED_EVENT, { detail: { sessionId } }));
+        renderLiveChat();
+      }} />
     </QueryClientProvider>,
   );
 }

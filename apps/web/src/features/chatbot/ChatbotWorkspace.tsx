@@ -38,7 +38,9 @@ import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/ru
 import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
 import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentToolProposalCard';
+import { LiveChatFullscreenShell } from './LiveChatFullscreenShell';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
+import { enterLiveChatFullscreen } from './live-chat-fullscreen-controller';
 import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
 
 interface ChatbotFormValues {
@@ -321,6 +323,15 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   useEffect(() => {
     if (!selectedSessionId && sessionsQuery.data?.sessions[0]) setSelectedSessionId(sessionsQuery.data.sessions[0].id);
   }, [selectedSessionId, sessionsQuery.data]);
+
+  useEffect(() => {
+    const syncLiveChatSession = (event: Event) => {
+      const sessionId = (event as CustomEvent<{ sessionId?: string }>).detail?.sessionId;
+      if (sessionId) setSelectedSessionId(sessionId);
+    };
+    window.addEventListener('omnix:live-chat-session-changed', syncLiveChatSession);
+    return () => window.removeEventListener('omnix:live-chat-session-changed', syncLiveChatSession);
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(ASSISTANT_VIEW_STORAGE_KEY, activeView);
@@ -1676,7 +1687,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <div className="assistant-side-panel-toggle" aria-label="Assistant utility panel"><button type="button" className={activeUtilityPanel === 'voice' ? 'active' : undefined} onClick={() => setActiveUtilityPanel('voice')}>Live Voice</button><button type="button" className={activeUtilityPanel === 'tools' ? 'active' : undefined} onClick={() => setActiveUtilityPanel('tools')}>Tools</button></div>
           <div className="assistant-live-tools-grid" data-active-panel={activeUtilityPanel}>
             <section className="assistant-live-card" data-live-voice-id={currentLiveCallVoiceId()}>
-              <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><strong>{liveConnectionLabel}</strong></header>
+              <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><div className="assistant-live-header-actions"><strong>{liveConnectionLabel}</strong><button type="button" className="assistant-live-fullscreen-button" aria-label="Enter fullscreen Live Voice" onClick={() => enterLiveChatFullscreen('call-card')}>Fullscreen</button></div></header>
               <div className="assistant-live-state" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>
               <div className="assistant-voice-orb" data-voice-mode={liveVoiceVisualMode} aria-hidden="true">
                 <div className="assistant-voice-meter assistant-voice-meter-left">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`left-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
@@ -1704,6 +1715,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
         </aside>
       </div>
+      <LiveChatFullscreenShell />
     </WorkspacePanel>
   );
 }

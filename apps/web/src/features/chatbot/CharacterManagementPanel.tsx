@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CharacterAvatarPanel } from './CharacterAvatarPanel';
 import { characterAvatarAssetUrl, characterAvatarClient } from './characterAvatarClient';
 import { characterClient, type CharacterDataExport, type CharacterProfile } from './characterClient';
@@ -13,7 +13,6 @@ const SELECTED_CHARACTER_STORAGE_KEY = 'omnix.chatbot.selectedCharacterId';
 export function CharacterManagementPanel() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState(() => window.localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY) ?? '');
-  const [search, setSearch] = useState('');
   const [draft, setDraft] = useState({ display_name: '', description: '', personality_prompt: '', default_greeting: '', gender: '' });
   const [confirmation, setConfirmation] = useState('');
   const [actions, setActions] = useState({ delete_memories: false, delete_transcripts: false, unlink_voice: false, archive_profile: false });
@@ -25,14 +24,6 @@ export function CharacterManagementPanel() {
     queryFn: () => characterClient.list(),
   });
   const characters = charactersQuery.data?.characters ?? [];
-  const filteredCharacters = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
-    if (!normalized) return characters;
-    return characters.filter((character) =>
-      [character.display_name, character.description, character.status]
-        .some((value) => String(value || '').toLowerCase().includes(normalized)),
-    );
-  }, [characters, search]);
   const selected = characters.find((item) => item.id === selectedId) ?? characters[0];
   const dataQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'character-data', selected?.id],
@@ -139,50 +130,41 @@ export function CharacterManagementPanel() {
     <article className="character-management-card" aria-label="Character management">
       <h3 className="character-management-sr-title">Profiles and relationship data</h3>
       <div className="character-management-layout">
-        <aside className="character-roster" aria-label="Character profiles">
-          <div className="character-roster-toolbar">
-            <label>
-              <span className="character-management-sr-title">Search characters</span>
-              <input
-                aria-label="Search characters"
-                placeholder="Search characters"
-                value={search}
-                onChange={(event) => setSearch(event.currentTarget.value)}
-              />
-            </label>
-            <span aria-hidden="true">⌕</span>
-          </div>
-
-          <nav>
-            {filteredCharacters.map((character) => (
-              <button
-                type="button"
-                className={character.id === selected?.id ? 'active' : undefined}
-                key={character.id}
-                onClick={() => setSelectedId(character.id)}
-              >
-                <CharacterRosterAvatar character={character} />
-                <span className="character-roster-copy">
-                  <strong>{character.display_name}</strong>
-                  <small>{character.status} · v{character.active_version}</small>
-                </span>
-                <i className={`character-status-dot ${character.status}`} aria-label={character.status} />
-              </button>
-            ))}
-          </nav>
-
-          <footer>
+        <section className="character-selector-bar" aria-label="Character profiles">
+          <label>
+            <span>Character</span>
+            <select aria-label="Select character" value={selected?.id ?? ''} onChange={(event) => setSelectedId(event.currentTarget.value)}>
+              {characters.map((character) => (
+                <option value={character.id} key={character.id}>
+                  {character.display_name} · {character.status} · v{character.active_version}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div>
+            <small>{characters.length} {characters.length === 1 ? 'character' : 'characters'}</small>
             <button type="button" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
               <span aria-hidden="true">＋</span>
               New character
             </button>
-            <small>{filteredCharacters.length} of {characters.length} characters</small>
-          </footer>
-        </aside>
+          </div>
+        </section>
 
         <div className="character-management-editor">
           {charactersQuery.isPending ? <div className="character-dashboard-empty">Loading characters…</div> : selected ? (
             <div className="character-dashboard-grid">
+              <header className="character-editor-summary">
+                <CharacterRosterAvatar character={selected} />
+                <div>
+                  <span>Editing character</span>
+                  <h3>{selected.display_name}</h3>
+                  <p>{selected.description || 'Add a short description to make this character easier to identify.'}</p>
+                </div>
+                <dl>
+                  <div><dt>Status</dt><dd>{selected.status}</dd></div>
+                  <div><dt>Version</dt><dd>v{selected.active_version}</dd></div>
+                </dl>
+              </header>
               <section className="character-dashboard-section character-profile-section">
                 <header className="character-section-heading">
                   <div><span>1</span><h4>Character profile</h4></div>
@@ -220,7 +202,7 @@ export function CharacterManagementPanel() {
                     <span>Default greeting <small>{draft.default_greeting.length} / 2000</small></span>
                     <textarea aria-label="Character greeting" rows={2} value={draft.default_greeting} onChange={(event) => setDraft({ ...draft, default_greeting: event.currentTarget.value })} />
                   </label>
-                  <label>
+                  <label className="wide">
                     <span>Personality prompt <small>{draft.personality_prompt.length} / 12000</small></span>
                     <textarea aria-label="Character personality" rows={4} value={draft.personality_prompt} onChange={(event) => setDraft({ ...draft, personality_prompt: event.currentTarget.value })} />
                   </label>

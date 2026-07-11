@@ -1,16 +1,3 @@
-.assistant-chat-layout:has(.assistant-view-panel[aria-label='Characters view']) {
-  grid-template-columns: minmax(12rem, 14rem) minmax(0, 1fr);
-}
-
-.assistant-chat-layout:has(.assistant-view-panel[aria-label='Characters view']) > .assistant-chat-side,
-.assistant-chat-layout:has(.assistant-view-panel[aria-label='Characters view']) .assistant-sidebar-section {
-  display: none;
-}
-
-.assistant-chat-layout:has(.assistant-view-panel[aria-label='Characters view']) .assistant-chat-sidebar {
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
 .assistant-view-panel[aria-label='Characters view'] {
   background:
     radial-gradient(circle at 45% -10%, rgba(96, 70, 190, 0.14), transparent 34rem),
@@ -65,7 +52,7 @@
 
 .character-management-card {
   margin-inline: auto;
-  max-width: 66rem;
+  max-width: 72rem;
   min-height: 0;
   width: 100%;
 }
@@ -83,10 +70,63 @@
   width: 1px;
 }
 
+.character-selector-bar {
+  align-items: end;
+  background: linear-gradient(180deg, rgba(10, 16, 31, 0.94), rgba(6, 11, 23, 0.96));
+  border: 1px solid rgba(131, 147, 193, 0.17);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.85rem 1rem;
+}
+
+.character-selector-bar label {
+  color: #aeb9d5;
+  display: grid;
+  font-size: 0.72rem;
+  font-weight: 800;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.character-selector-bar select {
+  background: rgba(5, 10, 22, 0.82);
+  border: 1px solid rgba(130, 146, 190, 0.22);
+  border-radius: 0.65rem;
+  color: #edf2ff;
+  font: inherit;
+  font-size: 0.88rem;
+  min-height: 2.75rem;
+  outline: none;
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+}
+
+.character-selector-bar select:focus {
+  border-color: rgba(137, 103, 255, 0.75);
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.12);
+}
+
+.character-selector-bar > div {
+  align-items: center;
+  display: flex;
+  gap: 0.8rem;
+}
+
+.character-selector-bar small {
+  color: #8996b5;
+  white-space: nowrap;
+}
+
+.character-selector-bar button {
+  white-space: nowrap;
+}
+
 .character-management-layout {
   display: grid;
   gap: 1.15rem;
-  grid-template-columns: minmax(13rem, 14.5rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -95,17 +135,17 @@
   border: 1px solid rgba(131, 147, 193, 0.17);
   border-radius: 0.85rem;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  max-height: calc(100vh - 11.5rem);
-  min-height: 34rem;
+  grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr) auto;
+  grid-template-rows: auto;
+  max-height: none;
+  min-height: 0;
   overflow: hidden;
-  position: sticky;
-  top: 0;
+  position: static;
 }
 
 .character-roster-toolbar {
   align-items: center;
-  border-bottom: 1px solid rgba(131, 147, 193, 0.13);
+  border-right: 1px solid rgba(131, 147, 193, 0.13);
   display: grid;
   gap: 0.5rem;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -145,21 +185,25 @@
 
 .character-roster nav {
   align-content: start;
-  display: grid;
-  overflow: auto;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .character-roster nav button {
   align-items: center;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid rgba(131, 147, 193, 0.1);
+  border-bottom: 0;
+  border-right: 1px solid rgba(131, 147, 193, 0.1);
   border-radius: 0;
   color: #e8edff;
   display: grid;
   gap: 0.7rem;
-  grid-template-columns: 3.35rem minmax(0, 1fr) auto;
-  min-height: 4.4rem;
+  flex: 0 0 12.5rem;
+  grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  min-height: 4.2rem;
   padding: 0.65rem 0.75rem;
   text-align: left;
   width: 100%;
@@ -173,7 +217,7 @@
 
 .character-roster nav button.active {
   background: linear-gradient(135deg, rgba(98, 74, 196, 0.25), rgba(34, 28, 71, 0.34));
-  box-shadow: inset 3px 0 #8b6cff;
+  box-shadow: inset 0 -3px #8b6cff;
 }
 
 .character-roster-avatar {
@@ -182,10 +226,10 @@
   border: 1px solid rgba(151, 114, 255, 0.32);
   border-radius: 0.7rem;
   display: inline-flex;
-  height: 3rem;
+  height: 2.4rem;
   justify-content: center;
   overflow: hidden;
-  width: 3rem;
+  width: 2.4rem;
 }
 
 .character-roster-avatar img {
@@ -234,10 +278,12 @@
 }
 
 .character-roster footer {
-  border-top: 1px solid rgba(131, 147, 193, 0.13);
+  align-content: center;
+  border-left: 1px solid rgba(131, 147, 193, 0.13);
   display: grid;
   gap: 0.5rem;
-  padding: 0.75rem;
+  min-width: 10.5rem;
+  padding: 0.65rem 0.75rem;
 }
 
 .character-roster footer button {
@@ -257,10 +303,81 @@
   min-width: 0;
 }
 
+.character-editor-summary {
+  align-items: center;
+  background:
+    radial-gradient(circle at 0 50%, rgba(124, 92, 255, 0.18), transparent 18rem),
+    rgba(10, 16, 31, 0.82);
+  border: 1px solid rgba(130, 146, 190, 0.16);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.85rem;
+  grid-column: 1;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.9rem 1rem;
+}
+
+.character-editor-summary > .character-roster-avatar {
+  height: 3.5rem;
+  width: 3.5rem;
+}
+
+.character-editor-summary > div {
+  min-width: 0;
+}
+
+.character-editor-summary span,
+.character-editor-summary dt {
+  color: #8390af;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.character-editor-summary h3 {
+  color: #f4f6ff;
+  font-size: 1.15rem;
+  margin: 0.12rem 0;
+}
+
+.character-editor-summary p {
+  color: #9aa6c4;
+  font-size: 0.76rem;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.character-editor-summary dl {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.character-editor-summary dl div {
+  background: rgba(5, 10, 22, 0.58);
+  border: 1px solid rgba(130, 146, 190, 0.12);
+  border-radius: 0.6rem;
+  display: grid;
+  gap: 0.15rem;
+  min-width: 4.5rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.character-editor-summary dd {
+  color: #e9edfa;
+  font-size: 0.78rem;
+  font-weight: 800;
+  margin: 0;
+  text-transform: capitalize;
+}
+
 .character-dashboard-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .character-dashboard-section {
@@ -273,12 +390,15 @@
   padding: 1rem;
 }
 
-.character-profile-section { grid-column: 1 / -1; }
-.character-voice-section { grid-column: 1; grid-row: 2; }
-.character-backfill-section { grid-column: 2; grid-row: 2; }
-.character-avatar-panel { grid-column: 1 / -1; grid-row: 3; }
-.character-data-section { grid-column: 1 / -1; }
-.character-danger-zone { grid-column: 1 / -1; }
+.character-profile-section,
+.character-voice-section,
+.character-backfill-section,
+.character-avatar-panel,
+.character-data-section,
+.character-danger-zone {
+  grid-column: 1;
+  grid-row: auto;
+}
 
 .character-section-heading {
   align-items: center;
@@ -821,14 +941,6 @@
 }
 
 @media (max-width: 1050px) {
-  .assistant-chat-layout:has(.assistant-view-panel[aria-label='Characters view']) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .assistant-chat-layout:has(.assistant-view-panel[aria-label='Characters view']) .assistant-chat-sidebar {
-    display: none;
-  }
-
   .character-management-layout,
   .character-dashboard-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -864,6 +976,38 @@
 
   .assistant-view-panel[aria-label='Characters view'] > header::after {
     justify-self: start;
+  }
+
+  .character-selector-bar {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .character-selector-bar > div {
+    justify-content: space-between;
+  }
+
+  .character-roster {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .character-roster-toolbar {
+    border-bottom: 1px solid rgba(131, 147, 193, 0.13);
+    border-right: 0;
+  }
+
+  .character-roster footer {
+    border-left: 0;
+    border-top: 1px solid rgba(131, 147, 193, 0.13);
+  }
+
+  .character-editor-summary {
+    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .character-editor-summary dl {
+    grid-column: 1 / -1;
   }
 
   .character-form-grid,
@@ -903,7 +1047,9 @@
 }
 
 :root[data-omnix-appearance='light'] .character-roster,
-:root[data-omnix-appearance='light'] .character-dashboard-section {
+:root[data-omnix-appearance='light'] .character-selector-bar,
+:root[data-omnix-appearance='light'] .character-dashboard-section,
+:root[data-omnix-appearance='light'] .character-editor-summary {
   background: #fff;
   border-color: #dbe1ed;
   box-shadow: 0 10px 28px rgba(55, 65, 81, 0.06);
@@ -916,12 +1062,18 @@
 }
 
 :root[data-omnix-appearance='light'] .character-roster-toolbar input,
+:root[data-omnix-appearance='light'] .character-selector-bar select,
 :root[data-omnix-appearance='light'] .character-dashboard-section input,
 :root[data-omnix-appearance='light'] .character-dashboard-section textarea,
 :root[data-omnix-appearance='light'] .character-dashboard-section select {
   background: #f7f9fc;
   border-color: #d7deeb;
   color: #172033;
+}
+
+:root[data-omnix-appearance='light'] .character-selector-bar label,
+:root[data-omnix-appearance='light'] .character-selector-bar small {
+  color: #59667f;
 }
 
 :root[data-omnix-appearance='light'] .character-roster-toolbar input::placeholder,
@@ -967,11 +1119,24 @@
 }
 
 :root[data-omnix-appearance='light'] .character-section-heading h4,
+:root[data-omnix-appearance='light'] .character-editor-summary h3,
+:root[data-omnix-appearance='light'] .character-editor-summary dd,
 :root[data-omnix-appearance='light'] .character-backfill-content strong,
 :root[data-omnix-appearance='light'] .character-data-metrics strong,
 :root[data-omnix-appearance='light'] .character-dashboard-empty strong,
 :root[data-omnix-appearance='light'] .character-hermes-panel strong {
   color: #172033;
+}
+
+:root[data-omnix-appearance='light'] .character-editor-summary p,
+:root[data-omnix-appearance='light'] .character-editor-summary span,
+:root[data-omnix-appearance='light'] .character-editor-summary dt {
+  color: #66738c;
+}
+
+:root[data-omnix-appearance='light'] .character-editor-summary dl div {
+  background: #f7f9fc;
+  border-color: #e0e5ef;
 }
 
 :root[data-omnix-appearance='light'] .character-form-grid label,

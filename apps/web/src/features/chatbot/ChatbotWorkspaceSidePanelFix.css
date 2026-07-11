@@ -43,6 +43,35 @@
   width: 100%;
 }
 
+.assistant-live-header-actions {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.assistant-live-fullscreen-button {
+  align-items: center;
+  background: rgba(83, 63, 170, 0.22);
+  border: 1px solid rgba(137, 112, 255, 0.55);
+  border-radius: 0.65rem;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.assistant-live-fullscreen-button:hover,
+.assistant-live-fullscreen-button:focus-visible {
+  background: rgba(112, 76, 255, 0.4);
+  outline: none;
+}
+
 .assistant-supporting-panels {
   display: grid;
   gap: 0.75rem;
