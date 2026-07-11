@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
-from .runtime_part39 import *  # noqa: F401,F403
 from .runtime_part19 import apply_turn as _PHASE8_PART40_BASE_APPLY_TURN
+from .runtime_part39 import _canonicalize_publication, _persist_soft_truth
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
 
 
 def _queued_narration_snapshot(payload: Dict[str, Any]) -> dict[str, Any]:
@@ -97,4 +105,4 @@ def apply_turn(
     return _persist_soft_truth(canonical, session_id)
 
 
-__all__ = [name for name in globals() if not name.startswith("__")]
+__all__ = ["apply_turn"]
