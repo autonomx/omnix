@@ -1,12 +1,15 @@
 """FastAPI management routes for durable Character profiles and session mode."""
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from app.assistant_memory import default_memory_service, resolve_chat_scope
+from app.chat.live_call_greeting import stream_live_call_greeting_chunks
 from app.chat.models import ChatSession
 
 from .hermes_adapter import (
@@ -230,6 +233,29 @@ def register_character_routes(
             return resolve_live_call_runtime(session, character_service_factory=service_factory)
         except (CharacterNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post(
+        "/api/chat/sessions/{session_id}/live-call/greeting/stream",
+        tags=["characters"],
+        include_in_schema=False,
+    )
+    async def stream_live_call_greeting(session_id: str) -> StreamingResponse:
+        store = chat_store_factory()
+        session = store.get_session(session_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+
+        def generate():
+            try:
+                for event in stream_live_call_greeting_chunks(store, session):
+                    yield f"data: {json.dumps(event, sort_keys=True)}\n\n"
+                yield f"data: {json.dumps({'type': 'done'}, sort_keys=True)}\n\n"
+            except GeneratorExit:
+                raise
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(exc) or 'Live-call greeting failed.'}, sort_keys=True)}\n\n"
+
+        return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 __all__ = ["register_character_routes"]
