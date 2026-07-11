@@ -8,6 +8,7 @@ import {
   type VoiceSessionEvaluationRecord,
 } from '../assistant-workspace/live-chat-evaluation-client';
 import { LIVE_DURABLE_EVALUATION_SAVED_EVENT } from '../assistant-workspace/live-conversation-durable-evaluation-controller';
+import { LIVE_PRESENCE_POLICY_REFRESH_EVENT } from '../assistant-workspace/live-presence-policy-controller';
 import './VoiceSessionEvaluationPanel.css';
 
 const PRESETS: PresencePreset[] = ['quiet', 'natural', 'engaged', 'listener'];
@@ -86,6 +87,7 @@ export function VoiceSessionEvaluationPanel() {
       setPolicies((current) => current ? { ...current, [activated.preset]: activated } : current);
       setCandidate(null);
       await refresh();
+      window.dispatchEvent(new Event(LIVE_PRESENCE_POLICY_REFRESH_EVENT));
       setStatus(`${title(activated.preset)} policy v${activated.version} is active. Explicit user overrides were not changed.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Tuning candidate could not be activated.');
@@ -101,6 +103,7 @@ export function VoiceSessionEvaluationPanel() {
       const rolledBack = await liveChatEvaluationClient.rollbackPolicy(selectedPreset);
       setPolicies((current) => current ? { ...current, [rolledBack.preset]: rolledBack } : current);
       await refresh();
+      window.dispatchEvent(new Event(LIVE_PRESENCE_POLICY_REFRESH_EVENT));
       setStatus(`${title(rolledBack.preset)} rolled back to policy v${rolledBack.version}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Presence policy could not be rolled back.');
