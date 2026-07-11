@@ -222,7 +222,11 @@ def test_phase9_legacy_bridge_buffers_raw_chunks_until_canonical_approval(monkey
     monkeypatch.setattr(legacy_bridge, "_legacy_narrate_scene", fake_legacy)
     result = narrate_scene_canonical(
         {"scene_id": "room"},
-        {"turn_id": "turn-delivery", "player_input": "Open the door."},
+        {
+            "turn_id": "turn-delivery",
+            "player_input": "Open the door.",
+            "response_rollout_stage": "canonical_default",
+        },
         on_chunk=delivered.append,
     )
 
