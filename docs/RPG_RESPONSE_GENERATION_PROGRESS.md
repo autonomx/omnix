@@ -8,8 +8,8 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 
 | Phase | Status | Scope | Validation |
 |---:|---|---|---|
-| 0 | implemented, CI pending | labeled deterministic corpus, metrics, holdout manifest, opt-in live benchmark, CI test entry point | exact-head GitHub Actions pending |
-| 1 | pending | core contracts, thin orchestrator, response modes, renderer | pending |
+| 0 | complete | labeled deterministic corpus, metrics, holdout manifest, opt-in live benchmark, CI test entry point | exact-head GitHub Actions passed at `7bf797d1cd4953b12042662d3ded5f3f81cac952` |
+| 1 | implemented, CI pending | core contracts, thin orchestrator, response modes, field-aware renderer, legacy shadow adapters | exact-head GitHub Actions pending |
 | 2 | pending | hard gates, ranking, quality, repair, revalidation | pending |
 | 3 | pending | compact context, claim ledger, semantic claim references | pending |
 | 4 | pending | intent hypotheses, local retrieval, narrative affordances | pending |
@@ -27,3 +27,12 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 - Hidden holdout content is not committed; only a content-free hash manifest and use policy are present.
 - The live-model benchmark is opt-in through `OMNIX_RPG_RESPONSE_LIVE_BENCHMARK=1` and remains informational.
 - New roadmap tests are run by the required deterministic RPG workflow after every implementation update.
+
+## Phase 1 implementation notes
+
+- Added stable `ResponseRequest`, `SemanticResponsePlan`, `ResponseCandidate`, and `RenderedResponse` contracts.
+- Added response modes and centralized visible word budgets.
+- Added `RpgResponseGenerator.generate()` as the canonical ownership boundary.
+- Added compatibility adapters for runtime narration and world-scene payload shapes.
+- Added field-aware rendering with mode ordering, semantic deduplication, delivery-unit extraction, and authoritative delta separation.
+- Added shadow comparison reports that cannot mutate simulation state.
