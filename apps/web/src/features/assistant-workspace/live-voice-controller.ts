@@ -302,6 +302,7 @@ registerProcessor('omnix-live-voice-processor', OmnixLiveVoiceProcessor);
 }
 
 function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void {
+  const assistantOwnsFloor = liveVoiceAssistantOwnsFloor(session.card);
   const assistantSpeaking = assistantIsSpeaking(session.card);
   const rms = calculateRms(audio);
   updateVoiceVisualizer(session, rms);
@@ -314,9 +315,10 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
       timestamp: new Date().toISOString(),
       rms,
       assistantSpeaking,
+      assistantOwnsFloor,
     });
   }
-  if (assistantSpeaking && confirmedSpeech && !session.speechDetected) {
+  if (assistantOwnsFloor && confirmedSpeech && !session.speechDetected) {
     session.overlapIntent = 'uncertain';
     session.floorState = reduceUserFloor(session.floorState, {
       type: 'speech_confirmed',
@@ -330,7 +332,8 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
   }
   if (confirmedSpeech) {
     session.speechDetected = true;
-    if (!assistantSpeaking) {
+    if (!assistantOwnsFloor) {
+      session.overlapIntent = null;
       session.floorState = reduceUserFloor(session.floorState, {
         type: 'speech_confirmed',
         assistantSpeaking: false,
@@ -345,7 +348,7 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
     session.floorState = reduceUserFloor(session.floorState, { type: 'pause' });
     scheduleSemanticFinalization(session);
   }
-  if (assistantSpeaking && !session.speechDetected) return;
+  if (assistantOwnsFloor && !session.speechDetected) return;
   session.client.sendAudio(audio, session.audioContext.sampleRate);
 }
 
@@ -534,6 +537,10 @@ function readConversationPace(): ConversationPace {
 
 function assistantIsSpeaking(card: HTMLElement): boolean {
   return card.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode === 'speaking';
+}
+
+export function liveVoiceAssistantOwnsFloor(card: HTMLElement): boolean {
+  return assistantIsSpeaking(card) && card.dataset.liveVoiceOutputKind !== 'greeting';
 }
 
 function currentAssistantSpeechText(): string {
