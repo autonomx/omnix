@@ -1,7 +1,5 @@
-import {
-  projectLegacyLiveVoiceState,
-  type LiveConversationState,
-} from './live-conversation-state';
+import type { LiveConversationState } from './live-conversation-state';
+import { liveConversationStore } from './live-conversation-store';
 import type { SpeechDeliveryPlan } from './live-speech-delivery-plan';
 
 export type AvatarPresenceCue = 'idle' | 'listening' | 'thinking' | 'speaking' | 'yielding' | 'restrained';
@@ -20,37 +18,24 @@ export function deriveAvatarPresenceCue(
 }
 
 export function initializeLiveAvatarPresenceController(): () => void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  let plan: SpeechDeliveryPlan | null = null;
-  const handlePlan = (event: Event) => {
-    plan = (event as CustomEvent<SpeechDeliveryPlan>).detail ?? null;
-    project();
-  };
+  if (typeof document === 'undefined') return () => undefined;
   const project = () => {
-    const card = document.querySelector<HTMLElement>('.assistant-live-card');
-    const connected = Array.from(card?.querySelectorAll<HTMLButtonElement>('button') ?? [])
-      .some((button) => button.textContent?.trim().toLocaleLowerCase() === 'end call');
-    const legacyState = card?.querySelector<HTMLElement>('.assistant-live-state span')?.textContent?.trim()
-      || card?.querySelector<HTMLElement>('.assistant-voice-status strong')?.textContent?.trim()
-      || 'Idle';
-    const state = projectLegacyLiveVoiceState(connected, legacyState);
-    if (card?.dataset.bargeIn === 'accepted') state.bargeIn = 'accepted';
-    const cue = deriveAvatarPresenceCue(state, plan);
-    document.querySelectorAll<HTMLElement>('.assistant-voice-orb, [data-character-avatar], .character-avatar').forEach((node) => {
+    const runtime = liveConversationStore.getState();
+    const cue = deriveAvatarPresenceCue(runtime.conversation, runtime.deliveryPlan);
+    document.querySelectorAll<HTMLElement>(
+      '.assistant-voice-orb, [data-character-avatar], .character-avatar',
+    ).forEach((node) => {
       node.dataset.presenceCue = cue;
     });
   };
-  window.addEventListener('omnix:live-speech-delivery-plan', handlePlan);
+  const unsubscribe = liveConversationStore.subscribe(project);
+  // This observer only applies current store output to newly mounted presentation nodes.
+  // It never infers conversation state from the DOM.
   const observer = new MutationObserver(project);
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['data-voice-mode', 'data-barge-in', 'data-live-voice-status'],
-  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
   project();
   return () => {
+    unsubscribe();
     observer.disconnect();
-    window.removeEventListener('omnix:live-speech-delivery-plan', handlePlan);
   };
 }
