@@ -13,6 +13,7 @@ const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
 const INSTALL_KEY = '__omnixCharacterAvatarBridgeInstalled';
 const AUDIO_ELEMENT_FRAME_MS = 50;
 const AUDIO_ELEMENT_FFT_SIZE = 1_024;
+const AUDIO_BUFFER_WINDOW_MS = 60;
 const ENVELOPE_FRAME_ALIASES: Record<AvatarMouthFrame, string[]> = {
   closed: ['closed', 'silence', 'MBP'],
   small: ['small', 'U', 'WQ', 'FV', 'other'],
@@ -28,6 +29,10 @@ type AudioMonitorWindow = Window & typeof globalThis & {
 type CapturableAudioElement = HTMLAudioElement & {
   captureStream?: () => MediaStream;
   mozCaptureStream?: () => MediaStream;
+};
+
+type PatchedCreateBufferSource = AudioContext['createBufferSource'] & {
+  __omnixAvatarAudioMonitor?: boolean;
 };
 
 let currentRuntime: CharacterLiveCallRuntime | null = null;
@@ -61,6 +66,25 @@ export function floatPcmMouthFrame(samples: Float32Array): AvatarMouthFrame {
   let sum = 0;
   for (const sample of samples) sum += sample * sample;
   return mouthFrameForRms(Math.sqrt(sum / samples.length));
+}
+
+export function floatPcmMouthTimeline(
+  samples: Float32Array,
+  sampleRate: number,
+  windowMs = AUDIO_BUFFER_WINDOW_MS,
+): Array<{ offsetMs: number; frame: AvatarMouthFrame }> {
+  if (!samples.length || !Number.isFinite(sampleRate) || sampleRate <= 0) return [];
+  const windowSamples = Math.max(1, Math.floor(sampleRate * (windowMs / 1000)));
+  const timeline: Array<{ offsetMs: number; frame: AvatarMouthFrame }> = [];
+  let lastFrame: AvatarMouthFrame | null = null;
+  for (let start = 0; start < samples.length; start += windowSamples) {
+    const frame = floatPcmMouthFrame(samples.subarray(start, Math.min(samples.length, start + windowSamples)));
+    if (frame !== lastFrame) {
+      timeline.push({ offsetMs: (start / sampleRate) * 1000, frame });
+      lastFrame = frame;
+    }
+  }
+  return timeline;
 }
 
 export function pcmMouthTimeline(
@@ -151,6 +175,7 @@ function installLiveCharacterAvatarBridge(): void {
 
   installTtsFetchMonitor();
   installAudioElementMonitor();
+  installAudioBufferSourceMonitor();
 }
 
 function installTtsFetchMonitor(): void {
@@ -184,6 +209,58 @@ function installAudioElementMonitor(): void {
     }
     return result;
   };
+}
+
+function installAudioBufferSourceMonitor(): void {
+  const liveWindow = window as AudioMonitorWindow;
+  const constructors = [liveWindow.AudioContext, liveWindow.webkitAudioContext]
+    .filter((value): value is typeof AudioContext => Boolean(value));
+  const patchedPrototypes = new Set<AudioContext>();
+  for (const AudioContextCtor of constructors) {
+    const prototype = AudioContextCtor.prototype;
+    if (patchedPrototypes.has(prototype)) continue;
+    patchedPrototypes.add(prototype);
+    const originalCreate = prototype.createBufferSource as PatchedCreateBufferSource;
+    if (originalCreate.__omnixAvatarAudioMonitor) continue;
+    const patchedCreate = function patchedAvatarBufferSource(this: AudioContext): AudioBufferSourceNode {
+      const source = originalCreate.call(this);
+      const originalStart = source.start.bind(source);
+      source.start = ((when = 0, offset?: number, duration?: number): void => {
+        if (typeof duration === 'number') originalStart(when, offset ?? 0, duration);
+        else if (typeof offset === 'number') originalStart(when, offset);
+        else originalStart(when);
+        scheduleAudioBufferFrames(source.buffer, this, when, source.playbackRate.value, offset, duration);
+      }) as AudioBufferSourceNode['start'];
+      return source;
+    } as PatchedCreateBufferSource;
+    patchedCreate.__omnixAvatarAudioMonitor = true;
+    prototype.createBufferSource = patchedCreate;
+  }
+}
+
+function scheduleAudioBufferFrames(
+  buffer: AudioBuffer | null,
+  context: AudioContext,
+  when: number,
+  playbackRate: number,
+  offset = 0,
+  duration?: number,
+): void {
+  if (!buffer || !currentRuntime?.avatar_pack || buffer.numberOfChannels < 1) return;
+  const rate = Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
+  const startFrame = Math.max(0, Math.min(buffer.length, Math.floor(Math.max(0, offset) * buffer.sampleRate)));
+  const requestedEnd = typeof duration === 'number'
+    ? startFrame + Math.floor(Math.max(0, duration) * buffer.sampleRate)
+    : buffer.length;
+  const endFrame = Math.max(startFrame, Math.min(buffer.length, requestedEnd));
+  const samples = buffer.getChannelData(0).subarray(startFrame, endFrame);
+  if (!samples.length) return;
+  const startDelayMs = Math.max(0, (when - context.currentTime) * 1000);
+  for (const point of floatPcmMouthTimeline(samples, buffer.sampleRate)) {
+    window.setTimeout(() => dispatchAvatarFrame(point.frame), startDelayMs + (point.offsetMs / rate));
+  }
+  const durationMs = samples.length * 1000 / buffer.sampleRate / rate;
+  window.setTimeout(() => dispatchAvatarFrame('closed'), startDelayMs + durationMs);
 }
 
 function startAudioElementMonitor(audio: HTMLAudioElement): void {
