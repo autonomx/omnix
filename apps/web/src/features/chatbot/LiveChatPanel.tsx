@@ -19,6 +19,7 @@ import { LiveConversationEvaluationPanel } from './LiveConversationEvaluationPan
 import { LivePronunciationPanel } from './LivePronunciationPanel';
 import { LiveVoiceCalibrationPanel } from './LiveVoiceCalibrationPanel';
 import './LiveChatPanel.css';
+import './LiveChatFullscreenEntry.css';
 
 export {
   invokeExistingLiveCallControl,
