@@ -7,6 +7,7 @@ export type UserFloorState =
   | 'speaking'
   | 'paused'
   | 'completion_pending'
+  | 'finalizing'
   | 'overlap_candidate';
 
 export type SemanticTurnReason =
