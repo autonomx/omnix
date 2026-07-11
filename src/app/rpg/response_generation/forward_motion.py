@@ -50,6 +50,21 @@ class ForwardMotionPolicy:
                 rationale="interpretation confidence is too low to choose an action",
                 options=("clarify the intended outcome", "inspect the immediate situation"),
             )
+        if mechanic_resolved and selected.affordance in {
+            "transaction",
+            "combat_attempt",
+            "social_check",
+            "travel_attempt",
+        }:
+            return ForwardMotionPlan(
+                strategy=f"describe_resolved_{selected.affordance}",
+                outcome="resolved_action" if selected.affordance != "combat_attempt" else "mechanic_attempt",
+                rationale="the deterministic mechanic resolved the player's clear attempt",
+                offer_only=False,
+                starts_path=True,
+                requires_player_confirmation=False,
+                state_mutation_allowed=True,
+            )
         if analysis.retrieval.knowledge_status == "known" and analysis.retrieval.evidence:
             return ForwardMotionPlan(
                 strategy="answer_with_visible_evidence",
@@ -89,7 +104,7 @@ class ForwardMotionPolicy:
                 rationale="the requested power is unsupported",
                 options=("attempt insight or observation", "research a ritual or specialist"),
             )
-        if affordance in {"ask_directions", "entity_search", "lore_search"}:
+        if affordance in {"ask_directions", "entity_search", "lore_search", "offer_investigation"}:
             return ForwardMotionPlan(
                 strategy="offer_investigation_lead",
                 outcome="lead",
@@ -119,6 +134,13 @@ class ForwardMotionPolicy:
                 outcome="lead",
                 rationale="travel has not been resolved",
                 options=("ask for directions", "choose a known route"),
+            )
+        if affordance in {"transaction_failure", "combat_attempt"}:
+            return ForwardMotionPlan(
+                strategy="meaningful_failure_with_alternative",
+                outcome="failure",
+                rationale="the requested consequence has not been resolved by the relevant mechanic",
+                options=("attempt the supported mechanic", "choose a safer alternative"),
             )
         return ForwardMotionPlan(
             strategy="meaningful_failure_with_alternative",
