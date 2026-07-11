@@ -13,6 +13,8 @@ from .live_chat_evaluation_store import (
     VoiceSessionEvaluationRecord,
     default_live_chat_evaluation_store,
 )
+from .live_chat_release_aggregation import evaluate_durable_live_chat_records
+from .live_chat_release_gate import LiveChatReleaseGateReport
 
 _ROUTE_SENTINEL = "_omnix_live_chat_evaluation_routes_registered"
 
@@ -48,6 +50,18 @@ def register_live_chat_evaluation_routes(
             limit=limit,
         )
 
+    @router.get("/evaluations/release-gate", response_model=LiveChatReleaseGateReport)
+    async def evaluate_durable_voice_session_evidence(
+        limit: Annotated[int, Query(ge=1, le=1_000)] = 1_000,
+        persist_status: bool = True,
+    ) -> LiveChatReleaseGateReport:
+        records = evaluation_store.list(limit=limit)
+        report = evaluate_durable_live_chat_records(records)
+        if persist_status:
+            for record in records:
+                evaluation_store.update_release_gate_status(record.evaluation_id, report.status)
+        return report
+
     @router.get("/evaluations/export")
     async def export_voice_session_evaluations() -> dict:
         return evaluation_store.export()
@@ -78,7 +92,10 @@ def register_live_chat_evaluation_routes(
     ) -> PresencePolicyVersion:
         if preset not in {"quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
-        return evaluation_store.create_policy_version(preset, request)  # type: ignore[arg-type]
+        try:
+            return evaluation_store.create_policy_version(preset, request)  # type: ignore[arg-type]
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
 
     @router.post("/presence-presets/{preset}/activate/{version}", response_model=PresencePolicyVersion)
     async def activate_presence_policy(preset: str, version: int) -> PresencePolicyVersion:
@@ -88,6 +105,8 @@ def register_live_chat_evaluation_routes(
             return evaluation_store.activate_policy(preset, version)  # type: ignore[arg-type]
         except KeyError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
 
     @router.post("/presence-presets/{preset}/rollback", response_model=PresencePolicyVersion)
     async def rollback_presence_policy(preset: str) -> PresencePolicyVersion:
