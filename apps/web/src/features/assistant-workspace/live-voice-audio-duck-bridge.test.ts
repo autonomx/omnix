@@ -33,8 +33,10 @@ class FakeAudioContext {
 
 class FakeAudioWorkletNode {
   context: FakeAudioContext;
-  connect = vi.fn((destination: AudioNode) => destination);
-  disconnect = vi.fn();
+  rawConnect = vi.fn((destination: AudioNode) => destination);
+  connect = (destination: AudioNode) => this.rawConnect(destination);
+  rawDisconnect = vi.fn();
+  disconnect = () => this.rawDisconnect();
 
   constructor(context: FakeAudioContext, _name: string) {
     this.context = context;
@@ -59,14 +61,14 @@ describe('live voice audio duck bridge', () => {
     liveNode.connect(context.destination);
 
     expect(context.gains).toHaveLength(1);
-    expect((liveNode as unknown as FakeAudioWorkletNode).connect).toHaveBeenCalledWith(context.gains[0]);
+    expect((liveNode as unknown as FakeAudioWorkletNode).rawConnect).toHaveBeenCalledWith(context.gains[0]);
     expect(context.gains[0].connect).toHaveBeenCalledWith(context.destination);
 
     window.dispatchEvent(new CustomEvent('omnix:assistant-audio-duck', { detail: { gain: 0.18 } }));
-    expect(context.gains[0].gain.setTargetAtTime).toHaveBeenLastCalledWith(0.18, expect.any(Number), 0.025);
+    expect(context.gains[0].gain.setTargetAtTime).toHaveBeenLastCalledWith(0.18, 0, 0.025);
 
     window.dispatchEvent(new CustomEvent('omnix:assistant-audio-duck', { detail: { gain: 1 } }));
-    expect(context.gains[0].gain.setTargetAtTime).toHaveBeenLastCalledWith(1, expect.any(Number), 0.025);
+    expect(context.gains[0].gain.setTargetAtTime).toHaveBeenLastCalledWith(1, 0, 0.025);
     cleanup();
   });
 
@@ -78,7 +80,7 @@ describe('live voice audio duck bridge', () => {
     node.connect(context.destination);
 
     expect(context.gains).toHaveLength(0);
-    expect((node as unknown as FakeAudioWorkletNode).connect).toHaveBeenCalledWith(context.destination);
+    expect((node as unknown as FakeAudioWorkletNode).rawConnect).toHaveBeenCalledWith(context.destination);
     cleanup();
   });
 });
