@@ -20,8 +20,11 @@ def test_duplex_policy_no_longer_infers_playback_from_dom() -> None:
     source = _source("apps/web/src/features/assistant-workspace/live-voice-duplex-gate.ts")
     assert "new MutationObserver" not in source
     assert "refreshDuplexGate" not in source
+    assert ".assistant-voice-orb" not in source
     assert "handlePlaybackState" in source
-    assert "liveConversationStore.dispatch" in source
+    assert "liveConversationStore.getState" in source
+    assert "BoundedWaveformReference" in source
+    assert "resolveLiveVoiceDeviceKey" in source
 
 
 def test_initiative_policy_no_longer_reads_visible_voice_state() -> None:
