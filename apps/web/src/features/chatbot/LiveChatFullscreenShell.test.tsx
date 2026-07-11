@@ -10,10 +10,11 @@ import {
   resetLiveChatFullscreenStateForTests,
 } from './live-chat-fullscreen-controller';
 
+const sourceCallClick = vi.fn();
+const sourceSubmit = vi.fn();
+
 describe('LiveChatFullscreenShell', () => {
   let dispose: () => void;
-  let sourceCallClick: ReturnType<typeof vi.fn>;
-  let sourceSubmit: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     document.body.innerHTML = `
@@ -25,10 +26,11 @@ describe('LiveChatFullscreenShell', () => {
       <form class="assistant-composer"><textarea></textarea></form>
       <figure class="assistant-live-character-avatar" data-mouth-frame="medium" data-voice-mode="speaking"><img src="/maya.png" alt="Maya live avatar" /></figure>
     `;
-    sourceCallClick = vi.fn();
-    document.querySelector<HTMLButtonElement>('.assistant-live-card button')!.addEventListener('click', sourceCallClick);
-    sourceSubmit = vi.fn();
-    document.querySelector<HTMLFormElement>('.assistant-composer')!.requestSubmit = sourceSubmit;
+    sourceCallClick.mockReset();
+    sourceSubmit.mockReset();
+    document.querySelector<HTMLButtonElement>('.assistant-live-card button')!
+      .addEventListener('click', () => sourceCallClick());
+    document.querySelector<HTMLFormElement>('.assistant-composer')!.requestSubmit = () => sourceSubmit();
     Object.defineProperty(document.documentElement, 'requestFullscreen', { configurable: true, value: undefined });
     vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
