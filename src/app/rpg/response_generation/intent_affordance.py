@@ -12,7 +12,6 @@ _TRAVEL_WORDS = {"travel", "go", "walk", "ride", "sail", "teleport", "journey"}
 _SOCIAL_WORDS = {"convince", "persuade", "threaten", "intimidate", "understand", "order", "ask"}
 _TRANSACTION_WORDS = {"buy", "pay", "purchase", "sell", "price", "room", "rent", "money", "coin"}
 _COMBAT_WORDS = {"attack", "strike", "hit", "kill", "fight", "stab", "shoot"}
-_INVESTIGATION_WORDS = {"investigate", "someone", "knows", "symbol", "clue", "ask around"}
 _ASSERTION_MARKERS = {"as", "remember", "again", "my", "our", "used", "before"}
 _SENTENCE_LEADERS = {"I", "The", "A", "An", "Where", "What", "Who", "When", "Why", "How", "Ask", "Travel", "Do", "Make", "Go", "Tell", "Show", "Find", "Use", "Cast", "Convince", "Persuade", "Threaten", "Order"}
 
@@ -26,6 +25,7 @@ class IntentHypothesis:
     required_evidence: tuple[str, ...] = ()
     ambiguity: str = "low"
     state_mutation_allowed: bool = False
+    entities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ class NarrativeAffordanceClassifier:
             hypotheses.append(IntentHypothesis("combat_action", "combat_attempt", 0.94, "attempt the stated hostile action through combat rules", ("combat_state", "initiative", "target_state")))
         if token_set & _TRAVEL_WORDS:
             unknown_destination = bool(unresolved) or not locations
-            hypotheses.append(IntentHypothesis("travel", "ask_directions" if unknown_destination else "travel_attempt", 0.82 if unknown_destination else 0.92, "reach the requested destination", ("known_locations", "routes", "travel_rules")))
+            hypotheses.append(IntentHypothesis("travel", "ask_directions" if unknown_destination else "travel_attempt", 0.82 if unknown_destination else 0.92, "reach the requested destination", ("known_locations", "routes", "travel_rules"), entities=unresolved))
         investigation_offer = (
             lowered.startswith("maybe ")
             and ("someone" in token_set or "knows" in token_set)
@@ -67,16 +67,16 @@ class NarrativeAffordanceClassifier:
         if investigation_offer:
             hypotheses.append(IntentHypothesis("offer_investigation", "offer_investigation", 0.9, "identify a source or clue without automatically beginning the investigation", ("visible_entities", "known_sources", "clues")))
         if unresolved:
-            hypotheses.append(IntentHypothesis("reference_unknown_entity", "entity_search", 0.84, "identify or learn about the referenced entity", ("entity_aliases", "npc_memory", "lorebook"), ambiguity="medium"))
+            hypotheses.append(IntentHypothesis("reference_unknown_entity", "entity_search", 0.84, "identify or learn about the referenced entity", ("entity_aliases", "npc_memory", "lorebook"), ambiguity="medium", entities=unresolved))
         if (tokens and tokens[0] in _QUESTION_WORDS) or text.endswith("?"):
-            hypotheses.append(IntentHypothesis("ask_world_question", "lore_search", 0.88, "obtain an answer consistent with available knowledge", ("speaker_knowledge", "journal", "lorebook")))
+            hypotheses.append(IntentHypothesis("ask_world_question", "lore_search", 0.88, "obtain an answer consistent with available knowledge", ("speaker_knowledge", "journal", "lorebook"), entities=unresolved))
         if token_set & _SOCIAL_WORDS:
             ambiguous = "understand" in token_set or len(tokens) <= 4
-            hypotheses.append(IntentHypothesis("social_action", "clarification" if ambiguous else "social_check", 0.7 if ambiguous else 0.86, "change another character's understanding or behavior", ("target", "relationship", "social_mechanics"), ambiguity="high" if ambiguous else "low"))
+            hypotheses.append(IntentHypothesis("social_action", "clarification" if ambiguous else "social_check", 0.7 if ambiguous else 0.86, "change another character's understanding or behavior", ("target", "relationship", "social_mechanics"), ambiguity="high" if ambiguous else "low", entities=unresolved))
         if token_set & _ASSERTION_MARKERS and any(word in lowered for word in ("agent", "sister", "friend", "promised", "remember")):
-            hypotheses.append(IntentHypothesis("assert_prior_history", "unverified_player_claim", 0.98, "use an asserted relationship or prior event", ("campaign_history", "npc_memory", "relationships"), ambiguity="medium"))
+            hypotheses.append(IntentHypothesis("assert_prior_history", "unverified_player_claim", 0.98, "use an asserted relationship or prior event", ("campaign_history", "npc_memory", "relationships"), ambiguity="medium", entities=unresolved))
         if not hypotheses:
-            hypotheses.append(IntentHypothesis("unresolved_action", "inspect_or_clarify", 0.45, "understand what outcome the player is seeking", ("scene", "visible_entities"), ambiguity="high"))
+            hypotheses.append(IntentHypothesis("unresolved_action", "inspect_or_clarify", 0.45, "understand what outcome the player is seeking", ("scene", "visible_entities"), ambiguity="high", entities=unresolved))
         ordered = tuple(sorted(hypotheses, key=lambda row: row.confidence, reverse=True))
         return IntentAnalysis(hypotheses=ordered, selected=ordered[0], tokens=tokens, unresolved_references=unresolved)
 
