@@ -79,6 +79,18 @@ class NarrationContext:
             "word_budget": list(self.word_budget),
         }
 
+    def as_dict(self) -> dict[str, Any]:
+        """Stable developer-trace representation of the compact prompt context."""
+
+        payload = self.as_prompt_payload()
+        payload["trace"] = {
+            "omitted_fields": list(self.trace.omitted_fields),
+            "truncated_fields": list(self.trace.truncated_fields),
+            "hidden_evidence_ids": list(self.trace.hidden_evidence_ids),
+            "included_evidence_ids": list(self.trace.included_evidence_ids),
+        }
+        return payload
+
 
 class NarrationContextCompiler:
     def __init__(self, *, max_entities: int = 8, max_evidence: int = 12, max_mapping_keys: int = 24) -> None:
