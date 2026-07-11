@@ -27,6 +27,8 @@ _FORBIDDEN_METRIC_KEY_PARTS = (
     "message_content",
     "utterance_text",
 )
+_UNKNOWN_RUNTIME_VALUES = {"", "unknown", "unknown0", "unavailable"}
+_MINIMUM_POLICY_EVIDENCE = 5
 
 
 class VoiceSessionEvaluationCreate(BaseModel):
@@ -40,6 +42,8 @@ class VoiceSessionEvaluationCreate(BaseModel):
     ended_at: str = Field(min_length=1, max_length=80)
     exact_commit_sha: str = Field(min_length=7, max_length=64)
     app_version: str = Field(default="unknown", min_length=1, max_length=80)
+    browser_version: str = Field(default="unknown", min_length=1, max_length=240)
+    os_version: str = Field(default="unknown", min_length=1, max_length=160)
     character_id: str = Field(default="system-assistant", min_length=1, max_length=160)
     profile_version: int | None = Field(default=None, ge=1)
     presence_preset: PresencePreset = "natural"
@@ -211,6 +215,18 @@ class LiveChatEvaluationStore:
             self._write(payload)
             return record
 
+    def update_release_gate_status(self, evaluation_id: str, status: GateStatus) -> VoiceSessionEvaluationRecord:
+        with self._lock:
+            payload = self._read()
+            records = payload.setdefault("evaluations", [])
+            target = next((item for item in records if item.get("evaluation_id") == evaluation_id), None)
+            if target is None:
+                raise KeyError(f"voice session evaluation {evaluation_id} does not exist")
+            target["release_gate_status"] = status
+            target["updated_at"] = _now()
+            self._write(payload)
+            return VoiceSessionEvaluationRecord.model_validate(target)
+
     def get(self, evaluation_id: str) -> VoiceSessionEvaluationRecord | None:
         with self._lock:
             for item in self._read().get("evaluations", []):
@@ -270,6 +286,8 @@ class LiveChatEvaluationStore:
     ) -> PresencePolicyVersion:
         with self._lock:
             payload = self._read()
+            evidence_ids = tuple(dict.fromkeys(create.evidence_evaluation_ids))
+            self._validate_policy_evidence(payload, preset, evidence_ids)
             rows = payload.setdefault("presence_policies", {}).setdefault(preset, [])
             next_version = max((int(item.get("version", 0)) for item in rows), default=0) + 1
             record = PresencePolicyVersion(
@@ -277,7 +295,7 @@ class LiveChatEvaluationStore:
                 version=next_version,
                 values=create.values,
                 reason=create.reason,
-                evidence_evaluation_ids=tuple(dict.fromkeys(create.evidence_evaluation_ids)),
+                evidence_evaluation_ids=evidence_ids,
                 active=False,
                 created_at=_now(),
             )
@@ -289,8 +307,15 @@ class LiveChatEvaluationStore:
         with self._lock:
             payload = self._read()
             rows = payload.setdefault("presence_policies", {}).setdefault(preset, [])
-            if not any(int(item.get("version", 0)) == version for item in rows):
+            match = next((item for item in rows if int(item.get("version", 0)) == version), None)
+            if match is None:
                 raise KeyError(f"presence policy {preset} v{version} does not exist")
+            if version > 1:
+                self._validate_policy_evidence(
+                    payload,
+                    preset,
+                    tuple(match.get("evidence_evaluation_ids", ())),
+                )
             selected: PresencePolicyVersion | None = None
             for item in rows:
                 item["active"] = int(item.get("version", 0)) == version
@@ -308,6 +333,31 @@ class LiveChatEvaluationStore:
             raise KeyError(f"presence policy {preset} has no previous version")
         return self.activate_policy(preset, previous[-1].version)
 
+    @staticmethod
+    def _validate_policy_evidence(payload: dict, preset: PresencePreset, evidence_ids: tuple[str, ...]) -> None:
+        if len(evidence_ids) < _MINIMUM_POLICY_EVIDENCE:
+            raise ValueError(f"at least {_MINIMUM_POLICY_EVIDENCE} labelled evaluations are required")
+        records_by_id = {
+            str(item.get("evaluation_id")): VoiceSessionEvaluationRecord.model_validate(item)
+            for item in payload.get("evaluations", [])
+        }
+        missing = [evaluation_id for evaluation_id in evidence_ids if evaluation_id not in records_by_id]
+        if missing:
+            raise ValueError("presence policy evidence contains unknown evaluation IDs")
+        evidence = [records_by_id[evaluation_id] for evaluation_id in evidence_ids]
+        if any(record.presence_preset != preset for record in evidence):
+            raise ValueError("presence policy evidence must match the selected preset")
+        if any(not record.scenario_labels for record in evidence):
+            raise ValueError("presence policy evidence must be scenario-labelled")
+        if any(record.release_gate_status == "fail" for record in evidence):
+            raise ValueError("failed release evidence cannot tune a presence policy")
+        if any(record.exact_commit_sha.casefold() in _UNKNOWN_RUNTIME_VALUES for record in evidence):
+            raise ValueError("presence policy evidence requires an exact commit SHA")
+        if any(record.browser_version.casefold() in _UNKNOWN_RUNTIME_VALUES for record in evidence):
+            raise ValueError("presence policy evidence requires browser metadata")
+        if any(record.os_version.casefold() in _UNKNOWN_RUNTIME_VALUES for record in evidence):
+            raise ValueError("presence policy evidence requires OS metadata")
+
     def _read(self) -> dict:
         if not self.path.is_file():
             return self._fresh_payload()
@@ -317,7 +367,7 @@ class LiveChatEvaluationStore:
             return self._fresh_payload()
         if not isinstance(payload, dict):
             return self._fresh_payload()
-        payload.setdefault("format_version", 1)
+        payload.setdefault("format_version", 2)
         payload.setdefault("evaluations", [])
         policies = payload.setdefault("presence_policies", {})
         self._ensure_default_policies(policies)
@@ -326,7 +376,7 @@ class LiveChatEvaluationStore:
     def _fresh_payload(self) -> dict:
         policies: dict[str, list[dict]] = {}
         self._ensure_default_policies(policies)
-        return {"format_version": 1, "evaluations": [], "presence_policies": policies}
+        return {"format_version": 2, "evaluations": [], "presence_policies": policies}
 
     @staticmethod
     def _ensure_default_policies(policies: dict) -> None:

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseProactiveSse,
   proactiveReasonFromTranscript,
+  resolveInitiativePolicyTiming,
 } from './live-conversation-initiative-controller';
 
 describe('live conversation initiative controller', () => {
@@ -32,5 +33,31 @@ describe('live conversation initiative controller', () => {
     expect(proactiveReasonFromTranscript('Should we revisit the launch plan?')).toBe('unresolved_question');
     expect(proactiveReasonFromTranscript('The launch plan is still open.')).toBe('continue_current_topic');
     expect(proactiveReasonFromTranscript('')).toBeNull();
+  });
+
+  it('applies active policy silence, cooldown, length, and onset values conservatively', () => {
+    expect(resolveInitiativePolicyTiming(12_000, {
+      silence_tolerance_ms: 16_000,
+      initiative_threshold_ms: 20_000,
+      initiative_cooldown_ms: 50_000,
+      listener_backchannel_frequency: 0.14,
+      typical_turn_words: 65,
+      interruption_sensitivity: 0.74,
+      response_onset_ms: 450,
+    })).toEqual({
+      idleThresholdMs: 20_000,
+      cooldownMs: 50_000,
+      typicalTurnWords: 65,
+      responseOnsetMs: 450,
+    });
+  });
+
+  it('preserves profile timing when no server policy is available', () => {
+    expect(resolveInitiativePolicyTiming(18_000, null)).toEqual({
+      idleThresholdMs: 18_000,
+      cooldownMs: 30_000,
+      typicalTurnWords: null,
+      responseOnsetMs: null,
+    });
   });
 });

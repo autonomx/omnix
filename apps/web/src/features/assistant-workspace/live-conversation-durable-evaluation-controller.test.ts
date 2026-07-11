@@ -50,6 +50,28 @@ const profile = {
   profile_version: 2,
 };
 
+function activeCall() {
+  return {
+    callId: 'call-one',
+    startedAt: '2026-07-11T12:00:00+00:00',
+    eosTerminationCounts: { natural_eos: 6, forced_eos: 1, token_limit: 0, sequence_limit: 0, model_stopped: 0 },
+    releaseLatencies: {
+      stt_finalize_ms: [400, 500],
+      final_to_first_token_ms: [800, 900],
+      first_token_to_first_audio_ms: [300, 350],
+      interruption_to_silence_ms: [120, 150],
+    },
+    releaseQuality: {
+      false_interruption: [false, false],
+      missed_interruption: [false, true],
+      backchannel_false_positive: [false],
+      playback_echo_submission: [false, false],
+    },
+    duckToCancelMs: [100, 140],
+    rejectedCandidateRestoreMs: [90, 110],
+  };
+}
+
 describe('durable Live Conversation evaluation controller', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -94,11 +116,7 @@ describe('durable Live Conversation evaluation controller', () => {
   });
 
   it('builds aggregate-only evidence from the authoritative store', () => {
-    const payload = buildDurableEvaluationPayload({
-      callId: 'call-one',
-      startedAt: '2026-07-11T12:00:00+00:00',
-      eosTerminationCounts: { natural_eos: 6, forced_eos: 1, token_limit: 0, sequence_limit: 0, model_stopped: 0 },
-    }, '2026-07-11T12:10:00+00:00');
+    const payload = buildDurableEvaluationPayload(activeCall(), '2026-07-11T12:10:00+00:00');
 
     expect(payload).toMatchObject({
       call_id: 'call-one',
@@ -110,29 +128,68 @@ describe('durable Live Conversation evaluation controller', () => {
       pressure_score: 1,
       eos_termination_counts: { natural_eos: 6, forced_eos: 1 },
       scenario_labels: ['speakers-quiet', 'immediate-hard-stop'],
+      latency_summary: {
+        stt_finalize_p95_ms: 500,
+        final_to_first_token_p95_ms: 900,
+        first_token_to_first_audio_p95_ms: 350,
+        interruption_to_silence_p95_ms: 150,
+        cancellation_p95_ms: 140,
+        rejected_candidate_restore_p95_ms: 110,
+      },
+      quality_metrics: {
+        false_barge_in_rate: 0,
+        missed_barge_in_rate: 0.5,
+        playback_echo_submission_rate: 0,
+      },
     });
+    expect(payload.browser_version.length).toBeGreaterThan(0);
+    expect(payload.os_version.length).toBeGreaterThan(0);
     const serialized = JSON.stringify(payload).toLocaleLowerCase();
     expect(serialized).not.toMatch(/transcript|prompt|memory|pcm|message_content|utterance_text/);
   });
 
-  it('posts one record on call stop and counts EOS reasons', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => (
-      Response.json({ evaluation_id: 'evaluation-one' })
-    ));
+  it('posts one record, evaluates the durable aggregate, and counts release observations', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/release-gate')) {
+        return Response.json({
+          status: 'insufficient', generated_at: 'now', records_scanned: 1, traces: 1,
+          scenarios: [], missing_scenarios: [], character_modes: ['character'], metrics: [],
+          failures: [], insufficient: ['more evidence required'],
+        });
+      }
+      return Response.json({ ...JSON.parse(String(init?.body)), evaluation_id: 'evaluation-one' });
+    });
     vi.stubGlobal('fetch', fetchMock);
     const dispose = initializeLiveConversationDurableEvaluationController();
 
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
+    window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
+      detail: { kind: 'latency', metricName: 'stt_finalize_ms', valueMs: 430, scenario: 'speakers-quiet' },
+    }));
+    window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
+      detail: { kind: 'quality', qualityName: 'playback_echo_submission', occurred: false, scenario: 'speakers-quiet' },
+    }));
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
       detail: { provider_timing: { termination_reason: 'natural_eos' } },
     }));
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: { stage: 'barge_in_confirmed', duck_to_cancel_ms: 125 },
+    }));
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-stop'));
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
-    const [, init] = fetchMock.mock.calls[0];
+    const [, init] = fetchMock.mock.calls.find(([input]) => !String(input).includes('/release-gate')) ?? [];
     const body = JSON.parse(String(init?.body));
     expect(body.eos_termination_counts.natural_eos).toBe(1);
+    expect(body.latency_summary.stt_finalize_p95_ms).toBe(430);
+    expect(body.latency_summary.cancellation_p95_ms).toBe(125);
+    expect(body.quality_metrics.playback_echo_submission_rate).toBe(0);
     expect(body.release_gate_status).toBe('insufficient');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/tts/live-call/evaluations/release-gate?limit=1000&persist_status=true',
+      undefined,
+    );
     dispose();
   });
 });

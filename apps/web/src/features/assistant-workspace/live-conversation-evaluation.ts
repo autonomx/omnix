@@ -7,7 +7,7 @@ export type LiveConversationEvaluationEvent =
   | { atMs: number; type: 'interruption'; success: boolean; latencyMs?: number }
   | { atMs: number; type: 'proactive_prompt'; accepted: boolean | null }
   | { atMs: number; type: 'backchannel'; collision: boolean }
-  | { atMs: number; type: 'turn'; role: EvaluationRole; durationMs: number; content: string }
+  | { atMs: number; type: 'turn'; role: EvaluationRole; durationMs: number; questionCount?: number; content?: string }
   | { atMs: number; type: 'repair'; success: boolean }
   | { atMs: number; type: 'topic'; repeated: boolean }
   | { atMs: number; type: 'obligation'; answered: boolean }
@@ -64,7 +64,10 @@ export function evaluateLiveConversation(events: LiveConversationEvaluationEvent
     silenceFillRegretRate: rate(resolvedProactive.filter((event) => event.accepted === false).length, resolvedProactive.length),
     proactiveAcceptanceRate: rate(resolvedProactive.filter((event) => event.accepted === true).length, resolvedProactive.length),
     backchannelCollisionRate: rate(backchannels.filter((event) => event.collision).length, backchannels.length),
-    questionDensity: rate(assistantTurns.filter((event) => /[?？]\s*$/.test(event.content.trim())).length, assistantTurns.length),
+    questionDensity: rate(
+      assistantTurns.filter((event) => (event.questionCount ?? legacyQuestionCount(event.content)) > 0).length,
+      assistantTurns.length,
+    ),
     assistantUserSpeakingRatio: userDuration > 0 ? round(assistantDuration / userDuration) : null,
     turnDurationMs: turnDistribution(turnDurations),
     repairSuccessRate: rate(repairs.filter((event) => event.success).length, repairs.length),
@@ -116,4 +119,8 @@ function round(value: number): number {
 
 function clampScore(value: number): number {
   return Math.min(5, Math.max(1, Math.round(value)));
+}
+
+function legacyQuestionCount(content: string | undefined): number {
+  return content && /[?？]\s*$/.test(content.trim()) ? 1 : 0;
 }

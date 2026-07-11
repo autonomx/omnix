@@ -1,10 +1,10 @@
-"""Content-free target-runtime release evidence for Live Chat phases 1-8."""
+"""Content-free target-runtime release evidence for Live Chat."""
 from __future__ import annotations
 
 import math
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any, Iterable, Literal
+from typing import Any, Iterable, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -40,6 +40,8 @@ REQUIRED_LIVE_CHAT_SCENARIOS = (
     "sustained-20-minute-conversation",
 )
 
+_UNKNOWN_RUNTIME_VALUES = {"", "unknown", "unknown0", "unavailable"}
+
 
 class LiveChatEvidenceMetadata(BaseModel):
     """Runtime identity without transcript, prompt, memory, or audio content."""
@@ -47,7 +49,7 @@ class LiveChatEvidenceMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     exact_commit_sha: str = Field(min_length=7, max_length=64)
-    browser_version: str = Field(min_length=1, max_length=160)
+    browser_version: str = Field(min_length=1, max_length=240)
     os_version: str = Field(min_length=1, max_length=160)
     input_device_hash: str = Field(min_length=8, max_length=128)
     output_device_hash: str = Field(min_length=8, max_length=128)
@@ -69,6 +71,7 @@ class LiveChatEvidenceEvent(BaseModel):
     scenario: str = Field(min_length=1, max_length=160)
     metric_name: str = Field(min_length=1, max_length=120)
     value: float
+    character_id: str | None = Field(default=None, max_length=160)
 
 
 class LiveChatMetricPolicy(BaseModel):
@@ -81,6 +84,10 @@ class LiveChatMetricPolicy(BaseModel):
 
 
 DEFAULT_LIVE_CHAT_METRIC_POLICIES: dict[str, LiveChatMetricPolicy] = {
+    "stt_finalize_ms": LiveChatMetricPolicy(kind="latency", limit=1_500.0, minimum_samples=5),
+    "final_to_first_token_ms": LiveChatMetricPolicy(kind="latency", limit=5_000.0, minimum_samples=5),
+    "first_token_to_first_audio_ms": LiveChatMetricPolicy(kind="latency", limit=3_500.0, minimum_samples=5),
+    "interruption_to_silence_ms": LiveChatMetricPolicy(kind="latency", limit=500.0, minimum_samples=5),
     "natural_eos_rate": LiveChatMetricPolicy(kind="rate", limit=0.90, comparison="minimum"),
     "forced_eos_rate": LiveChatMetricPolicy(kind="rate", limit=0.05),
     "token_limit_rate": LiveChatMetricPolicy(kind="rate", limit=0.01),
@@ -108,6 +115,7 @@ class LiveChatReleaseThresholds(BaseModel):
         default_factory=lambda: dict(DEFAULT_LIVE_CHAT_METRIC_POLICIES)
     )
     require_system_and_character: bool = True
+    require_runtime_identity: bool = True
 
 
 class LiveChatMetricResult(BaseModel):
@@ -128,6 +136,7 @@ class LiveChatReleaseGateReport(BaseModel):
     status: GateStatus
     generated_at: str
     metadata: LiveChatEvidenceMetadata
+    metadata_records: list[LiveChatEvidenceMetadata] = Field(default_factory=list)
     records_scanned: int
     traces: int
     scenarios: list[str]
@@ -146,32 +155,68 @@ class LiveChatReleaseGateEvaluationRequest(BaseModel):
     thresholds: LiveChatReleaseThresholds = Field(default_factory=LiveChatReleaseThresholds)
 
 
+class LiveChatEvidenceBundle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    metadata: LiveChatEvidenceMetadata
+    events: list[LiveChatEvidenceEvent] = Field(min_length=1, max_length=100_000)
+
+
+class LiveChatReleaseGateAggregateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bundles: list[LiveChatEvidenceBundle] = Field(min_length=1, max_length=5_000)
+    thresholds: LiveChatReleaseThresholds = Field(default_factory=LiveChatReleaseThresholds)
+
+
 def evaluate_live_chat_release_gate(
     metadata: LiveChatEvidenceMetadata,
     events: Iterable[LiveChatEvidenceEvent | dict[str, Any]],
     *,
     thresholds: LiveChatReleaseThresholds | None = None,
 ) -> LiveChatReleaseGateReport:
+    bundle = LiveChatEvidenceBundle(
+        metadata=metadata,
+        events=[
+            event if isinstance(event, LiveChatEvidenceEvent) else LiveChatEvidenceEvent.model_validate(event)
+            for event in events
+        ],
+    )
+    return evaluate_live_chat_release_gate_bundles([bundle], thresholds=thresholds)
+
+
+def evaluate_live_chat_release_gate_bundles(
+    bundles: Sequence[LiveChatEvidenceBundle | dict[str, Any]],
+    *,
+    thresholds: LiveChatReleaseThresholds | None = None,
+) -> LiveChatReleaseGateReport:
     limits = thresholds or LiveChatReleaseThresholds()
+    validated = [
+        bundle if isinstance(bundle, LiveChatEvidenceBundle) else LiveChatEvidenceBundle.model_validate(bundle)
+        for bundle in bundles
+    ]
+    if not validated:
+        raise ValueError("at least one evidence bundle is required")
+
     values: dict[str, list[float]] = defaultdict(list)
     traces: set[str] = set()
     scenarios: set[str] = set()
     character_modes: set[str] = set()
+    metadata_records: list[LiveChatEvidenceMetadata] = []
     scanned = 0
 
-    for raw in events:
-        try:
-            event = raw if isinstance(raw, LiveChatEvidenceEvent) else LiveChatEvidenceEvent.model_validate(raw)
-        except Exception:
-            continue
-        if not math.isfinite(event.value):
-            continue
-        scanned += 1
-        traces.add(event.trace_id)
-        scenarios.add(event.scenario)
-        character_modes.add("system" if metadata.character_id == "system-assistant" else "character")
-        if event.metric_name in limits.metric_policies:
-            values[event.metric_name].append(float(event.value))
+    for bundle in validated:
+        metadata_records.append(bundle.metadata)
+        character_modes.add(_character_mode(bundle.metadata.character_id))
+        for event in bundle.events:
+            if not math.isfinite(event.value):
+                continue
+            scanned += 1
+            traces.add(event.trace_id)
+            scenarios.add(event.scenario)
+            character_modes.add(_character_mode(event.character_id or bundle.metadata.character_id))
+            if event.metric_name in limits.metric_policies:
+                values[event.metric_name].append(float(event.value))
 
     failures: list[str] = []
     insufficient: list[str] = []
@@ -180,9 +225,13 @@ def evaluate_live_chat_release_gate(
         insufficient.append("missing scenarios: " + ", ".join(missing_scenarios))
 
     if limits.require_system_and_character and character_modes != {"system", "character"}:
-        # A single request represents one runtime identity. Combined evidence can disable
-        # this check, while production aggregation must provide both identity classes.
         insufficient.append("system and character evidence must be aggregated")
+
+    if limits.require_runtime_identity:
+        for index, metadata in enumerate(metadata_records):
+            missing = _missing_runtime_identity(metadata)
+            if missing:
+                insufficient.append(f"metadata[{index}] missing runtime identity: {', '.join(missing)}")
 
     results: list[LiveChatMetricResult] = []
     for name, policy in limits.metric_policies.items():
@@ -197,9 +246,7 @@ def evaluate_live_chat_release_gate(
             )
             status = "pass" if passed else "fail"
             if status == "fail":
-                failures.append(
-                    f"{name} {observed:.3f} violates {policy.comparison} {policy.limit:.3f}"
-                )
+                failures.append(f"{name} {observed:.3f} violates {policy.comparison} {policy.limit:.3f}")
         results.append(LiveChatMetricResult(
             name=name,
             kind=policy.kind,
@@ -214,7 +261,8 @@ def evaluate_live_chat_release_gate(
     return LiveChatReleaseGateReport(
         status=overall,
         generated_at=datetime.now(timezone.utc).isoformat(),
-        metadata=metadata,
+        metadata=metadata_records[0],
+        metadata_records=metadata_records,
         records_scanned=scanned,
         traces=len(traces),
         scenarios=sorted(scenarios),
@@ -224,6 +272,19 @@ def evaluate_live_chat_release_gate(
         failures=failures,
         insufficient=insufficient,
     )
+
+
+def _missing_runtime_identity(metadata: LiveChatEvidenceMetadata) -> list[str]:
+    missing: list[str] = []
+    for name in ("exact_commit_sha", "browser_version", "os_version", "input_device_hash", "output_device_hash"):
+        value = str(getattr(metadata, name, "")).strip().casefold()
+        if value in _UNKNOWN_RUNTIME_VALUES:
+            missing.append(name)
+    return missing
+
+
+def _character_mode(character_id: str) -> str:
+    return "system" if character_id == "system-assistant" else "character"
 
 
 def _observed(kind: MetricKind, values: list[float]) -> float:

@@ -3,11 +3,13 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   liveChatEvaluationClient,
   suggestPresencePolicy,
+  type LiveChatReleaseGateReport,
   type PresencePolicyVersion,
   type PresencePreset,
   type VoiceSessionEvaluationRecord,
 } from '../assistant-workspace/live-chat-evaluation-client';
 import { LIVE_DURABLE_EVALUATION_SAVED_EVENT } from '../assistant-workspace/live-conversation-durable-evaluation-controller';
+import { LIVE_PRESENCE_POLICY_REFRESH_EVENT } from '../assistant-workspace/live-presence-policy-controller';
 import './VoiceSessionEvaluationPanel.css';
 
 const PRESETS: PresencePreset[] = ['quiet', 'natural', 'engaged', 'listener'];
@@ -15,6 +17,7 @@ const MINIMUM_TUNING_EVIDENCE = 5;
 
 export function VoiceSessionEvaluationPanel() {
   const [evaluations, setEvaluations] = useState<VoiceSessionEvaluationRecord[]>([]);
+  const [gate, setGate] = useState<LiveChatReleaseGateReport | null>(null);
   const [policies, setPolicies] = useState<Record<PresencePreset, PresencePolicyVersion> | null>(null);
   const [versions, setVersions] = useState<PresencePolicyVersion[]>([]);
   const [selectedPreset, setSelectedPreset] = useState<PresencePreset>('natural');
@@ -24,11 +27,13 @@ export function VoiceSessionEvaluationPanel() {
 
   async function refresh(): Promise<void> {
     try {
+      const nextGate = await liveChatEvaluationClient.releaseGate({ persistStatus: true });
       const [nextEvaluations, nextPolicies, nextVersions] = await Promise.all([
         liveChatEvaluationClient.list({ limit: 100 }),
         liveChatEvaluationClient.activePolicies(),
         liveChatEvaluationClient.policyVersions(),
       ]);
+      setGate(nextGate);
       setEvaluations(nextEvaluations);
       setPolicies(nextPolicies);
       setVersions(nextVersions);
@@ -86,6 +91,7 @@ export function VoiceSessionEvaluationPanel() {
       setPolicies((current) => current ? { ...current, [activated.preset]: activated } : current);
       setCandidate(null);
       await refresh();
+      window.dispatchEvent(new Event(LIVE_PRESENCE_POLICY_REFRESH_EVENT));
       setStatus(`${title(activated.preset)} policy v${activated.version} is active. Explicit user overrides were not changed.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Tuning candidate could not be activated.');
@@ -101,6 +107,7 @@ export function VoiceSessionEvaluationPanel() {
       const rolledBack = await liveChatEvaluationClient.rollbackPolicy(selectedPreset);
       setPolicies((current) => current ? { ...current, [rolledBack.preset]: rolledBack } : current);
       await refresh();
+      window.dispatchEvent(new Event(LIVE_PRESENCE_POLICY_REFRESH_EVENT));
       setStatus(`${title(rolledBack.preset)} rolled back to policy v${rolledBack.version}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Presence policy could not be rolled back.');
@@ -145,8 +152,21 @@ export function VoiceSessionEvaluationPanel() {
         <Metric label="Interruption success" value={formatPercent(latestMetrics.interruptionSuccess)} />
         <Metric label="Listening score" value={formatScore(latestMetrics.listeningScore)} />
         <Metric label="Pressure score" value={formatScore(latestMetrics.pressureScore)} />
-        <Metric label="Release evidence" value={releaseSummary(evaluations)} />
+        <Metric label="Release evidence" value={gate ? title(gate.status) : 'Loading'} />
       </div>
+
+      <section className="voice-session-gate" aria-labelledby="voice-session-gate-heading">
+        <h4 id="voice-session-gate-heading">Aggregate release gate</h4>
+        <p>
+          {gate
+            ? `${gate.scenarios.length} scenarios observed · ${gate.traces} durable traces · ${gate.character_modes.join(' + ') || 'identity evidence missing'}`
+            : 'Evaluating durable release evidence…'}
+        </p>
+        {gate?.failures.length ? <p role="alert">Failures: {gate.failures.slice(0, 3).join('; ')}</p> : null}
+        {gate?.missing_scenarios.length ? (
+          <p>Still required: {gate.missing_scenarios.slice(0, 6).map(title).join(', ')}{gate.missing_scenarios.length > 6 ? ` +${gate.missing_scenarios.length - 6} more` : ''}.</p>
+        ) : null}
+      </section>
 
       <section className="voice-session-policy" aria-labelledby="voice-session-policy-heading">
         <header>
@@ -214,13 +234,6 @@ function average(values: Array<number | null | undefined>): number | null {
   return numeric.length ? numeric.reduce((sum, value) => sum + value, 0) / numeric.length : null;
 }
 
-function releaseSummary(records: VoiceSessionEvaluationRecord[]): string {
-  if (!records.length) return 'No evidence';
-  if (records.some((record) => record.release_gate_status === 'fail')) return 'Fail';
-  if (records.every((record) => record.release_gate_status === 'pass')) return 'Pass';
-  return 'Insufficient';
-}
-
 function formatMilliseconds(value: number | null | undefined): string {
   return typeof value === 'number' ? `${Math.round(value)} ms` : '—';
 }
@@ -234,5 +247,5 @@ function formatScore(value: number | null | undefined): string {
 }
 
 function title(value: string): string {
-  return value.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toLocaleUpperCase());
+  return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (character) => character.toLocaleUpperCase());
 }

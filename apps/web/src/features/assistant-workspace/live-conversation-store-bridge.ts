@@ -6,7 +6,6 @@ import {
 import {
   LIVE_VOICE_CALIBRATION_UPDATED_EVENT,
   readLatestLiveVoiceCalibration,
-  resolveCalibrationDuplex,
   type LiveVoiceCalibrationRecord,
 } from './live-voice-calibration';
 import { liveConversationStore } from './live-conversation-store';
@@ -82,15 +81,20 @@ export function initializeLiveConversationStoreBridge(): () => void {
       || stringValue(detail.partial_transcript)
       || stringValue(detail.transcript);
     if (partial) liveConversationStore.dispatch({ type: 'transcript_partial', text: partial });
+    if (Boolean(detail.assistantSpeaking)) {
+      liveConversationStore.dispatch({ type: 'conversation', event: { type: 'user_turn', value: 'speech_candidate' } });
+      liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'confirming' } });
+      return;
+    }
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'user_turn', value: 'speaking' } });
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'floor_owner', value: 'user' } });
-    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'confirming' } });
   };
   const handleInterrupt = () => {
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'accepted' } });
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'assistant_turn', value: 'interrupted' } });
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'delivery', value: 'interrupted' } });
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'floor_owner', value: 'user' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'user_turn', value: 'speaking' } });
   };
   const handlePlayback = (event: Event) => {
     const speaking = Boolean(detailOf(event).speaking);
@@ -167,14 +171,24 @@ export function initializeLiveConversationStoreBridge(): () => void {
 function mapPerfEvent(detail: UnknownDetail): void {
   const stage = stringValue(detail.stage);
   if (!stage) return;
-  if (stage === 'overlap_candidate' || stage === 'barge_in_acoustic_candidate') {
+  if (stage === 'overlap_candidate') {
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'ducking' } });
+  }
+  if (stage === 'barge_in_acoustic_candidate') {
+    const decision = stringValue(detail.decision);
+    if (decision === 'likely_echo' || decision === 'no_playback') {
+      liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'inactive' } });
+      liveConversationStore.dispatch({ type: 'conversation', event: { type: 'user_turn', value: 'listening' } });
+    } else {
+      liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'ducking' } });
+    }
   }
   if (stage === 'barge_in_ducked') {
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'confirming' } });
   }
   if (stage === 'barge_in_restored') {
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'rejected' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'user_turn', value: 'listening' } });
   }
   if (stage === 'overlap_classified') {
     const intent = stringValue(detail.intent);
@@ -183,6 +197,9 @@ function mapPerfEvent(detail: UnknownDetail): void {
       type: 'conversation',
       event: { type: 'barge_in', value: rejected ? 'rejected' : 'accepted' },
     });
+    if (rejected) {
+      liveConversationStore.dispatch({ type: 'conversation', event: { type: 'user_turn', value: 'listening' } });
+    }
   }
   if (stage === 'initiative_policy_decision') {
     const action = stringValue(detail.action);
@@ -221,14 +238,18 @@ function mapPerfEvent(detail: UnknownDetail): void {
 }
 
 function applyCalibration(record: LiveVoiceCalibrationRecord | null): void {
-  const resolution = resolveCalibrationDuplex(record);
+  const runtime = liveConversationStore.getState();
+  const configuredMode = runtime.profile?.duplex_mode ?? runtime.duplex.configuredMode;
+  const explicitEchoAware = configuredMode === 'echo_aware';
   liveConversationStore.dispatch({
     type: 'duplex',
     duplex: {
       calibration: record,
-      resolvedMode: resolution.mode,
-      reason: resolution.reason,
-      confidence: resolution.confidence,
+      resolvedMode: explicitEchoAware ? 'echo_aware' : 'half_duplex',
+      reason: explicitEchoAware
+        ? 'explicit_user_selection'
+        : record ? 'calibration_device_unverified' : 'calibration_missing',
+      confidence: record?.confidence ?? 0,
     },
   });
 }

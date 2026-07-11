@@ -1,4 +1,8 @@
 import {
+  LIVE_ASSISTANT_TURN_SUMMARY_EVENT,
+  type LiveAssistantTurnSummary,
+} from './live-conversation-assistant-summary';
+import {
   evaluateLiveConversation,
   type LiveConversationEvaluationEvent,
   type LiveConversationEvaluationReport,
@@ -15,6 +19,7 @@ const PROACTIVE_DELIVERED_EVENT = 'omnix:live-conversation-proactive-delivered';
 const REPAIR_EVENT = 'omnix:live-conversation-repair-planned';
 const LISTENER_BACKCHANNEL_EVENT = 'omnix:live-conversation-listener-backchannel';
 const MAX_EVENTS = 600;
+const MAX_TOPIC_FINGERPRINTS = 12;
 const PROACTIVE_REGRET_WINDOW_MS = 2_500;
 const BACKCHANNEL_COLLISION_WINDOW_MS = 650;
 
@@ -35,6 +40,8 @@ let overlapStartedAt: number | null = null;
 let lastProactiveAt: number | null = null;
 let pendingRepair = false;
 let pendingObligation = false;
+let pendingAssistantSummary: LiveAssistantTurnSummary | null = null;
+let recentTopicFingerprints: string[] = [];
 let listenerBackchannelAt: number | null = null;
 let listenerBackchannelTimer: ReturnType<typeof setTimeout> | null = null;
 let assistantSpeechStartedAt: number | null = null;
@@ -53,6 +60,7 @@ export function initializeLiveConversationEvaluationController(): () => void {
     if (pendingObligation) recordLiveConversationEvaluationEvent({ atMs: now(), type: 'obligation', answered: false });
     pendingRepair = false;
     pendingObligation = false;
+    pendingAssistantSummary = null;
     resolveBackchannel(false);
     completeAssistantTurn();
   };
@@ -81,6 +89,25 @@ export function initializeLiveConversationEvaluationController(): () => void {
     listenerBackchannelAt = now();
     listenerBackchannelTimer = setTimeout(() => resolveBackchannel(false), BACKCHANNEL_COLLISION_WINDOW_MS);
   };
+  const handleAssistantSummary = (event: Event) => {
+    const summary = (event as CustomEvent<LiveAssistantTurnSummary>).detail;
+    if (!summary || summary.turnKind !== 'response') return;
+    pendingAssistantSummary = summary;
+    if (summary.topicFingerprint) {
+      const repeated = recentTopicFingerprints.includes(summary.topicFingerprint);
+      recordLiveConversationEvaluationEvent({ atMs: now(), type: 'topic', repeated });
+      recentTopicFingerprints = [
+        ...recentTopicFingerprints.filter((fingerprint) => fingerprint !== summary.topicFingerprint),
+        summary.topicFingerprint,
+      ].slice(-MAX_TOPIC_FINGERPRINTS);
+    }
+    if (summary.createsObligation) {
+      if (pendingObligation) {
+        recordLiveConversationEvaluationEvent({ atMs: now(), type: 'obligation', answered: false });
+      }
+      pendingObligation = true;
+    }
+  };
   const handlePerf = (event: Event) => {
     const detail = (event as CustomEvent<PerfDetail>).detail ?? {};
     const mapped = evaluationEventFromPerfDetail(detail, now());
@@ -96,7 +123,7 @@ export function initializeLiveConversationEvaluationController(): () => void {
       overlapStartedAt = null;
     }
     if (stage === 'stt_final_received' && userSpeechStartedAt !== null) {
-      recordTurn('user', Math.max(100, now() - userSpeechStartedAt), currentTranscriptText());
+      recordTurn('user', Math.max(100, now() - userSpeechStartedAt), 0);
       userSpeechStartedAt = null;
       if (pendingObligation) {
         recordLiveConversationEvaluationEvent({ atMs: now(), type: 'obligation', answered: true });
@@ -122,6 +149,7 @@ export function initializeLiveConversationEvaluationController(): () => void {
   window.addEventListener(PROACTIVE_DELIVERED_EVENT, handleProactive);
   window.addEventListener(REPAIR_EVENT, handleRepair);
   window.addEventListener(LISTENER_BACKCHANNEL_EVENT, handleListenerBackchannel);
+  window.addEventListener(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, handleAssistantSummary);
   window.addEventListener(PERF_EVENT, handlePerf);
   const unsubscribe = liveConversationStore.subscribe(handleStore);
   handleStore();
@@ -135,6 +163,7 @@ export function initializeLiveConversationEvaluationController(): () => void {
     window.removeEventListener(PROACTIVE_DELIVERED_EVENT, handleProactive);
     window.removeEventListener(REPAIR_EVENT, handleRepair);
     window.removeEventListener(LISTENER_BACKCHANNEL_EVENT, handleListenerBackchannel);
+    window.removeEventListener(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, handleAssistantSummary);
     window.removeEventListener(PERF_EVENT, handlePerf);
     resolveBackchannel(false, false);
     liveWindow.__omnixLiveConversationEvaluationInstalled = false;
@@ -193,6 +222,8 @@ export function resetLiveConversationEvaluation(): EvaluationSnapshot {
   lastProactiveAt = null;
   pendingRepair = false;
   pendingObligation = false;
+  pendingAssistantSummary = null;
+  recentTopicFingerprints = [];
   assistantSpeechStartedAt = null;
   previousAssistantSpeaking = false;
   resolveBackchannel(false, false);
@@ -202,17 +233,22 @@ export function resetLiveConversationEvaluation(): EvaluationSnapshot {
 
 function completeAssistantTurn(): void {
   if (assistantSpeechStartedAt === null) return;
-  recordTurn('assistant', Math.max(350, now() - assistantSpeechStartedAt), '');
+  recordTurn(
+    'assistant',
+    Math.max(350, now() - assistantSpeechStartedAt),
+    pendingAssistantSummary?.questionCount ?? 0,
+  );
   assistantSpeechStartedAt = null;
+  pendingAssistantSummary = null;
 }
 
-function recordTurn(role: 'user' | 'assistant', durationMs: number, content: string): void {
+function recordTurn(role: 'user' | 'assistant', durationMs: number, questionCount: number): void {
   recordLiveConversationEvaluationEvent({
     atMs: now(),
     type: 'turn',
     role,
     durationMs,
-    content: content.slice(0, 280),
+    questionCount: Math.max(0, Math.round(questionCount)),
   });
 }
 
@@ -225,25 +261,22 @@ function resolveBackchannel(collision: boolean, record = true): void {
   listenerBackchannelAt = null;
 }
 
-function currentTranscriptText(): string {
-  const transcript = liveConversationStore.getState().transcript;
-  return transcript.lastFinal || transcript.partial;
-}
-
 function sanitizeEvent(event: LiveConversationEvaluationEvent): LiveConversationEvaluationEvent {
-  if (event.type === 'turn') return { ...event, content: event.content.slice(0, 280) };
+  if (event.type === 'turn') {
+    const { content: _content, ...contentFree } = event;
+    return contentFree;
+  }
   return event;
 }
 
 function redactPersistedEvent(event: LiveConversationEvaluationEvent): LiveConversationEvaluationEvent {
-  if (event.type === 'turn') return { ...event, content: '' };
-  return event;
+  return sanitizeEvent(event);
 }
 
 function readStoredEvents(): LiveConversationEvaluationEvent[] {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(LIVE_EVALUATION_STORAGE_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed.filter(isEvaluationEvent).slice(-MAX_EVENTS) : [];
+    return Array.isArray(parsed) ? parsed.filter(isEvaluationEvent).map(sanitizeEvent).slice(-MAX_EVENTS) : [];
   } catch {
     return [];
   }

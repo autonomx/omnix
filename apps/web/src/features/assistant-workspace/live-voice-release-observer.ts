@@ -5,6 +5,7 @@ const DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const QUALITY_EVENT = 'omnix:assistant-voice-release-quality';
 const SCENARIO_KEY = 'omnix.liveCall.releaseScenario';
+export const LIVE_VOICE_RELEASE_OBSERVATION_EVENT = 'omnix:live-voice-release-observation';
 
 export type LiveVoiceLatencyMetric =
   | 'stt_finalize_ms'
@@ -15,7 +16,12 @@ export type LiveVoiceLatencyMetric =
 export type LiveVoiceQualityMetric =
   | 'false_interruption'
   | 'missed_interruption'
-  | 'backchannel_false_positive';
+  | 'backchannel_false_positive'
+  | 'playback_echo_submission';
+
+export type LiveVoiceReleaseObservation =
+  | { kind: 'latency'; metricName: LiveVoiceLatencyMetric; valueMs: number; scenario: string }
+  | { kind: 'quality'; qualityName: LiveVoiceQualityMetric; occurred: boolean; scenario: string };
 
 type PerfDetail = {
   stage?: unknown;
@@ -71,6 +77,7 @@ export function recordLiveVoiceReleaseQuality(
     occurred,
     scenario,
   }, 'release_observer');
+  dispatchObservation({ kind: 'quality', qualityName, occurred, scenario });
 }
 
 export function resetLiveVoiceReleaseObserver(): void {
@@ -143,13 +150,21 @@ function handleQualityEvent(event: Event): void {
 
 function recordLatency(metricName: LiveVoiceLatencyMetric, valueMs: number | null): void {
   if (valueMs === null) return;
+  const rounded = Math.round(valueMs * 1000) / 1000;
+  const scenario = currentScenario();
   reporter?.record('release_metric', {
     metric_name: metricName,
-    value_ms: Math.round(valueMs * 1000) / 1000,
-    scenario: currentScenario(),
+    value_ms: rounded,
+    scenario,
     turn_id: state.turnId,
     observed_trace_id: state.activeTraceId,
   }, 'release_observer');
+  dispatchObservation({ kind: 'latency', metricName, valueMs: rounded, scenario });
+}
+
+function dispatchObservation(observation: LiveVoiceReleaseObservation): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, { detail: observation }));
 }
 
 function elapsed(start: number | null, end: number): number | null {
@@ -172,7 +187,8 @@ function currentScenario(): string {
 function isQualityMetric(value: unknown): value is LiveVoiceQualityMetric {
   return value === 'false_interruption'
     || value === 'missed_interruption'
-    || value === 'backchannel_false_positive';
+    || value === 'backchannel_false_positive'
+    || value === 'playback_echo_submission';
 }
 
 function emptyState(): ReleaseState {

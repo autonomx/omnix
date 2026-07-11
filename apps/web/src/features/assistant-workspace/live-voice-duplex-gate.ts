@@ -11,7 +11,15 @@ import {
   resolveCalibrationDuplex,
   type LiveVoiceCalibrationRecord,
 } from './live-voice-calibration';
+import { resolveLiveVoiceDeviceKey } from './live-voice-device-key';
+import { createLiveVoiceMicrophoneTap, type LiveVoiceMicrophoneTap } from './live-voice-microphone-tap';
 import { liveConversationStore } from './live-conversation-store';
+import {
+  BoundedWaveformReference,
+  compareRecentWaveforms,
+  pcm16ToFloat32Reference,
+  resampleWaveform,
+} from './live-voice-waveform-reference';
 
 const PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const PLAYBACK_PCM_EVENT = 'omnix:character-avatar-pcm';
@@ -20,17 +28,20 @@ const PERF_EVENT = 'omnix:assistant-voice-perf';
 const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const DUCK_EVENT = 'omnix:assistant-audio-duck';
-const STREAM_AUDIO_BUTTON_SELECTOR = 'button[data-omnix-stream-audio][aria-pressed="true"]';
+const RELEASE_QUALITY_EVENT = 'omnix:assistant-voice-release-quality';
 const trackedStreams = new Set<MediaStream>();
+const microphoneTaps = new Map<MediaStream, LiveVoiceMicrophoneTap>();
 const CANDIDATE_TIMEOUT_MS = 1_500;
+const DEFAULT_PLAYBACK_SAMPLE_RATE = 24_000;
 
-let announcedSpeaking = false;
-let assistantSpeaking = false;
-let configuredMode: DuplexMode = 'automatic';
-let activeCalibration: LiveVoiceCalibrationRecord | null = null;
+let playbackReference = new BoundedWaveformReference(DEFAULT_PLAYBACK_SAMPLE_RATE * 2);
+let playbackSampleRate = DEFAULT_PLAYBACK_SAMPLE_RATE;
 let playbackRms = 0;
 let playbackReferenceAt = 0;
+let activeDeviceKey: string | null = null;
+let deviceRefreshGeneration = 0;
 let candidateTimer: ReturnType<typeof setTimeout> | null = null;
+let candidateStartedAt: number | null = null;
 let ducked = false;
 
 export type ResolvedDuplexMode = 'half_duplex' | 'echo_aware';
@@ -39,15 +50,17 @@ export function resolveDuplexMode(
   mode: DuplexMode,
   echoAwareSupported = true,
   calibration: LiveVoiceCalibrationRecord | null = readLatestLiveVoiceCalibration(),
+  currentDeviceKey: string | null = null,
 ): ResolvedDuplexMode {
   if (!echoAwareSupported || mode === 'half_duplex') return 'half_duplex';
   if (mode === 'echo_aware') return 'echo_aware';
-  return resolveCalibrationDuplex(calibration).mode;
+  if (!currentDeviceKey) return 'half_duplex';
+  return resolveCalibrationDuplex(calibration, currentDeviceKey).mode;
 }
 
 export function shouldMuteLiveMic(
   speaking: boolean,
-  mode: ResolvedDuplexMode = resolveDuplexMode(configuredMode, true, activeCalibration),
+  mode: ResolvedDuplexMode = resolvedRuntimeDuplexMode(),
 ): boolean {
   return speaking && mode === 'half_duplex';
 }
@@ -57,52 +70,78 @@ export function initializeLiveVoiceDuplexGate(): () => void {
   const mediaDevices = navigator.mediaDevices;
   if (!mediaDevices?.getUserMedia) return () => undefined;
 
-  configuredMode = readEffectiveLiveConversationProfile()?.duplex_mode ?? 'automatic';
-  activeCalibration = readLatestLiveVoiceCalibration();
   const originalGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices);
   const patchedGetUserMedia: typeof mediaDevices.getUserMedia = async (constraints) => {
     const stream = await originalGetUserMedia(constraints);
-    if (constraints?.audio && document.querySelector('.assistant-live-card')) trackLiveVoiceStream(stream);
+    const connection = liveConversationStore.getState().conversation.connection;
+    if (constraints?.audio && connection !== 'disconnected') trackLiveVoiceStream(stream);
     return stream;
   };
   mediaDevices.getUserMedia = patchedGetUserMedia;
 
   const handlePlaybackState = (event: Event): void => {
-    const detail = (event as CustomEvent<{ speaking?: boolean }>).detail;
-    announcedSpeaking = Boolean(detail?.speaking);
-    assistantSpeaking = announcedSpeaking;
-    if (!assistantSpeaking) clearCandidate('playback-finished');
+    const speaking = Boolean((event as CustomEvent<{ speaking?: boolean }>).detail?.speaking);
+    if (!speaking) {
+      clearCandidate('playback-finished');
+      playbackReference.clear();
+      playbackRms = 0;
+    }
     applyDuplexGate();
   };
   const handleProfile = (event: Event): void => {
     const detail = (event as CustomEvent<LiveConversationProfile>).detail;
-    configuredMode = detail?.duplex_mode ?? readEffectiveLiveConversationProfile()?.duplex_mode ?? 'automatic';
     liveConversationStore.dispatch({ type: 'profile', profile: detail ?? readEffectiveLiveConversationProfile() });
     clearCandidate('duplex-mode-changed');
     applyDuplexGate();
   };
   const handleCalibration = (event: Event): void => {
-    activeCalibration = (event as CustomEvent<LiveVoiceCalibrationRecord>).detail
+    const calibration = (event as CustomEvent<LiveVoiceCalibrationRecord>).detail
       ?? readLatestLiveVoiceCalibration();
+    liveConversationStore.dispatch({ type: 'duplex', duplex: { calibration } });
     clearCandidate('calibration-updated');
     applyDuplexGate();
   };
   const handlePlaybackPcm = (event: Event): void => {
-    const detail = (event as CustomEvent<{ samples?: Int16Array }>).detail;
+    const detail = (event as CustomEvent<{ samples?: Int16Array; sampleRate?: number }>).detail;
     if (!(detail?.samples instanceof Int16Array)) return;
+    const sampleRate = typeof detail.sampleRate === 'number' && detail.sampleRate > 0
+      ? Math.round(detail.sampleRate)
+      : DEFAULT_PLAYBACK_SAMPLE_RATE;
+    if (sampleRate !== playbackSampleRate) {
+      playbackSampleRate = sampleRate;
+      playbackReference = new BoundedWaveformReference(sampleRate * 2);
+    }
     playbackRms = calculatePcm16Rms(detail.samples);
+    playbackReference.append(pcm16ToFloat32Reference(detail.samples));
     playbackReferenceAt = performance.now();
   };
   const handleUserSpeech = (event: Event): void => {
-    if (!assistantSpeaking || resolveDuplexMode(configuredMode, true, activeCalibration) !== 'echo_aware') return;
+    const runtime = liveConversationStore.getState();
+    const assistantSpeaking = assistantAudioIsActive();
+    if (!assistantSpeaking || resolvedRuntimeDuplexMode() !== 'echo_aware') return;
     const detail = (event as CustomEvent<{ rms?: number; assistantSpeaking?: boolean }>).detail;
     const microphoneRms = typeof detail?.rms === 'number' ? detail.rms : 0;
+    const tap = firstMicrophoneTap();
+    const microphoneFrame = tap?.read() ?? new Float32Array(0);
+    const resampledMicrophone = tap
+      ? resampleWaveform(microphoneFrame, tap.sampleRate, playbackSampleRate)
+      : microphoneFrame;
+    const waveform = compareRecentWaveforms(
+      playbackReference.snapshot(),
+      resampledMicrophone,
+      playbackSampleRate,
+    );
+    const sensitivity = runtime.presencePolicy?.values.interruption_sensitivity ?? 0.7;
+    const calibration = runtime.duplex.calibration;
     const assessment = assessAcousticBargeIn({
       assistantSpeaking: detail?.assistantSpeaking ?? assistantSpeaking,
       microphoneRms,
       playbackRms,
       playbackReferenceAgeMs: Math.max(0, performance.now() - playbackReferenceAt),
-      speechThreshold: adaptiveSpeechThreshold(activeCalibration),
+      speechThreshold: adaptiveSpeechThreshold(calibration, sensitivity),
+      waveformSimilarity: waveform.similarity,
+      calibratedEchoGain: calibration?.echoGain ?? null,
+      interruptionSensitivity: sensitivity,
     });
     dispatchPerf('barge_in_acoustic_candidate', {
       decision: assessment.decision,
@@ -111,9 +150,18 @@ export function initializeLiveVoiceDuplexGate(): () => void {
       microphone_rms: assessment.microphoneRms,
       playback_rms: assessment.playbackRms,
       energy_ratio: assessment.energyRatio,
-      calibration_confidence: activeCalibration?.confidence ?? 0,
+      waveform_similarity: assessment.waveformSimilarity,
+      waveform_lag_ms: waveform.lagMs,
+      waveform_samples: waveform.comparedSamples,
+      calibration_confidence: calibration?.confidence ?? 0,
+      presence_policy_version: runtime.presencePolicy?.version ?? null,
+      interruption_sensitivity: sensitivity,
     });
-    if (assessment.decision === 'likely_echo' || assessment.decision === 'no_playback') return;
+    if (assessment.decision === 'likely_echo' || assessment.decision === 'no_playback') {
+      if (assessment.reason === 'waveform_matches_playback') recordReleaseQuality('playback_echo_submission', false);
+      return;
+    }
+    candidateStartedAt = performance.now();
     setDucked(true, assessment.reason);
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'confirming' } });
     projectBargeIn('confirming');
@@ -130,8 +178,12 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     }
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'accepted' } });
     projectBargeIn('accepted');
+    if (candidateStartedAt !== null) {
+      dispatchPerf('barge_in_confirmed', { duck_to_cancel_ms: performance.now() - candidateStartedAt });
+    }
   };
   const handleStop = () => clearCandidate('playback-stopped');
+  const handleDeviceChange = () => { void refreshActiveDeviceKey(); };
 
   window.addEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
   window.addEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
@@ -141,6 +193,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
   window.addEventListener(PERF_EVENT, handlePerf);
   window.addEventListener(INTERRUPT_EVENT, handleStop);
   window.addEventListener(STOP_EVENT, handleStop);
+  mediaDevices.addEventListener?.('devicechange', handleDeviceChange);
   applyDuplexGate();
 
   return () => {
@@ -152,52 +205,82 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     window.removeEventListener(PERF_EVENT, handlePerf);
     window.removeEventListener(INTERRUPT_EVENT, handleStop);
     window.removeEventListener(STOP_EVENT, handleStop);
+    mediaDevices.removeEventListener?.('devicechange', handleDeviceChange);
     mediaDevices.getUserMedia = originalGetUserMedia;
-    announcedSpeaking = false;
-    assistantSpeaking = false;
-    configuredMode = 'automatic';
-    activeCalibration = null;
+    deviceRefreshGeneration += 1;
+    activeDeviceKey = null;
+    playbackReference.clear();
     playbackRms = 0;
     playbackReferenceAt = 0;
     clearCandidate('gate-disposed');
+    for (const tap of microphoneTaps.values()) void tap.close();
+    microphoneTaps.clear();
     trackedStreams.clear();
   };
 }
 
-/** Compatibility-only inspection helper. Duplex policy itself is event/store-driven. */
-export function assistantAudioIsActive(root: ParentNode = document): boolean {
-  const orbSpeaking = Array.from(root.querySelectorAll<HTMLElement>('.assistant-voice-orb'))
-    .some((orb) => orb.dataset.voiceMode === 'speaking');
-  const streamSpeaking = Boolean(root.querySelector(STREAM_AUDIO_BUTTON_SELECTOR));
-  return announcedSpeaking || orbSpeaking || streamSpeaking;
+/** Compatibility-only inspection helper. Runtime ownership is store-derived. */
+export function assistantAudioIsActive(_root: ParentNode = document): boolean {
+  const conversation = liveConversationStore.getState().conversation;
+  return conversation.assistantTurn === 'speaking' || conversation.delivery === 'audio_started';
 }
 
 function trackLiveVoiceStream(stream: MediaStream): void {
   if (!stream.getAudioTracks().length) return;
   trackedStreams.add(stream);
+  void createLiveVoiceMicrophoneTap(stream).then((tap) => {
+    if (!tap || !trackedStreams.has(stream)) {
+      if (tap) void tap.close();
+      return;
+    }
+    microphoneTaps.set(stream, tap);
+  });
   for (const track of stream.getAudioTracks()) {
     track.addEventListener('ended', () => {
-      if (stream.getAudioTracks().every((candidate) => candidate.readyState === 'ended')) trackedStreams.delete(stream);
+      if (!stream.getAudioTracks().every((candidate) => candidate.readyState === 'ended')) return;
+      trackedStreams.delete(stream);
+      const tap = microphoneTaps.get(stream);
+      microphoneTaps.delete(stream);
+      if (tap) void tap.close();
+      void refreshActiveDeviceKey();
     }, { once: true });
   }
+  void refreshActiveDeviceKey();
+  applyDuplexGate();
+}
+
+async function refreshActiveDeviceKey(): Promise<void> {
+  const generation = ++deviceRefreshGeneration;
+  const stream = Array.from(trackedStreams).find((candidate) => candidate.getAudioTracks().some((track) => track.readyState !== 'ended'));
+  const next = stream ? await resolveLiveVoiceDeviceKey(stream) : null;
+  if (generation !== deviceRefreshGeneration) return;
+  activeDeviceKey = next;
   applyDuplexGate();
 }
 
 function applyDuplexGate(): void {
-  const resolvedMode = resolveDuplexMode(configuredMode, true, activeCalibration);
-  const calibration = resolveCalibrationDuplex(activeCalibration);
-  const reason = configuredMode === 'automatic' ? calibration.reason : 'explicit_user_selection';
-  const confidence = activeCalibration?.confidence ?? 0;
+  const runtime = liveConversationStore.getState();
+  const configuredMode = runtime.profile?.duplex_mode
+    ?? readEffectiveLiveConversationProfile()?.duplex_mode
+    ?? runtime.duplex.configuredMode;
+  const calibration = runtime.duplex.calibration ?? readLatestLiveVoiceCalibration();
+  const resolvedMode = resolveDuplexMode(configuredMode, true, calibration, activeDeviceKey);
+  const resolution = configuredMode === 'automatic'
+    ? activeDeviceKey
+      ? resolveCalibrationDuplex(calibration, activeDeviceKey)
+      : { mode: 'half_duplex' as const, confidence: calibration?.confidence ?? 0, reason: 'current_device_unavailable' }
+    : { mode: resolvedMode, confidence: calibration?.confidence ?? 0, reason: 'explicit_user_selection' };
   liveConversationStore.dispatch({
     type: 'duplex',
     duplex: {
       configuredMode,
       resolvedMode,
-      reason,
-      confidence,
-      calibration: activeCalibration,
+      reason: resolution.reason,
+      confidence: resolution.confidence,
+      calibration,
     },
   });
+  const assistantSpeaking = assistantAudioIsActive();
   const enabled = !shouldMuteLiveMic(assistantSpeaking, resolvedMode);
   for (const stream of Array.from(trackedStreams)) {
     const tracks = stream.getAudioTracks();
@@ -209,17 +292,40 @@ function applyDuplexGate(): void {
   }
   document.querySelectorAll<HTMLElement>('.assistant-live-card').forEach((card) => {
     card.dataset.duplexMode = resolvedMode;
-    card.dataset.duplexReason = reason;
-    card.dataset.calibrationConfidence = String(confidence);
+    card.dataset.duplexReason = resolution.reason;
+    card.dataset.calibrationConfidence = String(resolution.confidence);
     card.dataset.duplexGate = assistantSpeaking
       ? resolvedMode === 'echo_aware' ? 'echo-aware-listening' : 'assistant-speaking'
       : 'listening';
   });
 }
 
-function adaptiveSpeechThreshold(calibration: LiveVoiceCalibrationRecord | null): number {
-  if (!calibration) return 0.012;
-  return Math.max(0.008, Math.min(0.08, calibration.noiseFloorRms * 2.6));
+function resolvedRuntimeDuplexMode(): ResolvedDuplexMode {
+  const runtime = liveConversationStore.getState();
+  return resolveDuplexMode(
+    runtime.profile?.duplex_mode ?? runtime.duplex.configuredMode,
+    true,
+    runtime.duplex.calibration,
+    activeDeviceKey,
+  );
+}
+
+function firstMicrophoneTap(): LiveVoiceMicrophoneTap | null {
+  for (const stream of trackedStreams) {
+    const tap = microphoneTaps.get(stream);
+    if (tap) return tap;
+  }
+  return null;
+}
+
+function adaptiveSpeechThreshold(
+  calibration: LiveVoiceCalibrationRecord | null,
+  interruptionSensitivity: number,
+): number {
+  const sensitivity = Math.max(0, Math.min(1, interruptionSensitivity));
+  if (!calibration) return Math.max(0.008, 0.016 - sensitivity * 0.006);
+  const multiplier = 2.9 - sensitivity * 0.7;
+  return Math.max(0.006, Math.min(0.08, calibration.noiseFloorRms * multiplier));
 }
 
 function setDucked(value: boolean, reason: string): void {
@@ -232,13 +338,17 @@ function setDucked(value: boolean, reason: string): void {
   window.dispatchEvent(new CustomEvent(DUCK_EVENT, {
     detail: { ducked: value, gain: value ? 0.18 : 1, reason, timestamp: performance.now() },
   }));
-  dispatchPerf(value ? 'barge_in_ducked' : 'barge_in_restored', { reason });
+  dispatchPerf(value ? 'barge_in_ducked' : 'barge_in_restored', {
+    reason,
+    ...(candidateStartedAt !== null ? { elapsed_ms: performance.now() - candidateStartedAt } : {}),
+  });
 }
 
 function clearCandidate(reason: string): void {
   if (candidateTimer) window.clearTimeout(candidateTimer);
   candidateTimer = null;
   setDucked(false, reason);
+  candidateStartedAt = null;
   projectBargeIn('inactive');
 }
 
@@ -248,10 +358,14 @@ function projectBargeIn(value: string): void {
   });
 }
 
+function recordReleaseQuality(qualityName: string, occurred: boolean): void {
+  window.dispatchEvent(new CustomEvent(RELEASE_QUALITY_EVENT, {
+    detail: { qualityName, occurred },
+  }));
+}
+
 function dispatchPerf(stage: string, details: Record<string, unknown>): void {
   window.dispatchEvent(new CustomEvent(PERF_EVENT, {
     detail: { stage, timestamp: new Date().toISOString(), ...details },
   }));
 }
-
-if (typeof window !== 'undefined') initializeLiveVoiceDuplexGate();

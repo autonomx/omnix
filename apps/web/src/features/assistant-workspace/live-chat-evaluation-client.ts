@@ -8,6 +8,8 @@ export type VoiceSessionEvaluationCreate = {
   ended_at: string;
   exact_commit_sha: string;
   app_version: string;
+  browser_version: string;
+  os_version: string;
   character_id: string;
   profile_version: number | null;
   presence_preset: PresencePreset;
@@ -53,6 +55,29 @@ export type PresencePolicyVersion = {
   created_at: string;
 };
 
+export type LiveChatReleaseMetric = {
+  name: string;
+  kind: 'latency' | 'rate' | 'score';
+  status: ReleaseGateStatus;
+  samples: number;
+  observed: number | null;
+  limit: number;
+  comparison: 'maximum' | 'minimum';
+};
+
+export type LiveChatReleaseGateReport = {
+  status: ReleaseGateStatus;
+  generated_at: string;
+  records_scanned: number;
+  traces: number;
+  scenarios: string[];
+  missing_scenarios: string[];
+  character_modes: string[];
+  metrics: LiveChatReleaseMetric[];
+  failures: string[];
+  insufficient: string[];
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
@@ -82,6 +107,13 @@ export const liveChatEvaluationClient = {
     if (options.preset) params.set('presence_preset', options.preset);
     params.set('limit', String(options.limit ?? 100));
     return request(`/api/tts/live-call/evaluations?${params}`);
+  },
+  releaseGate(options: { limit?: number; persistStatus?: boolean } = {}): Promise<LiveChatReleaseGateReport> {
+    const params = new URLSearchParams({
+      limit: String(options.limit ?? 1_000),
+      persist_status: String(options.persistStatus ?? true),
+    });
+    return request(`/api/tts/live-call/evaluations/release-gate?${params}`);
   },
   export(): Promise<Record<string, unknown>> {
     return request('/api/tts/live-call/evaluations/export');

@@ -6,6 +6,9 @@ export type AcousticBargeInInput = {
   playbackRms: number;
   playbackReferenceAgeMs: number;
   speechThreshold: number;
+  waveformSimilarity?: number | null;
+  calibratedEchoGain?: number | null;
+  interruptionSensitivity?: number;
 };
 
 export type AcousticBargeInAssessment = {
@@ -15,6 +18,7 @@ export type AcousticBargeInAssessment = {
   microphoneRms: number;
   playbackRms: number;
   energyRatio: number | null;
+  waveformSimilarity: number | null;
 };
 
 const MAX_REFERENCE_AGE_MS = 750;
@@ -36,23 +40,40 @@ export function assessAcousticBargeIn(input: AcousticBargeInInput): AcousticBarg
   const referenceAge = finiteNonNegative(input.playbackReferenceAgeMs);
   const threshold = Math.max(0.001, finiteNonNegative(input.speechThreshold));
   const energyRatio = playbackRms > 0 ? microphoneRms / playbackRms : null;
+  const waveformSimilarity = finiteOptionalRatio(input.waveformSimilarity);
+  const echoGain = finiteOptionalRatio(input.calibratedEchoGain);
+  const sensitivity = clamp01(input.interruptionSensitivity ?? 0.7);
 
   if (!input.assistantSpeaking) {
-    return assessment('no_playback', 1, 'assistant_not_speaking', microphoneRms, playbackRms, energyRatio);
+    return assessment('no_playback', 1, 'assistant_not_speaking', microphoneRms, playbackRms, energyRatio, waveformSimilarity);
   }
   if (microphoneRms < threshold) {
-    return assessment('likely_echo', 0.85, 'below_user_speech_threshold', microphoneRms, playbackRms, energyRatio);
+    return assessment('likely_echo', 0.85, 'below_user_speech_threshold', microphoneRms, playbackRms, energyRatio, waveformSimilarity);
   }
   if (referenceAge > MAX_REFERENCE_AGE_MS || playbackRms < MIN_REFERENCE_RMS) {
-    return assessment('independent_speech', 0.74, 'no_recent_playback_reference', microphoneRms, playbackRms, energyRatio);
+    return assessment('independent_speech', 0.74, 'no_recent_playback_reference', microphoneRms, playbackRms, energyRatio, waveformSimilarity);
   }
-  if (energyRatio !== null && energyRatio <= 0.48) {
-    return assessment('likely_echo', 0.82, 'microphone_energy_tracks_playback', microphoneRms, playbackRms, energyRatio);
+
+  const strongEchoSimilarity = 0.66 + sensitivity * 0.14;
+  const weakEchoSimilarity = 0.42 + sensitivity * 0.08;
+  const calibratedEchoRatio = echoGain === null ? 0.58 : Math.max(0.35, Math.min(0.78, echoGain * 2.2));
+  const independentRatio = 1.08 - sensitivity * 0.25;
+
+  if (waveformSimilarity !== null && waveformSimilarity >= strongEchoSimilarity) {
+    if (energyRatio === null || energyRatio <= Math.max(0.72, calibratedEchoRatio)) {
+      return assessment('likely_echo', 0.94, 'waveform_matches_playback', microphoneRms, playbackRms, energyRatio, waveformSimilarity);
+    }
   }
-  if (energyRatio !== null && energyRatio >= 0.9) {
-    return assessment('independent_speech', 0.8, 'microphone_energy_exceeds_echo_envelope', microphoneRms, playbackRms, energyRatio);
+  if (waveformSimilarity !== null && waveformSimilarity <= 0.22 && energyRatio !== null && energyRatio >= 0.58) {
+    return assessment('independent_speech', 0.9, 'waveform_separates_from_playback', microphoneRms, playbackRms, energyRatio, waveformSimilarity);
   }
-  return assessment('uncertain', 0.5, 'candidate_requires_partial_stt', microphoneRms, playbackRms, energyRatio);
+  if (energyRatio !== null && energyRatio <= 0.48 && (waveformSimilarity === null || waveformSimilarity >= weakEchoSimilarity)) {
+    return assessment('likely_echo', 0.82, 'microphone_energy_tracks_playback', microphoneRms, playbackRms, energyRatio, waveformSimilarity);
+  }
+  if (energyRatio !== null && energyRatio >= independentRatio) {
+    return assessment('independent_speech', 0.8, 'microphone_energy_exceeds_echo_envelope', microphoneRms, playbackRms, energyRatio, waveformSimilarity);
+  }
+  return assessment('uncertain', 0.5, 'candidate_requires_partial_stt', microphoneRms, playbackRms, energyRatio, waveformSimilarity);
 }
 
 function assessment(
@@ -62,10 +83,19 @@ function assessment(
   microphoneRms: number,
   playbackRms: number,
   energyRatio: number | null,
+  waveformSimilarity: number | null,
 ): AcousticBargeInAssessment {
-  return { decision, confidence, reason, microphoneRms, playbackRms, energyRatio };
+  return { decision, confidence, reason, microphoneRms, playbackRms, energyRatio, waveformSimilarity };
 }
 
 function finiteNonNegative(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function finiteOptionalRatio(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? clamp01(value) : null;
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
 }

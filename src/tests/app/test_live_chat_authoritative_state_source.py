@@ -20,8 +20,13 @@ def test_duplex_policy_no_longer_infers_playback_from_dom() -> None:
     source = _source("apps/web/src/features/assistant-workspace/live-voice-duplex-gate.ts")
     assert "new MutationObserver" not in source
     assert "refreshDuplexGate" not in source
+    assert ".assistant-voice-orb" not in source
     assert "handlePlaybackState" in source
-    assert "liveConversationStore.dispatch" in source
+    assert "liveConversationStore.getState" in source
+    assert "BoundedWaveformReference" in source
+    assert "compareRecentWaveforms" in source
+    assert "resolveLiveVoiceDeviceKey" in source
+    assert "currentDeviceKey" in source
 
 
 def test_initiative_policy_no_longer_reads_visible_voice_state() -> None:
@@ -30,6 +35,17 @@ def test_initiative_policy_no_longer_reads_visible_voice_state() -> None:
     assert "dataset.voiceMode" not in source
     assert "new MutationObserver" not in source
     assert "liveConversationStore.getState" in source
+    assert "presencePolicy" in source
+    assert "initiative_cooldown_ms" in source
+
+
+def test_listener_backchannel_policy_is_store_derived_not_dom_derived() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-voice-backchannel.ts")
+    assert ".assistant-live-draft" not in source
+    assert ".assistant-voice-transcript" not in source
+    assert ".assistant-voice-orb" not in source
+    assert "liveConversationStore.getState" in source
+    assert "listener_backchannel_frequency" in source
 
 
 def test_avatar_state_is_store_derived_not_dom_derived() -> None:
@@ -40,13 +56,26 @@ def test_avatar_state_is_store_derived_not_dom_derived() -> None:
     assert "liveConversationStore.getState" in source
 
 
-def test_evaluation_no_longer_observes_or_persists_transcript_dom() -> None:
+def test_evaluation_uses_content_free_assistant_summaries() -> None:
     source = _source("apps/web/src/features/assistant-workspace/live-conversation-evaluation-controller.ts")
     assert "new MutationObserver" not in source
     assert "assistant-voice-transcript" not in source
     assert "assistant-live-draft" not in source
+    assert "currentTranscriptText" not in source
+    assert "LIVE_ASSISTANT_TURN_SUMMARY_EVENT" in source
+    assert "topicFingerprint" in source
+    assert "questionCount" in source
     assert "redactPersistedEvent" in source
     assert "liveConversationStore.subscribe" in source
+
+
+def test_diagnostics_summarize_before_existing_redaction_boundary() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-call-diagnostics-client.ts")
+    assert "observeAssistantDiagnostic(traceId, event, details)" in source
+    assert "sanitizeDiagnosticDetails(details" in source
+    assert source.index("observeAssistantDiagnostic(traceId, event, details)") < source.index(
+        "sanitizeDiagnosticDetails(details"
+    )
 
 
 def test_durable_payload_uses_aggregates_not_event_or_content_uploads() -> None:
@@ -57,6 +86,20 @@ def test_durable_payload_uses_aggregates_not_event_or_content_uploads() -> None:
     assert "quality_metrics" in source
     assert "latency_summary" in source
     assert "eos_termination_counts" in source
+    assert "browser_version" in source
+    assert "os_version" in source
+    assert "liveChatEvaluationClient.releaseGate" in source
     assert "transcript:" not in source
     assert "prompt:" not in source
     assert "pcm:" not in source
+
+
+def test_release_gate_aggregates_durable_system_and_character_evidence() -> None:
+    source = _source("src/app/gateway/live_chat_release_gate.py")
+    aggregation = _source("src/app/gateway/live_chat_release_aggregation.py")
+    routes = _source("src/app/gateway/live_chat_evaluation_routes.py")
+    assert "evaluate_live_chat_release_gate_bundles" in source
+    assert "metadata_records" in source
+    assert "character_id" in source
+    assert "durable_record_to_bundle" in aggregation
+    assert '"/evaluations/release-gate"' in routes

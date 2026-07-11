@@ -2,15 +2,18 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   evaluationEventFromPerfDetail,
+  initializeLiveConversationEvaluationController,
   readLiveConversationEvaluationSnapshot,
   recordLiveConversationEvaluationEvent,
   recordLiveConversationSurvey,
   resetLiveConversationEvaluation,
 } from './live-conversation-evaluation-controller';
+import { liveConversationStore } from './live-conversation-store';
 
 describe('live conversation evaluation controller', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    liveConversationStore.reset();
     resetLiveConversationEvaluation();
   });
 
@@ -25,9 +28,11 @@ describe('live conversation evaluation controller', () => {
     expect(evaluationEventFromPerfDetail({ stage: 'overlap_classified', intent: 'backchannel' }, 40)).toBeNull();
   });
 
-  it('keeps rich metrics in memory while redacting browser fallback persistence', () => {
+  it('removes turn content before memory and browser fallback persistence', () => {
     recordLiveConversationEvaluationEvent({ atMs: 1, type: 'first_audio', latencyMs: 500 });
-    recordLiveConversationEvaluationEvent({ atMs: 2, type: 'turn', role: 'assistant', durationMs: 1_000, content: 'Ready?' });
+    recordLiveConversationEvaluationEvent({
+      atMs: 2, type: 'turn', role: 'assistant', durationMs: 1_000, content: 'Ready?', questionCount: 1,
+    });
     const snapshot = recordLiveConversationSurvey(5, 2);
 
     expect(snapshot.report.firstAudioLatencyMs.average).toBe(500);
@@ -38,7 +43,45 @@ describe('live conversation evaluation controller', () => {
 
     const stored = JSON.parse(window.localStorage.getItem('omnix.liveConversation.evaluation.v1') || '[]');
     expect(stored).toHaveLength(3);
-    expect(stored.find((event: { type: string }) => event.type === 'turn').content).toBe('');
+    expect(stored.find((event: { type: string }) => event.type === 'turn').content).toBeUndefined();
     expect(JSON.stringify(stored)).not.toContain('Ready?');
+  });
+
+  it('derives question, repeated-topic, and obligation outcomes from content-free summaries', () => {
+    const dispose = initializeLiveConversationEvaluationController();
+
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'assistant_turn', value: 'speaking' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'delivery', value: 'audio_started' } });
+    window.dispatchEvent(new CustomEvent('omnix:live-conversation-assistant-summary', {
+      detail: {
+        turnId: 'assistant-one', turnKind: 'response', wordCount: 8, questionCount: 1,
+        topicFingerprint: 'topic-launch', createsObligation: true,
+      },
+    }));
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'assistant_turn', value: 'idle' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'delivery', value: 'completed' } });
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-user-speech'));
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: { stage: 'stt_final_received' },
+    }));
+
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'assistant_turn', value: 'speaking' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'delivery', value: 'audio_started' } });
+    window.dispatchEvent(new CustomEvent('omnix:live-conversation-assistant-summary', {
+      detail: {
+        turnId: 'assistant-two', turnKind: 'response', wordCount: 7, questionCount: 1,
+        topicFingerprint: 'topic-launch', createsObligation: true,
+      },
+    }));
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'assistant_turn', value: 'idle' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'delivery', value: 'completed' } });
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-stop'));
+
+    const snapshot = readLiveConversationEvaluationSnapshot();
+    expect(snapshot.report.questionDensity).toBe(1);
+    expect(snapshot.report.repeatedTopicRate).toBe(0.5);
+    expect(snapshot.report.unansweredObligationRate).toBe(0.5);
+    expect(JSON.stringify(snapshot.events)).not.toMatch(/launch plan|assistant-one|assistant-two/);
+    dispose();
   });
 });

@@ -30,6 +30,38 @@ describe('acoustic barge-in detector', () => {
     expect(result.energyRatio).toBeCloseTo(0.3);
   });
 
+  it('uses strong waveform similarity to reject speaker echo', () => {
+    const result = assessAcousticBargeIn({
+      assistantSpeaking: true,
+      microphoneRms: 0.035,
+      playbackRms: 0.07,
+      playbackReferenceAgeMs: 80,
+      speechThreshold: 0.018,
+      waveformSimilarity: 0.93,
+      calibratedEchoGain: 0.2,
+      interruptionSensitivity: 0.75,
+    });
+
+    expect(result.decision).toBe('likely_echo');
+    expect(result.reason).toBe('waveform_matches_playback');
+    expect(result.waveformSimilarity).toBe(0.93);
+  });
+
+  it('uses waveform separation to identify independent speech before STT', () => {
+    const result = assessAcousticBargeIn({
+      assistantSpeaking: true,
+      microphoneRms: 0.045,
+      playbackRms: 0.06,
+      playbackReferenceAgeMs: 80,
+      speechThreshold: 0.018,
+      waveformSimilarity: 0.08,
+      interruptionSensitivity: 0.8,
+    });
+
+    expect(result.decision).toBe('independent_speech');
+    expect(result.reason).toBe('waveform_separates_from_playback');
+  });
+
   it('ducks for strong independent speech and defers ambiguous candidates to STT', () => {
     expect(assessAcousticBargeIn({
       assistantSpeaking: true,

@@ -2,6 +2,7 @@ import {
   readEffectiveLiveConversationProfile,
   type AssistantBackchannelMode,
 } from '../chatbot/liveConversationProfileClient';
+import { liveConversationStore } from './live-conversation-store';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
@@ -11,14 +12,16 @@ const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 const USER_CONTINUER_EVENT = 'omnix:live-conversation-user-continuer';
 const LISTENER_BACKCHANNEL_EVENT = 'omnix:live-conversation-listener-backchannel';
 const DUCK_EVENT = 'omnix:assistant-audio-duck';
-const MIN_COOLDOWN_MS = 8_000;
-const MIN_SPEECH_MS = 3_500;
+const BASE_COOLDOWN_MS = 8_000;
+const BASE_SPEECH_MS = 3_500;
+const DEFAULT_FREQUENCY = 0.16;
 const SENSITIVE_PATTERN = /\b(?:password|passcode|pin|account|card number|security code|address|phone number|email address)\b|\b\d{4,}\b/i;
 const QUESTION_OR_CORRECTION_PATTERN = /[?？]|\b(?:no|not|wrong|actually|correction|I meant|did you say)\b/i;
 const CONTINUER_PATTERN = /^(?:m+h+m+|mhm+|uh[ -]?huh|yeah|yep|right|okay|ok|got it|sure|I see|mm+)[.!\s-]*$/i;
 
 export type BackchannelToken = 'mhm' | 'right' | 'okay' | "i'm with you";
 export type AssistantBackchannelDecision = { allowed: boolean; token: BackchannelToken | null; reason: string };
+export type BackchannelCadence = { speechMs: number; cooldownMs: number; enabled: boolean };
 
 let initialized = false;
 let selectedSessionId: string | null = null;
@@ -31,19 +34,32 @@ export function isUserContinuer(transcript: string): boolean {
   return CONTINUER_PATTERN.test(transcript.trim());
 }
 
+export function resolveBackchannelCadence(frequency = DEFAULT_FREQUENCY): BackchannelCadence {
+  const bounded = Math.max(0, Math.min(1, Number.isFinite(frequency) ? frequency : DEFAULT_FREQUENCY));
+  if (bounded === 0) return { speechMs: 8_000, cooldownMs: 30_000, enabled: false };
+  const delta = DEFAULT_FREQUENCY - bounded;
+  return {
+    speechMs: Math.round(Math.max(2_500, Math.min(8_000, BASE_SPEECH_MS + delta * 10_000))),
+    cooldownMs: Math.round(Math.max(6_000, Math.min(30_000, BASE_COOLDOWN_MS + delta * 60_000))),
+    enabled: true,
+  };
+}
+
 export function decideAssistantListenerBackchannel(
   transcript: string,
   mode: AssistantBackchannelMode,
   speechDurationMs: number,
   now = Date.now(),
   lastAt = lastPlayedAt,
-  duplexMode: string = readEffectiveLiveConversationProfile()?.duplex_mode ?? 'automatic',
+  duplexMode: string = liveConversationStore.getState().duplex.resolvedMode,
+  frequency = DEFAULT_FREQUENCY,
 ): AssistantBackchannelDecision {
   const text = transcript.trim();
-  if (mode === 'off') return denied('disabled');
+  const cadence = resolveBackchannelCadence(frequency);
+  if (mode === 'off' || !cadence.enabled) return denied('disabled');
   if (duplexMode !== 'echo_aware') return denied('requires_echo_aware_duplex');
-  if (speechDurationMs < MIN_SPEECH_MS) return denied('speech_too_short');
-  if (now - lastAt < MIN_COOLDOWN_MS) return denied('cooldown');
+  if (speechDurationMs < cadence.speechMs) return denied('speech_too_short');
+  if (now - lastAt < cadence.cooldownMs) return denied('cooldown');
   if (!text) return denied('no_partial_transcript');
   if (SENSITIVE_PATTERN.test(text)) return denied('sensitive_dictation');
   if (QUESTION_OR_CORRECTION_PATTERN.test(text)) return denied('semantic_risk');
@@ -55,18 +71,14 @@ export function decideAssistantListenerBackchannel(
 
 export function resolveBackchannelTranscript(detailTranscript: unknown): string {
   if (typeof detailTranscript === 'string' && detailTranscript.trim()) return detailTranscript.trim();
-  const draft = document.querySelector<HTMLElement>('.assistant-live-draft p');
-  if (draft?.textContent?.trim()) return draft.textContent.trim();
-  const row = document.querySelector<HTMLElement>('.assistant-voice-transcript [data-live-voice-id="live-voice-draft"]');
-  if (!row) return '';
-  const clone = row.cloneNode(true) as HTMLElement;
-  clone.querySelector('span')?.remove();
-  return clone.textContent?.trim() ?? '';
+  const transcript = liveConversationStore.getState().transcript;
+  return (transcript.partial || transcript.lastFinal).trim();
 }
 
 export function initializeEphemeralBackchannels(): () => void {
   if (initialized || typeof window === 'undefined') return () => undefined;
   initialized = true;
+  selectedSessionId = liveConversationStore.getState().sessionId;
 
   const handleSession = (event: Event) => {
     const detail = (event as CustomEvent<{ sessionId?: unknown }>).detail;
@@ -82,20 +94,34 @@ export function initializeEphemeralBackchannels(): () => void {
   const handleUserSpeech = () => {
     clearSpeechTimer();
     const startedAt = performance.now();
+    const runtime = liveConversationStore.getState();
+    const profile = runtime.profile ?? readEffectiveLiveConversationProfile();
+    const policy = runtime.presencePolicy;
+    const frequency = policy && policy.preset === profile?.presence_preset
+      ? policy.values.listener_backchannel_frequency
+      : DEFAULT_FREQUENCY;
+    const cadence = resolveBackchannelCadence(frequency);
+    if (!cadence.enabled) return;
     speechTimer = setTimeout(() => {
-      const profile = readEffectiveLiveConversationProfile();
+      const current = liveConversationStore.getState();
+      const currentProfile = current.profile ?? readEffectiveLiveConversationProfile();
+      const currentPolicy = current.presencePolicy;
+      const currentFrequency = currentPolicy && currentPolicy.preset === currentProfile?.presence_preset
+        ? currentPolicy.values.listener_backchannel_frequency
+        : frequency;
       const decision = decideAssistantListenerBackchannel(
         resolveBackchannelTranscript(undefined),
-        profile?.assistant_backchannel_mode ?? 'off',
+        currentProfile?.assistant_backchannel_mode ?? 'off',
         performance.now() - startedAt,
         Date.now(),
         lastPlayedAt,
-        profile?.duplex_mode ?? 'automatic',
+        current.duplex.resolvedMode,
+        currentFrequency,
       );
       if (decision.allowed && decision.token && selectedSessionId && !assistantIsSpeaking()) {
         void playCharacterBackchannel(selectedSessionId, decision.token);
       }
-    }, MIN_SPEECH_MS);
+    }, cadence.speechMs);
   };
   const cancel = () => { clearSpeechTimer(); restoreOutput('cancelled'); };
 
@@ -137,7 +163,8 @@ async function playCharacterBackchannel(sessionId: string, token: BackchannelTok
 }
 
 function assistantIsSpeaking(): boolean {
-  return Array.from(document.querySelectorAll<HTMLElement>('.assistant-voice-orb')).some((orb) => orb.dataset.voiceMode === 'speaking');
+  const conversation = liveConversationStore.getState().conversation;
+  return conversation.assistantTurn === 'speaking' || conversation.delivery === 'audio_started';
 }
 
 function clearSpeechTimer(): void {

@@ -30,12 +30,22 @@
 }
 
 .voice-session-summary-grid > div,
+.voice-session-gate,
 .voice-session-policy,
 .voice-session-records article {
   padding: 0.85rem;
   border: 1px solid var(--mantine-color-dark-4, #343a40);
   border-radius: 0.75rem;
   background: color-mix(in srgb, var(--mantine-color-dark-7, #1f2023) 92%, transparent);
+}
+
+.voice-session-gate {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.voice-session-gate [role="alert"] {
+  color: var(--mantine-color-red-4, #ff8787);
 }
 
 .voice-session-summary-grid span,
@@ -100,7 +110,8 @@
 
 .voice-session-records time,
 .voice-session-status,
-.voice-session-records .muted {
+.voice-session-records .muted,
+.voice-session-gate p {
   color: var(--mantine-color-dimmed, #909296);
   font-size: 0.82rem;
 }

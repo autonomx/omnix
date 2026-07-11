@@ -27,6 +27,8 @@ const evaluations = Array.from({ length: 5 }, (_, index) => ({
   ended_at: `2026-07-11T12:1${index}:00+00:00`,
   exact_commit_sha: 'a'.repeat(40),
   app_version: '1.0.0',
+  browser_version: 'Chrome 150',
+  os_version: 'Windows 11',
   character_id: 'maya',
   profile_version: 4,
   presence_preset: 'natural' as const,
@@ -54,6 +56,7 @@ const evaluations = Array.from({ length: 5 }, (_, index) => ({
   updated_at: '2026-07-11T12:20:00+00:00',
 }));
 
+const releaseGate = vi.fn();
 const list = vi.fn();
 const activePolicies = vi.fn();
 const policyVersions = vi.fn();
@@ -66,6 +69,7 @@ vi.mock('../assistant-workspace/live-chat-evaluation-client', async () => {
   return {
     ...actual,
     liveChatEvaluationClient: {
+      releaseGate: (...args: unknown[]) => releaseGate(...args),
       list: (...args: unknown[]) => list(...args),
       activePolicies: (...args: unknown[]) => activePolicies(...args),
       policyVersions: (...args: unknown[]) => policyVersions(...args),
@@ -81,6 +85,18 @@ import { VoiceSessionEvaluationPanel } from './VoiceSessionEvaluationPanel';
 
 describe('VoiceSessionEvaluationPanel', () => {
   beforeEach(() => {
+    releaseGate.mockReset().mockResolvedValue({
+      status: 'insufficient',
+      generated_at: '2026-07-11T12:20:00+00:00',
+      records_scanned: 5,
+      traces: 5,
+      scenarios: ['speakers-quiet'],
+      missing_scenarios: ['headphones-quiet', 'sustained-20-minute-conversation'],
+      character_modes: ['character'],
+      metrics: [],
+      failures: [],
+      insufficient: ['system and character evidence must be aggregated'],
+    });
     list.mockReset().mockResolvedValue(evaluations);
     activePolicies.mockReset().mockResolvedValue({
       quiet: { ...activePolicy, preset: 'quiet' },
@@ -94,14 +110,17 @@ describe('VoiceSessionEvaluationPanel', () => {
     rollbackPolicy.mockReset().mockResolvedValue(activePolicy);
   });
 
-  it('shows durable history and current release posture', async () => {
+  it('shows durable history and the aggregate release posture', async () => {
     render(<VoiceSessionEvaluationPanel />);
 
     expect(await screen.findByText('5 durable Voice Session evaluations loaded.')).toBeInTheDocument();
     expect(screen.getAllByText('700 ms').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('100%').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Insufficient').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/1 scenarios observed · 5 durable traces/)).toBeInTheDocument();
+    expect(screen.getByText(/Headphones Quiet/)).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Durable Voice Session evaluations' }).children).toHaveLength(5);
+    expect(releaseGate).toHaveBeenCalledWith({ persistStatus: true });
   });
 
   it('creates an inactive evidence-backed candidate before activation', async () => {

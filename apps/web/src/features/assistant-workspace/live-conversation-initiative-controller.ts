@@ -3,6 +3,7 @@ import {
   readEffectiveLiveConversationProfile,
   type LiveConversationProfile,
 } from '../chatbot/liveConversationProfileClient';
+import type { PresencePolicyValues } from './live-chat-evaluation-client';
 import { decideInitiative } from './live-conversation-initiative-policy';
 import { liveConversationStore } from './live-conversation-store';
 
@@ -37,6 +38,13 @@ export type ParsedProactiveStream = {
   turnId: string;
   content: string;
   initiativeReason: string;
+};
+
+export type InitiativePolicyTiming = {
+  idleThresholdMs: number;
+  cooldownMs: number;
+  typicalTurnWords: number | null;
+  responseOnsetMs: number | null;
 };
 
 let selectedSessionId: string | null = null;
@@ -151,12 +159,40 @@ export function proactiveReasonFromTranscript(transcript?: string): string | nul
   return /\?\s*$/.test(latest) ? 'unresolved_question' : 'continue_current_topic';
 }
 
+export function resolveInitiativePolicyTiming(
+  profileIdleThresholdMs: number,
+  policy: PresencePolicyValues | null,
+): InitiativePolicyTiming {
+  if (!policy) {
+    return {
+      idleThresholdMs: profileIdleThresholdMs,
+      cooldownMs: DEFAULT_COOLDOWN_MS,
+      typicalTurnWords: null,
+      responseOnsetMs: null,
+    };
+  }
+  return {
+    idleThresholdMs: Math.max(
+      profileIdleThresholdMs,
+      policy.silence_tolerance_ms,
+      policy.initiative_threshold_ms,
+    ),
+    cooldownMs: policy.initiative_cooldown_ms,
+    typicalTurnWords: policy.typical_turn_words,
+    responseOnsetMs: policy.response_onset_ms,
+  };
+}
+
 function evaluateInitiative(): void {
   const runtime = liveConversationStore.getState();
   const profile = runtime.profile ?? readEffectiveLiveConversationProfile();
   selectedSessionId = runtime.sessionId ?? selectedSessionId;
   callConnected = runtime.conversation.connection === 'connected';
   if (!profile || !selectedSessionId) return;
+  const policy = runtime.presencePolicy?.preset === profile.presence_preset
+    ? runtime.presencePolicy.values
+    : null;
+  const timing = resolveInitiativePolicyTiming(profile.idle_threshold_ms, policy);
   const transcript = currentDraftOrTranscript();
   const userSpeaking = runtime.conversation.userTurn === 'speaking'
     || runtime.conversation.userTurn === 'speech_candidate';
@@ -177,26 +213,46 @@ function evaluateInitiative(): void {
     nowMs: performance.now(),
     lastActivityAtMs,
     lastPromptAtMs,
-    idleThresholdMs: profile.idle_threshold_ms,
-    cooldownMs: DEFAULT_COOLDOWN_MS,
+    idleThresholdMs: timing.idleThresholdMs,
+    cooldownMs: timing.cooldownMs,
     promptCount,
     maxPrompts: profile.max_idle_prompts,
   });
-  dispatchPerf('initiative_policy_decision', { action: decision.action, reason: decision.reason, eligible_in_ms: decision.eligibleInMs });
-  if (decision.action === 'speak' && reason && isAutoSpeakEnabled()) void startProactiveTurn(selectedSessionId, reason, profile);
+  dispatchPerf('initiative_policy_decision', {
+    action: decision.action,
+    reason: decision.reason,
+    eligible_in_ms: decision.eligibleInMs,
+    presence_policy_version: runtime.presencePolicy?.version ?? null,
+    idle_threshold_ms: timing.idleThresholdMs,
+    cooldown_ms: timing.cooldownMs,
+  });
+  if (decision.action === 'speak' && reason && isAutoSpeakEnabled()) {
+    void startProactiveTurn(selectedSessionId, reason, profile, timing);
+  }
 }
 
-async function startProactiveTurn(sessionId: string, reason: string, profile: LiveConversationProfile): Promise<void> {
+async function startProactiveTurn(
+  sessionId: string,
+  reason: string,
+  profile: LiveConversationProfile,
+  timing: InitiativePolicyTiming,
+): Promise<void> {
   if (requestController || pending) return;
   const controller = new AbortController();
   requestController = controller;
   const params = new URLSearchParams({
     purpose: 'proactive_reengagement',
     initiative_reason: reason,
-    state_summary: conversationStateSummary(profile),
+    state_summary: conversationStateSummary(profile, timing),
   });
-  dispatchPerf('initiative_generation_started', { session_id: sessionId, initiative_reason: reason });
+  if (timing.typicalTurnWords !== null) params.set('target_words', String(timing.typicalTurnWords));
+  dispatchPerf('initiative_generation_started', {
+    session_id: sessionId,
+    initiative_reason: reason,
+    target_words: timing.typicalTurnWords,
+  });
   try {
+    if (timing.responseOnsetMs) await waitForOnset(timing.responseOnsetMs, controller.signal);
     const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/greeting/stream?${params}`, {
       method: 'POST',
       signal: controller.signal,
@@ -265,10 +321,14 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
     promptCount += 1;
     lastPromptAtMs = performance.now();
     lastActivityAtMs = lastPromptAtMs;
-    window.dispatchEvent(new CustomEvent(DELIVERED_EVENT, { detail: { sessionId: turn.sessionId, turnId: turn.turnId, status } }));
+    window.dispatchEvent(new CustomEvent(DELIVERED_EVENT, {
+      detail: { sessionId: turn.sessionId, turnId: turn.turnId, status },
+    }));
     dispatchPerf('initiative_delivery_committed', { turn_id: turn.turnId, delivery_status: status });
   } catch (error) {
-    dispatchPerf('initiative_delivery_commit_failed', { error: error instanceof Error ? error.message : String(error) });
+    dispatchPerf('initiative_delivery_commit_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   } finally {
     if (pending === turn) pending = null;
   }
@@ -300,12 +360,22 @@ function currentDraftOrTranscript(): string {
   return transcript.partial || transcript.lastFinal;
 }
 
-function conversationStateSummary(profile: LiveConversationProfile): string {
-  const messages = liveConversationStore.getState().transcript.recentFinals
+function conversationStateSummary(
+  profile: LiveConversationProfile,
+  timing: InitiativePolicyTiming,
+): string {
+  const runtime = liveConversationStore.getState();
+  const messages = runtime.transcript.recentFinals
     .slice(-3)
     .map((value) => value.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
-  return `stance=${profile.conversation_stance}; presence=${profile.presence_preset}; recent=${messages.join(' | ')}`.slice(0, 500);
+  return [
+    `stance=${profile.conversation_stance}`,
+    `presence=${profile.presence_preset}`,
+    `policy_version=${runtime.presencePolicy?.version ?? 'none'}`,
+    `target_words=${timing.typicalTurnWords ?? 'profile'}`,
+    `recent=${messages.join(' | ')}`,
+  ].join('; ').slice(0, 500);
 }
 
 function isAssistantSpeaking(): boolean {
@@ -317,6 +387,20 @@ function isAutoSpeakEnabled(): boolean {
   return document.querySelector<HTMLInputElement>('.assistant-voice-toggle input[type="checkbox"]')?.checked ?? false;
 }
 
+function waitForOnset(delayMs: number, signal: AbortSignal): Promise<void> {
+  const bounded = Math.max(0, Math.min(5_000, delayMs));
+  if (!bounded || signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(resolve, bounded);
+    signal.addEventListener('abort', () => {
+      window.clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
+}
+
 function dispatchPerf(stage: string, details: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(PERF_EVENT, { detail: { stage, timestamp: new Date().toISOString(), ...details } }));
+  window.dispatchEvent(new CustomEvent(PERF_EVENT, {
+    detail: { stage, timestamp: new Date().toISOString(), ...details },
+  }));
 }

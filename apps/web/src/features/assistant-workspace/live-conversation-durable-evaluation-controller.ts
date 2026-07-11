@@ -4,6 +4,12 @@ import {
   liveChatEvaluationClient,
   type VoiceSessionEvaluationCreate,
 } from './live-chat-evaluation-client';
+import {
+  LIVE_VOICE_RELEASE_OBSERVATION_EVENT,
+  type LiveVoiceLatencyMetric,
+  type LiveVoiceQualityMetric,
+  type LiveVoiceReleaseObservation,
+} from './live-voice-release-observer';
 
 export const LIVE_DURABLE_EVALUATION_SAVED_EVENT = 'omnix:live-conversation-durable-evaluation-saved';
 const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
@@ -19,6 +25,10 @@ type ActiveCall = {
   callId: string;
   startedAt: string;
   eosTerminationCounts: Record<string, number>;
+  releaseLatencies: Record<LiveVoiceLatencyMetric, number[]>;
+  releaseQuality: Record<LiveVoiceQualityMetric, boolean[]>;
+  duckToCancelMs: number[];
+  rejectedCandidateRestoreMs: number[];
 };
 
 let activeCall: ActiveCall | null = null;
@@ -30,17 +40,17 @@ export function initializeLiveConversationDurableEvaluationController(): () => v
   liveWindow.__omnixLiveDurableEvaluationInstalled = true;
 
   const handleStart = () => {
-    activeCall = {
-      callId: createCallId(),
-      startedAt: new Date().toISOString(),
-      eosTerminationCounts: {
-        natural_eos: 0,
-        forced_eos: 0,
-        token_limit: 0,
-        sequence_limit: 0,
-        model_stopped: 0,
-      },
-    };
+    activeCall = createActiveCall();
+  };
+  const handleObservation = (event: Event) => {
+    if (!activeCall) return;
+    const observation = (event as CustomEvent<LiveVoiceReleaseObservation>).detail;
+    if (!observation) return;
+    if (observation.kind === 'latency') {
+      activeCall.releaseLatencies[observation.metricName].push(observation.valueMs);
+    } else {
+      activeCall.releaseQuality[observation.qualityName].push(observation.occurred);
+    }
   };
   const handlePerf = (event: Event) => {
     if (!activeCall) return;
@@ -48,6 +58,13 @@ export function initializeLiveConversationDurableEvaluationController(): () => v
     const reason = terminationReason(detail);
     if (reason && Object.hasOwn(activeCall.eosTerminationCounts, reason)) {
       activeCall.eosTerminationCounts[reason] += 1;
+    }
+    const stage = typeof detail.stage === 'string' ? detail.stage : '';
+    if (stage === 'barge_in_confirmed') {
+      pushFinite(activeCall.duckToCancelMs, detail.duck_to_cancel_ms);
+    }
+    if (stage === 'barge_in_restored') {
+      pushFinite(activeCall.rejectedCandidateRestoreMs, detail.elapsed_ms);
     }
   };
   const handleStop = () => {
@@ -58,11 +75,13 @@ export function initializeLiveConversationDurableEvaluationController(): () => v
   };
 
   window.addEventListener(CALL_START_EVENT, handleStart);
+  window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, handleObservation);
   window.addEventListener(PERF_EVENT, handlePerf);
   window.addEventListener(STOP_EVENT, handleStop);
 
   return () => {
     window.removeEventListener(CALL_START_EVENT, handleStart);
+    window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, handleObservation);
     window.removeEventListener(PERF_EVENT, handlePerf);
     window.removeEventListener(STOP_EVENT, handleStop);
     activeCall = null;
@@ -84,6 +103,8 @@ export function buildDurableEvaluationPayload(
     ended_at: endedAt,
     exact_commit_sha: currentCommitSha(),
     app_version: currentAppVersion(),
+    browser_version: currentBrowserVersion(),
+    os_version: currentOsVersion(),
     character_id: runtime.identity.characterId,
     profile_version: runtime.identity.profileVersion,
     presence_preset: runtime.profile?.presence_preset ?? 'natural',
@@ -98,15 +119,23 @@ export function buildDurableEvaluationPayload(
       first_audio_average_ms: report.firstAudioLatencyMs.average,
       first_audio_p95_ms: report.firstAudioLatencyMs.p95,
       cancellation_average_ms: report.cancellationLatencyMs.average,
-      cancellation_p95_ms: report.cancellationLatencyMs.p95,
+      cancellation_p95_ms: p95(call.duckToCancelMs) ?? report.cancellationLatencyMs.p95,
+      rejected_candidate_restore_p95_ms: p95(call.rejectedCandidateRestoreMs),
       turn_duration_median_ms: report.turnDurationMs.median,
       turn_duration_p95_ms: report.turnDurationMs.p95,
+      stt_finalize_p95_ms: p95(call.releaseLatencies.stt_finalize_ms),
+      final_to_first_token_p95_ms: p95(call.releaseLatencies.final_to_first_token_ms),
+      first_token_to_first_audio_p95_ms: p95(call.releaseLatencies.first_token_to_first_audio_ms),
+      interruption_to_silence_p95_ms: p95(call.releaseLatencies.interruption_to_silence_ms),
     },
     quality_metrics: {
       event_count: report.eventCount,
       false_endpoint_rate: report.falseEndpointRate,
       talk_over_duration_ms: report.talkOverDurationMs,
       interruption_success_rate: report.interruptionSuccessRate,
+      false_barge_in_rate: booleanRate(call.releaseQuality.false_interruption),
+      missed_barge_in_rate: booleanRate(call.releaseQuality.missed_interruption),
+      playback_echo_submission_rate: booleanRate(call.releaseQuality.playback_echo_submission),
       silence_fill_regret_rate: report.silenceFillRegretRate,
       proactive_acceptance_rate: report.proactiveAcceptanceRate,
       backchannel_collision_rate: report.backchannelCollisionRate,
@@ -129,7 +158,10 @@ export function buildDurableEvaluationPayload(
 async function persistCallEvaluation(call: ActiveCall): Promise<void> {
   try {
     const record = await liveChatEvaluationClient.upsert(buildDurableEvaluationPayload(call));
-    window.dispatchEvent(new CustomEvent(LIVE_DURABLE_EVALUATION_SAVED_EVENT, { detail: record }));
+    const gate = await liveChatEvaluationClient.releaseGate({ persistStatus: true });
+    window.dispatchEvent(new CustomEvent(LIVE_DURABLE_EVALUATION_SAVED_EVENT, {
+      detail: { record: { ...record, release_gate_status: gate.status }, gate },
+    }));
   } catch (error) {
     window.dispatchEvent(new CustomEvent(PERF_EVENT, {
       detail: {
@@ -139,6 +171,34 @@ async function persistCallEvaluation(call: ActiveCall): Promise<void> {
       },
     }));
   }
+}
+
+function createActiveCall(): ActiveCall {
+  return {
+    callId: createCallId(),
+    startedAt: new Date().toISOString(),
+    eosTerminationCounts: {
+      natural_eos: 0,
+      forced_eos: 0,
+      token_limit: 0,
+      sequence_limit: 0,
+      model_stopped: 0,
+    },
+    releaseLatencies: {
+      stt_finalize_ms: [],
+      final_to_first_token_ms: [],
+      first_token_to_first_audio_ms: [],
+      interruption_to_silence_ms: [],
+    },
+    releaseQuality: {
+      false_interruption: [],
+      missed_interruption: [],
+      backchannel_false_positive: [],
+      playback_echo_submission: [],
+    },
+    duckToCancelMs: [],
+    rejectedCandidateRestoreMs: [],
+  };
 }
 
 function terminationReason(detail: Record<string, unknown>): string {
@@ -169,12 +229,48 @@ function currentAppVersion(): string {
     || 'unknown';
 }
 
+function currentBrowserVersion(): string {
+  const userAgentData = (navigator as Navigator & {
+    userAgentData?: { brands?: Array<{ brand: string; version: string }> };
+  }).userAgentData;
+  const brands = userAgentData?.brands
+    ?.map((entry) => `${entry.brand} ${entry.version}`)
+    .join(', ')
+    .trim();
+  return (brands || navigator.userAgent || 'unknown').slice(0, 240);
+}
+
+function currentOsVersion(): string {
+  const userAgentData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
+  const platform = userAgentData?.platform || navigator.platform || 'unknown';
+  const userAgent = navigator.userAgent || '';
+  const windows = userAgent.match(/Windows NT [0-9.]+/i)?.[0];
+  const mac = userAgent.match(/Mac OS X [0-9_]+/i)?.[0]?.replaceAll('_', '.');
+  const android = userAgent.match(/Android [0-9.]+/i)?.[0];
+  return `${platform}${windows || mac || android ? ` · ${windows || mac || android}` : ''}`.slice(0, 160);
+}
+
 function currentScenarioLabels(): string[] {
   const raw = window.localStorage.getItem(RELEASE_SCENARIO_KEY) ?? '';
   return raw.split(',')
     .map((value) => value.trim().toLocaleLowerCase())
     .filter((value) => /^[a-z0-9_.:-]{1,160}$/.test(value))
     .slice(0, 64);
+}
+
+function p95(values: number[]): number | null {
+  if (!values.length) return null;
+  const ordered = [...values].filter(Number.isFinite).sort((left, right) => left - right);
+  if (!ordered.length) return null;
+  return Number(ordered[Math.max(0, Math.ceil(ordered.length * 0.95) - 1)].toFixed(3));
+}
+
+function booleanRate(values: boolean[]): number | null {
+  return values.length ? Number((values.filter(Boolean).length / values.length).toFixed(3)) : null;
+}
+
+function pushFinite(target: number[], value: unknown): void {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) target.push(value);
 }
 
 function environmentHash(calibration: { deviceKey: string; confidence: number; delayMs: number; noiseFloorRms: number }): string {
