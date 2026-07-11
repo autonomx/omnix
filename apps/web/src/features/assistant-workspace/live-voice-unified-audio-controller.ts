@@ -19,8 +19,13 @@ import {
 } from './live-voice-pcm-session';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
+const LIVE_CALL_RUNTIME_PATH = /^\/api\/chat\/sessions\/([^/]+)\/live-call\/runtime$/;
+const LIVE_CALL_GREETING_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/live-call\/greeting\/stream$/;
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
+const LIVE_VOICE_CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
+const LIVE_VOICE_CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
+const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const MIN_SENTENCE_CHARS = 36;
 const MAX_PHRASE_CHARS = 120;
@@ -39,8 +44,11 @@ type LiveVoiceWindow = Window & typeof globalThis & {
   __omnixLiveVoiceUnifiedAudioInstalled?: boolean;
 };
 
+type LiveTurnKind = 'greeting' | 'response';
+
 type ActiveLiveTurn = {
   generation: number;
+  kind: LiveTurnKind;
   traceId: string;
   startedAtMs: number;
   reporter: LiveCallDiagnosticsReporter;
@@ -63,9 +71,20 @@ type LiveVoiceRequestPayload = Record<string, unknown> & {
   live_voice_turn_id?: unknown;
 };
 
+type GreetingStartup = {
+  token: number;
+  connected: boolean;
+  sessionId: string | null;
+  userSpoke: boolean;
+  started: boolean;
+  requestAbortController: AbortController | null;
+};
+
 let originalFetch: typeof window.fetch | null = null;
 let playbackGeneration = 0;
 let activeTurn: ActiveLiveTurn | null = null;
+let greetingStartup: GreetingStartup | null = null;
+let greetingStartupToken = 0;
 
 export function initializeLiveVoiceUnifiedAudioController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
@@ -77,6 +96,9 @@ export function initializeLiveVoiceUnifiedAudioController(): () => void {
   window.fetch = interceptLiveVoiceFetch;
   window.addEventListener(LIVE_VOICE_INTERRUPT_EVENT, stopLiveVoiceUnifiedAudio);
   window.addEventListener(LIVE_VOICE_STOP_EVENT, stopLiveVoiceUnifiedAudio);
+  window.addEventListener(LIVE_VOICE_CALL_START_EVENT, handleGreetingCallStart);
+  window.addEventListener(LIVE_VOICE_CALL_CONNECTED_EVENT, handleGreetingCallConnected);
+  window.addEventListener(LIVE_VOICE_USER_SPEECH_EVENT, handleGreetingUserSpeech);
   window.addEventListener('beforeunload', stopLiveVoiceUnifiedAudio);
   const installedReporter = createLiveCallDiagnosticsReporter('live-call:controller');
   installedReporter.record('controller_installed', {
@@ -90,6 +112,9 @@ export function initializeLiveVoiceUnifiedAudioController(): () => void {
     originalFetch = null;
     window.removeEventListener(LIVE_VOICE_INTERRUPT_EVENT, stopLiveVoiceUnifiedAudio);
     window.removeEventListener(LIVE_VOICE_STOP_EVENT, stopLiveVoiceUnifiedAudio);
+    window.removeEventListener(LIVE_VOICE_CALL_START_EVENT, handleGreetingCallStart);
+    window.removeEventListener(LIVE_VOICE_CALL_CONNECTED_EVENT, handleGreetingCallConnected);
+    window.removeEventListener(LIVE_VOICE_USER_SPEECH_EVENT, handleGreetingUserSpeech);
     window.removeEventListener('beforeunload', stopLiveVoiceUnifiedAudio);
     stopLiveVoiceUnifiedAudio();
     liveWindow.__omnixLiveVoiceUnifiedAudioInstalled = false;
@@ -98,23 +123,41 @@ export function initializeLiveVoiceUnifiedAudioController(): () => void {
 
 async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
-  if (!shouldUseUnifiedLiveVoiceAudio(input, init)) return fetchImpl(input, init);
-
-  void stopActiveTurn('superseded-by-new-turn');
-  stopAssistantPcmStream(document);
   const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
   const url = new URL(rawUrl, window.location.origin);
-  const sessionId = CHAT_STREAM_PATH.exec(url.pathname)?.[1] ?? 'unknown';
-  const voiceTurnId = extractLiveVoiceTurnId(init);
+  const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+
+  const runtimeMatch = method === 'GET' ? LIVE_CALL_RUNTIME_PATH.exec(url.pathname) : null;
+  if (runtimeMatch) {
+    const response = await fetchImpl(input, init);
+    captureGreetingSession(runtimeMatch[1], response.ok);
+    return response;
+  }
+
+  const responseMatch = method === 'POST' ? CHAT_STREAM_PATH.exec(url.pathname) : null;
+  const greetingMatch = method === 'POST' ? LIVE_CALL_GREETING_STREAM_PATH.exec(url.pathname) : null;
+  if ((!responseMatch && !greetingMatch) || !isAutoSpeakEnabled()) return fetchImpl(input, init);
+
+  const kind: LiveTurnKind = greetingMatch ? 'greeting' : 'response';
+  if (kind === 'response') cancelGreetingStartup('real-response-started', true);
+  void stopActiveTurn(kind === 'response' ? 'superseded-by-real-response' : 'superseded-by-greeting');
+  stopAssistantPcmStream(document);
+
+  const sessionId = decodeURIComponent((responseMatch ?? greetingMatch)?.[1] ?? 'unknown');
+  const voiceTurnId = kind === 'response' ? extractLiveVoiceTurnId(init) : null;
   const ids = createLiveTurnIds();
   const abortController = new AbortController();
   connectAbortSignal(init?.signal, abortController);
-  const preparedInit = injectLiveTurnIds(init, ids, abortController.signal);
+  const preparedInit = kind === 'response'
+    ? injectLiveTurnIds(init, ids, abortController.signal)
+    : { ...init, signal: abortController.signal };
   const response = await fetchImpl(input, preparedInit);
   if (!response.body || !response.ok) return response;
 
   const generation = ++playbackGeneration;
-  const traceId = voiceTurnId ? `live-call:${voiceTurnId}` : createLiveCallTraceId(sessionId);
+  const traceId = kind === 'greeting'
+    ? `live-call:greeting:${sessionId}:${generation}`
+    : voiceTurnId ? `live-call:${voiceTurnId}` : createLiveCallTraceId(sessionId);
   const reporter = createLiveCallDiagnosticsReporter(traceId);
   const delivery = createLiveVoiceDeliveryLedger();
   instrumentDeliveryReporter(reporter, () => delivery, (ledger) => {
@@ -126,6 +169,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
   const sessionPromise = createLiveVoicePcmSession(traceId, voiceId, reporter);
   const turn: ActiveLiveTurn = {
     generation,
+    kind,
     traceId,
     startedAtMs,
     reporter,
@@ -142,10 +186,11 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
   reporter.record('turn_intercepted', {
     session_id: sessionId,
     request_path: url.pathname,
+    turn_kind: kind,
     voice_id: voiceId,
     auto_speak: true,
-    user_turn_id: ids.userTurnId,
-    speech_segment_id: ids.speechSegmentId,
+    user_turn_id: kind === 'response' ? ids.userTurnId : null,
+    speech_segment_id: kind === 'response' ? ids.speechSegmentId : null,
     voice_turn_id: voiceTurnId,
   }, 'controller');
 
@@ -153,13 +198,13 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
   void consumeLiveVoiceText(audioBranch, turn).catch(async (error: unknown) => {
     if (generation !== playbackGeneration || abortController.signal.aborted) return;
     const message = error instanceof Error ? error.message : 'Live voice audio streaming failed.';
-    reporter.record('turn_failed', { error: message }, 'controller');
+    reporter.record('turn_failed', { error: message, turn_kind: kind }, 'controller');
     setInlineStatus(message);
     setVoiceSpeaking(false);
     const session = await sessionPromise.catch(() => null);
     await session?.stop('turn-failed');
     recordDeliveryCheckpoint(reporter, delivery);
-    await reporter.close('turn_failed_final', { error: message });
+    await reporter.close('turn_failed_final', { error: message, turn_kind: kind });
     removeDeliveryLedgerRow();
     if (activeTurn?.generation === generation) activeTurn = null;
   });
@@ -178,7 +223,73 @@ export function shouldUseUnifiedLiveVoiceAudio(input: RequestInfo | URL, init?: 
   if (method !== 'POST') return false;
   const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
   const url = new URL(rawUrl, window.location.origin);
-  return CHAT_STREAM_PATH.test(url.pathname) && isAutoSpeakEnabled();
+  return (CHAT_STREAM_PATH.test(url.pathname) || LIVE_CALL_GREETING_STREAM_PATH.test(url.pathname))
+    && isAutoSpeakEnabled();
+}
+
+function handleGreetingCallStart(): void {
+  cancelGreetingStartup('new-call-started', true);
+  greetingStartup = {
+    token: ++greetingStartupToken,
+    connected: false,
+    sessionId: null,
+    userSpoke: false,
+    started: false,
+    requestAbortController: null,
+  };
+}
+
+function handleGreetingCallConnected(): void {
+  if (!greetingStartup) return;
+  greetingStartup.connected = true;
+  maybeStartGeneratedGreeting();
+}
+
+function handleGreetingUserSpeech(): void {
+  cancelGreetingStartup('user-spoke-before-greeting', true);
+  if (activeTurn?.kind !== 'greeting') return;
+  playbackGeneration += 1;
+  void stopActiveTurn('user-spoke-during-greeting');
+  stopAssistantPcmStream(document);
+  setVoiceSpeaking(false);
+}
+
+function captureGreetingSession(encodedSessionId: string, responseOk: boolean): void {
+  if (!responseOk || !greetingStartup || greetingStartup.userSpoke) return;
+  greetingStartup.sessionId = decodeURIComponent(encodedSessionId);
+  maybeStartGeneratedGreeting();
+}
+
+function maybeStartGeneratedGreeting(): void {
+  const startup = greetingStartup;
+  if (!startup || startup.started || startup.userSpoke || !startup.connected || !startup.sessionId) return;
+  startup.started = true;
+  const abortController = new AbortController();
+  startup.requestAbortController = abortController;
+  const path = `/api/chat/sessions/${encodeURIComponent(startup.sessionId)}/live-call/greeting/stream`;
+  void window.fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+    signal: abortController.signal,
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`Live-call greeting failed with status ${response.status}.`);
+    await response.text();
+  }).catch((error: unknown) => {
+    if (abortController.signal.aborted) return;
+    console.warn('[Omnix Voice] generated live-call greeting failed', error);
+  }).finally(() => {
+    if (greetingStartup?.token === startup.token) greetingStartup.requestAbortController = null;
+  });
+}
+
+function cancelGreetingStartup(reason: string, preserveUserSpoke = false): void {
+  const startup = greetingStartup;
+  if (!startup) return;
+  if (preserveUserSpoke) startup.userSpoke = true;
+  startup.requestAbortController?.abort(reason);
+  startup.requestAbortController = null;
+  if (!preserveUserSpoke) greetingStartup = null;
 }
 
 async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: ActiveLiveTurn): Promise<void> {
@@ -203,6 +314,7 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
         text: event.text,
         text_length: event.text.length,
         elapsed_ms: performance.now() - turn.startedAtMs,
+        turn_kind: turn.kind,
       }, 'controller');
       phrase = mergeText(phrase, event.text);
       if (shouldFlushPhrase(phrase)) {
@@ -231,6 +343,7 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
     text_chunks: turn.textChunkCount,
     phrases: turn.phraseCount,
     assistant_turn_id: turn.assistantTurnId,
+    turn_kind: turn.kind,
   }, 'controller');
 
   let audioIssue: string | null = null;
@@ -259,7 +372,8 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
   advanceDeliveryLedger(turn.delivery, Number.MAX_SAFE_INTEGER);
   recordDeliveryCheckpoint(turn.reporter, turn.delivery);
   setVoiceSpeaking(false);
-  setInlineStatus(audioIssue ? 'Live response finished; some audio was skipped.' : 'Live response audio finished.');
+  const subject = turn.kind === 'greeting' ? 'Live greeting' : 'Live response';
+  setInlineStatus(audioIssue ? `${subject} finished; some audio was skipped.` : `${subject} audio finished.`);
   await turn.reporter.close('turn_finished', {
     elapsed_ms: performance.now() - turn.startedAtMs,
     text_chunks: turn.textChunkCount,
@@ -267,6 +381,7 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
     audio_degraded: Boolean(audioIssue),
     audio_error: audioIssue,
     assistant_turn_id: turn.assistantTurnId,
+    turn_kind: turn.kind,
   });
   removeDeliveryLedgerRow();
   if (activeTurn?.generation === turn.generation) activeTurn = null;
@@ -287,14 +402,15 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
   const phraseIndex = turn.phraseCount;
   appendDeliveryPhrase(turn.delivery, phraseIndex, phrase);
   turn.phraseCount += 1;
-  setVoiceSpeaking(true);
-  setInlineStatus('Buffering live response audio…');
+  setVoiceSpeaking(true, turn.kind);
+  setInlineStatus(turn.kind === 'greeting' ? 'Buffering generated greeting…' : 'Buffering live response audio…');
   turn.reporter.record('phrase_queued', {
     phrase_index: phraseIndex,
     reason,
     text: phrase,
     text_length: phrase.length,
     elapsed_ms: performance.now() - turn.startedAtMs,
+    turn_kind: turn.kind,
   }, 'controller');
   void turn.sessionPromise.then((session) => session.enqueuePhrase(phrase, phraseIndex)).catch((error: unknown) => {
     if (turn.abortController.signal.aborted) return;
@@ -325,6 +441,8 @@ function recordDeliveryCheckpoint(
 
 function stopLiveVoiceUnifiedAudio(event?: Event): void {
   const reason = event?.type === LIVE_VOICE_INTERRUPT_EVENT ? 'voice-interrupt' : 'live-call-stop';
+  greetingStartup = null;
+  cancelGreetingStartup(reason);
   playbackGeneration += 1;
   void stopActiveTurn(reason);
   stopAssistantPcmStream(document);
@@ -341,6 +459,7 @@ async function stopActiveTurn(reason: string): Promise<void> {
     text_chunks: turn.textChunkCount,
     phrases: turn.phraseCount,
     assistant_turn_id: turn.assistantTurnId,
+    turn_kind: turn.kind,
   }, 'controller');
   recordDeliveryCheckpoint(turn.reporter, turn.delivery);
   renderDeliveryLedger(turn.delivery, true);
@@ -352,6 +471,7 @@ async function stopActiveTurn(reason: string): Promise<void> {
     assistant_turn_id: turn.assistantTurnId,
     visual_delivered_text_end: turn.delivery.visualDeliveredTextEnd,
     context_delivered_text_end: turn.delivery.contextDeliveredTextEnd,
+    turn_kind: turn.kind,
   });
 }
 
@@ -406,7 +526,7 @@ function connectAbortSignal(source: AbortSignal | null | undefined, target: Abor
 }
 
 function captureAssistantTurnId(turn: ActiveLiveTurn, event: ChatStreamEvent | null): void {
-  if (event?.type !== 'user_message') return;
+  if (turn.kind !== 'response' || event?.type !== 'user_message') return;
   const candidate = event.message?.metadata?.assistant_turn_id;
   if (typeof candidate !== 'string' || !candidate.trim()) return;
   turn.assistantTurnId = candidate.trim();
@@ -422,7 +542,7 @@ function isAutoSpeakEnabled(): boolean {
   return document.querySelector<HTMLInputElement>('.assistant-voice-toggle input[type="checkbox"]')?.checked ?? false;
 }
 
-function setVoiceSpeaking(speaking: boolean): void {
+function setVoiceSpeaking(speaking: boolean, kind?: LiveTurnKind): void {
   document.querySelectorAll<HTMLElement>('.assistant-voice-orb').forEach((orb) => {
     const card = orb.closest<HTMLElement>('.assistant-live-card');
     const live = card?.dataset.liveVoiceStatus === 'connected'
@@ -430,6 +550,10 @@ function setVoiceSpeaking(speaking: boolean): void {
         (button) => button.textContent?.trim().toLowerCase() === 'end call',
       );
     orb.dataset.voiceMode = speaking ? 'speaking' : live ? 'listening' : 'idle';
+    if (card) {
+      if (speaking && kind) card.dataset.liveVoiceOutputKind = kind;
+      else delete card.dataset.liveVoiceOutputKind;
+    }
   });
 }
 
