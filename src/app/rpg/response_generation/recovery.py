@@ -15,6 +15,12 @@ class LocalRecoveryAnalysis:
     reason: str
     state_mutation_allowed: bool = False
 
+    @property
+    def hermes_eligible(self) -> bool:
+        """Compatibility name used by the production recovery orchestrator."""
+
+        return self.needs_hermes
+
     def as_dict(self) -> dict[str, Any]:
         selected = self.intent.selected
         return {
@@ -29,6 +35,7 @@ class LocalRecoveryAnalysis:
             "hidden_evidence_ids": list(self.retrieval.hidden_evidence_ids),
             "conflicting_evidence_ids": list(self.retrieval.conflicting_evidence_ids),
             "needs_hermes": self.needs_hermes,
+            "hermes_eligible": self.hermes_eligible,
             "reason": self.reason,
             "state_mutation_allowed": False,
         }
