@@ -7,6 +7,12 @@ from typing import Any, Callable
 from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
 
+from .live_chat_evaluation_routes import register_live_chat_evaluation_routes
+from .live_chat_release_gate import (
+    LiveChatReleaseGateEvaluationRequest,
+    LiveChatReleaseGateReport,
+    evaluate_live_chat_release_gate,
+)
 from .live_voice_release_gate import (
     LiveVoiceReleaseEvent,
     LiveVoiceReleaseGateReport,
@@ -90,6 +96,22 @@ def register_live_voice_diagnostics_routes(gateway: FastAPI) -> None:
             request.events,
             thresholds=request.thresholds,
         )
+
+    @gateway.post(
+        f"{LIVE_VOICE_DIAGNOSTICS_PATH}/release-gate/v2/evaluate",
+        response_model=LiveChatReleaseGateReport,
+        include_in_schema=False,
+    )
+    async def evaluate_live_chat_release_gate_payload(
+        request: LiveChatReleaseGateEvaluationRequest,
+    ) -> LiveChatReleaseGateReport:
+        return evaluate_live_chat_release_gate(
+            request.metadata,
+            request.events,
+            thresholds=request.thresholds,
+        )
+
+    register_live_chat_evaluation_routes(gateway)
 
 
 def install_live_voice_diagnostics_hook() -> None:

@@ -25,7 +25,7 @@ describe('live conversation evaluation controller', () => {
     expect(evaluationEventFromPerfDetail({ stage: 'overlap_classified', intent: 'backchannel' }, 40)).toBeNull();
   });
 
-  it('persists bounded events and updates survey scores', () => {
+  it('keeps rich metrics in memory while redacting browser fallback persistence', () => {
     recordLiveConversationEvaluationEvent({ atMs: 1, type: 'first_audio', latencyMs: 500 });
     recordLiveConversationEvaluationEvent({ atMs: 2, type: 'turn', role: 'assistant', durationMs: 1_000, content: 'Ready?' });
     const snapshot = recordLiveConversationSurvey(5, 2);
@@ -38,5 +38,7 @@ describe('live conversation evaluation controller', () => {
 
     const stored = JSON.parse(window.localStorage.getItem('omnix.liveConversation.evaluation.v1') || '[]');
     expect(stored).toHaveLength(3);
+    expect(stored.find((event: { type: string }) => event.type === 'turn').content).toBe('');
+    expect(JSON.stringify(stored)).not.toContain('Ready?');
   });
 });

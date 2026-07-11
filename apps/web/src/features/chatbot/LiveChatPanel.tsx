@@ -1,36 +1,39 @@
 import { useEffect, useState } from 'react';
 
 import {
-  deriveLiveConversationStatus,
-  projectLegacyLiveVoiceState,
-} from '../assistant-workspace/live-conversation-state';
+  liveConversationStore,
+  selectLiveChatSnapshot,
+  useLiveConversationState,
+} from '../assistant-workspace/live-conversation-store';
 import { CharacterModePanel } from './CharacterModePanel';
 import { LiveConversationControls } from './LiveConversationControls';
 import { LiveConversationEvaluationPanel } from './LiveConversationEvaluationPanel';
 import { LivePronunciationPanel } from './LivePronunciationPanel';
+import { LiveVoiceCalibrationPanel } from './LiveVoiceCalibrationPanel';
 import './LiveChatPanel.css';
 
 export type LiveChatPanelProps = {
   sessionId: string | null;
 };
 
-type LiveCallSnapshot = {
+type LegacyLiveCallSnapshot = {
   connected: boolean;
   state: string;
   identity: string;
   duplexMode: string;
 };
 
-const DEFAULT_SNAPSHOT: LiveCallSnapshot = {
+const DEFAULT_LEGACY_SNAPSHOT: LegacyLiveCallSnapshot = {
   connected: false,
   state: 'Idle',
   identity: 'System Assistant',
   duplexMode: 'Safe half-duplex',
 };
 
-export function readLiveCallSnapshot(root: ParentNode = document): LiveCallSnapshot {
+/** Compatibility-only DOM read for the legacy call button tests. Runtime policy uses the store. */
+export function readLiveCallSnapshot(root: ParentNode = document): LegacyLiveCallSnapshot {
   const card = root.querySelector<HTMLElement>('.assistant-live-card');
-  if (!card) return DEFAULT_SNAPSHOT;
+  if (!card) return DEFAULT_LEGACY_SNAPSHOT;
   const action = Array.from(card.querySelectorAll<HTMLButtonElement>('button'))
     .find((button) => /^(?:Start Call|End Call)$/i.test(button.textContent?.trim() ?? ''));
   const state = card.querySelector<HTMLElement>('.assistant-live-state span')?.textContent?.trim()
@@ -64,25 +67,13 @@ export function liveCallCharacterName(identity: string): string {
 }
 
 export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
-  const [snapshot, setSnapshot] = useState<LiveCallSnapshot>(() => readLiveCallSnapshot());
+  const runtimeState = useLiveConversationState();
+  const snapshot = selectLiveChatSnapshot(runtimeState);
   const [callStatus, setCallStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    const refresh = () => setSnapshot(readLiveCallSnapshot());
-    refresh();
-    const observer = new MutationObserver(refresh);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['data-voice-mode', 'data-duplex-gate', 'data-duplex-mode', 'data-live-voice-status'],
-    });
-    const interval = window.setInterval(refresh, 1_000);
-    return () => {
-      observer.disconnect();
-      window.clearInterval(interval);
-    };
-  }, []);
+    liveConversationStore.dispatch({ type: 'session', sessionId });
+  }, [sessionId]);
 
   function toggleCall(): void {
     if (!invokeExistingLiveCallControl()) {
@@ -92,8 +83,11 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
     setCallStatus(snapshot.connected ? 'Ending live call…' : 'Starting live call…');
   }
 
-  const conversationState = projectLegacyLiveVoiceState(snapshot.connected, snapshot.state);
-  const visibleState = deriveLiveConversationStatus(conversationState, liveCallCharacterName(snapshot.identity));
+  const duplexLabel = snapshot.duplexMode === 'echo_aware'
+    ? 'Echo-aware barge-in'
+    : snapshot.duplexReason === 'calibration_missing'
+      ? 'Safe half-duplex · calibration required'
+      : 'Safe half-duplex';
 
   return (
     <section className="assistant-view-panel live-chat-panel" aria-label="Live Chat view">
@@ -104,7 +98,7 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
           <p>Configure the character and conversation presence used by the existing live voice pipeline.</p>
         </div>
         <span className={snapshot.connected ? 'live-chat-status active' : 'live-chat-status'}>
-          {snapshot.connected ? 'Call connected' : 'Call idle'}
+          {snapshot.connected ? 'Call connected' : snapshot.connection === 'connecting' ? 'Call connecting' : 'Call idle'}
         </span>
       </header>
 
@@ -118,6 +112,7 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
       )}
 
       <LiveConversationControls sessionId={sessionId} />
+      <LiveVoiceCalibrationPanel />
       <LivePronunciationPanel sessionId={sessionId} />
 
       <section className="live-chat-card" aria-labelledby="live-chat-call-heading">
@@ -131,9 +126,9 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
         </header>
         <dl className="live-chat-metrics">
           <div><dt>Identity</dt><dd>{snapshot.identity}</dd></div>
-          <div><dt>State</dt><dd>{visibleState}</dd></div>
-          <div><dt>Floor</dt><dd>{conversationState.floorOwner}</dd></div>
-          <div><dt>Duplex</dt><dd>{snapshot.duplexMode}</dd></div>
+          <div><dt>State</dt><dd>{snapshot.state}</dd></div>
+          <div><dt>Floor</dt><dd>{snapshot.floorOwner}</dd></div>
+          <div><dt>Duplex</dt><dd>{duplexLabel}</dd></div>
         </dl>
         {callStatus ? <p className="live-chat-note" role="status">{callStatus}</p> : null}
       </section>

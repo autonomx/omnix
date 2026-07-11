@@ -3,6 +3,7 @@ import {
   type LiveConversationEvaluationEvent,
   type LiveConversationEvaluationReport,
 } from './live-conversation-evaluation';
+import { liveConversationStore } from './live-conversation-store';
 
 export const LIVE_EVALUATION_UPDATED_EVENT = 'omnix:live-conversation-evaluation-updated';
 export const LIVE_EVALUATION_STORAGE_KEY = 'omnix.liveConversation.evaluation.v1';
@@ -34,18 +35,17 @@ let overlapStartedAt: number | null = null;
 let lastProactiveAt: number | null = null;
 let pendingRepair = false;
 let pendingObligation = false;
-let lastAssistantContent = '';
 let listenerBackchannelAt: number | null = null;
 let listenerBackchannelTimer: ReturnType<typeof setTimeout> | null = null;
-const seenTranscriptRows = new WeakSet<Element>();
+let assistantSpeechStartedAt: number | null = null;
+let previousAssistantSpeaking = false;
 
 export function initializeLiveConversationEvaluationController(): () => void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
+  if (typeof window === 'undefined') return () => undefined;
   const liveWindow = window as EvaluationWindow;
   if (liveWindow.__omnixLiveConversationEvaluationInstalled) return () => undefined;
   liveWindow.__omnixLiveConversationEvaluationInstalled = true;
   events = readStoredEvents();
-  markExistingTranscriptRows();
 
   const handleCallStart = () => resetLiveConversationEvaluation();
   const handleStop = () => {
@@ -54,6 +54,7 @@ export function initializeLiveConversationEvaluationController(): () => void {
     pendingRepair = false;
     pendingObligation = false;
     resolveBackchannel(false);
+    completeAssistantTurn();
   };
   const handleUserSpeech = () => {
     const timestamp = now();
@@ -107,6 +108,13 @@ export function initializeLiveConversationEvaluationController(): () => void {
       pendingRepair = false;
     }
   };
+  const handleStore = () => {
+    const conversation = liveConversationStore.getState().conversation;
+    const speaking = conversation.assistantTurn === 'speaking' || conversation.delivery === 'audio_started';
+    if (speaking && !previousAssistantSpeaking) assistantSpeechStartedAt = now();
+    if (!speaking && previousAssistantSpeaking) completeAssistantTurn();
+    previousAssistantSpeaking = speaking;
+  };
 
   window.addEventListener(CALL_START_EVENT, handleCallStart);
   window.addEventListener(STOP_EVENT, handleStop);
@@ -115,13 +123,12 @@ export function initializeLiveConversationEvaluationController(): () => void {
   window.addEventListener(REPAIR_EVENT, handleRepair);
   window.addEventListener(LISTENER_BACKCHANNEL_EVENT, handleListenerBackchannel);
   window.addEventListener(PERF_EVENT, handlePerf);
-  const observer = new MutationObserver(collectTranscriptRows);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  collectTranscriptRows();
+  const unsubscribe = liveConversationStore.subscribe(handleStore);
+  handleStore();
   dispatchUpdate();
 
   return () => {
-    observer.disconnect();
+    unsubscribe();
     window.removeEventListener(CALL_START_EVENT, handleCallStart);
     window.removeEventListener(STOP_EVENT, handleStop);
     window.removeEventListener(USER_SPEECH_EVENT, handleUserSpeech);
@@ -186,30 +193,17 @@ export function resetLiveConversationEvaluation(): EvaluationSnapshot {
   lastProactiveAt = null;
   pendingRepair = false;
   pendingObligation = false;
-  lastAssistantContent = '';
+  assistantSpeechStartedAt = null;
+  previousAssistantSpeaking = false;
   resolveBackchannel(false, false);
   persistEvents(events);
-  markExistingTranscriptRows();
   return dispatchUpdate();
 }
 
-function collectTranscriptRows(): void {
-  document.querySelectorAll<Element>('.assistant-voice-transcript p:not(.muted)').forEach((row) => {
-    if (seenTranscriptRows.has(row)) return;
-    seenTranscriptRows.add(row);
-    const role = row.classList.contains('assistant') ? 'assistant' : row.classList.contains('user') ? 'user' : null;
-    if (!role) return;
-    const content = transcriptRowText(row);
-    if (!content) return;
-    if (role === 'assistant') {
-      const durationMs = estimateSpokenDuration(content, 2.45);
-      recordTurn('assistant', durationMs, content);
-      const repeated = Boolean(lastAssistantContent) && lexicalSimilarity(content, lastAssistantContent) >= 0.72;
-      recordLiveConversationEvaluationEvent({ atMs: now(), type: 'topic', repeated });
-      lastAssistantContent = content;
-      if (/[?？]\s*$/.test(content)) pendingObligation = true;
-    }
-  });
+function completeAssistantTurn(): void {
+  if (assistantSpeechStartedAt === null) return;
+  recordTurn('assistant', Math.max(350, now() - assistantSpeechStartedAt), '');
+  assistantSpeechStartedAt = null;
 }
 
 function recordTurn(role: 'user' | 'assistant', durationMs: number, content: string): void {
@@ -231,42 +225,18 @@ function resolveBackchannel(collision: boolean, record = true): void {
   listenerBackchannelAt = null;
 }
 
-function markExistingTranscriptRows(): void {
-  document.querySelectorAll('.assistant-voice-transcript p:not(.muted)').forEach((row) => seenTranscriptRows.add(row));
-}
-
-function transcriptRowText(row: Element): string {
-  const clone = row.cloneNode(true) as HTMLElement;
-  clone.querySelector('span')?.remove();
-  return clone.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-}
-
 function currentTranscriptText(): string {
-  const draft = document.querySelector<HTMLElement>('.assistant-live-draft p')?.textContent?.trim();
-  if (draft && !draft.startsWith('Start Live Voice')) return draft;
-  const rows = Array.from(document.querySelectorAll<Element>('.assistant-voice-transcript p.user'));
-  return rows.length ? transcriptRowText(rows.at(-1) as Element) : '';
-}
-
-function estimateSpokenDuration(content: string, wordsPerSecond: number): number {
-  const words = content.split(/\s+/).filter(Boolean).length;
-  return Math.max(350, Math.round(words / wordsPerSecond * 1_000));
-}
-
-function lexicalSimilarity(left: string, right: string): number {
-  const leftWords = new Set(normalizeWords(left));
-  const rightWords = new Set(normalizeWords(right));
-  if (!leftWords.size || !rightWords.size) return 0;
-  const intersection = [...leftWords].filter((word) => rightWords.has(word)).length;
-  return intersection / Math.max(leftWords.size, rightWords.size);
-}
-
-function normalizeWords(content: string): string[] {
-  return content.toLocaleLowerCase().replace(/[^\p{L}\p{N}'\s]+/gu, ' ').split(/\s+/).filter((word) => word.length > 2);
+  const transcript = liveConversationStore.getState().transcript;
+  return transcript.lastFinal || transcript.partial;
 }
 
 function sanitizeEvent(event: LiveConversationEvaluationEvent): LiveConversationEvaluationEvent {
   if (event.type === 'turn') return { ...event, content: event.content.slice(0, 280) };
+  return event;
+}
+
+function redactPersistedEvent(event: LiveConversationEvaluationEvent): LiveConversationEvaluationEvent {
+  if (event.type === 'turn') return { ...event, content: '' };
   return event;
 }
 
@@ -280,7 +250,11 @@ function readStoredEvents(): LiveConversationEvaluationEvent[] {
 }
 
 function persistEvents(value: LiveConversationEvaluationEvent[]): void {
-  try { window.localStorage.setItem(LIVE_EVALUATION_STORAGE_KEY, JSON.stringify(value)); } catch { /* in-memory report remains available */ }
+  try {
+    window.localStorage.setItem(LIVE_EVALUATION_STORAGE_KEY, JSON.stringify(value.map(redactPersistedEvent)));
+  } catch {
+    // In-memory report remains available.
+  }
 }
 
 function dispatchUpdate(): EvaluationSnapshot {

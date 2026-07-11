@@ -9,6 +9,7 @@ import './features/chatbot/sessionTools';
 import './features/chatbot/researchProgressController';
 import './features/chatbot/researchProgressController.css';
 import { initializeLiveChatWorkspace } from './features/chatbot/live-chat-workspace';
+import { initializeVoiceSessionEvaluationWorkspace } from './features/chatbot/voice-session-evaluation-workspace';
 import './features/podcast/podcastSessionGuard';
 import './features/voice/voiceJobListGuard';
 import './styles.css';
@@ -21,9 +22,11 @@ import './features/assistant-workspace/research-release-controller.css';
 import { initializeChatMessageAudioControllerV2 } from './features/assistant-workspace/chat-message-audio-controller-v2';
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
 import { initializeLiveAvatarPresenceController } from './features/assistant-workspace/live-avatar-presence';
+import { initializeLiveConversationDurableEvaluationController } from './features/assistant-workspace/live-conversation-durable-evaluation-controller';
 import { initializeLiveConversationEvaluationController } from './features/assistant-workspace/live-conversation-evaluation-controller';
 import { initializeLiveConversationInitiativeController } from './features/assistant-workspace/live-conversation-initiative-controller';
 import { initializeLiveConversationRepairController } from './features/assistant-workspace/live-conversation-repair-controller';
+import { initializeLiveConversationStoreBridge } from './features/assistant-workspace/live-conversation-store-bridge';
 import { initializeLiveSpeechDeliveryBridge } from './features/assistant-workspace/live-speech-delivery-bridge';
 import { initializeLiveVoiceAudioDuckBridge } from './features/assistant-workspace/live-voice-audio-duck-bridge';
 import './features/assistant-workspace/live-voice-form-sync';
@@ -52,6 +55,7 @@ const queryClient = new QueryClient({
   },
 });
 
+initializeLiveConversationStoreBridge();
 initializeLiveSpeechDeliveryBridge();
 initializeLiveVoiceAudioDuckBridge();
 initializeLiveVoiceUnifiedAudioController();
@@ -59,7 +63,9 @@ initializeLiveAvatarPresenceController();
 initializeLiveConversationInitiativeController();
 initializeLiveConversationRepairController();
 initializeLiveConversationEvaluationController();
+initializeLiveConversationDurableEvaluationController();
 initializeLiveChatWorkspace();
+initializeVoiceSessionEvaluationWorkspace();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
