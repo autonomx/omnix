@@ -228,7 +228,7 @@ export function shouldUseUnifiedLiveVoiceAudio(input: RequestInfo | URL, init?: 
 }
 
 function handleGreetingCallStart(): void {
-  cancelGreetingStartup('new-call-started', true);
+  cancelGreetingStartup('new-call-started');
   greetingStartup = {
     token: ++greetingStartupToken,
     connected: false,
@@ -262,7 +262,14 @@ function captureGreetingSession(encodedSessionId: string, responseOk: boolean): 
 
 function maybeStartGeneratedGreeting(): void {
   const startup = greetingStartup;
-  if (!startup || startup.started || startup.userSpoke || !startup.connected || !startup.sessionId) return;
+  if (
+    !startup
+    || startup.started
+    || startup.userSpoke
+    || !startup.connected
+    || !startup.sessionId
+    || !isAutoSpeakEnabled()
+  ) return;
   startup.started = true;
   const abortController = new AbortController();
   startup.requestAbortController = abortController;
@@ -441,7 +448,6 @@ function recordDeliveryCheckpoint(
 
 function stopLiveVoiceUnifiedAudio(event?: Event): void {
   const reason = event?.type === LIVE_VOICE_INTERRUPT_EVENT ? 'voice-interrupt' : 'live-call-stop';
-  greetingStartup = null;
   cancelGreetingStartup(reason);
   playbackGeneration += 1;
   void stopActiveTurn(reason);
