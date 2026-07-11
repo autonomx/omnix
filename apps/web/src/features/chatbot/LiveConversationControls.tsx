@@ -4,6 +4,7 @@ import {
   type AssistantBackchannelMode,
   type ConversationPace,
   type ConversationStance,
+  type DuplexMode,
   type InterruptionPreference,
   type LiveConversationProfile,
   type LiveConversationProfilePatch,
@@ -138,6 +139,9 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
               ]} />
               <SelectControl label="Assistant listener backchannels" value={profile.assistant_backchannel_mode} disabled={saving} onChange={(value) => void update({ assistant_backchannel_mode: value as AssistantBackchannelMode })} options={[
                 ['off', 'Off'], ['minimal', 'Minimal'], ['natural', 'Natural'],
+              ]} />
+              <SelectControl label="Duplex mode" value={profile.duplex_mode} disabled={saving} onChange={(value) => void update({ duplex_mode: value as DuplexMode })} options={[
+                ['automatic', 'Automatic (safe fallback)'], ['half_duplex', 'Safe half-duplex'], ['echo_aware', 'Echo-aware barge-in'],
               ]} />
             </div>
           ) : null}
