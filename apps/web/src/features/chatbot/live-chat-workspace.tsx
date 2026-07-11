@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { LiveChatPanel } from './LiveChatPanel';
@@ -15,6 +16,7 @@ let active = false;
 let selectedSessionId: string | null = null;
 let mountedRoot: Root | null = null;
 let mountedHost: HTMLElement | null = null;
+let workspaceQueryClient: QueryClient | null = null;
 
 export function sessionIdFromChatRequest(input: RequestInfo | URL): string | null {
   const raw = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
@@ -28,7 +30,8 @@ export function sessionIdFromChatRequest(input: RequestInfo | URL): string | nul
   }
 }
 
-export function initializeLiveChatWorkspace(): () => void {
+export function initializeLiveChatWorkspace(queryClient: QueryClient): () => void {
+  workspaceQueryClient = queryClient;
   const liveWindow = window as LiveChatWindow;
   if (liveWindow.__omnixLiveChatWorkspaceInstalled) return () => undefined;
   liveWindow.__omnixLiveChatWorkspaceInstalled = true;
@@ -68,6 +71,7 @@ export function initializeLiveChatWorkspace(): () => void {
     closeLiveChat();
     document.querySelector(`[${NAV_ATTRIBUTE}]`)?.remove();
     window.fetch = originalFetch;
+    workspaceQueryClient = null;
     liveWindow.__omnixLiveChatWorkspaceInstalled = false;
   };
 }
@@ -118,7 +122,8 @@ function renderLiveChat(): void {
   if (!active) return;
   const main = document.querySelector<HTMLElement>('.assistant-chat-main');
   const nav = document.querySelector<HTMLElement>('.assistant-sidebar-nav');
-  if (!main || !nav) return;
+  const queryClient = workspaceQueryClient;
+  if (!main || !nav || !queryClient) return;
 
   main.classList.add('omnix-live-chat-active');
   nav.classList.add('omnix-live-chat-nav-active');
@@ -131,5 +136,9 @@ function renderLiveChat(): void {
     main.appendChild(mountedHost);
     mountedRoot = createRoot(mountedHost);
   }
-  mountedRoot?.render(<LiveChatPanel sessionId={selectedSessionId} />);
+  mountedRoot?.render(
+    <QueryClientProvider client={queryClient}>
+      <LiveChatPanel sessionId={selectedSessionId} />
+    </QueryClientProvider>,
+  );
 }
