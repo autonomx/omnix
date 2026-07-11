@@ -9,6 +9,7 @@ const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 const USER_CONTINUER_EVENT = 'omnix:live-conversation-user-continuer';
+const LISTENER_BACKCHANNEL_EVENT = 'omnix:live-conversation-listener-backchannel';
 const DUCK_EVENT = 'omnix:assistant-audio-duck';
 const MIN_COOLDOWN_MS = 8_000;
 const MIN_SPEECH_MS = 3_500;
@@ -124,7 +125,11 @@ async function playCharacterBackchannel(sessionId: string, token: BackchannelTok
     initiative_reason: `listener_backchannel:${token}`,
   });
   try {
-    await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/greeting/stream?${params}`, { method: 'POST' });
+    const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/greeting/stream?${params}`, { method: 'POST' });
+    if (!response.ok) throw new Error(`Listener backchannel failed with status ${response.status}.`);
+    window.dispatchEvent(new CustomEvent(LISTENER_BACKCHANNEL_EVENT, {
+      detail: { sessionId, token, playedAt: Date.now() },
+    }));
   } finally {
     if (restoreTimer) clearTimeout(restoreTimer);
     restoreTimer = setTimeout(() => restoreOutput('listener-backchannel-complete'), 1_800);
