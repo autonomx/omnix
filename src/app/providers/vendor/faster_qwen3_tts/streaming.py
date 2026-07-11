@@ -14,10 +14,12 @@ from .predictor_graph import PredictorGraph
 from .sampling import apply_repetition_penalty, sample_logits
 from .talker_graph import TalkerGraph
 from .termination import (
+    StreamingEosDeadlines,
     StreamingEosPolicy,
     TerminationReason,
     classify_after_sample,
     eos_logit_bias,
+    resolve_eos_deadlines,
     termination_metadata,
 )
 
@@ -33,7 +35,7 @@ def _sample_with_eos_policy(
     *,
     eos_id: int,
     generation_step: int,
-    text_context_steps: int,
+    deadlines: StreamingEosDeadlines,
     policy: StreamingEosPolicy,
     temperature: float,
     top_k: int,
@@ -42,7 +44,7 @@ def _sample_with_eos_policy(
     suppress_mask: torch.Tensor,
     suppress_eos: bool,
 ) -> tuple[torch.Tensor, float]:
-    bias = eos_logit_bias(generation_step, text_context_steps, policy)
+    bias = eos_logit_bias(generation_step, deadlines, policy)
     if bias > 0:
         logits = logits.clone()
         logits[..., eos_id] += bias
@@ -70,6 +72,7 @@ def _timing_payload(
     generation_step: int,
     text_context_steps: int,
     eos_bias_applied: float,
+    deadlines: StreamingEosDeadlines,
     policy: StreamingEosPolicy,
 ) -> dict:
     payload = {
@@ -88,6 +91,7 @@ def _timing_payload(
                 generation_step=generation_step,
                 text_context_steps=text_context_steps,
                 eos_bias_applied=eos_bias_applied,
+                deadlines=deadlines,
                 policy=policy,
             )
         )
@@ -112,25 +116,24 @@ def fast_generate_streaming(
     do_sample: bool = True,
     repetition_penalty: float = 1.05,
     chunk_size: int = 12,
-    eos_bias_start_steps: int = 2,
-    eos_force_after_steps: int = 8,
-    eos_bias_per_step: float = 2.0,
+    eos_policy: StreamingEosPolicy | None = None,
 ) -> Generator[Tuple[torch.Tensor, dict], None, None]:
     """
     Streaming autoregressive generation with CUDA-graphed predictor and talker.
 
-    Natural EOS remains the preferred stop. Once text alignment is exhausted,
-    EOS is progressively encouraged and then generation is deterministically
-    stopped after a short grace window.
+    Natural EOS remains the preferred stop. Near the phrase's text-relative
+    token budget, EOS is progressively encouraged and then generation is
+    deterministically stopped before the catastrophic hard ceiling.
     """
     eos_id = config.codec_eos_token_id
     vocab_size = config.vocab_size
     device = talker_input_embeds.device
     text_context_steps = int(trailing_text_hiddens.shape[1])
-    policy = StreamingEosPolicy(
-        bias_start_steps=eos_bias_start_steps,
-        force_after_steps=eos_force_after_steps,
-        bias_per_step=eos_bias_per_step,
+    policy = eos_policy or StreamingEosPolicy()
+    deadlines = resolve_eos_deadlines(
+        max_new_tokens=max_new_tokens,
+        text_context_steps=text_context_steps,
+        policy=policy,
     )
 
     suppress_mask = torch.zeros(vocab_size, dtype=torch.bool, device=device)
@@ -145,9 +148,7 @@ def fast_generate_streaming(
     predictor_codec_embeds = predictor.get_input_embeddings()
     num_code_groups = config.num_code_groups
 
-    # === PREFILL (still uses HF forward for variable-length prefill) ===
     t_start = time.time()
-
     out = talker.forward(
         inputs_embeds=talker_input_embeds,
         attention_mask=attention_mask,
@@ -170,7 +171,7 @@ def fast_generate_streaming(
         logits,
         eos_id=eos_id,
         generation_step=generation_step,
-        text_context_steps=text_context_steps,
+        deadlines=deadlines,
         policy=policy,
         temperature=temperature,
         top_k=top_k,
@@ -187,7 +188,6 @@ def fast_generate_streaming(
     torch.cuda.synchronize()
     t_prefill = time.time() - t_start
 
-    # === DECODE LOOP — yield chunks ===
     chunk_buffer = []
     all_first_tokens = []
     total_steps = 0
@@ -205,7 +205,6 @@ def fast_generate_streaming(
             termination_reason = "sequence_limit"
             break
 
-        # --- CUDA-Graphed Code Predictor ---
         last_id_hidden = talker_codec_embed(token.unsqueeze(1))
         pred_input = torch.cat((past_hidden, last_id_hidden), dim=1)
         codebook_token_ids = predictor_graph.run(pred_input)
@@ -214,7 +213,6 @@ def fast_generate_streaming(
         chunk_buffer.append(all_cb.detach())
         all_first_tokens.append(token.detach())
 
-        # --- Build input embedding for talker ---
         codec_hiddens = [last_id_hidden]
         for i in range(num_code_groups - 1):
             codec_hiddens.append(
@@ -232,7 +230,6 @@ def fast_generate_streaming(
         else:
             inputs_embeds = inputs_embeds + tts_pad_embed
 
-        # --- CUDA-Graphed Talker decode step ---
         hidden_states = talker_graph.run(inputs_embeds, position=current_pos)
         logits = talker_codec_head(hidden_states[:, -1, :]).unsqueeze(0)
 
@@ -244,7 +241,7 @@ def fast_generate_streaming(
             logits.squeeze(0),
             eos_id=eos_id,
             generation_step=generation_step,
-            text_context_steps=text_context_steps,
+            deadlines=deadlines,
             policy=policy,
             temperature=temperature,
             top_k=top_k,
@@ -260,8 +257,7 @@ def fast_generate_streaming(
             sampled_token_id=_as_int(token),
             eos_token_id=eos_id,
             generation_step=generation_step,
-            text_context_steps=text_context_steps,
-            policy=policy,
+            deadlines=deadlines,
         )
         if termination_reason is None and current_pos + 1 >= talker_graph.max_seq_len - 1:
             termination_reason = "sequence_limit"
@@ -285,6 +281,7 @@ def fast_generate_streaming(
                 generation_step=generation_step,
                 text_context_steps=text_context_steps,
                 eos_bias_applied=last_eos_bias,
+                deadlines=deadlines,
                 policy=policy,
             )
 
@@ -316,6 +313,7 @@ def fast_generate_streaming(
             generation_step=generation_step,
             text_context_steps=text_context_steps,
             eos_bias_applied=last_eos_bias,
+            deadlines=deadlines,
             policy=policy,
         )
 
@@ -336,9 +334,7 @@ def parity_generate_streaming(
     do_sample: bool = True,
     repetition_penalty: float = 1.05,
     chunk_size: int = 12,
-    eos_bias_start_steps: int = 2,
-    eos_force_after_steps: int = 8,
-    eos_bias_per_step: float = 2.0,
+    eos_policy: StreamingEosPolicy | None = None,
 ) -> Generator[Tuple[torch.Tensor, dict], None, None]:
     """
     Streaming generation without CUDA graphs (dynamic cache).
@@ -350,10 +346,11 @@ def parity_generate_streaming(
     vocab_size = config.vocab_size
     device = talker_input_embeds.device
     text_context_steps = int(trailing_text_hiddens.shape[1])
-    policy = StreamingEosPolicy(
-        bias_start_steps=eos_bias_start_steps,
-        force_after_steps=eos_force_after_steps,
-        bias_per_step=eos_bias_per_step,
+    policy = eos_policy or StreamingEosPolicy()
+    deadlines = resolve_eos_deadlines(
+        max_new_tokens=max_new_tokens,
+        text_context_steps=text_context_steps,
+        policy=policy,
     )
 
     suppress_mask = torch.zeros(vocab_size, dtype=torch.bool, device=device)
@@ -362,9 +359,7 @@ def parity_generate_streaming(
         if i != eos_id:
             suppress_mask[i] = True
 
-    # === PREFILL ===
     t_start = time.time()
-
     out = talker.forward(
         inputs_embeds=talker_input_embeds,
         attention_mask=attention_mask,
@@ -387,7 +382,7 @@ def parity_generate_streaming(
         logits,
         eos_id=eos_id,
         generation_step=generation_step,
-        text_context_steps=text_context_steps,
+        deadlines=deadlines,
         policy=policy,
         temperature=temperature,
         top_k=top_k,
@@ -403,7 +398,6 @@ def parity_generate_streaming(
     torch.cuda.synchronize()
     t_prefill = time.time() - t_start
 
-    # === DECODE LOOP — yield chunks ===
     chunk_buffer = []
     all_first_tokens = []
     total_steps = 0
@@ -466,7 +460,7 @@ def parity_generate_streaming(
             logits,
             eos_id=eos_id,
             generation_step=current_generation_step,
-            text_context_steps=text_context_steps,
+            deadlines=deadlines,
             policy=policy,
             temperature=temperature,
             top_k=top_k,
@@ -484,8 +478,7 @@ def parity_generate_streaming(
             sampled_token_id=_as_int(token),
             eos_token_id=eos_id,
             generation_step=generation_step,
-            text_context_steps=text_context_steps,
-            policy=policy,
+            deadlines=deadlines,
         )
         if termination_reason is None and step_idx + 1 >= max_new_tokens:
             termination_reason = "token_limit"
@@ -507,6 +500,7 @@ def parity_generate_streaming(
                 generation_step=generation_step,
                 text_context_steps=text_context_steps,
                 eos_bias_applied=last_eos_bias,
+                deadlines=deadlines,
                 policy=policy,
             )
 
@@ -538,5 +532,6 @@ def parity_generate_streaming(
             generation_step=generation_step,
             text_context_steps=text_context_steps,
             eos_bias_applied=last_eos_bias,
+            deadlines=deadlines,
             policy=policy,
         )
