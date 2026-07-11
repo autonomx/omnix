@@ -10,17 +10,13 @@ from app.rpg.ai.world_scene_narrator_runtime import (
 )
 
 from .contracts import ResponseMode, coerce_response_mode
-from .production_pipeline import (
-    CANONICAL_NARRATION_SOURCE,
-    ProfileBoundProvider,
-    RpgProductionResponsePipeline,
-)
+from .production_pipeline import CANONICAL_NARRATION_SOURCE, ProfileBoundProvider
 from .profiles import ResponseProfileRegistry
-from .strict_proposal_policy import StrictProposalPolicy
+from .strict_pipeline import StrictRpgProductionResponsePipeline
 
 
-def _pipeline() -> RpgProductionResponsePipeline:
-    return RpgProductionResponsePipeline(proposal_policy=StrictProposalPolicy())
+def _pipeline() -> StrictRpgProductionResponsePipeline:
+    return StrictRpgProductionResponsePipeline()
 
 
 def narrate_scene_canonical(
