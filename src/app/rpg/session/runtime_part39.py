@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Iterable
 
+from app.rpg.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
+
 from .runtime_part38 import *  # noqa: F401,F403
 from .runtime_part38 import (
     _apply_turn_authoritative as _PHASE8_PART39_BASE_APPLY_TURN_AUTHORITATIVE,
@@ -10,6 +12,7 @@ from .runtime_part38 import (
 from .runtime_part19 import apply_turn as _PHASE8_PART39_BASE_APPLY_TURN
 
 _PHASE8_PART39_SOURCE = "phase8_social_claim_travel_mismatch_guard_v1"
+_CANONICAL_PUBLICATION_PIPELINE = StrictRpgProductionResponsePipeline()
 _SOCIAL_ACTIONS = {
     "social_activity",
     "social_affection",
@@ -297,6 +300,86 @@ def _apply_turn_authoritative(
     )
 
 
+def _canonicalize_publication(
+    payload: Dict[str, Any],
+    *,
+    player_input: str,
+) -> Dict[str, Any]:
+    result = dict(_safe_dict(payload))
+    existing = _safe_dict(
+        result.get("narration_payload") or result.get("structured_narration")
+    )
+    if (
+        existing.get("canonical_response_source") == "rpg_response_generator_v1"
+        and _safe_dict(existing.get("canonical_response"))
+    ):
+        return result
+
+    nested = _safe_dict(result.get("result"))
+    state = _safe_dict(
+        result.get("simulation_state")
+        or nested.get("simulation_state")
+        or _safe_dict(result.get("session")).get("simulation_state")
+    )
+    contract = _safe_dict(
+        result.get("turn_contract")
+        or nested.get("turn_contract")
+        or result.get("authoritative")
+    )
+    narration = _clean(
+        result.get("narration")
+        or nested.get("narration")
+        or result.get("final_narration")
+        or nested.get("final_narration")
+    )
+    npc = _safe_dict(result.get("npc") or nested.get("npc"))
+    authoritative = dict(nested or result)
+    authoritative.setdefault("mechanic_resolved", bool(result.get("ok", True)))
+    authoritative.setdefault("resolver_status", "resolved")
+    canonical = _CANONICAL_PUBLICATION_PIPELINE.finalize_payload(
+        {
+            "source": "legacy_runtime_early_return",
+            "legacy_visible_text": narration,
+            "narration": narration,
+            "npc": npc,
+            "response_mode": (
+                contract.get("response_mode")
+                or contract.get("semantic_family")
+                or contract.get("action_type")
+                or authoritative.get("semantic_family")
+                or authoritative.get("action_type")
+                or "action"
+            ),
+        },
+        player_input=player_input,
+        authoritative_turn_result=authoritative,
+        simulation_state=state,
+        turn_contract=contract,
+        runtime_mode="runtime_early_return",
+    )
+    result["narration_payload"] = canonical
+    result["structured_narration"] = canonical
+    result["presentation_narration_selection"] = {
+        "source": "canonical_runtime_response",
+        "runtime_payload_source": canonical.get("source"),
+    }
+    result["narration"] = canonical.get("narration") or narration
+    result["npc"] = _safe_dict(canonical.get("npc") or npc)
+    result["llm_called"] = canonical.get("source") == "provider_runtime_narration"
+    if nested:
+        nested = dict(nested)
+        nested["narration_payload"] = deepcopy(canonical)
+        nested["structured_narration"] = deepcopy(canonical)
+        nested["presentation_narration_selection"] = deepcopy(
+            result["presentation_narration_selection"]
+        )
+        nested["narration"] = result["narration"]
+        nested["npc"] = deepcopy(result["npc"])
+        nested["llm_called"] = result["llm_called"]
+        result["result"] = nested
+    return result
+
+
 def _response_soft_truth(payload: Dict[str, Any]) -> Dict[str, Any]:
     narration = _safe_dict(
         payload.get("narration_payload") or payload.get("structured_narration")
@@ -349,7 +432,8 @@ def apply_turn(
         action,
         performance_override=performance_override,
     )
-    return _persist_soft_truth(payload, session_id)
+    canonical = _canonicalize_publication(payload, player_input=player_input)
+    return _persist_soft_truth(canonical, session_id)
 
 
 __all__ = [name for name in globals() if not name.startswith("__")]
