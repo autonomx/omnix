@@ -49,14 +49,14 @@ class CandidateRanker:
     def _score(candidate: ResponseCandidate) -> tuple[float, ...]:
         issue_count = len(candidate.repetition_issues) + len(candidate.style_issues)
         stale_penalty = 1.0 if candidate.provider_metadata.get("stale_prior_narration") else 0.0
-        safe_bonus = 0.25 if candidate.provider_metadata.get("grounded_safe_fallback") else 0.0
+        safe_bonus = 1.0 if candidate.provider_metadata.get("grounded_safe_fallback") else 0.0
         return (
+            -stale_penalty,
+            safe_bonus,
             float(candidate.current_turn_relevance),
             float(candidate.forward_motion),
             float(candidate.specificity),
             float(candidate.naturalness),
-            safe_bonus,
-            -stale_penalty,
             -float(issue_count),
             -max(0.0, float(candidate.latency_ms)),
             float(_SOURCE_TIE_BREAK.get(candidate.source, 0)),
