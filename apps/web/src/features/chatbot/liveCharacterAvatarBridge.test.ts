@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CharacterLiveCallRuntime } from './characterClient';
+import './liveCharacterVisemeBridge';
 import {
+  avatarMouthAssetForFrame,
   characterAvatarAssetUrl,
+  floatPcmMouthFrame,
   mouthFrameForRms,
   pcmMouthTimeline,
   presentationStateFromDom,
@@ -60,6 +63,21 @@ const runtime: CharacterLiveCallRuntime = {
   },
 };
 
+const visemeRuntime: CharacterLiveCallRuntime = {
+  ...runtime,
+  avatar_pack: {
+    ...runtime.avatar_pack!,
+    render_mode: 'viseme',
+    mouth_frames: {
+      closed: 'image:maya-closed',
+      silence: 'image:maya-closed',
+      A: 'image:maya-A',
+      E: 'image:maya-E',
+      U: 'image:maya-U',
+    },
+  },
+};
+
 afterEach(() => {
   vi.useRealTimers();
   publishCharacterAvatarRuntime(null);
@@ -72,6 +90,7 @@ describe('live character avatar audio envelope', () => {
     expect(mouthFrameForRms(0.02)).toBe('small');
     expect(mouthFrameForRms(0.05)).toBe('medium');
     expect(mouthFrameForRms(0.2)).toBe('wide');
+    expect(floatPcmMouthFrame(new Float32Array(32).fill(0.1))).toBe('wide');
   });
 
   it('produces a compact timeline and browser-safe asset URL', () => {
@@ -84,6 +103,13 @@ describe('live character avatar audio envelope', () => {
     expect(timeline[0]).toEqual({ offsetMs: 0, frame: 'closed' });
     expect(timeline.some((point) => point.frame === 'wide')).toBe(true);
     expect(characterAvatarAssetUrl('image:maya closed')).toBe('/api/assets/image%3Amaya%20closed/file');
+  });
+
+  it('maps audio-envelope states onto generated viseme assets', () => {
+    expect(avatarMouthAssetForFrame(visemeRuntime.avatar_pack!, 'wide')).toBe('image:maya-A');
+    expect(avatarMouthAssetForFrame(visemeRuntime.avatar_pack!, 'medium')).toBe('image:maya-E');
+    expect(avatarMouthAssetForFrame(visemeRuntime.avatar_pack!, 'small')).toBe('image:maya-U');
+    expect(avatarMouthAssetForFrame(visemeRuntime.avatar_pack!, 'closed')).toBe('image:maya-closed');
   });
 
   it('derives listening, thinking, speaking, and error presentation states', () => {
@@ -155,5 +181,30 @@ describe('live character avatar audio envelope', () => {
     expect(avatar?.dataset.voiceMode).toBe('speaking');
     expect(image?.getAttribute('src')).toBe('/api/assets/image%3Amaya-wide/file');
     expect(caption?.textContent).toBe('Maya is speaking');
+  });
+
+  it('keeps PCM-driven movement visible for viseme avatar packs', () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <section class="assistant-live-card">
+        <div class="assistant-voice-orb" data-voice-mode="idle"></div>
+        <div class="assistant-voice-controls"></div>
+        <div class="assistant-voice-transcript"></div>
+      </section>
+      <div class="assistant-inline-status"></div>
+    `;
+    publishCharacterAvatarRuntime(visemeRuntime);
+
+    const samples = new Int16Array(2_400);
+    samples.fill(16_000);
+    window.dispatchEvent(new CustomEvent('omnix:character-avatar-pcm', {
+      detail: { samples, sampleRate: 24_000 },
+    }));
+    vi.advanceTimersByTime(30);
+
+    const avatar = document.querySelector<HTMLElement>('.assistant-live-character-avatar');
+    const image = avatar?.querySelector<HTMLImageElement>('img');
+    expect(avatar?.dataset.mouthFrame).toBe('wide');
+    expect(image?.getAttribute('src')).toBe('/api/assets/image%3Amaya-A/file');
   });
 });
