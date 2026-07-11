@@ -6,6 +6,17 @@ from typing import Iterable
 from .recovery import LocalRecoveryAnalysis
 
 
+_SOCIAL_ENTITY_REQUEST_WORDS = {
+    "ask",
+    "join",
+    "convince",
+    "persuade",
+    "order",
+    "invite",
+    "tell",
+}
+
+
 @dataclass(frozen=True)
 class RecoveryHistoryEntry:
     turn_id: str
@@ -63,11 +74,12 @@ class ForwardMotionPolicy:
         if (
             selected.affordance == "entity_search"
             and analysis.intent.unresolved_references
+            and set(analysis.intent.tokens) & _SOCIAL_ENTITY_REQUEST_WORDS
         ):
             return ForwardMotionPlan(
                 strategy="clarify_unknown_entity",
                 outcome="clarification",
-                rationale="the referenced person or entity is not established in current knowledge",
+                rationale="the requested person or relationship is not established in current knowledge",
                 options=("identify who you mean", "describe where you heard the name"),
             )
         if mechanic_resolved and selected.affordance in {
