@@ -14,7 +14,6 @@ from .contracts import (
 
 _FACTUAL_SECTION_TYPES = {
     SectionType.ACTION,
-    SectionType.NPC_DIALOGUE,
     SectionType.RESULT,
     SectionType.STATE_CHANGE,
 }
