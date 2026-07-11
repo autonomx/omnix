@@ -19,7 +19,13 @@ const defaultProfile = {
 beforeEach(() => {
   window.localStorage.clear();
   window.localStorage.setItem('omnix.liveConversation.serverProfileMigrated.v1', 'done');
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json(defaultProfile)));
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    if (url.includes('/live-conversation/pronunciations')) {
+      return Response.json({ session_id: 'chat:one', entries: [] });
+    }
+    return Response.json(defaultProfile);
+  }));
 });
 
 afterEach(() => {
@@ -34,6 +40,7 @@ describe('LiveChatPanel', () => {
     expect(screen.getByRole('heading', { name: 'Live Chat' })).toBeInTheDocument();
     expect(screen.getByText('Select a Chat session')).toBeInTheDocument();
     expect(await screen.findByLabelText('Presence')).toHaveValue('natural');
+    expect(screen.getByText('Select a Chat session before saving pronunciation guidance.')).toBeInTheDocument();
   });
 
   it('reuses the existing live-call control instead of creating another voice pipeline', () => {
