@@ -18,14 +18,22 @@ def _safe_str(value: Any) -> str:
 def _queued_narration_snapshot(payload: Dict[str, Any]) -> dict[str, Any]:
     result = _safe_dict(payload)
     nested = _safe_dict(result.get("result"))
+    authoritative = _safe_dict(result.get("authoritative"))
+    resolved = _safe_dict(
+        authoritative.get("resolved_result")
+        or nested.get("resolved_result")
+        or result.get("resolved_result")
+    )
     status = _safe_str(
         nested.get("narration_status") or result.get("narration_status")
     ).casefold()
     narration = _safe_str(
-        nested.get("narration")
-        or result.get("narration")
-        or nested.get("deterministic_fallback_narration")
+        nested.get("deterministic_fallback_narration")
         or result.get("deterministic_fallback_narration")
+        or authoritative.get("deterministic_fallback_narration")
+        or resolved.get("deterministic_fallback_narration")
+        or nested.get("narration")
+        or result.get("narration")
     ).strip()
     if status not in {"queued", "pending"} or not narration:
         return {}
