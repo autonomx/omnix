@@ -21,6 +21,7 @@ describe('live call diagnostics client', () => {
 
     reporter.record('llm_text_chunk_received', {
       transcript: 'private text',
+      text: 'private assistant response',
       text_length: 12,
     }, 'controller');
     await reporter.close();
@@ -34,10 +35,12 @@ describe('live call diagnostics client', () => {
       event: 'llm_text_chunk_received',
       details: expect.objectContaining({
         transcript_chars: 12,
+        text_chars: 26,
         text_length: 12,
       }),
     }));
     expect(event?.detail.details.transcript).toBeUndefined();
+    expect(event?.detail.details.text).toBeUndefined();
     expect(fetchMock).toHaveBeenCalled();
   });
 
@@ -45,5 +48,10 @@ describe('live call diagnostics client', () => {
     expect(sanitizeDiagnosticDetails({ transcript: 'secret' }, 'none')).toEqual({});
     expect(sanitizeDiagnosticDetails({ transcript: 'secret' }, 'redacted')).toEqual({ transcript: '[redacted]' });
     expect(sanitizeDiagnosticDetails({ transcript: 'secret' }, 'lengths_only')).toEqual({ transcript_chars: 6 });
+    expect(sanitizeDiagnosticDetails({ text: 'secret', text_length: 6, text_chunk_index: 2 }, 'lengths_only')).toEqual({
+      text_chars: 6,
+      text_length: 6,
+      text_chunk_index: 2,
+    });
   });
 });

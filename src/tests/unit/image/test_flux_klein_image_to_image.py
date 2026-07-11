@@ -63,6 +63,45 @@ def test_flux_provider_forwards_reference_image_to_pipeline(tmp_path, monkeypatc
     assert result.metadata["reference_count"] == 1
 
 
+def test_flux_provider_downsamples_large_reference_before_generation(tmp_path, monkeypatch) -> None:
+    captured = {}
+
+    class FakePipeline:
+        def __call__(
+            self,
+            *,
+            image=None,
+            prompt=None,
+            width=None,
+            height=None,
+            num_inference_steps=None,
+            guidance_scale=None,
+        ):
+            captured["reference_size"] = image.size
+            return SimpleNamespace(images=[Image.new("RGB", (width, height), "purple")])
+
+    provider = FluxKleinImageProvider({"device": "cpu"})
+    provider._pipeline = FakePipeline()
+    provider._memory_mode = "cpu"
+    reference = Image.new("RGB", (768, 1024), "blue")
+    monkeypatch.setattr(flux_module, "generated_images_root", lambda: tmp_path)
+    monkeypatch.setattr(flux_module, "_release_generation_memory", lambda: None)
+
+    result = provider.generate(
+        {
+            "prompt": "preserve the character and change only the mouth",
+            "width": 768,
+            "height": 768,
+            "num_inference_steps": 4,
+            "guidance_scale": 1.0,
+            "image": reference,
+        }
+    )
+
+    assert result.ok is True
+    assert captured["reference_size"] == (384, 512)
+
+
 def test_flux_provider_omits_negative_prompt_when_pipeline_does_not_support_it(
     tmp_path, monkeypatch
 ) -> None:

@@ -70,6 +70,17 @@ def test_image_workspace_routes_are_filtered_and_bounded(tmp_path, monkeypatch) 
     )
     assets.upsert_asset(
         AssetRecord(
+            id="image:character-avatar",
+            module="image-generation",
+            type=AssetType.IMAGE,
+            mime_type="image/png",
+            storage_path=str(valid_image),
+            metadata={"source_module": "character-avatar"},
+            created_at="2026-01-04T01:00:00+00:00",
+        )
+    )
+    assets.upsert_asset(
+        AssetRecord(
             id="audio:one",
             module="voice",
             type=AssetType.AUDIO,

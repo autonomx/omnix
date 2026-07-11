@@ -81,7 +81,7 @@ export function assessSemanticTurn(
   const profile = conversationTimingProfile(pace);
   const text = transcript.trim();
   if (text.length < 2) {
-    return { probabilityDone: 0.1, reason: 'insufficient_text', recommendedWaitMs: profile.maximumWaitMs };
+    return { probabilityDone: 0.1, reason: 'insufficient_text', recommendedWaitMs: profile.ambiguousWaitMs };
   }
   if (HESITATION_PATTERN.test(text)) {
     return { probabilityDone: 0.08, reason: 'trailing_hesitation', recommendedWaitMs: profile.maximumWaitMs };

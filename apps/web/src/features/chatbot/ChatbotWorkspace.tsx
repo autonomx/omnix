@@ -30,6 +30,10 @@ import {
   type TtsSynthesisResponse,
 } from '../assistant-workspace';
 import { createChatbotActivityEvents, createChatbotFailureEvent } from '../assistant-workspace/chatbot-activity';
+import {
+  createLiveCallDiagnosticsReporter,
+  type LiveCallDiagnosticsReporter,
+} from '../assistant-workspace/live-call-diagnostics-client';
 import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
 import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
@@ -119,11 +123,27 @@ function liveVoiceSubmissionKey(content: string): string {
   return content.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}']+/gu, ' ').trim();
 }
 
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function dedicatedLiveVoiceControllerInstalled(): boolean {
+  return Boolean((window as StreamingTtsWindow).__omnixLiveVoiceControllerInstalled);
+}
+
+function unifiedLiveVoiceAudioInstalled(): boolean {
+  return Boolean((window as StreamingTtsWindow).__omnixLiveVoiceUnifiedAudioInstalled);
+}
+
 type VoicePerformanceStage = {
   stage?: unknown;
   turnId?: unknown;
   transcriptChars?: unknown;
   sttFinalizeMs?: unknown;
+  delayMs?: unknown;
+  pace?: unknown;
+  probabilityDone?: unknown;
+  reason?: unknown;
 };
 
 type ChatStreamEvent = {
@@ -140,12 +160,20 @@ type VoiceTurnPerformance = {
   sttFinalizeMs?: number;
   chatSubmitStartedAt?: number;
   chatResponseReceivedAt?: number;
+  llmFirstChunkReceivedAt?: number;
+  llmCompletedAt?: number;
   ttsStartedAt?: number;
   ttsReadyAt?: number;
   ttsFirstChunkReceivedAt?: number;
   audioFirstScheduledAt?: number;
   audioPlayStartedAt?: number;
+  turnaroundLogged?: boolean;
 };
+
+type VoiceTurnTimestampStage = Exclude<
+  keyof VoiceTurnPerformance,
+  'turnId' | 'sttFinalReceivedAt' | 'transcriptChars' | 'sttFinalizeMs' | 'turnaroundLogged'
+>;
 
 type StreamingTtsPlayback = {
   audioContext: AudioContext;
@@ -157,6 +185,8 @@ type StreamingTtsPlayback = {
 type StreamingTtsWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
   webkitAudioContext?: typeof AudioContext;
+  __omnixLiveVoiceControllerInstalled?: boolean;
+  __omnixLiveVoiceUnifiedAudioInstalled?: boolean;
 };
 
 const personalityOptions: Array<{ id: PersonalityId; label: string; prompt: string }> = [
@@ -226,6 +256,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveVoiceActiveRef = useRef(false);
   const lastSubmittedVoiceTextRef = useRef('');
   const voiceTurnPerformanceRef = useRef<VoiceTurnPerformance | null>(null);
+  const voiceTurnDiagnosticsRef = useRef<LiveCallDiagnosticsReporter | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const lastMessageScrollKeyRef = useRef('');
@@ -442,6 +473,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       dispatchLiveVoiceStop();
       stopVoiceInput();
       stopAssistantResponseAudio();
+      void voiceTurnDiagnosticsRef.current?.close('workspace_unmounted');
+      voiceTurnDiagnosticsRef.current = null;
     };
   }, []);
 
@@ -454,7 +487,24 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   useEffect(() => {
     const handlePerfEvent = (event: Event) => {
       const detail = (event as CustomEvent<VoicePerformanceStage>).detail;
-      if (detail?.stage !== 'stt_final_received' || typeof detail.turnId !== 'string') return;
+      if (!detail || typeof detail.stage !== 'string' || typeof detail.turnId !== 'string') return;
+      if (detail.stage === 'semantic_turn_assessed' || detail.stage === 'stt_final_requested') {
+        if (voiceTurnDiagnosticsRef.current?.traceId !== `live-call:${detail.turnId}`) {
+          void voiceTurnDiagnosticsRef.current?.close('turn_superseded');
+          voiceTurnDiagnosticsRef.current = createLiveCallDiagnosticsReporter(`live-call:${detail.turnId}`);
+        }
+        recordVoiceTurnDiagnostic(detail.stage, {
+          delay_ms: finiteNumber(detail.delayMs),
+          pace: typeof detail.pace === 'string' ? detail.pace : undefined,
+          probability_done: finiteNumber(detail.probabilityDone),
+          reason: typeof detail.reason === 'string' ? detail.reason : undefined,
+        });
+      }
+      if (detail.stage !== 'stt_final_received') return;
+      if (!voiceTurnDiagnosticsRef.current) {
+        voiceTurnDiagnosticsRef.current = createLiveCallDiagnosticsReporter(`live-call:${detail.turnId}`);
+      }
+      stopAssistantResponseAudio(undefined);
       voiceTurnPerformanceRef.current = {
         turnId: detail.turnId,
         sttFinalReceivedAt: performance.now(),
@@ -466,12 +516,17 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         transcriptChars: voiceTurnPerformanceRef.current.transcriptChars,
         sttFinalizeMs: voiceTurnPerformanceRef.current.sttFinalizeMs,
       });
+      recordVoiceTurnDiagnostic('stt_final_received', {
+        stt_finalize_ms: voiceTurnPerformanceRef.current.sttFinalizeMs,
+        input_chars: voiceTurnPerformanceRef.current.transcriptChars,
+      });
     };
     window.addEventListener(LIVE_VOICE_PERF_EVENT, handlePerfEvent);
     return () => window.removeEventListener(LIVE_VOICE_PERF_EVENT, handlePerfEvent);
   }, []);
 
   useEffect(() => {
+    if (unifiedLiveVoiceAudioInstalled()) return;
     if (!autoSpeakResponses || !liveVoiceActive || !latestAssistantMessage || spokenMessageIds[latestAssistantMessage.id]) return;
     setSpokenMessageIds((current) => ({ ...current, [latestAssistantMessage.id]: true }));
     void playAssistantResponseAudio(latestAssistantMessage.content);
@@ -604,7 +659,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       });
       setAudioStatus(`${runtime.display_name} call ready · preload ${Math.round(runtime.preload.preload_ms)}ms`);
       if (runtime.greeting.trim()) await playAssistantResponseAudio(runtime.greeting);
-      await startVoiceInput();
+      if (dedicatedLiveVoiceControllerInstalled()) {
+        setVoiceCaptureMode('listening');
+        setAudioStatus(`${runtime.display_name} call ready · streaming microphone active`);
+      } else {
+        await startVoiceInput();
+      }
     } catch (error) {
       liveVoiceActiveRef.current = false;
       liveCallRuntimeRef.current = null;
@@ -844,6 +904,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   async function sendStreamingVoiceTranscript(content: string): Promise<void> {
     liveVoiceSubmissionInFlightRef.current = true;
     markVoiceTurnPerformance('chatSubmitStartedAt');
+    recordVoiceTurnDiagnostic('chat_submit_started', {
+      input_chars: content.length,
+      provider_configured: Boolean(selectedProviderId),
+      model_configured: Boolean(selectedModelId),
+    });
     setAudioStatus('Sending voice text.');
     const providerId = selectedProviderId || undefined;
     const modelId = selectedModelId || undefined;
@@ -866,10 +931,16 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, provider_id: providerId, model_id: modelId }),
+        body: JSON.stringify({
+          content,
+          provider_id: providerId,
+          model_id: modelId,
+          live_voice_turn_id: voiceTurnPerformanceRef.current?.turnId,
+        }),
       });
       if (!response.ok || !response.body) throw new Error(`Chat stream failed with status ${response.status}.`);
       markVoiceTurnPerformance('chatResponseReceivedAt');
+      recordVoiceTurnDiagnostic('chat_response_opened', { status: response.status });
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let pending = '';
@@ -884,6 +955,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           if (!event) continue;
           if (event.type === 'error') throw new Error(typeof event.message === 'string' ? event.message : 'Chat stream failed.');
           if (event.type === 'text_chunk' && typeof event.text === 'string') {
+            const firstChunk = voiceTurnPerformanceRef.current?.llmFirstChunkReceivedAt === undefined;
+            markVoiceTurnPerformance('llmFirstChunkReceivedAt');
+            if (firstChunk) {
+              recordVoiceTurnDiagnostic('llm_first_text_chunk_received', {
+                text_chunk_chars: event.text.length,
+              });
+            }
             responseText = mergeTranscript(responseText, event.text);
             speechBuffer = mergeTranscript(speechBuffer, event.text);
             setAudioStatus('Assistant response streaming.');
@@ -902,9 +980,16 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       setLiveInterimTranscript('');
       setValue('content', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
       if (autoSpeakResponses && speechBuffer.trim()) queueStreamedAssistantAudio(speechBuffer);
+      markVoiceTurnPerformance('llmCompletedAt');
+      recordVoiceTurnDiagnostic('llm_stream_completed', {
+        response_chars: responseText.length,
+      });
       await queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
       setAudioStatus(responseText ? 'Response ready.' : 'Voice text sent.');
     } catch (error) {
+      recordVoiceTurnDiagnostic('chat_stream_failed', {
+        error_name: error instanceof Error ? error.name : 'unknown',
+      });
       setAudioStatus(error instanceof Error ? error.message : 'Voice text stream failed.');
     } finally {
       liveVoiceSubmissionInFlightRef.current = false;
@@ -912,6 +997,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
 
   function queueStreamedAssistantAudio(text: string): void {
+    if (unifiedLiveVoiceAudioInstalled()) return;
     streamedSpeechQueueRef.current = streamedSpeechQueueRef.current
       .catch(() => undefined)
       .then(() => playAssistantResponseAudio(text));
@@ -970,6 +1056,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     let revokePlayableAudioSource: (() => void) | undefined;
     try {
       markVoiceTurnPerformance('ttsStartedAt');
+      recordVoiceTurnDiagnostic('tts_request_started', {
+        text_chars: spokenText.length,
+        streaming_requested: liveVoiceActive && canUseStreamingTts(),
+      });
       setAudioStatus(activeVoiceId ? `Synthesizing ${activeVoiceLabel || activeVoiceId} voice…` : 'Synthesizing response voice…');
       if (liveVoiceActive && canUseStreamingTts()) {
         try {
@@ -983,6 +1073,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           console.info('[Omnix Voice Perf] streaming TTS failed without batch fallback', {
             reason: streamError instanceof Error ? streamError.message : 'Streaming TTS failed.',
           });
+          recordVoiceTurnDiagnostic('tts_stream_failed', {
+            error_name: streamError instanceof Error ? streamError.name : 'unknown',
+          });
           setAudioStatus(streamError instanceof Error ? streamError.message : 'Streaming TTS failed.');
           return;
         }
@@ -993,6 +1086,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         : await synthesizeWithVoiceJob(spokenText);
       if (assistantPlaybackTokenRef.current !== playbackToken) return;
       markVoiceTurnPerformance('ttsReadyAt');
+      recordVoiceTurnDiagnostic('tts_output_ready', { playback_mode: 'batch' });
       if (canUseDecodedAudioPlayback()) {
         await playDecodedAssistantResponseAudio(audioSource, playbackToken);
         return;
@@ -1033,6 +1127,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       await playing;
       if (assistantPlaybackTokenRef.current !== playbackToken) return;
       markVoiceTurnPerformance('audioPlayStartedAt');
+      recordVoiceTurnDiagnostic('audio_playback_started', { playback_mode: 'audio_element' });
       console.info('[Omnix Voice Perf] batch TTS audio playing', {
         duration: Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : null,
         readyState: audio.readyState,
@@ -1085,6 +1180,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       chunkSize: 8,
       audioContextState: audioContext.state,
     });
+    recordVoiceTurnDiagnostic('tts_stream_connecting', {
+      request_id: requestId,
+      text_chars: text.length,
+      playback_mode: 'sse_audio_context',
+    });
     const playback: StreamingTtsPlayback = { audioContext, abortController, sources: [], closed: false };
     streamingTtsRef.current = playback;
     setIsAssistantSpeaking(true);
@@ -1120,6 +1220,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       status: response.status,
       openMs: Math.round(performance.now() - requestStartedAt),
       contentType: response.headers.get('content-type'),
+    });
+    recordVoiceTurnDiagnostic('tts_stream_opened', {
+      request_id: requestId,
+      status: response.status,
+      open_ms: Math.round(performance.now() - requestStartedAt),
     });
 
     const reader = response.body.getReader();
@@ -1201,9 +1306,20 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             audioContextTime: Number(audioContext.currentTime.toFixed(3)),
             startAt: Number(startAt.toFixed(3)),
           });
+          recordVoiceTurnDiagnostic('tts_first_audio_scheduled', {
+            request_id: requestId,
+            first_frame_ms: Math.round(performance.now() - requestStartedAt),
+            scheduled_lead_ms: Math.round(delayMs),
+            chunk_bytes: pcm.byteLength,
+          });
           window.setTimeout(() => {
             if (assistantPlaybackTokenRef.current !== playbackToken || playback.closed) return;
             markVoiceTurnPerformance('audioPlayStartedAt');
+            recordVoiceTurnDiagnostic('audio_playback_started', {
+              request_id: requestId,
+              playback_mode: 'sse_audio_context',
+              playback_start_ms: Math.round(performance.now() - requestStartedAt),
+            });
             console.info('[Omnix Voice Perf] streaming TTS first audio start', {
               requestId,
               elapsedMs: Math.round(performance.now() - requestStartedAt),
@@ -1230,6 +1346,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       scheduledAudioMs: Math.round(scheduledAudioSeconds * 1000),
       activeSources: playback.sources.length,
       audioContextTime: Number(audioContext.currentTime.toFixed(3)),
+    });
+    recordVoiceTurnDiagnostic('tts_stream_completed', {
+      request_id: requestId,
+      elapsed_ms: Math.round(performance.now() - requestStartedAt),
+      chunks: receivedChunkCount,
+      scheduled_audio_ms: Math.round(scheduledAudioSeconds * 1000),
     });
     await waitForStreamingPlaybackToFinish(playback, () => assistantPlaybackTokenRef.current !== playbackToken);
   }
@@ -1278,6 +1400,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       window.setTimeout(() => {
         if (assistantPlaybackTokenRef.current !== playbackToken || playback.closed) return;
         markVoiceTurnPerformance('audioPlayStartedAt');
+        recordVoiceTurnDiagnostic('audio_playback_started', { playback_mode: 'decoded_audio_context' });
         console.info('[Omnix Voice Perf] decoded TTS audio start', {
           audioContextTime: Number(audioContext.currentTime.toFixed(3)),
           activeSources: playback.sources.length,
@@ -1309,15 +1432,35 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     window.dispatchEvent(new CustomEvent(LIVE_VOICE_STOP_EVENT));
   }
 
-  function markVoiceTurnPerformance(stage: keyof Omit<VoiceTurnPerformance, 'turnId' | 'sttFinalReceivedAt' | 'transcriptChars' | 'sttFinalizeMs'>): void {
+  function markVoiceTurnPerformance(stage: VoiceTurnTimestampStage): void {
     const current = voiceTurnPerformanceRef.current;
     if (!current) return;
-    current[stage] = performance.now();
+    if (current[stage] === undefined) current[stage] = performance.now();
+  }
+
+  function recordVoiceTurnDiagnostic(event: string, details: Record<string, unknown> = {}): void {
+    const reporter = voiceTurnDiagnosticsRef.current;
+    const performanceState = voiceTurnPerformanceRef.current;
+    if (!reporter) return;
+    const reporterTurnId = reporter.traceId.startsWith('live-call:voice-turn:')
+      ? reporter.traceId.slice('live-call:'.length)
+      : performanceState?.turnId;
+    const performanceMatchesReporter = Boolean(
+      performanceState && reporterTurnId && performanceState.turnId === reporterTurnId,
+    );
+    reporter.record(event, {
+      turn_id: reporterTurnId,
+      elapsed_from_stt_final_ms: performanceMatchesReporter && performanceState
+        ? Math.round(performance.now() - performanceState.sttFinalReceivedAt)
+        : undefined,
+      ...details,
+    }, 'chatbot_workspace');
   }
 
   function logVoiceTurnPerformance(): void {
     const current = voiceTurnPerformanceRef.current;
-    if (!current?.audioPlayStartedAt) return;
+    if (!current?.audioPlayStartedAt || current.turnaroundLogged) return;
+    current.turnaroundLogged = true;
 
     const totalMs = Math.round(current.audioPlayStartedAt - current.sttFinalReceivedAt);
     const rows = [
@@ -1340,7 +1483,18 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       transcriptChars: current.transcriptChars,
     });
     console.table(rows);
-    voiceTurnPerformanceRef.current = null;
+    recordVoiceTurnDiagnostic('voice_audio_turnaround', {
+      total_ms: totalMs,
+      target_ms: 1000,
+      within_target: totalMs < 1000,
+      stt_finalize_ms: current.sttFinalizeMs,
+      final_to_chat_submit_ms: elapsedMs(current.sttFinalReceivedAt, current.chatSubmitStartedAt),
+      chat_submit_to_response_open_ms: elapsedMs(current.chatSubmitStartedAt, current.chatResponseReceivedAt),
+      response_open_to_first_chunk_ms: elapsedMs(current.chatResponseReceivedAt, current.llmFirstChunkReceivedAt),
+      first_chunk_to_llm_complete_ms: elapsedMs(current.llmFirstChunkReceivedAt, current.llmCompletedAt),
+      tts_start_to_ready_ms: elapsedMs(current.ttsStartedAt, current.ttsReadyAt),
+      tts_ready_to_playback_ms: elapsedMs(current.ttsReadyAt, current.audioPlayStartedAt),
+    });
   }
 
   async function synthesizeWithTtsService(text: string): Promise<string> {

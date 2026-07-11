@@ -23,6 +23,7 @@ import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 type LiveVoiceWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
   webkitAudioContext?: typeof AudioContext;
+  __omnixLiveVoiceControllerInstalled?: boolean;
 };
 
 type LiveVoiceAudioPipeline = { node: AudioNode; cleanup: () => void };
@@ -72,6 +73,7 @@ const liveVoiceWorkletContexts = new WeakSet<AudioContext>();
 export function initializeLiveVoiceController(root: ParentNode = document): void {
   if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return;
   initialized = true;
+  (window as LiveVoiceWindow).__omnixLiveVoiceControllerInstalled = true;
   prepareCards(root);
   document.addEventListener('click', handleDocumentClick, true);
   window.addEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
@@ -361,9 +363,11 @@ function scheduleSemanticFinalization(session: LiveVoiceSession): void {
   const pace = readConversationPace();
   const assessment = assessSemanticTurn(session.partialTranscript, pace);
   const delayMs = semanticFinalizeDelay(session.partialTranscript, pace);
+  session.perfTurnId ??= `voice-turn:${Date.now()}`;
   session.floorState = reduceUserFloor(session.floorState, { type: 'completion_check' });
   dispatchLiveVoicePerfEvent({
     stage: 'semantic_turn_assessed',
+    turnId: session.perfTurnId,
     timestamp: new Date().toISOString(),
     pace,
     probabilityDone: assessment.probabilityDone,
@@ -404,7 +408,7 @@ function requestFinalTranscript(session: LiveVoiceSession): void {
   if (session.floorState === 'overlap_candidate' && session.partialTranscript) assessOverlapCandidate(session);
   session.floorState = reduceUserFloor(session.floorState, { type: 'commit' });
   session.finalRequested = true;
-  session.perfTurnId = `voice-turn:${Date.now()}`;
+  session.perfTurnId ??= `voice-turn:${Date.now()}`;
   session.sttFinalRequestedAt = performance.now();
   dispatchLiveVoicePerfEvent({
     stage: 'stt_final_requested',

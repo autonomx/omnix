@@ -3,7 +3,7 @@ const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const FLUSH_DELAY_MS = 250;
 const MAX_BATCH_EVENTS = 24;
 const TRANSCRIPT_LOGGING_KEY = 'omnix.liveCall.transcriptLogging';
-const TRANSCRIPT_DETAIL_PATTERN = /(^|_)(transcript|user_text|speech_text)(_|$)/i;
+const TRANSCRIPT_DETAIL_PATTERN = /(^|_)(transcript|text)(_|$)/i;
 
 export type TranscriptLoggingMode = 'none' | 'lengths_only' | 'redacted' | 'full_local_debug';
 
@@ -102,7 +102,7 @@ export function sanitizeDiagnosticDetails(
   if (mode === 'full_local_debug') return { ...details };
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(details)) {
-    if (!TRANSCRIPT_DETAIL_PATTERN.test(key)) {
+    if (!TRANSCRIPT_DETAIL_PATTERN.test(key) || typeof value !== 'string') {
       sanitized[key] = value;
       continue;
     }
@@ -111,8 +111,7 @@ export function sanitizeDiagnosticDetails(
       sanitized[key] = '[redacted]';
       continue;
     }
-    const length = typeof value === 'string' ? value.length : 0;
-    sanitized[`${key}_chars`] = length;
+    sanitized[`${key}_chars`] = value.length;
   }
   return sanitized;
 }

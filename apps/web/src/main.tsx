@@ -23,7 +23,7 @@ import './features/assistant-workspace/live-voice-form-sync';
 import './features/assistant-workspace/live-voice-duplex-gate';
 import './features/assistant-workspace/live-voice-controller';
 import './features/assistant-workspace/live-voice-transcript-autoscroll';
-import { initializeLiveVoiceSmoothAudioController } from './features/assistant-workspace/live-voice-smooth-audio-controller';
+import { initializeLiveVoiceUnifiedAudioController } from './features/assistant-workspace/live-voice-unified-audio-controller';
 import './features/storyteller/StorytellerWorkspace.css';
 import './features/storyteller/StorytellerSidebar.css';
 import './features/storyteller/StoryMode.css';
@@ -45,7 +45,7 @@ const queryClient = new QueryClient({
   },
 });
 
-initializeLiveVoiceSmoothAudioController();
+initializeLiveVoiceUnifiedAudioController();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

@@ -125,6 +125,10 @@ def _is_usable_image_asset(asset: AssetRecord) -> bool:
 
 
 def _is_character_avatar_asset(asset: AssetRecord, job_store: SQLiteJobStore) -> bool:
+    if asset.module == "character-avatar":
+        return True
+    if str((asset.metadata or {}).get("source_module") or "").strip() == "character-avatar":
+        return True
     source_job_id = str(asset.source_job_id or "").strip()
     if not source_job_id:
         return False

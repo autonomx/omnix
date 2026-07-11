@@ -59,6 +59,10 @@ type LiveTurnIds = {
   speechSegmentId: string;
 };
 
+type LiveVoiceRequestPayload = Record<string, unknown> & {
+  live_voice_turn_id?: unknown;
+};
+
 let originalFetch: typeof window.fetch | null = null;
 let playbackGeneration = 0;
 let activeTurn: ActiveLiveTurn | null = null;
@@ -101,6 +105,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
   const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
   const url = new URL(rawUrl, window.location.origin);
   const sessionId = CHAT_STREAM_PATH.exec(url.pathname)?.[1] ?? 'unknown';
+  const voiceTurnId = extractLiveVoiceTurnId(init);
   const ids = createLiveTurnIds();
   const abortController = new AbortController();
   connectAbortSignal(init?.signal, abortController);
@@ -109,7 +114,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
   if (!response.body || !response.ok) return response;
 
   const generation = ++playbackGeneration;
-  const traceId = createLiveCallTraceId(sessionId);
+  const traceId = voiceTurnId ? `live-call:${voiceTurnId}` : createLiveCallTraceId(sessionId);
   const reporter = createLiveCallDiagnosticsReporter(traceId);
   const delivery = createLiveVoiceDeliveryLedger();
   instrumentDeliveryReporter(reporter, () => delivery, (ledger) => {
@@ -141,6 +146,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
     auto_speak: true,
     user_turn_id: ids.userTurnId,
     speech_segment_id: ids.speechSegmentId,
+    voice_turn_id: voiceTurnId,
   }, 'controller');
 
   const [applicationBranch, audioBranch] = response.body.tee();
@@ -357,6 +363,19 @@ function createLiveTurnIds(): LiveTurnIds {
     userTurnId: `voice-user-turn:${suffix}`,
     speechSegmentId: `voice-segment:${suffix}`,
   };
+}
+
+function extractLiveVoiceTurnId(init: RequestInit | undefined): string | null {
+  if (typeof init?.body !== 'string') return null;
+  try {
+    const payload = JSON.parse(init.body) as LiveVoiceRequestPayload;
+    const candidate = payload.live_voice_turn_id;
+    return typeof candidate === 'string' && /^voice-turn:[A-Za-z0-9_.:-]+$/.test(candidate)
+      ? candidate
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function injectLiveTurnIds(init: RequestInit | undefined, ids: LiveTurnIds, signal: AbortSignal): RequestInit {

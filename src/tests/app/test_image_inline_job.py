@@ -59,6 +59,46 @@ def test_image_job_executes_and_persists_shared_asset(monkeypatch, tmp_path) -> 
     assert len(asset_store.assets) == 1
     assert asset_store.assets[0].source_job_id == job.id
     assert asset_store.assets[0].metadata["provider_key"] == "mock"
+    assert asset_store.assets[0].metadata["source_module"] == "image-generation"
+
+
+def test_character_avatar_image_keeps_its_module_boundary(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
+    monkeypatch.setattr(Path, "is_file", lambda _path: True)
+    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    asset_store = MemoryAssetStore()
+    job = job_store.create_job(
+        CreateJobRequest(
+            module="character-avatar",
+            type="image.generate",
+            resource_class=ResourceClass.GPU_IMAGE,
+            input_payload={
+                "prompt": "A locked avatar frame",
+                "provider_id": "image:mock",
+                "width": 768,
+                "height": 768,
+                "metadata": {"character_id": "maya", "avatar_variant": "mouth_small"},
+            },
+        )
+    )
+
+    completed = execute_image_job(
+        job_store,
+        job,
+        asset_store=asset_store,
+        generate_fn=lambda payload: ImageGenerationResponse(
+            ok=True,
+            provider=payload["provider"],
+            status="completed",
+            local_path="avatar.png",
+            width=payload["width"],
+            height=payload["height"],
+        ),
+    )
+
+    assert completed.status.value == "completed"
+    assert asset_store.assets[0].module == "character-avatar"
+    assert asset_store.assets[0].metadata["source_module"] == "character-avatar"
 
 
 def test_image_job_reports_milestone_progress_during_generation(monkeypatch, tmp_path) -> None:

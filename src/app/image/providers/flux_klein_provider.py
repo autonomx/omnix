@@ -27,6 +27,7 @@ _DEFAULT_MIN_GENERATION_FREE_GIB = 3.0
 _DEFAULT_MAX_PIXELS = 1024 * 1024
 _DEFAULT_MAX_REFERENCE_PIXELS = 2 * 1024 * 1024
 _DEFAULT_MAX_REFERENCE_COUNT = 2
+_DEFAULT_MAX_REFERENCE_EDGE = 512
 
 
 def _safe_str(value: Any) -> str:
@@ -99,6 +100,35 @@ def _reference_pixels(images: Iterable[Any]) -> int:
         if isinstance(size, tuple) and len(size) >= 2:
             total += max(1, _safe_int(size[0], 1) * _safe_int(size[1], 1))
     return total
+
+
+def _bounded_reference_input(value: Any, max_edge: int) -> tuple[Any, list[Any]]:
+    """Downsample oversized references to bound FLUX conditioning memory."""
+
+    if value is None:
+        return None, []
+    items = value if isinstance(value, list) else [value]
+    bounded: list[Any] = []
+    owned: list[Any] = []
+    for image in items:
+        size = getattr(image, "size", None)
+        if not isinstance(size, tuple) or len(size) < 2:
+            bounded.append(image)
+            continue
+        width = max(1, _safe_int(size[0], 1))
+        height = max(1, _safe_int(size[1], 1))
+        longest = max(width, height)
+        if longest <= max_edge:
+            bounded.append(image)
+            continue
+        scale = max_edge / longest
+        resized = image.resize(
+            (max(1, round(width * scale)), max(1, round(height * scale))),
+            resample=3,  # Pillow BICUBIC without coupling this provider to a Pillow enum version.
+        )
+        bounded.append(resized)
+        owned.append(resized)
+    return (bounded if isinstance(value, list) else bounded[0]), owned
 
 
 class FluxKleinImageProvider(BaseImageProvider):
@@ -341,6 +371,10 @@ class FluxKleinImageProvider(BaseImageProvider):
             _safe_float(self.config.get("guidance_scale"), 1.0),
         )
         reference_input = payload.get("image")
+        reference_input, owned_references = _bounded_reference_input(
+            reference_input,
+            max(64, _safe_int(self.config.get("max_reference_edge"), _DEFAULT_MAX_REFERENCE_EDGE)),
+        )
         references = _reference_list(reference_input)
 
         kwargs: Dict[str, Any] = {
@@ -492,4 +526,7 @@ class FluxKleinImageProvider(BaseImageProvider):
                 output = None
                 output_image = None
                 pipe = None
+                for image in owned_references:
+                    with contextlib.suppress(Exception):
+                        image.close()
                 _release_generation_memory()

@@ -18,6 +18,7 @@ from .models import CompleteJobRequest, FailJobRequest, JobRecord
 
 IMAGE_JOB_TYPE = "image.generate"
 IMAGE_EXECUTOR_ENV = "OMNIX_INLINE_IMAGE_JOB_EXECUTOR"
+_IMAGE_GENERATION_LOCK = threading.Lock()
 
 
 def install_image_job_execution(sqlite_job_store_cls: Any) -> None:
@@ -76,15 +77,17 @@ def execute_image_job(
 
         generate_fn = generate_image
 
-    _update_progress(job_store, job.id, 0, 100, "Generating image - 0%", stage_id="generate-image")
-    progress_poller = _start_image_generation_progress_poll(job_store, job.id)
-    try:
-        result = generate_fn(provider_payload)
-    except Exception as exc:
-        return _fail(job_store, job, "image_generation_failed", str(exc) or "Image generation failed", retryable=True)
-    finally:
-        if progress_poller is not None:
-            progress_poller()
+    _update_progress(job_store, job.id, 0, 100, "Waiting for image service", stage_id="generate-image")
+    with _IMAGE_GENERATION_LOCK:
+        _update_progress(job_store, job.id, 0, 100, "Generating image - 0%", stage_id="generate-image")
+        progress_poller = _start_image_generation_progress_poll(job_store, job.id)
+        try:
+            result = generate_fn(provider_payload)
+        except Exception as exc:
+            return _fail(job_store, job, "image_generation_failed", str(exc) or "Image generation failed", retryable=True)
+        finally:
+            if progress_poller is not None:
+                progress_poller()
 
     if not bool(getattr(result, "ok", False)):
         message = str(getattr(result, "error", "") or "Image generation failed")
@@ -161,10 +164,11 @@ def _store_image_asset(
     metadata = dict(getattr(result, "metadata", {}) or {})
     asset_id = f"image:image-generation-{job.id.removeprefix('job:')}"
 
+    asset_module = job.module if job.module == "character-avatar" else "image-generation"
     asset = store.upsert_asset(
         AssetRecord(
             id=asset_id,
-            module="image-generation",
+            module=asset_module,
             type=AssetType.IMAGE,
             mime_type=mime_type,
             storage_path=storage_path,
@@ -183,6 +187,7 @@ def _store_image_asset(
                 "steps": request.steps,
                 "guidance_scale": request.guidance_scale,
                 "cache_hit": bool(metadata.get("cache_hit")),
+                "source_module": job.module,
             },
             compat={"contract": "image_generation_asset_v1"},
         )

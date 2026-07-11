@@ -168,6 +168,23 @@ describe('live voice unified audio controller', () => {
     );
   });
 
+  it('reuses the speech turn id as the end-to-end diagnostics trace', async () => {
+    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'hello', live_voice_turn_id: 'voice-turn:12345' }),
+    });
+    await response.text();
+
+    expect(mocks.createReporter).toHaveBeenCalledWith('live-call:voice-turn:12345');
+    expect(mocks.recordSpy).toHaveBeenCalledWith(
+      'turn_intercepted',
+      expect.objectContaining({ voice_turn_id: 'voice-turn:12345' }),
+      'controller',
+    );
+    expect(mocks.createTraceId).not.toHaveBeenCalled();
+  });
+
   it('skips non-speech-only trailing chunks without stopping the turn', async () => {
     streamEvents = [
       { type: 'user_message', message: { id: 'u1', metadata: { assistant_turn_id: 'assistant-turn:t2' } } },

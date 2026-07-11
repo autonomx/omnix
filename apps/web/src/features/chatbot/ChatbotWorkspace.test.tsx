@@ -83,6 +83,8 @@ function deferred<T>() {
 
 afterEach(() => {
   window.localStorage.clear();
+  delete (window as typeof window & { __omnixLiveVoiceControllerInstalled?: boolean }).__omnixLiveVoiceControllerInstalled;
+  delete (window as typeof window & { __omnixLiveVoiceUnifiedAudioInstalled?: boolean }).__omnixLiveVoiceUnifiedAudioInstalled;
   vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -523,6 +525,17 @@ describe('ChatbotWorkspace', () => {
     await waitFor(() => expect(recognitionInstance).not.toBeNull());
 
     act(() => {
+      window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+        detail: { stage: 'stt_final_requested', turnId: 'voice-turn:test-auto' },
+      }));
+      window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+        detail: {
+          stage: 'stt_final_received',
+          turnId: 'voice-turn:test-auto',
+          transcriptChars: 22,
+          sttFinalizeMs: 180,
+        },
+      }));
       recognitionInstance?.onresult?.({
         resultIndex: 0,
         results: {
@@ -545,6 +558,19 @@ describe('ChatbotWorkspace', () => {
       expect(streamCall?.[1]?.body).toContain('"content":"open the pod bay doors"');
     });
     expect((await screen.findAllByText('Opening them now.')).length).toBeGreaterThan(0);
+    await waitFor(() => {
+      const diagnosticBodies = fetchMock.mock.calls
+        .filter(([input, init]) => requestPath(input as RequestInfo | URL) === '/api/tts/live-call/diagnostics' && init?.method === 'POST')
+        .map(([, init]) => String(init?.body ?? ''))
+        .join('\n');
+      expect(diagnosticBodies).toContain('"trace_id":"live-call:voice-turn:test-auto"');
+      expect(diagnosticBodies).toContain('"event":"chat_submit_started"');
+      expect(diagnosticBodies).toContain('"event":"chat_response_opened"');
+      expect(diagnosticBodies).toContain('"event":"llm_first_text_chunk_received"');
+      expect(diagnosticBodies).toContain('"event":"llm_stream_completed"');
+      expect(diagnosticBodies).not.toContain('open the pod bay doors');
+      expect(diagnosticBodies).not.toContain('Opening them now.');
+    });
 
     act(() => {
       recognitionInstance?.onresult?.({

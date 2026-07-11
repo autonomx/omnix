@@ -29,6 +29,13 @@ describe('live voice floor manager', () => {
     );
   });
 
+  it('uses the ambiguous pause instead of the maximum pause before partial STT is ready', () => {
+    const profile = conversationTimingProfile('balanced');
+
+    expect(semanticFinalizeDelay('', 'balanced')).toBe(profile.ambiguousWaitMs);
+    expect(semanticFinalizeDelay('', 'balanced')).toBeLessThan(profile.maximumWaitMs);
+  });
+
   it('keeps user-floor state independent from assistant lifecycle', () => {
     let state = reduceUserFloor('idle', { type: 'listen' });
     state = reduceUserFloor(state, { type: 'speech_candidate' });
