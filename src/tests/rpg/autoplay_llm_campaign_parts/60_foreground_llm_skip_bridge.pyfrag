@@ -1,0 +1,60 @@
+"""Allow deterministic autoplay runs to skip unavailable foreground providers.
+
+The manual autoplay entry point intentionally requests a semantic advisory before
+runtime resolution. CI has no LM Studio service, so the provider attempt can only
+fail and produce an empty advisory. This opt-in bridge returns that same empty
+advisory immediately while leaving normal/manual runs unchanged.
+"""
+
+
+def _autoplay_foreground_llm_skip_enabled() -> bool:
+    raw = str(os.environ.get("RPG_AUTOPLAY_SKIP_FOREGROUND_LLM", "auto") or "auto")
+    mode = raw.strip().casefold()
+    if mode in {"0", "false", "no", "off", "disabled"}:
+        return False
+    if mode in {"1", "true", "yes", "on", "all", "always"}:
+        return True
+    test_mode = str(os.environ.get("RPG_TEST_MODE", "") or "").strip().casefold()
+    background_mode = str(
+        os.environ.get("RPG_AUTOPLAY_SKIP_COMBINED_BACKGROUND_LLM", "") or ""
+    ).strip().casefold()
+    return test_mode == "deterministic" and background_mode in {
+        "1",
+        "true",
+        "yes",
+        "on",
+        "all",
+        "always",
+    }
+
+
+def _install_autoplay_foreground_llm_skip(runtime_module: object | None = None) -> bool:
+    if not _autoplay_foreground_llm_skip_enabled():
+        return False
+
+    if runtime_module is None:
+        try:
+            from app.rpg.session import interactive_first_call_runtime as runtime_module
+        except Exception:
+            return False
+
+    original = getattr(runtime_module, "get_semantic_action_advisory", None)
+    if not callable(original):
+        return False
+    if getattr(original, "_autoplay_foreground_llm_skip_wrapped", False):
+        return True
+
+    def _skip_semantic_advisory(*args, **kwargs):
+        print(
+            "[AUTOPLAY-PROBE] "
+            "event=foreground_semantic_llm.skipped "
+            "reason=deterministic_ci_provider_unavailable"
+        )
+        return {}
+
+    _skip_semantic_advisory._autoplay_foreground_llm_skip_wrapped = True
+    setattr(runtime_module, "get_semantic_action_advisory", _skip_semantic_advisory)
+    return True
+
+
+_install_autoplay_foreground_llm_skip()

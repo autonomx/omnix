@@ -1,0 +1,126 @@
+{
+  "format_version": "rpg_response_baseline_v1",
+  "description": "Human-authored deterministic expectations for RPG response generation.",
+  "scenarios": [
+    {
+      "scenario_id": "supported_buy_room",
+      "category": "supported_action",
+      "player_input": "I pay Bran five silver for a room.",
+      "expected_affordances": ["transaction"],
+      "allowed_truth_classes": ["confirmed_fact"],
+      "forbidden_claims": ["free room", "quest complete"],
+      "allowed_forward_outcomes": ["resolved_action"],
+      "clarification_required": false
+    },
+    {
+      "scenario_id": "unknown_moonwell",
+      "category": "unknown_lore",
+      "player_input": "Where is the Moonwell?",
+      "expected_affordances": ["knowledge_check", "lore_search", "offer_lead"],
+      "allowed_truth_classes": ["retrieved_lore", "npc_belief", "rumor", "inference"],
+      "forbidden_claims": ["the Moonwell is unlocked", "you arrive at the Moonwell"],
+      "allowed_forward_outcomes": ["answer", "lead", "clarification", "uncertainty"],
+      "clarification_required": false
+    },
+    {
+      "scenario_id": "invented_sister",
+      "category": "invented_entity",
+      "player_input": "Ask Bran's sister Mira to join us.",
+      "expected_affordances": ["entity_search", "unverified_player_claim", "clarification"],
+      "allowed_truth_classes": ["confirmed_fact", "unverified_player_claim", "inference"],
+      "forbidden_claims": ["Mira joins your party", "Mira is Bran's sister"],
+      "allowed_forward_outcomes": ["clarification", "alternative", "lead"],
+      "clarification_required": true
+    },
+    {
+      "scenario_id": "unsupported_mind_read",
+      "category": "unsupported_spell",
+      "player_input": "I cast mind reading on the guard.",
+      "expected_affordances": ["analogous_skill", "ritual_research", "meaningful_failure"],
+      "allowed_truth_classes": ["confirmed_fact", "npc_belief", "inference"],
+      "forbidden_claims": ["you read every thought", "spell succeeds"],
+      "allowed_forward_outcomes": ["alternative", "failure", "choice"],
+      "clarification_required": false
+    },
+    {
+      "scenario_id": "telephone_king",
+      "category": "impossible_technology",
+      "player_input": "I telephone the king.",
+      "expected_affordances": ["world_equivalent", "substitute_action"],
+      "allowed_truth_classes": ["confirmed_fact", "inference"],
+      "forbidden_claims": ["the king answers the phone", "telephone rings"],
+      "allowed_forward_outcomes": ["alternative", "choice"],
+      "clarification_required": false
+    },
+    {
+      "scenario_id": "ambiguous_threat",
+      "category": "ambiguous_social_action",
+      "player_input": "Make him understand.",
+      "expected_affordances": ["clarification", "social_options"],
+      "allowed_truth_classes": ["confirmed_fact", "inference"],
+      "forbidden_claims": ["you attack him", "he surrenders"],
+      "allowed_forward_outcomes": ["clarification", "choice"],
+      "clarification_required": true
+    },
+    {
+      "scenario_id": "contradictory_crown_agent",
+      "category": "contradictory_player_claim",
+      "player_input": "As the queen's secret agent, I order the captain aside.",
+      "expected_affordances": ["memory_check", "unverified_player_claim", "social_check"],
+      "allowed_truth_classes": ["confirmed_fact", "unverified_player_claim", "npc_belief"],
+      "forbidden_claims": ["your royal authority is confirmed", "the captain obeys by decree"],
+      "allowed_forward_outcomes": ["reaction", "clarification", "mechanic_attempt"],
+      "clarification_required": false
+    },
+    {
+      "scenario_id": "failed_purchase",
+      "category": "failed_purchase",
+      "player_input": "I buy the sword even though I have no money.",
+      "expected_affordances": ["transaction_failure", "alternative_payment"],
+      "allowed_truth_classes": ["confirmed_fact"],
+      "forbidden_claims": ["the sword is yours", "your debt is accepted"],
+      "allowed_forward_outcomes": ["failure", "alternative", "choice"],
+      "clarification_required": false
+    },
+    {
+      "scenario_id": "invalid_travel",
+      "category": "invalid_travel",
+      "player_input": "Travel directly to the sealed royal vault.",
+      "expected_affordances": ["travel_failure", "ask_directions", "offer_lead"],
+      "allowed_truth_classes": ["confirmed_fact", "retrieved_lore", "inference"],
+      "forbidden_claims": ["you arrive in the royal vault", "vault unlocked"],
+      "allowed_forward_outcomes": ["failure", "lead", "alternative"],
+      "clarification_required": false
+    },
+    {
+      "scenario_id": "attack_outside_combat",
+      "category": "combat_edge_case",
+      "player_input": "I strike the merchant dead before she can react.",
+      "expected_affordances": ["combat_start", "combat_attempt", "meaningful_failure"],
+      "allowed_truth_classes": ["confirmed_fact"],
+      "forbidden_claims": ["the merchant dies", "you gain xp", "you loot the body"],
+      "allowed_forward_outcomes": ["mechanic_attempt", "failure", "consequence"],
+      "clarification_required": false
+    },
+    {
+      "scenario_id": "agency_investigation_offer",
+      "category": "agency_sensitive_recovery",
+      "player_input": "Maybe someone in the market knows the symbol.",
+      "expected_affordances": ["offer_investigation", "offer_lead"],
+      "allowed_truth_classes": ["confirmed_fact", "inference", "rumor"],
+      "forbidden_claims": ["you begin investigating", "new objective accepted"],
+      "allowed_forward_outcomes": ["lead", "choice", "uncertainty"],
+      "clarification_required": false
+    },
+    {
+      "scenario_id": "broad_world_question",
+      "category": "broad_world_question",
+      "player_input": "Why do the northern caravans avoid this road?",
+      "expected_affordances": ["lore_search", "speaker_perspective"],
+      "allowed_truth_classes": ["retrieved_lore", "npc_belief", "rumor", "inference"],
+      "forbidden_claims": ["hidden director event", "undiscovered ambush"],
+      "allowed_forward_outcomes": ["answer", "uncertainty", "lead"],
+      "clarification_required": false
+    }
+  ]
+}
