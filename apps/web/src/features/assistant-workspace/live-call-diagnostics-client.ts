@@ -1,3 +1,5 @@
+import { observeAssistantDiagnostic } from './live-conversation-assistant-summary';
+
 const LIVE_CALL_DIAGNOSTICS_PATH = '/api/tts/live-call/diagnostics';
 const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const FLUSH_DELAY_MS = 250;
@@ -63,6 +65,7 @@ export function createLiveCallDiagnosticsReporter(traceId: string): LiveCallDiag
     source = 'browser',
   ): void => {
     if (closed) return;
+    observeAssistantDiagnostic(traceId, event, details);
     const sanitizedDetails = {
       client_wall_time_ms: Date.now(),
       client_monotonic_ms: performance.now(),
