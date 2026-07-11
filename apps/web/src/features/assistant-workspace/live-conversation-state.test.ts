@@ -30,8 +30,13 @@ describe('live conversation state', () => {
 
   it('projects legacy live-call labels during staged migration', () => {
     expect(projectLegacyLiveVoiceState(false, 'Idle').connection).toBe('disconnected');
-    const speaking = projectLegacyLiveVoiceState(true, 'Speaking');
-    expect(speaking.assistantTurn).toBe('speaking');
-    expect(speaking.floorOwner).toBe('assistant');
+    const assistantSpeaking = projectLegacyLiveVoiceState(true, 'Speaking');
+    expect(assistantSpeaking.assistantTurn).toBe('speaking');
+    expect(assistantSpeaking.floorOwner).toBe('assistant');
+
+    const userSpeaking = projectLegacyLiveVoiceState(true, 'User speaking');
+    expect(userSpeaking.userTurn).toBe('speaking');
+    expect(userSpeaking.floorOwner).toBe('user');
+    expect(userSpeaking.assistantTurn).toBe('idle');
   });
 });
