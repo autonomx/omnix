@@ -47,7 +47,7 @@ let previousPromptIgnored = false;
 let requestController: AbortController | null = null;
 let pending: PendingProactive | null = null;
 let assistantSpeaking = false;
-let audioStartTimer: number | null = null;
+let audioStartTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function initializeLiveConversationInitiativeController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
@@ -61,14 +61,8 @@ export function initializeLiveConversationInitiativeController(): () => void {
     selectedSessionId = typeof detail?.sessionId === 'string' ? detail.sessionId : selectedSessionId;
     resetQuietPeriod('session-changed');
   };
-  const handleCallStart = () => {
-    callConnected = false;
-    resetQuietPeriod('call-started');
-  };
-  const handleCallConnected = () => {
-    callConnected = true;
-    resetQuietPeriod('call-connected');
-  };
+  const handleCallStart = () => { callConnected = false; resetQuietPeriod('call-started'); };
+  const handleCallConnected = () => { callConnected = true; resetQuietPeriod('call-connected'); };
   const handleUserSpeech = () => {
     const hadPlayingPrompt = Boolean(pending?.audioStarted);
     requestController?.abort('user-speech');
@@ -107,10 +101,10 @@ export function initializeLiveConversationInitiativeController(): () => void {
     attributeFilter: ['data-voice-mode', 'data-live-voice-status'],
   });
   handleVoiceOrbMutation();
-  const timer = window.setInterval(evaluateInitiative, SCHEDULER_INTERVAL_MS);
+  const scheduler = window.setInterval(evaluateInitiative, SCHEDULER_INTERVAL_MS);
 
   return () => {
-    window.clearInterval(timer);
+    window.clearInterval(scheduler);
     observer.disconnect();
     window.removeEventListener(SESSION_CHANGED_EVENT, handleSession);
     window.removeEventListener(CALL_START_EVENT, handleCallStart);
@@ -137,11 +131,7 @@ export function parseProactiveSse(text: string): ParsedProactiveStream | null {
       .join('\n');
     if (!data) continue;
     let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(data) as Record<string, unknown>;
-    } catch {
-      continue;
-    }
+    try { event = JSON.parse(data) as Record<string, unknown>; } catch { continue; }
     if (event.type === 'error') throw new Error(String(event.message || 'Proactive turn failed.'));
     if (event.type === 'initiative') {
       if (typeof event.turn_id === 'string') turnId = event.turn_id;
@@ -159,11 +149,9 @@ export function parseProactiveSse(text: string): ParsedProactiveStream | null {
 
 export function proactiveReasonFromTranscript(root: ParentNode = document): string | null {
   const messages = Array.from(root.querySelectorAll<HTMLElement>('.assistant-voice-transcript p:not(.muted)'));
-  if (!messages.length) return null;
   const latest = messages.at(-1)?.textContent?.trim() ?? '';
   if (!latest) return null;
-  if (/\?\s*$/.test(latest)) return 'unresolved_question';
-  return 'continue_current_topic';
+  return /\?\s*$/.test(latest) ? 'unresolved_question' : 'continue_current_topic';
 }
 
 function evaluateInitiative(): void {
@@ -226,10 +214,10 @@ async function startProactiveTurn(sessionId: string, reason: string, profile: Li
     pending = turn;
     dispatchPerf('initiative_generation_completed', { turn_id: parsed.turnId, content_chars: parsed.content.length });
     if (!turn.audioStarted) {
-      audioStartTimer = window.setTimeout(() => {
+      audioStartTimer = setTimeout(() => {
         if (pending === turn && !turn.audioStarted) clearPending('audio-never-started');
       }, AUDIO_START_TIMEOUT_MS);
-      window.setTimeout(handleVoiceOrbMutation, 0);
+      setTimeout(handleVoiceOrbMutation, 0);
     }
   } catch (error) {
     if (!controller.signal.aborted) dispatchPerf('initiative_generation_failed', {
@@ -299,7 +287,7 @@ function clearPending(reason: string): void {
 }
 
 function clearAudioStartTimer(): void {
-  if (audioStartTimer !== null) window.clearTimeout(audioStartTimer);
+  if (audioStartTimer !== null) clearTimeout(audioStartTimer);
   audioStartTimer = null;
 }
 
@@ -322,8 +310,7 @@ function liveVoiceStatus(): string {
 }
 
 function isAssistantSpeaking(): boolean {
-  return Array.from(document.querySelectorAll<HTMLElement>('.assistant-voice-orb'))
-    .some((orb) => orb.dataset.voiceMode === 'speaking');
+  return Array.from(document.querySelectorAll<HTMLElement>('.assistant-voice-orb')).some((orb) => orb.dataset.voiceMode === 'speaking');
 }
 
 function isAutoSpeakEnabled(): boolean {
