@@ -6,6 +6,7 @@ import {
 } from '../assistant-workspace/live-conversation-state';
 import { CharacterModePanel } from './CharacterModePanel';
 import { LiveConversationControls } from './LiveConversationControls';
+import { LivePronunciationPanel } from './LivePronunciationPanel';
 import './LiveChatPanel.css';
 
 export type LiveChatPanelProps = {
@@ -116,6 +117,7 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
       )}
 
       <LiveConversationControls sessionId={sessionId} />
+      <LivePronunciationPanel sessionId={sessionId} />
 
       <section className="live-chat-card" aria-labelledby="live-chat-call-heading">
         <header>
