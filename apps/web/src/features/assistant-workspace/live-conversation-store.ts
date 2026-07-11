@@ -148,16 +148,19 @@ export function createLiveConversationStore(
 ): LiveConversationStore {
   let state = initialState;
   const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const listener of listeners) listener();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(LIVE_CONVERSATION_STORE_UPDATED_EVENT, { detail: state }));
+    }
+  };
   return {
     getState: () => state,
     dispatch: (action) => {
       const next = reduceLiveConversationRuntimeState(state, action);
       if (next === state) return;
       state = next;
-      for (const listener of listeners) listener();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent(LIVE_CONVERSATION_STORE_UPDATED_EVENT, { detail: state }));
-      }
+      notify();
     },
     subscribe: (listener) => {
       listeners.add(listener);
@@ -165,19 +168,23 @@ export function createLiveConversationStore(
     },
     reset: () => {
       state = INITIAL_LIVE_CONVERSATION_RUNTIME_STATE;
-      for (const listener of listeners) listener();
+      notify();
     },
   };
 }
 
 export const liveConversationStore = createLiveConversationStore();
 
-export function useLiveConversationSelector<T>(selector: (state: LiveConversationRuntimeState) => T): T {
+export function useLiveConversationState(): LiveConversationRuntimeState {
   return useSyncExternalStore(
     liveConversationStore.subscribe,
-    () => selector(liveConversationStore.getState()),
-    () => selector(INITIAL_LIVE_CONVERSATION_RUNTIME_STATE),
+    liveConversationStore.getState,
+    () => INITIAL_LIVE_CONVERSATION_RUNTIME_STATE,
   );
+}
+
+export function useLiveConversationSelector<T>(selector: (state: LiveConversationRuntimeState) => T): T {
+  return selector(useLiveConversationState());
 }
 
 export function replayLiveConversationActions(
