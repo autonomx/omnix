@@ -12,6 +12,32 @@ _TECH_WORDS = {"telephone", "phone", "internet", "email", "camera", "computer", 
 _TRAVEL_WORDS = {"travel", "go", "walk", "ride", "sail", "teleport", "journey"}
 _SOCIAL_WORDS = {"convince", "persuade", "threaten", "intimidate", "understand", "order", "ask"}
 _ASSERTION_MARKERS = {"as", "remember", "again", "my", "our", "used", "before"}
+_SENTENCE_LEADERS = {
+    "I",
+    "The",
+    "A",
+    "An",
+    "Where",
+    "What",
+    "Who",
+    "When",
+    "Why",
+    "How",
+    "Ask",
+    "Travel",
+    "Do",
+    "Make",
+    "Go",
+    "Tell",
+    "Show",
+    "Find",
+    "Use",
+    "Cast",
+    "Convince",
+    "Persuade",
+    "Threaten",
+    "Order",
+}
 
 
 @dataclass(frozen=True)
@@ -101,7 +127,7 @@ class NarrativeAffordanceClassifier:
                     ambiguity="medium",
                 )
             )
-        if tokens and tokens[0] in _QUESTION_WORDS or text.endswith("?"):
+        if (tokens and tokens[0] in _QUESTION_WORDS) or text.endswith("?"):
             hypotheses.append(
                 IntentHypothesis(
                     "ask_world_question",
@@ -123,7 +149,9 @@ class NarrativeAffordanceClassifier:
                     ambiguity="high" if ambiguous else "low",
                 )
             )
-        if token_set & _ASSERTION_MARKERS and any(word in lowered for word in ("agent", "sister", "friend", "promised", "remember")):
+        if token_set & _ASSERTION_MARKERS and any(
+            word in lowered for word in ("agent", "sister", "friend", "promised", "remember")
+        ):
             hypotheses.append(
                 IntentHypothesis(
                     "assert_prior_history",
@@ -157,8 +185,7 @@ class NarrativeAffordanceClassifier:
 
 def _capitalized_phrases(text: str) -> tuple[str, ...]:
     phrases = re.findall(r"\b[A-Z][a-zA-Z']+(?:\s+[A-Z][a-zA-Z']+)*", text)
-    ignored = {"I", "The", "A", "An", "Where", "What", "Who", "Why", "How", "Ask", "Travel"}
-    return tuple(phrase for phrase in phrases if phrase not in ignored)
+    return tuple(phrase for phrase in phrases if phrase not in _SENTENCE_LEADERS)
 
 
 def _normalized_keys(value: Mapping[str, Any] | None) -> set[str]:
