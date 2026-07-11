@@ -21,11 +21,13 @@ describe('live speech delivery plan', () => {
   });
 
   it('tunes bounded TTS sampling without rewriting text', () => {
-    const plan = createSpeechDeliveryPlan('That is GREAT news!', profile, false);
+    const engagedProfile: LiveConversationProfile = { ...profile, conversation_stance: 'discuss' };
+    const plan = createSpeechDeliveryPlan('That is GREAT news!', engagedProfile, false);
     const request = applyDeliveryPlanToTtsRequest({
       type: 'synthesize', text: 'That is GREAT news!', temperature: 0.6, top_p: 0.85, repetition_penalty: 1,
     }, plan);
     expect(request.text).toBe('That is GREAT news!');
+    expect(plan.energy).toBe('high');
     expect(request.temperature).toBeGreaterThan(0.6);
     expect(request.top_p).toBeGreaterThanOrEqual(0.85);
     expect(request.repetition_penalty).toBe(1.05);
