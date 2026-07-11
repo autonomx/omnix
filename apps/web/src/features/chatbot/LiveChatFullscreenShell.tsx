@@ -36,10 +36,10 @@ export function LiveChatFullscreenShell() {
 
   useEffect(() => {
     if (!fullscreen.immersive) return;
-    let timer: number | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const refresh = () => {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
         timer = null;
         setMessages(readLiveChatMirroredMessages());
         setAvatar(readLiveChatMirroredAvatar());
@@ -60,7 +60,7 @@ export function LiveChatFullscreenShell() {
       observer.disconnect();
       window.removeEventListener(AVATAR_RUNTIME_EVENT, refresh);
       window.removeEventListener(AVATAR_FRAME_EVENT, refresh);
-      if (timer !== null) window.clearTimeout(timer);
+      if (timer !== null) clearTimeout(timer);
     };
   }, [fullscreen.immersive]);
 
