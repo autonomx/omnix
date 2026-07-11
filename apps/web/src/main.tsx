@@ -8,6 +8,7 @@ import { omnixTheme } from './design/theme';
 import './features/chatbot/sessionTools';
 import './features/chatbot/researchProgressController';
 import './features/chatbot/researchProgressController.css';
+import './features/chatbot/live-chat-workspace';
 import './features/podcast/podcastSessionGuard';
 import './features/voice/voiceJobListGuard';
 import './styles.css';
