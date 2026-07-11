@@ -56,7 +56,30 @@ describe('live conversation store bridge', () => {
     });
   });
 
-  it('projects calibrated duplex and delivery metadata without DOM inference', () => {
+  it('keeps speech over assistant playback as a candidate until classification', () => {
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
+    window.dispatchEvent(new CustomEvent('omnix:assistant-audio-playback-state', { detail: { speaking: true } }));
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-user-speech', {
+      detail: { assistantSpeaking: true },
+    }));
+
+    expect(liveConversationStore.getState().conversation).toMatchObject({
+      userTurn: 'speech_candidate',
+      floorOwner: 'assistant',
+      bargeIn: 'confirming',
+    });
+
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: { stage: 'barge_in_acoustic_candidate', decision: 'likely_echo' },
+    }));
+    expect(liveConversationStore.getState().conversation).toMatchObject({
+      userTurn: 'listening',
+      floorOwner: 'assistant',
+      bargeIn: 'inactive',
+    });
+  });
+
+  it('stores calibration evidence safely until the current device pair is verified', () => {
     window.dispatchEvent(new CustomEvent('omnix:live-voice-calibration-updated', {
       detail: {
         version: 'live-voice-calibration-v1',
@@ -82,7 +105,7 @@ describe('live conversation store bridge', () => {
     }));
 
     expect(liveConversationStore.getState().duplex).toMatchObject({
-      resolvedMode: 'echo_aware', reason: 'calibration_confident', confidence: 0.91,
+      resolvedMode: 'half_duplex', reason: 'calibration_device_unverified', confidence: 0.91,
     });
     expect(liveConversationStore.getState().deliveryPlan).toMatchObject({
       speech_act: 'reassurance', warmth: 'high',
