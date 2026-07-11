@@ -94,17 +94,21 @@ class QualityGate:
         repaired: list[SemanticSection] = []
         history: list[str] = []
         seen_sentences: set[str] = set()
+        deterministic_fallback = bool(plan.metadata.get("fallback_reason")) or any(
+            bool(section.metadata.get("fallback")) for section in plan.sections
+        )
         for section in plan.sections:
             text = _DEBUG_PREFIX.sub("", section.text.strip())
             if text != section.text.strip():
                 history.append(f"removed_debug_prefix:{section.section_id}")
-            for phrase in _LOW_VALUE_PHRASES:
-                if phrase in text.casefold():
-                    text = re.sub(re.escape(phrase), "", text, flags=re.IGNORECASE)
-                    text = " ".join(text.split()).strip(" ,;:-")
-                    history.append(
-                        f"removed_low_value_phrase:{section.section_id}:{phrase}"
-                    )
+            if deterministic_fallback:
+                for phrase in _LOW_VALUE_PHRASES:
+                    if phrase in text.casefold():
+                        text = re.sub(re.escape(phrase), "", text, flags=re.IGNORECASE)
+                        text = " ".join(text.split()).strip(" ,;:-")
+                        history.append(
+                            f"removed_low_value_phrase:{section.section_id}:{phrase}"
+                        )
             kept: list[str] = []
             for sentence in _sentences(text):
                 normalized = _normalize(sentence)
