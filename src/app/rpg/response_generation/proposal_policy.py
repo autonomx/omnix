@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Iterable, Mapping
 
@@ -125,35 +125,11 @@ class ProposalPolicy:
         turn_id: str,
     ) -> ProposalPolicyResult:
         current = tuple(existing)
-        if proposal.visibility == "hidden":
-            return ProposalPolicyResult(
-                ProposalDecision.REJECT_HIDDEN,
-                proposal,
-                reason="hidden proposals cannot enter visible recovery truth",
-            )
-        if not proposal.world_consistent:
-            return ProposalPolicyResult(
-                ProposalDecision.REJECT_INCONSISTENT,
-                proposal,
-                reason="proposal conflicts with authoritative world rules",
-            )
-        dedupe_key = proposal.normalized_dedupe_key()
-        for row in current:
-            if str(row.metadata.get("dedupe_key") or "") == dedupe_key:
-                return ProposalPolicyResult(
-                    ProposalDecision.REJECT_DUPLICATE,
-                    proposal,
-                    reason=f"duplicates existing truth {row.truth_ref}",
-                )
+        rejection = self._preflight(proposal, current)
+        if rejection is not None:
+            return rejection
 
         target = self._target_lifetime(proposal)
-        if target is TruthLifetime.PERSISTENT and proposal.risk is ProposalRisk.HIGH:
-            if not proposal.resolver_name or not proposal.resolver_approved:
-                return ProposalPolicyResult(
-                    ProposalDecision.REJECT_RESOLVER_REQUIRED,
-                    proposal,
-                    reason="high-risk persistence requires an approved deterministic resolver",
-                )
         if self._budget_exceeded(current, target, proposal.scene_id):
             return ProposalPolicyResult(
                 ProposalDecision.REJECT_BUDGET,
@@ -162,25 +138,32 @@ class ProposalPolicy:
             )
 
         truth_ref = f"proposal.{proposal.proposal_id}"
-        expires_turn = (
+        base_lifetime = (
+            TruthLifetime.TURN
+            if target is TruthLifetime.PERSISTENT
+            else target
+        )
+        base_expires = (
             proposal.created_turn
-            if target is TruthLifetime.TURN
+            if base_lifetime is TruthLifetime.TURN
             else proposal.created_turn + 64
-            if target is TruthLifetime.SCENE
-            else None
         )
         truth = SoftTruthRecord(
             truth_ref=truth_ref,
             truth_class=TruthClass.GENERATED_PROPOSAL,
-            content=proposal.content if proposal.content is not None else proposal.summary,
+            content=(
+                proposal.content
+                if proposal.content is not None
+                else proposal.summary
+            ),
             provenance_refs=proposal.provenance_refs,
             visibility=proposal.visibility,
             confidence=proposal.confidence,
-            lifetime=target,
+            lifetime=base_lifetime,
             created_turn=proposal.created_turn,
             created_turn_id=proposal.created_turn_id or turn_id,
             scene_id=proposal.scene_id,
-            expires_turn=expires_turn,
+            expires_turn=base_expires,
             source=proposal.source,
             metadata={
                 **dict(proposal.metadata),
@@ -188,23 +171,19 @@ class ProposalPolicy:
                 "proposal_type": proposal.proposal_type,
                 "risk": proposal.risk.value,
                 "seed": proposal.seed,
-                "dedupe_key": dedupe_key,
+                "dedupe_key": proposal.normalized_dedupe_key(),
                 "acceptance_reason": self._acceptance_reason(proposal, target),
                 "resolver_name": proposal.resolver_name,
             },
         )
         if target is TruthLifetime.PERSISTENT:
             event = self._promotion_event(proposal, truth, turn_id=turn_id)
-            truth = replace(
-                truth,
-                promotion_history=(
-                    truth.promote(
-                        TruthLifetime.PERSISTENT,
-                        turn_id=turn_id,
-                        reason=event.reason,
-                        event_id=event.event_id,
-                    ).promotion_history
-                ),
+            truth = truth.promote(
+                TruthLifetime.PERSISTENT,
+                turn_id=turn_id,
+                reason=event.reason,
+                event_id=event.event_id,
+                expires_turn=None,
             )
             return ProposalPolicyResult(
                 ProposalDecision.PROMOTE_PERSISTENT,
@@ -225,11 +204,45 @@ class ProposalPolicy:
             reason=self._acceptance_reason(proposal, target),
         )
 
+    def _preflight(
+        self,
+        proposal: WorldProposal,
+        current: tuple[SoftTruthRecord, ...],
+    ) -> ProposalPolicyResult | None:
+        if proposal.visibility == "hidden":
+            return ProposalPolicyResult(
+                ProposalDecision.REJECT_HIDDEN,
+                proposal,
+                reason="hidden proposals cannot enter visible recovery truth",
+            )
+        if not proposal.world_consistent:
+            return ProposalPolicyResult(
+                ProposalDecision.REJECT_INCONSISTENT,
+                proposal,
+                reason="proposal conflicts with authoritative world rules",
+            )
+        dedupe_key = proposal.normalized_dedupe_key()
+        for row in current:
+            if str(row.metadata.get("dedupe_key") or "") == dedupe_key:
+                return ProposalPolicyResult(
+                    ProposalDecision.REJECT_DUPLICATE,
+                    proposal,
+                    reason=f"duplicates existing truth {row.truth_ref}",
+                )
+        if (
+            proposal.risk is ProposalRisk.HIGH
+            and proposal.requested_lifetime is TruthLifetime.PERSISTENT
+            and (not proposal.resolver_name or not proposal.resolver_approved)
+        ):
+            # Preserve the idea only as turn-scoped inference; never persist it.
+            return None
+        return None
+
     def _target_lifetime(self, proposal: WorldProposal) -> TruthLifetime:
         if proposal.risk is ProposalRisk.HIGH:
             return (
                 TruthLifetime.PERSISTENT
-                if proposal.resolver_approved
+                if proposal.resolver_name and proposal.resolver_approved
                 else TruthLifetime.TURN
             )
         if proposal.requested_lifetime is TruthLifetime.PERSISTENT:
@@ -252,8 +265,7 @@ class ProposalPolicy:
         scene_id: str,
     ) -> bool:
         if target is TruthLifetime.TURN:
-            count = sum(row.lifetime is TruthLifetime.TURN for row in existing)
-            return count >= self.budget.max_turn
+            return sum(row.lifetime is TruthLifetime.TURN for row in existing) >= self.budget.max_turn
         if target is TruthLifetime.SCENE:
             count = sum(
                 row.lifetime is TruthLifetime.SCENE
@@ -261,8 +273,7 @@ class ProposalPolicy:
                 for row in existing
             )
             return count >= self.budget.max_scene
-        count = sum(row.lifetime is TruthLifetime.PERSISTENT for row in existing)
-        return count >= self.budget.max_persistent
+        return sum(row.lifetime is TruthLifetime.PERSISTENT for row in existing) >= self.budget.max_persistent
 
     @staticmethod
     def _acceptance_reason(
