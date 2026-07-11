@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 
+import {
+  deriveLiveConversationStatus,
+  projectLegacyLiveVoiceState,
+} from '../assistant-workspace/live-conversation-state';
 import { CharacterModePanel } from './CharacterModePanel';
 import { LiveConversationControls } from './LiveConversationControls';
 import './LiveChatPanel.css';
@@ -51,6 +55,10 @@ export function invokeExistingLiveCallControl(root: ParentNode = document): bool
   return true;
 }
 
+export function liveCallCharacterName(identity: string): string {
+  return identity.replace(/^Talking to\s+/i, '').trim() || 'Assistant';
+}
+
 export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
   const [snapshot, setSnapshot] = useState<LiveCallSnapshot>(() => readLiveCallSnapshot());
   const [callStatus, setCallStatus] = useState<string | null>(null);
@@ -79,6 +87,9 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
     }
     setCallStatus(snapshot.connected ? 'Ending live call…' : 'Starting live call…');
   }
+
+  const conversationState = projectLegacyLiveVoiceState(snapshot.connected, snapshot.state);
+  const visibleState = deriveLiveConversationStatus(conversationState, liveCallCharacterName(snapshot.identity));
 
   return (
     <section className="assistant-view-panel live-chat-panel" aria-label="Live Chat view">
@@ -115,7 +126,8 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
         </header>
         <dl className="live-chat-metrics">
           <div><dt>Identity</dt><dd>{snapshot.identity}</dd></div>
-          <div><dt>State</dt><dd>{snapshot.state}</dd></div>
+          <div><dt>State</dt><dd>{visibleState}</dd></div>
+          <div><dt>Floor</dt><dd>{conversationState.floorOwner}</dd></div>
           <div><dt>Duplex</dt><dd>{snapshot.duplexMode}</dd></div>
         </dl>
         {callStatus ? <p className="live-chat-note" role="status">{callStatus}</p> : null}
