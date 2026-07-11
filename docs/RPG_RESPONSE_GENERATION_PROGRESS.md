@@ -10,8 +10,8 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 |---:|---|---|---|
 | 0 | complete | labeled deterministic corpus, metrics, holdout manifest, opt-in live benchmark, CI test entry point | exact-head GitHub Actions passed at `7bf797d1cd4953b12042662d3ded5f3f81cac952` |
 | 1 | complete | core contracts, thin orchestrator, response modes, field-aware renderer, legacy shadow adapters | exact-head GitHub Actions passed at `2170a2a80309c94583bd9caf621eb56d98b724b9` |
-| 2 | implemented, CI pending | hard gates, eligible-only ranking, final quality repair, rewrite revalidation | exact-head GitHub Actions pending |
-| 3 | pending | compact context, claim ledger, semantic claim references | pending |
+| 2 | complete | hard gates, eligible-only ranking, final quality repair, rewrite revalidation | exact-head GitHub Actions passed after repair at `363a1fad0b43196240deba26fdf58e6747493fb1` |
+| 3 | implemented, CI pending | compact current-turn context, typed claim ledger, semantic claim validation | exact-head GitHub Actions pending |
 | 4 | pending | intent hypotheses, local retrieval, narrative affordances | pending |
 | 5 | pending | forward strategies and deterministic fallbacks | pending |
 | 6 | pending | proposal-only Hermes recovery | pending |
@@ -45,3 +45,12 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 - Added final-visible quality evaluation for meta language, low-value phrases, duplicate sentences, and repeated openings.
 - Added deterministic section repair and one bounded rewrite attempt.
 - Every rewrite is fully re-evaluated by the hard gates; failed rewrites preserve the last eligible candidate.
+
+## Phase 3 implementation notes
+
+- Added `ClaimLedger` and `ClaimRecord` contracts with typed visibility, provenance, speakers, persistence, and prohibited claims.
+- Added deterministic claim derivation for location, currency, inventory, combat, quests, relationships, discovered facts, and approved proposals.
+- Production RPG grounding cannot be disabled by a false runtime flag.
+- Added compact, current-turn-first `NarrationContext` with scene, entity, speaker, evidence, continuity, agency, style, budget, and truncation traces.
+- Hidden evidence is excluded before prompt payload construction.
+- Added semantic-plan validation requiring factual sections to reference ledger claims or explicitly allowed soft truth.
