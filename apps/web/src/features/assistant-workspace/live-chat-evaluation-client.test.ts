@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  liveChatEvaluationClient,
   suggestPresencePolicy,
   type PresencePolicyVersion,
   type VoiceSessionEvaluationRecord,
@@ -33,6 +34,8 @@ function evaluation(index: number): VoiceSessionEvaluationRecord {
     ended_at: '2026-07-11T12:10:00+00:00',
     exact_commit_sha: 'a'.repeat(40),
     app_version: '1.0.0',
+    browser_version: 'Chrome 150',
+    os_version: 'Windows 11',
     character_id: 'maya',
     profile_version: 4,
     presence_preset: 'natural',
@@ -59,6 +62,25 @@ function evaluation(index: number): VoiceSessionEvaluationRecord {
     updated_at: '2026-07-11T12:10:01+00:00',
   };
 }
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('live chat evaluation client', () => {
+  it('requests the durable aggregate release gate with status persistence', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: 'insufficient' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await liveChatEvaluationClient.releaseGate({ limit: 250, persistStatus: true });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/tts/live-call/evaluations/release-gate?limit=250&persist_status=true',
+      undefined,
+    );
+  });
+});
 
 describe('suggestPresencePolicy', () => {
   it('makes bounded conservative changes from measured pressure and collisions', () => {
