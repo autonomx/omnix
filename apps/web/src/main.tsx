@@ -21,6 +21,7 @@ import './features/assistant-workspace/research-release-controller.css';
 import { initializeChatMessageAudioControllerV2 } from './features/assistant-workspace/chat-message-audio-controller-v2';
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
 import { initializeLiveAvatarPresenceController } from './features/assistant-workspace/live-avatar-presence';
+import { initializeLiveConversationEvaluationController } from './features/assistant-workspace/live-conversation-evaluation-controller';
 import { initializeLiveConversationInitiativeController } from './features/assistant-workspace/live-conversation-initiative-controller';
 import { initializeLiveConversationRepairController } from './features/assistant-workspace/live-conversation-repair-controller';
 import { initializeLiveSpeechDeliveryBridge } from './features/assistant-workspace/live-speech-delivery-bridge';
@@ -57,6 +58,7 @@ initializeLiveVoiceUnifiedAudioController();
 initializeLiveAvatarPresenceController();
 initializeLiveConversationInitiativeController();
 initializeLiveConversationRepairController();
+initializeLiveConversationEvaluationController();
 initializeLiveChatWorkspace();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
