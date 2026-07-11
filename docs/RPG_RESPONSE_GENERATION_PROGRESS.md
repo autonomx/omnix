@@ -6,35 +6,43 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 
 ## Phase status
 
-| Phase | Status | Scope | Validation |
-|---:|---|---|---|
-| 0 | complete | labeled corpus and metrics | passed `7bf797d1cd4953b12042662d3ded5f3f81cac952` |
-| 1 | complete | contracts, orchestrator, renderer | passed `2170a2a80309c94583bd9caf621eb56d98b724b9` |
-| 2 | complete | hard gates, ranking, repair, rewrite revalidation | passed `363a1fad0b43196240deba26fdf58e6747493fb1` |
-| 3 | complete | compact context, claim ledger, semantic references | passed `12f2aad071a5ec42eb52a58da7bcc451fbf07fb2` |
-| 4 | complete | intent, retrieval, speaker boundaries, affordances | passed `6e12ca5b6737f0ccdde76f44476ad6fbadb2d998` |
-| 5 | complete | forward strategies, loop breaking, deterministic fallbacks | passed `f8ea2a5762ca76d5448e6d8dbad104dc6e82369d` |
-| 6 | complete | proposal-only bounded Hermes recovery | passed `89272ea279766e85c3258917efc560fa56f71e81` |
-| 7 | complete | ephemeral truth, budgets, deterministic promotion, replay-safe store | passed `509d44623e5493e3862ccf408b2366668781ee68` |
-| 8 | complete | canonical publication bridge, explicit facade, fixup removal, source guards | passed after compatibility repair `79d57e9c9973cfe38a27a6bfeaf609e3cf11e1ec` |
-| 9 | implemented, CI pending | authoritative profiles, validation-first delivery, caches and latency policy | exact-head GitHub Actions pending |
-| 10 | pending | observability, regression, autoplay, staged rollout | pending |
+| Phase | Status | Scope |
+|---:|---|---|
+| 0 | complete | labeled corpus, live observation runner, deterministic metrics, holdout policy |
+| 1 | complete | canonical contracts, orchestrator, response modes, field-aware renderer |
+| 2 | complete | hard eligibility gates, eligible-only ranking, final quality and revalidation cycle |
+| 3 | complete | compact context, typed claim ledger, strict semantic claim references |
+| 4 | complete | intent hypotheses, ordered local retrieval, speaker knowledge boundaries |
+| 5 | complete | agency-preserving forward strategies, loop breaking, specific deterministic fallbacks |
+| 6 | complete | bounded proposal-only Hermes recovery after local retrieval |
+| 7 | complete | ephemeral soft truth, deterministic promotion, budgets, persistence, expiry and replay |
+| 8 | complete | canonical runtime/scene publication, explicit facade, fixup and bypass removal |
+| 9 | complete | profiles resolved before generation, validation-first delivery, caching and latency policy |
+| 10 | complete | traces, real pipeline regression, 100-turn replay, 1000-turn endurance and staged rollout |
 
-## Completed implementation notes
+## Required-changes integration pass
 
-- Phases 0-3 established deterministic evaluation, canonical response ownership, hard gates, compact context, and typed claims.
-- Phases 4-5 added local affordance recovery, agency-preserving progression, loop breaking, and useful deterministic fallbacks.
-- Phase 6 added bounded proposal-only Hermes research with fail-closed local recovery.
-- Phase 7 added ephemeral-by-default truth, deterministic bounded promotion, replay-safe events, and garbage collection.
-- Phase 8 moved final scene publication behind the canonical generator, removed import-order fixups, and preserved ambient narration through explicit exports.
+The post-review integration pass closes the gaps found after the initial Phase 0-10 implementation:
 
-## Phase 9 implementation notes
+- the normal `apply_turn` narration import and final visible selection now route through the canonical runtime bridge;
+- `RpgProductionResponsePipeline` compiles context, derives a strict claim ledger, classifies intent, retrieves local evidence, selects forward motion, invokes Hermes only when justified, and applies proposal lifetime policy;
+- production responses cannot disable strict claim references;
+- profile policy is resolved before provider generation and bound to provider calls;
+- rollout stage is resolved before visible replacement or sentence/audio delivery, with shadow as the default;
+- public `SceneNarrator` and `play_scene` outputs are canonically validated;
+- deterministic quality repair and candidate reselection guarantee a publishable model-outage fallback;
+- stale narration cannot outrank a current grounded candidate;
+- retrieval ordering is process-stable;
+- unresolved high-risk proposals fail closed instead of entering visible soft truth;
+- proposal stores are mirrored into returned session state and persisted through the runtime session boundary;
+- Phase 0 fixtures are executed through the actual pipeline;
+- deterministic 100-turn and 1000-turn pipeline tests exercise generation, validation, recovery, rendering and bounded proposal state.
 
-- Added one response profile authority backed by the existing RPG prompt-profile registry.
-- Runtime attempts to override provider, model, temperature, tokens, timeout, retries, execution, or delivery settings are recorded and ignored.
-- Utility responses are deterministic; normal supported turns never invoke Hermes; only unresolved investigation and recovery modes may permit bounded Hermes research.
-- Added blocking-path decisions for deterministic, cache, generate, and recover paths with explicit budgets.
-- Added versioned caches for entity, lore, and research context plus deterministic p50/p95 benchmark helpers.
-- Legacy raw provider chunks are no longer forwarded. Complete text is validated, repaired, revalidated, and split into approved sentence or audio-phrase units before delivery.
-- Added delivery validation tokens, checksums, ordered acknowledgements, interruption/cancellation checkpoints, and replay-safe restoration so unheard suffixes remain undelivered.
-- Added first-approved-delivery and per-stage latency trace contracts.
+## Validation
+
+Exact-head GitHub Actions are required before this pull request can leave draft:
+
+- `RPG Phase 0 architecture compliance`
+- `RPG deterministic PR gates`
+
+The final integration head remains pending until both workflows complete successfully.

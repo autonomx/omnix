@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from .candidate_ranker import CandidateRanker, NoEligibleCandidateError
+from .candidate_ranker import CandidateRanker
 from .contracts import (
     AgencyEffect,
     CandidateSource,
@@ -64,34 +64,62 @@ class RpgResponseGenerator:
             self._eligibility.evaluate(candidate, request)
             for candidate in raw_candidates
         )
-        eligible = tuple(candidate for candidate in evaluated if candidate.eligible)
-        if not eligible:
+        if not any(candidate.eligible for candidate in evaluated):
             emergency = self._eligibility.evaluate(self._empty_candidate(request), request)
             evaluated = (*evaluated, emergency)
-            eligible = (emergency,)
 
-        selected = (
-            self._selector(eligible)
+        ranked = (
+            (self._selector(tuple(candidate for candidate in evaluated if candidate.eligible)),)
             if self._selector is not None
-            else self._ranker.select(evaluated)
+            else self._ranker.rank(evaluated)
         )
-        final_candidate, final_report, repair_history, cycle_metadata = self._quality_cycle(
-            request,
-            selected,
-        )
+        quality_attempts: list[dict[str, Any]] = []
+        selected: ResponseCandidate | None = None
+        final_report: QualityReport | None = None
+        repair_history: tuple[str, ...] = ()
+        cycle_metadata: dict[str, Any] = {}
+        for candidate in ranked:
+            current, report, history, metadata = self._quality_cycle(request, candidate)
+            quality_attempts.append(
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "candidate_source": candidate.source.value,
+                    "issues": list(report.issues),
+                    "accepted": report.ok,
+                }
+            )
+            if report.ok:
+                selected = current
+                final_report = report
+                repair_history = history
+                cycle_metadata = metadata
+                break
+
+        if selected is None or final_report is None:
+            emergency = self._eligibility.evaluate(self._empty_candidate(request), request)
+            selected, final_report, repair_history, cycle_metadata = self._quality_cycle(
+                request,
+                emergency,
+            )
+            if not final_report.ok:
+                raise RuntimeError(
+                    "canonical deterministic response failed final quality validation: "
+                    + ",".join(final_report.issues)
+                )
+
         authoritative_deltas = _mapping(
             request.authoritative_turn_result.get("state_delta")
             or request.authoritative_turn_result.get("authoritative_deltas")
         )
         rendered = self._renderer.render(
-            final_candidate.plan,
+            selected.plan,
             authoritative_deltas=authoritative_deltas,
             repair_history=repair_history,
             quality_report=final_report.as_dict(),
             metadata={
                 "turn_id": request.turn_id,
-                "candidate_id": final_candidate.candidate_id,
-                "candidate_source": final_candidate.source.value,
+                "candidate_id": selected.candidate_id,
+                "candidate_source": selected.source.value,
                 "runtime_mode": request.runtime_mode,
                 "candidate_count": len(evaluated),
                 "eligible_candidate_count": len(
@@ -107,8 +135,9 @@ class RpgResponseGenerator:
                         "passed": decision.passed,
                         "reasons": list(decision.reasons),
                     }
-                    for decision in final_candidate.gate_decisions
+                    for decision in selected.gate_decisions
                 ],
+                "quality_candidate_attempts": quality_attempts,
                 **cycle_metadata,
             },
         )
@@ -204,7 +233,7 @@ class RpgResponseGenerator:
                 SemanticSection(
                     section_id="empty.clarification",
                     section_type=SectionType.CLARIFICATION,
-                    text="What would you like to accomplish here?",
+                    text="What outcome are you trying to achieve here?",
                 ),
             ),
             forward_strategy="ask_clarification",

@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping
 
+from .contracts import ResponseMode, coerce_response_mode
 from .orchestration import RpgResponseGenerator
 from .performance import blocking_path_decision
 from .profiles import ResponseGenerationProfile, ResponseProfileRegistry
 
 
 class ProfiledRpgResponseGenerator:
-    """Apply the authoritative profile and blocking policy to canonical output."""
+    """Resolve authoritative policy before any candidate generation occurs."""
 
     def __init__(
         self,
@@ -20,19 +21,27 @@ class ProfiledRpgResponseGenerator:
         self.registry = registry or ResponseProfileRegistry()
 
     def generate(self, request):
-        rendered = self.generator.generate(request)
+        mode = self._request_mode(request)
         result = _mapping(request.authoritative_turn_result)
         recovery_needed = bool(
             result.get("recovery_needed")
-            or result.get("resolver_status") in {"unresolved", "partial"}
-            or rendered.mode.value in {"recovery", "investigation"}
+            or result.get("resolver_status") in {"unresolved", "partial", "unsupported", "no_match"}
+            or mode in {ResponseMode.RECOVERY, ResponseMode.INVESTIGATION}
             and request.runtime_mode not in {"supported_mechanic", "utility"}
         )
         profile, ignored = self.registry.resolve_from_request(
-            rendered.mode,
+            mode,
             request.provider_policy,
             recovery_needed=recovery_needed,
         )
+        profiled_request = replace(
+            request,
+            provider_policy={
+                **dict(request.provider_policy),
+                "_resolved_profile": profile.debug_payload(),
+            },
+        )
+        rendered = self.generator.generate(profiled_request)
         path = blocking_path_decision(
             rendered.mode,
             profile,
@@ -48,6 +57,7 @@ class ProfiledRpgResponseGenerator:
             **dict(rendered.metadata),
             "response_profile": profile.debug_payload(),
             "ignored_runtime_profile_overrides": list(ignored),
+            "profile_resolved_before_generation": True,
             "blocking_path": {
                 "action": path.action,
                 "reason": path.reason,
@@ -62,12 +72,37 @@ class ProfiledRpgResponseGenerator:
 
     def resolve_profile(self, request, mode) -> ResponseGenerationProfile:
         result = _mapping(request.authoritative_turn_result)
-        recovery_needed = bool(result.get("recovery_needed"))
+        recovery_needed = bool(
+            result.get("recovery_needed")
+            or result.get("resolver_status")
+            in {"unresolved", "partial", "unsupported", "no_match"}
+        )
         return self.registry.resolve_from_request(
-            mode,
+            coerce_response_mode(mode),
             request.provider_policy,
             recovery_needed=recovery_needed,
         )[0]
+
+    @staticmethod
+    def _request_mode(request) -> ResponseMode:
+        result = _mapping(request.authoritative_turn_result)
+        resolved = _mapping(
+            result.get("resolved_result")
+            or result.get("resolved_action")
+            or result.get("result")
+        )
+        return coerce_response_mode(
+            result.get("response_mode")
+            or resolved.get("response_mode")
+            or result.get("semantic_family")
+            or resolved.get("semantic_family")
+            or result.get("action_type")
+            or resolved.get("action_type"),
+            ResponseMode.RECOVERY
+            if result.get("resolver_status")
+            in {"unresolved", "partial", "unsupported", "no_match"}
+            else ResponseMode.ACTION,
+        )
 
 
 def _mapping(value: Any) -> dict[str, Any]:
