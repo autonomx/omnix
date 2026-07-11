@@ -1,25 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import {
-  LIVE_VOICE_CALIBRATION_UPDATED_EVENT,
   readLatestLiveVoiceCalibration,
-  resolveCalibrationDuplex,
   runBrowserLiveVoiceCalibration,
-  type LiveVoiceCalibrationRecord,
 } from '../assistant-workspace/live-voice-calibration';
+import { useLiveConversationSelector } from '../assistant-workspace/live-conversation-store';
 
 export function LiveVoiceCalibrationPanel() {
-  const [record, setRecord] = useState<LiveVoiceCalibrationRecord | null>(() => readLatestLiveVoiceCalibration());
+  const duplex = useLiveConversationSelector((state) => state.duplex);
+  const record = duplex.calibration ?? readLatestLiveVoiceCalibration();
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handle = (event: Event) => {
-      setRecord((event as CustomEvent<LiveVoiceCalibrationRecord>).detail ?? readLatestLiveVoiceCalibration());
-    };
-    window.addEventListener(LIVE_VOICE_CALIBRATION_UPDATED_EVENT, handle);
-    return () => window.removeEventListener(LIVE_VOICE_CALIBRATION_UPDATED_EVENT, handle);
-  }, []);
 
   async function calibrate(): Promise<void> {
     if (running) return;
@@ -32,9 +23,8 @@ export function LiveVoiceCalibrationPanel() {
         if (stage === 'speech') setStatus('Say “testing one two” in your normal voice…');
         if (stage === 'complete') setStatus('Calibration complete.');
       });
-      setRecord(next);
       setStatus(next.resolvedMode === 'echo_aware'
-        ? 'Automatic mode can use echo-aware barge-in for this device pair.'
+        ? 'Calibration saved. Automatic mode will verify the current device pair when the call connects.'
         : `Automatic mode will stay safe half-duplex: ${humanReason(next.reason)}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Calibration could not be completed.');
@@ -43,8 +33,7 @@ export function LiveVoiceCalibrationPanel() {
     }
   }
 
-  const resolution = resolveCalibrationDuplex(record);
-  const confidence = Math.round((record?.confidence ?? 0) * 100);
+  const confidence = Math.round(duplex.confidence * 100);
   return (
     <section className="live-chat-card" aria-labelledby="live-chat-calibration-heading">
       <header>
@@ -58,9 +47,9 @@ export function LiveVoiceCalibrationPanel() {
         </button>
       </header>
       <dl className="live-chat-metrics live-chat-calibration-metrics">
-        <div><dt>Resolved mode</dt><dd>{resolution.mode === 'echo_aware' ? 'Echo-aware' : 'Safe half-duplex'}</dd></div>
+        <div><dt>Resolved mode</dt><dd>{duplex.resolvedMode === 'echo_aware' ? 'Echo-aware' : 'Safe half-duplex'}</dd></div>
         <div><dt>Confidence</dt><dd>{confidence}%</dd></div>
-        <div><dt>Status</dt><dd>{record ? humanReason(resolution.reason) : 'Not calibrated'}</dd></div>
+        <div><dt>Status</dt><dd>{record ? humanReason(duplex.reason) : 'Not calibrated'}</dd></div>
         <div><dt>Last calibration</dt><dd>{record ? new Date(record.createdAt).toLocaleString() : 'Never'}</dd></div>
       </dl>
       <p className="live-chat-note">Calibration stores only numeric environment measurements and a device-pair hash. It does not retain conversation audio or transcript text.</p>
