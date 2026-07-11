@@ -24,6 +24,7 @@ import { initializeLiveAvatarPresenceController } from './features/assistant-wor
 import { initializeLiveConversationEvaluationController } from './features/assistant-workspace/live-conversation-evaluation-controller';
 import { initializeLiveConversationInitiativeController } from './features/assistant-workspace/live-conversation-initiative-controller';
 import { initializeLiveConversationRepairController } from './features/assistant-workspace/live-conversation-repair-controller';
+import { initializeLiveConversationStoreBridge } from './features/assistant-workspace/live-conversation-store-bridge';
 import { initializeLiveSpeechDeliveryBridge } from './features/assistant-workspace/live-speech-delivery-bridge';
 import { initializeLiveVoiceAudioDuckBridge } from './features/assistant-workspace/live-voice-audio-duck-bridge';
 import './features/assistant-workspace/live-voice-form-sync';
@@ -52,6 +53,7 @@ const queryClient = new QueryClient({
   },
 });
 
+initializeLiveConversationStoreBridge();
 initializeLiveSpeechDeliveryBridge();
 initializeLiveVoiceAudioDuckBridge();
 initializeLiveVoiceUnifiedAudioController();
