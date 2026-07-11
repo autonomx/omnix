@@ -6,6 +6,7 @@ import {
 } from '../assistant-workspace/live-conversation-state';
 import { CharacterModePanel } from './CharacterModePanel';
 import { LiveConversationControls } from './LiveConversationControls';
+import { LiveConversationEvaluationPanel } from './LiveConversationEvaluationPanel';
 import { LivePronunciationPanel } from './LivePronunciationPanel';
 import './LiveChatPanel.css';
 
@@ -136,6 +137,8 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
         </dl>
         {callStatus ? <p className="live-chat-note" role="status">{callStatus}</p> : null}
       </section>
+
+      <LiveConversationEvaluationPanel />
     </section>
   );
 }
