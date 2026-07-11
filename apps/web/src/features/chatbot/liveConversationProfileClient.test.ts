@@ -41,4 +41,14 @@ describe('liveConversationProfileClient migration', () => {
     });
     expect(window.localStorage.getItem('omnix.liveConversation.serverProfileMigrated.v1')).toBe('done');
   });
+
+  it('does not overwrite server defaults when no legacy settings exist', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(migrateLegacyConversationSettingsOnce()).resolves.toBe(false);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem('omnix.liveConversation.serverProfileMigrated.v1')).toBe('done');
+  });
 });
