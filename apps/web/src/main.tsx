@@ -67,7 +67,7 @@ initializeLiveConversationInitiativeController();
 initializeLiveConversationRepairController();
 initializeLiveConversationEvaluationController();
 initializeLiveConversationDurableEvaluationController();
-initializeLiveChatWorkspace();
+initializeLiveChatWorkspace(queryClient);
 initializeVoiceSessionEvaluationWorkspace();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
