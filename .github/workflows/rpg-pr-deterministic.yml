@@ -247,46 +247,22 @@ jobs:
             rpg-response-autoplay-100/autoplay-transcript.json
           if-no-files-found: warn
 
-      - name: RPG actual 1000-turn endurance gate
-        env:
-          RPG_AUTOPLAY_SKIP_COMBINED_BACKGROUND_LLM: all
+      - name: RPG actual 1000-turn runtime endurance gate
         run: |
           set -o pipefail
-          rm -rf rpg-response-autoplay-1000
-          python -m tests.rpg.autoplay_llm_campaign \
-            --autoplay-profile smoke_100 \
+          python scripts/run_rpg_response_runtime_endurance.py \
             --turns 1000 \
-            --session-id response-generation-ci-1000 \
-            --scenario-seed tavern_story_seed \
-            --player-agent scripted \
-            --strategy goal_directed_quest_runner \
-            --autoplay-base-response deterministic \
-            --narration-mode deferred \
-            --background-llm-mode combined \
-            --checkpoint-every 100 \
-            --checkpoint-mode blocking \
-            --artifact-detail summary \
-            --transcript-detail auto \
-            --strict-eval-turns 1000 \
-            --fail-on-runtime-error \
-            --fail-on-compatibility-turn-runtime \
-            --output-dir rpg-response-autoplay-1000 \
-            --no-capture-console-log 2>&1 | tee rpg-response-autoplay-1000-output.txt
-          python scripts/validate_rpg_response_autoplay_summary.py \
-            --summary rpg-response-autoplay-1000/autoplay-summary.json \
-            --expected-turns 1000 \
-            --report rpg-response-autoplay-1000-gate.json
+            --output rpg-response-runtime-endurance-1000.json \
+            2>&1 | tee rpg-response-runtime-endurance-1000-output.txt
 
-      - name: Upload 1000-turn autoplay diagnostics
+      - name: Upload 1000-turn runtime endurance diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rpg-response-autoplay-1000
+          name: rpg-response-runtime-endurance-1000
           path: |
-            rpg-response-autoplay-1000-output.txt
-            rpg-response-autoplay-1000-gate.json
-            rpg-response-autoplay-1000/autoplay-summary.json
-            rpg-response-autoplay-1000/autoplay-transcript.json
+            rpg-response-runtime-endurance-1000-output.txt
+            rpg-response-runtime-endurance-1000.json
           if-no-files-found: warn
 
       - name: RPG representative deterministic smoke
