@@ -20,7 +20,6 @@ type RuntimeDetail = {
 };
 
 const RUNTIME_EVENT = 'omnix:character-avatar-runtime';
-const FRAME_EVENT = 'omnix:character-avatar-frame';
 const RIG_VISEME_EVENT = 'omnix:character-rig-viseme';
 const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
 const INSTALL_KEY = '__omnixCharacterVisemeBridgeInstalled';
@@ -89,9 +88,6 @@ function install(): void {
   window.addEventListener(RUNTIME_EVENT, (event) => {
     runtime = (event as CustomEvent<RuntimeDetail | null>).detail;
     currentViseme = 'silence';
-  });
-  window.addEventListener(FRAME_EVENT, () => {
-    if (runtime?.avatar_pack?.render_mode === 'viseme') window.setTimeout(() => renderViseme(currentViseme), 0);
   });
   installFetchMonitor();
 }
