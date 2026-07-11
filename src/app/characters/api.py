@@ -10,6 +10,12 @@ from fastapi.responses import StreamingResponse
 
 from app.assistant_memory import default_memory_service, resolve_chat_scope
 from app.chat.live_call_greeting import stream_live_call_greeting_chunks
+from app.chat.live_conversation_proactive import (
+    ProactiveDeliveryRequest,
+    ProactiveDeliveryResponse,
+    commit_proactive_delivery,
+    stream_proactive_turn_chunks,
+)
 from app.chat.models import ChatSession
 
 from .hermes_adapter import (
@@ -299,23 +305,49 @@ def register_character_routes(
         tags=["characters"],
         include_in_schema=False,
     )
-    async def stream_live_call_greeting(session_id: str) -> StreamingResponse:
+    async def stream_live_call_greeting(
+        session_id: str,
+        purpose: str = Query(default="greeting"),
+        initiative_reason: str = Query(default="quiet_follow_up", max_length=120),
+        state_summary: str | None = Query(default=None, max_length=500),
+    ) -> StreamingResponse:
         store = chat_store_factory()
-        session = store.get_session(session_id)
-        if session is None:
-            raise HTTPException(status_code=404, detail="chat session not found")
+        session = require_session(session_id)
 
         def generate():
             try:
-                for event in stream_live_call_greeting_chunks(store, session):
+                events = stream_proactive_turn_chunks(
+                    store,
+                    session,
+                    initiative_reason=initiative_reason,
+                    state_summary=state_summary,
+                ) if purpose == "proactive_reengagement" else stream_live_call_greeting_chunks(store, session)
+                for event in events:
                     yield f"data: {json.dumps(event, sort_keys=True)}\n\n"
                 yield f"data: {json.dumps({'type': 'done'}, sort_keys=True)}\n\n"
             except GeneratorExit:
                 raise
             except Exception as exc:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(exc) or 'Live-call greeting failed.'}, sort_keys=True)}\n\n"
+                label = "Proactive live-conversation turn" if purpose == "proactive_reengagement" else "Live-call greeting"
+                yield f"data: {json.dumps({'type': 'error', 'message': str(exc) or f'{label} failed.'}, sort_keys=True)}\n\n"
 
         return StreamingResponse(generate(), media_type="text/event-stream")
+
+    @app.post(
+        "/api/chat/sessions/{session_id}/live-conversation/proactive/delivery",
+        response_model=ProactiveDeliveryResponse,
+        tags=["live-chat"],
+        include_in_schema=False,
+    )
+    async def commit_live_conversation_proactive_delivery(
+        session_id: str,
+        request: ProactiveDeliveryRequest,
+    ) -> ProactiveDeliveryResponse:
+        require_session(session_id)
+        result = commit_proactive_delivery(chat_store_factory(), session_id, request)
+        if result is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+        return result
 
 
 __all__ = ["register_character_routes"]
