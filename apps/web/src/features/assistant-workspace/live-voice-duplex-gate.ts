@@ -5,6 +5,12 @@ import {
   type LiveConversationProfile,
 } from '../chatbot/liveConversationProfileClient';
 import { assessAcousticBargeIn, calculatePcm16Rms } from './live-voice-barge-in-detector';
+import {
+  LIVE_VOICE_CALIBRATION_UPDATED_EVENT,
+  readLatestLiveVoiceCalibration,
+  resolveCalibrationDuplex,
+  type LiveVoiceCalibrationRecord,
+} from './live-voice-calibration';
 
 const PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const PLAYBACK_PCM_EVENT = 'omnix:character-avatar-pcm';
@@ -20,6 +26,7 @@ const CANDIDATE_TIMEOUT_MS = 1_500;
 let announcedSpeaking = false;
 let assistantSpeaking = false;
 let configuredMode: DuplexMode = 'automatic';
+let activeCalibration: LiveVoiceCalibrationRecord | null = null;
 let playbackRms = 0;
 let playbackReferenceAt = 0;
 let candidateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -27,14 +34,19 @@ let ducked = false;
 
 export type ResolvedDuplexMode = 'half_duplex' | 'echo_aware';
 
-export function resolveDuplexMode(mode: DuplexMode, echoAwareSupported = true): ResolvedDuplexMode {
-  if (mode === 'echo_aware' && echoAwareSupported) return 'echo_aware';
-  return 'half_duplex';
+export function resolveDuplexMode(
+  mode: DuplexMode,
+  echoAwareSupported = true,
+  calibration: LiveVoiceCalibrationRecord | null = readLatestLiveVoiceCalibration(),
+): ResolvedDuplexMode {
+  if (!echoAwareSupported || mode === 'half_duplex') return 'half_duplex';
+  if (mode === 'echo_aware') return 'echo_aware';
+  return resolveCalibrationDuplex(calibration).mode;
 }
 
 export function shouldMuteLiveMic(
   speaking: boolean,
-  mode: ResolvedDuplexMode = resolveDuplexMode(configuredMode),
+  mode: ResolvedDuplexMode = resolveDuplexMode(configuredMode, true, activeCalibration),
 ): boolean {
   return speaking && mode === 'half_duplex';
 }
@@ -45,6 +57,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
   if (!mediaDevices?.getUserMedia) return () => undefined;
 
   configuredMode = readEffectiveLiveConversationProfile()?.duplex_mode ?? 'automatic';
+  activeCalibration = readLatestLiveVoiceCalibration();
   const originalGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices);
   const patchedGetUserMedia: typeof mediaDevices.getUserMedia = async (constraints) => {
     const stream = await originalGetUserMedia(constraints);
@@ -65,6 +78,12 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     clearCandidate('duplex-mode-changed');
     applyDuplexGate();
   };
+  const handleCalibration = (event: Event): void => {
+    activeCalibration = (event as CustomEvent<LiveVoiceCalibrationRecord>).detail
+      ?? readLatestLiveVoiceCalibration();
+    clearCandidate('calibration-updated');
+    applyDuplexGate();
+  };
   const handlePlaybackPcm = (event: Event): void => {
     const detail = (event as CustomEvent<{ samples?: Int16Array }>).detail;
     if (!(detail?.samples instanceof Int16Array)) return;
@@ -72,7 +91,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     playbackReferenceAt = performance.now();
   };
   const handleUserSpeech = (event: Event): void => {
-    if (!assistantSpeaking || resolveDuplexMode(configuredMode) !== 'echo_aware') return;
+    if (!assistantSpeaking || resolveDuplexMode(configuredMode, true, activeCalibration) !== 'echo_aware') return;
     const detail = (event as CustomEvent<{ rms?: number; assistantSpeaking?: boolean }>).detail;
     const microphoneRms = typeof detail?.rms === 'number' ? detail.rms : 0;
     const assessment = assessAcousticBargeIn({
@@ -80,7 +99,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
       microphoneRms,
       playbackRms,
       playbackReferenceAgeMs: Math.max(0, performance.now() - playbackReferenceAt),
-      speechThreshold: 0.012,
+      speechThreshold: adaptiveSpeechThreshold(activeCalibration),
     });
     dispatchPerf('barge_in_acoustic_candidate', {
       decision: assessment.decision,
@@ -89,6 +108,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
       microphone_rms: assessment.microphoneRms,
       playback_rms: assessment.playbackRms,
       energy_ratio: assessment.energyRatio,
+      calibration_confidence: activeCalibration?.confidence ?? 0,
     });
     if (assessment.decision === 'likely_echo' || assessment.decision === 'no_playback') return;
     setDucked(true, assessment.reason);
@@ -113,6 +133,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
 
   window.addEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
   window.addEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
+  window.addEventListener(LIVE_VOICE_CALIBRATION_UPDATED_EVENT, handleCalibration);
   window.addEventListener(PLAYBACK_PCM_EVENT, handlePlaybackPcm);
   window.addEventListener(USER_SPEECH_EVENT, handleUserSpeech);
   window.addEventListener(PERF_EVENT, handlePerf);
@@ -134,6 +155,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     observer.disconnect();
     window.removeEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
     window.removeEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
+    window.removeEventListener(LIVE_VOICE_CALIBRATION_UPDATED_EVENT, handleCalibration);
     window.removeEventListener(PLAYBACK_PCM_EVENT, handlePlaybackPcm);
     window.removeEventListener(USER_SPEECH_EVENT, handleUserSpeech);
     window.removeEventListener(PERF_EVENT, handlePerf);
@@ -143,6 +165,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     announcedSpeaking = false;
     assistantSpeaking = false;
     configuredMode = 'automatic';
+    activeCalibration = null;
     playbackRms = 0;
     playbackReferenceAt = 0;
     clearCandidate('gate-disposed');
@@ -177,7 +200,8 @@ function trackLiveVoiceStream(stream: MediaStream): void {
 }
 
 function applyDuplexGate(): void {
-  const resolvedMode = resolveDuplexMode(configuredMode);
+  const resolvedMode = resolveDuplexMode(configuredMode, true, activeCalibration);
+  const calibration = resolveCalibrationDuplex(activeCalibration);
   const enabled = !shouldMuteLiveMic(assistantSpeaking, resolvedMode);
   for (const stream of Array.from(trackedStreams)) {
     const tracks = stream.getAudioTracks();
@@ -189,10 +213,17 @@ function applyDuplexGate(): void {
   }
   document.querySelectorAll<HTMLElement>('.assistant-live-card').forEach((card) => {
     card.dataset.duplexMode = resolvedMode;
+    card.dataset.duplexReason = configuredMode === 'automatic' ? calibration.reason : 'explicit_user_selection';
+    card.dataset.calibrationConfidence = String(activeCalibration?.confidence ?? 0);
     card.dataset.duplexGate = assistantSpeaking
       ? resolvedMode === 'echo_aware' ? 'echo-aware-listening' : 'assistant-speaking'
       : 'listening';
   });
+}
+
+function adaptiveSpeechThreshold(calibration: LiveVoiceCalibrationRecord | null): number {
+  if (!calibration) return 0.012;
+  return Math.max(0.008, Math.min(0.08, calibration.noiseFloorRms * 2.6));
 }
 
 function setDucked(value: boolean, reason: string): void {
