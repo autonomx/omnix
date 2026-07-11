@@ -26,15 +26,19 @@ describe('liveConversationProfileClient migration', () => {
       interruptionPreference: 'easy',
       backchannelMode: 'natural',
     }));
-    const fetchMock = vi.fn(async () => Response.json(profile));
+    const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ input, init });
+      return Response.json(profile);
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(migrateLegacyConversationSettingsOnce()).resolves.toBe(true);
     await expect(migrateLegacyConversationSettingsOnce()).resolves.toBe(false);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/live-chat/profile/defaults');
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+    expect(requests[0]?.input).toBe('/api/live-chat/profile/defaults');
+    expect(JSON.parse(String(requests[0]?.init?.body))).toEqual({
       conversation_pace: 'reflective',
       interruption_preference: 'easy',
       assistant_backchannel_mode: 'natural',
@@ -43,7 +47,7 @@ describe('liveConversationProfileClient migration', () => {
   });
 
   it('does not overwrite server defaults when no legacy settings exist', async () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(profile));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(migrateLegacyConversationSettingsOnce()).resolves.toBe(false);
