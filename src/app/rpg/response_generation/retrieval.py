@@ -149,7 +149,9 @@ def _score(query_tokens: set[str], record: EvidenceRecord) -> float:
     else:
         overlap = len(query_tokens & searchable) / max(1, len(query_tokens))
     alias_bonus = 0.35 if query_tokens & alias_tokens else 0.0
-    exact_bonus = 0.25 if " ".join(query_tokens) and " ".join(query_tokens) in " ".join(searchable) else 0.0
+    query_key = " ".join(sorted(query_tokens))
+    searchable_key = " ".join(sorted(searchable))
+    exact_bonus = 0.25 if query_key and query_key in searchable_key else 0.0
     return round((overlap + alias_bonus + exact_bonus) * max(0.0, min(1.0, record.confidence)), 6)
 
 
