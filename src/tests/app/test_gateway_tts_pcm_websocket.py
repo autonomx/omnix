@@ -30,15 +30,18 @@ def test_chat_stream_policy_uses_fast_mode_and_text_relative_token_budget() -> N
     request = TtsStreamRequest.model_validate(
         {
             "text": captured_text,
+            "max_new_tokens": 1_024,
             "parity_mode": True,
+            "repetition_penalty": 1.0,
             "diagnostics_stream_id": "chat-captured-example",
         }
     )
 
     assert len(captured_text) == 149
-    assert estimate_chat_stream_max_new_tokens(captured_text) == 235
-    assert request.max_new_tokens == 235
+    assert estimate_chat_stream_max_new_tokens(captured_text) == 192
+    assert request.max_new_tokens == 192
     assert request.parity_mode is False
+    assert request.repetition_penalty == 1.05
 
 
 def test_live_chat_stream_policy_uses_fast_mode_with_provider_fallback() -> None:
@@ -47,12 +50,14 @@ def test_live_chat_stream_policy_uses_fast_mode_with_provider_fallback() -> None
         {
             "text": captured_text,
             "parity_mode": True,
+            "repetition_penalty": 1.0,
             "diagnostics_stream_id": "chat-live-session-p0",
         }
     )
 
     assert request.max_new_tokens == estimate_chat_stream_max_new_tokens(captured_text)
     assert request.parity_mode is False
+    assert request.repetition_penalty == 1.05
 
 
 def test_non_chat_stream_preserves_explicit_runtime_settings() -> None:
@@ -61,12 +66,14 @@ def test_non_chat_stream_preserves_explicit_runtime_settings() -> None:
             "text": "Diagnostic parity request",
             "max_new_tokens": 333,
             "parity_mode": True,
+            "repetition_penalty": 1.0,
             "diagnostics_stream_id": "manual-diagnostic",
         }
     )
 
     assert request.max_new_tokens == 333
     assert request.parity_mode is True
+    assert request.repetition_penalty == 1.0
 
 
 def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkeypatch) -> None:
@@ -135,7 +142,8 @@ def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkey
     assert provider.calls[0]["chunk_size"] == 8
     assert provider.calls[0]["non_streaming_mode"] is False
     assert provider.calls[0]["parity_mode"] is False
-    assert provider.calls[0]["max_new_tokens"] == 192
+    assert provider.calls[0]["repetition_penalty"] == 1.05
+    assert provider.calls[0]["max_new_tokens"] == 96
 
     event_names = [event for _stream_id, _source, event, _details in logged_events]
     assert "request_received" in event_names
