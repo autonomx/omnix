@@ -133,7 +133,7 @@ export function isLiveVoiceCalibrationValid(
   record: LiveVoiceCalibrationRecord | null,
   deviceKey?: string | null,
   now = Date.now(),
-): record is LiveVoiceCalibrationRecord {
+): boolean {
   return Boolean(
     record
     && record.version === LIVE_VOICE_CALIBRATION_VERSION
@@ -203,7 +203,7 @@ export async function runBrowserLiveVoiceCalibration(
     const noise = await collectAnalyserSamples(analyser, 450);
     const reference = buildCalibrationChirp(context.sampleRate, 1_000);
     const buffer = context.createBuffer(1, reference.length, context.sampleRate);
-    buffer.copyToChannel(reference, 0);
+    buffer.getChannelData(0).set(reference);
     const playback = context.createBufferSource();
     playback.buffer = buffer;
     playback.connect(context.destination);
