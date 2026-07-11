@@ -12,6 +12,7 @@ from .baseline import (
     load_baseline_scenarios,
     validate_scenarios,
 )
+from .candidate_ranker import CandidateRanker, NoEligibleCandidateError
 from .contracts import (
     AgencyEffect,
     CandidateSource,
@@ -25,12 +26,14 @@ from .contracts import (
     SemanticResponsePlan,
     SemanticSection,
 )
+from .eligibility import EligibilityPolicy, eligibility_reasons
 from .orchestration import (
     RpgResponseGenerator,
     build_runtime_shadow_report,
     build_world_scene_shadow_report,
     semantic_plan_from_legacy_payload,
 )
+from .quality_gate import QualityGate, QualityReport
 from .renderer import ResponseRenderer
 
 __all__ = [
@@ -38,8 +41,13 @@ __all__ = [
     "BaselineMetrics",
     "BaselineObservation",
     "BaselineScenario",
+    "CandidateRanker",
     "CandidateSource",
+    "EligibilityPolicy",
     "GateDecision",
+    "NoEligibleCandidateError",
+    "QualityGate",
+    "QualityReport",
     "RenderedResponse",
     "ResponseCandidate",
     "ResponseMode",
@@ -52,6 +60,7 @@ __all__ = [
     "SemanticSection",
     "build_runtime_shadow_report",
     "build_world_scene_shadow_report",
+    "eligibility_reasons",
     "evaluate_baseline",
     "load_baseline_scenarios",
     "semantic_plan_from_legacy_payload",
