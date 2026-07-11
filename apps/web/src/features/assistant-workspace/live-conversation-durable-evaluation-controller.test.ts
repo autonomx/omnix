@@ -116,7 +116,9 @@ describe('durable Live Conversation evaluation controller', () => {
   });
 
   it('posts one record on call stop and counts EOS reasons', async () => {
-    const fetchMock = vi.fn(async () => Response.json({ evaluation_id: 'evaluation-one' }));
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => (
+      Response.json({ evaluation_id: 'evaluation-one' })
+    ));
     vi.stubGlobal('fetch', fetchMock);
     const dispose = initializeLiveConversationDurableEvaluationController();
 
@@ -127,8 +129,8 @@ describe('durable Live Conversation evaluation controller', () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-stop'));
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(String(init.body));
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String(init?.body));
     expect(body.eos_termination_counts.natural_eos).toBe(1);
     expect(body.release_gate_status).toBe('insufficient');
     dispose();
