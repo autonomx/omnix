@@ -1,0 +1,249 @@
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+
+import {
+  selectLiveChatSnapshot,
+  useLiveConversationState,
+} from '../assistant-workspace/live-conversation-store';
+import {
+  exitLiveChatFullscreen,
+  useLiveChatFullscreenState,
+} from './live-chat-fullscreen-controller';
+import {
+  invokeExistingLiveCallControl,
+  readLiveChatMirroredAvatar,
+  readLiveChatMirroredMessages,
+  submitLiveChatMessageThroughExistingComposer,
+  type LiveChatMirroredAvatar,
+  type LiveChatMirroredMessage,
+} from './live-chat-runtime-adapters';
+import './LiveChatFullscreenShell.css';
+
+const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
+const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
+const PRESENTATION_UPDATE_DELAY_MS = 24;
+
+export function LiveChatFullscreenShell() {
+  const fullscreen = useLiveChatFullscreenState();
+  const runtime = useLiveConversationState();
+  const snapshot = selectLiveChatSnapshot(runtime);
+  const [messages, setMessages] = useState<LiveChatMirroredMessage[]>(() => readLiveChatMirroredMessages());
+  const [avatar, setAvatar] = useState<LiveChatMirroredAvatar>(() => readLiveChatMirroredAvatar());
+  const [composerText, setComposerText] = useState('');
+  const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const shellRef = useRef<HTMLElement | null>(null);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!fullscreen.immersive) return;
+    let timer: number | null = null;
+    const refresh = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        setMessages(readLiveChatMirroredMessages());
+        setAvatar(readLiveChatMirroredAvatar());
+      }, PRESENTATION_UPDATE_DELAY_MS);
+    };
+    const observer = new MutationObserver(refresh);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['src', 'style', 'data-mouth-frame', 'data-voice-mode'],
+    });
+    window.addEventListener(AVATAR_RUNTIME_EVENT, refresh);
+    window.addEventListener(AVATAR_FRAME_EVENT, refresh);
+    refresh();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener(AVATAR_RUNTIME_EVENT, refresh);
+      window.removeEventListener(AVATAR_FRAME_EVENT, refresh);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [fullscreen.immersive]);
+
+  useEffect(() => {
+    if (!fullscreen.immersive) return;
+    shellRef.current?.focus({ preventScroll: true });
+  }, [fullscreen.immersive]);
+
+  useEffect(() => {
+    const transcript = transcriptRef.current;
+    if (!transcript || !fullscreen.immersive) return;
+    transcript.scrollTop = transcript.scrollHeight;
+  }, [fullscreen.immersive, messages, runtime.transcript.partial]);
+
+  const stageMode = useMemo(() => {
+    const conversation = runtime.conversation;
+    if (conversation.connection === 'connecting') return 'connecting';
+    if (conversation.connection === 'disconnected') return 'idle';
+    if (conversation.bargeIn === 'ducking' || conversation.bargeIn === 'confirming') return 'yielding';
+    if (conversation.assistantTurn === 'speaking' || conversation.delivery === 'audio_started') return 'speaking';
+    if (conversation.assistantTurn === 'planning' || conversation.assistantTurn === 'generating') return 'thinking';
+    if (conversation.userTurn === 'speaking' || conversation.floorOwner === 'user') return 'listening';
+    return 'ready';
+  }, [runtime.conversation]);
+
+  if (!fullscreen.immersive || typeof document === 'undefined') return null;
+
+  const microphoneStatus = !snapshot.connected
+    ? 'Microphone offline'
+    : runtime.conversation.assistantTurn === 'speaking' && snapshot.duplexMode === 'half_duplex'
+      ? 'Microphone paused during playback'
+      : runtime.conversation.userTurn === 'speaking'
+        ? 'Hearing you'
+        : 'Microphone listening';
+  const duplexLabel = snapshot.duplexMode === 'echo_aware' ? 'Echo-aware' : 'Safe half-duplex';
+
+  function toggleCall(): void {
+    if (!invokeExistingLiveCallControl()) {
+      setActionStatus('The existing Live Voice controls are not available yet.');
+      return;
+    }
+    setActionStatus(snapshot.connected ? 'Ending live call…' : 'Starting live call…');
+  }
+
+  function submitMessage(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    if (!composerText.trim()) return;
+    if (!submitLiveChatMessageThroughExistingComposer(composerText)) {
+      setActionStatus('The existing chat composer is not available yet.');
+      return;
+    }
+    setComposerText('');
+    setActionStatus('Message sent through the current chat session.');
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  }
+
+  return createPortal(
+    <section
+      ref={shellRef}
+      className={`live-chat-fullscreen-shell mode-${stageMode}`}
+      data-live-chat-fullscreen-shell
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Immersive Live Chat with ${snapshot.identity}`}
+      tabIndex={-1}
+    >
+      <div className="live-chat-fullscreen-topbar">
+        <div className="live-chat-fullscreen-brand">
+          <span aria-hidden="true">✦</span>
+          <div><strong>Omnix Live</strong><small>Immersive conversation</small></div>
+        </div>
+        <div className="live-chat-fullscreen-topbar-actions">
+          <span className={snapshot.connected ? 'connected' : undefined}>
+            <i aria-hidden="true" />{snapshot.connected ? `Live with ${snapshot.identity}` : 'Call idle'}
+          </span>
+          <button type="button" onClick={() => void exitLiveChatFullscreen()} aria-label="Exit fullscreen Live Chat">Exit fullscreen</button>
+        </div>
+      </div>
+
+      <main className="live-chat-fullscreen-layout">
+        <LiveCharacterStage
+          avatar={avatar}
+          identity={snapshot.identity}
+          status={snapshot.state}
+          stageMode={stageMode}
+        />
+
+        <aside className="live-chat-fullscreen-rail" aria-label="Live conversation">
+          <header>
+            <div><p className="eyebrow">Private conversation</p><h1>Talk with {snapshot.identity}</h1></div>
+            <span>{fullscreen.browserState === 'active' ? 'Browser fullscreen' : 'Immersive view'}</span>
+          </header>
+
+          <div className="live-chat-fullscreen-transcript" role="log" aria-live="polite" ref={transcriptRef}>
+            {messages.length ? messages.slice(-24).map((message) => (
+              <article className={message.role} key={message.id}>
+                <header><strong>{message.label}</strong>{message.timestamp ? <time dateTime={message.timestamp}>{formatTime(message.timestamp)}</time> : null}</header>
+                <p>{message.text}</p>
+              </article>
+            )) : (
+              <div className="live-chat-fullscreen-empty">
+                <span aria-hidden="true">✦</span>
+                <p>Your conversation will appear here. Start the call or send a message.</p>
+              </div>
+            )}
+            {runtime.transcript.partial ? (
+              <article className="user partial"><header><strong>You</strong><span>Listening…</span></header><p>{runtime.transcript.partial}</p></article>
+            ) : null}
+          </div>
+
+          <section className="live-chat-fullscreen-call-card" aria-label="Live voice controls">
+            <div>
+              <strong>Live voice</strong>
+              <span>{microphoneStatus} · {duplexLabel}</span>
+            </div>
+            <button className={snapshot.connected ? 'danger' : undefined} type="button" onClick={toggleCall}>
+              <span aria-hidden="true">{snapshot.connected ? '■' : '●'}</span>
+              {snapshot.connected ? 'End voice chat' : 'Start voice chat'}
+            </button>
+            <small>{snapshot.state}. You can interrupt naturally when echo-aware mode is active.</small>
+          </section>
+
+          <form className="live-chat-fullscreen-composer" onSubmit={submitMessage}>
+            <label>
+              <span>Message {snapshot.identity}</span>
+              <textarea
+                rows={2}
+                value={composerText}
+                placeholder="Write a message…"
+                onChange={(event) => setComposerText(event.currentTarget.value)}
+                onKeyDown={handleComposerKeyDown}
+              />
+            </label>
+            <button type="submit" aria-label="Send fullscreen Live Chat message" disabled={!composerText.trim()}>➤</button>
+          </form>
+
+          <footer>
+            <span>{actionStatus ?? 'Audio and conversation state remain owned by the current Live Chat session.'}</span>
+            <button type="button" onClick={() => void exitLiveChatFullscreen()}>Return to Live Chat settings</button>
+          </footer>
+        </aside>
+      </main>
+    </section>,
+    document.body,
+  );
+}
+
+function LiveCharacterStage({
+  avatar,
+  identity,
+  status,
+  stageMode,
+}: {
+  avatar: LiveChatMirroredAvatar;
+  identity: string;
+  status: string;
+  stageMode: string;
+}) {
+  const initial = identity.trim().charAt(0).toLocaleUpperCase() || 'O';
+  const stageStyle = avatar.backgroundImage ? { backgroundImage: avatar.backgroundImage } : undefined;
+  return (
+    <section className="live-chat-character-stage" style={stageStyle} aria-label={`${identity} character stage`}>
+      <div className="live-chat-stage-stars" aria-hidden="true" />
+      <header><div><p className="eyebrow">Live room</p><h2>{identity}</h2></div><span>{title(stageMode)}</span></header>
+      <div className="live-chat-stage-avatar" data-mouth-frame={avatar.mouthFrame} data-voice-mode={avatar.voiceMode}>
+        {avatar.imageUrl ? <img src={avatar.imageUrl} alt={avatar.alt} /> : <div className="live-chat-stage-fallback" aria-label={`${identity} visual placeholder`}><span>{initial}</span><i aria-hidden="true" /></div>}
+      </div>
+      <div className="live-chat-stage-caption" aria-live="polite"><i aria-hidden="true" /><span>{status}</span></div>
+      <footer><span>Character-first mode</span><span>{avatar.imageUrl ? 'Avatar animation linked' : 'System visual fallback'}</span></footer>
+    </section>
+  );
+}
+
+function formatTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function title(value: string): string {
+  return value.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toLocaleUpperCase());
+}
