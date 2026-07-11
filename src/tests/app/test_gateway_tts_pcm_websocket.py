@@ -41,6 +41,20 @@ def test_chat_stream_policy_uses_fast_mode_and_text_relative_token_budget() -> N
     assert request.parity_mode is False
 
 
+def test_live_chat_stream_policy_uses_safe_parity_mode_and_token_budget() -> None:
+    captured_text = "Live voice must avoid CUDA graph capture failures."
+    request = TtsStreamRequest.model_validate(
+        {
+            "text": captured_text,
+            "parity_mode": False,
+            "diagnostics_stream_id": "chat-live-session-p0",
+        }
+    )
+
+    assert request.max_new_tokens == estimate_chat_stream_max_new_tokens(captured_text)
+    assert request.parity_mode is True
+
+
 def test_non_chat_stream_preserves_explicit_runtime_settings() -> None:
     request = TtsStreamRequest.model_validate(
         {
