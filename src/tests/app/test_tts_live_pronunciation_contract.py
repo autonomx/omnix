@@ -1,4 +1,8 @@
-from app.gateway.tts_stream_contract import TtsStreamRequest, apply_pronunciation_lexicon
+from app.gateway.tts_stream_contract import (
+    TtsPronunciationEntry,
+    TtsStreamRequest,
+    apply_pronunciation_lexicon,
+)
 
 
 def test_pronunciation_lexicon_rewrites_synthesized_text_only() -> None:
@@ -24,8 +28,8 @@ def test_pronunciation_longest_phrase_wins_and_is_bounded() -> None:
     result = apply_pronunciation_lexicon(
         "New York and York",
         [
-            {"phrase": "York", "pronunciation": "YORK"},
-            {"phrase": "New York", "pronunciation": "NEW-YORK"},
+            TtsPronunciationEntry(phrase="York", pronunciation="YORK"),
+            TtsPronunciationEntry(phrase="New York", pronunciation="NEW-YORK"),
         ],
     )
 
