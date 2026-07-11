@@ -46,6 +46,7 @@ import {
 
 let cleanup: (() => void) | null = null;
 let streamEvents: Array<Record<string, unknown>> | null = null;
+let greetingEvents: Array<Record<string, unknown>> | null = null;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 function renderLiveVoice(active = true, autoSpeak = true): void {
@@ -69,12 +70,36 @@ function chatStreamResponse(events: Array<Record<string, unknown>> = [
   return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
 }
 
+function greetingStreamResponse(): Response {
+  return chatStreamResponse(greetingEvents ?? [
+    { type: 'text_chunk', text: 'Hey there! How is your day going?' },
+    { type: 'complete', content: 'Hey there! How is your day going?', metadata: { transient: true } },
+    { type: 'done' },
+  ]);
+}
+
+function requestPath(input: RequestInfo | URL): string {
+  const raw = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+  return new URL(raw, window.location.origin).pathname;
+}
+
 beforeEach(() => {
   renderLiveVoice();
   streamEvents = null;
+  greetingEvents = null;
   window.localStorage.clear();
   window.localStorage.setItem('omnix.chatbot.assistantSettings', JSON.stringify({ voiceId: 'Jinx' }));
-  fetchMock = vi.fn(async () => chatStreamResponse(streamEvents ?? undefined));
+  fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const path = requestPath(input);
+    if (path.endsWith('/live-call/runtime')) {
+      return new Response(JSON.stringify({ session_id: 's1', greeting: '' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (path.endsWith('/live-call/greeting/stream')) return greetingStreamResponse();
+    return chatStreamResponse(streamEvents ?? undefined);
+  });
   vi.stubGlobal('fetch', fetchMock);
   mocks.session.enqueuePhrase.mockReset().mockResolvedValue(undefined);
   mocks.session.finish.mockReset().mockResolvedValue(undefined);
@@ -148,9 +173,66 @@ describe('live voice unified audio controller', () => {
     await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_finished',
-      expect.objectContaining({ phrases: 2, text_chunks: 2, assistant_turn_id: 'assistant-turn:t1' }),
+      expect.objectContaining({ phrases: 2, text_chunks: 2, assistant_turn_id: 'assistant-turn:t1', turn_kind: 'response' }),
     ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
+  });
+
+  it('generates one transient greeting only after runtime and microphone connection are ready', async () => {
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
+    await window.fetch('/api/chat/sessions/s1/live-call/runtime');
+    expect(fetchMock.mock.calls.some(([input]) => requestPath(input).endsWith('/live-call/greeting/stream'))).toBe(false);
+
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
+
+    await waitFor(() => expect(
+      fetchMock.mock.calls.some(([input]) => requestPath(input).endsWith('/live-call/greeting/stream')),
+    ).toBe(true));
+    await waitFor(() => expect(mocks.session.enqueuePhrase).toHaveBeenCalledWith(
+      'Hey there! How is your day going?',
+      0,
+    ));
+    expect(mocks.recordSpy).toHaveBeenCalledWith(
+      'turn_intercepted',
+      expect.objectContaining({ turn_kind: 'greeting', request_path: '/api/chat/sessions/s1/live-call/greeting/stream' }),
+      'controller',
+    );
+    expect(fetchMock.mock.calls.filter(([input]) => requestPath(input).endsWith('/live-call/greeting/stream'))).toHaveLength(1);
+  });
+
+  it('does not generate a greeting when the user speaks before startup is ready', async () => {
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
+    await window.fetch('/api/chat/sessions/s1/live-call/runtime');
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-user-speech'));
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
+    await Promise.resolve();
+
+    expect(fetchMock.mock.calls.some(([input]) => requestPath(input).endsWith('/live-call/greeting/stream'))).toBe(false);
+    expect(mocks.session.enqueuePhrase).not.toHaveBeenCalled();
+  });
+
+  it('aborts greeting generation and playback when the user begins speaking', async () => {
+    let finishResolve: () => void = () => undefined;
+    mocks.session.finish.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      finishResolve = () => resolve(undefined);
+    }));
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
+    await window.fetch('/api/chat/sessions/s1/live-call/runtime');
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
+
+    await waitFor(() => expect(mocks.session.enqueuePhrase).toHaveBeenCalledTimes(1));
+    const greetingCall = fetchMock.mock.calls.find(([input]) => requestPath(input).endsWith('/live-call/greeting/stream'));
+    const signal = greetingCall?.[1]?.signal as AbortSignal;
+    expect(signal.aborted).toBe(false);
+    expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBe('greeting');
+
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-user-speech'));
+
+    await waitFor(() => expect(signal.aborted).toBe(true));
+    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalledWith('user-spoke-during-greeting'));
+    expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBeUndefined();
+    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
+    finishResolve();
   });
 
   it('uses the authoritative live-call voice instead of the chat voice setting', async () => {
@@ -179,7 +261,7 @@ describe('live voice unified audio controller', () => {
     expect(mocks.createReporter).toHaveBeenCalledWith('live-call:voice-turn:12345');
     expect(mocks.recordSpy).toHaveBeenCalledWith(
       'turn_intercepted',
-      expect.objectContaining({ voice_turn_id: 'voice-turn:12345' }),
+      expect.objectContaining({ voice_turn_id: 'voice-turn:12345', turn_kind: 'response' }),
       'controller',
     );
     expect(mocks.createTraceId).not.toHaveBeenCalled();
@@ -212,16 +294,18 @@ describe('live voice unified audio controller', () => {
     expect(mocks.session.stop).not.toHaveBeenCalled();
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_finished',
-      expect.objectContaining({ phrases: 1, text_chunks: 3 }),
+      expect.objectContaining({ phrases: 1, text_chunks: 3, turn_kind: 'response' }),
     ));
   });
 
-  it('uses the live streaming endpoint as the activation signal and respects Auto-speak', () => {
+  it('uses live streaming endpoints as activation signals and respects Auto-speak', () => {
     renderLiveVoice(false, true);
     expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'POST' })).toBe(true);
+    expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/live-call/greeting/stream', { method: 'POST' })).toBe(true);
 
     renderLiveVoice(true, false);
     expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'POST' })).toBe(false);
+    expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/live-call/greeting/stream', { method: 'POST' })).toBe(false);
     expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages', { method: 'POST' })).toBe(false);
     expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'GET' })).toBe(false);
   });
@@ -246,7 +330,7 @@ describe('live voice unified audio controller', () => {
     expect(mocks.stopButtonStream).toHaveBeenCalled();
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_stopped',
-      expect.objectContaining({ reason: 'voice-interrupt', assistant_turn_id: 'assistant-turn:t1' }),
+      expect.objectContaining({ reason: 'voice-interrupt', assistant_turn_id: 'assistant-turn:t1', turn_kind: 'response' }),
     ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
     finishResolve();
