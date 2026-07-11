@@ -20,6 +20,7 @@ import './features/assistant-workspace/assistant-context-controller.css';
 import './features/assistant-workspace/research-release-controller.css';
 import { initializeChatMessageAudioControllerV2 } from './features/assistant-workspace/chat-message-audio-controller-v2';
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
+import { initializeLiveConversationInitiativeController } from './features/assistant-workspace/live-conversation-initiative-controller';
 import { initializeLiveVoiceAudioDuckBridge } from './features/assistant-workspace/live-voice-audio-duck-bridge';
 import './features/assistant-workspace/live-voice-form-sync';
 import './features/assistant-workspace/live-voice-duplex-gate';
@@ -49,6 +50,7 @@ const queryClient = new QueryClient({
 
 initializeLiveVoiceAudioDuckBridge();
 initializeLiveVoiceUnifiedAudioController();
+initializeLiveConversationInitiativeController();
 initializeLiveChatWorkspace();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
