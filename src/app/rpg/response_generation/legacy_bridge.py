@@ -11,7 +11,6 @@ from app.rpg.ai.world_scene_narrator_runtime import (
 
 from .contracts import ResponseMode, coerce_response_mode
 from .production_pipeline import CANONICAL_NARRATION_SOURCE, ProfileBoundProvider
-from .profiles import ResponseProfileRegistry
 from .strict_pipeline import StrictRpgProductionResponsePipeline
 
 
@@ -32,17 +31,33 @@ def narrate_scene_canonical(
 
     scene_payload = dict(scene or {})
     context = dict(narration_context or {})
-    mode = _response_mode(context, {})
+    player_input = str(context.get("player_input") or "")
+    raw_contract = _mapping(context.get("turn_contract"))
+    raw_state = _mapping(
+        context.get("simulation_state")
+        or context.get("state_snapshot")
+        or context.get("state")
+    )
+    pipeline = _pipeline()
+    prepared = pipeline.prepare_generation_inputs(
+        player_input=player_input,
+        simulation_state=raw_state,
+        turn_contract=raw_contract,
+    )
+    state = prepared["simulation_state"]
+    turn_contract = prepared["turn_contract"]
+    profile = prepared["profile"]
+    ignored = prepared["ignored_profile_overrides"]
+    context["simulation_state"] = state
+    context["turn_contract"] = turn_contract
+    context["narration_brief"] = turn_contract.get("narration_brief", {})
+    context["response_profile"] = profile.debug_payload()
+    mode = profile.mode
     recovery_needed = bool(
         context.get("recovery_needed")
         or str(context.get("resolver_status") or "").casefold()
         in {"unresolved", "partial", "unsupported", "no_match"}
         or mode in {ResponseMode.RECOVERY, ResponseMode.INVESTIGATION}
-    )
-    profile, ignored = ResponseProfileRegistry().resolve_from_request(
-        mode,
-        _mapping(context.get("provider_policy") or context.get("response_profile")),
-        recovery_needed=recovery_needed,
     )
     profile_gateway = (
         ProfileBoundProvider(llm_gateway, profile)
@@ -78,12 +93,6 @@ def narrate_scene_canonical(
         "agency_effect": context.get("agency_effect") or "none",
         "reversibility": context.get("reversibility") or "fully_reversible",
     }
-    turn_contract = _mapping(context.get("turn_contract"))
-    state = _mapping(
-        context.get("simulation_state")
-        or context.get("state_snapshot")
-        or context.get("state")
-    )
     authoritative_result = {
         **turn_contract,
         "turn_id": context.get("turn_id") or turn_contract.get("turn_id"),
@@ -107,9 +116,9 @@ def narrate_scene_canonical(
             context.get("provider_policy") or context.get("response_profile")
         ),
     }
-    canonical = _pipeline().finalize_payload(
+    canonical = pipeline.finalize_payload(
         legacy_payload,
-        player_input=str(context.get("player_input") or ""),
+        player_input=player_input,
         authoritative_turn_result=authoritative_result,
         simulation_state=state,
         turn_contract=turn_contract,
@@ -140,26 +149,35 @@ class SceneNarrator(_LegacySceneNarrator):
         *,
         tone: str | None = None,
     ):
-        mode = _response_mode(state, {})
-        recovery_needed = bool(
-            state.get("recovery_needed")
-            or mode in {ResponseMode.RECOVERY, ResponseMode.INVESTIGATION}
+        pipeline = _pipeline()
+        player_input = str(state.get("player_input") or "")
+        prepared = pipeline.prepare_generation_inputs(
+            player_input=player_input,
+            simulation_state=_mapping(
+                state.get("simulation_state") or state.get("state_snapshot") or state
+            ),
+            turn_contract=_mapping(state.get("turn_contract") or state),
         )
-        profile, ignored = ResponseProfileRegistry().resolve_from_request(
-            mode,
-            _mapping(state.get("provider_policy") or state.get("response_profile")),
-            recovery_needed=recovery_needed,
+        generation_state = dict(state)
+        generation_state["simulation_state"] = prepared["simulation_state"]
+        generation_state["turn_contract"] = prepared["turn_contract"]
+        generation_state["narration_brief"] = prepared["turn_contract"].get(
+            "narration_brief", {}
         )
+        generation_state["response_profile"] = prepared["profile"].debug_payload()
+        profile = prepared["profile"]
+        ignored = prepared["ignored_profile_overrides"]
+        mode = profile.mode
         original_gateway = self.llm_gateway
         profile_gateway = None
         if original_gateway is not None and profile.use_provider:
             profile_gateway = ProfileBoundProvider(original_gateway, profile)
             self.llm_gateway = profile_gateway
         try:
-            result = super().narrate_scene(scene, state, tone=tone)
+            result = super().narrate_scene(scene, generation_state, tone=tone)
         finally:
             self.llm_gateway = original_gateway
-        canonical = _pipeline().finalize_payload(
+        canonical = pipeline.finalize_payload(
             {
                 "source": "legacy_scene_narrator",
                 "legacy_visible_text": result.narrative,
@@ -167,16 +185,17 @@ class SceneNarrator(_LegacySceneNarrator):
                 "narration": result.narrative,
                 "npc": {},
             },
-            player_input=str(state.get("player_input") or ""),
+            player_input=player_input,
             authoritative_turn_result={
-                **dict(state),
+                **prepared["turn_contract"],
                 "turn_id": state.get("turn_id"),
                 "response_mode": mode.value,
                 "production_rpg_response": True,
                 "strict_claim_refs": True,
                 "grounding_required": True,
             },
-            simulation_state=state,
+            simulation_state=prepared["simulation_state"],
+            turn_contract=prepared["turn_contract"],
             profile=profile,
             ignored_profile_overrides=ignored,
             provider_profile_applied=(
