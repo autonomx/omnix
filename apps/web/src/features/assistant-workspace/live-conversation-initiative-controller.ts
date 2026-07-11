@@ -4,6 +4,7 @@ import {
   type LiveConversationProfile,
 } from '../chatbot/liveConversationProfileClient';
 import { decideInitiative } from './live-conversation-initiative-policy';
+import { liveConversationStore } from './live-conversation-store';
 
 const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
@@ -55,6 +56,9 @@ export function initializeLiveConversationInitiativeController(): () => void {
   if (liveWindow.__omnixLiveConversationInitiativeInstalled) return () => undefined;
   liveWindow.__omnixLiveConversationInitiativeInstalled = true;
   lastActivityAtMs = performance.now();
+  selectedSessionId = liveConversationStore.getState().sessionId;
+  callConnected = liveConversationStore.getState().conversation.connection === 'connected';
+  assistantSpeaking = isAssistantSpeaking();
 
   const handleSession = (event: Event) => {
     const detail = (event as CustomEvent<{ sessionId?: unknown }>).detail;
@@ -93,19 +97,13 @@ export function initializeLiveConversationInitiativeController(): () => void {
   window.addEventListener(STOP_EVENT, handleStop);
   window.addEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
 
-  const observer = new MutationObserver(handleVoiceOrbMutation);
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['data-voice-mode', 'data-live-voice-status'],
-  });
-  handleVoiceOrbMutation();
+  const unsubscribe = liveConversationStore.subscribe(handleAuthoritativeStateChange);
+  handleAuthoritativeStateChange();
   const scheduler = window.setInterval(evaluateInitiative, SCHEDULER_INTERVAL_MS);
 
   return () => {
     window.clearInterval(scheduler);
-    observer.disconnect();
+    unsubscribe();
     window.removeEventListener(SESSION_CHANGED_EVENT, handleSession);
     window.removeEventListener(CALL_START_EVENT, handleCallStart);
     window.removeEventListener(CALL_CONNECTED_EVENT, handleCallConnected);
@@ -147,23 +145,26 @@ export function parseProactiveSse(text: string): ParsedProactiveStream | null {
   return turnId && content ? { turnId, content, initiativeReason: initiativeReason || 'continue_current_topic' } : null;
 }
 
-export function proactiveReasonFromTranscript(root: ParentNode = document): string | null {
-  const messages = Array.from(root.querySelectorAll<HTMLElement>('.assistant-voice-transcript p:not(.muted)'));
-  const latest = messages.at(-1)?.textContent?.trim() ?? '';
+export function proactiveReasonFromTranscript(transcript?: string): string | null {
+  const latest = (transcript ?? currentDraftOrTranscript()).trim();
   if (!latest) return null;
   return /\?\s*$/.test(latest) ? 'unresolved_question' : 'continue_current_topic';
 }
 
 function evaluateInitiative(): void {
-  const profile = readEffectiveLiveConversationProfile();
+  const runtime = liveConversationStore.getState();
+  const profile = runtime.profile ?? readEffectiveLiveConversationProfile();
+  selectedSessionId = runtime.sessionId ?? selectedSessionId;
+  callConnected = runtime.conversation.connection === 'connected';
   if (!profile || !selectedSessionId) return;
   const transcript = currentDraftOrTranscript();
-  const userSpeaking = liveVoiceStatus().includes('speech');
-  const reason = proactiveReasonFromTranscript();
+  const userSpeaking = runtime.conversation.userTurn === 'speaking'
+    || runtime.conversation.userTurn === 'speech_candidate';
+  const reason = proactiveReasonFromTranscript(transcript);
   const decision = decideInitiative({
     mode: profile.initiative_mode,
     callConnected,
-    assistantActive: assistantSpeaking,
+    assistantActive: isAssistantSpeaking(),
     userSpeaking,
     partialTranscript: userSpeaking ? transcript : '',
     userRequestedTime: THINKING_PATTERN.test(transcript),
@@ -217,7 +218,7 @@ async function startProactiveTurn(sessionId: string, reason: string, profile: Li
       audioStartTimer = setTimeout(() => {
         if (pending === turn && !turn.audioStarted) clearPending('audio-never-started');
       }, AUDIO_START_TIMEOUT_MS);
-      setTimeout(handleVoiceOrbMutation, 0);
+      setTimeout(handleAuthoritativeStateChange, 0);
     }
   } catch (error) {
     if (!controller.signal.aborted) dispatchPerf('initiative_generation_failed', {
@@ -228,7 +229,10 @@ async function startProactiveTurn(sessionId: string, reason: string, profile: Li
   }
 }
 
-function handleVoiceOrbMutation(): void {
+function handleAuthoritativeStateChange(): void {
+  const runtime = liveConversationStore.getState();
+  selectedSessionId = runtime.sessionId ?? selectedSessionId;
+  callConnected = runtime.conversation.connection === 'connected';
   const speaking = isAssistantSpeaking();
   if (speaking === assistantSpeaking) return;
   const wasSpeaking = assistantSpeaking;
@@ -292,25 +296,21 @@ function clearAudioStartTimer(): void {
 }
 
 function currentDraftOrTranscript(): string {
-  const draft = document.querySelector<HTMLElement>('.assistant-live-draft p')?.textContent?.trim();
-  if (draft && !draft.startsWith('Start Live Voice')) return draft;
-  return Array.from(document.querySelectorAll<HTMLElement>('.assistant-voice-transcript p:not(.muted)')).at(-1)?.textContent?.trim() ?? '';
+  const transcript = liveConversationStore.getState().transcript;
+  return transcript.partial || transcript.lastFinal;
 }
 
 function conversationStateSummary(profile: LiveConversationProfile): string {
-  const messages = Array.from(document.querySelectorAll<HTMLElement>('.assistant-voice-transcript p:not(.muted)'))
+  const messages = liveConversationStore.getState().transcript.recentFinals
     .slice(-3)
-    .map((node) => node.textContent?.replace(/\s+/g, ' ').trim())
-    .filter((value): value is string => Boolean(value));
+    .map((value) => value.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
   return `stance=${profile.conversation_stance}; presence=${profile.presence_preset}; recent=${messages.join(' | ')}`.slice(0, 500);
 }
 
-function liveVoiceStatus(): string {
-  return document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceStatus?.toLocaleLowerCase() ?? '';
-}
-
 function isAssistantSpeaking(): boolean {
-  return Array.from(document.querySelectorAll<HTMLElement>('.assistant-voice-orb')).some((orb) => orb.dataset.voiceMode === 'speaking');
+  const conversation = liveConversationStore.getState().conversation;
+  return conversation.assistantTurn === 'speaking' || conversation.delivery === 'audio_started';
 }
 
 function isAutoSpeakEnabled(): boolean {
