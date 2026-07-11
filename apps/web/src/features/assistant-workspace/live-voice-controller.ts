@@ -61,6 +61,9 @@ const FINAL_RESPONSE_TIMEOUT_MS = 8_000;
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
+const LIVE_VOICE_CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
+const LIVE_VOICE_CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
+const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
 const preparedCards = new WeakSet<HTMLElement>();
 const panelStatuses = new WeakMap<HTMLElement, StreamingSttConnectionStatus>();
 let activeSession: LiveVoiceSession | null = null;
@@ -143,6 +146,10 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
   const token = ++startToken;
   pendingStart = { card, token };
   setPanelStatus(card, 'connecting');
+  dispatchLiveVoiceLifecycleEvent(LIVE_VOICE_CALL_START_EVENT, {
+    token,
+    timestamp: new Date().toISOString(),
+  });
   let audioContext: AudioContext | null = null;
   let stream: MediaStream | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
@@ -209,6 +216,10 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       return;
     }
     setPanelStatus(card, 'connected');
+    dispatchLiveVoiceLifecycleEvent(LIVE_VOICE_CALL_CONNECTED_EVENT, {
+      token,
+      timestamp: new Date().toISOString(),
+    });
   } catch (error) {
     if (activeSession?.card === card) {
       const session = activeSession;
@@ -298,6 +309,13 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
   const speechStarted = rms >= liveVoiceSpeechThreshold();
   session.speechFrameCount = speechStarted ? session.speechFrameCount + 1 : 0;
   const confirmedSpeech = session.speechFrameCount >= INTERRUPT_CONFIRMATION_FRAMES;
+  if (confirmedSpeech && !session.speechDetected) {
+    dispatchLiveVoiceLifecycleEvent(LIVE_VOICE_USER_SPEECH_EVENT, {
+      timestamp: new Date().toISOString(),
+      rms,
+      assistantSpeaking,
+    });
+  }
   if (assistantSpeaking && confirmedSpeech && !session.speechDetected) {
     session.overlapIntent = 'uncertain';
     session.floorState = reduceUserFloor(session.floorState, {
@@ -649,6 +667,10 @@ function submitComposer(): void {
   if (!form) return;
   if (typeof form.requestSubmit === 'function') form.requestSubmit();
   else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+}
+
+function dispatchLiveVoiceLifecycleEvent(type: string, detail: Record<string, unknown>): void {
+  window.dispatchEvent(new CustomEvent(type, { detail }));
 }
 
 function dispatchLiveVoicePerfEvent(detail: Record<string, unknown>): void {
