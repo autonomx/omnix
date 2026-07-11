@@ -15,10 +15,24 @@ from app.research.compatibility import (
 )
 
 DesktopCaptureMode = Literal["single", "temporal"]
+LiveConversationRepairKind = Literal[
+    "acknowledge_correction",
+    "clarify_number",
+    "clarify_name",
+    "yield_to_user",
+    "resume_interrupted_thought",
+]
+
+
+class LiveConversationRepairContext(BaseModel):
+    kind: LiveConversationRepairKind
+    instruction: str = Field(min_length=1, max_length=280)
+    source_reason: str = Field(min_length=1, max_length=120)
+    confidence: float = Field(default=1.0, ge=0, le=1)
 
 
 class AssistantContextItem(BaseModel):
-    source_id: Literal["web_search", "desktop_vision"]
+    source_id: Literal["web_search", "desktop_vision", "live_repair"]
     title: str
     content: str
     url: str | None = None
@@ -46,6 +60,7 @@ class AssistantContextChatRequest(BaseModel):
     desktop_capture_mode: DesktopCaptureMode = "single"
     desktop_question: str | None = None
     vision_model_id: str | None = None
+    live_repair: LiveConversationRepairContext | None = None
 
     @model_validator(mode="before")
     @classmethod

@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { CharacterModePanel } from './CharacterModePanel';
 import {
   memoryClient,
   type ManagedMemoryRecord,
@@ -82,7 +81,6 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
         <div className="memory-page-stats" aria-label="Memory totals"><span><strong>{records.length}</strong> saved</span><span><strong>{candidates.length}</strong> pending</span><span><strong>{snapshot?.memory_record_count ?? 0}</strong> active</span></div>
       </header>
       {status ? <p className="memory-status" role="status">{status}</p> : null}
-      <CharacterModePanel sessionId={sessionId} />
 
       <div className="memory-overview-grid">
         <article className="memory-card memory-card-primary">

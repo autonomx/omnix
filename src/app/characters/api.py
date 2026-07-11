@@ -10,6 +10,12 @@ from fastapi.responses import StreamingResponse
 
 from app.assistant_memory import default_memory_service, resolve_chat_scope
 from app.chat.live_call_greeting import stream_live_call_greeting_chunks
+from app.chat.live_conversation_proactive import (
+    ProactiveDeliveryRequest,
+    ProactiveDeliveryResponse,
+    commit_proactive_delivery,
+    stream_proactive_turn_chunks,
+)
 from app.chat.models import ChatSession
 
 from .hermes_adapter import (
@@ -18,6 +24,13 @@ from .hermes_adapter import (
     import_character_hermes_memory,
 )
 from .live_call import CharacterLiveCallRuntime, resolve_live_call_runtime
+from .live_conversation_profile import (
+    LiveConversationProfile,
+    LiveConversationProfileEnvelope,
+    LiveConversationProfileStore,
+    LiveConversationProfileUpdate,
+    default_live_conversation_profile_store,
+)
 from .management import (
     CharacterDataActionRequest,
     CharacterDataActionResponse,
@@ -48,6 +61,7 @@ def register_character_routes(
     *,
     service_factory: Callable[[], CharacterService] = default_character_service,
     chat_store_factory: Callable[[], Any] | None = None,
+    live_conversation_profile_store_factory: Callable[[], LiveConversationProfileStore] = default_live_conversation_profile_store,
 ) -> None:
     """Register typed routes while keeping the flagged feature out of public OpenAPI."""
 
@@ -167,11 +181,35 @@ def register_character_routes(
         except VoiceConsentError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @app.get(
+        "/api/live-chat/profile/defaults",
+        response_model=LiveConversationProfile,
+        tags=["live-chat"],
+        include_in_schema=False,
+    )
+    async def get_live_conversation_defaults() -> LiveConversationProfile:
+        return live_conversation_profile_store_factory().get_defaults()
+
+    @app.patch(
+        "/api/live-chat/profile/defaults",
+        response_model=LiveConversationProfile,
+        tags=["live-chat"],
+        include_in_schema=False,
+    )
+    async def update_live_conversation_defaults(request: LiveConversationProfileUpdate) -> LiveConversationProfile:
+        return live_conversation_profile_store_factory().update_defaults(request)
+
     if chat_store_factory is None:
         return
 
     def management_service() -> CharacterManagementService:
         return CharacterManagementService(service_factory(), chat_store_factory())
+
+    def require_session(session_id: str) -> ChatSession:
+        session = chat_store_factory().get_session(session_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+        return session
 
     @app.get(
         "/api/characters/{character_id}/data",
@@ -204,10 +242,7 @@ def register_character_routes(
 
     @app.get("/api/chat/sessions/{session_id}/interaction", response_model=ChatSession, tags=["characters"], include_in_schema=False)
     async def get_session_interaction(session_id: str) -> ChatSession:
-        session = chat_store_factory().get_session(session_id)
-        if session is None:
-            raise HTTPException(status_code=404, detail="chat session not found")
-        return session
+        return require_session(session_id)
 
     @app.post("/api/chat/sessions/{session_id}/interaction", response_model=ChatSession, tags=["characters"], include_in_schema=False)
     async def set_session_interaction(session_id: str, request: SetSessionInteractionRequest) -> ChatSession:
@@ -220,15 +255,46 @@ def register_character_routes(
         return session
 
     @app.get(
+        "/api/chat/sessions/{session_id}/live-conversation/profile",
+        response_model=LiveConversationProfileEnvelope,
+        tags=["live-chat"],
+        include_in_schema=False,
+    )
+    async def get_live_conversation_profile(session_id: str) -> LiveConversationProfileEnvelope:
+        require_session(session_id)
+        return live_conversation_profile_store_factory().get(session_id)
+
+    @app.patch(
+        "/api/chat/sessions/{session_id}/live-conversation/profile",
+        response_model=LiveConversationProfileEnvelope,
+        tags=["live-chat"],
+        include_in_schema=False,
+    )
+    async def update_live_conversation_profile(
+        session_id: str,
+        request: LiveConversationProfileUpdate,
+    ) -> LiveConversationProfileEnvelope:
+        require_session(session_id)
+        return live_conversation_profile_store_factory().update(session_id, request)
+
+    @app.delete(
+        "/api/chat/sessions/{session_id}/live-conversation/profile",
+        response_model=LiveConversationProfileEnvelope,
+        tags=["live-chat"],
+        include_in_schema=False,
+    )
+    async def clear_live_conversation_profile(session_id: str) -> LiveConversationProfileEnvelope:
+        require_session(session_id)
+        return live_conversation_profile_store_factory().clear(session_id)
+
+    @app.get(
         "/api/chat/sessions/{session_id}/live-call/runtime",
         response_model=CharacterLiveCallRuntime,
         tags=["characters"],
         include_in_schema=False,
     )
     async def get_live_call_runtime(session_id: str) -> CharacterLiveCallRuntime:
-        session = chat_store_factory().get_session(session_id)
-        if session is None:
-            raise HTTPException(status_code=404, detail="chat session not found")
+        session = require_session(session_id)
         try:
             return resolve_live_call_runtime(session, character_service_factory=service_factory)
         except (CharacterNotFoundError, ValueError) as exc:
@@ -239,23 +305,49 @@ def register_character_routes(
         tags=["characters"],
         include_in_schema=False,
     )
-    async def stream_live_call_greeting(session_id: str) -> StreamingResponse:
+    async def stream_live_call_greeting(
+        session_id: str,
+        purpose: str = Query(default="greeting"),
+        initiative_reason: str = Query(default="quiet_follow_up", max_length=120),
+        state_summary: str | None = Query(default=None, max_length=500),
+    ) -> StreamingResponse:
         store = chat_store_factory()
-        session = store.get_session(session_id)
-        if session is None:
-            raise HTTPException(status_code=404, detail="chat session not found")
+        session = require_session(session_id)
 
         def generate():
             try:
-                for event in stream_live_call_greeting_chunks(store, session):
+                events = stream_proactive_turn_chunks(
+                    store,
+                    session,
+                    initiative_reason=initiative_reason,
+                    state_summary=state_summary,
+                ) if purpose == "proactive_reengagement" else stream_live_call_greeting_chunks(store, session)
+                for event in events:
                     yield f"data: {json.dumps(event, sort_keys=True)}\n\n"
                 yield f"data: {json.dumps({'type': 'done'}, sort_keys=True)}\n\n"
             except GeneratorExit:
                 raise
             except Exception as exc:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(exc) or 'Live-call greeting failed.'}, sort_keys=True)}\n\n"
+                label = "Proactive live-conversation turn" if purpose == "proactive_reengagement" else "Live-call greeting"
+                yield f"data: {json.dumps({'type': 'error', 'message': str(exc) or f'{label} failed.'}, sort_keys=True)}\n\n"
 
         return StreamingResponse(generate(), media_type="text/event-stream")
+
+    @app.post(
+        "/api/chat/sessions/{session_id}/live-conversation/proactive/delivery",
+        response_model=ProactiveDeliveryResponse,
+        tags=["live-chat"],
+        include_in_schema=False,
+    )
+    async def commit_live_conversation_proactive_delivery(
+        session_id: str,
+        request: ProactiveDeliveryRequest,
+    ) -> ProactiveDeliveryResponse:
+        require_session(session_id)
+        result = commit_proactive_delivery(chat_store_factory(), session_id, request)
+        if result is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+        return result
 
 
 __all__ = ["register_character_routes"]

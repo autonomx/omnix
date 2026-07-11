@@ -1,6 +1,7 @@
 """Transport-neutral request policy and PCM helpers for TTS streaming."""
 from __future__ import annotations
 
+import re
 from typing import Any, Iterator
 
 from pydantic import BaseModel, Field, model_validator
@@ -17,6 +18,26 @@ CHAT_STREAM_TOKEN_NUMERATOR = 9
 CHAT_STREAM_TOKEN_DENOMINATOR = 8
 CHAT_STREAM_TOKEN_OVERHEAD = 24
 CHAT_STREAM_MIN_REPETITION_PENALTY = 1.05
+
+
+class TtsPronunciationEntry(BaseModel):
+    phrase: str = Field(min_length=1, max_length=120)
+    pronunciation: str = Field(min_length=1, max_length=160)
+    locale: str | None = Field(default=None, max_length=20)
+
+
+def apply_pronunciation_lexicon(text: str, entries: list[TtsPronunciationEntry]) -> str:
+    """Apply bounded, case-insensitive whole-phrase rendering hints to synthesized text only."""
+    result = text
+    ordered = sorted(entries[:32], key=lambda entry: len(entry.phrase), reverse=True)
+    for entry in ordered:
+        phrase = entry.phrase.strip()
+        pronunciation = entry.pronunciation.strip()
+        if not phrase or not pronunciation or phrase.casefold() == pronunciation.casefold():
+            continue
+        pattern = re.compile(rf"(?<!\w){re.escape(phrase)}(?!\w)", re.IGNORECASE)
+        result = pattern.sub(pronunciation, result)
+    return result
 
 
 def estimate_chat_stream_max_new_tokens(text: str) -> int:
@@ -47,10 +68,13 @@ class TtsStreamRequest(BaseModel):
     parity_mode: bool | None = None
     request_id: str | None = None
     diagnostics_stream_id: str | None = None
+    delivery_plan: dict[str, Any] | None = None
+    pronunciation_lexicon: list[TtsPronunciationEntry] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
-    def apply_chat_stream_runtime_policy(self) -> "TtsStreamRequest":
-        """Use bounded CUDA-graph chat decoding with safe provider fallback on graph failures."""
+    def apply_live_rendering_policy(self) -> "TtsStreamRequest":
+        if self.pronunciation_lexicon:
+            self.text = apply_pronunciation_lexicon(self.text, self.pronunciation_lexicon)
         stream_id = (self.diagnostics_stream_id or "").strip()
         if not stream_id.startswith("chat-"):
             return self
@@ -141,26 +165,24 @@ def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
 
 
 def even_pcm16_bytes(pcm_bytes: bytes) -> bytes:
-    return pcm_bytes if len(pcm_bytes) % 2 == 0 else pcm_bytes[:-1]
+    return pcm_bytes[: len(pcm_bytes) - (len(pcm_bytes) % 2)]
+
+
+def pad_pcm16_block(pcm_bytes: bytes, block_bytes: int) -> bytes:
+    return pcm_bytes + (b"\x00" * max(0, block_bytes - len(pcm_bytes)))
 
 
 def initial_speech_start_byte(
     pcm_bytes: bytes,
     sample_rate: int,
-    silence_threshold: float,
+    threshold: float,
     preroll_ms: float,
 ) -> int | None:
-    threshold = int(32768 * max(0.0, silence_threshold))
+    threshold_int = int(max(0.0, min(1.0, threshold)) * 32767)
     preroll_samples = max(0, int(sample_rate * max(0.0, preroll_ms) / 1000.0))
-    for index in range(0, len(pcm_bytes), 2):
-        sample = int.from_bytes(pcm_bytes[index : index + 2], "little", signed=True)
-        if abs(sample) > threshold:
-            start_sample = max(0, index // 2 - preroll_samples)
-            return start_sample * 2
+    for sample_index in range(len(pcm_bytes) // 2):
+        offset = sample_index * 2
+        sample = int.from_bytes(pcm_bytes[offset : offset + 2], byteorder="little", signed=True)
+        if abs(sample) > threshold_int:
+            return max(0, sample_index - preroll_samples) * 2
     return None
-
-
-def pad_pcm16_block(pcm_bytes: bytes, block_bytes: int) -> bytes:
-    if len(pcm_bytes) >= block_bytes:
-        return pcm_bytes
-    return pcm_bytes + (b"\x00" * (block_bytes - len(pcm_bytes)))

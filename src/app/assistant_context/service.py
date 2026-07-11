@@ -68,7 +68,31 @@ class AssistantContextService:
             "desktop_requested": desktop_requested,
             "desktop_capture_mode": request.desktop_capture_mode,
             "desktop_history_frames": len(request.desktop_history_timestamps),
+            "live_repair_requested": request.live_repair is not None,
         }
+
+        if request.live_repair is not None:
+            repair = request.live_repair
+            items.append(
+                AssistantContextItem(
+                    source_id="live_repair",
+                    title="Live conversation repair guidance",
+                    content=(
+                        "Trusted conversational-control guidance for this response: "
+                        f"{repair.instruction.strip()} "
+                        "Keep the visible user words authoritative, apply the repair briefly, and then continue naturally."
+                    ),
+                    metadata={
+                        "kind": repair.kind,
+                        "source_reason": repair.source_reason,
+                        "confidence": repair.confidence,
+                        "trusted_control_context": True,
+                    },
+                )
+            )
+            diagnostics["live_repair_kind"] = repair.kind
+            diagnostics["live_repair_source_reason"] = repair.source_reason
+            diagnostics["live_repair_confidence"] = repair.confidence
 
         if request.web_research_mode == "quick":
             execution = self._quick_search_for(request).search(
