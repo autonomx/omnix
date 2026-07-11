@@ -1,0 +1,316 @@
+import {
+  LIVE_CONVERSATION_PROFILE_CHANGED_EVENT,
+  readEffectiveLiveConversationProfile,
+  type LiveConversationProfile,
+} from '../chatbot/liveConversationProfileClient';
+import { decideInitiative } from './live-conversation-initiative-policy';
+
+const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
+const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
+const CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
+const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
+const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
+const STOP_EVENT = 'omnix:assistant-live-voice-stop';
+const PERF_EVENT = 'omnix:assistant-voice-perf';
+const DELIVERED_EVENT = 'omnix:live-conversation-proactive-delivered';
+const INSTALL_FLAG = '__omnixLiveConversationInitiativeInstalled';
+const SCHEDULER_INTERVAL_MS = 750;
+const DEFAULT_COOLDOWN_MS = 30_000;
+const THINKING_PATTERN = /\b(?:give me (?:a )?(?:second|minute|moment)|let me think|one moment|hold on|I need a minute)\b/i;
+const SENSITIVE_PATTERN = /\b(?:password|passcode|pin|account|card number|security code|address|phone number|email address)\b|\b\d{4,}\b/i;
+
+type InitiativeWindow = Window & typeof globalThis & {
+  __omnixLiveConversationInitiativeInstalled?: boolean;
+};
+
+type PendingProactive = {
+  sessionId: string;
+  turnId: string;
+  content: string;
+  reason: string;
+  audioStarted: boolean;
+  committing: boolean;
+};
+
+type ParsedProactiveStream = {
+  turnId: string;
+  content: string;
+  initiativeReason: string;
+};
+
+let selectedSessionId: string | null = null;
+let callConnected = false;
+let lastActivityAtMs = 0;
+let lastPromptAtMs: number | null = null;
+let promptCount = 0;
+let previousPromptIgnored = false;
+let requestController: AbortController | null = null;
+let pending: PendingProactive | null = null;
+let assistantSpeaking = false;
+
+export function initializeLiveConversationInitiativeController(): () => void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
+  const liveWindow = window as InitiativeWindow;
+  if (liveWindow.__omnixLiveConversationInitiativeInstalled) return () => undefined;
+  liveWindow.__omnixLiveConversationInitiativeInstalled = true;
+  lastActivityAtMs = performance.now();
+
+  const handleSession = (event: Event) => {
+    const detail = (event as CustomEvent<{ sessionId?: unknown }>).detail;
+    selectedSessionId = typeof detail?.sessionId === 'string' ? detail.sessionId : selectedSessionId;
+    resetQuietPeriod('session-changed');
+  };
+  const handleCallStart = () => {
+    callConnected = false;
+    resetQuietPeriod('call-started');
+  };
+  const handleCallConnected = () => {
+    callConnected = true;
+    resetQuietPeriod('call-connected');
+  };
+  const handleUserSpeech = () => {
+    const hadPlayingPrompt = Boolean(pending?.audioStarted);
+    requestController?.abort('user-speech');
+    requestController = null;
+    if (hadPlayingPrompt) previousPromptIgnored = true;
+    else pending = null;
+    lastActivityAtMs = performance.now();
+    promptCount = 0;
+  };
+  const handleInterrupt = () => {
+    if (pending?.audioStarted) void commitPending('interrupted');
+    else pending = null;
+    lastActivityAtMs = performance.now();
+  };
+  const handleStop = () => {
+    callConnected = false;
+    requestController?.abort('call-stopped');
+    requestController = null;
+    pending = null;
+    resetQuietPeriod('call-stopped');
+  };
+  const handleProfile = () => resetQuietPeriod('profile-changed');
+
+  window.addEventListener(SESSION_CHANGED_EVENT, handleSession);
+  window.addEventListener(CALL_START_EVENT, handleCallStart);
+  window.addEventListener(CALL_CONNECTED_EVENT, handleCallConnected);
+  window.addEventListener(USER_SPEECH_EVENT, handleUserSpeech);
+  window.addEventListener(INTERRUPT_EVENT, handleInterrupt);
+  window.addEventListener(STOP_EVENT, handleStop);
+  window.addEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
+
+  const observer = new MutationObserver(handleVoiceOrbMutation);
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['data-voice-mode', 'data-live-voice-status'],
+  });
+  handleVoiceOrbMutation();
+  const timer = window.setInterval(evaluateInitiative, SCHEDULER_INTERVAL_MS);
+
+  return () => {
+    window.clearInterval(timer);
+    observer.disconnect();
+    window.removeEventListener(SESSION_CHANGED_EVENT, handleSession);
+    window.removeEventListener(CALL_START_EVENT, handleCallStart);
+    window.removeEventListener(CALL_CONNECTED_EVENT, handleCallConnected);
+    window.removeEventListener(USER_SPEECH_EVENT, handleUserSpeech);
+    window.removeEventListener(INTERRUPT_EVENT, handleInterrupt);
+    window.removeEventListener(STOP_EVENT, handleStop);
+    window.removeEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
+    requestController?.abort('controller-disposed');
+    requestController = null;
+    pending = null;
+    liveWindow.__omnixLiveConversationInitiativeInstalled = false;
+  };
+}
+
+export function parseProactiveSse(text: string): ParsedProactiveStream | null {
+  let turnId = '';
+  let content = '';
+  let initiativeReason = '';
+  for (const block of text.split(/\n\n+/)) {
+    const data = block.split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart())
+      .join('\n');
+    if (!data) continue;
+    try {
+      const event = JSON.parse(data) as Record<string, unknown>;
+      if (event.type === 'initiative') {
+        if (typeof event.turn_id === 'string') turnId = event.turn_id;
+        if (typeof event.initiative_reason === 'string') initiativeReason = event.initiative_reason;
+      }
+      if (event.type === 'complete') {
+        if (typeof event.content === 'string') content = event.content.trim();
+        const metadata = event.metadata as Record<string, unknown> | undefined;
+        if (!turnId && typeof metadata?.turn_id === 'string') turnId = metadata.turn_id;
+        if (!initiativeReason && typeof metadata?.initiative_reason === 'string') initiativeReason = metadata.initiative_reason;
+      }
+      if (event.type === 'error') throw new Error(String(event.message || 'Proactive turn failed.'));
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Proactive turn failed.') throw error;
+    }
+  }
+  return turnId && content ? { turnId, content, initiativeReason: initiativeReason || 'continue_current_topic' } : null;
+}
+
+export function proactiveReasonFromTranscript(root: ParentNode = document): string | null {
+  const messages = Array.from(root.querySelectorAll<HTMLElement>('.assistant-voice-transcript p:not(.muted)'));
+  if (!messages.length) return null;
+  const latest = messages.at(-1)?.textContent?.trim() ?? '';
+  if (!latest) return null;
+  if (/\?\s*$/.test(latest)) return 'unresolved_question';
+  return 'continue_current_topic';
+}
+
+function evaluateInitiative(): void {
+  const profile = readEffectiveLiveConversationProfile();
+  if (!profile || !selectedSessionId) return;
+  const transcript = currentDraftOrTranscript();
+  const userSpeaking = liveVoiceStatus().includes('speech');
+  const reason = proactiveReasonFromTranscript();
+  const decision = decideInitiative({
+    mode: profile.initiative_mode,
+    callConnected,
+    assistantActive: assistantSpeaking,
+    userSpeaking,
+    partialTranscript: userSpeaking ? transcript : '',
+    userRequestedTime: THINKING_PATTERN.test(transcript),
+    sensitiveDictation: SENSITIVE_PATTERN.test(transcript),
+    tabVisible: document.visibilityState === 'visible',
+    muted: false,
+    requestInFlight: Boolean(requestController || pending),
+    hasMeaningfulReason: Boolean(reason),
+    previousPromptIgnored,
+    nowMs: performance.now(),
+    lastActivityAtMs,
+    lastPromptAtMs,
+    idleThresholdMs: profile.idle_threshold_ms,
+    cooldownMs: DEFAULT_COOLDOWN_MS,
+    promptCount,
+    maxPrompts: profile.max_idle_prompts,
+  });
+  dispatchPerf('initiative_policy_decision', { action: decision.action, reason: decision.reason, eligible_in_ms: decision.eligibleInMs });
+  if (decision.action === 'speak' && reason && isAutoSpeakEnabled()) {
+    void startProactiveTurn(selectedSessionId, reason, profile);
+  }
+}
+
+async function startProactiveTurn(sessionId: string, reason: string, profile: LiveConversationProfile): Promise<void> {
+  if (requestController || pending) return;
+  const controller = new AbortController();
+  requestController = controller;
+  const summary = conversationStateSummary(profile);
+  const params = new URLSearchParams({
+    purpose: 'proactive_reengagement',
+    initiative_reason: reason,
+    state_summary: summary,
+  });
+  dispatchPerf('initiative_generation_started', { session_id: sessionId, initiative_reason: reason });
+  try {
+    const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/greeting/stream?${params}`, {
+      method: 'POST',
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Proactive turn failed with status ${response.status}.`);
+    const parsed = parseProactiveSse(await response.text());
+    if (!parsed || controller.signal.aborted) return;
+    pending = {
+      sessionId,
+      turnId: parsed.turnId,
+      content: parsed.content,
+      reason: parsed.initiativeReason || reason,
+      audioStarted: isAssistantSpeaking(),
+      committing: false,
+    };
+    dispatchPerf('initiative_generation_completed', { turn_id: parsed.turnId, content_chars: parsed.content.length });
+    if (!pending.audioStarted) window.setTimeout(handleVoiceOrbMutation, 0);
+  } catch (error) {
+    if (!controller.signal.aborted) dispatchPerf('initiative_generation_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    if (requestController === controller) requestController = null;
+  }
+}
+
+function handleVoiceOrbMutation(): void {
+  const speaking = isAssistantSpeaking();
+  if (speaking === assistantSpeaking) return;
+  const wasSpeaking = assistantSpeaking;
+  assistantSpeaking = speaking;
+  lastActivityAtMs = performance.now();
+  if (pending && speaking) pending.audioStarted = true;
+  if (pending?.audioStarted && wasSpeaking && !speaking) void commitPending('completed');
+}
+
+async function commitPending(status: 'completed' | 'interrupted'): Promise<void> {
+  const turn = pending;
+  if (!turn || turn.committing) return;
+  turn.committing = true;
+  try {
+    const response = await fetch(`/api/chat/sessions/${encodeURIComponent(turn.sessionId)}/live-conversation/proactive/delivery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        turn_id: turn.turnId,
+        content: turn.content,
+        initiative_reason: turn.reason,
+        delivery_status: status,
+      }),
+    });
+    if (!response.ok) throw new Error(`Proactive delivery commit failed with status ${response.status}.`);
+    promptCount += 1;
+    lastPromptAtMs = performance.now();
+    lastActivityAtMs = lastPromptAtMs;
+    window.dispatchEvent(new CustomEvent(DELIVERED_EVENT, { detail: { sessionId: turn.sessionId, turnId: turn.turnId, status } }));
+    dispatchPerf('initiative_delivery_committed', { turn_id: turn.turnId, delivery_status: status });
+  } catch (error) {
+    dispatchPerf('initiative_delivery_commit_failed', { error: error instanceof Error ? error.message : String(error) });
+  } finally {
+    if (pending === turn) pending = null;
+  }
+}
+
+function resetQuietPeriod(reason: string): void {
+  requestController?.abort(reason);
+  requestController = null;
+  pending = null;
+  promptCount = 0;
+  previousPromptIgnored = false;
+  lastPromptAtMs = null;
+  lastActivityAtMs = performance.now();
+}
+
+function currentDraftOrTranscript(): string {
+  const draft = document.querySelector<HTMLElement>('.assistant-live-draft p')?.textContent?.trim();
+  if (draft && !draft.startsWith('Start Live Voice')) return draft;
+  return Array.from(document.querySelectorAll<HTMLElement>('.assistant-voice-transcript p:not(.muted)')).at(-1)?.textContent?.trim() ?? '';
+}
+
+function conversationStateSummary(profile: LiveConversationProfile): string {
+  const messages = Array.from(document.querySelectorAll<HTMLElement>('.assistant-voice-transcript p:not(.muted)'))
+    .slice(-3)
+    .map((node) => node.textContent?.replace(/\s+/g, ' ').trim())
+    .filter((value): value is string => Boolean(value));
+  return `stance=${profile.conversation_stance}; presence=${profile.presence_preset}; recent=${messages.join(' | ')}`.slice(0, 500);
+}
+
+function liveVoiceStatus(): string {
+  return document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceStatus?.toLocaleLowerCase() ?? '';
+}
+
+function isAssistantSpeaking(): boolean {
+  return Array.from(document.querySelectorAll<HTMLElement>('.assistant-voice-orb'))
+    .some((orb) => orb.dataset.voiceMode === 'speaking');
+}
+
+function isAutoSpeakEnabled(): boolean {
+  return document.querySelector<HTMLInputElement>('.assistant-voice-toggle input[type="checkbox"]')?.checked ?? false;
+}
+
+function dispatchPerf(stage: string, details: Record<string, unknown>): void {
+  window.dispatchEvent(new CustomEvent(PERF_EVENT, { detail: { stage, timestamp: new Date().toISOString(), ...details } }));
+}
