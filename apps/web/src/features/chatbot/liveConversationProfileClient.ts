@@ -1,0 +1,97 @@
+import {
+  readLiveConversationSettings,
+  updateLiveConversationSettings,
+} from '../assistant-workspace/live-voice-conversation-settings';
+
+export type PresencePreset = 'quiet' | 'natural' | 'engaged' | 'listener';
+export type ConversationStance = 'automatic' | 'listen' | 'discuss' | 'advise' | 'brainstorm' | 'teach';
+export type ConversationPace = 'quick' | 'balanced' | 'reflective';
+export type InterruptionPreference = 'easy' | 'balanced' | 'finish_more';
+export type AssistantBackchannelMode = 'off' | 'minimal' | 'natural';
+export type InitiativeMode = 'off' | 'gentle' | 'active';
+export type LongPauseBehavior = 'wait' | 'reassure' | 'ask_to_continue';
+export type ResponseLength = 'brief' | 'conversational' | 'detailed';
+export type ResponseOnsetStyle = 'adaptive' | 'immediate' | 'natural' | 'reflective';
+export type EmotionalAttunement = 'off' | 'subtle' | 'expressive';
+export type TopicContinuity = 'focused' | 'natural' | 'exploratory';
+export type DuplexMode = 'automatic' | 'half_duplex' | 'echo_aware';
+export type PronunciationSavePolicy = 'ask' | 'session_only' | 'allow';
+
+export type LiveConversationProfile = {
+  presence_preset: PresencePreset;
+  talkativeness: number;
+  conversation_stance: ConversationStance;
+  conversation_pace: ConversationPace;
+  interruption_preference: InterruptionPreference;
+  assistant_backchannel_mode: AssistantBackchannelMode;
+  initiative_mode: InitiativeMode;
+  idle_threshold_ms: number;
+  long_pause_behavior: LongPauseBehavior;
+  response_length: ResponseLength;
+  response_onset_style: ResponseOnsetStyle;
+  emotional_attunement: EmotionalAttunement;
+  topic_continuity: TopicContinuity;
+  max_idle_prompts: number;
+  duplex_mode: DuplexMode;
+  pronunciation_save_policy: PronunciationSavePolicy;
+  profile_version: number;
+};
+
+export type LiveConversationProfileEnvelope = {
+  user_defaults: LiveConversationProfile;
+  session_override: LiveConversationProfile | null;
+  effective: LiveConversationProfile;
+  source: 'user_defaults' | 'session_override';
+};
+
+export type LiveConversationProfilePatch = Partial<Omit<LiveConversationProfile, 'profile_version'>>;
+
+const MIGRATION_KEY = 'omnix.liveConversation.serverProfileMigrated.v1';
+
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+  });
+  if (!response.ok) throw new Error(`Live Chat profile request failed with status ${response.status}.`);
+  return response.json() as Promise<T>;
+}
+
+export const liveConversationProfileClient = {
+  defaults: () => requestJson<LiveConversationProfile>('/api/live-chat/profile/defaults'),
+  updateDefaults: (patch: LiveConversationProfilePatch) => requestJson<LiveConversationProfile>(
+    '/api/live-chat/profile/defaults',
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  ),
+  get: (sessionId: string) => requestJson<LiveConversationProfileEnvelope>(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-conversation/profile`,
+  ),
+  update: (sessionId: string, patch: LiveConversationProfilePatch) => requestJson<LiveConversationProfileEnvelope>(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-conversation/profile`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  ),
+  clear: (sessionId: string) => requestJson<LiveConversationProfileEnvelope>(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-conversation/profile`,
+    { method: 'DELETE' },
+  ),
+};
+
+export function mirrorProfileForLegacyRuntime(profile: LiveConversationProfile): void {
+  updateLiveConversationSettings({
+    conversationPace: profile.conversation_pace,
+    interruptionPreference: profile.interruption_preference,
+    backchannelMode: profile.assistant_backchannel_mode,
+  });
+}
+
+export async function migrateLegacyConversationSettingsOnce(): Promise<boolean> {
+  if (typeof window === 'undefined' || window.localStorage.getItem(MIGRATION_KEY) === 'done') return false;
+  const legacy = readLiveConversationSettings();
+  await liveConversationProfileClient.updateDefaults({
+    conversation_pace: legacy.conversationPace,
+    interruption_preference: legacy.interruptionPreference,
+    assistant_backchannel_mode: legacy.backchannelMode,
+  });
+  window.localStorage.setItem(MIGRATION_KEY, 'done');
+  return true;
+}
