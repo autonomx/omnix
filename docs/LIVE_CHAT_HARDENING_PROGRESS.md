@@ -9,10 +9,10 @@ Completion PR: #1328
 
 | Phase | Status | Scope | Validation |
 |---:|---|---|---|
-| 9 | complete | target-runtime release evidence and v2 evaluator | original phase gate passed; completion aggregation gate pending final head |
-| 10 | complete | calibration-backed automatic duplex | original phase gate passed; live waveform/current-device gate passed `535f2ea6121cdac04f5eb11a07d87bf8f5b5964b` |
-| 11 | complete | authoritative browser conversation store | original phase gate passed; policy-consumption gate passed `a36913750c149c2e296d1bc10e6bab3621d347f7` |
-| 12 | complete | durable Voice Session evaluation and preset tuning | original phase gate passed; completion evidence gate pending final head |
+| 9 | complete | target-runtime release evidence and v2 evaluator | combined aggregation and durable gate passed `25bd2ba9f641309a26d5a193a31c7a79bbb63261` |
+| 10 | complete | calibration-backed automatic duplex | live waveform/current-device gate passed `535f2ea6121cdac04f5eb11a07d87bf8f5b5964b` |
+| 11 | complete | authoritative browser conversation store | policy-consumption gate passed `a36913750c149c2e296d1bc10e6bab3621d347f7` |
+| 12 | complete | durable Voice Session evaluation and preset tuning | content-free runtime evidence and aggregate UI passed `25bd2ba9f641309a26d5a193a31c7a79bbb63261` |
 
 ## Post-implementation review completion
 
@@ -28,7 +28,7 @@ The completion branch closes the repository gaps found after PR #1327:
 
 ## Repository completion gate
 
-The final completion head must pass:
+Implementation head `25bd2ba9f641309a26d5a193a31c7a79bbb63261` passed:
 
 - RPG Phase 0 architecture compliance;
 - RPG deterministic PR gates;
@@ -37,6 +37,8 @@ The final completion head must pass:
 - authoritative-state and privacy source guards;
 - Web TypeScript and full unit suite;
 - representative deterministic RPG smoke.
+
+This documentation-only commit must pass the same exact-head checks before PR #1328 is merged.
 
 ## Operational evidence boundary
 
