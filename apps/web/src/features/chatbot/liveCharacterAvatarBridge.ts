@@ -11,16 +11,36 @@ const AVATAR_HOST_CLASS = 'assistant-live-character-avatar';
 const LIVE_VISUAL_STAGE_CLASS = 'assistant-live-visual-stage';
 const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
 const INSTALL_KEY = '__omnixCharacterAvatarBridgeInstalled';
+const AUDIO_ELEMENT_FRAME_MS = 50;
+const AUDIO_ELEMENT_FFT_SIZE = 1_024;
+const ENVELOPE_FRAME_ALIASES: Record<AvatarMouthFrame, string[]> = {
+  closed: ['closed', 'silence', 'MBP'],
+  small: ['small', 'U', 'WQ', 'FV', 'other'],
+  medium: ['medium', 'E', 'L', 'other', 'U'],
+  wide: ['wide', 'A', 'O', 'other', 'E'],
+};
+
+type AudioMonitorWindow = Window & typeof globalThis & {
+  AudioContext?: typeof AudioContext;
+  webkitAudioContext?: typeof AudioContext;
+};
+
+type CapturableAudioElement = HTMLAudioElement & {
+  captureStream?: () => MediaStream;
+  mozCaptureStream?: () => MediaStream;
+};
 
 let currentRuntime: CharacterLiveCallRuntime | null = null;
 let currentMouthFrame: AvatarMouthFrame = 'closed';
 let nextAudioFrameAt = 0;
 let blinkClosed = false;
 let blinkTimer: ReturnType<typeof setTimeout> | null = null;
+const audioElementStops = new WeakMap<HTMLAudioElement, () => void>();
 
 export function publishCharacterAvatarRuntime(runtime: CharacterLiveCallRuntime | null): void {
   currentRuntime = runtime;
   currentMouthFrame = 'closed';
+  nextAudioFrameAt = 0;
   blinkClosed = false;
   scheduleBlink();
   if (typeof window !== 'undefined') {
@@ -34,6 +54,13 @@ export function mouthFrameForRms(rms: number): AvatarMouthFrame {
   if (rms < 0.035) return 'small';
   if (rms < 0.075) return 'medium';
   return 'wide';
+}
+
+export function floatPcmMouthFrame(samples: Float32Array): AvatarMouthFrame {
+  if (!samples.length) return 'closed';
+  let sum = 0;
+  for (const sample of samples) sum += sample * sample;
+  return mouthFrameForRms(Math.sqrt(sum / samples.length));
 }
 
 export function pcmMouthTimeline(
@@ -63,6 +90,17 @@ export function pcmMouthTimeline(
 
 export function characterAvatarAssetUrl(assetId: string): string {
   return `/api/assets/${encodeURIComponent(assetId)}/file`;
+}
+
+export function avatarMouthAssetForFrame(
+  pack: CharacterAvatarPack,
+  frame: AvatarMouthFrame,
+): string {
+  for (const key of ENVELOPE_FRAME_ALIASES[frame]) {
+    const assetId = pack.mouth_frames[key];
+    if (assetId) return assetId;
+  }
+  return pack.base_asset_id || '';
 }
 
 export function presentationStateFromDom(
@@ -112,6 +150,7 @@ function installLiveCharacterAvatarBridge(): void {
   });
 
   installTtsFetchMonitor();
+  installAudioElementMonitor();
 }
 
 function installTtsFetchMonitor(): void {
@@ -130,6 +169,86 @@ function installTtsFetchMonitor(): void {
       headers: response.headers,
     });
   };
+}
+
+function installAudioElementMonitor(): void {
+  const prototype = window.HTMLMediaElement?.prototype;
+  if (!prototype || typeof prototype.play !== 'function') return;
+  const originalPlay = prototype.play;
+  prototype.play = function patchedAvatarAudioPlay(this: HTMLMediaElement): Promise<void> {
+    const audio = this instanceof HTMLAudioElement ? this : null;
+    if (audio) startAudioElementMonitor(audio);
+    const result = originalPlay.call(this);
+    if (audio && result && typeof result.catch === 'function') {
+      void result.catch(() => stopAudioElementMonitor(audio));
+    }
+    return result;
+  };
+}
+
+function startAudioElementMonitor(audio: HTMLAudioElement): void {
+  if (!currentRuntime?.avatar_pack) return;
+  stopAudioElementMonitor(audio);
+  const liveWindow = window as AudioMonitorWindow;
+  const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
+  if (!AudioContextCtor) return;
+
+  let context: AudioContext | null = null;
+  let source: AudioNode | null = null;
+  let analyser: AnalyserNode | null = null;
+  let timer: number | null = null;
+  let stopped = false;
+
+  const stop = (): void => {
+    if (stopped) return;
+    stopped = true;
+    if (timer !== null) window.clearInterval(timer);
+    audio.removeEventListener('pause', stop);
+    audio.removeEventListener('ended', stop);
+    audio.removeEventListener('error', stop);
+    if (audioElementStops.get(audio) === stop) audioElementStops.delete(audio);
+    try { source?.disconnect(); } catch { /* ignore monitor cleanup failures */ }
+    try { analyser?.disconnect(); } catch { /* ignore monitor cleanup failures */ }
+    if (context && context.state !== 'closed') void context.close().catch(() => undefined);
+    dispatchAvatarFrame('closed');
+  };
+
+  try {
+    context = new AudioContextCtor({ latencyHint: 'interactive' });
+    analyser = context.createAnalyser();
+    analyser.fftSize = AUDIO_ELEMENT_FFT_SIZE;
+    analyser.smoothingTimeConstant = 0.2;
+
+    const capturable = audio as CapturableAudioElement;
+    const capturedStream = capturable.captureStream?.() ?? capturable.mozCaptureStream?.();
+    if (capturedStream && typeof context.createMediaStreamSource === 'function') {
+      source = context.createMediaStreamSource(capturedStream);
+      source.connect(analyser);
+    } else {
+      source = context.createMediaElementSource(audio);
+      source.connect(analyser);
+      analyser.connect(context.destination);
+    }
+
+    const waveform = new Float32Array(analyser.fftSize);
+    timer = window.setInterval(() => {
+      if (!analyser || audio.paused || audio.ended) return;
+      analyser.getFloatTimeDomainData(waveform);
+      dispatchAvatarFrame(floatPcmMouthFrame(waveform));
+    }, AUDIO_ELEMENT_FRAME_MS);
+
+    audioElementStops.set(audio, stop);
+    audio.addEventListener('pause', stop, { once: true });
+    audio.addEventListener('ended', stop, { once: true });
+    audio.addEventListener('error', stop, { once: true });
+    if (context.state !== 'running') void context.resume().catch(() => undefined);
+  } catch {
+    stop();
+  }
+}
+
+function stopAudioElementMonitor(audio: HTMLAudioElement): void {
+  audioElementStops.get(audio)?.();
 }
 
 async function monitorTtsStream(stream: ReadableStream<Uint8Array>): Promise<void> {
@@ -330,12 +449,10 @@ function resolveFrameAsset(
 ): string {
   if (!pack) return '';
   if (blinkClosed && pack.blink_frames.closed) return pack.blink_frames.closed;
-  if (frame !== 'closed') {
-    return pack.mouth_frames[frame] || pack.mouth_frames.closed || pack.base_asset_id || '';
-  }
+  if (frame !== 'closed') return avatarMouthAssetForFrame(pack, frame);
   if (pack.expression_frames[state]) return pack.expression_frames[state];
   if (pack.active_outfit && pack.outfit_frames[pack.active_outfit]) return pack.outfit_frames[pack.active_outfit];
-  return pack.mouth_frames.closed || pack.base_asset_id || '';
+  return avatarMouthAssetForFrame(pack, 'closed');
 }
 
 installLiveCharacterAvatarBridge();
