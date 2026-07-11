@@ -86,7 +86,7 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
         <div>
           <p className="eyebrow">Omnix Assistant</p>
           <h2>Live Chat</h2>
-          <p>Configure the character and turn-taking behavior used by the existing live voice pipeline.</p>
+          <p>Configure the character and conversation presence used by the existing live voice pipeline.</p>
         </div>
         <span className={snapshot.connected ? 'live-chat-status active' : 'live-chat-status'}>
           {snapshot.connected ? 'Call connected' : 'Call idle'}
@@ -96,13 +96,13 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
       {!sessionId ? (
         <article className="live-chat-card live-chat-empty" role="status">
           <h3>Select a Chat session</h3>
-          <p>Choose or create a Chat session before configuring its live character identity.</p>
+          <p>Choose or create a Chat session to configure its character. Presence changes below update your user defaults.</p>
         </article>
       ) : (
         <CharacterModePanel sessionId={sessionId} />
       )}
 
-      <LiveConversationControls />
+      <LiveConversationControls sessionId={sessionId} />
 
       <section className="live-chat-card" aria-labelledby="live-chat-call-heading">
         <header>
