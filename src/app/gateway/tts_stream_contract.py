@@ -43,11 +43,11 @@ class TtsStreamRequest(BaseModel):
 
     @model_validator(mode="after")
     def apply_chat_stream_runtime_policy(self) -> "TtsStreamRequest":
-        """Use CUDA graphs and a text-relative completion bound for chat playback."""
+        """Use safe parity decoding for live calls and CUDA graphs for one-shot chat playback."""
         stream_id = (self.diagnostics_stream_id or "").strip()
         if not stream_id.startswith("chat-"):
             return self
-        self.parity_mode = False
+        self.parity_mode = stream_id.startswith("chat-live-")
         if self.max_new_tokens is None:
             self.max_new_tokens = estimate_chat_stream_max_new_tokens(self.text)
         return self
