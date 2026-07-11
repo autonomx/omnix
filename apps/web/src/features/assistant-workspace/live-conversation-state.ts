@@ -74,6 +74,10 @@ export function projectLegacyLiveVoiceState(connected: boolean, legacyState: str
   if (!connected) return INITIAL_LIVE_CONVERSATION_STATE;
   const normalized = legacyState.trim().toLocaleLowerCase();
   let state = reduceLiveConversationState(INITIAL_LIVE_CONVERSATION_STATE, { type: 'connection', value: 'connected' });
+  if (normalized.includes('user speaking') || normalized.includes('hearing speech')) {
+    state = reduceLiveConversationState(state, { type: 'user_turn', value: 'speaking' });
+    return reduceLiveConversationState(state, { type: 'floor_owner', value: 'user' });
+  }
   if (normalized.includes('speaking') || normalized.includes('playing')) {
     state = reduceLiveConversationState(state, { type: 'assistant_turn', value: 'speaking' });
     state = reduceLiveConversationState(state, { type: 'delivery', value: 'audio_started' });
@@ -81,10 +85,6 @@ export function projectLegacyLiveVoiceState(connected: boolean, legacyState: str
   }
   if (normalized.includes('generating') || normalized.includes('thinking')) {
     return reduceLiveConversationState(state, { type: 'assistant_turn', value: 'generating' });
-  }
-  if (normalized.includes('user speaking') || normalized.includes('hearing speech')) {
-    state = reduceLiveConversationState(state, { type: 'user_turn', value: 'speaking' });
-    return reduceLiveConversationState(state, { type: 'floor_owner', value: 'user' });
   }
   state = reduceLiveConversationState(state, { type: 'user_turn', value: 'listening' });
   return reduceLiveConversationState(state, { type: 'floor_owner', value: 'unclaimed' });
