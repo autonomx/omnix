@@ -1,48 +1,51 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  decideBackchannel,
-  requestEphemeralBackchannel,
+  decideAssistantListenerBackchannel,
+  isUserContinuer,
   resolveBackchannelTranscript,
 } from './live-voice-backchannel';
 
-describe('ephemeral live voice acknowledgements', () => {
+describe('live voice backchannels', () => {
   beforeEach(() => {
     window.localStorage.clear();
     document.body.innerHTML = '';
   });
 
-  it('is opt-in and blocks sensitive or semantic speech', () => {
-    expect(decideBackchannel('mhm', 'off', 10_000, 0).allowed).toBe(false);
-    expect(decideBackchannel('my passcode is 123456', 'natural', 10_000, 0).reason).toBe('sensitive_dictation');
-    expect(decideBackchannel('No, that is wrong', 'natural', 10_000, 0).reason).toBe('semantic_turn');
-    expect(decideBackchannel('Where is the gate?', 'natural', 10_000, 0).reason).toBe('semantic_turn');
+  it('recognizes user continuers without authorizing assistant speech', () => {
+    expect(isUserContinuer('mhm')).toBe(true);
+    expect(isUserContinuer('Yeah.')).toBe(true);
+    expect(isUserContinuer('Actually, that is wrong.')).toBe(false);
   });
 
-  it('uses fixed non-authoritative tokens and enforces cooldown', () => {
-    const allowed = decideBackchannel('yeah', 'minimal', 10_000, 0);
-    expect(allowed).toEqual({ allowed: true, token: 'mhm', reason: 'minimal' });
-    expect(decideBackchannel('mhm', 'natural', 12_000, 10_000).reason).toBe('cooldown');
+  it('requires sustained speech, a safe boundary, and echo-aware duplex', () => {
+    expect(decideAssistantListenerBackchannel('I was explaining the whole situation,', 'natural', 4_000, 10_000, 0, 'half_duplex').reason)
+      .toBe('requires_echo_aware_duplex');
+    expect(decideAssistantListenerBackchannel('I was explaining the whole situation,', 'natural', 2_000, 10_000, 0, 'echo_aware').reason)
+      .toBe('speech_too_short');
+    expect(decideAssistantListenerBackchannel('I was explaining', 'natural', 4_000, 10_000, 0, 'echo_aware').reason)
+      .toBe('no_safe_clause_boundary');
   });
 
-  it('dispatches an ephemeral event without creating a chat message', () => {
-    window.localStorage.setItem('omnix.chatbot.assistantSettings', JSON.stringify({ backchannelMode: 'minimal' }));
-    const listener = vi.fn();
-    window.addEventListener('omnix:assistant-backchannel', listener);
-
-    expect(requestEphemeralBackchannel('mhm', 'minimal')).toBe(true);
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect((listener.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ token: 'mhm', expiresAfterMs: 900 });
-    expect(document.querySelector('.assistant-chat-message')).toBeNull();
+  it('blocks sensitive, corrective, and question-shaped speech', () => {
+    expect(decideAssistantListenerBackchannel('my passcode is 123456,', 'natural', 4_000, 10_000, 0, 'echo_aware').reason)
+      .toBe('sensitive_dictation');
+    expect(decideAssistantListenerBackchannel('Actually, that was wrong.', 'natural', 4_000, 10_000, 0, 'echo_aware').reason)
+      .toBe('semantic_risk');
+    expect(decideAssistantListenerBackchannel('Where should I go?', 'natural', 4_000, 10_000, 0, 'echo_aware').reason)
+      .toBe('semantic_risk');
   });
 
-  it('recovers the classified acknowledgement from the current draft row', () => {
-    document.body.innerHTML = `
-      <div class="assistant-voice-transcript">
-        <p data-live-voice-id="live-voice-draft"><span><strong>You</strong></span>mhm</p>
-      </div>`;
+  it('selects bounded character-voice tokens and enforces cooldown', () => {
+    expect(decideAssistantListenerBackchannel('I have been walking through the background carefully,', 'minimal', 4_000, 10_000, 0, 'echo_aware'))
+      .toEqual({ allowed: true, token: 'mhm', reason: 'minimal' });
+    expect(decideAssistantListenerBackchannel('I have been walking through the background carefully,', 'natural', 4_000, 12_000, 10_000, 'echo_aware').reason)
+      .toBe('cooldown');
+  });
 
-    expect(resolveBackchannelTranscript(undefined)).toBe('mhm');
-    expect(resolveBackchannelTranscript('yeah')).toBe('yeah');
+  it('recovers partial speech from the live draft', () => {
+    document.body.innerHTML = '<div class="assistant-live-draft"><p>I am still explaining this part,</p></div>';
+    expect(resolveBackchannelTranscript(undefined)).toBe('I am still explaining this part,');
+    expect(resolveBackchannelTranscript('explicit')).toBe('explicit');
   });
 });
