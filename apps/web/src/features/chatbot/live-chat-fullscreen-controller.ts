@@ -14,12 +14,15 @@ const INITIAL_STATE: LiveChatFullscreenState = {
   source: null,
 };
 
-type FullscreenDocument = Document & {
+type FullscreenDocumentApi = {
+  fullscreenElement?: Element | null;
   webkitFullscreenElement?: Element | null;
+  exitFullscreen?: () => Promise<void> | void;
   webkitExitFullscreen?: () => Promise<void> | void;
 };
 
-type FullscreenElement = HTMLElement & {
+type FullscreenElementApi = {
+  requestFullscreen?: () => Promise<void> | void;
   webkitRequestFullscreen?: () => Promise<void> | void;
 };
 
@@ -35,9 +38,13 @@ function emit(next: LiveChatFullscreenState): void {
   listeners.forEach((listener) => listener());
 }
 
+function fullscreenDocumentApi(): FullscreenDocumentApi {
+  return document as unknown as FullscreenDocumentApi;
+}
+
 function browserFullscreenElement(): Element | null {
-  const fullscreenDocument = document as FullscreenDocument;
-  return document.fullscreenElement ?? fullscreenDocument.webkitFullscreenElement ?? null;
+  const api = fullscreenDocumentApi();
+  return api.fullscreenElement ?? api.webkitFullscreenElement ?? null;
 }
 
 function restorePresentationContext(): void {
@@ -92,8 +99,13 @@ export function enterLiveChatFullscreen(source: 'header' | 'call-card' = 'header
   priorFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   priorScroll = { x: window.scrollX, y: window.scrollY };
   const token = ++requestToken;
-  const root = document.documentElement as FullscreenElement;
-  const request = root.requestFullscreen?.bind(root) ?? root.webkitRequestFullscreen?.bind(root);
+  const root = document.documentElement;
+  const api = root as unknown as FullscreenElementApi;
+  const request = typeof api.requestFullscreen === 'function'
+    ? api.requestFullscreen.bind(root)
+    : typeof api.webkitRequestFullscreen === 'function'
+      ? api.webkitRequestFullscreen.bind(root)
+      : null;
   emit({ immersive: true, browserState: request ? 'requesting' : 'unavailable', source });
 
   window.requestAnimationFrame(() => {
@@ -115,8 +127,12 @@ export function enterLiveChatFullscreen(source: 'header' | 'call-card' = 'header
 export async function exitLiveChatFullscreen(): Promise<void> {
   if (!state.immersive) return;
   requestToken += 1;
-  const fullscreenDocument = document as FullscreenDocument;
-  const exit = document.exitFullscreen?.bind(document) ?? fullscreenDocument.webkitExitFullscreen?.bind(document);
+  const api = fullscreenDocumentApi();
+  const exit = typeof api.exitFullscreen === 'function'
+    ? api.exitFullscreen.bind(document)
+    : typeof api.webkitExitFullscreen === 'function'
+      ? api.webkitExitFullscreen.bind(document)
+      : null;
   emit(INITIAL_STATE);
   if (browserFullscreenElement() && exit) {
     try {
