@@ -8,8 +8,8 @@ Base: `main` at `e882b184f6d3df27abaab3b68af2a2b6d041534b`
 
 | Phase | Status | Scope | Validation |
 |---:|---|---|---|
-| 9 | implemented, CI pending | target-runtime release evidence and v2 evaluator | exact-head GitHub Actions pending |
-| 10 | pending | calibration-backed automatic duplex | pending |
+| 9 | complete | target-runtime release evidence and v2 evaluator | passed `3ba45b7fc284b5c426c6850b9f5c142ce67bbbf0` |
+| 10 | implemented, CI pending | calibration-backed automatic duplex | exact-head GitHub Actions pending |
 | 11 | pending | authoritative browser conversation store | pending |
 | 12 | pending | durable Voice Session evaluation and preset tuning | pending |
 
