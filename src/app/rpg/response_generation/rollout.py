@@ -155,7 +155,7 @@ def coerce_rollout_stage(value: RolloutStage | str | int) -> RolloutStage:
 def rollout_stage_from_context(
     context: Mapping[str, Any] | None,
     *,
-    default: RolloutStage = RolloutStage.CANONICAL_DEFAULT,
+    default: RolloutStage = RolloutStage.SHADOW,
 ) -> RolloutStage:
     if not isinstance(context, Mapping):
         return default
