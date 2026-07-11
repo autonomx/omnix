@@ -17,10 +17,12 @@ import './features/chatbot/ChatbotWorkspaceSidePanelFix.css';
 import './features/chatbot/ChatbotWorkspaceUtilityToggle.css';
 import './features/assistant-workspace/assistant-context-controller.css';
 import './features/assistant-workspace/research-release-controller.css';
-import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
+import { initializeChatMessageAudioControllerV2 } from './features/assistant-workspace/chat-message-audio-controller-v2';
 import './features/assistant-workspace/live-voice-form-sync';
+import './features/assistant-workspace/live-voice-duplex-gate';
 import './features/assistant-workspace/live-voice-controller';
-import { initializeLiveVoiceUnifiedAudioController } from './features/assistant-workspace/live-voice-unified-audio-controller';
+import './features/assistant-workspace/live-voice-transcript-autoscroll';
+import { initializeLiveVoiceSmoothAudioController } from './features/assistant-workspace/live-voice-smooth-audio-controller';
 import './features/storyteller/StorytellerWorkspace.css';
 import './features/storyteller/StorytellerSidebar.css';
 import './features/storyteller/StoryMode.css';
@@ -42,7 +44,7 @@ const queryClient = new QueryClient({
   },
 });
 
-initializeLiveVoiceUnifiedAudioController();
+initializeLiveVoiceSmoothAudioController();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
@@ -55,7 +57,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 );
 
 window.setTimeout(() => {
-  initializeChatMessageStreamAudioController();
+  initializeChatMessageAudioControllerV2();
   void import('./features/assistant-workspace/assistant-context-controller')
     .then(() => import('./features/assistant-workspace/research-release-controller'))
     .catch((error: unknown) => {
