@@ -73,8 +73,12 @@ export function compareRecentWaveforms(
   if (!playbackHistory.length || microphoneInput.length < 16) return emptySimilarity();
   const boundedMicrophone = boundedDownsample(microphoneInput, 2_048);
   const scale = microphoneInput.length / Math.max(1, boundedMicrophone.length);
+  const minimumOverlap = Math.min(
+    microphoneInput.length,
+    Math.max(16, Math.min(256, Math.ceil(microphoneInput.length * 0.6))),
+  );
   const lagLimit = Math.min(
-    playbackHistory.length - 16,
+    playbackHistory.length - minimumOverlap,
     Math.max(0, Math.round(sampleRate * maxLagMs / 1_000)),
   );
   if (lagLimit < 0) return emptySimilarity();
@@ -86,7 +90,7 @@ export function compareRecentWaveforms(
   for (let lag = 0; lag <= lagLimit; lag += lagStep) {
     const playbackEnd = playbackHistory.length - lag;
     const compared = Math.min(microphoneInput.length, playbackEnd);
-    if (compared < 16) continue;
+    if (compared < minimumOverlap) continue;
     const playbackStart = playbackEnd - compared;
     const microphoneStart = microphoneInput.length - compared;
     const stride = Math.max(1, Math.ceil(compared / 2_048));
