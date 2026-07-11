@@ -1,79 +1,171 @@
 import { useEffect, useState } from 'react';
 
 import {
-  type BackchannelMode,
-  type ConversationPaceSetting,
+  type AssistantBackchannelMode,
+  type ConversationPace,
+  type ConversationStance,
   type InterruptionPreference,
-  type LiveConversationSettings,
-  readLiveConversationSettings,
-  updateLiveConversationSettings,
-} from '../assistant-workspace/live-voice-conversation-settings';
+  type LiveConversationProfile,
+  type LiveConversationProfilePatch,
+  type PresencePreset,
+  type ResponseLength,
+  liveConversationProfileClient,
+  migrateLegacyConversationSettingsOnce,
+  mirrorProfileForLegacyRuntime,
+} from './liveConversationProfileClient';
 
-const SETTINGS_CHANGED_EVENT = 'omnix:live-conversation-settings-changed';
+export type LiveConversationControlsProps = {
+  sessionId: string | null;
+};
 
-export function LiveConversationControls() {
-  const [settings, setSettings] = useState<LiveConversationSettings>(() => readLiveConversationSettings());
+export function LiveConversationControls({ sessionId }: LiveConversationControlsProps) {
+  const [profile, setProfile] = useState<LiveConversationProfile | null>(null);
+  const [source, setSource] = useState<'user_defaults' | 'session_override'>('user_defaults');
+  const [advanced, setAdvanced] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const sync = (event: Event) => {
-      const detail = (event as CustomEvent<LiveConversationSettings>).detail;
-      setSettings(detail ?? readLiveConversationSettings());
-    };
-    window.addEventListener(SETTINGS_CHANGED_EVENT, sync);
-    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, sync);
-  }, []);
+    let cancelled = false;
+    setProfile(null);
+    setStatus(null);
+    void (async () => {
+      try {
+        await migrateLegacyConversationSettingsOnce();
+        if (cancelled) return;
+        if (sessionId) {
+          const envelope = await liveConversationProfileClient.get(sessionId);
+          if (cancelled) return;
+          setProfile(envelope.effective);
+          setSource(envelope.source);
+          mirrorProfileForLegacyRuntime(envelope.effective);
+        } else {
+          const defaults = await liveConversationProfileClient.defaults();
+          if (cancelled) return;
+          setProfile(defaults);
+          setSource('user_defaults');
+          mirrorProfileForLegacyRuntime(defaults);
+        }
+      } catch (error) {
+        if (!cancelled) setStatus(error instanceof Error ? error.message : 'Live Chat profile could not be loaded.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId]);
 
-  function update(patch: Partial<LiveConversationSettings>): void {
-    setSettings(updateLiveConversationSettings(patch));
+  async function update(patch: LiveConversationProfilePatch): Promise<void> {
+    if (!profile || saving) return;
+    setSaving(true);
+    setStatus(null);
+    try {
+      if (sessionId) {
+        const envelope = await liveConversationProfileClient.update(sessionId, patch);
+        setProfile(envelope.effective);
+        setSource(envelope.source);
+        mirrorProfileForLegacyRuntime(envelope.effective);
+      } else {
+        const defaults = await liveConversationProfileClient.updateDefaults(patch);
+        setProfile(defaults);
+        setSource('user_defaults');
+        mirrorProfileForLegacyRuntime(defaults);
+      }
+      setStatus(sessionId ? 'Session presence profile saved.' : 'Default presence profile saved.');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Live Chat profile could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearOverride(): Promise<void> {
+    if (!sessionId || saving) return;
+    setSaving(true);
+    setStatus(null);
+    try {
+      const envelope = await liveConversationProfileClient.clear(sessionId);
+      setProfile(envelope.effective);
+      setSource(envelope.source);
+      mirrorProfileForLegacyRuntime(envelope.effective);
+      setStatus('This session now uses your Live Chat defaults.');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Session override could not be cleared.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <section className="live-chat-card" aria-labelledby="live-chat-turn-taking-heading">
+    <section className="live-chat-card" aria-labelledby="live-chat-presence-heading">
       <header>
         <div>
           <p className="eyebrow">Conversation presence</p>
-          <h3 id="live-chat-turn-taking-heading">Turn-taking</h3>
-          <p>Control pause timing, interruption sensitivity, and optional spoken acknowledgements.</p>
+          <h3 id="live-chat-presence-heading">Presence and stance</h3>
+          <p>Choose how active the character feels without changing who the character is.</p>
         </div>
+        <span className="live-chat-profile-source">{sessionId && source === 'session_override' ? 'Session override' : 'User defaults'}</span>
       </header>
-      <div className="live-chat-control-grid">
-        <label>
-          <span>Conversation pace</span>
-          <select
-            aria-label="Conversation pace"
-            value={settings.conversationPace}
-            onChange={(event) => update({ conversationPace: event.currentTarget.value as ConversationPaceSetting })}
-          >
-            <option value="quick">Quick</option>
-            <option value="balanced">Balanced</option>
-            <option value="reflective">Reflective</option>
-          </select>
-        </label>
-        <label>
-          <span>Interruption behavior</span>
-          <select
-            aria-label="Interruption behavior"
-            value={settings.interruptionPreference}
-            onChange={(event) => update({ interruptionPreference: event.currentTarget.value as InterruptionPreference })}
-          >
-            <option value="easy">Easy to interrupt</option>
-            <option value="balanced">Balanced</option>
-            <option value="finish_more">Let assistant finish more often</option>
-          </select>
-        </label>
-        <label>
-          <span>Spoken acknowledgements</span>
-          <select
-            aria-label="Spoken acknowledgements"
-            value={settings.backchannelMode}
-            onChange={(event) => update({ backchannelMode: event.currentTarget.value as BackchannelMode })}
-          >
-            <option value="off">Off</option>
-            <option value="minimal">Minimal</option>
-            <option value="natural">Natural</option>
-          </select>
-        </label>
-      </div>
+
+      {!profile ? <p role="status">{status ?? 'Loading Live Chat profile…'}</p> : (
+        <>
+          <div className="live-chat-control-grid">
+            <SelectControl label="Presence" value={profile.presence_preset} disabled={saving} onChange={(value) => void update({ presence_preset: value as PresencePreset })} options={[
+              ['quiet', 'Quiet'], ['natural', 'Natural'], ['engaged', 'Engaged'], ['listener', 'Listener'],
+            ]} />
+            <SelectControl label="Conversation stance" value={profile.conversation_stance} disabled={saving} onChange={(value) => void update({ conversation_stance: value as ConversationStance })} options={[
+              ['automatic', 'Automatic'], ['listen', 'Listen'], ['discuss', 'Discuss'], ['advise', 'Advise'], ['brainstorm', 'Brainstorm'], ['teach', 'Teach'],
+            ]} />
+            <SelectControl label="Response length" value={profile.response_length} disabled={saving} onChange={(value) => void update({ response_length: value as ResponseLength })} options={[
+              ['brief', 'Brief'], ['conversational', 'Conversational'], ['detailed', 'Detailed'],
+            ]} />
+            <label>
+              <span>Talkativeness</span>
+              <input aria-label="Talkativeness" type="range" min="0" max="100" step="5" value={profile.talkativeness} disabled={saving} onChange={(event) => void update({ talkativeness: Number(event.currentTarget.value) })} />
+              <strong>{profile.talkativeness < 35 ? 'Less talkative' : profile.talkativeness > 65 ? 'More talkative' : 'Balanced'}</strong>
+            </label>
+          </div>
+
+          <button className="live-chat-advanced-toggle" type="button" aria-expanded={advanced} onClick={() => setAdvanced((value) => !value)}>
+            {advanced ? 'Hide advanced controls' : 'Show advanced controls'}
+          </button>
+
+          {advanced ? (
+            <div className="live-chat-control-grid live-chat-advanced-controls">
+              <SelectControl label="Conversation pace" value={profile.conversation_pace} disabled={saving} onChange={(value) => void update({ conversation_pace: value as ConversationPace })} options={[
+                ['quick', 'Quick'], ['balanced', 'Balanced'], ['reflective', 'Reflective'],
+              ]} />
+              <SelectControl label="Interruption behavior" value={profile.interruption_preference} disabled={saving} onChange={(value) => void update({ interruption_preference: value as InterruptionPreference })} options={[
+                ['easy', 'Easy to interrupt'], ['balanced', 'Balanced'], ['finish_more', 'Finish more often'],
+              ]} />
+              <SelectControl label="Assistant listener backchannels" value={profile.assistant_backchannel_mode} disabled={saving} onChange={(value) => void update({ assistant_backchannel_mode: value as AssistantBackchannelMode })} options={[
+                ['off', 'Off'], ['minimal', 'Minimal'], ['natural', 'Natural'],
+              ]} />
+            </div>
+          ) : null}
+
+          <div className="live-chat-profile-actions">
+            {sessionId && source === 'session_override' ? <button type="button" disabled={saving} onClick={() => void clearOverride()}>Use my defaults</button> : null}
+            <small>Profile version {profile.profile_version}</small>
+          </div>
+          {status ? <p className="live-chat-note" role="status">{status}</p> : null}
+        </>
+      )}
     </section>
+  );
+}
+
+function SelectControl({ label, value, options, disabled, onChange }: {
+  label: string;
+  value: string;
+  options: Array<[string, string]>;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label>
+      <span>{label}</span>
+      <select aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)}>
+        {options.map(([optionValue, display]) => <option key={optionValue} value={optionValue}>{display}</option>)}
+      </select>
+    </label>
   );
 }
