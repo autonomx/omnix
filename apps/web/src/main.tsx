@@ -8,7 +8,7 @@ import { omnixTheme } from './design/theme';
 import './features/chatbot/sessionTools';
 import './features/chatbot/researchProgressController';
 import './features/chatbot/researchProgressController.css';
-import './features/chatbot/live-chat-workspace';
+import { initializeLiveChatWorkspace } from './features/chatbot/live-chat-workspace';
 import './features/podcast/podcastSessionGuard';
 import './features/voice/voiceJobListGuard';
 import './styles.css';
@@ -47,6 +47,7 @@ const queryClient = new QueryClient({
 });
 
 initializeLiveVoiceUnifiedAudioController();
+initializeLiveChatWorkspace();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
