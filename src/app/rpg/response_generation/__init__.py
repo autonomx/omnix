@@ -12,6 +12,7 @@ from .contracts import AgencyEffect, CandidateSource, GateDecision, RenderedResp
 from .eligibility import EligibilityPolicy, eligibility_reasons
 from .fallback_library import DeterministicFallbackLibrary, FallbackInput
 from .forward_motion import ForwardMotionPlan, ForwardMotionPolicy, RecoveryHistoryEntry, validate_agency
+from .hermes_adapter import HermesCircuitBreaker, HermesEvidence, HermesProposal, HermesRecoveryResult, RpgHermesRecoveryAdapter
 from .intent_affordance import IntentAnalysis, IntentHypothesis, NarrativeAffordanceClassifier
 from .orchestration import RpgResponseGenerator, build_runtime_shadow_report, build_world_scene_shadow_report, semantic_plan_from_legacy_payload
 from .quality_gate import QualityGate, QualityReport
@@ -21,18 +22,5 @@ from .retrieval import EvidenceRecord, LocalKnowledgeRetriever, RetrievalResult,
 from .semantic_plan import SemanticPlanValidation, validate_semantic_plan
 
 __all__ = [
-    "AgencyEffect", "BaselineMetrics", "BaselineObservation", "BaselineScenario",
-    "CandidateRanker", "CandidateSource", "ClaimLedger", "ClaimRecord", "ContextTrace",
-    "DeterministicFallbackLibrary", "EligibilityPolicy", "EvidenceCard", "EvidenceRecord",
-    "FallbackInput", "ForwardMotionPlan", "ForwardMotionPolicy", "GateDecision",
-    "IntentAnalysis", "IntentHypothesis", "LocalKnowledgeRetriever", "LocalRecoveryAnalysis",
-    "LocalRecoveryCoordinator", "NarrationContext", "NarrationContextCompiler",
-    "NarrativeAffordanceClassifier", "NoEligibleCandidateError", "QualityGate", "QualityReport",
-    "RecoveryHistoryEntry", "RenderedResponse", "ResponseCandidate", "ResponseMode",
-    "ResponseRenderer", "ResponseRequest", "RetrievalResult", "Reversibility",
-    "RpgResponseGenerator", "SectionType", "SemanticPlanValidation", "SemanticResponsePlan",
-    "SemanticSection", "build_retrieval_sources", "build_runtime_shadow_report",
-    "build_world_scene_shadow_report", "derive_claim_ledger", "eligibility_reasons",
-    "evaluate_baseline", "load_baseline_scenarios", "semantic_plan_from_legacy_payload",
-    "validate_agency", "validate_scenarios", "validate_semantic_plan",
+    "AgencyEffect", "BaselineMetrics", "BaselineObservation", "BaselineScenario", "CandidateRanker", "CandidateSource", "ClaimLedger", "ClaimRecord", "ContextTrace", "DeterministicFallbackLibrary", "EligibilityPolicy", "EvidenceCard", "EvidenceRecord", "FallbackInput", "ForwardMotionPlan", "ForwardMotionPolicy", "GateDecision", "HermesCircuitBreaker", "HermesEvidence", "HermesProposal", "HermesRecoveryResult", "IntentAnalysis", "IntentHypothesis", "LocalKnowledgeRetriever", "LocalRecoveryAnalysis", "LocalRecoveryCoordinator", "NarrationContext", "NarrationContextCompiler", "NarrativeAffordanceClassifier", "NoEligibleCandidateError", "QualityGate", "QualityReport", "RecoveryHistoryEntry", "RenderedResponse", "ResponseCandidate", "ResponseMode", "ResponseRenderer", "ResponseRequest", "RetrievalResult", "Reversibility", "RpgHermesRecoveryAdapter", "RpgResponseGenerator", "SectionType", "SemanticPlanValidation", "SemanticResponsePlan", "SemanticSection", "build_retrieval_sources", "build_runtime_shadow_report", "build_world_scene_shadow_report", "derive_claim_ledger", "eligibility_reasons", "evaluate_baseline", "load_baseline_scenarios", "semantic_plan_from_legacy_payload", "validate_agency", "validate_scenarios", "validate_semantic_plan",
 ]
