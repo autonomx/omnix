@@ -94,5 +94,99 @@ def test_phase1_authoritative_deltas_remain_metadata_not_prose():
     )
 
     assert rendered.authoritative_deltas["currency"]["silver"] == -5
-    assert "silver":
-        pass
+    assert "silver" not in rendered.text.casefold()
+    assert "room_key" not in rendered.text
+
+
+def test_phase1_dialogue_renderer_formats_speaker_text_without_debug_labels():
+    rendered = ResponseRenderer().render(_plan(ResponseMode.DIALOGUE))
+
+    assert rendered.text.startswith("“")
+    assert "npc_bran:" not in rendered.text
+    assert "Result:" not in rendered.text
+
+
+def test_phase1_runtime_and_world_scene_payloads_use_one_semantic_adapter_shape():
+    runtime_payload = {
+        "source": "provider_runtime_narration",
+        "response_mode": "dialogue",
+        "narration": "Bran glances toward the stairs.",
+        "action": "Bran glances toward the stairs.",
+        "npc": {"speaker": "Bran", "line": "Five silver for the night."},
+    }
+    world_payload = {
+        "source": "world_scene_narrator",
+        "mode": "dialogue",
+        "narration": "Bran glances toward the stairs.",
+        "npc_line": "Five silver for the night.",
+        "speaker": "Bran",
+    }
+
+    runtime_plan = semantic_plan_from_legacy_payload(
+        runtime_payload,
+        mode=ResponseMode.DIALOGUE,
+    )
+    world_plan = semantic_plan_from_legacy_payload(
+        world_payload,
+        mode=ResponseMode.DIALOGUE,
+    )
+
+    assert runtime_plan.mode is world_plan.mode is ResponseMode.DIALOGUE
+    assert {section.section_type for section in runtime_plan.sections} == {
+        SectionType.NARRATION,
+        SectionType.ACTION,
+        SectionType.NPC_DIALOGUE,
+    }
+    assert {section.section_type for section in world_plan.sections} == {
+        SectionType.NARRATION,
+        SectionType.NPC_DIALOGUE,
+    }
+
+
+def test_phase1_canonical_generator_owns_final_visible_assembly():
+    candidate = ResponseCandidate(
+        candidate_id="candidate-1",
+        plan=_plan(ResponseMode.ACTION),
+        source=CandidateSource.DETERMINISTIC,
+    )
+    generator = RpgResponseGenerator(candidate_adapter=lambda _request: (candidate,))
+    request = ResponseRequest(
+        turn_id="turn-1",
+        player_input="Open the door.",
+        authoritative_turn_result={"state_delta": {"door_open": True}},
+    )
+
+    rendered = generator.generate(request)
+
+    assert rendered.text == "A specific action response."
+    assert rendered.metadata["candidate_id"] == "candidate-1"
+    assert rendered.metadata["candidate_source"] == "deterministic"
+    assert rendered.authoritative_deltas == {"door_open": True}
+
+
+def test_phase1_shadow_reports_preserve_legacy_text_and_do_not_mutate_state():
+    payload = {
+        "source": "provider_runtime_narration",
+        "response_mode": "action",
+        "narration": "You open the door.",
+        "action": "You open the door.",
+    }
+    runtime_report = build_runtime_shadow_report(
+        turn_id="turn-runtime",
+        player_input="Open the door.",
+        runtime_payload=payload,
+        authoritative_turn_result={"state_delta": {"door_open": True}},
+        legacy_visible_text="You open the door. Result: You open the door.",
+    )
+    world_report = build_world_scene_shadow_report(
+        turn_id="turn-world",
+        player_input="Open the door.",
+        world_scene_payload=payload,
+        authoritative_turn_result={"state_delta": {"door_open": True}},
+        legacy_visible_text="You open the door.",
+    )
+
+    assert runtime_report["authoritative_state_unchanged"] is True
+    assert world_report["authoritative_state_unchanged"] is True
+    assert runtime_report["canonical_visible_text"] == "You open the door."
+    assert world_report["canonical_visible_text"] == "You open the door."
