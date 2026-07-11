@@ -60,11 +60,11 @@ export function deriveLiveConversationStatus(state: LiveConversationState, chara
   if (state.connection === 'stopping') return 'Ending call';
   if (state.bargeIn === 'ducking' || state.bargeIn === 'confirming') return 'Checking interruption';
   if (state.bargeIn === 'accepted' || state.assistantTurn === 'interrupted') return `${characterName} is yielding`;
+  if (state.assistantTurn === 'speaking' || state.delivery === 'audio_started' || state.floorOwner === 'assistant') return `${characterName} is speaking`;
   if (state.userTurn === 'paused' || state.userTurn === 'completion_pending' || state.userTurn === 'finalizing') return 'Waiting for you';
   if (state.userTurn === 'speaking' || state.userTurn === 'speech_candidate' || state.floorOwner === 'user') return `${characterName} is listening`;
   if (state.assistantTurn === 'planning' || state.assistantTurn === 'generating') return `${characterName} is thinking`;
   if (state.assistantTurn === 'queued') return `${characterName} is preparing to speak`;
-  if (state.assistantTurn === 'speaking' || state.delivery === 'audio_started' || state.floorOwner === 'assistant') return `${characterName} is speaking`;
   if (state.initiative === 'considering') return `${characterName} is considering a follow-up`;
   if (state.initiative === 'suppressed') return 'Listening quietly';
   return 'Listening';
