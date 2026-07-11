@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { liveConversationStore } from '../assistant-workspace/live-conversation-store';
+
 const calibration = {
   version: 'live-voice-calibration-v1' as const,
   deviceKey: 'device-pair',
@@ -20,18 +22,17 @@ const calibration = {
 const runCalibration = vi.fn();
 
 vi.mock('../assistant-workspace/live-voice-calibration', () => ({
-  LIVE_VOICE_CALIBRATION_UPDATED_EVENT: 'omnix:live-voice-calibration-updated',
   readLatestLiveVoiceCalibration: () => null,
-  resolveCalibrationDuplex: (record: typeof calibration | null) => record
-    ? { mode: record.resolvedMode, confidence: record.confidence, reason: record.reason }
-    : { mode: 'half_duplex', confidence: 0, reason: 'calibration_missing' },
   runBrowserLiveVoiceCalibration: (...args: unknown[]) => runCalibration(...args),
 }));
 
 import { LiveVoiceCalibrationPanel } from './LiveVoiceCalibrationPanel';
 
 describe('LiveVoiceCalibrationPanel', () => {
-  beforeEach(() => runCalibration.mockReset());
+  beforeEach(() => {
+    runCalibration.mockReset();
+    liveConversationStore.reset();
+  });
 
   it('shows safe fallback before calibration', () => {
     render(<LiveVoiceCalibrationPanel />);
@@ -40,19 +41,46 @@ describe('LiveVoiceCalibrationPanel', () => {
     expect(screen.getByText('Not calibrated')).toBeInTheDocument();
   });
 
-  it('runs calibration and displays the evidence-backed mode', async () => {
+  it('shows the authoritative current-device resolution', () => {
+    liveConversationStore.dispatch({
+      type: 'duplex',
+      duplex: {
+        calibration,
+        resolvedMode: 'echo_aware',
+        reason: 'calibration_confident',
+        confidence: 0.91,
+      },
+    });
+    render(<LiveVoiceCalibrationPanel />);
+
+    expect(screen.getByText('Echo-aware')).toBeInTheDocument();
+    expect(screen.getByText('91%')).toBeInTheDocument();
+    expect(screen.getByText('Calibration confident')).toBeInTheDocument();
+  });
+
+  it('runs calibration and explains that the active pair is verified at call time', async () => {
     runCalibration.mockImplementation(async (onStage?: (stage: string) => void) => {
       onStage?.('noise');
       onStage?.('echo');
       onStage?.('speech');
       onStage?.('complete');
+      liveConversationStore.dispatch({
+        type: 'duplex',
+        duplex: {
+          calibration,
+          resolvedMode: 'half_duplex',
+          reason: 'calibration_device_unverified',
+          confidence: 0.91,
+        },
+      });
       return calibration;
     });
     render(<LiveVoiceCalibrationPanel />);
     fireEvent.click(screen.getByRole('button', { name: 'Calibrate microphone and speakers' }));
 
-    expect(await screen.findByText('Echo-aware')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Re-run calibration' })).toBeInTheDocument();
+    expect(screen.getByText('Safe half-duplex')).toBeInTheDocument();
     expect(screen.getByText('91%')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Automatic mode can use echo-aware barge-in');
+    expect(screen.getByRole('status')).toHaveTextContent('verify the current device pair when the call connects');
   });
 });
