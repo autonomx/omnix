@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from app.rpg.narration.runtime_narration_legacy import (
+    build_runtime_narration_payload as build_legacy_runtime_narration_payload,
+)
+
 from .context_compiler import EvidenceCard
 from .contracts import ResponseRequest
 from .production_pipeline import (
+    ProfileBoundProvider,
     RpgProductionResponsePipeline,
     _authoritative_result,
     _known_entities,
@@ -18,6 +23,42 @@ from .production_pipeline import (
     _turn_id,
 )
 from .strict_proposal_policy import StrictProposalPolicy
+
+
+class AuthoritativeProfileBoundProvider(ProfileBoundProvider):
+    """Bind every supported provider parameter before the provider is invoked."""
+
+    def _call(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
+        method = getattr(self.provider, method_name)
+        effective = dict(kwargs)
+        effective["max_tokens"] = self.profile.max_tokens
+        effective.setdefault("temperature", self.profile.temperature)
+        effective.setdefault("model", self.profile.model)
+        effective.setdefault("timeout", self.profile.timeout_seconds)
+        effective.setdefault("timeout_seconds", self.profile.timeout_seconds)
+        self.calls.append({"method": method_name, **effective})
+        variants = (
+            effective,
+            {key: value for key, value in effective.items() if key != "timeout_seconds"},
+            {key: value for key, value in effective.items() if key not in {"timeout", "timeout_seconds"}},
+            {key: value for key, value in effective.items() if key not in {"model", "timeout", "timeout_seconds"}},
+            {
+                key: value
+                for key, value in effective.items()
+                if key not in {"model", "temperature", "timeout", "timeout_seconds"}
+            },
+            {"max_tokens": self.profile.max_tokens},
+            {},
+        )
+        last_error: TypeError | None = None
+        for candidate in variants:
+            try:
+                return method(*args, **candidate)
+            except TypeError as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        return method(*args)
 
 
 class StrictRpgProductionResponsePipeline(RpgProductionResponsePipeline):
@@ -170,14 +211,44 @@ class StrictRpgProductionResponsePipeline(RpgProductionResponsePipeline):
             simulation_state=simulation_state,
             turn_contract=turn_contract,
         )
-        return super().build_runtime_payload(
-            provider=provider,
+        profile = prepared["profile"]
+        deferred = profile.execution_mode == "deferred"
+        wrapped_provider = (
+            AuthoritativeProfileBoundProvider(provider, profile)
+            if provider is not None
+            and prefer_provider
+            and profile.use_provider
+            and not deferred
+            else None
+        )
+        legacy_payload = build_legacy_runtime_narration_payload(
+            provider=wrapped_provider,
             player_action=player_action,
             simulation_state=prepared["simulation_state"],
             turn_contract=prepared["turn_contract"],
-            prefer_provider=prefer_provider,
-            max_tokens=max_tokens,
-            max_provider_attempts=max_provider_attempts,
+            prefer_provider=bool(wrapped_provider),
+            max_tokens=profile.max_tokens,
+            max_provider_attempts=profile.retry_count + 1,
+        )
+        if deferred:
+            legacy_payload = dict(legacy_payload)
+            legacy_payload["deferred"] = True
+            legacy_payload["narration_status"] = "pending"
+        return self.finalize_payload(
+            legacy_payload,
+            player_input=player_action,
+            authoritative_turn_result=_authoritative_result(
+                prepared["turn_contract"],
+                prepared["simulation_state"],
+            ),
+            simulation_state=prepared["simulation_state"],
+            turn_contract=prepared["turn_contract"],
+            profile=profile,
+            ignored_profile_overrides=prepared["ignored_profile_overrides"],
+            provider_profile_applied=(
+                dict(wrapped_provider.applied) if wrapped_provider is not None else {}
+            ),
+            runtime_mode="runtime_deferred" if deferred else "runtime",
         )
 
     def finalize_payload(
@@ -275,4 +346,7 @@ class StrictRpgProductionResponsePipeline(RpgProductionResponsePipeline):
         return result
 
 
-__all__ = ["StrictRpgProductionResponsePipeline"]
+__all__ = [
+    "AuthoritativeProfileBoundProvider",
+    "StrictRpgProductionResponsePipeline",
+]
