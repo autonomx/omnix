@@ -60,6 +60,16 @@ class ForwardMotionPolicy:
                 rationale="the asserted person or relationship is not established",
                 options=("identify who you mean", "ask the present NPC what they know"),
             )
+        if (
+            selected.affordance == "entity_search"
+            and analysis.intent.unresolved_references
+        ):
+            return ForwardMotionPlan(
+                strategy="clarify_unknown_entity",
+                outcome="clarification",
+                rationale="the referenced person or entity is not established in current knowledge",
+                options=("identify who you mean", "describe where you heard the name"),
+            )
         if mechanic_resolved and selected.affordance in {
             "transaction",
             "combat_attempt",
