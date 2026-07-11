@@ -13,6 +13,13 @@ from .baseline import (
     validate_scenarios,
 )
 from .candidate_ranker import CandidateRanker, NoEligibleCandidateError
+from .claim_ledger import ClaimLedger, ClaimRecord, derive_claim_ledger
+from .context_compiler import (
+    ContextTrace,
+    EvidenceCard,
+    NarrationContext,
+    NarrationContextCompiler,
+)
 from .contracts import (
     AgencyEffect,
     CandidateSource,
@@ -35,6 +42,7 @@ from .orchestration import (
 )
 from .quality_gate import QualityGate, QualityReport
 from .renderer import ResponseRenderer
+from .semantic_plan import SemanticPlanValidation, validate_semantic_plan
 
 __all__ = [
     "AgencyEffect",
@@ -43,8 +51,14 @@ __all__ = [
     "BaselineScenario",
     "CandidateRanker",
     "CandidateSource",
+    "ClaimLedger",
+    "ClaimRecord",
+    "ContextTrace",
     "EligibilityPolicy",
+    "EvidenceCard",
     "GateDecision",
+    "NarrationContext",
+    "NarrationContextCompiler",
     "NoEligibleCandidateError",
     "QualityGate",
     "QualityReport",
@@ -56,13 +70,16 @@ __all__ = [
     "Reversibility",
     "RpgResponseGenerator",
     "SectionType",
+    "SemanticPlanValidation",
     "SemanticResponsePlan",
     "SemanticSection",
     "build_runtime_shadow_report",
     "build_world_scene_shadow_report",
+    "derive_claim_ledger",
     "eligibility_reasons",
     "evaluate_baseline",
     "load_baseline_scenarios",
     "semantic_plan_from_legacy_payload",
     "validate_scenarios",
+    "validate_semantic_plan",
 ]
