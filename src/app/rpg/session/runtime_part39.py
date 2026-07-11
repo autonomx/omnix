@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable
 from .runtime_part38 import *  # noqa: F401,F403
 from .runtime_part38 import _apply_turn_authoritative as _PHASE8_PART39_BASE_APPLY_TURN_AUTHORITATIVE
 
+_PHASE8_PART39_BASE_APPLY_TURN = apply_turn
 _PHASE8_PART39_SOURCE = "phase8_social_claim_travel_mismatch_guard_v1"
 _PHASE8_PART39_SOCIAL_ACTIONS = {
     "social_activity",
@@ -166,8 +167,6 @@ def _phase8_part39_is_social_claim_source(source: Dict[str, Any], player_input: 
         or "claim" in activity_label
     )
 
-    # A player statement such as "I killed a dragon" is a claim heard in the
-    # scene. It is not proof that combat, rewards, quests, or world facts changed.
     return bool((has_claim_marker or looks_declarative) and has_achievement and not literal_action)
 
 
@@ -320,6 +319,70 @@ def _apply_turn_authoritative(
         performance_override=performance_override,
     )
     return _phase8_part39_patch_social_claim_mismatch(payload, player_input=player_input)
+
+
+def _phase8_part39_soft_truth(payload: Dict[str, Any]) -> Dict[str, Any]:
+    narration_payload = _safe_dict(
+        payload.get("narration_payload")
+        or payload.get("structured_narration")
+    )
+    return _safe_dict(
+        narration_payload.get("response_soft_truth")
+        or payload.get("response_soft_truth")
+    )
+
+
+def _phase8_part39_persist_soft_truth(
+    payload: Dict[str, Any],
+    *,
+    session_id: str,
+) -> Dict[str, Any]:
+    payload = dict(_safe_dict(payload))
+    soft_truth = _phase8_part39_soft_truth(payload)
+    if not soft_truth:
+        return payload
+
+    simulation_state = dict(_safe_dict(payload.get("simulation_state")))
+    simulation_state["response_soft_truth"] = deepcopy(soft_truth)
+    payload["simulation_state"] = simulation_state
+
+    nested_result = dict(_safe_dict(payload.get("result")))
+    if nested_result:
+        nested_result["simulation_state"] = deepcopy(simulation_state)
+        nested_result["response_soft_truth"] = deepcopy(soft_truth)
+        payload["result"] = nested_result
+
+    session = dict(_safe_dict(payload.get("session")))
+    if not session:
+        session = dict(_safe_dict(load_runtime_session(session_id)))
+    if session:
+        session_simulation = dict(_safe_dict(session.get("simulation_state")))
+        session_simulation["response_soft_truth"] = deepcopy(soft_truth)
+        session["simulation_state"] = session_simulation
+        runtime_state = dict(_safe_dict(session.get("runtime_state")))
+        runtime_state["response_soft_truth"] = deepcopy(soft_truth)
+        session["runtime_state"] = runtime_state
+        payload["session"] = session
+        save_runtime_session(session)
+    payload["response_soft_truth"] = deepcopy(soft_truth)
+    return payload
+
+
+def apply_turn(
+    session_id: str,
+    player_input: str,
+    action: Dict[str, Any] | None = None,
+    *,
+    performance_override: Dict[str, Any] | None = None,
+    _base_apply_turn: Any = _PHASE8_PART39_BASE_APPLY_TURN,
+) -> Dict[str, Any]:
+    payload = _base_apply_turn(
+        session_id,
+        player_input,
+        action,
+        performance_override=performance_override,
+    )
+    return _phase8_part39_persist_soft_truth(payload, session_id=session_id)
 
 
 __all__ = [name for name in globals() if not name.startswith("__")]
