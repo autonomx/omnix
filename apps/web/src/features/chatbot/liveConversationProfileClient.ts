@@ -47,12 +47,13 @@ export type LiveConversationProfileEnvelope = {
 export type LiveConversationProfilePatch = Partial<Omit<LiveConversationProfile, 'profile_version'>>;
 
 const MIGRATION_KEY = 'omnix.liveConversation.serverProfileMigrated.v1';
+const CANONICAL_LEGACY_KEY = 'omnix.liveConversation.settings';
+const ASSISTANT_LEGACY_KEY = 'omnix.chatbot.assistantSettings';
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
+  const headers = new Headers(init?.headers);
+  headers.set('Content-Type', 'application/json');
+  const response = await fetch(url, { ...init, headers });
   if (!response.ok) throw new Error(`Live Chat profile request failed with status ${response.status}.`);
   return response.json() as Promise<T>;
 }
@@ -86,6 +87,12 @@ export function mirrorProfileForLegacyRuntime(profile: LiveConversationProfile):
 
 export async function migrateLegacyConversationSettingsOnce(): Promise<boolean> {
   if (typeof window === 'undefined' || window.localStorage.getItem(MIGRATION_KEY) === 'done') return false;
+  const hasLegacySettings = window.localStorage.getItem(CANONICAL_LEGACY_KEY) !== null
+    || window.localStorage.getItem(ASSISTANT_LEGACY_KEY) !== null;
+  if (!hasLegacySettings) {
+    window.localStorage.setItem(MIGRATION_KEY, 'done');
+    return false;
+  }
   const legacy = readLiveConversationSettings();
   await liveConversationProfileClient.updateDefaults({
     conversation_pace: legacy.conversationPace,
