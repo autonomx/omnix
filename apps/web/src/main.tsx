@@ -18,6 +18,7 @@ import './features/chatbot/ChatbotWorkspaceUtilityToggle.css';
 import './features/assistant-workspace/assistant-context-controller.css';
 import './features/assistant-workspace/research-release-controller.css';
 import { initializeChatMessageAudioControllerV2 } from './features/assistant-workspace/chat-message-audio-controller-v2';
+import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
 import './features/assistant-workspace/live-voice-form-sync';
 import './features/assistant-workspace/live-voice-duplex-gate';
 import './features/assistant-workspace/live-voice-controller';
@@ -57,7 +58,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 );
 
 window.setTimeout(() => {
+  // Install the congestion-aware capture handler before the legacy stream-button handler.
   initializeChatMessageAudioControllerV2();
+  initializeChatMessageStreamAudioController();
   void import('./features/assistant-workspace/assistant-context-controller')
     .then(() => import('./features/assistant-workspace/research-release-controller'))
     .catch((error: unknown) => {
