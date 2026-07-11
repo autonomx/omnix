@@ -129,11 +129,11 @@ describe('live character avatar audio envelope', () => {
     expect(stage?.dataset.hasCharacterAvatar).toBeUndefined();
   });
 
-  it('animates mouth frames from live-call WebSocket PCM events', () => {
+  it('animates mouth frames from live PCM even when the DOM voice mode is stale', () => {
     vi.useFakeTimers();
     document.body.innerHTML = `
       <section class="assistant-live-card">
-        <div class="assistant-voice-orb" data-voice-mode="speaking"></div>
+        <div class="assistant-voice-orb" data-voice-mode="idle"></div>
         <div class="assistant-voice-controls"></div>
         <div class="assistant-voice-transcript"></div>
       </section>
@@ -150,7 +150,10 @@ describe('live character avatar audio envelope', () => {
 
     const avatar = document.querySelector<HTMLElement>('.assistant-live-character-avatar');
     const image = avatar?.querySelector<HTMLImageElement>('img');
+    const caption = avatar?.querySelector<HTMLElement>('figcaption');
     expect(avatar?.dataset.mouthFrame).toBe('wide');
+    expect(avatar?.dataset.voiceMode).toBe('speaking');
     expect(image?.getAttribute('src')).toBe('/api/assets/image%3Amaya-wide/file');
+    expect(caption?.textContent).toBe('Maya is speaking');
   });
 });
