@@ -25,7 +25,7 @@ describe('enrichLiveTtsFrame', () => {
       type: 'synthesize', text: 'Hello Nika.', temperature: 0.6, top_p: 0.85,
     }, profile);
 
-    expect(result.plan?.speech_act).toBe('answer');
+    expect(result.plan?.speech_act).toBe('acknowledgement');
     expect(result.frame.delivery_plan).toEqual(result.plan);
     expect(result.frame.pronunciation_lexicon).toEqual([
       { phrase: 'Nika', pronunciation: 'NEE-kah', locale: 'en-US' },
