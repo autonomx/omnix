@@ -111,7 +111,11 @@ def build_retrieval_sources(
     campaign: Iterable[EvidenceRecord | Mapping[str, Any]] = (),
     lorebook: Iterable[EvidenceRecord | Mapping[str, Any]] = (),
     approved_proposals: Iterable[EvidenceRecord | Mapping[str, Any]] = (),
+    approved_proposal: Iterable[EvidenceRecord | Mapping[str, Any]] = (),
 ) -> dict[str, Iterable[EvidenceRecord | Mapping[str, Any]]]:
+    """Build ordered source buckets, accepting the legacy singular alias."""
+
+    approved_rows = tuple(approved_proposals) or tuple(approved_proposal)
     return {
         "resolved_turn": tuple(resolved_turn),
         "scene": tuple(scene),
@@ -120,7 +124,7 @@ def build_retrieval_sources(
         "journal": tuple(journal),
         "campaign": tuple(campaign),
         "lorebook": tuple(lorebook),
-        "approved_proposal": tuple(approved_proposals),
+        "approved_proposal": approved_rows,
     }
 
 
