@@ -10,7 +10,8 @@ from app.rpg.ai.world_scene_narrator_runtime import (
 )
 
 from .contracts import ResponseRequest
-from .orchestration import RpgResponseGenerator
+from .profiled_generator import ProfiledRpgResponseGenerator
+from .validated_delivery import ValidatedDeliverySession
 
 
 CANONICAL_NARRATION_SOURCE = "rpg_response_generator_v1"
@@ -25,12 +26,12 @@ def narrate_scene_canonical(
     debug_logging: bool = False,
     on_chunk: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    """Compatibility entry point with canonical final-response ownership.
+    """Compatibility entry point with canonical validation-first publication.
 
-    The legacy narrator still performs provider generation and its existing
-    simulation-safe sanitization. The result is then adapted into the canonical
-    semantic envelope, selected, quality-checked, rendered, and published by
-    ``RpgResponseGenerator``. Authoritative deltas are copied into metadata only.
+    The legacy narrator may generate provider text, but its raw tokens are never
+    player-visible. The complete candidate is adapted, hard-gated, ranked,
+    quality-checked, and rerendered before approved sentence or audio-phrase units
+    are delivered through ``on_chunk``. Authoritative deltas remain metadata only.
     """
     context = dict(narration_context or {})
     legacy = _legacy_narrate_scene(
@@ -40,7 +41,7 @@ def narrate_scene_canonical(
         tone=tone,
         retry_on_invalid=retry_on_invalid,
         debug_logging=debug_logging,
-        on_chunk=on_chunk,
+        on_chunk=None,
     )
     if not isinstance(legacy, Mapping):
         legacy = {"narration": str(legacy or "")}
@@ -68,10 +69,10 @@ def narrate_scene_canonical(
         ),
         "response_mode": response_mode,
         "production_rpg_response": True,
-        # Legacy payloads are not yet claim-ref annotated. The canonical hard
-        # gates still enforce visibility, speakers, proposals, agency, and no
-        # direct mutation while Phase 3+ paths can opt into strict references.
         "strict_claim_refs": False,
+        "mechanic_resolved": bool(context.get("mechanic_resolved")),
+        "recovery_needed": bool(context.get("recovery_needed")),
+        "resolver_status": context.get("resolver_status"),
     }
     request = ResponseRequest(
         turn_id=str(
@@ -84,10 +85,21 @@ def narrate_scene_canonical(
         session_id=str(context.get("session_id") or ""),
         scene_id=str(_mapping(scene).get("scene_id") or _mapping(scene).get("id") or ""),
         speaker_id=str(npc.get("speaker") or ""),
-        runtime_mode="legacy_world_scene_compatibility",
+        runtime_mode=str(context.get("runtime_mode") or "legacy_world_scene_compatibility"),
+        provider_policy=_mapping(
+            context.get("provider_policy") or context.get("response_profile")
+        ),
         legacy_payload=legacy_payload,
     )
-    rendered = RpgResponseGenerator().generate(request)
+    generator = ProfiledRpgResponseGenerator()
+    rendered = generator.generate(request)
+    profile = generator.resolve_profile(request, rendered.mode)
+    delivery = ValidatedDeliverySession.prepare(rendered, profile)
+    if on_chunk is not None:
+        while (unit := delivery.next_unit()) is not None:
+            on_chunk(unit.text)
+            delivery.acknowledge(unit)
+    checkpoint = delivery.checkpoint()
     if rendered.text.strip():
         payload["narration"] = rendered.text
     payload["canonical_response"] = {
@@ -97,7 +109,15 @@ def narrate_scene_canonical(
         "resolved_claim_refs": list(rendered.resolved_claim_refs),
         "quality_report": dict(rendered.quality_report),
         "repair_history": list(rendered.repair_history),
-        "delivery_units": list(rendered.delivery_units),
+        "delivery_units": [unit.text for unit in delivery.units],
+        "delivery_checkpoint": {
+            "state": checkpoint.state.value,
+            "prepared_unit_ids": list(checkpoint.prepared_unit_ids),
+            "delivered_unit_ids": list(checkpoint.delivered_unit_ids),
+            "next_index": checkpoint.next_index,
+            "interruption_reason": checkpoint.interruption_reason,
+            "validation_token": checkpoint.validation_token,
+        },
         "metadata": dict(rendered.metadata),
     }
     payload["canonical_response_source"] = CANONICAL_NARRATION_SOURCE
