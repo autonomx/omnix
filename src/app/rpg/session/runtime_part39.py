@@ -3,16 +3,14 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Iterable
 
-# Generated split module for app.rpg.session.runtime.
-# Phase 8.39: prevent unverified social accomplishment claims from falling
-# through to deterministic travel/exploration narration when the first-call
-# semantic router marks the player input as a public/social declaration.
 from .runtime_part38 import *  # noqa: F401,F403
-from .runtime_part38 import _apply_turn_authoritative as _PHASE8_PART39_BASE_APPLY_TURN_AUTHORITATIVE
+from .runtime_part38 import (
+    _apply_turn_authoritative as _PHASE8_PART39_BASE_APPLY_TURN_AUTHORITATIVE,
+)
+from .runtime_part19 import apply_turn as _PHASE8_PART39_BASE_APPLY_TURN
 
-_PHASE8_PART39_BASE_APPLY_TURN = apply_turn
 _PHASE8_PART39_SOURCE = "phase8_social_claim_travel_mismatch_guard_v1"
-_PHASE8_PART39_SOCIAL_ACTIONS = {
+_SOCIAL_ACTIONS = {
     "social_activity",
     "social_affection",
     "social_competition",
@@ -21,8 +19,8 @@ _PHASE8_PART39_SOCIAL_ACTIONS = {
     "deceive",
     "intimidate",
 }
-_PHASE8_PART39_TRAVEL_ACTIONS = {"exploration", "travel"}
-_PHASE8_PART39_ACHIEVEMENT_VERBS = {
+_TRAVEL_ACTIONS = {"exploration", "travel"}
+_ACHIEVEMENT_VERBS = {
     "beat",
     "defeat",
     "defeated",
@@ -34,7 +32,7 @@ _PHASE8_PART39_ACHIEVEMENT_VERBS = {
     "vanquish",
     "vanquished",
 }
-_PHASE8_PART39_CLAIM_MARKERS = {
+_CLAIM_MARKERS = {
     "i was able to",
     "i have",
     "i had",
@@ -56,19 +54,19 @@ _PHASE8_PART39_CLAIM_MARKERS = {
 }
 
 
-def _phase8_part39_clean_text(value: Any) -> str:
+def _clean(value: Any) -> str:
     if not isinstance(value, str):
         return ""
     text = value.strip()
     return "" if text.casefold() in {"", "[]", "{}", "null", "none", "false", "true"} else text
 
 
-def _phase8_part39_norm(value: Any) -> str:
-    text = _phase8_part39_clean_text(value).casefold()
+def _norm(value: Any) -> str:
+    text = _clean(value).casefold()
     return " ".join("".join(ch if ch.isalnum() else " " for ch in text).split())
 
 
-def _phase8_part39_bool(value: Any, default: bool = False) -> bool:
+def _bool(value: Any, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
@@ -77,45 +75,32 @@ def _phase8_part39_bool(value: Any, default: bool = False) -> bool:
             return True
         if lowered in {"false", "no", "0", "off"}:
             return False
-    if value is None:
-        return default
-    return bool(value)
+    return default if value is None else bool(value)
 
 
-def _phase8_part39_iter_sources(payload: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
-    payload = _safe_dict(payload)
+def _iter_sources(payload: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
     seen: set[int] = set()
-
-    def emit(source: Any) -> Iterable[Dict[str, Any]]:
-        if not isinstance(source, dict):
-            return
-        source_id = id(source)
-        if source_id in seen:
-            return
-        seen.add(source_id)
-        yield source
-
-    for source in _phase8_part38_iter_candidate_sources(payload):
-        yield from emit(source)
+    for source in _phase8_part38_iter_candidate_sources(_safe_dict(payload)):
+        if isinstance(source, dict) and id(source) not in seen:
+            seen.add(id(source))
+            yield source
     try:
-        for source in _phase8_part31_iter_payload_dicts(payload):
-            yield from emit(source)
+        for source in _phase8_part31_iter_payload_dicts(_safe_dict(payload)):
+            if isinstance(source, dict) and id(source) not in seen:
+                seen.add(id(source))
+                yield source
     except Exception:
-        pass
+        return
 
 
-def _phase8_part39_source_field(source: Dict[str, Any], key: str) -> str:
+def _source_field(source: Dict[str, Any], key: str) -> str:
     source = _safe_dict(source)
     semantic = _safe_dict(source.get("semantic_advisory"))
-    action_intent = _safe_dict(source.get("action_intent"))
-    return _phase8_part39_clean_text(
-        source.get(key)
-        or semantic.get(key)
-        or action_intent.get(key)
-    )
+    intent = _safe_dict(source.get("action_intent"))
+    return _clean(source.get(key) or semantic.get(key) or intent.get(key))
 
 
-def _phase8_part39_source_text(source: Dict[str, Any], player_input: str) -> str:
+def _source_text(source: Dict[str, Any], player_input: str) -> str:
     source = _safe_dict(source)
     semantic = _safe_dict(source.get("semantic_advisory"))
     visible = _safe_dict(source.get("visible_response") or source.get("final_narration_candidate"))
@@ -129,62 +114,48 @@ def _phase8_part39_source_text(source: Dict[str, Any], player_input: str) -> str
         semantic.get("intent_summary"),
         visible.get("narration"),
         npc.get("line"),
+        *_safe_list(source.get("evidence_spans")),
+        *_safe_list(semantic.get("evidence_spans")),
     ]
-    pieces.extend(_safe_list(source.get("evidence_spans")))
-    pieces.extend(_safe_list(semantic.get("evidence_spans")))
-    return _phase8_part39_norm(
-        " ".join(_phase8_part39_clean_text(piece) for piece in pieces)
-    )
+    return _norm(" ".join(_clean(piece) for piece in pieces))
 
 
-def _phase8_part39_is_social_claim_source(source: Dict[str, Any], player_input: str) -> bool:
+def _is_social_claim(source: Dict[str, Any], player_input: str) -> bool:
     source = _safe_dict(source)
     semantic = _safe_dict(source.get("semantic_advisory"))
-    action_type = _phase8_part39_source_field(source, "action_type").casefold()
-    semantic_family = _phase8_part39_source_field(source, "semantic_family").casefold()
-    utterance_mode = _phase8_part39_source_field(source, "utterance_mode").casefold()
-    activity_label = _phase8_part39_source_field(source, "activity_label").casefold()
-    risk_domain = _phase8_part39_source_field(source, "risk_domain").casefold()
-    literal_action = _phase8_part39_bool(
+    action_type = _source_field(source, "action_type").casefold()
+    family = _source_field(source, "semantic_family").casefold()
+    risk = _source_field(source, "risk_domain").casefold()
+    activity = _source_field(source, "activity_label").casefold()
+    utterance = _source_field(source, "utterance_mode").casefold()
+    literal = _bool(
         semantic.get("literal_action_requested", source.get("literal_action_requested")),
         False,
     )
-
-    is_social = (
-        semantic_family == "social"
-        or action_type in _PHASE8_PART39_SOCIAL_ACTIONS
-        or risk_domain in {"social", "relationship_change", "social_reputation"}
-    )
-    if not is_social:
+    if not (
+        family == "social"
+        or action_type in _SOCIAL_ACTIONS
+        or risk in {"social", "relationship_change", "social_reputation"}
+    ):
         return False
-
-    text = _phase8_part39_source_text(source, player_input)
-    has_claim_marker = any(marker in text for marker in _PHASE8_PART39_CLAIM_MARKERS)
-    has_achievement = any(verb in text.split() for verb in _PHASE8_PART39_ACHIEVEMENT_VERBS)
-    looks_declarative = (
-        utterance_mode in {"declarative", "report", "reporting", "statement"}
-        or "report" in activity_label
-        or "claim" in activity_label
+    text = _source_text(source, player_input)
+    has_claim = any(marker in text for marker in _CLAIM_MARKERS)
+    has_achievement = any(verb in text.split() for verb in _ACHIEVEMENT_VERBS)
+    declarative = (
+        utterance in {"declarative", "report", "reporting", "statement"}
+        or "report" in activity
+        or "claim" in activity
     )
-
-    return bool((has_claim_marker or looks_declarative) and has_achievement and not literal_action)
-
-
-def _phase8_part39_find_social_claim(payload: Dict[str, Any], player_input: str) -> Dict[str, Any]:
-    for source in _phase8_part39_iter_sources(payload):
-        if _phase8_part39_is_social_claim_source(source, player_input):
-            return source
-    return {}
+    return bool((has_claim or declarative) and has_achievement and not literal)
 
 
-def _phase8_part39_has_travel_mismatch(payload: Dict[str, Any]) -> bool:
-    payload = _safe_dict(payload)
-    for source in _phase8_part39_iter_sources(payload):
-        action_type = _phase8_part39_source_field(source, "action_type").casefold()
-        travel_result = _safe_dict(source.get("travel_result"))
-        action_text = _phase8_part39_norm(
+def _has_travel_mismatch(payload: Dict[str, Any]) -> bool:
+    for source in _iter_sources(payload):
+        action_type = _source_field(source, "action_type").casefold()
+        travel = _safe_dict(source.get("travel_result"))
+        text = _norm(
             " ".join(
-                _phase8_part39_clean_text(source.get(key))
+                _clean(source.get(key))
                 for key in (
                     "action",
                     "narration",
@@ -195,37 +166,30 @@ def _phase8_part39_has_travel_mismatch(payload: Dict[str, Any]) -> bool:
                 )
             )
         )
-        if action_type in _PHASE8_PART39_TRAVEL_ACTIONS and (
-            travel_result
-            or "travel" in action_text
-            or "moving from" in action_text
-            or "village square" in action_text
+        if action_type in _TRAVEL_ACTIONS and (
+            travel or "travel" in text or "moving from" in text or "village square" in text
         ):
             return True
-        if travel_result and travel_result.get("matched") is not False:
+        if travel and travel.get("matched") is not False:
             return True
     return False
 
 
-def _phase8_part39_claim_narration(player_input: str) -> str:
-    utterance = _phase8_part39_clean_text(player_input) or "I report an accomplishment."
-    return (
+def _guard_fields(player_input: str, claim_source: Dict[str, Any]) -> Dict[str, Any]:
+    utterance = _clean(player_input) or "I report an accomplishment."
+    narration = (
         f'You say, "{utterance}" The statement is treated as an unverified claim '
         "heard in the current scene, not as confirmation that the event happened. "
         "No travel, combat victory, reward, quest progress, or world-fact mutation is applied."
     )
-
-
-def _phase8_part39_guard_fields(player_input: str, claim_source: Dict[str, Any]) -> Dict[str, Any]:
-    narration = _phase8_part39_claim_narration(player_input)
     guard = {
         "format_version": "social_claim_runtime_guard_v1",
         "source": _PHASE8_PART39_SOURCE,
         "reason": "social_claim_must_not_fall_through_to_travel",
         "claim_veracity": "unverified",
         "verified_world_fact": False,
-        "original_semantic_action_type": _phase8_part39_source_field(claim_source, "action_type"),
-        "original_activity_label": _phase8_part39_source_field(claim_source, "activity_label"),
+        "original_semantic_action_type": _source_field(claim_source, "action_type"),
+        "original_activity_label": _source_field(claim_source, "activity_label"),
     }
     return {
         "narration": narration,
@@ -258,47 +222,56 @@ def _phase8_part39_guard_fields(player_input: str, claim_source: Dict[str, Any])
     }
 
 
-def _phase8_part39_patch_target(target: Dict[str, Any], fields: Dict[str, Any]) -> Dict[str, Any]:
-    target = dict(_safe_dict(target))
-    for key, value in fields.items():
-        target[key] = deepcopy(value)
-    semantic_action = _safe_dict(target.get("semantic_action") or target.get("semantic_action_record"))
+def _patch_target(target: Dict[str, Any], fields: Dict[str, Any]) -> Dict[str, Any]:
+    patched = dict(_safe_dict(target))
+    patched.update(deepcopy(fields))
+    semantic_action = _safe_dict(
+        patched.get("semantic_action") or patched.get("semantic_action_record")
+    )
     if semantic_action:
         semantic_action = dict(semantic_action)
-        semantic_action["state_mutation_requested"] = False
-        semantic_action["claim_veracity"] = "unverified"
-        semantic_action["verified_world_fact"] = False
-        target["semantic_action"] = semantic_action
-    return target
+        semantic_action.update(
+            {
+                "state_mutation_requested": False,
+                "claim_veracity": "unverified",
+                "verified_world_fact": False,
+            }
+        )
+        patched["semantic_action"] = semantic_action
+    return patched
 
 
-def _phase8_part39_patch_social_claim_mismatch(payload: Any, *, player_input: str) -> Any:
+def _phase8_part39_patch_social_claim_mismatch(
+    payload: Any,
+    *,
+    player_input: str,
+) -> Any:
     if not isinstance(payload, dict):
         return payload
-    claim_source = _phase8_part39_find_social_claim(payload, player_input)
-    if not claim_source:
+    claim_source = next(
+        (source for source in _iter_sources(payload) if _is_social_claim(source, player_input)),
+        {},
+    )
+    if not claim_source or not _has_travel_mismatch(payload):
         return payload
-    if not _phase8_part39_has_travel_mismatch(payload):
-        return payload
-
-    fields = _phase8_part39_guard_fields(player_input, claim_source)
-    patched = _phase8_part39_patch_target(payload, fields)
-    for nested_key in ("result", "authoritative", "resolved_result", "payload"):
-        nested = _safe_dict(patched.get(nested_key))
+    fields = _guard_fields(player_input, claim_source)
+    patched = _patch_target(payload, fields)
+    for key in ("result", "authoritative", "resolved_result", "payload"):
+        nested = _safe_dict(patched.get(key))
         if nested:
-            patched[nested_key] = _phase8_part39_patch_target(nested, fields)
-
-    narration_context = _safe_dict(patched.get("narration_context"))
-    if narration_context:
-        narration_context = dict(narration_context)
-        resolved = _safe_dict(narration_context.get("resolved_result"))
+            patched[key] = _patch_target(nested, fields)
+    context = _safe_dict(patched.get("narration_context"))
+    if context:
+        context = dict(context)
+        resolved = _safe_dict(context.get("resolved_result"))
         if resolved:
-            narration_context["resolved_result"] = _phase8_part39_patch_target(resolved, fields)
-        narration_context["social_claim_guard"] = deepcopy(fields["social_claim_guard"])
-        patched["narration_context"] = narration_context
-
+            context["resolved_result"] = _patch_target(resolved, fields)
+        context["social_claim_guard"] = deepcopy(fields["social_claim_guard"])
+        patched["narration_context"] = context
     if not _safe_dict(patched.get("result")):
-        patched["result"] = {key: value for key, value in patched.items() if key != "authoritative"}
+        patched["result"] = {
+            key: value for key, value in patched.items() if key != "authoritative"
+        }
     if not _safe_dict(patched.get("authoritative")):
         patched["authoritative"] = dict(_safe_dict(patched.get("result")))
     return patched
@@ -318,41 +291,35 @@ def _apply_turn_authoritative(
         action,
         performance_override=performance_override,
     )
-    return _phase8_part39_patch_social_claim_mismatch(payload, player_input=player_input)
+    return _phase8_part39_patch_social_claim_mismatch(
+        payload,
+        player_input=player_input,
+    )
 
 
-def _phase8_part39_soft_truth(payload: Dict[str, Any]) -> Dict[str, Any]:
-    narration_payload = _safe_dict(
-        payload.get("narration_payload")
-        or payload.get("structured_narration")
+def _response_soft_truth(payload: Dict[str, Any]) -> Dict[str, Any]:
+    narration = _safe_dict(
+        payload.get("narration_payload") or payload.get("structured_narration")
     )
     return _safe_dict(
-        narration_payload.get("response_soft_truth")
-        or payload.get("response_soft_truth")
+        narration.get("response_soft_truth") or payload.get("response_soft_truth")
     )
 
 
-def _phase8_part39_persist_soft_truth(
-    payload: Dict[str, Any],
-    *,
-    session_id: str,
-) -> Dict[str, Any]:
-    payload = dict(_safe_dict(payload))
-    soft_truth = _phase8_part39_soft_truth(payload)
+def _persist_soft_truth(payload: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+    result = dict(_safe_dict(payload))
+    soft_truth = _response_soft_truth(result)
     if not soft_truth:
-        return payload
-
-    simulation_state = dict(_safe_dict(payload.get("simulation_state")))
-    simulation_state["response_soft_truth"] = deepcopy(soft_truth)
-    payload["simulation_state"] = simulation_state
-
-    nested_result = dict(_safe_dict(payload.get("result")))
-    if nested_result:
-        nested_result["simulation_state"] = deepcopy(simulation_state)
-        nested_result["response_soft_truth"] = deepcopy(soft_truth)
-        payload["result"] = nested_result
-
-    session = dict(_safe_dict(payload.get("session")))
+        return result
+    simulation = dict(_safe_dict(result.get("simulation_state")))
+    simulation["response_soft_truth"] = deepcopy(soft_truth)
+    result["simulation_state"] = simulation
+    nested = dict(_safe_dict(result.get("result")))
+    if nested:
+        nested["simulation_state"] = deepcopy(simulation)
+        nested["response_soft_truth"] = deepcopy(soft_truth)
+        result["result"] = nested
+    session = dict(_safe_dict(result.get("session")))
     if not session:
         session = dict(_safe_dict(load_runtime_session(session_id)))
     if session:
@@ -362,10 +329,10 @@ def _phase8_part39_persist_soft_truth(
         runtime_state = dict(_safe_dict(session.get("runtime_state")))
         runtime_state["response_soft_truth"] = deepcopy(soft_truth)
         session["runtime_state"] = runtime_state
-        payload["session"] = session
+        result["session"] = session
         save_runtime_session(session)
-    payload["response_soft_truth"] = deepcopy(soft_truth)
-    return payload
+    result["response_soft_truth"] = deepcopy(soft_truth)
+    return result
 
 
 def apply_turn(
@@ -382,7 +349,7 @@ def apply_turn(
         action,
         performance_override=performance_override,
     )
-    return _phase8_part39_persist_soft_truth(payload, session_id=session_id)
+    return _persist_soft_truth(payload, session_id)
 
 
 __all__ = [name for name in globals() if not name.startswith("__")]
