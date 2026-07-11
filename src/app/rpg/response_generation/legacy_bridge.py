@@ -11,6 +11,8 @@ from app.rpg.ai.world_scene_narrator_runtime import (
 
 from .contracts import ResponseRequest
 from .profiled_generator import ProfiledRpgResponseGenerator
+from .rollout import ResponseRolloutController, rollout_stage_from_context
+from .telemetry import build_response_trace, player_state_change_indicators
 from .validated_delivery import ValidatedDeliverySession
 
 
@@ -26,13 +28,7 @@ def narrate_scene_canonical(
     debug_logging: bool = False,
     on_chunk: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    """Compatibility entry point with canonical validation-first publication.
-
-    The legacy narrator may generate provider text, but its raw tokens are never
-    player-visible. The complete candidate is adapted, hard-gated, ranked,
-    quality-checked, and rerendered before approved sentence or audio-phrase units
-    are delivered through ``on_chunk``. Authoritative deltas remain metadata only.
-    """
+    """Compatibility entry point with canonical validation-first publication."""
     context = dict(narration_context or {})
     legacy = _legacy_narrate_scene(
         dict(scene or {}),
@@ -46,13 +42,14 @@ def narrate_scene_canonical(
     if not isinstance(legacy, Mapping):
         legacy = {"narration": str(legacy or "")}
     payload = dict(legacy)
+    legacy_visible_text = str(payload.get("narration") or "")
     narration_json = _mapping(payload.get("narration_json"))
     npc = _mapping(narration_json.get("npc"))
     response_mode = _response_mode(context, narration_json)
     legacy_payload = {
         "source": "legacy_world_scene",
         "response_mode": response_mode,
-        "narration": narration_json.get("narration") or payload.get("narration") or "",
+        "narration": narration_json.get("narration") or legacy_visible_text,
         "action": narration_json.get("action") or "",
         "npc": {
             "speaker": npc.get("speaker") or npc.get("name") or "",
@@ -100,8 +97,56 @@ def narrate_scene_canonical(
             on_chunk(unit.text)
             delivery.acknowledge(unit)
     checkpoint = delivery.checkpoint()
-    if rendered.text.strip():
+
+    rollout_controller = ResponseRolloutController()
+    rollout = rollout_controller.config(rollout_stage_from_context(context))
+    comparison = rollout_controller.compare(
+        turn_id=request.turn_id,
+        legacy_text=legacy_visible_text,
+        canonical_text=rendered.text,
+        authoritative_state_hash_before=str(
+            context.get("authoritative_state_hash_before") or "unchanged"
+        ),
+        authoritative_state_hash_after=str(
+            context.get("authoritative_state_hash_after") or "unchanged"
+        ),
+    )
+    if rollout.publishes_canonical and rendered.text.strip():
         payload["narration"] = rendered.text
+
+    trace = build_response_trace(
+        request,
+        rendered,
+        interpreted_intents=tuple(
+            row for row in context.get("interpreted_intents", ()) if isinstance(row, Mapping)
+        ),
+        selected_affordance=str(context.get("selected_affordance") or ""),
+        resolver_result=authoritative_result,
+        retrieval_sources=tuple(
+            row for row in context.get("retrieval_sources", ()) if isinstance(row, Mapping)
+        ),
+        visibility_decisions=tuple(
+            row for row in context.get("visibility_decisions", ()) if isinstance(row, Mapping)
+        ),
+        hermes=_mapping(context.get("hermes")),
+        recovery_plan=_mapping(context.get("recovery_plan")),
+        proposals=tuple(
+            row for row in context.get("proposals", ()) if isinstance(row, Mapping)
+        ),
+        claim_ledger=_mapping(context.get("claim_ledger")),
+        candidate_ranking=tuple(
+            {"candidate_id": candidate_id, "rank": index + 1}
+            for index, candidate_id in enumerate(
+                rendered.metadata.get("ranked_candidate_ids", ())
+            )
+        ),
+        truth_records=tuple(
+            row for row in context.get("truth_records", ()) if isinstance(row, Mapping)
+        ),
+        latency=_mapping(context.get("latency")),
+        rollout=rollout.as_dict(),
+        extra={"comparison": comparison},
+    )
     payload["canonical_response"] = {
         "source": CANONICAL_NARRATION_SOURCE,
         "mode": rendered.mode.value,
@@ -119,7 +164,13 @@ def narrate_scene_canonical(
             "validation_token": checkpoint.validation_token,
         },
         "metadata": dict(rendered.metadata),
+        "rollout": rollout.as_dict(),
+        "developer_trace": trace.as_dict(),
     }
+    payload["rollout_comparison"] = comparison
+    payload["player_state_change_indicators"] = list(
+        player_state_change_indicators(authoritative_result["state_delta"])
+    )
     payload["canonical_response_source"] = CANONICAL_NARRATION_SOURCE
     return payload
 
