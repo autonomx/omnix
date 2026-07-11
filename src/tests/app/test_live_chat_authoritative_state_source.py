@@ -30,6 +30,17 @@ def test_initiative_policy_no_longer_reads_visible_voice_state() -> None:
     assert "dataset.voiceMode" not in source
     assert "new MutationObserver" not in source
     assert "liveConversationStore.getState" in source
+    assert "presencePolicy" in source
+    assert "initiative_cooldown_ms" in source
+
+
+def test_listener_backchannel_policy_is_store_derived_not_dom_derived() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-voice-backchannel.ts")
+    assert ".assistant-live-draft" not in source
+    assert ".assistant-voice-transcript" not in source
+    assert ".assistant-voice-orb" not in source
+    assert "liveConversationStore.getState" in source
+    assert "listener_backchannel_frequency" in source
 
 
 def test_avatar_state_is_store_derived_not_dom_derived() -> None:
