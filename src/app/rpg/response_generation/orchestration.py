@@ -200,6 +200,41 @@ class RpgResponseGenerator:
                         eligibility_reasons(rewritten)
                     )
 
+        if (
+            not report.ok
+            and metadata["rewrite_attempted"]
+            and not metadata["rewrite_accepted"]
+        ):
+            repaired_plan, deterministic_history = self._quality_gate.repair_plan(
+                current.plan,
+                remove_low_value_phrases=True,
+            )
+            if deterministic_history and repaired_plan.sections:
+                repaired = replace(
+                    current,
+                    plan=repaired_plan,
+                    repair_history=(*current.repair_history, *deterministic_history),
+                )
+                repaired = self._eligibility.evaluate(repaired, request)
+                if repaired.eligible:
+                    repaired_rendered = self._renderer.render(repaired.plan)
+                    repaired_report = self._quality_gate.evaluate(repaired_rendered.text)
+                    if repaired_report.ok:
+                        current = repaired
+                        report = repaired_report
+                        history.extend(deterministic_history)
+                        metadata["post_rewrite_deterministic_repair"] = list(
+                            deterministic_history
+                        )
+                    else:
+                        metadata["post_rewrite_repair_issues"] = list(
+                            repaired_report.issues
+                        )
+                else:
+                    metadata["post_rewrite_repair_rejected"] = list(
+                        eligibility_reasons(repaired)
+                    )
+
         final_rendered = self._renderer.render(current.plan)
         final_report = self._quality_gate.evaluate(final_rendered.text)
         metadata["final_quality_issues"] = list(final_report.issues)
