@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { liveConversationStore } from '../assistant-workspace/live-conversation-store';
 import {
   LiveChatPanel,
   invokeExistingLiveCallControl,
@@ -18,6 +19,7 @@ const defaultProfile = {
 
 beforeEach(() => {
   window.localStorage.clear();
+  liveConversationStore.reset();
   window.localStorage.setItem('omnix.liveConversation.serverProfileMigrated.v1', 'done');
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = input.toString();
@@ -30,6 +32,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = '';
+  liveConversationStore.reset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -41,6 +44,23 @@ describe('LiveChatPanel', () => {
     expect(screen.getByText('Select a Chat session')).toBeInTheDocument();
     expect(await screen.findByLabelText('Presence')).toHaveValue('natural');
     expect(screen.getByText('Select a Chat session before saving pronunciation guidance.')).toBeInTheDocument();
+  });
+
+  it('renders identity, floor, and status from the authoritative store', () => {
+    liveConversationStore.dispatch({ type: 'identity', identity: { characterId: 'maya', displayName: 'Maya' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'connection', value: 'connected' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'user_turn', value: 'speaking' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'floor_owner', value: 'user' } });
+    liveConversationStore.dispatch({
+      type: 'duplex',
+      duplex: { resolvedMode: 'echo_aware', reason: 'calibration_confident', confidence: 0.9 },
+    });
+
+    render(<LiveChatPanel sessionId="chat:one" />);
+    expect(screen.getByText('Call connected')).toBeInTheDocument();
+    expect(screen.getByText('Maya is listening')).toBeInTheDocument();
+    expect(screen.getByText('Echo-aware barge-in')).toBeInTheDocument();
+    expect(screen.getByText('user')).toBeInTheDocument();
   });
 
   it('reuses the existing live-call control instead of creating another voice pipeline', () => {
