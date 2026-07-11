@@ -17,6 +17,7 @@ from .store import _model_key, _provider_key, _pop_ready_sentences
 
 PROACTIVE_MAX_CHARS = 320
 PROACTIVE_MAX_WORDS = 42
+LISTENER_BACKCHANNELS = {"mhm", "right", "okay", "i'm with you"}
 
 
 class ProactiveDeliveryRequest(BaseModel):
@@ -62,6 +63,14 @@ def _prompt(reason: str, state_summary: str | None) -> str:
     )
 
 
+def _listener_backchannel(reason: str) -> str | None:
+    prefix = "listener_backchannel:"
+    if not reason.startswith(prefix):
+        return None
+    token = reason[len(prefix):].strip().lower().replace("’", "'")
+    return token if token in LISTENER_BACKCHANNELS else "mhm"
+
+
 def stream_proactive_turn_chunks(
     store: Any,
     session: ChatSession,
@@ -71,13 +80,30 @@ def stream_proactive_turn_chunks(
     provider_id: str | None = None,
     model_id: str | None = None,
 ) -> Iterator[dict[str, Any]]:
+    turn_id = f"proactive:{uuid.uuid4().hex}"
+    backchannel = _listener_backchannel(initiative_reason)
+    if backchannel is not None:
+        yield {"type": "initiative", "turn_id": turn_id, "initiative_reason": initiative_reason}
+        yield {"type": "text_chunk", "text": backchannel}
+        yield {
+            "type": "complete",
+            "content": backchannel,
+            "metadata": {
+                "generation_status": "completed",
+                "purpose": "listener_backchannel",
+                "transient": True,
+                "turn_id": turn_id,
+                "initiative_reason": initiative_reason,
+            },
+        }
+        return
+
     resolved_provider_id = provider_id or session.provider_id
     resolved_model_id = model_id or session.model_id
     provider = shared.get_provider(_provider_key(resolved_provider_id))
     if provider is None:
         raise RuntimeError("Chat provider is not available")
 
-    turn_id = f"proactive:{uuid.uuid4().hex}"
     synthetic_message = ChatMessage(
         id=turn_id,
         role="user",
