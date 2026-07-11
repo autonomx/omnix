@@ -45,9 +45,12 @@ jobs:
           ruff check \
             src/app/gateway/live_voice_release_gate.py \
             src/app/gateway/live_chat_release_gate.py \
+            src/app/gateway/live_chat_evaluation_store.py \
+            src/app/gateway/live_chat_evaluation_routes.py \
             src/app/gateway/live_voice_diagnostics_routes.py \
             src/tests/app/test_live_voice_release_gate.py \
             src/tests/app/test_live_chat_release_gate.py \
+            src/tests/app/test_live_chat_evaluation_store.py \
             src/tests/app/test_live_chat_authoritative_state_source.py
 
       - name: Existing live voice release-gate regression
@@ -68,6 +71,12 @@ jobs:
           python -m pytest src/tests/app/test_live_chat_authoritative_state_source.py -q --tb=short \
             2>&1 | tee live-chat-authoritative-state-output.txt
 
+      - name: Phase 12 durable evaluation and policy regression
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_live_chat_evaluation_store.py -q --tb=short \
+            2>&1 | tee live-chat-durable-evaluation-output.txt
+
       - name: Upload hardening diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -77,6 +86,7 @@ jobs:
             live-voice-release-gate-output.txt
             live-chat-release-gate-output.txt
             live-chat-authoritative-state-output.txt
+            live-chat-durable-evaluation-output.txt
 
       - name: Web typecheck
         run: npm --workspace @omnix/web run typecheck
