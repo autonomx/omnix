@@ -46,6 +46,8 @@ export type LiveConversationProfileEnvelope = {
 
 export type LiveConversationProfilePatch = Partial<Omit<LiveConversationProfile, 'profile_version'>>;
 
+export const LIVE_CONVERSATION_PROFILE_CHANGED_EVENT = 'omnix:live-conversation-profile-changed';
+export const LIVE_CONVERSATION_EFFECTIVE_PROFILE_KEY = 'omnix.liveConversation.effectiveProfile';
 const MIGRATION_KEY = 'omnix.liveConversation.serverProfileMigrated.v1';
 const CANONICAL_LEGACY_KEY = 'omnix.liveConversation.settings';
 const ASSISTANT_LEGACY_KEY = 'omnix.chatbot.assistantSettings';
@@ -83,6 +85,25 @@ export function mirrorProfileForLegacyRuntime(profile: LiveConversationProfile):
     interruptionPreference: profile.interruption_preference,
     backchannelMode: profile.assistant_backchannel_mode,
   });
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(LIVE_CONVERSATION_EFFECTIVE_PROFILE_KEY, JSON.stringify(profile));
+  } catch {
+    // The in-memory event remains available when storage is blocked.
+  }
+  window.dispatchEvent(new CustomEvent<LiveConversationProfile>(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, {
+    detail: profile,
+  }));
+}
+
+export function readEffectiveLiveConversationProfile(): LiveConversationProfile | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(LIVE_CONVERSATION_EFFECTIVE_PROFILE_KEY);
+    return raw ? JSON.parse(raw) as LiveConversationProfile : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function migrateLegacyConversationSettingsOnce(): Promise<boolean> {
