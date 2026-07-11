@@ -10,8 +10,8 @@ Base: `main` at `e882b184f6d3df27abaab3b68af2a2b6d041534b`
 |---:|---|---|---|
 | 9 | complete | target-runtime release evidence and v2 evaluator | passed `3ba45b7fc284b5c426c6850b9f5c142ce67bbbf0` |
 | 10 | complete | calibration-backed automatic duplex | passed `3d5d0e28abca4968d1fb8a4458b801db4c1bd655` |
-| 11 | implemented, CI pending | authoritative browser conversation store | exact-head GitHub Actions pending |
-| 12 | pending | durable Voice Session evaluation and preset tuning | pending |
+| 11 | complete | authoritative browser conversation store | passed `3cfa77f12a7c698cf7048fed1a6df7ba5517cd34` |
+| 12 | implemented, CI pending | durable Voice Session evaluation and preset tuning | exact-head GitHub Actions pending |
 
 ## Operational evidence boundary
 
