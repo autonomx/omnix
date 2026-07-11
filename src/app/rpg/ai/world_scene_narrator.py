@@ -1,12 +1,13 @@
 """Compatibility facade for the canonical RPG response-generation pipeline.
 
 Provider generation remains in the legacy split modules during migration, but final
-visible narration is owned by ``RpgResponseGenerator`` through the explicit bridge.
-This module intentionally contains no star imports, import-order fixups, or runtime
-symbol replacement.
+visible scene narration is owned by ``RpgResponseGenerator`` through the explicit
+bridge. Ambient updates retain their deterministic dedicated presenter. This module
+contains no star imports, import-order fixups, or runtime symbol replacement.
 """
 from __future__ import annotations
 
+from app.rpg.ai.world_scene_narrator_ambient import narrate_ambient_update
 from app.rpg.ai.world_scene_narrator_prompts import (
     NPCReaction,
     NarrativeResult,
@@ -34,6 +35,7 @@ __all__ = [
     "build_choice_prompt",
     "build_npc_reaction_prompt",
     "build_scene_prompt",
+    "narrate_ambient_update",
     "narrate_scene",
     "parse_choices",
     "parse_npc_reaction",
