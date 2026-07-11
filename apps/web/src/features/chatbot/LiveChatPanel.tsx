@@ -8,6 +8,7 @@ import { CharacterModePanel } from './CharacterModePanel';
 import { LiveConversationControls } from './LiveConversationControls';
 import { LiveConversationEvaluationPanel } from './LiveConversationEvaluationPanel';
 import { LivePronunciationPanel } from './LivePronunciationPanel';
+import { LiveVoiceCalibrationPanel } from './LiveVoiceCalibrationPanel';
 import './LiveChatPanel.css';
 
 export type LiveChatPanelProps = {
@@ -118,6 +119,7 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
       )}
 
       <LiveConversationControls sessionId={sessionId} />
+      <LiveVoiceCalibrationPanel />
       <LivePronunciationPanel sessionId={sessionId} />
 
       <section className="live-chat-card" aria-labelledby="live-chat-call-heading">
