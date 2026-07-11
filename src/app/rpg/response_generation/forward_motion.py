@@ -50,6 +50,16 @@ class ForwardMotionPolicy:
                 rationale="interpretation confidence is too low to choose an action",
                 options=("clarify the intended outcome", "inspect the immediate situation"),
             )
+        if (
+            selected.affordance == "unverified_player_claim"
+            and analysis.intent.unresolved_references
+        ):
+            return ForwardMotionPlan(
+                strategy="clarify_unverified_relationship",
+                outcome="clarification",
+                rationale="the asserted person or relationship is not established",
+                options=("identify who you mean", "ask the present NPC what they know"),
+            )
         if mechanic_resolved and selected.affordance in {
             "transaction",
             "combat_attempt",
