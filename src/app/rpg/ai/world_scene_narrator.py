@@ -3,7 +3,7 @@
 Provider generation remains in the legacy split modules during migration, but final
 visible narration is owned by ``RpgResponseGenerator`` through the explicit bridge.
 This module intentionally contains no star imports, import-order fixups, or runtime
-monkey patches.
+symbol replacement.
 """
 from __future__ import annotations
 
