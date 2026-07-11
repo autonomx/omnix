@@ -121,7 +121,8 @@ def test_live_call_websocket_reuses_one_connection_for_multiple_phrases(monkeypa
         "Second persistent phrase.",
     ]
     assert all(call["parity_mode"] is False for call in provider.calls)
-    assert all(call["max_new_tokens"] == 192 for call in provider.calls)
+    assert all(call["repetition_penalty"] == 1.05 for call in provider.calls)
+    assert all(call["max_new_tokens"] == 96 for call in provider.calls)
 
     request_events = [
         (stream_id, details.get("phrase_index"))
