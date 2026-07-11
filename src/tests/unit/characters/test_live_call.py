@@ -90,7 +90,7 @@ def test_character_live_call_runtime_resolves_profile_voice_and_delivery(tmp_pat
     assert runtime.display_name == "Maya"
     assert runtime.character_profile_version == 1
     assert runtime.voice_asset_id == "voice-cloning:maya"
-    assert runtime.greeting == "Hey, good to hear from you."
+    assert runtime.greeting == ""
     assert runtime.speech_style.speed == 0.94
     assert runtime.speech_style.temperature == 0.52
     assert runtime.speech_style.top_k == 18
