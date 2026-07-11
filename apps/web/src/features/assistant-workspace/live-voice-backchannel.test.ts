@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { liveConversationStore } from './live-conversation-store';
 import {
   decideAssistantListenerBackchannel,
   isUserContinuer,
+  resolveBackchannelCadence,
   resolveBackchannelTranscript,
 } from './live-voice-backchannel';
 
@@ -10,6 +12,7 @@ describe('live voice backchannels', () => {
   beforeEach(() => {
     window.localStorage.clear();
     document.body.innerHTML = '';
+    liveConversationStore.reset();
   });
 
   it('recognizes user continuers without authorizing assistant speech', () => {
@@ -43,8 +46,20 @@ describe('live voice backchannels', () => {
       .toBe('cooldown');
   });
 
-  it('recovers partial speech from the live draft', () => {
-    document.body.innerHTML = '<div class="assistant-live-draft"><p>I am still explaining this part,</p></div>';
+  it('derives bounded cadence from the active policy frequency', () => {
+    const quiet = resolveBackchannelCadence(0.05);
+    const natural = resolveBackchannelCadence(0.16);
+    const engaged = resolveBackchannelCadence(0.24);
+
+    expect(quiet.speechMs).toBeGreaterThan(natural.speechMs);
+    expect(quiet.cooldownMs).toBeGreaterThan(natural.cooldownMs);
+    expect(engaged.speechMs).toBeLessThan(natural.speechMs);
+    expect(engaged.cooldownMs).toBeLessThan(natural.cooldownMs);
+    expect(resolveBackchannelCadence(0).enabled).toBe(false);
+  });
+
+  it('recovers partial speech from the authoritative conversation store', () => {
+    liveConversationStore.dispatch({ type: 'transcript_partial', text: 'I am still explaining this part,' });
     expect(resolveBackchannelTranscript(undefined)).toBe('I am still explaining this part,');
     expect(resolveBackchannelTranscript('explicit')).toBe('explicit');
   });
