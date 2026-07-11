@@ -23,18 +23,28 @@ function calibration(changes: Partial<LiveVoiceCalibrationRecord> = {}): LiveVoi
 }
 
 describe('live voice duplex gate', () => {
-  it('keeps automatic mode on the safe fallback without calibration evidence', () => {
-    expect(resolveDuplexMode('automatic', true, null)).toBe('half_duplex');
+  it('keeps automatic mode on the safe fallback without calibration or current device evidence', () => {
+    expect(resolveDuplexMode('automatic', true, null, 'device-pair')).toBe('half_duplex');
+    expect(resolveDuplexMode('automatic', true, calibration(), null)).toBe('half_duplex');
     expect(shouldMuteLiveMic(true, 'half_duplex')).toBe(true);
     expect(shouldMuteLiveMic(false, 'half_duplex')).toBe(false);
   });
 
-  it('lets Automatic select echo-aware only from valid confident calibration', () => {
-    expect(resolveDuplexMode('automatic', true, calibration())).toBe('echo_aware');
-    expect(resolveDuplexMode('automatic', true, calibration({ confidence: 0.4, resolvedMode: 'half_duplex' })))
-      .toBe('half_duplex');
-    expect(resolveDuplexMode('automatic', true, calibration({ expiresAt: Date.now() - 1 })))
-      .toBe('half_duplex');
+  it('lets Automatic select echo-aware only from valid matching calibration', () => {
+    expect(resolveDuplexMode('automatic', true, calibration(), 'device-pair')).toBe('echo_aware');
+    expect(resolveDuplexMode('automatic', true, calibration(), 'different-device')).toBe('half_duplex');
+    expect(resolveDuplexMode(
+      'automatic',
+      true,
+      calibration({ confidence: 0.4, resolvedMode: 'half_duplex' }),
+      'device-pair',
+    )).toBe('half_duplex');
+    expect(resolveDuplexMode(
+      'automatic',
+      true,
+      calibration({ expiresAt: Date.now() - 1 }),
+      'device-pair',
+    )).toBe('half_duplex');
   });
 
   it('keeps microphone capture enabled in explicit echo-aware mode', () => {
@@ -43,8 +53,8 @@ describe('live voice duplex gate', () => {
   });
 
   it('falls back safely when echo-aware support is unavailable', () => {
-    expect(resolveDuplexMode('echo_aware', false, calibration())).toBe('half_duplex');
-    expect(resolveDuplexMode('automatic', false, calibration())).toBe('half_duplex');
+    expect(resolveDuplexMode('echo_aware', false, calibration(), 'device-pair')).toBe('half_duplex');
+    expect(resolveDuplexMode('automatic', false, calibration(), 'device-pair')).toBe('half_duplex');
     expect(resolveDuplexMode('half_duplex')).toBe('half_duplex');
   });
 });
