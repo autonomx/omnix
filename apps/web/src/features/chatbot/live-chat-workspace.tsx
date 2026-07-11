@@ -20,7 +20,7 @@ export function sessionIdFromChatRequest(input: RequestInfo | URL): string | nul
   const raw = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
   const pathname = new URL(raw, window.location.origin).pathname;
   const match = SESSION_PATH.exec(pathname);
-  if (!match || match[1] === 'sessions') return null;
+  if (!match) return null;
   try {
     return decodeURIComponent(match[1]);
   } catch {
@@ -132,8 +132,4 @@ function renderLiveChat(): void {
     mountedRoot = createRoot(mountedHost);
   }
   mountedRoot?.render(<LiveChatPanel sessionId={selectedSessionId} />);
-}
-
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  initializeLiveChatWorkspace();
 }
