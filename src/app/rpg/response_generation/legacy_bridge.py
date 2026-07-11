@@ -16,6 +16,11 @@ from .production_pipeline import (
     RpgProductionResponsePipeline,
 )
 from .profiles import ResponseProfileRegistry
+from .strict_proposal_policy import StrictProposalPolicy
+
+
+def _pipeline() -> RpgProductionResponsePipeline:
+    return RpgProductionResponsePipeline(proposal_policy=StrictProposalPolicy())
 
 
 def narrate_scene_canonical(
@@ -106,7 +111,7 @@ def narrate_scene_canonical(
             context.get("provider_policy") or context.get("response_profile")
         ),
     }
-    canonical = RpgProductionResponsePipeline().finalize_payload(
+    canonical = _pipeline().finalize_payload(
         legacy_payload,
         player_input=str(context.get("player_input") or ""),
         authoritative_turn_result=authoritative_result,
@@ -158,7 +163,7 @@ class SceneNarrator(_LegacySceneNarrator):
             result = super().narrate_scene(scene, state, tone=tone)
         finally:
             self.llm_gateway = original_gateway
-        canonical = RpgProductionResponsePipeline().finalize_payload(
+        canonical = _pipeline().finalize_payload(
             {
                 "source": "legacy_scene_narrator",
                 "legacy_visible_text": result.narrative,
