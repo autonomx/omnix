@@ -36,9 +36,11 @@ export function readLiveCallSnapshot(root: ParentNode = document): LiveCallSnaps
     || 'Idle';
   const identity = card.querySelector<HTMLElement>('.assistant-live-identity')?.textContent?.trim()
     || 'System Assistant';
-  const duplexMode = card.dataset.duplexGate === 'assistant-speaking'
-    ? 'Safe half-duplex · microphone paused during playback'
-    : 'Safe half-duplex';
+  const duplexMode = card.dataset.duplexMode === 'echo_aware'
+    ? 'Echo-aware barge-in'
+    : card.dataset.duplexGate === 'assistant-speaking'
+      ? 'Safe half-duplex · microphone paused during playback'
+      : 'Safe half-duplex';
   return {
     connected: action?.textContent?.trim().toLocaleLowerCase() === 'end call',
     state,
@@ -71,7 +73,7 @@ export function LiveChatPanel({ sessionId }: LiveChatPanelProps) {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['data-voice-mode', 'data-duplex-gate', 'data-live-voice-status'],
+      attributeFilter: ['data-voice-mode', 'data-duplex-gate', 'data-duplex-mode', 'data-live-voice-status'],
     });
     const interval = window.setInterval(refresh, 1_000);
     return () => {
