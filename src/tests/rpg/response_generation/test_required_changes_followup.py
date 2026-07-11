@@ -219,7 +219,7 @@ def test_scene_provider_receives_precompiled_canonical_brief(monkeypatch):
     )
 
     assert captured["narration_brief"]["must_answer"] == "Look around."
-    assert captured["runtime_settings"][
+    assert captured["simulation_state"]["runtime_settings"][
         "canonical_context_compiled_before_generation"
     ] is True
     assert payload["canonical_response"]["quality_report"]["ok"] is True
