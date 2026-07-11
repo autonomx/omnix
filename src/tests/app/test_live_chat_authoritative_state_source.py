@@ -103,3 +103,29 @@ def test_release_gate_aggregates_durable_system_and_character_evidence() -> None
     assert "character_id" in source
     assert "durable_record_to_bundle" in aggregation
     assert '"/evaluations/release-gate"' in routes
+
+
+def test_fullscreen_shell_reuses_existing_runtime_owners() -> None:
+    shell = _source("apps/web/src/features/chatbot/LiveChatFullscreenShell.tsx")
+    adapters = _source("apps/web/src/features/chatbot/live-chat-runtime-adapters.ts")
+    controller = _source("apps/web/src/features/chatbot/live-chat-fullscreen-controller.ts")
+    combined = "\n".join((shell, adapters, controller))
+    forbidden_runtime_owners = (
+        "getUserMedia(",
+        "new WebSocket",
+        "new Audio(",
+        "AudioContext(",
+        "SpeechRecognition",
+        "/api/tts",
+        "/api/chat/",
+    )
+    for forbidden in forbidden_runtime_owners:
+        assert forbidden not in combined
+    assert "useLiveConversationState" in shell
+    assert "invokeExistingLiveCallControl" in shell
+    assert "submitLiveChatMessageThroughExistingComposer" in shell
+    assert "createPortal" in shell
+    assert ".assistant-composer textarea" in adapters
+    assert ".assistant-live-character-avatar" in adapters
+    assert "requestFullscreen" in controller
+    assert "exitFullscreen" in controller
