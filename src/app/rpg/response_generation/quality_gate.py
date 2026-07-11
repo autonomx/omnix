@@ -90,6 +90,8 @@ class QualityGate:
     def repair_plan(
         self,
         plan: SemanticResponsePlan,
+        *,
+        remove_low_value_phrases: bool = False,
     ) -> tuple[SemanticResponsePlan, tuple[str, ...]]:
         repaired: list[SemanticSection] = []
         history: list[str] = []
@@ -97,11 +99,12 @@ class QualityGate:
         deterministic_fallback = bool(plan.metadata.get("fallback_reason")) or any(
             bool(section.metadata.get("fallback")) for section in plan.sections
         )
+        repair_low_value = deterministic_fallback or remove_low_value_phrases
         for section in plan.sections:
             text = _DEBUG_PREFIX.sub("", section.text.strip())
             if text != section.text.strip():
                 history.append(f"removed_debug_prefix:{section.section_id}")
-            if deterministic_fallback:
+            if repair_low_value:
                 for phrase in _LOW_VALUE_PHRASES:
                     if phrase in text.casefold():
                         text = re.sub(re.escape(phrase), "", text, flags=re.IGNORECASE)
