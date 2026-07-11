@@ -1,13 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   parseProactiveSse,
   proactiveReasonFromTranscript,
 } from './live-conversation-initiative-controller';
-
-afterEach(() => {
-  document.body.innerHTML = '';
-});
 
 describe('live conversation initiative controller', () => {
   it('parses transient proactive stream metadata and content', () => {
@@ -32,17 +28,9 @@ describe('live conversation initiative controller', () => {
       .toThrow('Provider unavailable');
   });
 
-  it('derives only context-backed initiative reasons', () => {
-    const transcript = document.createElement('div');
-    transcript.className = 'assistant-voice-transcript';
-    transcript.innerHTML = '<p class="user">You Should we revisit the launch plan?</p>';
-    document.body.appendChild(transcript);
-    expect(proactiveReasonFromTranscript()).toBe('unresolved_question');
-
-    transcript.innerHTML = '<p class="user">You The launch plan is still open.</p>';
-    expect(proactiveReasonFromTranscript()).toBe('continue_current_topic');
-
-    transcript.innerHTML = '<p class="muted">Voice transcript will appear here.</p>';
-    expect(proactiveReasonFromTranscript()).toBeNull();
+  it('derives only context-backed initiative reasons from authoritative transcript text', () => {
+    expect(proactiveReasonFromTranscript('Should we revisit the launch plan?')).toBe('unresolved_question');
+    expect(proactiveReasonFromTranscript('The launch plan is still open.')).toBe('continue_current_topic');
+    expect(proactiveReasonFromTranscript('')).toBeNull();
   });
 });
