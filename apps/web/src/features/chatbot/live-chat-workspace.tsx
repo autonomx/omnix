@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { LiveChatPanel } from './LiveChatPanel';
@@ -71,6 +71,7 @@ export function initializeLiveChatWorkspace(queryClient: QueryClient): () => voi
     closeLiveChat();
     document.querySelector(`[${NAV_ATTRIBUTE}]`)?.remove();
     window.fetch = originalFetch;
+    selectedSessionId = null;
     workspaceQueryClient = null;
     liveWindow.__omnixLiveChatWorkspaceInstalled = false;
   };
