@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .production_pipeline import RpgProductionResponsePipeline
-from .strict_proposal_policy import StrictProposalPolicy
+from .strict_pipeline import StrictRpgProductionResponsePipeline
 
 
-_PIPELINE = RpgProductionResponsePipeline(proposal_policy=StrictProposalPolicy())
+_PIPELINE = StrictRpgProductionResponsePipeline()
 
 
 def build_runtime_narration_payload(
