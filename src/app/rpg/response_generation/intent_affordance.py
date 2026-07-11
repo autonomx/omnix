@@ -71,7 +71,7 @@ class NarrativeAffordanceClassifier:
         if (tokens and tokens[0] in _QUESTION_WORDS) or text.endswith("?"):
             hypotheses.append(IntentHypothesis("ask_world_question", "lore_search", 0.88, "obtain an answer consistent with available knowledge", ("speaker_knowledge", "journal", "lorebook"), entities=unresolved))
         if token_set & _SOCIAL_WORDS:
-            ambiguous = "understand" in token_set or len(tokens) <= 4
+            ambiguous = bool(unresolved) or "understand" in token_set or len(tokens) <= 4
             hypotheses.append(IntentHypothesis("social_action", "clarification" if ambiguous else "social_check", 0.7 if ambiguous else 0.86, "change another character's understanding or behavior", ("target", "relationship", "social_mechanics"), ambiguity="high" if ambiguous else "low", entities=unresolved))
         if token_set & _ASSERTION_MARKERS and any(word in lowered for word in ("agent", "sister", "friend", "promised", "remember")):
             hypotheses.append(IntentHypothesis("assert_prior_history", "unverified_player_claim", 0.98, "use an asserted relationship or prior event", ("campaign_history", "npc_memory", "relationships"), ambiguity="medium", entities=unresolved))
