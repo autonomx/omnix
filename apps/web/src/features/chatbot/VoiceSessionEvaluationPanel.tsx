@@ -247,5 +247,5 @@ function formatScore(value: number | null | undefined): string {
 }
 
 function title(value: string): string {
-  return value.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toLocaleUpperCase());
+  return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (character) => character.toLocaleUpperCase());
 }
