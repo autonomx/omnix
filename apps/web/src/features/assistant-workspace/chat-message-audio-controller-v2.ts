@@ -3,8 +3,11 @@ import {
   stopBufferedTtsPlayback,
   type BufferedTtsPlaybackState,
 } from './assistant-buffered-tts-player';
+import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
 
 const STREAM_AUDIO_BUTTON_ATTRIBUTE = 'data-omnix-stream-audio';
+const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
+const AUDIO_PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const INSTALLED_KEY = '__omnixChatMessageAudioControllerV2Installed';
 
 let activeButton: HTMLButtonElement | null = null;
@@ -20,6 +23,17 @@ export function initializeChatMessageAudioControllerV2(root: ParentNode = docume
     if (!(target instanceof Element)) return;
     const button = target.closest<HTMLButtonElement>('button');
     if (!button || !rootContains(root, button) || !isChatAudioButton(button)) return;
+
+    if (isStreamAudioButton(button)) {
+      const stopping = button.getAttribute('aria-pressed') === 'true';
+      stopActiveButton(root);
+      dispatchLiveAudioPreemption('manual-stream-button');
+      if (stopping) announceAudioPlayback(false, 'manual-stream');
+      // Preserve the existing low-latency stream-button handler. This capture listener
+      // only clears competing pipelines before that handler runs.
+      return;
+    }
+
     const message = button.closest<HTMLElement>('.assistant-chat-message.assistant');
     const text = message?.querySelector<HTMLElement>('.assistant-chat-bubble > p')?.textContent?.trim() ?? '';
     if (!text) {
@@ -36,6 +50,8 @@ export function initializeChatMessageAudioControllerV2(root: ParentNode = docume
       return;
     }
 
+    dispatchLiveAudioPreemption('manual-play-button');
+    stopAssistantPcmStream(root);
     stopActiveButton(root);
     activeButton = button;
     setButtonState(button, true);
@@ -46,6 +62,11 @@ export function initializeChatMessageAudioControllerV2(root: ParentNode = docume
       if (activeButton !== button) return;
       setButtonState(button, false);
       activeButton = null;
+      announceAudioPlayback(false, 'manual-play');
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setStatus(root, 'Response audio stopped.');
+        return;
+      }
       setStatus(root, error instanceof Error ? error.message : 'Response audio playback failed.');
     });
   };
@@ -60,10 +81,14 @@ export function initializeChatMessageAudioControllerV2(root: ParentNode = docume
 }
 
 export function isChatAudioButton(button: HTMLButtonElement): boolean {
-  if (button.hasAttribute(STREAM_AUDIO_BUTTON_ATTRIBUTE)) return true;
+  if (isStreamAudioButton(button)) return true;
   if (button.getAttribute('aria-label')?.trim().toLowerCase() === 'play response audio') return true;
   return button.textContent?.trim().toLowerCase() === 'play audio'
     && Boolean(button.closest('.assistant-chat-message.assistant'));
+}
+
+export function isStreamAudioButton(button: HTMLButtonElement): boolean {
+  return button.hasAttribute(STREAM_AUDIO_BUTTON_ATTRIBUTE);
 }
 
 function handlePlaybackState(
@@ -73,16 +98,19 @@ function handlePlaybackState(
 ): void {
   if (activeButton !== button) return;
   if (playbackState === 'buffering') {
+    announceAudioPlayback(false, 'manual-play');
     setStatus(root, 'Generating and buffering response audio…');
     return;
   }
   if (playbackState === 'playing') {
+    announceAudioPlayback(true, 'manual-play');
     setStatus(root, 'Playing response audio.');
     return;
   }
   if (playbackState === 'finished' || playbackState === 'stopped') {
     setButtonState(button, false);
     activeButton = null;
+    announceAudioPlayback(false, 'manual-play');
     setStatus(root, playbackState === 'finished' ? 'Response audio finished.' : 'Response audio stopped.');
   }
 }
@@ -91,12 +119,25 @@ function stopActiveButton(root: ParentNode, status?: string): void {
   stopBufferedTtsPlayback();
   if (activeButton) setButtonState(activeButton, false);
   activeButton = null;
+  announceAudioPlayback(false, 'manual-play');
   if (status) setStatus(root, status);
 }
 
 function setButtonState(button: HTMLButtonElement, active: boolean): void {
   button.setAttribute('aria-pressed', active ? 'true' : 'false');
   button.dataset.audioPlayback = active ? 'active' : 'idle';
+}
+
+function dispatchLiveAudioPreemption(source: string): void {
+  window.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
+    detail: { source, intent: 'audio-preempt', confidence: 1 },
+  }));
+}
+
+function announceAudioPlayback(speaking: boolean, source: string): void {
+  window.dispatchEvent(new CustomEvent(AUDIO_PLAYBACK_STATE_EVENT, {
+    detail: { speaking, source },
+  }));
 }
 
 function selectedVoiceId(): string | null {
