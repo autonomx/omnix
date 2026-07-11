@@ -10,6 +10,7 @@ from app.providers.vendor.faster_qwen3_tts.termination import (
     StreamingEosPolicy,
     classify_after_sample,
     eos_logit_bias,
+    resolve_eos_deadlines,
 )
 
 
@@ -129,34 +130,53 @@ def _sequence_sampler(*token_ids: int):
     return sample
 
 
-def test_eos_policy_biases_then_forces_after_text_context() -> None:
-    policy = StreamingEosPolicy(
-        bias_start_steps=2,
-        force_after_steps=4,
-        bias_per_step=1.5,
+def test_eos_policy_resolves_budget_relative_deadlines() -> None:
+    policy = StreamingEosPolicy()
+    deadlines = resolve_eos_deadlines(
+        max_new_tokens=100,
+        text_context_steps=20,
+        policy=policy,
     )
 
-    assert eos_logit_bias(2, 1, policy) == 0.0
-    assert eos_logit_bias(3, 1, policy) == 1.5
-    assert eos_logit_bias(4, 1, policy) == 3.0
-    assert classify_after_sample(
-        sampled_token_id=7,
-        eos_token_id=31,
-        generation_step=5,
-        text_context_steps=1,
+    assert deadlines.bias_start_step == 70
+    assert deadlines.force_step == 90
+    assert deadlines.hard_limit_step == 100
+    assert eos_logit_bias(69, deadlines, policy) == 0.0
+    assert eos_logit_bias(70, deadlines, policy) == pytest.approx(0.5)
+    assert eos_logit_bias(90, deadlines, policy) == pytest.approx(8.0)
+
+
+def test_eos_deadlines_never_cut_before_text_context_headroom() -> None:
+    policy = StreamingEosPolicy()
+    deadlines = resolve_eos_deadlines(
+        max_new_tokens=100,
+        text_context_steps=80,
         policy=policy,
-    ) == "forced_eos"
+    )
+
+    assert deadlines.bias_start_step == 88
+    assert deadlines.force_step == 96
+    assert deadlines.hard_limit_step == 100
 
 
 def test_natural_eos_wins_at_the_forced_boundary() -> None:
-    policy = StreamingEosPolicy(force_after_steps=4)
+    policy = StreamingEosPolicy(
+        bias_start_fraction=0.3,
+        force_fraction=0.5,
+        min_post_text_bias_steps=0,
+        min_post_text_force_steps=0,
+    )
+    deadlines = resolve_eos_deadlines(
+        max_new_tokens=10,
+        text_context_steps=1,
+        policy=policy,
+    )
 
     assert classify_after_sample(
         sampled_token_id=31,
         eos_token_id=31,
-        generation_step=5,
-        text_context_steps=1,
-        policy=policy,
+        generation_step=deadlines.force_step,
+        deadlines=deadlines,
     ) == "natural_eos"
 
 
@@ -169,7 +189,7 @@ def test_fast_stream_marks_natural_eos_on_exact_chunk_boundary(monkeypatch) -> N
             talker=_FastTalker(),
             predictor_graph=_PredictorGraph(),
             talker_graph=_TalkerGraph(),
-            max_new_tokens=20,
+            max_new_tokens=10,
             min_new_tokens=0,
             chunk_size=1,
             **_inputs(),
@@ -184,7 +204,7 @@ def test_fast_stream_marks_natural_eos_on_exact_chunk_boundary(monkeypatch) -> N
     assert timing["generated_steps"] == 1
 
 
-def test_fast_stream_forces_eos_after_bounded_post_text_grace(monkeypatch) -> None:
+def test_fast_stream_forces_eos_near_phrase_budget(monkeypatch) -> None:
     monkeypatch.setattr(streaming.torch.cuda, "synchronize", lambda: None)
     monkeypatch.setattr(streaming, "sample_logits", _constant_sampler(1))
 
@@ -193,12 +213,17 @@ def test_fast_stream_forces_eos_after_bounded_post_text_grace(monkeypatch) -> No
             talker=_FastTalker(),
             predictor_graph=_PredictorGraph(),
             talker_graph=_TalkerGraph(),
-            max_new_tokens=20,
+            max_new_tokens=10,
             min_new_tokens=0,
             chunk_size=2,
-            eos_bias_start_steps=2,
-            eos_force_after_steps=4,
-            eos_bias_per_step=2.0,
+            eos_policy=StreamingEosPolicy(
+                bias_start_fraction=0.3,
+                force_fraction=0.5,
+                min_post_text_bias_steps=0,
+                min_post_text_force_steps=0,
+                bias_per_step=1.0,
+                max_bias=4.0,
+            ),
             **_inputs(text_context_steps=1),
         )
     )
@@ -208,8 +233,10 @@ def test_fast_stream_forces_eos_after_bounded_post_text_grace(monkeypatch) -> No
     assert final_timing["is_final"] is True
     assert final_timing["termination_reason"] == "forced_eos"
     assert final_timing["generated_steps"] == 5
-    assert final_timing["post_text_steps"] == 4
-    assert final_timing["eos_bias_applied"] == pytest.approx(4.0)
+    assert final_timing["eos_bias_start_step"] == 3
+    assert final_timing["eos_force_step"] == 5
+    assert final_timing["hard_token_limit_step"] == 10
+    assert final_timing["eos_bias_applied"] == pytest.approx(2.0)
 
 
 def test_fast_stream_marks_token_limit_on_exact_chunk_boundary(monkeypatch) -> None:
@@ -224,7 +251,6 @@ def test_fast_stream_marks_token_limit_on_exact_chunk_boundary(monkeypatch) -> N
             max_new_tokens=2,
             min_new_tokens=0,
             chunk_size=2,
-            eos_force_after_steps=8,
             **_inputs(text_context_steps=100),
         )
     )
@@ -241,12 +267,17 @@ def test_parity_stream_uses_the_same_forced_eos_policy(monkeypatch) -> None:
     chunks = list(
         streaming.parity_generate_streaming(
             talker=_ParityTalker(),
-            max_new_tokens=20,
+            max_new_tokens=10,
             min_new_tokens=0,
             chunk_size=2,
-            eos_bias_start_steps=2,
-            eos_force_after_steps=4,
-            eos_bias_per_step=2.0,
+            eos_policy=StreamingEosPolicy(
+                bias_start_fraction=0.3,
+                force_fraction=0.5,
+                min_post_text_bias_steps=0,
+                min_post_text_force_steps=0,
+                bias_per_step=1.0,
+                max_bias=4.0,
+            ),
             **_inputs(text_context_steps=1),
         )
     )
@@ -254,4 +285,4 @@ def test_parity_stream_uses_the_same_forced_eos_policy(monkeypatch) -> None:
     final_timing = chunks[-1][1]
     assert final_timing["is_final"] is True
     assert final_timing["termination_reason"] == "forced_eos"
-    assert final_timing["post_text_steps"] == 4
+    assert final_timing["eos_force_step"] == 5
