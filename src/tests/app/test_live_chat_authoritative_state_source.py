@@ -38,3 +38,25 @@ def test_avatar_state_is_store_derived_not_dom_derived() -> None:
     assert "data-live-voice-status" not in source
     assert "projectLegacyLiveVoiceState" not in source
     assert "liveConversationStore.getState" in source
+
+
+def test_evaluation_no_longer_observes_or_persists_transcript_dom() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-conversation-evaluation-controller.ts")
+    assert "new MutationObserver" not in source
+    assert "assistant-voice-transcript" not in source
+    assert "assistant-live-draft" not in source
+    assert "redactPersistedEvent" in source
+    assert "liveConversationStore.subscribe" in source
+
+
+def test_durable_payload_uses_aggregates_not_event_or_content_uploads() -> None:
+    source = _source(
+        "apps/web/src/features/assistant-workspace/live-conversation-durable-evaluation-controller.ts"
+    )
+    assert "snapshot().events" not in source
+    assert "quality_metrics" in source
+    assert "latency_summary" in source
+    assert "eos_termination_counts" in source
+    assert "transcript:" not in source
+    assert "prompt:" not in source
+    assert "pcm:" not in source
