@@ -27,8 +27,12 @@ export function initializeChatMessageAudioControllerV2(root: ParentNode = docume
     if (isStreamAudioButton(button)) {
       const stopping = button.getAttribute('aria-pressed') === 'true';
       stopActiveButton(root);
+      if (stopping) {
+        // Let the existing stream controller see the still-active stream and stop it.
+        announceAudioPlayback(false, 'manual-stream');
+        return;
+      }
       dispatchLiveAudioPreemption('manual-stream-button');
-      if (stopping) announceAudioPlayback(false, 'manual-stream');
       // Preserve the existing low-latency stream-button handler. This capture listener
       // only clears competing pipelines before that handler runs.
       return;
