@@ -11,6 +11,7 @@ import {
   resolveCalibrationDuplex,
   type LiveVoiceCalibrationRecord,
 } from './live-voice-calibration';
+import { liveConversationStore } from './live-conversation-store';
 
 const PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const PLAYBACK_PCM_EVENT = 'omnix:character-avatar-pcm';
@@ -69,12 +70,14 @@ export function initializeLiveVoiceDuplexGate(): () => void {
   const handlePlaybackState = (event: Event): void => {
     const detail = (event as CustomEvent<{ speaking?: boolean }>).detail;
     announcedSpeaking = Boolean(detail?.speaking);
-    if (!announcedSpeaking) clearCandidate('playback-finished');
-    refreshDuplexGate();
+    assistantSpeaking = announcedSpeaking;
+    if (!assistantSpeaking) clearCandidate('playback-finished');
+    applyDuplexGate();
   };
   const handleProfile = (event: Event): void => {
     const detail = (event as CustomEvent<LiveConversationProfile>).detail;
     configuredMode = detail?.duplex_mode ?? readEffectiveLiveConversationProfile()?.duplex_mode ?? 'automatic';
+    liveConversationStore.dispatch({ type: 'profile', profile: detail ?? readEffectiveLiveConversationProfile() });
     clearCandidate('duplex-mode-changed');
     applyDuplexGate();
   };
@@ -112,9 +115,8 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     });
     if (assessment.decision === 'likely_echo' || assessment.decision === 'no_playback') return;
     setDucked(true, assessment.reason);
-    document.querySelectorAll<HTMLElement>('.assistant-live-card').forEach((card) => {
-      card.dataset.bargeIn = 'confirming';
-    });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'confirming' } });
+    projectBargeIn('confirming');
     if (candidateTimer) window.clearTimeout(candidateTimer);
     candidateTimer = window.setTimeout(() => clearCandidate('candidate-timeout'), CANDIDATE_TIMEOUT_MS);
   };
@@ -122,12 +124,12 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     const detail = (event as CustomEvent<{ stage?: unknown; intent?: unknown; reason?: unknown }>).detail;
     if (detail?.stage !== 'overlap_classified' || !ducked) return;
     if (detail.intent === 'noise' || detail.intent === 'backchannel' || detail.intent === 'uncertain') {
+      liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'rejected' } });
       clearCandidate(String(detail.reason ?? detail.intent ?? 'candidate-rejected'));
       return;
     }
-    document.querySelectorAll<HTMLElement>('.assistant-live-card').forEach((card) => {
-      card.dataset.bargeIn = 'accepted';
-    });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'barge_in', value: 'accepted' } });
+    projectBargeIn('accepted');
   };
   const handleStop = () => clearCandidate('playback-stopped');
 
@@ -139,20 +141,9 @@ export function initializeLiveVoiceDuplexGate(): () => void {
   window.addEventListener(PERF_EVENT, handlePerf);
   window.addEventListener(INTERRUPT_EVENT, handleStop);
   window.addEventListener(STOP_EVENT, handleStop);
-
-  const observer = new MutationObserver(refreshDuplexGate);
-  if (document.body) {
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['data-voice-mode', 'aria-pressed'],
-    });
-  }
-  refreshDuplexGate();
+  applyDuplexGate();
 
   return () => {
-    observer.disconnect();
     window.removeEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
     window.removeEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
     window.removeEventListener(LIVE_VOICE_CALIBRATION_UPDATED_EVENT, handleCalibration);
@@ -169,23 +160,16 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     playbackRms = 0;
     playbackReferenceAt = 0;
     clearCandidate('gate-disposed');
-    applyDuplexGate();
     trackedStreams.clear();
   };
 }
 
+/** Compatibility-only inspection helper. Duplex policy itself is event/store-driven. */
 export function assistantAudioIsActive(root: ParentNode = document): boolean {
   const orbSpeaking = Array.from(root.querySelectorAll<HTMLElement>('.assistant-voice-orb'))
     .some((orb) => orb.dataset.voiceMode === 'speaking');
   const streamSpeaking = Boolean(root.querySelector(STREAM_AUDIO_BUTTON_SELECTOR));
   return announcedSpeaking || orbSpeaking || streamSpeaking;
-}
-
-function refreshDuplexGate(): void {
-  const speaking = assistantAudioIsActive();
-  if (speaking === assistantSpeaking) return;
-  assistantSpeaking = speaking;
-  applyDuplexGate();
 }
 
 function trackLiveVoiceStream(stream: MediaStream): void {
@@ -202,6 +186,18 @@ function trackLiveVoiceStream(stream: MediaStream): void {
 function applyDuplexGate(): void {
   const resolvedMode = resolveDuplexMode(configuredMode, true, activeCalibration);
   const calibration = resolveCalibrationDuplex(activeCalibration);
+  const reason = configuredMode === 'automatic' ? calibration.reason : 'explicit_user_selection';
+  const confidence = activeCalibration?.confidence ?? 0;
+  liveConversationStore.dispatch({
+    type: 'duplex',
+    duplex: {
+      configuredMode,
+      resolvedMode,
+      reason,
+      confidence,
+      calibration: activeCalibration,
+    },
+  });
   const enabled = !shouldMuteLiveMic(assistantSpeaking, resolvedMode);
   for (const stream of Array.from(trackedStreams)) {
     const tracks = stream.getAudioTracks();
@@ -213,8 +209,8 @@ function applyDuplexGate(): void {
   }
   document.querySelectorAll<HTMLElement>('.assistant-live-card').forEach((card) => {
     card.dataset.duplexMode = resolvedMode;
-    card.dataset.duplexReason = configuredMode === 'automatic' ? calibration.reason : 'explicit_user_selection';
-    card.dataset.calibrationConfidence = String(activeCalibration?.confidence ?? 0);
+    card.dataset.duplexReason = reason;
+    card.dataset.calibrationConfidence = String(confidence);
     card.dataset.duplexGate = assistantSpeaking
       ? resolvedMode === 'echo_aware' ? 'echo-aware-listening' : 'assistant-speaking'
       : 'listening';
@@ -229,6 +225,10 @@ function adaptiveSpeechThreshold(calibration: LiveVoiceCalibrationRecord | null)
 function setDucked(value: boolean, reason: string): void {
   if (ducked === value) return;
   ducked = value;
+  liveConversationStore.dispatch({
+    type: 'conversation',
+    event: { type: 'barge_in', value: value ? 'ducking' : 'inactive' },
+  });
   window.dispatchEvent(new CustomEvent(DUCK_EVENT, {
     detail: { ducked: value, gain: value ? 0.18 : 1, reason, timestamp: performance.now() },
   }));
@@ -239,8 +239,12 @@ function clearCandidate(reason: string): void {
   if (candidateTimer) window.clearTimeout(candidateTimer);
   candidateTimer = null;
   setDucked(false, reason);
+  projectBargeIn('inactive');
+}
+
+function projectBargeIn(value: string): void {
   document.querySelectorAll<HTMLElement>('.assistant-live-card').forEach((card) => {
-    card.dataset.bargeIn = 'inactive';
+    card.dataset.bargeIn = value;
   });
 }
 
