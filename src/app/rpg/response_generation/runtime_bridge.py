@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .production_pipeline import RpgProductionResponsePipeline
+from .strict_proposal_policy import StrictProposalPolicy
 
 
-_PIPELINE = RpgProductionResponsePipeline()
+_PIPELINE = RpgProductionResponsePipeline(proposal_policy=StrictProposalPolicy())
 
 
 def build_runtime_narration_payload(
