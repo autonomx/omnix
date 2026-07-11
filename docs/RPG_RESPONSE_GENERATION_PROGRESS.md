@@ -9,8 +9,8 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 | Phase | Status | Scope | Validation |
 |---:|---|---|---|
 | 0 | complete | labeled deterministic corpus, metrics, holdout manifest, opt-in live benchmark, CI test entry point | exact-head GitHub Actions passed at `7bf797d1cd4953b12042662d3ded5f3f81cac952` |
-| 1 | implemented, CI pending | core contracts, thin orchestrator, response modes, field-aware renderer, legacy shadow adapters | exact-head GitHub Actions pending |
-| 2 | pending | hard gates, ranking, quality, repair, revalidation | pending |
+| 1 | complete | core contracts, thin orchestrator, response modes, field-aware renderer, legacy shadow adapters | exact-head GitHub Actions passed at `2170a2a80309c94583bd9caf621eb56d98b724b9` |
+| 2 | implemented, CI pending | hard gates, eligible-only ranking, final quality repair, rewrite revalidation | exact-head GitHub Actions pending |
 | 3 | pending | compact context, claim ledger, semantic claim references | pending |
 | 4 | pending | intent hypotheses, local retrieval, narrative affordances | pending |
 | 5 | pending | forward strategies and deterministic fallbacks | pending |
@@ -36,3 +36,12 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 - Added compatibility adapters for runtime narration and world-scene payload shapes.
 - Added field-aware rendering with mode ordering, semantic deduplication, delivery-unit extraction, and authoritative delta separation.
 - Added shadow comparison reports that cannot mutate simulation state.
+
+## Phase 2 implementation notes
+
+- Added hard gates for allowed state claims, hidden information, speaker knowledge, proposals, player agency, semantic references, and direct mutation attempts.
+- Candidate ranking now receives only eligible candidates; prose quality cannot compensate for a failed gate.
+- Added grounded-safe and stale-prior tie-break metadata.
+- Added final-visible quality evaluation for meta language, low-value phrases, duplicate sentences, and repeated openings.
+- Added deterministic section repair and one bounded rewrite attempt.
+- Every rewrite is fully re-evaluated by the hard gates; failed rewrites preserve the last eligible candidate.
