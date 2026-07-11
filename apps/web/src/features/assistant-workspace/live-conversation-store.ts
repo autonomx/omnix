@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 import type { LiveConversationProfile } from '../chatbot/liveConversationProfileClient';
+import type { PresencePolicyVersion } from './live-chat-evaluation-client';
 import {
   INITIAL_LIVE_CONVERSATION_STATE,
   deriveLiveConversationStatus,
@@ -39,6 +40,7 @@ export type LiveConversationRuntimeState = {
   sessionId: string | null;
   identity: LiveConversationIdentity;
   profile: LiveConversationProfile | null;
+  presencePolicy: PresencePolicyVersion | null;
   duplex: LiveConversationDuplexState;
   deliveryPlan: SpeechDeliveryPlan | null;
   pronunciationRevision: number;
@@ -51,6 +53,7 @@ export type LiveConversationStoreAction =
   | { type: 'session'; sessionId: string | null }
   | { type: 'identity'; identity: Partial<LiveConversationIdentity> }
   | { type: 'profile'; profile: LiveConversationProfile | null }
+  | { type: 'presence_policy'; policy: PresencePolicyVersion | null }
   | { type: 'duplex'; duplex: Partial<LiveConversationDuplexState> }
   | { type: 'delivery_plan'; plan: SpeechDeliveryPlan | null }
   | { type: 'pronunciation_revision'; revision: number }
@@ -70,6 +73,7 @@ export const INITIAL_LIVE_CONVERSATION_RUNTIME_STATE: LiveConversationRuntimeSta
     profileVersion: null,
   },
   profile: null,
+  presencePolicy: null,
   duplex: {
     configuredMode: 'automatic',
     resolvedMode: 'half_duplex',
@@ -98,10 +102,15 @@ export function reduceLiveConversationRuntimeState(
       return {
         ...state,
         profile: action.profile,
+        presencePolicy: action.profile && state.presencePolicy?.preset === action.profile.presence_preset
+          ? state.presencePolicy
+          : null,
         duplex: action.profile
           ? { ...state.duplex, configuredMode: action.profile.duplex_mode }
           : state.duplex,
       };
+    case 'presence_policy':
+      return { ...state, presencePolicy: action.policy };
     case 'duplex':
       return { ...state, duplex: { ...state.duplex, ...action.duplex } };
     case 'delivery_plan':
@@ -204,5 +213,6 @@ export function selectLiveChatSnapshot(state: LiveConversationRuntimeState) {
     duplexMode: state.duplex.resolvedMode,
     duplexReason: state.duplex.reason,
     calibrationConfidence: state.duplex.confidence,
+    presencePolicyVersion: state.presencePolicy?.version ?? null,
   };
 }
