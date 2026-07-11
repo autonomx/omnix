@@ -62,12 +62,13 @@ describe('LiveChatFullscreenShell', () => {
     render(<LiveChatFullscreenShell />);
 
     const dialog = screen.getByRole('dialog', { name: 'Immersive Live Chat with Maya' });
+    const fullscreen = within(dialog);
     expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByAltText('Maya live avatar')).toBeInTheDocument();
-    expect(screen.getByText('Welcome to our corner of the stars.')).toBeInTheDocument();
-    expect(screen.getByText('Can you tell me a story?')).toBeInTheDocument();
-    expect(screen.getByText('Maya is speaking')).toBeInTheDocument();
-    expect(screen.getByText(/Microphone listening · Echo-aware/)).toBeInTheDocument();
+    expect(fullscreen.getByAltText('Maya live avatar')).toBeInTheDocument();
+    expect(fullscreen.getByText('Welcome to our corner of the stars.')).toBeInTheDocument();
+    expect(fullscreen.getByText('Can you tell me a story?')).toBeInTheDocument();
+    expect(fullscreen.getByText('Maya is speaking')).toBeInTheDocument();
+    expect(fullscreen.getByText(/Microphone listening · Echo-aware/)).toBeInTheDocument();
   });
 
   it('delegates call and composer actions without creating another runtime', () => {
