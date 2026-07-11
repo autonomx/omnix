@@ -15,8 +15,8 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 | 4 | complete | intent, retrieval, speaker boundaries, affordances | passed `6e12ca5b6737f0ccdde76f44476ad6fbadb2d998` |
 | 5 | complete | forward strategies, loop breaking, deterministic fallbacks | passed `f8ea2a5762ca76d5448e6d8dbad104dc6e82369d` |
 | 6 | complete | proposal-only bounded Hermes recovery | passed `89272ea279766e85c3258917efc560fa56f71e81` |
-| 7 | implemented, CI pending | ephemeral truth, budgets, deterministic promotion, replay-safe store | exact-head GitHub Actions pending |
-| 8 | pending | pipeline migration and fixup removal | pending |
+| 7 | complete | ephemeral truth, budgets, deterministic promotion, replay-safe store | passed `509d44623e5493e3862ccf408b2366668781ee68` |
+| 8 | implemented, CI pending | canonical publication bridge, explicit facade, fixup removal, source guards | exact-head GitHub Actions pending |
 | 9 | pending | authoritative profiles, validated delivery, performance | pending |
 | 10 | pending | observability, regression, autoplay, staged rollout | pending |
 
@@ -25,13 +25,14 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 - Phases 0-3 established deterministic evaluation, canonical response ownership, hard gates, compact context, and typed claims.
 - Phases 4-5 added local affordance recovery, agency-preserving progression, loop breaking, and useful deterministic fallbacks.
 - Phase 6 added bounded proposal-only Hermes research with fail-closed local recovery.
+- Phase 7 added ephemeral-by-default truth, deterministic bounded promotion, replay-safe events, and garbage collection.
 
-## Phase 7 implementation notes
+## Phase 8 implementation notes
 
-- Added explicit truth classes and turn, scene, and persistent lifetimes.
-- Generated details default to turn scope; medium-risk leads default to scene scope.
-- Persistence requires player interaction, repeated relevance, deterministic director approval, or an approved resolver.
-- High-risk persistent changes require an approved deterministic resolver and an explicit promotion event.
-- Added per-turn, per-scene, and per-campaign budgets, deterministic deduplication, expiry, and garbage collection.
-- Save/load restoration and repeated event application are idempotent.
-- Promotion event IDs and serialized stores are deterministic for replay.
+- Added an explicit compatibility bridge from legacy provider generation into `RpgResponseGenerator` for final validation, rendering, and publication.
+- Existing session imports now resolve through the facade to the canonical bridge without changing public turn APIs.
+- Replaced the star-import narrator facade with an explicit stable export list.
+- Removed both import-order fixup modules and their runtime symbol replacement behavior.
+- Canonical response metadata records the selected mode, sections, claims, quality report, repair history, delivery units, and candidate decision.
+- Authoritative deltas remain metadata-only and are never reconstructed from generated prose.
+- Added source guards preventing reintroduction of fixup imports or direct runtime publication bypasses.
