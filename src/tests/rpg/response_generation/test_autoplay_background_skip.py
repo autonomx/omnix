@@ -69,6 +69,26 @@ def test_foreground_skip_returns_empty_semantic_advisory(monkeypatch):
     assert calls == []
 
 
+def test_foreground_skip_auto_enables_for_deterministic_autoplay(monkeypatch):
+    calls: list[str] = []
+
+    def provider_advisory(*args, **kwargs):
+        calls.append("provider_called")
+        return {"action_type": "provider"}
+
+    runtime_module = SimpleNamespace(get_semantic_action_advisory=provider_advisory)
+    monkeypatch.delenv("RPG_AUTOPLAY_SKIP_FOREGROUND_LLM", raising=False)
+    monkeypatch.setenv("RPG_TEST_MODE", "deterministic")
+    monkeypatch.setenv("RPG_AUTOPLAY_SKIP_COMBINED_BACKGROUND_LLM", "all")
+
+    installed = campaign._install_autoplay_foreground_llm_skip(runtime_module)
+    result = runtime_module.get_semantic_action_advisory(player_input="travel north")
+
+    assert installed is True
+    assert result == {}
+    assert calls == []
+
+
 def test_foreground_skip_off_preserves_provider_advisory(monkeypatch):
     calls: list[str] = []
 
