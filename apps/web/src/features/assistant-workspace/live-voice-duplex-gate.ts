@@ -1,5 +1,7 @@
 const PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
+const STREAM_AUDIO_BUTTON_SELECTOR = 'button[data-omnix-stream-audio][aria-pressed="true"]';
 const trackedStreams = new Set<MediaStream>();
+let announcedSpeaking = false;
 let assistantSpeaking = false;
 
 export function initializeLiveVoiceDuplexGate(): () => void {
@@ -17,31 +19,27 @@ export function initializeLiveVoiceDuplexGate(): () => void {
 
   const handlePlaybackState = (event: Event): void => {
     const detail = (event as CustomEvent<{ speaking?: boolean }>).detail;
-    assistantSpeaking = Boolean(detail?.speaking);
-    applyDuplexGate();
+    announcedSpeaking = Boolean(detail?.speaking);
+    refreshDuplexGate();
   };
   window.addEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
 
-  const observer = new MutationObserver(() => {
-    const speaking = Array.from(document.querySelectorAll<HTMLElement>('.assistant-voice-orb'))
-      .some((orb) => orb.dataset.voiceMode === 'speaking');
-    if (speaking !== assistantSpeaking) {
-      assistantSpeaking = speaking;
-      applyDuplexGate();
-    }
-  });
+  const observer = new MutationObserver(refreshDuplexGate);
   if (document.body) {
     observer.observe(document.body, {
+      childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['data-voice-mode'],
+      attributeFilter: ['data-voice-mode', 'aria-pressed'],
     });
   }
+  refreshDuplexGate();
 
   return () => {
     observer.disconnect();
     window.removeEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
     mediaDevices.getUserMedia = originalGetUserMedia;
+    announcedSpeaking = false;
     assistantSpeaking = false;
     applyDuplexGate();
     trackedStreams.clear();
@@ -50,6 +48,20 @@ export function initializeLiveVoiceDuplexGate(): () => void {
 
 export function shouldMuteLiveMic(speaking: boolean): boolean {
   return speaking;
+}
+
+export function assistantAudioIsActive(root: ParentNode = document): boolean {
+  const orbSpeaking = Array.from(root.querySelectorAll<HTMLElement>('.assistant-voice-orb'))
+    .some((orb) => orb.dataset.voiceMode === 'speaking');
+  const streamSpeaking = Boolean(root.querySelector(STREAM_AUDIO_BUTTON_SELECTOR));
+  return announcedSpeaking || orbSpeaking || streamSpeaking;
+}
+
+function refreshDuplexGate(): void {
+  const speaking = assistantAudioIsActive();
+  if (speaking === assistantSpeaking) return;
+  assistantSpeaking = speaking;
+  applyDuplexGate();
 }
 
 function trackLiveVoiceStream(stream: MediaStream): void {
