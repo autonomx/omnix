@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .recovery import LocalRecoveryAnalysis
 
@@ -26,6 +26,14 @@ class HermesEvidence:
     content: Any
     confidence: float
 
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "evidence_id": self.evidence_id,
+            "source": self.source,
+            "content": self.content,
+            "confidence": self.confidence,
+        }
+
 
 @dataclass(frozen=True)
 class HermesProposal:
@@ -35,6 +43,28 @@ class HermesProposal:
     risk: str = "low"
     lifetime: str = "turn"
     provenance_refs: tuple[str, ...] = ()
+    content: Any = None
+    visibility: str = "player_visible"
+    confidence: float = 0.5
+    conflicts: tuple[str, ...] = ()
+
+    @property
+    def evidence_refs(self) -> tuple[str, ...]:
+        return self.provenance_refs
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "proposal_id": self.proposal_id,
+            "proposal_type": self.proposal_type,
+            "summary": self.summary,
+            "risk": self.risk,
+            "lifetime": self.lifetime,
+            "provenance_refs": list(self.provenance_refs),
+            "content": self.content,
+            "visibility": self.visibility,
+            "confidence": self.confidence,
+            "conflicts": list(self.conflicts),
+        }
 
 
 @dataclass(frozen=True)
@@ -51,6 +81,14 @@ class HermesRecoveryResult:
     proposal_only: bool = True
     executes: bool = False
     state_mutation_allowed: bool = False
+
+    @property
+    def ok(self) -> bool:
+        return self.status == "success" and not self.executes and not self.state_mutation_allowed
+
+    @property
+    def reason(self) -> str:
+        return self.error or self.status
 
 
 @dataclass
@@ -95,6 +133,84 @@ class RpgHermesRecoveryAdapter:
     ) -> HermesRecoveryResult:
         if not analysis.needs_hermes:
             return HermesRecoveryResult("not_needed", query)
+        return self._request(
+            query,
+            self._request_payload(
+                query,
+                analysis,
+                campaign_version=campaign_version,
+                lore_version=lore_version,
+            ),
+            campaign_version=campaign_version,
+            lore_version=lore_version,
+            cancelled=cancelled,
+        )
+
+    def recover(
+        self,
+        *,
+        campaign_id: str,
+        lore_version: str,
+        query: str,
+        unresolved_question: str,
+        evidence: Sequence[Mapping[str, Any]],
+        local_strategy: str,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> HermesRecoveryResult:
+        """Proposal-only compatibility entry used by the production pipeline."""
+
+        visible_evidence = [
+            {
+                "evidence_id": str(row.get("evidence_id") or ""),
+                "source": str(row.get("source") or "local"),
+                "content": row.get("content"),
+                "confidence": float(row.get("confidence") or 0.0),
+            }
+            for row in evidence[: self.max_evidence]
+            if isinstance(row, Mapping)
+            and str(row.get("visibility") or "player_visible") != "hidden"
+        ]
+        payload = {
+            "schema_version": "rpg_hermes_recovery_request_v1",
+            "query": query,
+            "unresolved_question": unresolved_question,
+            "local_strategy": local_strategy,
+            "visible_evidence": visible_evidence,
+            "campaign_version": campaign_id,
+            "lore_version": lore_version,
+            "constraints": {
+                "proposal_only": True,
+                "review_required": True,
+                "executes": False,
+                "state_mutation_allowed": False,
+                "hidden_information_forbidden": True,
+                "player_choice_must_not_be_taken": True,
+            },
+            "requested_output": {
+                "evidence": True,
+                "inferences": True,
+                "uncertainty": True,
+                "forward_strategies": True,
+                "proposals": True,
+            },
+        }
+        return self._request(
+            query,
+            payload,
+            campaign_version=campaign_id,
+            lore_version=lore_version,
+            cancelled=cancelled,
+        )
+
+    def _request(
+        self,
+        query: str,
+        payload: Mapping[str, Any],
+        *,
+        campaign_version: str,
+        lore_version: str,
+        cancelled: Callable[[], bool] | None,
+    ) -> HermesRecoveryResult:
         if cancelled is not None and cancelled():
             return HermesRecoveryResult("cancelled", query, error="cancelled_before_request")
         cache_key = _cache_key(query, campaign_version, lore_version)
@@ -103,13 +219,6 @@ class RpgHermesRecoveryAdapter:
             return HermesRecoveryResult(**{**cached.__dict__, "cache_hit": True})
         if self.circuit_breaker.open:
             return HermesRecoveryResult("unavailable", query, error="circuit_open")
-
-        payload = self._request_payload(
-            query,
-            analysis,
-            campaign_version=campaign_version,
-            lore_version=lore_version,
-        )
         try:
             raw = self.client.plan(payload, timeout_seconds=self.timeout_seconds)
             if cancelled is not None and cancelled():
@@ -121,7 +230,6 @@ class RpgHermesRecoveryAdapter:
         except Exception as exc:
             self.circuit_breaker.failure()
             return HermesRecoveryResult("unavailable", query, error=str(exc) or "hermes_unavailable")
-
         if result.status == "success":
             self.circuit_breaker.success()
             self._cache[cache_key] = result
@@ -203,7 +311,19 @@ class RpgHermesRecoveryAdapter:
                 summary=str(row.get("summary") or ""),
                 risk=str(row.get("risk") or "low"),
                 lifetime=str(row.get("lifetime") or "turn"),
-                provenance_refs=tuple(str(item) for item in row.get("provenance_refs", ()) if str(item)),
+                provenance_refs=tuple(
+                    str(item)
+                    for item in (
+                        row.get("provenance_refs")
+                        or row.get("evidence_refs")
+                        or ()
+                    )
+                    if str(item)
+                ),
+                content=row.get("content"),
+                visibility=str(row.get("visibility") or "player_visible"),
+                confidence=float(row.get("confidence") or 0.5),
+                conflicts=tuple(str(item) for item in row.get("conflicts", ()) if str(item)),
             )
             for row in raw.get("proposals", ())
             if isinstance(row, Mapping) and str(row.get("summary") or "").strip()
