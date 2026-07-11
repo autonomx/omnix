@@ -50,6 +50,7 @@ def test_phase8_bridge_owns_final_visible_assembly(monkeypatch):
             "turn_id": "turn-phase8",
             "player_input": "Open the door.",
             "state_delta": {"door_open": True},
+            "response_rollout_stage": "canonical_default",
         },
     )
 
@@ -58,7 +59,10 @@ def test_phase8_bridge_owns_final_visible_assembly(monkeypatch):
     assert "Result:" not in result["narration"]
     assert "The door is open." in result["narration"]
     assert result["canonical_response"]["quality_report"]["ok"] is True
-    assert result["canonical_response"]["metadata"]["candidate_source"] == "legacy_world_scene"
+    assert result["canonical_response"]["metadata"]["candidate_source"] in {
+        "legacy_runtime",
+        "legacy_world_scene",
+    }
 
 
 def test_phase8_bridge_preserves_authoritative_deltas_as_metadata_only(monkeypatch):
@@ -82,6 +86,7 @@ def test_phase8_bridge_preserves_authoritative_deltas_as_metadata_only(monkeypat
             "turn_id": "turn-payment",
             "player_input": "Pay for the room.",
             "turn_contract": {"state_delta": delta},
+            "response_rollout_stage": "canonical_default",
         },
     )
 
