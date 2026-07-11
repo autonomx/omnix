@@ -47,7 +47,8 @@ jobs:
             src/app/gateway/live_chat_release_gate.py \
             src/app/gateway/live_voice_diagnostics_routes.py \
             src/tests/app/test_live_voice_release_gate.py \
-            src/tests/app/test_live_chat_release_gate.py
+            src/tests/app/test_live_chat_release_gate.py \
+            src/tests/app/test_live_chat_authoritative_state_source.py
 
       - name: Existing live voice release-gate regression
         run: |
@@ -61,14 +62,21 @@ jobs:
           python -m pytest src/tests/app/test_live_chat_release_gate.py -q --tb=short \
             2>&1 | tee live-chat-release-gate-output.txt
 
-      - name: Upload release-gate diagnostics
+      - name: Phase 11 authoritative-state source guard
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_live_chat_authoritative_state_source.py -q --tb=short \
+            2>&1 | tee live-chat-authoritative-state-output.txt
+
+      - name: Upload hardening diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: live-chat-release-gate-output
+          name: live-chat-hardening-output
           path: |
             live-voice-release-gate-output.txt
             live-chat-release-gate-output.txt
+            live-chat-authoritative-state-output.txt
 
       - name: Web typecheck
         run: npm --workspace @omnix/web run typecheck
