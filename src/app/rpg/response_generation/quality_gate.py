@@ -29,6 +29,7 @@ _LOW_VALUE_PHRASES = (
 @dataclass(frozen=True)
 class QualityReport:
     issues: tuple[str, ...]
+    debug_labels: tuple[str, ...] = ()
     banned_meta_phrases: tuple[str, ...] = ()
     low_value_phrases: tuple[str, ...] = ()
     duplicate_sentences: tuple[str, ...] = ()
@@ -46,6 +47,7 @@ class QualityReport:
         return {
             "ok": self.ok,
             "issues": list(self.issues),
+            "debug_labels": list(self.debug_labels),
             "banned_meta_phrases": list(self.banned_meta_phrases),
             "low_value_phrases": list(self.low_value_phrases),
             "duplicate_sentences": list(self.duplicate_sentences),
@@ -60,17 +62,25 @@ class QualityGate:
     def evaluate(self, text: str) -> QualityReport:
         sentences = _sentences(text)
         lowered = text.casefold()
+        debug_labels = tuple(
+            match.group(0).strip()
+            for sentence in sentences
+            if (match := _DEBUG_PREFIX.match(sentence)) is not None
+        )
+        canonical_sentences = tuple(_DEBUG_PREFIX.sub("", sentence) for sentence in sentences)
         banned = tuple(phrase for phrase in _BANNED_META_PHRASES if phrase in lowered)
         low_value = tuple(phrase for phrase in _LOW_VALUE_PHRASES if phrase in lowered)
-        duplicates = _duplicates(sentences)
-        repeated_openings = _repeated_openings(sentences)
+        duplicates = _duplicates(canonical_sentences)
+        repeated_openings = _repeated_openings(canonical_sentences)
         issues: list[str] = []
+        issues.extend(f"debug_label:{label}" for label in debug_labels)
         issues.extend(f"banned_meta:{phrase}" for phrase in banned)
         issues.extend(f"low_value_phrase:{phrase}" for phrase in low_value)
         issues.extend(f"duplicate_sentence:{sentence}" for sentence in duplicates)
         issues.extend(f"repeated_opening:{opening}" for opening in repeated_openings)
         return QualityReport(
             issues=tuple(issues),
+            debug_labels=debug_labels,
             banned_meta_phrases=banned,
             low_value_phrases=low_value,
             duplicate_sentences=duplicates,
