@@ -15,6 +15,18 @@ class ClaimRecord:
     persistent: bool = False
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "claim_ref": self.claim_ref,
+            "claim_type": self.claim_type,
+            "value": self.value,
+            "visibility": self.visibility,
+            "source": self.source,
+            "speaker_ids": list(self.speaker_ids),
+            "persistent": self.persistent,
+            "metadata": dict(self.metadata),
+        }
+
 
 @dataclass(frozen=True)
 class ClaimLedger:
@@ -64,6 +76,7 @@ class ClaimLedger:
     def as_policy_payload(self) -> dict[str, Any]:
         return {
             "claim_ledger_version": self.schema_version,
+            "claim_records": [record.as_dict() for record in self.records],
             "allowed_claim_refs": list(self.allowed_claim_refs),
             "prohibited_claim_refs": list(self.prohibited_claim_refs),
             "hidden_fact_refs": list(self.hidden_claim_refs),
