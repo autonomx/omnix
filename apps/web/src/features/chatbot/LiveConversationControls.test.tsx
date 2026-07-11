@@ -1,36 +1,83 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LiveConversationControls } from './LiveConversationControls';
+import type { LiveConversationProfile } from './liveConversationProfileClient';
+
+const profile: LiveConversationProfile = {
+  presence_preset: 'natural',
+  talkativeness: 50,
+  conversation_stance: 'automatic',
+  conversation_pace: 'balanced',
+  interruption_preference: 'balanced',
+  assistant_backchannel_mode: 'off',
+  initiative_mode: 'gentle',
+  idle_threshold_ms: 15000,
+  long_pause_behavior: 'wait',
+  response_length: 'conversational',
+  response_onset_style: 'adaptive',
+  emotional_attunement: 'subtle',
+  topic_continuity: 'natural',
+  max_idle_prompts: 1,
+  duplex_mode: 'automatic',
+  pronunciation_save_policy: 'ask',
+  profile_version: 1,
+};
 
 beforeEach(() => {
   window.localStorage.clear();
+  window.localStorage.setItem('omnix.liveConversation.serverProfileMigrated.v1', 'done');
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('LiveConversationControls', () => {
-  it('renders the existing live conversation settings as React controls', () => {
-    render(<LiveConversationControls />);
+  it('renders the effective server profile and advanced turn-taking controls', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      user_defaults: profile,
+      session_override: null,
+      effective: profile,
+      source: 'user_defaults',
+    })));
 
+    render(<LiveConversationControls sessionId="chat:one" />);
+
+    expect(await screen.findByLabelText('Presence')).toHaveValue('natural');
+    expect(screen.getByLabelText('Conversation stance')).toHaveValue('automatic');
+    expect(screen.getByLabelText('Response length')).toHaveValue('conversational');
+    fireEvent.click(screen.getByRole('button', { name: 'Show advanced controls' }));
     expect(screen.getByLabelText('Conversation pace')).toHaveValue('balanced');
-    expect(screen.getByLabelText('Interruption behavior')).toHaveValue('balanced');
-    expect(screen.getByLabelText('Spoken acknowledgements')).toHaveValue('off');
+    expect(screen.getByLabelText('Assistant listener backchannels')).toHaveValue('off');
   });
 
-  it('persists changes without removing other assistant settings', () => {
-    window.localStorage.setItem('omnix.chatbot.assistantSettings', JSON.stringify({ voiceId: 'Maya' }));
-    render(<LiveConversationControls />);
-
-    fireEvent.change(screen.getByLabelText('Conversation pace'), { target: { value: 'reflective' } });
-    fireEvent.change(screen.getByLabelText('Interruption behavior'), { target: { value: 'easy' } });
-    fireEvent.change(screen.getByLabelText('Spoken acknowledgements'), { target: { value: 'natural' } });
-
-    const canonical = JSON.parse(window.localStorage.getItem('omnix.liveConversation.settings') || '{}');
-    const legacy = JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') || '{}');
-    expect(canonical).toEqual({
-      conversationPace: 'reflective',
-      interruptionPreference: 'easy',
-      backchannelMode: 'natural',
+  it('persists a session override and mirrors runtime-compatible fields', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      requests.push({ url, init });
+      if (init?.method === 'PATCH') {
+        const updated = { ...profile, presence_preset: 'engaged' as const, profile_version: 2 };
+        return Response.json({ user_defaults: profile, session_override: updated, effective: updated, source: 'session_override' });
+      }
+      return Response.json({ user_defaults: profile, session_override: null, effective: profile, source: 'user_defaults' });
     });
-    expect(legacy).toMatchObject({ voiceId: 'Maya', conversationPace: 'reflective' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<LiveConversationControls sessionId="chat:one" />);
+    await screen.findByLabelText('Presence');
+    fireEvent.change(screen.getByLabelText('Presence'), { target: { value: 'engaged' } });
+
+    await waitFor(() => expect(requests.some((request) => request.init?.method === 'PATCH')).toBe(true));
+    const patchRequest = requests.find((request) => request.init?.method === 'PATCH');
+    expect(patchRequest?.url).toContain('/api/chat/sessions/chat%3Aone/live-conversation/profile');
+    expect(JSON.parse(String(patchRequest?.init?.body))).toEqual({ presence_preset: 'engaged' });
+    expect(await screen.findByRole('status')).toHaveTextContent('Session presence profile saved.');
+    expect(JSON.parse(window.localStorage.getItem('omnix.liveConversation.settings') || '{}')).toEqual({
+      conversationPace: 'balanced',
+      interruptionPreference: 'balanced',
+      backchannelMode: 'off',
+    });
   });
 });
