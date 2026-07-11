@@ -16,8 +16,8 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 | 5 | complete | forward strategies, loop breaking, deterministic fallbacks | passed `f8ea2a5762ca76d5448e6d8dbad104dc6e82369d` |
 | 6 | complete | proposal-only bounded Hermes recovery | passed `89272ea279766e85c3258917efc560fa56f71e81` |
 | 7 | complete | ephemeral truth, budgets, deterministic promotion, replay-safe store | passed `509d44623e5493e3862ccf408b2366668781ee68` |
-| 8 | implemented, CI pending | canonical publication bridge, explicit facade, fixup removal, source guards | exact-head GitHub Actions pending |
-| 9 | pending | authoritative profiles, validated delivery, performance | pending |
+| 8 | complete | canonical publication bridge, explicit facade, fixup removal, source guards | passed after compatibility repair `79d57e9c9973cfe38a27a6bfeaf609e3cf11e1ec` |
+| 9 | implemented, CI pending | authoritative profiles, validation-first delivery, caches and latency policy | exact-head GitHub Actions pending |
 | 10 | pending | observability, regression, autoplay, staged rollout | pending |
 
 ## Completed implementation notes
@@ -26,13 +26,15 @@ Base: `main` at `6514942c618e353ffe06020dec6abae77a211b88`
 - Phases 4-5 added local affordance recovery, agency-preserving progression, loop breaking, and useful deterministic fallbacks.
 - Phase 6 added bounded proposal-only Hermes research with fail-closed local recovery.
 - Phase 7 added ephemeral-by-default truth, deterministic bounded promotion, replay-safe events, and garbage collection.
+- Phase 8 moved final scene publication behind the canonical generator, removed import-order fixups, and preserved ambient narration through explicit exports.
 
-## Phase 8 implementation notes
+## Phase 9 implementation notes
 
-- Added an explicit compatibility bridge from legacy provider generation into `RpgResponseGenerator` for final validation, rendering, and publication.
-- Existing session imports now resolve through the facade to the canonical bridge without changing public turn APIs.
-- Replaced the star-import narrator facade with an explicit stable export list.
-- Removed both import-order fixup modules and their runtime symbol replacement behavior.
-- Canonical response metadata records the selected mode, sections, claims, quality report, repair history, delivery units, and candidate decision.
-- Authoritative deltas remain metadata-only and are never reconstructed from generated prose.
-- Added source guards preventing reintroduction of fixup imports or direct runtime publication bypasses.
+- Added one response profile authority backed by the existing RPG prompt-profile registry.
+- Runtime attempts to override provider, model, temperature, tokens, timeout, retries, execution, or delivery settings are recorded and ignored.
+- Utility responses are deterministic; normal supported turns never invoke Hermes; only unresolved investigation and recovery modes may permit bounded Hermes research.
+- Added blocking-path decisions for deterministic, cache, generate, and recover paths with explicit budgets.
+- Added versioned caches for entity, lore, and research context plus deterministic p50/p95 benchmark helpers.
+- Legacy raw provider chunks are no longer forwarded. Complete text is validated, repaired, revalidated, and split into approved sentence or audio-phrase units before delivery.
+- Added delivery validation tokens, checksums, ordered acknowledgements, interruption/cancellation checkpoints, and replay-safe restoration so unheard suffixes remain undelivered.
+- Added first-approved-delivery and per-stage latency trace contracts.
