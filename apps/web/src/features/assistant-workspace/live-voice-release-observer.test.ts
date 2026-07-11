@@ -16,8 +16,10 @@ vi.mock('./live-call-diagnostics-client', () => ({
 }));
 
 import {
+  LIVE_VOICE_RELEASE_OBSERVATION_EVENT,
   recordLiveVoiceReleaseQuality,
   resetLiveVoiceReleaseObserver,
+  type LiveVoiceReleaseObservation,
 } from './live-voice-release-observer';
 
 describe('live voice release observer', () => {
@@ -31,6 +33,9 @@ describe('live voice release observer', () => {
   });
 
   it('correlates STT, model, audio, and interruption latency without transcript content', () => {
+    const observations: LiveVoiceReleaseObservation[] = [];
+    const listener = (event: Event) => observations.push((event as CustomEvent<LiveVoiceReleaseObservation>).detail);
+    window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
     window.localStorage.setItem('omnix.liveCall.releaseScenario', 'character-normal');
     now = 100;
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
@@ -70,15 +75,32 @@ describe('live voice release observer', () => {
     expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
       metric_name: 'interruption_to_silence_ms', value_ms: 250,
     }), 'release_observer');
+    expect(observations.map((observation) => observation.kind === 'latency' ? observation.metricName : observation.qualityName))
+      .toEqual([
+        'stt_finalize_ms',
+        'final_to_first_token_ms',
+        'first_token_to_first_audio_ms',
+        'interruption_to_silence_ms',
+      ]);
+    window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
   });
 
-  it('records manually labelled quality trials', () => {
+  it('records manually labelled quality trials for durable aggregation', () => {
+    const observations: LiveVoiceReleaseObservation[] = [];
+    const listener = (event: Event) => observations.push((event as CustomEvent<LiveVoiceReleaseObservation>).detail);
+    window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
     recordLiveVoiceReleaseQuality('false_interruption', false, 'system-noise');
+    recordLiveVoiceReleaseQuality('playback_echo_submission', false, 'pure-assistant-echo');
 
     expect(mocks.record).toHaveBeenCalledWith('release_quality', {
       quality_name: 'false_interruption',
       occurred: false,
       scenario: 'system-noise',
     }, 'release_observer');
+    expect(observations).toEqual(expect.arrayContaining([
+      { kind: 'quality', qualityName: 'false_interruption', occurred: false, scenario: 'system-noise' },
+      { kind: 'quality', qualityName: 'playback_echo_submission', occurred: false, scenario: 'pure-assistant-echo' },
+    ]));
+    window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
   });
 });
