@@ -95,6 +95,7 @@ def _install_optional_fast_runtime_hooks() -> None:
         ("app.rpg.session.interaction_event_store_hook.install_interaction_event_store_hook", "install_interaction_event_store_hook"),
         ("app.rpg.session.dialogue_quality_hook.install_dialogue_quality_hook", "install_dialogue_quality_hook"),
         ("app.rpg.session.interaction_timeline_hook.install_interaction_timeline_hook", "install_interaction_timeline_hook"),
+        ("app.rpg.session.interaction_lifecycle_hook.install_interaction_lifecycle_hook", "install_interaction_lifecycle_hook"),
         ("app.rpg.debug_runtime_hook.install_rpg_runtime_debug_hook", "install_rpg_runtime_debug_hook"),
     ):
         _try_install_optional_hook(import_path, installer_name)
