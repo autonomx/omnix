@@ -167,20 +167,6 @@ def _foreground_turn_command(payload: Any) -> str:
     raise HTTPException(status_code=400, detail={"ok": False, "error": "missing_command"})
 
 
-def _foreground_turn_text(result: dict[str, Any], command: str) -> str:
-    for key in ("final_narration", "narration", "summary", "response", "content"):
-        value = result.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    nested = result.get("result")
-    if isinstance(nested, dict):
-        return _foreground_turn_text(nested, command)
-    authoritative = result.get("authoritative")
-    if isinstance(authoritative, dict):
-        return _foreground_turn_text(authoritative, command)
-    return f"Your command is accepted: {command}."
-
-
 def register_rpg_session_routes(app: FastAPI) -> None:
     """Attach the typed RPG session API once.
 
@@ -261,16 +247,10 @@ def register_rpg_session_routes(app: FastAPI) -> None:
 
 
 def install_rpg_session_route_hook() -> None:
-    """Install the route registration hook for the local gateway app.
+    """Register the session routes on future gateway app instances."""
 
-    The gateway is still a single-file FastAPI app. This hook keeps the new typed
-    RPG session API modular without disturbing the existing compatibility routes;
-    once gateway.main is split into route modules, it can call
-    register_rpg_session_routes(app) directly and this hook can be removed.
-    """
     if getattr(FastAPI, _HOOK_SENTINEL, False):
         return
-
     original_init: Callable[..., None] = FastAPI.__init__
 
     @wraps(original_init)
