@@ -1,49 +1,61 @@
-"""Phase 15.0 — Migration layer for session payloads.
-
-Provides versioned migration support for old/unversioned saves.
-Ensures saves are always normalized to the current schema version
-with guaranteed manifest, simulation_state, presentation_state, and memory_state.
-"""
+"""Versioned migration layer for durable RPG session payloads."""
 from __future__ import annotations
 
 from typing import Any, Dict
 
+from app.rpg.session.legacy_interaction_migration import migrate_legacy_interactions
+
 _CURRENT_SAVE_VERSION = "1.0"
+_CURRENT_SCHEMA_VERSION = 5
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def migrate_session_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Migrate a session payload from an older schema to the current version.
+def _safe_int(value: Any, default: int = 1) -> int:
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
-    - Ensures manifest has an id and schema_version
-    - Guarantees simulation_state with presentation_state and memory_state
-    - Handles versioned migration for older/unversioned saves
+
+def migrate_session_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Migrate wrapped or direct session payloads to the current schema.
+
+    Durable files use ``{"save_version": ..., "session": {...}}`` while several
+    callers pass the session dictionary directly. Both shapes are migrated so a
+    legacy on-disk transcript cannot bypass interaction conversion.
     """
+
+    payload = _safe_dict(payload)
+    nested = payload.get("session")
+    if isinstance(nested, dict):
+        payload["session"] = _migrate_session_dict(nested)
+    return _migrate_session_dict(payload)
+
+
+def _migrate_session_dict(payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = _safe_dict(payload)
     manifest = _safe_dict(payload.get("manifest"))
-    version = int(manifest.get("schema_version") or 1)
+    version = _safe_int(manifest.get("schema_version"), 1)
 
-    # Ensure manifest has a valid id
     if not manifest.get("id"):
-        manifest["id"] = "session:unknown"
+        manifest["id"] = str(manifest.get("session_id") or "session:unknown")
+    if not manifest.get("session_id") and manifest.get("id") != "session:unknown":
+        manifest["session_id"] = manifest.get("id")
 
-    if version < 2:
-        # Migrate v1 or unversioned to v2
-        simulation_state = _safe_dict(payload.get("simulation_state"))
-        presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-        memory_state = _safe_dict(simulation_state.get("memory_state"))
-        simulation_state["presentation_state"] = presentation_state
-        simulation_state["memory_state"] = memory_state
-        payload["simulation_state"] = simulation_state
-        manifest["schema_version"] = 2
-        payload["manifest"] = manifest
+    simulation_state = _safe_dict(payload.get("simulation_state"))
+    simulation_state["presentation_state"] = _safe_dict(
+        simulation_state.get("presentation_state")
+    )
+    simulation_state["memory_state"] = _safe_dict(simulation_state.get("memory_state"))
+    payload["simulation_state"] = simulation_state
 
+    runtime_state = _safe_dict(payload.get("runtime_state"))
     if version < 4:
-        # Migrate to v4: add living-world ambient state
-        runtime_state = _safe_dict(payload.get("runtime_state"))
         runtime_state.setdefault("ambient_queue", [])
         runtime_state.setdefault("ambient_seq", 0)
         runtime_state.setdefault("last_idle_tick_at", "")
@@ -53,18 +65,18 @@ def migrate_session_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         runtime_state.setdefault("recent_ambient_ids", [])
         runtime_state.setdefault("pending_interrupt", None)
         runtime_state.setdefault("subscription_state", {"last_polled_seq": 0})
-        runtime_state.setdefault("ambient_metrics", {"emitted": 0, "suppressed": 0, "coalesced": 0})
-        payload["runtime_state"] = runtime_state
-        manifest["schema_version"] = 4
-        payload["manifest"] = manifest
-
-    # Always ensure simulation_state has required sub-states
-    simulation_state = _safe_dict(payload.get("simulation_state"))
-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    simulation_state["presentation_state"] = presentation_state
-    simulation_state["memory_state"] = memory_state
-    payload["simulation_state"] = simulation_state
+        runtime_state.setdefault(
+            "ambient_metrics",
+            {"emitted": 0, "suppressed": 0, "coalesced": 0},
+        )
+    payload["runtime_state"] = runtime_state
     payload["manifest"] = manifest
 
+    payload = migrate_legacy_interactions(payload)
+    manifest = _safe_dict(payload.get("manifest"))
+    manifest["schema_version"] = max(
+        _safe_int(manifest.get("schema_version"), version),
+        _CURRENT_SCHEMA_VERSION,
+    )
+    payload["manifest"] = manifest
     return payload
