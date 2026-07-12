@@ -14,6 +14,7 @@ from app.rpg.performance_trace import (
     rpg_pipeline_trace,
 )
 from app.rpg.presentation.turn_response import build_turn_response_v2
+from app.rpg.response_trace_headers import finalize_rpg_trace_headers
 
 
 async def execute_foreground_rpg_turn(
@@ -82,7 +83,8 @@ async def execute_foreground_rpg_turn(
             span["changed_domains"] = (payload.get("state") or {}).get("changed_domains")
 
         with rpg_pipeline_span("turn.response_send_prepare"):
-            return build_traced_json_response(payload)
+            response = build_traced_json_response(payload)
+        return finalize_rpg_trace_headers(response, trace)
 
 
 def _persisted_turn_session(result: dict[str, Any], session_id: str) -> dict[str, Any] | None:
