@@ -74,8 +74,8 @@ export function completeRpgTurnDiagnostics(input: CompleteDiagnosticsInput): voi
   const current = diagnosticsBySession.get(input.sessionId) || [];
   const prior = current.find((item) => item.submissionId === input.submissionId);
   const milestones = {
-    requestStartedMs: prior?.client.requestStartedMs ?? input.milestones.requestStartedMs,
     ...input.milestones,
+    requestStartedMs: prior?.client.requestStartedMs ?? input.milestones.requestStartedMs,
   };
   const snapshot: RpgTurnDiagnosticsSnapshot = {
     sessionId: input.sessionId,
@@ -117,7 +117,9 @@ export function useLatestRpgTurnDiagnostics(sessionId: string): RpgTurnDiagnosti
   useEffect(() => {
     const listener = () => setVersion((value) => value + 1);
     listeners.add(listener);
-    return () => listeners.delete(listener);
+    return () => {
+      listeners.delete(listener);
+    };
   }, []);
   return latestRpgTurnDiagnostics(sessionId);
 }
@@ -130,13 +132,14 @@ export function resetRpgTurnDiagnosticsForTests(): void {
 export function rpgDiagnosticsEnabled(): boolean {
   if (typeof window === 'undefined') return false;
   const queryEnabled = new URLSearchParams(window.location.search).get('rpgDiagnostics') === '1';
+  const localDevelopment = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
   let stored = false;
   try {
     stored = window.localStorage.getItem('omnix:rpg-diagnostics') === '1';
   } catch {
     stored = false;
   }
-  return Boolean(import.meta.env.DEV || queryEnabled || stored);
+  return localDevelopment || queryEnabled || stored;
 }
 
 function markMilestone(
