@@ -1,6 +1,6 @@
 # Interactive RPG response release
 
-Status: core implementation is merged through the recorded Phase 1–11 sequence. Original-roadmap completion follow-ups remain in progress and are tracked separately from the historical phase evidence.
+Status: the original-roadmap code implementation is complete through follow-up PRs #1348–#1358. Provider-backed latency and dialogue-quality evidence remains an explicit local operator gate because GitHub Actions has no active LLM.
 
 This release hardens the foreground RPG turn path so a player command is executed once, produces one canonical visible response, advances durable interaction continuity, and returns a bounded browser payload. Stateful mechanics remain authoritative; narration and dialogue enrich presentation only.
 
@@ -20,7 +20,22 @@ This release hardens the foreground RPG turn path so a player command is execute
 | 10 | Permanent provider-free structural release gates | #1345 | `635cdbd181da12cad06d87cc9346806ef4edcd37` |
 | 11 | Release evidence, local live-provider validation, rollout, and rollback runbook | #1346 | `8b11adfda8aedb40a6aad11f4125a010f14aa1bb` |
 
-The machine-readable historical Phase 1–11 evidence index is in `src/app/rpg/release_finalization.py`. It records what merged; it does not assert that every item in the original roadmap is finished.
+The machine-readable historical Phase 1–11 evidence index is in `src/app/rpg/release_finalization.py`. It records the historical sequence; the completion follow-ups below close the original roadmap requirements that were not part of those phase PRs.
+
+## Original-roadmap completion follow-ups
+
+| Pull request | Completion scope |
+|---:|---|
+| #1348 | Reproducible Phase 0 benchmark and original 1.5-second median / 2.5-second p95 targets |
+| #1349 | Durable cross-process submission ownership |
+| #1350 | Safe abandoned pre-execution claim recovery |
+| #1351 | Runtime-enforced 50 KB foreground response ceiling |
+| #1352 | Removal of legacy response bridges and duplicate formatter paths |
+| #1353 | Full foreground-path timing, CPU, RSS, response bytes, and attribution diagnostics |
+| #1354 | Interaction-identity UI reconciliation, browser timing, and developer diagnostics |
+| #1356 | Category-complete deterministic dialogue-quality matrix and local provider runner |
+| #1357 | Idempotent legacy transcript-to-interaction migration with disk restart coverage |
+| #1358 | Bounded replay records, removal of raw synthetic job graphs, and submission-lock cleanup |
 
 ## Phase 0 reproducible baseline
 
@@ -40,9 +55,9 @@ GitHub Actions must remain provider-free. Required checks are:
 - `RPG deterministic PR gates`
 - `Live Chat hardening gates`
 
-The deterministic suite may use fakes, monkeypatches, SQLite, local files, and static payloads. It must not call a live LLM, LM Studio, OpenRouter, OpenAI-compatible provider, or any external model endpoint.
+The deterministic suite may use fakes, monkeypatches, SQLite, local files, static payloads, threads, and local processes. It must not call a live LLM, LM Studio, OpenRouter, OpenAI-compatible provider, or any external model endpoint.
 
-The local live smoke harness contains a hard CI guard and requires an explicit operator opt-in. Do not add it to a GitHub Actions workflow.
+The local live smoke harnesses contain hard CI guards and require explicit operator opt-in. Do not add them to a GitHub Actions workflow.
 
 ## Local live-provider validation
 
@@ -54,7 +69,17 @@ $env:OMNIX_RPG_LIVE_SMOKE = "1"
 python scripts/rpg_interactive_live_smoke.py --session-id "<session-id>"
 ```
 
-Optional flags:
+Run the category-complete dialogue matrix separately:
+
+```powershell
+$env:PYTHONPATH = "src"
+$env:OMNIX_RPG_LIVE_SMOKE = "1"
+python -m app.rpg.local_dialogue_quality_smoke `
+  --session-id "<session-id>" `
+  --output "resources/data/reports/rpg-dialogue-quality-local.json"
+```
+
+Optional latency-smoke flags:
 
 ```powershell
 python scripts/rpg_interactive_live_smoke.py `
@@ -65,20 +90,22 @@ python scripts/rpg_interactive_live_smoke.py `
   --timeout-seconds 120
 ```
 
-The harness sends stable `X-Omnix-Rpg-Submission-Id` values, repeats the first submission to verify idempotency, validates the compact response gates, records response bytes, and reports mean, median, p95, and maximum latency. It exits unsuccessfully when a structural gate or latency target is missed. It does not mutate GitHub Actions or upload live-provider content.
+The latency harness sends stable `X-Omnix-Rpg-Submission-Id` values, repeats the first submission to verify idempotency, validates the compact response gates, records response bytes, and reports mean, median, p95, and maximum latency. The dialogue harness reports direct-answer, correct-speaker, grounded-specificity, continuity, repetition, private-leak, and empty-line rates. Both exit unsuccessfully when their acceptance targets are missed, remain local-only, and do not upload provider content.
 
 ## Operator acceptance criteria
 
-Repository gates are necessary but do not prove local provider quality or latency. Before wider use, capture local operator evidence showing:
+Repository gates prove the provider-free code contract but cannot prove the behavior or speed of the operator's configured provider. Before wider use, capture local evidence showing:
 
 1. Three distinct commands produce three distinct interaction IDs.
 2. Replaying the same submission ID returns the original interaction ID and does not execute a second turn.
 3. Every response uses `rpg_turn_response_v2`, has visible text, and remains at or below 50,000 bytes.
-4. Dialogue shows the addressed NPC line, not only generic scene prose.
-5. A reload preserves recent interactions and pending/completed narration lifecycle state.
-6. A stateful command changes only authoritative domains and deferred narration does not rewrite mechanics.
-7. Median foreground dialogue latency is 1.5 seconds or less on the intended local provider and hardware.
-8. p95 foreground dialogue latency is 2.5 seconds or less on the intended local provider and hardware.
+4. Foreground job replay records remain at or below 20,000 bytes and contain no full session/runtime graph.
+5. Dialogue shows the addressed NPC line, not only generic scene prose.
+6. A reload preserves recent interactions and pending/completed narration lifecycle state.
+7. A stateful command changes only authoritative domains and deferred narration does not rewrite mechanics.
+8. The live dialogue matrix meets its direct-answer, speaker, grounding, continuity, repetition, privacy, and empty-line targets.
+9. Median foreground dialogue latency is 1.5 seconds or less on the intended local provider and hardware.
+10. p95 foreground dialogue latency is 2.5 seconds or less on the intended local provider and hardware.
 
 Latency and provider-quality targets are operator evidence, not provider-free CI assertions.
 
@@ -104,7 +131,7 @@ Run the existing provider-free 1000-turn deterministic endurance gate in CI and 
 
 1. Stop new turn submissions before changing code.
 2. Back up the session JSON and adjacent `.interactions.jsonl` files.
-3. Revert phase merge commits in reverse order, starting with the newest affected phase. Do not delete append-only interaction logs during rollback.
+3. Revert completion and phase merge commits in reverse order, starting with the newest affected change. Do not delete append-only interaction logs during rollback.
 4. Restart the gateway and load the backed-up session. Older snapshots remain authoritative; event replay is additive and checksum-validated.
 5. Run provider-free deterministic gates on the rollback branch.
 6. Run a short local smoke only after the rollback build is stable and only outside CI.
@@ -113,7 +140,7 @@ A rollback must not manually edit authoritative mechanics, interaction IDs, subm
 
 ## Data and privacy posture
 
-- Full session and runtime graphs are excluded from foreground responses.
+- Full session and runtime graphs are excluded from foreground responses and foreground replay records.
 - Private NPC biography and private inventory are not valid presentation grounding.
 - Local live-provider evidence may contain user or story content; keep it outside source control.
 - Structured diagnostics should retain IDs, timings, sizes, statuses, and bounded summaries rather than full prompts or raw private state.
