@@ -51,7 +51,7 @@ interface CachedResponse {
 
 const listeners = new Set<() => void>();
 const entriesBySession = new Map<string, RpgTurnUiEntry[]>();
-const responseCache = new Map<string, CachedResponse>();
+const sessionResponseCache = new Map<string, CachedResponse>();
 const conversationRefreshSuppression = new Map<string, number>();
 let fetchInstalled = false;
 let originalFetch: typeof fetch | null = null;
@@ -72,9 +72,7 @@ export function createRpgSubmissionId(): string {
 
 export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () => void {
   const resolvedFetch = fetchImpl || globalThis.fetch;
-  if (fetchInstalled || typeof resolvedFetch !== 'function') {
-    return () => undefined;
-  }
+  if (fetchInstalled || typeof resolvedFetch !== 'function') return () => undefined;
   fetchInstalled = true;
   originalFetch = resolvedFetch;
 
@@ -84,10 +82,13 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
     const request = isRequest(input) ? input : null;
     const method = String(init.method || request?.method || 'GET').toUpperCase();
     const turnMatch = url.pathname.match(TURN_PATH);
+    const sessionMatch = url.pathname.match(SESSION_PATH);
 
-    if (method === 'GET') {
-      const cached = suppressedCachedResponse(url.pathname);
-      if (cached) return restoreResponse(cached);
+    if (method === 'GET' && sessionMatch) {
+      const sessionId = decodeURIComponent(sessionMatch[1]);
+      const suppressUntil = conversationRefreshSuppression.get(sessionId) || 0;
+      const cached = sessionResponseCache.get(url.pathname);
+      if (cached && Date.now() <= suppressUntil) return restoreResponse(cached);
     }
 
     if (method === 'POST' && turnMatch) {
@@ -103,7 +104,12 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
         if (response.ok) {
           const payload = await safeJson(response.clone());
           completeRpgTurnUiSubmission({ sessionId, submissionId, payload });
-          applyRefreshPolicy(sessionId, payload.state?.changed_domains || []);
+          if (
+            payload.contract_version === 'rpg_turn_response_v2'
+            && refreshPathsForChangedDomains(sessionId, payload.state?.changed_domains || []).length === 0
+          ) {
+            conversationRefreshSuppression.set(sessionId, Date.now() + REFRESH_SUPPRESSION_MS);
+          }
         } else if (response.status === 404) {
           discardRpgTurnUiSubmission(sessionId, submissionId);
         } else {
@@ -121,8 +127,8 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
     }
 
     const response = await resolvedFetch(input, init);
-    if (method === 'GET' && response.ok && isCacheableRefreshPath(url.pathname)) {
-      void cacheResponse(url.pathname, response.clone());
+    if (method === 'GET' && sessionMatch && response.ok) {
+      void cacheSessionResponse(url.pathname, response.clone());
     }
     return response;
   }) as typeof fetch;
@@ -241,9 +247,7 @@ export function useRpgTurnUiMessages(
   const [, setVersion] = useState(0);
   useEffect(() => {
     mountedSubscribers += 1;
-    if (mountedSubscribers === 1) {
-      uninstallSharedInterceptor = installRpgTurnUiFetchInterceptor();
-    }
+    if (mountedSubscribers === 1) uninstallSharedInterceptor = installRpgTurnUiFetchInterceptor();
     const listener = () => setVersion((value) => value + 1);
     listeners.add(listener);
     return () => {
@@ -262,7 +266,7 @@ export function useRpgTurnUiMessages(
 
 export function refreshPathsForChangedDomains(sessionId: string, changedDomains: string[]): string[] {
   const domains = new Set(changedDomains);
-  if (!domains.size || (domains.size === 1 && domains.has('conversation'))) return [];
+  if (domains.size === 1 && domains.has('conversation')) return [];
   const paths = new Set<string>([`/api/rpg/sessions/${encodeURIComponent(sessionId)}`]);
   if (domains.has('inventory') || domains.has('currency') || domains.has('player')) {
     paths.add('/api/replay/inventory');
@@ -275,7 +279,7 @@ export function refreshPathsForChangedDomains(sessionId: string, changedDomains:
 
 export function resetRpgTurnUiStoreForTests(): void {
   entriesBySession.clear();
-  responseCache.clear();
+  sessionResponseCache.clear();
   conversationRefreshSuppression.clear();
   listeners.clear();
   mountedSubscribers = 0;
@@ -370,33 +374,9 @@ function isRequest(input: RequestInfo | URL): input is Request {
   return typeof Request !== 'undefined' && input instanceof Request;
 }
 
-function isCacheableRefreshPath(pathname: string): boolean {
-  return SESSION_PATH.test(pathname)
-    || pathname === '/api/replay/inventory'
-    || pathname === '/api/jobs'
-    || pathname === '/api/assets'
-    || pathname === '/api/reports';
-}
-
-function applyRefreshPolicy(sessionId: string, changedDomains: string[]): void {
-  if (refreshPathsForChangedDomains(sessionId, changedDomains).length === 0) {
-    conversationRefreshSuppression.set(sessionId, Date.now() + REFRESH_SUPPRESSION_MS);
-  }
-}
-
-function suppressedCachedResponse(pathname: string): CachedResponse | null {
-  const sessionMatch = pathname.match(SESSION_PATH);
-  const sessionId = sessionMatch ? decodeURIComponent(sessionMatch[1]) : '';
-  const suppressUntil = sessionId
-    ? conversationRefreshSuppression.get(sessionId) || 0
-    : Math.max(0, ...conversationRefreshSuppression.values());
-  if (Date.now() > suppressUntil) return null;
-  return responseCache.get(pathname) || null;
-}
-
-async function cacheResponse(pathname: string, response: Response): Promise<void> {
+async function cacheSessionResponse(pathname: string, response: Response): Promise<void> {
   try {
-    responseCache.set(pathname, {
+    sessionResponseCache.set(pathname, {
       body: await response.text(),
       headers: [...response.headers.entries()],
       status: response.status,
