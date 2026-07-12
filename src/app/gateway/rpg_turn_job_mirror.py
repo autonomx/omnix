@@ -12,6 +12,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, Request
 
 from app.jobs.rpg_turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
+from app.rpg.performance_trace import rpg_pipeline_span
 from app.rpg.presentation.visible_response import visible_response_text
 
 _DIRECT_RPG_TURN_ACTIVE: ContextVar[bool] = ContextVar("omnix_direct_rpg_turn_active", default=False)
@@ -105,51 +106,69 @@ def _apply_turn_with_job_mirror(
     from app.jobs.store import default_job_store
 
     resolved_submission_id = str(submission_id or f"submit:{uuid.uuid4().hex}").strip()
-    with _submission_lock(resolved_submission_id):
+    lock = _submission_lock(resolved_submission_id)
+    with rpg_pipeline_span(
+        "turn.submission_lock_wait",
+        fields={"submission_id": resolved_submission_id},
+    ):
+        lock.acquire()
+    try:
         store = default_job_store()
         durable_store = submission_store_for_job_store(store)
-        durable_claim, durable_replay = _acquire_durable_claim(
-            durable_store,
-            session_id=session_id,
-            submission_id=resolved_submission_id,
-        )
+        with rpg_pipeline_span("turn.idempotency_claim") as claim_span:
+            durable_claim, durable_replay = _acquire_durable_claim(
+                durable_store,
+                session_id=session_id,
+                submission_id=resolved_submission_id,
+            )
+            claim_span["durable"] = durable_store is not None
+            claim_span["owner"] = getattr(durable_claim, "owner", None)
+            claim_span["replay"] = durable_replay is not None
         if durable_replay is not None:
             return durable_replay
 
-        existing = _find_submission_record(store, session_id, resolved_submission_id)
-        recovered = _recover_completed_result(existing)
+        with rpg_pipeline_span("turn.idempotency_job_lookup") as lookup_span:
+            existing = _find_submission_record(store, session_id, resolved_submission_id)
+            recovered = _recover_completed_result(existing)
+            lookup_span["record_found"] = existing is not None
+            lookup_span["recovered"] = recovered is not None
         if recovered is not None:
             _complete_durable_claim(durable_store, durable_claim, recovered)
             return recovered
 
-        job = store.create_job(
-            CreateJobRequest(
-                module="rpg",
-                type=RPG_FOREGROUND_RECORD_TYPE,
-                resource_class=ResourceClass.CPU,
-                priority=0,
-                input_ref={"session_id": session_id},
-                input_payload={
-                    "command": command,
-                    "player_input": command,
-                    "submission_id": resolved_submission_id,
-                    "determinism_policy": "replay_preserving",
-                    "source": "direct_foreground_route",
-                },
-                compat={
-                    "direct_foreground_route": True,
-                    "synthetic_job_mirror": True,
-                    "record_only": True,
-                },
+        with rpg_pipeline_span("turn.foreground_record_create") as create_span:
+            job = store.create_job(
+                CreateJobRequest(
+                    module="rpg",
+                    type=RPG_FOREGROUND_RECORD_TYPE,
+                    resource_class=ResourceClass.CPU,
+                    priority=0,
+                    input_ref={"session_id": session_id},
+                    input_payload={
+                        "command": command,
+                        "player_input": command,
+                        "submission_id": resolved_submission_id,
+                        "determinism_policy": "replay_preserving",
+                        "source": "direct_foreground_route",
+                    },
+                    compat={
+                        "direct_foreground_route": True,
+                        "synthetic_job_mirror": True,
+                        "record_only": True,
+                    },
+                )
             )
-        )
+            create_span["job_id"] = job.id
+            create_span["job_status"] = str(getattr(job.status, "value", job.status))
         if durable_store is not None and durable_claim is not None and durable_claim.claim_token:
-            attached = durable_store.attach_job(
-                session_id,
-                resolved_submission_id,
-                durable_claim.claim_token,
-                job.id,
-            )
+            with rpg_pipeline_span("turn.foreground_record_attach") as attach_span:
+                attached = durable_store.attach_job(
+                    session_id,
+                    resolved_submission_id,
+                    durable_claim.claim_token,
+                    job.id,
+                )
+                attach_span["attached"] = attached
             if not attached:
                 return _wait_after_lost_claim(
                     durable_store,
@@ -162,83 +181,90 @@ def _apply_turn_with_job_mirror(
                 _complete_durable_claim(durable_store, durable_claim, recovered)
                 return recovered
 
-        ownership_replay = _begin_durable_execution(
-            durable_store,
-            durable_claim,
-            session_id=session_id,
-            submission_id=resolved_submission_id,
-        )
+        with rpg_pipeline_span("turn.authoritative_execution_fence") as fence_span:
+            ownership_replay = _begin_durable_execution(
+                durable_store,
+                durable_claim,
+                session_id=session_id,
+                submission_id=resolved_submission_id,
+            )
+            fence_span["replay"] = ownership_replay is not None
         if ownership_replay is not None:
             return ownership_replay
-        running = store.mark_running(job.id) or job
+        with rpg_pipeline_span("turn.foreground_record_running"):
+            running = store.mark_running(job.id) or job
 
         try:
             result = apply_turn(session_id, command, *args, **kwargs)
         except Exception as exc:
-            store.fail_job(
-                running.id,
-                FailJobRequest(
-                    code="direct_rpg_turn_failed",
-                    message=str(exc) or "Direct RPG turn failed",
-                    retryable=False,
-                    details={
-                        "session_id": session_id,
-                        "submission_id": resolved_submission_id,
-                        "command": command,
-                    },
-                ),
-            )
-            _fail_durable_claim(durable_store, durable_claim, str(exc) or "Direct RPG turn failed")
+            with rpg_pipeline_span("turn.foreground_record_fail"):
+                store.fail_job(
+                    running.id,
+                    FailJobRequest(
+                        code="direct_rpg_turn_failed",
+                        message=str(exc) or "Direct RPG turn failed",
+                        retryable=False,
+                        details={
+                            "session_id": session_id,
+                            "submission_id": resolved_submission_id,
+                            "command": command,
+                        },
+                    ),
+                )
+                _fail_durable_claim(durable_store, durable_claim, str(exc) or "Direct RPG turn failed")
             raise
 
         if result.get("ok") is not True:
             error = str(result.get("error") or "direct_rpg_turn_failed")
-            store.fail_job(
-                running.id,
-                FailJobRequest(
-                    code=error,
-                    message=error,
-                    retryable=False,
-                    details={
-                        "session_id": session_id,
-                        "submission_id": resolved_submission_id,
-                        "command": command,
-                    },
-                ),
-            )
+            with rpg_pipeline_span("turn.foreground_record_fail"):
+                store.fail_job(
+                    running.id,
+                    FailJobRequest(
+                        code=error,
+                        message=error,
+                        retryable=False,
+                        details={
+                            "session_id": session_id,
+                            "submission_id": resolved_submission_id,
+                            "command": command,
+                        },
+                    ),
+                )
             finalized = dict(result)
             finalized["submission_id"] = resolved_submission_id
             _complete_durable_claim(durable_store, durable_claim, finalized)
             return finalized
 
         content = visible_response_text(result, command) or f"Your command is accepted: {command}."
-        completed = store.complete_job(
-            running.id,
-            CompleteJobRequest(
-                output_refs=[
-                    {
-                        "type": "rpg_turn_response",
-                        "module": "rpg",
-                        "title": command[:80] or "RPG turn",
-                        "content": content,
-                        "session_id": session_id,
-                        "submission_id": resolved_submission_id,
-                        "command": command,
-                        "raw_turn_result": result,
-                        "source": "direct_foreground_route",
-                    }
-                ],
-                logs=[
-                    {
-                        "level": "info",
-                        "message": "RPG turn recorded by direct foreground route",
-                        "content": content,
-                        "session_id": session_id,
-                        "submission_id": resolved_submission_id,
-                    }
-                ],
-            ),
-        )
+        with rpg_pipeline_span("turn.foreground_record_finalize") as finalize_span:
+            completed = store.complete_job(
+                running.id,
+                CompleteJobRequest(
+                    output_refs=[
+                        {
+                            "type": "rpg_turn_response",
+                            "module": "rpg",
+                            "title": command[:80] or "RPG turn",
+                            "content": content,
+                            "session_id": session_id,
+                            "submission_id": resolved_submission_id,
+                            "command": command,
+                            "raw_turn_result": result,
+                            "source": "direct_foreground_route",
+                        }
+                    ],
+                    logs=[
+                        {
+                            "level": "info",
+                            "message": "RPG turn recorded by direct foreground route",
+                            "content": content,
+                            "session_id": session_id,
+                            "submission_id": resolved_submission_id,
+                        }
+                    ],
+                ),
+            )
+            finalize_span["job_id"] = completed.id if completed is not None else running.id
         result = dict(result)
         result["submission_id"] = resolved_submission_id
         if completed is not None:
@@ -251,8 +277,11 @@ def _apply_turn_with_job_mirror(
                 "job_id": completed.id,
                 "submission_id": resolved_submission_id,
             }
-        _complete_durable_claim(durable_store, durable_claim, result)
+        with rpg_pipeline_span("turn.idempotency_result_finalize"):
+            _complete_durable_claim(durable_store, durable_claim, result)
         return result
+    finally:
+        lock.release()
 
 
 def _submission_lock(submission_id: str) -> threading.RLock:
