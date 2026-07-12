@@ -59,6 +59,7 @@ from .speaker_cards import (
     build_party_speaker_cards,
     build_speaker_cards,
 )
+from .visible_response import build_visible_response, visible_response_text
 
 __all__ = [
     "build_personality_prompt_hints",
@@ -84,4 +85,6 @@ __all__ = [
     "build_player_inspector_overlay_payload",
     "build_save_load_ux_payload",
     "build_narrative_recap_payload",
+    "build_visible_response",
+    "visible_response_text",
 ]
