@@ -55,7 +55,7 @@ GitHub Actions must remain provider-free. Required checks are:
 
 The deterministic suite may use fakes, monkeypatches, SQLite, local files, static payloads, and static timing dictionaries. It must not call a live LLM, LM Studio, OpenRouter, OpenAI-compatible provider, or any external model endpoint.
 
-The local live smoke harness contains a hard CI guard and requires an explicit operator opt-in. Do not add it to a GitHub Actions workflow.
+The local live smoke and dialogue-quality harnesses contain hard CI guards and require an explicit operator opt-in. Do not add either harness to a GitHub Actions workflow.
 
 ## Local live-provider validation
 
@@ -79,17 +79,29 @@ python scripts/rpg_interactive_live_smoke.py `
   --timeout-seconds 120
 ```
 
-The harness sends stable `X-Omnix-Rpg-Submission-Id` values, repeats the first submission to verify idempotency, validates compact response gates, records provider-call count, provider time, non-provider overhead, final server attribution, trace ID, response bytes, and mean/median/p95/maximum latency. It exits unsuccessfully when a structural or live runtime target is missed.
+The smoke harness sends stable `X-Omnix-Rpg-Submission-Id` values, repeats the first submission to verify idempotency, validates compact response gates, records provider-call count, provider time, non-provider overhead, final server attribution, trace ID, response bytes, and mean/median/p95/maximum latency. It exits unsuccessfully when a structural or live runtime target is missed.
+
+Use a disposable or backed-up session with Bran present to produce the live dialogue-quality report:
+
+```powershell
+python scripts/rpg_interactive_live_dialogue_quality.py `
+  --base-url "http://127.0.0.1:8000" `
+  --session-id "<session-id>" `
+  --timeout-seconds 120 `
+  --output resources/data/test-results/rpg-live-dialogue-quality.json
+```
+
+This local-only runner submits the complete accepted scenario matrix, verifies exactly one provider call per response, evaluates directness, speaker correctness, grounding, continuity, repetition, leakage, and empty-line rates, and exits nonzero when the original quality thresholds are missed. It does not submit the intentionally bad candidate fixtures used by provider-free CI.
 
 ## Complete local acceptance bundle
 
-Export at least three browser timing snapshots from the developer diagnostics drawer. Enable the drawer in a local build or with `?rpgDiagnostics=1`. Keep private story content outside source control.
+Export at least three browser timing snapshots from the developer diagnostics drawer. Enable the drawer in a local build or with `?rpgDiagnostics=1`, then use **Copy diagnostics JSON** and save the clipboard contents as `rpg-browser-timing.json`. Keep private story content outside source control.
 
 Prepare:
 
 - the live smoke report;
-- a live-provider dialogue-quality report using the same metric shape as `rpg_dialogue_quality_benchmark_v1`;
-- a browser JSON object containing a `samples` list with interaction IDs and client timing fields.
+- the live-provider dialogue-quality report from `rpg_interactive_live_dialogue_quality.py`;
+- the browser JSON object containing a `samples` list with interaction IDs and client timing fields.
 
 Then run:
 
