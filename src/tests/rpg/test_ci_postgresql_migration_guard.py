@@ -10,9 +10,7 @@ APP_ROOT = REPO_ROOT / "src" / "app"
 # Phase 0 freezes the existing SQLite runtime surface. Later phases remove
 # entries from this set; no phase may add an entry.
 LEGACY_SQLITE_CONNECTION_FILES = {
-    "src/app/assistant_memory/owner_repository.py",
     "src/app/assistant_memory/repository.py",
-    "src/app/assistant_memory/schema.py",
     "src/app/characters/avatar_generation_repository.py",
     "src/app/characters/avatar_repository.py",
     "src/app/characters/avatar_viseme_generation.py",
@@ -20,7 +18,6 @@ LEGACY_SQLITE_CONNECTION_FILES = {
     "src/app/chat/compaction.py",
     "src/app/chat/history_search.py",
     "src/app/chat/repository.py",
-    "src/app/chat/sqlite_schema.py",
     "src/app/jobs/residency.py",
     "src/app/jobs/rpg_foreground_submission_store.py",
     "src/app/jobs/store.py",
@@ -34,8 +31,12 @@ LEGACY_SQLITE_CONNECTION_FILES = {
 LEGACY_MUTABLE_JSON_STORE_FILES = {
     "src/app/assets/store.py",
     "src/app/assist_core/policy_store.py",
+    "src/app/assistant_tools/config_store.py",
     "src/app/chat/prompt_store.py",
+    "src/app/chat/store.py",
+    "src/app/gateway/live_chat_evaluation_store.py",
     "src/app/image/asset_store.py",
+    "src/app/research/source_store.py",
     "src/app/rpg/narrative/narrative_persistence.py",
     "src/app/rpg/npc_evolution/profile_store.py",
     "src/app/rpg/session/durable_store.py",
