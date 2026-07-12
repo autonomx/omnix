@@ -120,6 +120,7 @@ def _fallback_payload(
         "session_id": _truncate_utf8(payload.get("session_id"), 256),
         "submission_id": _truncate_utf8(payload.get("submission_id"), 256),
         "interaction_id": _truncate_utf8(payload.get("interaction_id"), 256),
+        "interaction_seq": _safe_scalar(payload.get("interaction_seq")),
         "turn_id": _truncate_utf8(payload.get("turn_id"), 256),
         "simulation_tick": _safe_scalar(payload.get("simulation_tick")),
         "job_id": _truncate_utf8(payload.get("job_id"), 256),
@@ -164,6 +165,7 @@ def _absolute_fallback(
             "session_id": _truncate_utf8(payload.get("session_id"), 96),
             "submission_id": _truncate_utf8(payload.get("submission_id"), 96),
             "interaction_id": _truncate_utf8(payload.get("interaction_id"), 96),
+            "interaction_seq": _safe_scalar(payload.get("interaction_seq")),
             "turn_id": _truncate_utf8(payload.get("turn_id"), 96),
             "visible_response": {
                 "format_version": "rpg_visible_response_v1",
