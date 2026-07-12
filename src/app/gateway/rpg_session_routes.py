@@ -8,6 +8,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import ValidationError
 
+from app.rpg.presentation.turn_response import build_turn_response_v2
 from app.rpg.session.ability_coverage import summarize_ability_coverage
 from app.rpg.session.environment_narration import build_environment_narration_contract
 from app.rpg.session.environment_regions import derive_active_region_snapshot
@@ -253,17 +254,13 @@ def register_rpg_session_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=status_code, detail=result)
         result_session = result.get("session")
         session = save_session(result_session, compact=False) if isinstance(result_session, dict) else load_session(session_id)
-        text = _foreground_turn_text(result, command)
-        return _with_rpg_response_surface({
-            "ok": True,
-            "session_id": session_id,
-            "command": command,
-            "response": text,
-            "content": text,
-            "result": result,
-            "session": session,
-            "game": session.get("state", {}) if isinstance(session, dict) else {},
-        })
+        return build_turn_response_v2(
+            result,
+            session_id=session_id,
+            command=command,
+            session=session,
+            trace_id=getattr(http_request.state, "rpg_trace_id", None),
+        )
 
     @app.post("/api/rpg/sessions/{session_id}/rename", tags=["rpg-session"])
     def rpg_rename_session(session_id: str, request: RpgRenameSessionRequest) -> dict[str, Any]:
