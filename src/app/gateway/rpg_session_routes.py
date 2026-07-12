@@ -8,7 +8,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import ValidationError
 
-from app.rpg.presentation.turn_response import build_turn_response_v2
+from app.gateway.rpg_turn_pipeline import execute_foreground_rpg_turn
 from app.rpg.session.ability_coverage import summarize_ability_coverage
 from app.rpg.session.environment_narration import build_environment_narration_contract
 from app.rpg.session.environment_regions import derive_active_region_snapshot
@@ -181,17 +181,6 @@ def _foreground_turn_text(result: dict[str, Any], command: str) -> str:
     return f"Your command is accepted: {command}."
 
 
-def _persisted_turn_session(result: dict[str, Any], session_id: str) -> dict[str, Any] | None:
-    result_session = result.get("session")
-    if result.get("interaction_persisted") is True and isinstance(result_session, dict):
-        return result_session
-    if isinstance(result_session, dict):
-        from app.rpg.session.service import save_session
-
-        return save_session(result_session, compact=True)
-    return load_session(session_id)
-
-
 def register_rpg_session_routes(app: FastAPI) -> None:
     """Attach the typed RPG session API once.
 
@@ -246,29 +235,13 @@ def register_rpg_session_routes(app: FastAPI) -> None:
         return _with_rpg_response_surface(_raise_for_error(continue_rpg_session(session_id), not_found_errors={"session_not_found"}))
 
     @app.post("/api/rpg/sessions/{session_id}/turn", tags=["rpg-session"], include_in_schema=False)
-    async def rpg_apply_turn(session_id: str, http_request: Request) -> dict[str, Any]:
+    async def rpg_apply_turn(session_id: str, http_request: Request) -> Any:
         raw_payload = await http_request.json()
         command = _foreground_turn_command(raw_payload)
-
-        from app.rpg.session import interactive_first_call_runtime
-
-        result = await asyncio.to_thread(
-            lambda: interactive_first_call_runtime.apply_turn(
-                session_id,
-                command,
-                performance_override={"enable_live_narration_llm": False},
-            )
-        )
-        if result.get("ok") is not True:
-            status_code = 404 if result.get("error") == "session_not_found" else 400
-            raise HTTPException(status_code=status_code, detail=result)
-        session = _persisted_turn_session(result, session_id)
-        return build_turn_response_v2(
-            result,
+        return await execute_foreground_rpg_turn(
             session_id=session_id,
             command=command,
-            session=session,
-            trace_id=getattr(http_request.state, "rpg_trace_id", None),
+            request=http_request,
         )
 
     @app.post("/api/rpg/sessions/{session_id}/rename", tags=["rpg-session"])
