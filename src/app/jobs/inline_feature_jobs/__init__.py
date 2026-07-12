@@ -1,8 +1,8 @@
-"""Compatibility wrapper for inline feature jobs.
+"""Compatibility package for the legacy inline feature job module.
 
-This package wrapper preserves the existing ``inline_feature_jobs.py`` module
-while patching the RPG visible-text projection to evaluate structured
-narration against the merged command/restatement context.
+The implementation remains in ``inline_feature_jobs.py`` for import compatibility.
+RPG visible text is supplied by the canonical presentation module before the
+implementation symbols are exported.
 """
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ import importlib.util
 import sys
 from pathlib import Path
 from typing import Any
+
+from app.rpg.presentation.visible_response import visible_response_text
 
 _SOURCE_PATH = Path(__file__).resolve().parent.parent / "inline_feature_jobs.py"
 _SOURCE_NAME = "app.jobs._inline_feature_jobs_source"
@@ -22,81 +24,17 @@ sys.modules[_SOURCE_NAME] = _source
 _spec.loader.exec_module(_source)
 
 
-def _format_rpg_turn_narration(
-    source: dict[str, Any],
-    restatement_source: dict[str, Any] | None = None,
-) -> str | None:
-    narration_json = _source._dict_value(source.get("narration_json"))
-    if not narration_json:
-        return None
-
-    narration = _source._text(narration_json.get("narration"))
-    npc = _source._dict_value(narration_json.get("npc")) or _source._dict_value(source.get("npc"))
-    speaker = _source._text(npc.get("speaker")) or _source._text(npc.get("name")) or "NPC"
-    line = _source._text(npc.get("line")) or _source._text(npc.get("text"))
-    if _source._is_non_npc_speaker(speaker):
-        speaker = ""
-        line = ""
-
-    restatement_context = _source._rpg_turn_restatement_source(source, restatement_source or {})
-    if _source._is_player_restatement(line, restatement_context) or _source._is_player_restatement(
-        narration,
-        restatement_context,
-    ):
-        return None
-
-    parts = [narration] if narration else []
-    if line and speaker:
-        parts.append(f'{speaker}: "{_source._normalize_dialogue_quotes(line)}"')
-    elif line:
-        parts.append(f'NPC: "{_source._normalize_dialogue_quotes(line)}"')
-    return "\n\n".join(parts) or None
+def _canonical_rpg_turn_visible_text(result: dict[str, Any]) -> str | None:
+    command = str(result.get("player_input") or "").strip()
+    return visible_response_text(result, command)
 
 
-def _rpg_turn_visible_text(result: dict[str, Any]) -> str | None:
-    nested = _source._dict_value(result.get("result"))
-    authoritative = _source._dict_value(result.get("authoritative"))
-    turn_contract = _source._dict_value(result.get("turn_contract"))
-    narration_brief = _source._dict_value(turn_contract.get("narration_brief"))
-    restatement_source = _source._rpg_turn_restatement_source(result, nested, authoritative, turn_contract)
-
-    for source in (result, nested, authoritative):
-        first_call = _source._format_rpg_turn_first_call_visible_response(source, restatement_source)
-        if first_call:
-            return first_call
-        structured = _format_rpg_turn_narration(source, restatement_source)
-        if structured:
-            return structured
-
-    for value, source in (
-        (result.get("final_narration"), result),
-        (result.get("narration"), result),
-        (nested.get("final_narration"), nested),
-        (nested.get("narration"), nested),
-        (nested.get("summary"), nested),
-        (authoritative.get("final_narration"), authoritative),
-        (authoritative.get("narration"), authoritative),
-        (authoritative.get("deterministic_fallback_narration"), authoritative),
-        (narration_brief.get("summary"), turn_contract),
-    ):
-        visible = _source._text(value)
-        if visible and not _source._is_player_restatement(
-            visible,
-            _source._rpg_turn_restatement_source(source, restatement_source),
-        ):
-            return visible
-    fallback = _source._fallback_rpg_turn_visible_text(result, nested, authoritative, turn_contract, restatement_source)
-    if fallback and not _source._is_player_restatement(fallback, restatement_source):
-        return fallback
-    return None
-
-
-setattr(_source, "_format_rpg_turn_narration", _format_rpg_turn_narration)
-setattr(_source, "_rpg_turn_visible_text", _rpg_turn_visible_text)
+_source._rpg_turn_visible_text = _canonical_rpg_turn_visible_text
 
 for _name, _value in vars(_source).items():
     if _name.startswith("__") and _name != "__all__":
         continue
     globals()[_name] = _value
 
+globals()["_rpg_turn_visible_text"] = _canonical_rpg_turn_visible_text
 __all__ = [name for name in globals() if not name.startswith("__")]
