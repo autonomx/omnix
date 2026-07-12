@@ -34,10 +34,23 @@
   color: #fca5a5;
 }
 
+/*
+ * Theme presets put backdrop-filter on .workspace-card. That makes the card a
+ * containing block for fixed descendants, so the campaign dialog is centered
+ * against the full, scrollable RPG card and can land far below the viewport.
+ * Drop that effect only while the launcher is open so the modal is fixed to
+ * the browser viewport as intended.
+ */
+:root[data-omnix-theme] .workspace-card:has(.rpg-launcher-modal) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 .rpg-launcher-modal {
   position: fixed;
   inset: 0;
   z-index: 1000;
+  isolation: isolate;
   display: grid;
   place-items: center;
   padding: clamp(1rem, 3vw, 2rem);
@@ -46,6 +59,7 @@
 .rpg-launcher-backdrop {
   position: absolute;
   inset: 0;
+  z-index: 0;
   border: 0;
   background: rgba(2, 6, 23, 0.74);
   backdrop-filter: blur(8px);
