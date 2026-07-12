@@ -137,6 +137,10 @@ export interface RpgCheckpointSummaryPreview {
 }
 
 export interface RpgStoryMessagePreview {
+  id?: string;
+  interactionId?: string;
+  messageKind?: string;
+  messageIndex?: number;
   avatar: string;
   speaker: string;
   text: string;
@@ -373,13 +377,16 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
     ? [...rpgJobs].sort(compareRpgJobsForCards).map(toJobCard)
     : selectedSessionSummary.source === 'live' ? [] : previewJobs;
   const heroSummary = buildHeroSummary(selectedSession);
+  const persistedStoryMessages = buildInteractionStoryMessages(selectedSession, heroSummary);
   const turnMessages = buildRpgTurnJobTimelineEvents(rpgJobs, selectedSessionSummary.id, heroSummary.name);
   const sessionTimeline = buildTimelineEvents(selectedSession);
   const timeline = [
     ...turnMessages,
     ...sessionTimeline,
   ].slice(0, 12);
-  const storyMessages = buildStoryMessages(turnMessages, heroSummary);
+  const storyMessages = persistedStoryMessages.length
+    ? persistedStoryMessages
+    : buildStoryMessages(turnMessages, heroSummary);
   const recentEvents = buildRecentEvents(selectedSessionSummary, sessionTimeline);
   const narrativeLogEntries = timeline.map((event) => ({ time: event.time, title: event.title, detail: event.detail }));
   const journalEntries = buildJournalEntries(selectedSessionSummary, selectedSession);
@@ -969,9 +976,19 @@ function turnLabelFor(record: Record<string, unknown>, index: number): string {
 
 function getPlayerRecord(session: RpgSession | undefined): Record<string, unknown> | undefined {
   const canonicalPlayer = recordValue(recordValue(session?.simulation_state)?.player_state);
-  if (canonicalPlayer) return canonicalPlayer;
   const roots = getSessionRecords(session);
-  return firstRecord(...roots.flatMap((root) => [root.player, root.hero, root.character, root.player_state, root.character_state, recordValue(root.state)?.player]));
+  const projectedPlayer = firstRecord(...roots.flatMap((root) => [root.player, root.hero, root.character, root.player_state, root.character_state, recordValue(root.state)?.player]));
+  if (canonicalPlayer && projectedPlayer) {
+    return {
+      ...projectedPlayer,
+      ...canonicalPlayer,
+      resources: {
+        ...recordValue(projectedPlayer.resources),
+        ...recordValue(canonicalPlayer.resources),
+      },
+    };
+  }
+  return canonicalPlayer ?? projectedPlayer;
 }
 
 function getSessionRecords(session: RpgSession | undefined): Record<string, unknown>[] {
@@ -1022,7 +1039,8 @@ function buildRpgTurnJobTimelineEvents(jobs: RpgJob[], sessionId: string, player
   return jobs
     .filter((job) => {
       const inputRef = recordValue(job.input_ref);
-      return job.type === 'rpg.turn' && firstString(inputRef?.session_id) === sessionId;
+      return (job.type === 'rpg.turn' || job.type === 'rpg.turn.foreground_record')
+        && firstString(inputRef?.session_id) === sessionId;
     })
     .flatMap((job) => {
       const inputPayload = recordValue(job.input_payload);
@@ -1089,6 +1107,65 @@ function buildStoryMessages(events: TimelineEvent[], hero: RpgHeroSummaryPreview
       tone: isNarrator ? 'narrator' : 'npc',
     };
   });
+}
+
+function buildInteractionStoryMessages(
+  session: RpgSession | undefined,
+  hero: RpgHeroSummaryPreview,
+): RpgStoryMessagePreview[] {
+  const runtime = recordValue(session?.runtime_state);
+  const interactions = firstArray(runtime?.recent_interactions);
+  if (!interactions.length) return [];
+  return interactions.slice(-12).flatMap((item) => {
+    const event = recordValue(item);
+    if (!event) return [];
+    const interactionId = firstString(event.interaction_id);
+    const playerInput = firstString(event.player_input);
+    const visible = recordValue(event.visible_response);
+    const narration = firstString(visible?.narration, event.narration);
+    const visibleMessages = firstArray(visible?.messages).map(recordValue).filter(Boolean) as Record<string, unknown>[];
+    const result: RpgStoryMessagePreview[] = [];
+    if (playerInput) {
+      result.push({
+        id: interactionId ? `${interactionId}:player` : undefined,
+        interactionId,
+        messageKind: 'player',
+        messageIndex: 0,
+        avatar: hero.avatar,
+        speaker: `${hero.name} (You)`,
+        text: playerInput,
+        tone: 'player',
+      });
+    }
+    if (narration) {
+      result.push({
+        id: interactionId ? `${interactionId}:narration` : undefined,
+        interactionId,
+        messageKind: 'narration',
+        messageIndex: 0,
+        avatar: 'O',
+        speaker: 'Omnix (Narrator)',
+        text: narration,
+        tone: 'narrator',
+      });
+    }
+    visibleMessages.forEach((message, index) => {
+      const text = firstString(message.text);
+      if (!text) return;
+      const speaker = firstString(message.speaker, event.speaker) ?? 'Omnix';
+      result.push({
+        id: interactionId ? `${interactionId}:message:${index}` : undefined,
+        interactionId,
+        messageKind: firstString(message.kind) ?? 'npc_dialogue',
+        messageIndex: index,
+        avatar: speaker.charAt(0).toUpperCase() || 'O',
+        speaker: speaker === 'Omnix' ? 'Omnix (Narrator)' : speaker,
+        text,
+        tone: speaker === 'Omnix' ? 'narrator' : 'npc',
+      });
+    });
+    return result;
+  }).slice(-40);
 }
 
 function inferResponseSpeaker(response: string): string {

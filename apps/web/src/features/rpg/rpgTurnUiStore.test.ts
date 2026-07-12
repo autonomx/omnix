@@ -26,6 +26,35 @@ describe('rpgTurnUiStore', () => {
     expect(createRpgSubmissionId()).toMatch(/^submit:[a-z0-9]+$/i);
   });
 
+  it('does not truncate durable history to the latest ten messages', () => {
+    const baseMessages = Array.from({ length: 24 }, (_, index) => ({
+      id: `interaction:${index + 1}:player`,
+      interactionId: `interaction:${index + 1}`,
+      avatar: 'A',
+      speaker: 'Alyndra (You)',
+      text: `Turn ${index + 1}`,
+      tone: 'player' as const,
+    }));
+
+    const merged = mergeRpgTurnUiMessages(baseMessages, [{
+      id: 'interaction:25:player',
+      sessionId: 'session:history',
+      submissionId: 'submit:25',
+      interactionId: 'interaction:25',
+      status: 'complete',
+      avatar: 'A',
+      speaker: 'Alyndra (You)',
+      text: 'Turn 25',
+      tone: 'player',
+      messageKind: 'player',
+      messageIndex: 0,
+    }]);
+
+    expect(merged).toHaveLength(24);
+    expect(merged[0].text).toBe('Turn 1');
+    expect(merged[23].text).toBe('Turn 25');
+  });
+
   it('shows the player command immediately and rekeys the completed turn by interaction id', () => {
     beginRpgTurnUiSubmission({
       sessionId: 'session:bran',
@@ -150,7 +179,9 @@ describe('rpgTurnUiStore', () => {
   });
 
   it('does not request heavy query refreshes for explicit conversation-only turns', () => {
-    expect(refreshPathsForChangedDomains('session:bran', ['conversation'])).toEqual([]);
+    expect(refreshPathsForChangedDomains('session:bran', ['conversation'])).toEqual([
+      '/api/rpg/sessions/session%3Abran',
+    ]);
     expect(refreshPathsForChangedDomains('session:bran', [])).toEqual([
       '/api/rpg/sessions/session%3Abran',
     ]);

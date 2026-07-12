@@ -44,6 +44,7 @@ def test_fast_visible_dialogue_skips_foreground_llm(monkeypatch) -> None:
     result = runtime.apply_turn(
         "fast_visible_test",
         "Bran, how are you?",
+        performance_override={"fast_visible_dialogue": True},
         session_override=_session(),
     )
 
@@ -73,6 +74,7 @@ def test_fast_visible_dialogue_handles_rumor_question_without_facts(monkeypatch)
     result = runtime.apply_turn(
         "fast_visible_test",
         "I ask Bran, any rumors lately?",
+        performance_override={"fast_visible_dialogue": True},
         session_override=_session(),
     )
 

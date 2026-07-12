@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.world.location_registry import current_location_id, has_explicit_location
+
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
@@ -25,13 +27,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 def _current_location_id(simulation_state: Dict[str, Any]) -> str:
     state = _safe_dict(simulation_state)
-    player_state = _safe_dict(state.get("player_state"))
-    return _safe_str(
-        state.get("location_id")
-        or state.get("current_location_id")
-        or player_state.get("location_id")
-        or player_state.get("current_location_id")
-    )
+    return current_location_id(state) if has_explicit_location(state) else ""
 
 
 def _provider_present(

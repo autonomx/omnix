@@ -6,6 +6,7 @@ LM Studio provides an OpenAI-compatible API on a configurable port.
 """
 
 from typing import Any, Dict, Iterator, List, Optional, Union
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from requests.exceptions import ConnectionError as RequestsConnectionError
@@ -42,7 +43,21 @@ class LMStudioProvider(BaseProvider):
         if not self.config.base_url:
             self.config.base_url = "http://localhost:1234"
         # Ensure base_url doesn't have trailing slash
-        self.config.base_url = self.config.base_url.rstrip('/')
+        self.config.base_url = self._normalize_local_base_url(
+            self.config.base_url.rstrip('/')
+        )
+
+    @staticmethod
+    def _normalize_local_base_url(base_url: str) -> str:
+        """Avoid the recurring Windows localhost IPv6 fallback penalty."""
+
+        parsed = urlsplit(base_url)
+        if parsed.hostname not in {"localhost", "localhost.localdomain"}:
+            return base_url
+        port = f":{parsed.port}" if parsed.port is not None else ""
+        return urlunsplit(
+            (parsed.scheme, f"127.0.0.1{port}", parsed.path, parsed.query, parsed.fragment)
+        )
 
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """
@@ -142,7 +157,7 @@ class LMStudioProvider(BaseProvider):
                 payload["model"] = resolved_model
 
             # Add other optional parameters only if explicitly provided
-            for key in ["max_tokens", "top_p"]:
+            for key in ["max_tokens", "top_p", "response_format", "chat_template_kwargs"]:
                 if key in kwargs:
                     payload[key] = kwargs[key]
 

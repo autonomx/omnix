@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+# Generated split runtime modules intentionally inherit private helpers via star imports.
+# ruff: noqa: F405
+
 from copy import deepcopy
 from typing import Any, Dict, Iterable
 
 from app.rpg.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
+from app.rpg.economy.service_resolver import resolve_service_turn
+from app.rpg.economy.currency import format_currency
+from app.rpg.session.public_state_bridge import (
+    hydrate_simulation_player,
+    project_authoritative_player,
+)
+from app.rpg.session.service_runtime import (
+    service_action_from_result,
+    service_authoritative_result,
+)
 
 from .runtime_part38 import *  # noqa: F401,F403
 from .runtime_part38 import (
@@ -288,16 +301,202 @@ def _apply_turn_authoritative(
     performance_override: Dict[str, Any] | None = None,
     _base_authoritative: Any = _PHASE8_PART39_BASE_APPLY_TURN_AUTHORITATIVE,
 ) -> Dict[str, Any]:
+    guarded_action = _safe_dict(action)
+    service_result: Dict[str, Any] = {}
+    session = hydrate_simulation_player(
+        deepcopy(_safe_dict(load_runtime_session(session_id)))
+    )
+    if session:
+        service_result = resolve_service_turn(
+            player_input=player_input,
+            action=guarded_action,
+            resolved_action={},
+            simulation_state=_safe_dict(session.get("simulation_state")),
+            runtime_state=_safe_dict(session.get("runtime_state")),
+        )
+        if service_result.get("matched"):
+            guarded_action = service_action_from_result(
+                player_input,
+                guarded_action,
+                service_result,
+            )
     payload = _base_authoritative(
         session_id,
         player_input,
-        action,
+        guarded_action,
         performance_override=performance_override,
     )
+    if service_result.get("matched") and not _service_postcondition_satisfied(
+        payload,
+        session_id=session_id,
+        service_result=service_result,
+    ):
+        latest_session = hydrate_simulation_player(
+            deepcopy(_safe_dict(load_runtime_session(session_id)))
+        )
+        if latest_session:
+            authoritative = service_authoritative_result(
+                _safe_dict(latest_session.get("simulation_state")),
+                guarded_action,
+            )
+            latest_session["simulation_state"] = _safe_dict(
+                authoritative.get("simulation_state")
+            )
+            latest_session = project_authoritative_player(latest_session)
+            save_runtime_session(latest_session)
+            payload = _patch_service_postcondition_payload(
+                payload,
+                session=latest_session,
+                authoritative=authoritative,
+            )
     return _phase8_part39_patch_social_claim_mismatch(
         payload,
         player_input=player_input,
     )
+
+
+def _service_postcondition_satisfied(
+    payload: Dict[str, Any],
+    *,
+    session_id: str,
+    service_result: Dict[str, Any],
+) -> bool:
+    kind = _clean(service_result.get("kind"))
+    selected_offer_id = _clean(service_result.get("selected_offer_id"))
+    session = _safe_dict(load_runtime_session(session_id))
+    simulation = _safe_dict(session.get("simulation_state"))
+    if kind == "service_purchase" and selected_offer_id:
+        for row in _safe_list(simulation.get("transaction_history")):
+            row = _safe_dict(row)
+            if _clean(row.get("offer_id") or row.get("service_id")) == selected_offer_id:
+                return True
+        for row in _safe_list(simulation.get("active_services")):
+            row = _safe_dict(row)
+            if _clean(row.get("offer_id") or row.get("service_id")) == selected_offer_id:
+                return True
+        return False
+    if kind == "service_consumption":
+        requested_kind = _clean(service_result.get("service_kind"))
+        return any(
+            _clean(_safe_dict(row).get("service_kind")) == requested_kind
+            and _clean(_safe_dict(row).get("status")) == "consumed"
+            for row in _safe_list(simulation.get("active_services"))
+        )
+    # Inquiries may write pending-offer and registered quest-evidence state.
+    # Reapplying is safe: both helpers are bounded and clue IDs are idempotent.
+    return False
+
+
+def _patch_service_postcondition_payload(
+    payload: Dict[str, Any],
+    *,
+    session: Dict[str, Any],
+    authoritative: Dict[str, Any],
+) -> Dict[str, Any]:
+    patched = dict(_safe_dict(payload))
+    simulation = deepcopy(_safe_dict(authoritative.get("simulation_state")))
+    resolved = deepcopy(_safe_dict(authoritative.get("result")))
+    visible = _grounded_service_visible_response(resolved)
+    patched["simulation_state"] = simulation
+    patched["session"] = deepcopy(session)
+    patched["resolved_result"] = deepcopy(resolved)
+    patched["authoritative"] = deepcopy(resolved)
+    patched["service_result"] = deepcopy(_safe_dict(resolved.get("service_result")))
+    patched["service_application"] = deepcopy(_safe_dict(resolved.get("service_application")))
+    if visible:
+        patched.update(
+            {
+                "narration": visible["narration"],
+                "final_narration": visible["narration"],
+                "deterministic_fallback_narration": visible["narration"],
+                "npc": deepcopy(visible.get("npc") or {}),
+                "visible_response": deepcopy(visible),
+                "narration_status": "queued",
+            }
+        )
+    nested = dict(_safe_dict(patched.get("result")))
+    nested.update(
+        {
+            "ok": bool(resolved.get("ok", True)),
+            "resolved_result": deepcopy(resolved),
+            "simulation_state": simulation,
+            "service_result": deepcopy(_safe_dict(resolved.get("service_result"))),
+            "service_application": deepcopy(_safe_dict(resolved.get("service_application"))),
+        }
+    )
+    if visible:
+        nested.update(
+            {
+                "narration": visible["narration"],
+                "final_narration": visible["narration"],
+                "deterministic_fallback_narration": visible["narration"],
+                "npc": deepcopy(visible.get("npc") or {}),
+                "visible_response": deepcopy(visible),
+                "narration_status": "queued",
+            }
+        )
+        resolved["visible_response"] = deepcopy(visible)
+        resolved["deterministic_fallback_narration"] = visible["narration"]
+    patched["result"] = nested
+    return patched
+
+
+def _grounded_service_visible_response(resolved: Dict[str, Any]) -> Dict[str, Any]:
+    resolved = _safe_dict(resolved)
+    service_result = _safe_dict(resolved.get("service_result"))
+    application = _safe_dict(resolved.get("service_application"))
+    provider = _clean(service_result.get("provider_name")) or "The provider"
+    kind = _clean(service_result.get("kind"))
+    messages = []
+
+    if kind == "service_purchase" and application.get("applied") is True:
+        transaction = _safe_dict(application.get("transaction_record"))
+        label = _clean(transaction.get("label")) or "the selected service"
+        price = _safe_dict(_safe_dict(service_result.get("purchase")).get("price"))
+        price_text = format_currency(price)
+        narration = f"You pay {price_text} to {provider} for {label}. The transaction is complete."
+        messages.append(
+            {"kind": "npc_dialogue", "speaker": provider, "text": f"Done. {label} is settled."}
+        )
+    elif kind == "service_consumption":
+        duration = _safe_dict(resolved.get("duration_application"))
+        if duration.get("applied") is not True:
+            return {}
+        active = _safe_dict(duration.get("active_service"))
+        label = _clean(active.get("label")) or "the reserved service"
+        elapsed = int(duration.get("elapsed_minutes") or 0)
+        narration = f"You use {label} and rest for {elapsed // 60} hours. The reserved service is consumed."
+    elif kind == "service_inquiry":
+        transition = _safe_dict(resolved.get("quest_transition"))
+        if transition.get("applied") is not True:
+            return {}
+        evidence = _safe_dict(transition.get("evidence"))
+        clue = _clean(evidence.get("clue_summary"))
+        objective = _clean(transition.get("objective"))
+        if not clue:
+            return {}
+        narration = f"{provider} shares a concrete lead: {clue}"
+        if objective:
+            narration = f"{narration} Your objective is now: {objective}"
+        messages.append(
+            {"kind": "npc_dialogue", "speaker": provider, "text": clue}
+        )
+    else:
+        return {}
+
+    response = {
+        "format_version": "rpg_visible_response_v1",
+        "narration": narration,
+        "messages": messages,
+        "plain_text": narration,
+    }
+    if messages:
+        response["npc"] = {
+            "speaker": messages[0]["speaker"],
+            "line": messages[0]["text"],
+        }
+        response["plain_text"] = f'{narration}\n\n{messages[0]["speaker"]}: "{messages[0]["text"]}"'
+    return response
 
 
 def _canonicalize_publication(

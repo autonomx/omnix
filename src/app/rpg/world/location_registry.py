@@ -89,7 +89,12 @@ def current_location_id(simulation_state: Dict[str, Any]) -> str:
         or _safe_str(simulation_state.get("location_id"))
         or _safe_str(simulation_state.get("current_location_id"))
     )
-    return location_id or default_location_id()
+    if not location_id:
+        return default_location_id()
+    if location_id in LOCATIONS:
+        return location_id
+    matched = find_location_by_name(location_id)
+    return _safe_str(matched.get("location_id")) or location_id
 
 
 def has_explicit_location(simulation_state: Dict[str, Any]) -> bool:
@@ -107,6 +112,9 @@ def has_explicit_location(simulation_state: Dict[str, Any]) -> bool:
 
 def normalize_location_name(value: str) -> str:
     value = _safe_str(value).strip().lower()
+    if value.startswith("location:"):
+        value = value.split(":", 1)[1]
+    value = value.replace("_", "-").replace("-", " ")
     value = value.replace("the ", "", 1) if value.startswith("the ") else value
     return " ".join(value.split())
 

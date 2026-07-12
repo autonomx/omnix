@@ -395,6 +395,10 @@ export class OmnixApiClient {
     }
   }
 
+  async listRpgSessionSummaries(): Promise<RpgSessionListResponse> {
+    return this.get<RpgSessionListResponse>('/api/rpg/sessions');
+  }
+
   async getRpgSession(sessionId: string): Promise<RpgLaunchResponse> {
     return this.get<RpgLaunchResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}`);
   }

@@ -47,4 +47,30 @@ describe('RpgStoryScene', () => {
     expect(recentEventsToggle).toHaveAttribute('aria-expanded', 'true');
     expect(recentEventsToggle.closest('.rpg-event-strip')).toHaveClass('is-expanded');
   });
+
+  it('renders the bounded durable transcript without dropping messages after the oldest ten', () => {
+    const storyMessages = Array.from({ length: 12 }, (_, index) => ({
+      id: `message:${index + 1}`,
+      interactionId: `interaction:${index + 1}`,
+      avatar: 'A',
+      speaker: 'Alyndra (You)',
+      text: `Durable message ${index + 1}`,
+      tone: 'player' as const,
+    }));
+
+    renderWithTheme(
+      <RpgStoryScene
+        heroSummary={previewHeroSummary}
+        recentEvents={[]}
+        selectedSessionSummary={{ ...previewSessionSummary, id: 'live-session', source: 'live' }}
+        storyMessages={storyMessages}
+      >
+        <button type="button">Queue RPG turn</button>
+      </RpgStoryScene>
+    );
+
+    expect(screen.getByText('Durable message 1')).toBeInTheDocument();
+    expect(screen.getByText('Durable message 12')).toBeInTheDocument();
+    expect(screen.getByLabelText('Conversation').querySelectorAll('article')).toHaveLength(12);
+  });
 });

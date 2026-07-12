@@ -79,6 +79,17 @@ def _find_duplicate_rpg_turn_job(job_store: Any, request: Any) -> JobRecord | No
     if not session_id:
         return None
 
+    targeted_lookup = getattr(job_store, "find_job_by_submission", None)
+    if submission_id and callable(targeted_lookup):
+        try:
+            return targeted_lookup(
+                job_type=job_type,
+                session_id=session_id,
+                submission_id=submission_id,
+            )
+        except Exception:
+            return None
+
     try:
         jobs = job_store.list_jobs()
     except Exception:

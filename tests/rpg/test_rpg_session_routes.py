@@ -69,7 +69,7 @@ def test_clean_rpg_session_routes_expose_save_management(monkeypatch) -> None:
     app = FastAPI(title="test")
     rpg_session_routes.register_rpg_session_routes(app)
 
-    monkeypatch.setattr(rpg_session_routes, "list_session_summaries", lambda: [{"manifest": {"id": "rpg_test"}}])
+    monkeypatch.setattr(rpg_session_routes, "list_session_summaries", lambda **_kwargs: [{"manifest": {"id": "rpg_test"}}])
     monkeypatch.setattr(rpg_session_routes, "load_session", lambda session_id: _coverage_session(session_id))
     monkeypatch.setattr(rpg_session_routes, "continue_rpg_session", lambda session_id: {"ok": True, "session_id": session_id, "status": "ready"})
     monkeypatch.setattr(rpg_session_routes, "rename_rpg_session", lambda session_id, name: {"ok": True, "session_id": session_id, "session": {"manifest": {"title": name}}})

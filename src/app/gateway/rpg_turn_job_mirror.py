@@ -342,6 +342,16 @@ def _submission_lock_count() -> int:
 
 
 def _find_submission_record(store: Any, session_id: str, submission_id: str) -> Any | None:
+    targeted_lookup = getattr(store, "find_job_by_submission", None)
+    if callable(targeted_lookup):
+        try:
+            return targeted_lookup(
+                job_type=RPG_FOREGROUND_RECORD_TYPE,
+                session_id=session_id,
+                submission_id=submission_id,
+            )
+        except Exception:
+            return None
     try:
         jobs = store.list_jobs()
     except Exception:

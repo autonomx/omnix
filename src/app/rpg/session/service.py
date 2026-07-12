@@ -77,11 +77,11 @@ def list_sessions() -> List[Dict[str, Any]]:
     return out
 
 
-def list_session_summaries() -> List[Dict[str, Any]]:
+def list_session_summaries(*, limit: int | None = None) -> List[Dict[str, Any]]:
     """Return bounded session list rows without normalizing full payloads."""
 
     out = []
-    for item in list_session_summaries_from_disk():
+    for item in list_session_summaries_from_disk(limit=limit):
         integrity = validate_session_integrity(item)
         item["_integrity"] = integrity
         out.append(item)

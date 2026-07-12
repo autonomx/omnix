@@ -63,13 +63,16 @@ def _normalize_session(value: Any) -> Dict[str, Any]:
             "archived": bool(manifest.get("archived")),
         }
     )
-    return {
+    normalized = {
         "manifest": normalized_manifest,
         "state": state,
         "setup_payload": _safe_dict(data.get("setup_payload")),
         "simulation_state": _safe_dict(data.get("simulation_state")),
         "runtime_state": _safe_dict(data.get("runtime_state")),
     }
+    from app.rpg.session.public_state_bridge import synchronize_player_projections
+
+    return synchronize_player_projections(normalized)
 
 
 def ensure_session_registry(root_state: Dict[str, Any]) -> Dict[str, Any]:

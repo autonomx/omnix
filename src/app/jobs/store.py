@@ -5,9 +5,10 @@ import json
 import os
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from app.runtime_paths import resources_data_root
 
@@ -85,12 +86,30 @@ class SQLiteJobStore:
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 30000")
         return conn
+
+    @contextmanager
+    def _write_connection(self) -> Iterator[sqlite3.Connection]:
+        """Queue cross-process writers before any transaction reads occur."""
+
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
+            if self.db_path != Path(":memory:"):
+                conn.execute("PRAGMA journal_mode = WAL")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS jobs (
@@ -130,6 +149,16 @@ class SQLiteJobStore:
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_jobs_rpg_submission
+                ON jobs(
+                    type,
+                    json_extract(input_ref_json, '$.session_id'),
+                    json_extract(input_payload_json, '$.submission_id')
+                )
+                """
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id)")
 
     def create_job(self, request: CreateJobRequest) -> JobRecord:
@@ -156,7 +185,7 @@ class SQLiteJobStore:
             cancel=CancelState(),
             compat=request.compat,
         )
-        with self._connect() as conn:
+        with self._write_connection() as conn:
             self._insert_job(conn, job)
             self._append_event(conn, job.id, "job.created", job.model_dump(mode="json"))
         return job
@@ -176,10 +205,33 @@ class SQLiteJobStore:
             row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         return self._row_to_job(row) if row else None
 
+    def find_job_by_submission(
+        self,
+        *,
+        job_type: str,
+        session_id: str,
+        submission_id: str,
+    ) -> JobRecord | None:
+        """Return one RPG job without scanning and decoding the full job table."""
+
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM jobs
+                WHERE type = ?
+                  AND json_extract(input_ref_json, '$.session_id') = ?
+                  AND json_extract(input_payload_json, '$.submission_id') = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (job_type, session_id, submission_id),
+            ).fetchone()
+        return self._row_to_job(row) if row else None
+
     def delete_job(self, job_id: str) -> bool:
         """Delete one job and its event rows from the local job store."""
 
-        with self._connect() as conn:
+        with self._write_connection() as conn:
             conn.execute("DELETE FROM job_events WHERE job_id = ?", (job_id,))
             cursor = conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
         return cursor.rowcount > 0
@@ -196,7 +248,7 @@ class SQLiteJobStore:
         now = datetime.now(timezone.utc)
         allowed = {resource.value for resource in request.resource_classes}
         residency_records = residency
-        with self._connect() as conn:
+        with self._write_connection() as conn:
             self._release_expired_leases(conn, now)
             active_jobs = [
                 self._row_to_job(row)
@@ -437,7 +489,7 @@ class SQLiteJobStore:
         return job
 
     def _save_with_event(self, job: JobRecord, event_type: str) -> JobRecord:
-        with self._connect() as conn:
+        with self._write_connection() as conn:
             self._update_job(conn, job)
             self._append_event(conn, job.id, event_type, job.model_dump(mode="json"))
         return job

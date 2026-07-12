@@ -505,6 +505,70 @@ describe('rpg UI state', () => {
     expect(state.recentEvents).not.toContain('Wrong session response.');
   });
 
+  it('preserves the latest persisted interaction turns with authoritative speakers', () => {
+    const interaction = (id: string, input: string, speaker: string, line: string) => ({
+      interaction_id: id,
+      kind: 'npc_dialogue',
+      player_input: input,
+      speaker,
+      visible_response: {
+        narration: `${speaker} considers the question.`,
+        messages: [{ kind: 'npc_dialogue', speaker, text: line }],
+      },
+    });
+    const state = createRpgWorkspaceState({
+      inventory: { sessions: [{ session_id: 'session-live', title: 'Live campaign' }] },
+      selectedSessionId: 'session-live',
+      selectedSession: {
+        manifest: { session_id: 'session-live', title: 'Live campaign' },
+        state: { player: { name: 'Alyndra' } },
+        runtime_state: {
+          recent_interactions: [
+            interaction('interaction:79', 'How is business?', 'Bran', 'Steady enough.'),
+            interaction('interaction:80', 'Any troubles lately?', 'Bran', 'Nothing unusual.'),
+          ],
+        },
+      },
+      jobs: { jobs: [] },
+    });
+
+    expect(state.storyMessages.filter((message) => message.tone === 'player').map((message) => message.text)).toEqual([
+      'How is business?',
+      'Any troubles lately?',
+    ]);
+    expect(state.storyMessages.filter((message) => message.tone === 'npc').map((message) => message.speaker)).toEqual([
+      'Bran',
+      'Bran',
+    ]);
+    expect(state.storyMessages.map((message) => message.interactionId)).toContain('interaction:79');
+  });
+
+  it('merges canonical mechanic fields without hiding projected player identity', () => {
+    const state = createRpgWorkspaceState({
+      inventory: { sessions: [{ session_id: 'session-live', title: 'Live campaign' }] },
+      selectedSessionId: 'session-live',
+      selectedSession: {
+        manifest: { session_id: 'session-live', title: 'Live campaign' },
+        state: {
+          player: {
+            name: 'Alyndra',
+            class: 'Ranger',
+            background: 'Wanderer',
+            currency: { gold: 0, silver: 10, copper: 0 },
+          },
+        },
+        simulation_state: {
+          player_state: { currency: { gold: 0, silver: 8, copper: 5 } },
+        },
+      },
+      jobs: { jobs: [] },
+    });
+
+    expect(state.heroSummary.name).toBe('Alyndra');
+    expect(state.heroSummary.subtitle).toContain('Ranger');
+    expect(state.heroSummary.gold).toBe('0g 8s 5c');
+  });
+
   it('does not project empty array RPG turn responses into the live timeline', () => {
     const state = createRpgWorkspaceState({
       inventory: {
@@ -540,6 +604,66 @@ describe('rpg UI state', () => {
       { avatar: 'E', speaker: 'Elara (You)', text: 'Listen to the hearth-side conversation', tone: 'player' },
     ]);
     expect(state.storyMessages.some((message) => message.text === '[]')).toBe(false);
+  });
+
+  it('projects foreground-record turn jobs while the durable session refreshes', () => {
+    const state = createRpgWorkspaceState({
+      inventory: { sessions: [{ session_id: 'session-live', title: 'Live campaign' }] },
+      jobs: {
+        jobs: [{
+          id: 'job:foreground-turn',
+          module: 'rpg',
+          type: 'rpg.turn.foreground_record',
+          status: 'completed',
+          resource_class: 'cpu',
+          priority: 0,
+          stages: [],
+          input_ref: { session_id: 'session-live' },
+          input_payload: { command: 'Ask the innkeeper about rooms.' },
+          output_refs: [{ type: 'rpg_turn_response', content: 'The innkeeper lists two rooms and their prices.' }],
+          created_at: '2026-06-22T01:19:36Z',
+          updated_at: '2026-06-22T01:19:39Z',
+          completed_at: '2026-06-22T01:19:39Z',
+        }],
+      } as JobListResponse,
+      selectedSessionId: 'session-live',
+      selectedSession: {
+        manifest: { session_id: 'session-live', title: 'Live campaign' },
+        state: { player: { name: 'Alyndra' } },
+      },
+    });
+
+    expect(state.storyMessages.map((message) => message.text)).toEqual([
+      'Ask the innkeeper about rooms.',
+      'The innkeeper lists two rooms and their prices.',
+    ]);
+  });
+
+  it('retains twelve persisted interactions instead of replacing intermediate turns', () => {
+    const interactions = Array.from({ length: 12 }, (_, index) => ({
+      interaction_id: `interaction:${index + 1}`,
+      kind: 'npc_dialogue',
+      player_input: `Player turn ${index + 1}`,
+      speaker: 'Innkeeper',
+      visible_response: {
+        narration: '',
+        messages: [{ kind: 'npc_dialogue', speaker: 'Innkeeper', text: `Reply ${index + 1}` }],
+      },
+    }));
+    const state = createRpgWorkspaceState({
+      inventory: { sessions: [{ session_id: 'session-live', title: 'Live campaign' }] },
+      jobs: { jobs: [] },
+      selectedSessionId: 'session-live',
+      selectedSession: {
+        manifest: { session_id: 'session-live', title: 'Live campaign' },
+        state: { player: { name: 'Alyndra' } },
+        runtime_state: { recent_interactions: interactions },
+      },
+    });
+
+    expect(state.storyMessages.filter((message) => message.tone === 'player')).toHaveLength(12);
+    expect(state.storyMessages.map((message) => message.text)).toContain('Player turn 2');
+    expect(state.storyMessages.map((message) => message.text)).toContain('Reply 11');
   });
 
   it('does not leak the previous campaign conversation while a new selection loads', () => {

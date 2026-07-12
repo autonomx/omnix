@@ -94,6 +94,7 @@ def _compact_timing(sources: tuple[dict[str, Any], ...]) -> dict[str, Any]:
     allowed = {
         "manual_turn_ms",
         "pre_runtime_intent_llm_ms",
+        "compact_dialogue_llm_ms",
         "deterministic_runtime_apply_ms",
         "grounding_validation_ms",
         "repair_ms",

@@ -42,7 +42,7 @@ describe('RpgWorkspace campaign handoff', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/replay/persistence/inventory') {
+      if (path === '/api/rpg/sessions') {
         return Response.json({
           sessions: [
             {
@@ -139,7 +139,7 @@ describe('RpgWorkspace campaign handoff', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/replay/persistence/inventory') {
+      if (path === '/api/rpg/sessions') {
         inventoryReads += 1;
         return Response.json({
           sessions: inventoryReads > 1

@@ -5,8 +5,6 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
-from app.rpg.presentation.visible_response import build_visible_response
-
 INTERACTION_TIMELINE_VERSION = "rpg_interaction_timeline_v1"
 MAX_RECENT_INTERACTIONS = 50
 
@@ -43,6 +41,10 @@ def commit_turn_interaction(
         _safe_int(timeline.get("state_revision")),
     ) + 1
     interaction_id = f"interaction:{sequence}"
+    # Import lazily so gateway startup can install the interaction hook while
+    # app.rpg.presentation is still completing its package initialization.
+    from app.rpg.presentation.visible_response import build_visible_response
+
     visible = build_visible_response(result, player_input)
     sources = _result_sources(result)
     turn_id = _first_text(sources, "turn_id")

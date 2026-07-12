@@ -27,6 +27,8 @@ from app.rpg.session.ambient_intent import (
     is_ambient_wait_or_listen_intent,
     is_room_context_ambient_not_lodging,
 )
+from app.rpg.session.semantic_interaction import semantic_interaction_from_action
+from app.rpg.session.pending_interactions import select_pending_service_offer
 from app.rpg.world.location_registry import (
     current_location_id,
     has_explicit_location,
@@ -232,6 +234,17 @@ def _offer_matches_purchase_text(offer: Dict[str, Any], text_l: str) -> bool:
     return bool(description and description in text_l)
 
 
+def _catalog_service_kind_from_text(provider_id: str, text_l: str) -> str:
+    """Infer a service family from registered offer identity, never from price prose."""
+    matching_kinds = {
+        _safe_str(offer.get("service_kind"))
+        for offer in get_provider_offers(provider_id)
+        if _offer_matches_purchase_text(_safe_dict(offer), text_l)
+    }
+    matching_kinds.discard("")
+    return next(iter(matching_kinds)) if len(matching_kinds) == 1 else ""
+
+
 def _offer_location_allowed(offer: Dict[str, Any], simulation_state: Dict[str, Any]) -> bool:
     # Skip location filtering when no explicit location is set in the simulation state.
     if not has_explicit_location(simulation_state):
@@ -281,14 +294,33 @@ def resolve_service_intent(
     text = _safe_str(player_input)
     text_l = text.lower()
     action = _safe_dict(action)
+    semantic = semantic_interaction_from_action(action)
 
-    service_kind = _detect_service_kind(text_l)
+    service_kind = _safe_str(
+        semantic.get("service_kind")
+        or action.get("service_kind")
+        or _safe_dict(action.get("metadata")).get("service_kind")
+    ) or _detect_service_kind(text_l)
     runtime_state = _safe_dict(runtime_state)
     prior_contract = _safe_dict(runtime_state.get("last_turn_contract"))
     prior_service = _safe_dict(prior_contract.get("service_result"))
     if not prior_service:
         prior_resolved = _safe_dict(prior_contract.get("resolved_result") or prior_contract.get("resolved_action"))
         prior_service = _safe_dict(prior_resolved.get("service_result"))
+
+    structured_provider_id = _safe_str(
+        semantic.get("actor_ref")
+        or action.get("provider_id")
+        or action.get("target_id")
+    )
+    provider = get_service_provider(structured_provider_id) if structured_provider_id else None
+    if not provider:
+        provider = find_provider_by_text(text_l)
+    if not service_kind and provider:
+        service_kind = _catalog_service_kind_from_text(
+            _safe_str(provider.get("provider_id")),
+            text_l,
+        )
     if not service_kind and _detect_kind(text_l) == "service_purchase" and prior_service.get("matched"):
         service_kind = _safe_str(prior_service.get("service_kind"))
     if not service_kind:
@@ -302,7 +334,16 @@ def resolve_service_intent(
             "source": "deterministic_service_resolver",
         }
 
-    provider = find_provider_by_text(text_l)
+    if not provider and service_kind:
+        for active in reversed(_safe_list(_safe_dict(simulation_state).get("active_services"))):
+            active = _safe_dict(active)
+            if active.get("status") != "active" or _safe_str(active.get("service_kind")) != service_kind:
+                continue
+            provider = get_service_provider(_safe_str(active.get("provider_id")))
+            if provider:
+                break
+    if not provider:
+        provider = find_provider_by_text(text_l)
     if not provider and prior_service.get("provider_id"):
         provider = get_service_provider(_safe_str(prior_service.get("provider_id")))
     if not provider:
@@ -318,7 +359,26 @@ def resolve_service_intent(
 
     provider_id = _safe_str(provider.get("provider_id"))
     provider_name = _safe_str(provider.get("provider_name") or provider_id)
-    kind = _detect_kind(text_l)
+    structured_kind = _safe_str(semantic.get("intent") or action.get("action_type"))
+    if structured_kind in {"service_consumption", "duration_action", "rest"}:
+        kind = "service_consumption"
+    elif structured_kind in {"service_purchase", "buy", "purchase", "commerce_purchase"}:
+        kind = "service_purchase"
+    elif structured_kind in {"service_inquiry", "commerce_inquiry"}:
+        kind = "service_inquiry"
+    else:
+        kind = _detect_kind(text_l)
+    if kind == "service_inquiry" and service_kind == SERVICE_KIND_LODGING:
+        has_active_lodging = any(
+            _safe_dict(value).get("status") == "active"
+            and _safe_str(_safe_dict(value).get("service_kind")) == SERVICE_KIND_LODGING
+            for value in _safe_list(_safe_dict(simulation_state).get("active_services"))
+        )
+        if has_active_lodging and any(
+            term in text_l
+            for term in ("sleep", "rest", "until morning", "through the night", "overnight")
+        ):
+            kind = "service_consumption"
 
     return {
         "matched": True,
@@ -327,7 +387,8 @@ def resolve_service_intent(
         "provider_id": provider_id,
         "provider_name": provider_name,
         "location_id": _safe_str(provider.get("location_id")),
-        "confidence": 0.95,
+        "confidence": semantic.get("confidence") or 0.95,
+        "semantic_interaction": semantic,
         "source": "deterministic_service_resolver",
     }
 
@@ -441,11 +502,42 @@ def resolve_service_turn(
         "source": "deterministic_service_resolver",
     }
 
+    if kind == "service_consumption":
+        result["status"] = "active_service_ready"
+        result["available_actions"] = []
+        return result
+
     if kind == "service_purchase":
         text_l = _safe_str(player_input).lower()
         selected = {}
+        action = _safe_dict(action)
+        semantic = semantic_interaction_from_action(action)
+        structured_offer_id = _safe_str(
+            semantic.get("offer_ref")
+            or action.get("offer_id")
+            or action.get("selected_offer_id")
+            or _safe_dict(action.get("metadata")).get("offer_id")
+        )
+        if structured_offer_id:
+            selected = next(
+                (
+                    _safe_dict(offer)
+                    for offer in offers
+                    if _safe_str(_safe_dict(offer).get("offer_id")) == structured_offer_id
+                ),
+                {},
+            )
+        if not selected:
+            selected = select_pending_service_offer(
+                simulation_state,
+                provider_id=provider_id,
+                service_kind=service_kind,
+                player_input=player_input,
+                structured_offer_id=structured_offer_id,
+                tick=int(_safe_dict(runtime_state).get("tick") or simulation_state.get("tick") or 0),
+            )
         for offer in offers:
-            if _offer_matches_purchase_text(_safe_dict(offer), text_l):
+            if not selected and _offer_matches_purchase_text(_safe_dict(offer), text_l):
                 selected = _safe_dict(offer)
                 break
         if not selected:

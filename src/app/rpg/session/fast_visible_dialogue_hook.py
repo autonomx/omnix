@@ -108,7 +108,7 @@ def _try_fast_visible_dialogue(
 ) -> dict[str, Any]:
     start = perf_counter()
     perf = _d(performance_override)
-    if perf.get("fast_visible_dialogue") is False:
+    if perf.get("fast_visible_dialogue") is not True:
         return {}
 
     text = _s(player_input).strip()

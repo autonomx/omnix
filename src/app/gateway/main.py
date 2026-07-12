@@ -108,6 +108,7 @@ from app.replay import (
 )
 
 from .story_asset_save import SaveStoryAssetRequest, SavedStoryAssetResponse, save_story_asset
+from . import _install_required_rpg_turn_hooks
 from .workers import (
     GATEWAY_FORMAT_VERSION,
     WorkerHealthPayload,
@@ -270,6 +271,7 @@ def create_gateway_app(
     replay_adapter_factory: Callable[[], RpgReplayPersistenceAdapter] | None = None,
     model_residency_store_factory: Callable[[], SQLiteModelResidencyStore] | None = None,
 ) -> FastAPI:
+    _install_required_rpg_turn_hooks()
     get_job_store = job_store_factory or default_job_store
     get_provider_facade = provider_facade_factory or default_provider_facade
     get_asset_store = asset_store_factory or default_asset_store

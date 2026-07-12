@@ -93,6 +93,7 @@ class AppLLMGateway:
         *,
         context: Optional[Dict[str, Any]] = None,
         timeout_s: Optional[float] = None,
+        provider_options: Optional[Dict[str, Any]] = None,
     ) -> str:
         # NOTE: timeout_s is accepted for forward-compatible API shape but is
         # intentionally not wired to the underlying provider yet.  Callers may
@@ -115,7 +116,11 @@ class AppLLMGateway:
         messages = self._build_messages(prompt, context=context)
         logger.debug("[RPG GATEWAY] Built messages for chat_completion", extra={"message_count": len(messages)})
         try:
-            response = self.provider.chat_completion(messages=messages, stream=False)
+            response = self.provider.chat_completion(
+                messages=messages,
+                stream=False,
+                **dict(provider_options or {}),
+            )
             logger.info(
                 "[RPG GATEWAY] generate_end dt=%.3fs response_type=%s",
                 time.monotonic() - t0,
@@ -206,6 +211,29 @@ class AppLLMGateway:
             return json.loads(text)
         except Exception:
             return {}
+
+    def complete_semantic_packet(
+        self,
+        prompt: str,
+        *,
+        response_schema: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        response = self.generate(
+            prompt,
+            provider_options={
+                "temperature": 0.3,
+                "chat_template_kwargs": {"enable_thinking": False},
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "rpg_semantic_packet",
+                        "strict": True,
+                        "schema": response_schema,
+                    },
+                },
+            },
+        )
+        return {"text": str(response or ""), "raw": response}
 
     def call(
         self,

@@ -229,7 +229,7 @@ export function mergeRpgTurnUiMessages(
     seenIds.add(entry.id);
     merged.push(entry);
   }
-  return merged.slice(-10);
+  return merged.slice(-40);
 }
 
 export function useRpgTurnUiMessages(
@@ -247,7 +247,6 @@ export function storyMessageIdentity(message: RpgStoryMessagePreview, index: num
 
 export function refreshPathsForChangedDomains(sessionId: string, changedDomains: string[]): string[] {
   const domains = new Set(changedDomains);
-  if (domains.size === 1 && domains.has('conversation')) return [];
   const paths = new Set<string>([`/api/rpg/sessions/${encodeURIComponent(sessionId)}`]);
   if ([...domains].some((domain) => ['inventory', 'currency', 'merchant', 'player'].includes(domain))) {
     paths.add('/api/replay/inventory');

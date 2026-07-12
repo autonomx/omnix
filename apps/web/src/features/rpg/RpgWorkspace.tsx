@@ -139,26 +139,50 @@ function inferSubmittedResponseSpeaker(response: string): string {
   return match?.[1]?.trim() || 'Omnix';
 }
 
+function isRpgTurnJobType(type: string): boolean {
+  return type === 'rpg.turn' || type === 'rpg.turn.foreground_record';
+}
+
+function submittedTurnInteractionId(job: JobRecord): string | undefined {
+  for (const output of job.output_refs ?? []) {
+    const record = recordValue(output);
+    const turnResponse = recordValue(record.turn_response);
+    const interactionId = firstString(turnResponse.interaction_id, record.interaction_id);
+    if (interactionId) return interactionId;
+  }
+  return undefined;
+}
+
 function buildSubmittedTurnStoryMessages(
   job: JobRecord | undefined,
   heroName: string,
   heroAvatar: string,
   selectedSessionId: string | null,
 ): RpgStoryMessagePreview[] {
-  if (!job || job.type !== 'rpg.turn') return [];
+  if (!job || !isRpgTurnJobType(job.type)) return [];
   const jobSessionId = submittedTurnSessionId(job);
   if (selectedSessionId && jobSessionId && jobSessionId !== selectedSessionId) return [];
 
   const messages: RpgStoryMessagePreview[] = [];
+  const interactionId = submittedTurnInteractionId(job);
   const command = submittedTurnCommand(job);
   if (command) {
-    messages.push({ avatar: heroAvatar, speaker: `${heroName} (You)`, text: command, tone: 'player' });
+    messages.push({
+      id: interactionId ? `${interactionId}:player` : undefined,
+      interactionId,
+      avatar: heroAvatar,
+      speaker: `${heroName} (You)`,
+      text: command,
+      tone: 'player',
+    });
   }
 
   const response = submittedTurnResponseContent(job);
   if (response) {
     const speaker = inferSubmittedResponseSpeaker(response);
     messages.push({
+      id: interactionId ? `${interactionId}:submitted-response` : undefined,
+      interactionId,
       avatar: speaker === 'Omnix' ? 'O' : speaker.charAt(0).toUpperCase(),
       speaker: speaker === 'Omnix' ? 'Omnix (Narrator)' : speaker,
       text: response,
@@ -178,7 +202,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [hermesAssistMode, setHermesAssistMode] = useState('review_each_step');
   const inventoryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'replay-inventory'],
-    queryFn: () => omnixApiClient.getReplayPersistenceInventory(),
+    queryFn: () => omnixApiClient.listRpgSessionSummaries(),
   });
   const jobsQuery = useQuery({
     queryKey: ['platform', 'jobs'],
@@ -339,7 +363,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const latestCompletedTurnJob = rpgJobs
     .filter((job) => {
       const sessionId = typeof job.input_ref?.session_id === 'string' ? job.input_ref.session_id : null;
-      return job.type === 'rpg.turn' && job.status === 'completed' && sessionId === selectedLiveSessionId;
+      return isRpgTurnJobType(job.type) && job.status === 'completed' && sessionId === selectedLiveSessionId;
     })
     .sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0];
   const latestCompletedTurnJobId = latestCompletedTurnJob?.id;
@@ -528,7 +552,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const submittedTurnJobFromQuery = submittedTurnJobQuery.data;
   useEffect(() => {
     if (
-      submittedTurnJobFromQuery?.type !== 'rpg.turn'
+      !submittedTurnJobFromQuery || !isRpgTurnJobType(submittedTurnJobFromQuery.type)
       || submittedTurnJobFromQuery.status !== 'completed'
       || refreshedTurnJobRef.current === submittedTurnJobFromQuery.id
     ) {
@@ -659,7 +683,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         const sessionId = typeof job.input_ref?.session_id === 'string' ? job.input_ref.session_id : '';
         const command = typeof job.input_payload?.command === 'string' ? job.input_payload.command.trim() : '';
         const createdAt = timestampMs(job.created_at);
-        return job.type === 'rpg.turn'
+        return isRpgTurnJobType(job.type)
           && sessionId === pending.sessionId
           && command === pending.command
           && (!createdAt || (createdAt >= recoveryStart && createdAt <= recoveryEnd));
@@ -718,10 +742,13 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     selectedLiveSessionId,
   );
   const missingSubmittedTurnMessages = submittedTurnStoryMessages.filter(
-    (submitted) => !storyMessages.some((message) => submitted.text === message.text),
+    (submitted) => !storyMessages.some((message) => (
+      (submitted.interactionId && submitted.interactionId === message.interactionId)
+      || submitted.text === message.text
+    )),
   );
   const visibleStoryMessages = missingSubmittedTurnMessages.length
-    ? [...storyMessages, ...missingSubmittedTurnMessages].slice(-10)
+    ? [...storyMessages, ...missingSubmittedTurnMessages].slice(-40)
     : storyMessages;
 
   return (

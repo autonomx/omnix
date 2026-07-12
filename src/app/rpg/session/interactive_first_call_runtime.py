@@ -6,9 +6,14 @@ from time import perf_counter
 from typing import Any, Dict, List
 
 from app.rpg.ai.action_intelligence import get_action_advisory  # noqa: F401
+from app.rpg.ai.compact_dialogue import (
+    build_compact_dialogue_advisory,
+)
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
+from app.rpg.session.public_state_bridge import hydrate_simulation_player
+from app.rpg.session.semantic_interaction import attach_semantic_interaction
 from app.rpg.session import runtime as canonical_runtime
 
 _FAST_DIRECT_SOURCE = "ce212_fast_direct_runtime_budget_v1"
@@ -192,7 +197,7 @@ def _stateful_runtime_performance_override(
 ) -> Dict[str, Any]:
     merged = _disable_duplicate_runtime_first_call(performance_override)
     merged["narration_mode"] = narration_mode
-    if narration_mode in {"deterministic", "disabled"}:
+    if narration_mode in {"deferred", "deterministic", "disabled"}:
         merged["enable_live_narration_llm"] = False
     return merged
 
@@ -747,6 +752,7 @@ def apply_turn(
         timing["manual_turn_ms"] = _ms_since(manual_start)
         return {"ok": False, "error": "session_not_found", "manual_turn_stage_timing": timing}
 
+    session = hydrate_simulation_player(session)
     simulation_state = _d(session.get("simulation_state"))
     runtime_state = _d(session.get("runtime_state"))
     candidate_action = _d(action)
@@ -808,13 +814,22 @@ def apply_turn(
     llm_start = perf_counter()
     try:
         gateway = build_app_llm_gateway()
-        semantic_advisory = get_semantic_action_advisory(
+        semantic_advisory = build_compact_dialogue_advisory(
             llm_gateway=gateway,
             player_input=_s(player_input),
             simulation_state=simulation_state,
             runtime_state=runtime_state,
             candidate_action=candidate_action,
+            public_state=_d(session.get("state")),
         )
+        if not semantic_advisory and not service_matched:
+            semantic_advisory = get_semantic_action_advisory(
+            llm_gateway=gateway,
+            player_input=_s(player_input),
+            simulation_state=simulation_state,
+            runtime_state=runtime_state,
+            candidate_action=candidate_action,
+            )
     except Exception as exc:
         runtime_state["first_call_grounding_error"] = f"{type(exc).__name__}: {exc}"
     timing["pre_runtime_intent_llm_ms"] = _ms_since(llm_start)
@@ -872,6 +887,18 @@ def apply_turn(
     first_call_action = _stateful_action_from_first_call(action_advisory, semantic_advisory)
     if not first_call_action:
         first_call_action = candidate_action
+    if service_matched:
+        first_call_action = canonical_runtime.service_action_from_result(
+            _s(player_input),
+            first_call_action,
+            service_match,
+        )
+    elif semantic_advisory:
+        first_call_action = attach_semantic_interaction(
+            first_call_action,
+            semantic_advisory,
+            player_input=_s(player_input),
+        )
 
     narration_mode = _narration_mode(performance_override, runtime_state)
     prepare_start = perf_counter()

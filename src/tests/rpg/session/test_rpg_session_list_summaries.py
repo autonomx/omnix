@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 from app.gateway.rpg_session_routes import _attach_environment_snapshot_to_session
 from app.rpg.session import list_summaries
@@ -53,6 +54,20 @@ def test_list_session_summaries_omit_large_payloads(tmp_path, monkeypatch):
     assert "huge" not in json.dumps(summary)
 
 
+def test_list_session_summaries_limit_returns_newest_files_first(tmp_path, monkeypatch):
+    monkeypatch.setattr(list_summaries, "ensure_session_dir", lambda: tmp_path)
+    older = tmp_path / "older.json"
+    newer = tmp_path / "newer.json"
+    _write_session(older, {"manifest": {"id": "older", "session_id": "older"}})
+    _write_session(newer, {"manifest": {"id": "newer", "session_id": "newer"}})
+    os.utime(older, (1, 1))
+    os.utime(newer, (2, 2))
+
+    [summary] = list_summaries.list_session_summaries_from_disk(limit=1)
+
+    assert summary["manifest"]["id"] == "newer"
+
+
 def test_service_summary_list_does_not_full_normalize(monkeypatch):
     summary = {
         "manifest": {"id": "session:row", "session_id": "session:row"},
@@ -64,7 +79,7 @@ def test_service_summary_list_does_not_full_normalize(monkeypatch):
     def fail_full_normalize(_session):
         raise AssertionError("full normalization should not run for list rows")
 
-    monkeypatch.setattr(service, "list_session_summaries_from_disk", lambda: [summary])
+    monkeypatch.setattr(service, "list_session_summaries_from_disk", lambda **_kwargs: [summary])
     monkeypatch.setattr(service, "create_or_normalize_session", fail_full_normalize)
 
     [row] = service.list_session_summaries()

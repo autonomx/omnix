@@ -1,5 +1,6 @@
 """Comprehensive tests for provider implementations."""
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -256,6 +257,29 @@ class TestLMStudioProviderFull:
         assert response.model == "test-model"
         assert response.usage == {"prompt_tokens": 10, "completion_tokens": 20}
         mock_requests.request.assert_called_once()
+
+    @patch('app.providers.lmstudio_provider.requests')
+    def test_chat_completion_forwards_structured_output_options(self, mock_requests):
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}],
+            "model": "test-model",
+        }
+        mock_requests.request.return_value = mock_response
+        provider = LMStudioProvider(
+            ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234", model="test-model")
+        )
+        response_format = {"type": "json_schema", "json_schema": {"name": "test", "schema": {"type": "object"}}}
+
+        provider.chat_completion(
+            [ChatMessage(role="user", content="Hi")],
+            response_format=response_format,
+            chat_template_kwargs={"enable_thinking": False},
+        )
+
+        payload = mock_requests.request.call_args.kwargs["json"]
+        assert payload["response_format"] == response_format
+        assert payload["chat_template_kwargs"] == {"enable_thinking": False}
     
     @patch('app.providers.lmstudio_provider.requests')
     def test_chat_completion_with_streaming(self, mock_requests):
@@ -404,7 +428,15 @@ class TestLMStudioProviderFull:
         """Test default base URL."""
         config = ProviderConfig(provider_type="lmstudio")
         provider = LMStudioProvider(config)
-        assert provider.config.base_url == "http://localhost:1234"
+        assert provider.config.base_url == "http://127.0.0.1:1234"
+
+    def test_lmstudio_nonlocal_url_is_preserved(self):
+        config = ProviderConfig(
+            provider_type="lmstudio",
+            base_url="http://studio-host.local:1234",
+        )
+        provider = LMStudioProvider(config)
+        assert provider.config.base_url == "http://studio-host.local:1234"
 
 
 class TestOpenRouterProviderFull:
@@ -898,7 +930,7 @@ class TestProviderConfiguration:
         """Test LMStudio default URL is correct."""
         config = ProviderConfig(provider_type="lmstudio")
         provider = LMStudioProvider(config)
-        assert provider.config.base_url == "http://localhost:1234"
+        assert provider.config.base_url == "http://127.0.0.1:1234"
     
     def test_openrouter_default_url(self):
         """Test OpenRouter default URL is correct."""
@@ -922,7 +954,7 @@ class TestProviderConfiguration:
         """Test that trailing slashes are stripped from URLs."""
         config = ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234/")
         provider = LMStudioProvider(config)
-        assert provider.config.base_url == "http://localhost:1234"
+        assert provider.config.base_url == "http://127.0.0.1:1234"
 
 
 class TestCapabilities:

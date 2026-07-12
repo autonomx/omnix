@@ -6,8 +6,8 @@ from typing import Any, Dict, List
 from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
 
-_ALLOWED_ACTION_TYPES = {"attack_unarmed", "attack_melee", "attack_ranged", "block", "dodge", "parry", "persuade", "intimidate", "deceive", "sneak", "investigate", "hack", "cast_spell", "use_item", "pickup_item", "drop_item", "equip_item", "unequip_item", "observe", "social_activity", "social_competition", "social_affection", "social_performance", "trade", "ritual", "exploration", "threat"}
-_ALLOWED_SEMANTIC_FAMILIES = {"combat", "defense", "social", "trade", "ritual", "exploration", "stealth", "magic", "technical", "item", "threat", "observation"}
+_ALLOWED_ACTION_TYPES = {"attack_unarmed", "attack_melee", "attack_ranged", "block", "dodge", "parry", "persuade", "intimidate", "deceive", "sneak", "investigate", "hack", "cast_spell", "use_item", "pickup_item", "drop_item", "equip_item", "unequip_item", "observe", "social_activity", "social_competition", "social_affection", "social_performance", "trade", "ritual", "exploration", "threat", "service_inquiry", "service_purchase", "service_consumption", "duration_action"}
+_ALLOWED_SEMANTIC_FAMILIES = {"combat", "defense", "social", "trade", "commerce", "ritual", "exploration", "stealth", "magic", "technical", "item", "threat", "observation"}
 _ALLOWED_INTERACTION_MODES = {"solo", "direct", "group", "public"}
 _ALLOWED_VISIBILITY = {"private", "local", "public"}
 _ALLOWED_INTENSITY = {0, 1, 2, 3}
@@ -43,6 +43,24 @@ _ALLOWED_RISK_DOMAINS = {
     "unknown",
 }
 _SEMANTIC_FAST_PATH_SOURCE = "phase14_18_semantic_reused_action_fast_path_v1"
+_SEMANTIC_PACKET_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "action_intent": {"type": "object"},
+        "semantic_advisory": {"type": "object"},
+        "dialogue_gate": {"type": "object"},
+        "final_narration_candidate": {"type": "object"},
+        "reason": {"type": "string"},
+    },
+    "required": [
+        "action_intent",
+        "semantic_advisory",
+        "dialogue_gate",
+        "final_narration_candidate",
+        "reason",
+    ],
+    "additionalProperties": False,
+}
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -69,6 +87,13 @@ def _safe_bool(v: Any, default: bool = False) -> bool:
     if v is None:
         return default
     return bool(v)
+
+
+def _safe_confidence(value: Any, default: float = 0.5) -> float:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return default
 
 
 def _clip_text(text: Any, limit: int = 120) -> str:
@@ -112,6 +137,8 @@ def _semantic_family_for_action(action_type: str) -> str:
         return "social"
     if action_type == "trade":
         return "trade"
+    if action_type in {"service_inquiry", "service_purchase", "service_consumption", "duration_action"}:
+        return "commerce"
     if action_type == "ritual":
         return "ritual"
     if action_type in {"exploration", "investigate"}:
@@ -205,6 +232,16 @@ def _attach_first_call_diagnostics(
 
 
 def _complete_raw_text(llm_gateway: Any, prompt: str) -> tuple[Any, str, str]:
+    if hasattr(llm_gateway, "complete_semantic_packet"):
+        result = llm_gateway.complete_semantic_packet(
+            prompt,
+            response_schema=_SEMANTIC_PACKET_SCHEMA,
+        )
+        if isinstance(result, dict):
+            raw_text = _safe_str(result.get("text") or result.get("content") or "")
+        else:
+            raw_text = _safe_str(result)
+        return result, raw_text, "semantic_action_intelligence.complete_semantic_packet"
     if hasattr(llm_gateway, "complete"):
         result = llm_gateway.complete(prompt)
         if isinstance(result, dict):
@@ -254,7 +291,7 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
         "Use open-ended activity_label values, but only bounded enums for family/mode/visibility/observer hooks.\n"
         "Return this single foreground semantic packet. Compatibility fields are allowed, but these four keys are required:\n"
         "{\n"
-        '  "action_intent": {"action_type": string, "target_id": string, "target_name": string, "stateful": true, "needs_runtime_resolution": true},\n'
+        '  "action_intent": {"action_type": string, "target_id": string, "target_name": string, "service_kind": string, "offer_id": string, "confirmation": false, "duration_policy": string, "confidence": number, "ambiguities": [string], "stateful": true, "needs_runtime_resolution": true},\n'
         '  "semantic_advisory": {"semantic_family": string, "interaction_mode": string, "activity_label": string, "utterance_mode": string, "literal_action_requested": false, "state_mutation_requested": false, "risk_domain": string, "intent_summary": string, "evidence_spans": [string]},\n'
         '  "dialogue_gate": {"safe_to_display_now": false, "reason": string, "risk_flags": [string]},\n'
         '  "final_narration_candidate": {"narration": string, "npc": {"speaker": string, "line": string}},\n'
@@ -263,7 +300,9 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
         "Examples:\n"
         "- 'I challenge Bran to darts' => stateful true, action_type social_competition, semantic_family social, activity_label darts\n"
         "- 'I hug Elara' => stateful true, action_type social_affection, semantic_family social, activity_label hug\n"
-        "- 'I buy everyone a round' => stateful true, action_type trade or social_activity, semantic_family social, activity_label buying_drinks\n"
+        "- 'I buy everyone a round' => stateful true, action_type service_purchase, semantic_family commerce, service_kind drink\n"
+        "- 'That sounds good; I'll take it' after one grounded offer => stateful true, action_type service_purchase, confirmation true; include offer_id only when context uniquely identifies it\n"
+        "- 'I sleep until morning using the room I rented' => stateful true, action_type service_consumption, semantic_family commerce, service_kind lodging, duration_policy until_next_morning\n"
         "- 'Bran, what do you think about sword combat styles?' => stateful false, action_type social_activity, semantic_family social, visible_response as Bran\n"
     )
     return instructions + "\nINPUT:\n" + json.dumps(payload, sort_keys=True)
@@ -383,6 +422,21 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
         action_intent.get("needs_runtime_resolution", advisory.get("needs_runtime_resolution")),
         stateful,
     )
+    if (
+        not stateful
+        and normalized_direct_gate.get("safe_to_display_now") is True
+        and bool(normalized_visible_response)
+        and risk_domain == "none"
+        and not _safe_bool(
+            semantic_packet.get("literal_action_requested", advisory.get("literal_action_requested")),
+            False,
+        )
+        and not _safe_bool(
+            semantic_packet.get("state_mutation_requested", advisory.get("state_mutation_requested")),
+            False,
+        )
+    ):
+        needs_runtime_resolution = False
     if not direct_gate and normalized_visible_response and not stateful and not needs_runtime_resolution:
         normalized_direct_gate = {
             "safe_to_display_now": True,
@@ -408,6 +462,36 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
             or candidate_action.get("target_name"),
             80,
         ),
+        "service_kind": _clip_text(
+            action_intent.get("service_kind")
+            or semantic_packet.get("service_kind")
+            or advisory.get("service_kind")
+            or candidate_action.get("service_kind"),
+            48,
+        ).lower().replace(" ", "_"),
+        "offer_id": _clip_text(
+            action_intent.get("offer_id")
+            or semantic_packet.get("offer_id")
+            or advisory.get("offer_id")
+            or candidate_action.get("offer_id"),
+            120,
+        ),
+        "confirmation": _safe_bool(
+            action_intent.get("confirmation", semantic_packet.get("confirmation", advisory.get("confirmation"))),
+            False,
+        ),
+        "duration_policy": _clip_text(
+            action_intent.get("duration_policy")
+            or semantic_packet.get("duration_policy")
+            or advisory.get("duration_policy"),
+            64,
+        ).lower().replace(" ", "_"),
+        "confidence": _safe_confidence(action_intent.get("confidence", advisory.get("confidence", 0.5))),
+        "ambiguities": [
+            _clip_text(value, 120)
+            for value in _safe_list(action_intent.get("ambiguities") or advisory.get("ambiguities"))[:6]
+            if _clip_text(value, 120)
+        ],
         "secondary_actor_ids": secondary_actor_ids,
         "visibility": visibility,
         "intensity": intensity,
@@ -447,6 +531,36 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
                 or candidate_action.get("target_name"),
                 80,
             ),
+            "service_kind": _clip_text(
+                action_intent.get("service_kind")
+                or semantic_packet.get("service_kind")
+                or advisory.get("service_kind")
+                or candidate_action.get("service_kind"),
+                48,
+            ).lower().replace(" ", "_"),
+            "offer_id": _clip_text(
+                action_intent.get("offer_id")
+                or semantic_packet.get("offer_id")
+                or advisory.get("offer_id")
+                or candidate_action.get("offer_id"),
+                120,
+            ),
+            "confirmation": _safe_bool(
+                action_intent.get("confirmation", semantic_packet.get("confirmation", advisory.get("confirmation"))),
+                False,
+            ),
+            "duration_policy": _clip_text(
+                action_intent.get("duration_policy")
+                or semantic_packet.get("duration_policy")
+                or advisory.get("duration_policy"),
+                64,
+            ).lower().replace(" ", "_"),
+            "confidence": _safe_confidence(action_intent.get("confidence", advisory.get("confidence", 0.5))),
+            "ambiguities": [
+                _clip_text(value, 120)
+                for value in _safe_list(action_intent.get("ambiguities") or advisory.get("ambiguities"))[:6]
+                if _clip_text(value, 120)
+            ],
             "stateful": stateful,
             "needs_runtime_resolution": needs_runtime_resolution,
         },

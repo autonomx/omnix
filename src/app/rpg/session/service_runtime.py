@@ -12,6 +12,15 @@ from app.rpg.session.state_normalization import (
     _safe_list,
     _safe_str,
 )
+from app.rpg.session.pending_interactions import (
+    close_pending_service_offer,
+    record_service_offer,
+)
+from app.rpg.session.duration_actions import apply_duration_action
+from app.rpg.session.quest_evidence import (
+    apply_quest_evidence,
+    clue_for_service_interaction,
+)
 
 
 def service_action_from_result(
@@ -128,7 +137,6 @@ def service_authoritative_result(
         "memory_entry": {},
         "social_effects": {},
         "stock_update": {},
-        "rumor_added": {},
         "journal_entry": {},
         "service_world_event": {},
         "rumor_world_event": {},
@@ -173,6 +181,56 @@ def service_authoritative_result(
             transaction_record["rumor_id"] = _safe_str(canonical_rumor.get("rumor_id"))
             purchase_application["transaction_record"] = transaction_record
 
+    pending_interaction = {}
+    if (
+        service_result.get("matched")
+        and _safe_str(service_result.get("kind")) == "service_inquiry"
+        and _safe_list(service_result.get("offers"))
+    ):
+        pending_interaction = record_service_offer(
+            simulation_state,
+            service_result,
+            tick=tick,
+        )
+    elif purchase_application.get("applied"):
+        pending_interaction = close_pending_service_offer(
+            simulation_state,
+            provider_id=_safe_str(service_result.get("provider_id")),
+            service_kind=_safe_str(service_result.get("service_kind")),
+            selected_offer_id=_safe_str(service_result.get("selected_offer_id")),
+            tick=tick,
+        )
+
+    player_input = _safe_str(_safe_dict(action.get("metadata")).get("player_input"))
+    duration_application = {}
+    semantic_interaction = _safe_dict(_safe_dict(action.get("metadata")).get("semantic_interaction"))
+    requested_duration_policy = _safe_str(semantic_interaction.get("duration_policy"))
+    duration_requested = bool(requested_duration_policy) or any(
+        term in player_input.casefold()
+        for term in ("sleep", "rest", "until morning", "through the night", "overnight")
+    )
+    if (
+        _safe_str(service_result.get("kind")) == "service_consumption"
+        or (purchase_application.get("applied") and duration_requested)
+    ):
+        duration_application = apply_duration_action(
+            simulation_state,
+            player_input=player_input,
+            service_kind=_safe_str(service_result.get("service_kind")),
+            tick=tick,
+            policy=requested_duration_policy,
+        )
+
+    quest_transition = {}
+    if (
+        service_result.get("matched")
+        and _safe_str(service_result.get("kind")) == "service_inquiry"
+        and _safe_str(service_result.get("service_kind")) == "paid_information"
+    ):
+        clue = clue_for_service_interaction(service_result, tick=tick)
+        if clue:
+            quest_transition = apply_quest_evidence(simulation_state, clue)
+
     blocked = bool(purchase_application.get("blocked"))
     blocked_reason = _safe_str(purchase_application.get("blocked_reason")) if blocked else ""
     applied = bool(purchase_application.get("applied"))
@@ -209,13 +267,18 @@ def service_authoritative_result(
             "memory_entry": purchase_application.get("memory_entry") or {},
             "social_effects": purchase_application.get("social_effects") or {},
             "stock_update": purchase_application.get("stock_update") or {},
-            "rumor_added": purchase_application.get("rumor_added") or {},
             "journal_entry": purchase_application.get("journal_entry") or {},
             "service_world_event": purchase_application.get("service_world_event") or {},
             "rumor_world_event": purchase_application.get("rumor_world_event") or {},
             "journal_state": purchase_application.get("journal_state") or {},
             "world_event_state": purchase_application.get("world_event_state") or {},
+            "pending_interaction": pending_interaction,
+            "duration_application": duration_application,
+            "quest_transition": quest_transition,
         },
+        "pending_interaction": pending_interaction,
+        "duration_application": duration_application,
+        "quest_transition": quest_transition,
         "transaction_record": purchase_application.get("transaction_record") or {},
         "memory_entry": purchase_application.get("memory_entry") or {},
         "social_effects": purchase_application.get("social_effects") or {},

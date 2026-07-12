@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.rpg.session.public_state_bridge import merge_authoritative_session_state
+
 # Generated split module for app.rpg.session.runtime.
 from .runtime_part01 import *
 from .runtime_part02 import *
@@ -507,6 +509,8 @@ def apply_turn(
     )
     if not authoritative_result.get("ok"):
         return authoritative_result
+
+    session = merge_authoritative_session_state(session, authoritative_result)
 
     _stage_started = __import__("time").perf_counter()
     final_result = build_apply_turn_response(authoritative_result)

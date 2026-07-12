@@ -59,7 +59,7 @@ function stubEmptyWorkspaceFetch() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = requestPath(input);
 
-    if (path === '/api/replay/persistence/inventory') {
+    if (path === '/api/rpg/sessions') {
       return Response.json(emptyWorkspaceResponses.inventory);
     }
 
@@ -94,7 +94,7 @@ describe('RpgWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);
 
-      if (path === '/api/replay/persistence/inventory') {
+      if (path === '/api/rpg/sessions') {
         return Response.json({
           sessions: [
             {
@@ -169,7 +169,7 @@ describe('RpgWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);
 
-      if (path === '/api/replay/persistence/inventory') {
+      if (path === '/api/rpg/sessions') {
         return Response.json({
           sessions: [
             {
@@ -216,7 +216,7 @@ describe('RpgWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/replay/persistence/inventory') {
+      if (path === '/api/rpg/sessions') {
         return Response.json(emptyWorkspaceResponses.inventory);
       }
 
@@ -281,7 +281,7 @@ describe('RpgWorkspace', () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/replay/persistence/inventory') {
+      if (path === '/api/rpg/sessions') {
         return Promise.resolve(Response.json(emptyWorkspaceResponses.inventory));
       }
 
@@ -354,7 +354,7 @@ describe('RpgWorkspace', () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/replay/persistence/inventory') {
+      if (path === '/api/rpg/sessions') {
         return Promise.resolve(Response.json(emptyWorkspaceResponses.inventory));
       }
 
@@ -434,7 +434,7 @@ describe('RpgWorkspace', () => {
     };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-      if (path === '/api/replay/persistence/inventory') return Response.json(emptyWorkspaceResponses.inventory);
+      if (path === '/api/rpg/sessions') return Response.json(emptyWorkspaceResponses.inventory);
       if (path === '/api/jobs' && init?.method === 'POST') return Response.json(pendingTurnJob);
       if (path === '/api/jobs') return Response.json({ jobs: [previousTurnJob] });
       if (path.startsWith('/api/jobs/job%3Arpg-new-pending')) return Response.json(pendingTurnJob);
@@ -479,7 +479,7 @@ describe('RpgWorkspace', () => {
     };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-      if (path === '/api/replay/persistence/inventory') return Response.json(emptyWorkspaceResponses.inventory);
+      if (path === '/api/rpg/sessions') return Response.json(emptyWorkspaceResponses.inventory);
       if (path === '/api/jobs' && init?.method === 'POST') {
         turnQueued = true;
         return Response.json({ ...completedJob, status: 'queued', output_refs: [] });
@@ -525,7 +525,7 @@ describe('RpgWorkspace', () => {
     };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-      if (path === '/api/replay/persistence/inventory') return Response.json(emptyWorkspaceResponses.inventory);
+      if (path === '/api/rpg/sessions') return Response.json(emptyWorkspaceResponses.inventory);
       if (path === '/api/jobs' && init?.method === 'POST') {
         turnQueued = true;
         return Response.json({ ...completedJob, status: 'queued', output_refs: [] });
@@ -573,7 +573,7 @@ describe('RpgWorkspace', () => {
     };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-      if (path === '/api/replay/persistence/inventory') return Response.json(emptyWorkspaceResponses.inventory);
+      if (path === '/api/rpg/sessions') return Response.json(emptyWorkspaceResponses.inventory);
       if (path === '/api/jobs' && init?.method === 'POST') {
         turnQueued = true;
         return Response.json({ ...failedJob, status: 'queued', error: null, completed_at: null });
@@ -600,7 +600,7 @@ describe('RpgWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/replay/persistence/inventory') {
+      if (path === '/api/rpg/sessions') {
         return Response.json({
           sessions: [
             {
@@ -738,7 +738,7 @@ describe('RpgWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);
 
-      if (path === '/api/replay/persistence/inventory') {
+      if (path === '/api/rpg/sessions') {
         return Response.json({ sessions: [], diagnostics: [] });
       }
 

@@ -105,11 +105,18 @@ def _summary_from_path(path: Path) -> Dict[str, Any]:
     return session_list_summary(session, fallback_id=path.stem)
 
 
-def list_session_summaries_from_disk() -> List[Dict[str, Any]]:
+def list_session_summaries_from_disk(*, limit: int | None = None) -> List[Dict[str, Any]]:
     """Return bounded session summaries without normalizing full session payloads."""
 
     sessions: List[Dict[str, Any]] = []
-    for path in sorted(ensure_session_dir().glob("*.json")):
+    paths = sorted(
+        ensure_session_dir().glob("*.json"),
+        key=lambda path: path.stat().st_mtime_ns,
+        reverse=True,
+    )
+    if limit is not None:
+        paths = paths[: max(0, int(limit))]
+    for path in paths:
         try:
             sessions.append(_summary_from_path(path))
         except CorruptSessionPayloadError:

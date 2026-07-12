@@ -94,7 +94,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
             </article>
           </>
         ) : visibleStoryMessages.length ? (
-          visibleStoryMessages.slice(0, 10).map((message, index) => (
+          visibleStoryMessages.map((message, index) => (
             <article key={storyMessageIdentity(message, index)} data-interaction-id={message.interactionId}>
               <span className={`rpg-avatar rpg-avatar-small${message.tone === 'narrator' ? ' rpg-avatar-omnix' : ''}`}>
                 {message.avatar}

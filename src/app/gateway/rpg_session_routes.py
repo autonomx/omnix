@@ -5,7 +5,7 @@ import asyncio
 from functools import wraps
 from typing import Any, Callable
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import ValidationError
 
 from app.gateway.rpg_turn_pipeline import execute_foreground_rpg_turn
@@ -188,10 +188,10 @@ def register_rpg_session_routes(app: FastAPI) -> None:
         return _with_rpg_response_surface(_raise_for_error(start_rpg_preset(preset_id), not_found_errors={"unknown_rpg_preset"}))
 
     @app.get("/api/rpg/sessions", tags=["rpg-session"])
-    def rpg_sessions() -> dict[str, Any]:
+    def rpg_sessions(limit: int = Query(default=100, ge=1, le=500)) -> dict[str, Any]:
         sessions = [
             _attach_environment_snapshot_to_session(session)
-            for session in (list_session_summaries() or [])
+            for session in (list_session_summaries(limit=limit) or [])
         ]
         return {"ok": True, "sessions": sessions}
 
