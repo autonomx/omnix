@@ -1,7 +1,6 @@
 """Exactly-once guards for foreground RPG turns and durable job transitions."""
 from __future__ import annotations
 
-import re
 from functools import wraps
 from typing import Any, Callable
 
@@ -27,12 +26,11 @@ _TERMINAL_GUARDED_METHODS = (
 def install_rpg_turn_job_guard(sqlite_job_store_cls: Any) -> None:
     """Install idempotency and terminal-state guards without changing job APIs."""
 
-    if not getattr(sqlite_job_store_cls, "_omnix_rpg_turn_job_guard_installed", False):
-        _install_create_guard(sqlite_job_store_cls)
-        _install_terminal_guards(sqlite_job_store_cls)
-        sqlite_job_store_cls._omnix_rpg_turn_job_guard_installed = True
-
-    _patch_rpg_turn_visible_formatter()
+    if getattr(sqlite_job_store_cls, "_omnix_rpg_turn_job_guard_installed", False):
+        return
+    _install_create_guard(sqlite_job_store_cls)
+    _install_terminal_guards(sqlite_job_store_cls)
+    sqlite_job_store_cls._omnix_rpg_turn_job_guard_installed = True
 
 
 def _install_create_guard(sqlite_job_store_cls: Any) -> None:
@@ -103,50 +101,6 @@ def _find_duplicate_rpg_turn_job(job_store: Any, request: Any) -> JobRecord | No
         ):
             return job
     return None
-
-
-def _patch_rpg_turn_visible_formatter() -> None:
-    try:
-        from . import inline_feature_jobs
-    except Exception:
-        return
-
-    if getattr(inline_feature_jobs, "_omnix_rpg_turn_visible_formatter_guard_installed", False):
-        return
-    original = inline_feature_jobs._format_rpg_turn_first_call_visible_response
-
-    @wraps(original)
-    def guarded_formatter(*args: Any, **kwargs: Any) -> str | None:
-        text = original(*args, **kwargs)
-        return _collapse_duplicate_visible_paragraphs(text)
-
-    inline_feature_jobs._format_rpg_turn_first_call_visible_response = guarded_formatter
-    inline_feature_jobs._omnix_rpg_turn_visible_formatter_guard_installed = True
-
-
-def _collapse_duplicate_visible_paragraphs(text: str | None) -> str | None:
-    if not text:
-        return text
-    out: list[str] = []
-    seen: set[str] = set()
-    for part in str(text).split("\n\n"):
-        paragraph = part.strip()
-        if not paragraph:
-            continue
-        key = _visible_key(paragraph)
-        if key and key in seen:
-            continue
-        seen.add(key)
-        out.append(paragraph)
-    return "\n\n".join(out) or None
-
-
-def _visible_key(text: str) -> str:
-    normalized = _text(text).casefold().strip()
-    normalized = re.sub(r":\s*[\"“”'`]+", ": ", normalized)
-    normalized = re.sub(r"[\"“”'`]", "", normalized)
-    normalized = re.sub(r"[^a-z0-9:]+", " ", normalized)
-    return normalized.strip()
 
 
 def _dict_value(value: Any) -> dict[str, Any]:
