@@ -103,12 +103,13 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
         const response = await resolvedFetch(input, { ...init, headers });
         if (response.ok) {
           const payload = await safeJson(response.clone());
-          completeRpgTurnUiSubmission({ sessionId, submissionId, payload });
-          if (
-            payload.contract_version === 'rpg_turn_response_v2'
-            && refreshPathsForChangedDomains(sessionId, payload.state?.changed_domains || []).length === 0
-          ) {
-            conversationRefreshSuppression.set(sessionId, Date.now() + REFRESH_SUPPRESSION_MS);
+          if (payload.contract_version === 'rpg_turn_response_v2') {
+            completeRpgTurnUiSubmission({ sessionId, submissionId, payload });
+            if (refreshPathsForChangedDomains(sessionId, payload.state?.changed_domains || []).length === 0) {
+              conversationRefreshSuppression.set(sessionId, Date.now() + REFRESH_SUPPRESSION_MS);
+            }
+          } else {
+            discardRpgTurnUiSubmission(sessionId, submissionId);
           }
         } else if (response.status === 404) {
           discardRpgTurnUiSubmission(sessionId, submissionId);
