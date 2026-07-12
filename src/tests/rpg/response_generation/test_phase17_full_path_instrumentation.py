@@ -82,7 +82,7 @@ def test_response_headers_expose_trace_bytes_and_completed_attribution() -> None
 
     with rpg_pipeline_trace("turn.pipeline", trace_id="trace:headers") as trace:
         with rpg_pipeline_span("turn.response_send_prepare"):
-            time.sleep(0.01)
+            time.sleep(0.05)
             response = build_traced_json_response(payload)
         response = finalize_rpg_trace_headers(response, trace)
 
