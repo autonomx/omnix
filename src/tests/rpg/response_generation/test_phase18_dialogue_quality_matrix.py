@@ -11,6 +11,9 @@ from app.rpg.dialogue_quality_benchmark import (
     evaluate_dialogue_benchmark_case,
     run_dialogue_quality_benchmark,
 )
+from app.rpg.dialogue_quality_release_matrix import (
+    run_release_dialogue_quality_benchmark,
+)
 
 
 def test_dialogue_quality_matrix_covers_required_categories() -> None:
@@ -33,7 +36,7 @@ def test_dialogue_quality_matrix_covers_required_categories() -> None:
 
 
 def test_deterministic_dialogue_quality_matrix_meets_release_targets() -> None:
-    report = run_dialogue_quality_benchmark()
+    report = run_release_dialogue_quality_benchmark()
 
     assert report["ok"] is True, report
     assert report["scenario_count"] >= 12
