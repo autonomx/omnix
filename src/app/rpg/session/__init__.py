@@ -91,6 +91,7 @@ def _install_optional_fast_runtime_hooks() -> None:
         ("app.rpg.session.diegetic_fallback_hook.install_diegetic_fallback_hook", "install_diegetic_fallback_hook"),
         ("app.rpg.session.fast_visible_dialogue_hook.install_fast_visible_dialogue_hook", "install_fast_visible_dialogue_hook"),
         ("app.rpg.session.visible_response_runtime_hook.install_visible_response_runtime_guard", "install_visible_response_runtime_guard"),
+        ("app.rpg.debug_runtime_hook.install_rpg_runtime_debug_hook", "install_rpg_runtime_debug_hook"),
     ):
         _try_install_optional_hook(import_path, installer_name)
 
