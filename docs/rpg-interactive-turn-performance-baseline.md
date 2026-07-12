@@ -88,6 +88,17 @@ Upgrading an older database is conservative: any legacy nonterminal claim is mar
 
 A process failure after authoritative execution begins still requires operator recovery or a future transactionally coupled turn ledger. The system deliberately times out instead of guessing whether mechanics were already committed.
 
+## Runtime response-size enforcement
+
+The 50,000-byte ceiling is enforced in two places:
+
+1. `build_turn_response_v2` bounds the projected contract before returning it.
+2. `build_traced_json_response` checks the final payload again immediately before UTF-8 JSON encoding.
+
+The second guard covers fields added after initial projection, such as timing or diagnostics. Oversized payloads first lose duplicate and nonessential presentation data while preserving submission, interaction, turn, state, and visible-text identity. If that is still too large, the sender emits a compact fallback contract with bounded visible text. Byte counts use encoded UTF-8 size, so multibyte characters cannot bypass the limit.
+
+A compacted response includes bounded `response_budget` diagnostics with the original byte count, maximum byte count, and whether the fallback contract was needed. Ordinary responses are returned unchanged and do not receive this marker.
+
 ## Live-provider acceptance baseline
 
 Live LLM validation must not run in GitHub Actions. It requires an active configured provider and explicit local opt-in through `OMNIX_RPG_LIVE_SMOKE=1`.
@@ -113,6 +124,7 @@ A passing deterministic benchmark proves the following narrow claims:
 - one canonical compact response can be constructed;
 - the expected Bran dialogue is browser-visible;
 - job, interaction, simulation, response-size, and serialization evidence is captured;
-- an expired claim can be recovered only before authoritative execution starts.
+- an expired claim can be recovered only before authoritative execution starts;
+- every emitted V2 foreground response is bounded to 50,000 UTF-8 bytes.
 
 It does not prove real-provider latency, natural dialogue quality, GPU queue behavior, browser commit latency, or automatic recovery after an owner disappears during authoritative execution. Those remain separate implementation and local-operator acceptance items.
