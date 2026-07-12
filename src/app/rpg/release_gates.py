@@ -177,7 +177,10 @@ def evaluate_dialogue_quality_release_gates(report: dict[str, Any]) -> dict[str,
         if _float(metrics.get(key)) < minimum:
             failures.append(f"{key}_below_target")
     for key, maximum in _DIALOGUE_MAXIMUMS.items():
-        if _float(metrics.get(key)) > maximum:
+        value = _float(metrics.get(key))
+        if (key == "near_duplicate_rate" and value >= maximum) or (
+            key != "near_duplicate_rate" and value > maximum
+        ):
             failures.append(f"{key}_above_target")
     if int(report.get("accepted_case_count") or 0) < 30:
         failures.append("dialogue_matrix_too_small")
@@ -199,8 +202,8 @@ def evaluate_ui_timing_release_gates(snapshot: dict[str, Any]) -> dict[str, Any]
     client = snapshot.get("client") if isinstance(snapshot.get("client"), dict) else snapshot
     failures: list[str] = []
     interaction_id = str(snapshot.get("interactionId") or snapshot.get("interaction_id") or "").strip()
-    commit_to_visible = _optional_float(client.get("commitToVisibleMs") or client.get("commit_to_visible_ms"))
-    request_to_visible = _optional_float(client.get("requestToVisibleMs") or client.get("request_to_visible_ms"))
+    commit_to_visible = _optional_float(_first_present(client, "commitToVisibleMs", "commit_to_visible_ms"))
+    request_to_visible = _optional_float(_first_present(client, "requestToVisibleMs", "request_to_visible_ms"))
 
     if not interaction_id:
         failures.append("missing_ui_interaction_identity")
@@ -247,6 +250,13 @@ def evaluate_job_transition_release_gates(transitions: Iterable[str]) -> dict[st
 def assert_release_gate(report: dict[str, Any]) -> None:
     if report.get("ok") is not True:
         raise AssertionError(";".join(str(value) for value in report.get("failures") or ["release_gate_failed"]))
+
+
+def _first_present(value: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in value:
+            return value[key]
+    return None
 
 
 def _float(value: Any) -> float:
