@@ -5,6 +5,8 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Request
 
+from app.rpg.presentation.turn_response import build_turn_response_v2
+
 _ROUTE_SENTINEL = '_omnix_direct_turn_registered'
 _HOOK_SENTINEL = '_omnix_direct_turn_hook_installed'
 
@@ -30,17 +32,13 @@ def register_direct_turn_route(app: FastAPI) -> None:
             raise HTTPException(status_code=status_code, detail=result)
         result_session = result.get('session')
         session = save_session(result_session, compact=False) if isinstance(result_session, dict) else load_session(session_id)
-        text = _text(result, command)
-        return {
-            'ok': True,
-            'session_id': session_id,
-            'command': command,
-            'response': text,
-            'content': text,
-            'result': result,
-            'session': session,
-            'game': session.get('state', {}) if isinstance(session, dict) else {},
-        }
+        return build_turn_response_v2(
+            result,
+            session_id=session_id,
+            command=command,
+            session=session,
+            trace_id=getattr(http_request.state, 'rpg_trace_id', None),
+        )
 
 
 def install_direct_turn_hook() -> None:
