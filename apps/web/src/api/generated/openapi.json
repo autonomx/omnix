@@ -666,6 +666,17 @@
             "title": "Input Summary",
             "type": "string"
           },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
           "result_summary": {
             "default": "",
             "title": "Result Summary",
@@ -786,6 +797,17 @@
             "additionalProperties": true,
             "title": "Input",
             "type": "object"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
           },
           "session_id": {
             "anyOf": [
@@ -1165,13 +1187,116 @@
       },
       "ChatSession": {
         "properties": {
+          "active_segment_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Segment Id"
+          },
+          "character_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Character Id"
+          },
+          "character_profile_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Character Profile Version"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
           },
+          "effective_identity_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Identity Hash"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "interaction_mode": {
+            "default": "system",
+            "enum": [
+              "system",
+              "character"
+            ],
+            "title": "Interaction Mode",
+            "type": "string"
+          },
+          "memory_enabled": {
+            "default": false,
+            "title": "Memory Enabled",
+            "type": "boolean"
+          },
+          "memory_last_refreshed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Last Refreshed At"
+          },
+          "memory_record_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Memory Record Count",
+            "type": "integer"
+          },
+          "memory_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Snapshot Id"
+          },
+          "memory_snapshot_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Snapshot Revision"
           },
           "message_count": {
             "default": 0,
@@ -1196,6 +1321,22 @@
             ],
             "title": "Model Id"
           },
+          "profile_id": {
+            "default": "profile:local",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
           "provider_id": {
             "anyOf": [
               {
@@ -1207,13 +1348,75 @@
             ],
             "title": "Provider Id"
           },
+          "read_memory": {
+            "default": false,
+            "title": "Read Memory",
+            "type": "boolean"
+          },
+          "research_mode_override": {
+            "anyOf": [
+              {
+                "enum": [
+                  "disabled",
+                  "quick",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Mode Override"
+          },
+          "shared_memory_access": {
+            "default": "none",
+            "enum": [
+              "none",
+              "read_only"
+            ],
+            "title": "Shared Memory Access",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
+            "type": "string"
+          },
+          "transcript_policy": {
+            "default": "persistent",
+            "enum": [
+              "persistent",
+              "temporary",
+              "none"
+            ],
+            "title": "Transcript Policy",
             "type": "string"
           },
           "updated_at": {
             "title": "Updated At",
             "type": "string"
+          },
+          "voice_asset_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Asset Id"
+          },
+          "workspace_id": {
+            "default": "workspace:default",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "write_memory": {
+            "default": false,
+            "title": "Write Memory",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1243,13 +1446,116 @@
       },
       "ChatSessionSummary": {
         "properties": {
+          "active_segment_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Segment Id"
+          },
+          "character_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Character Id"
+          },
+          "character_profile_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Character Profile Version"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
           },
+          "effective_identity_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Identity Hash"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "interaction_mode": {
+            "default": "system",
+            "enum": [
+              "system",
+              "character"
+            ],
+            "title": "Interaction Mode",
+            "type": "string"
+          },
+          "memory_enabled": {
+            "default": false,
+            "title": "Memory Enabled",
+            "type": "boolean"
+          },
+          "memory_last_refreshed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Last Refreshed At"
+          },
+          "memory_record_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Memory Record Count",
+            "type": "integer"
+          },
+          "memory_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Snapshot Id"
+          },
+          "memory_snapshot_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Snapshot Revision"
           },
           "message_count": {
             "default": 0,
@@ -1267,6 +1573,22 @@
             ],
             "title": "Model Id"
           },
+          "profile_id": {
+            "default": "profile:local",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
           "provider_id": {
             "anyOf": [
               {
@@ -1278,13 +1600,75 @@
             ],
             "title": "Provider Id"
           },
+          "read_memory": {
+            "default": false,
+            "title": "Read Memory",
+            "type": "boolean"
+          },
+          "research_mode_override": {
+            "anyOf": [
+              {
+                "enum": [
+                  "disabled",
+                  "quick",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Mode Override"
+          },
+          "shared_memory_access": {
+            "default": "none",
+            "enum": [
+              "none",
+              "read_only"
+            ],
+            "title": "Shared Memory Access",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
+            "type": "string"
+          },
+          "transcript_policy": {
+            "default": "persistent",
+            "enum": [
+              "persistent",
+              "temporary",
+              "none"
+            ],
+            "title": "Transcript Policy",
             "type": "string"
           },
           "updated_at": {
             "title": "Updated At",
             "type": "string"
+          },
+          "voice_asset_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Asset Id"
+          },
+          "workspace_id": {
+            "default": "workspace:default",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "write_memory": {
+            "default": false,
+            "title": "Write Memory",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1473,7 +1857,29 @@
         "type": "object"
       },
       "CreateChatSessionRequest": {
+        "description": "Client selection; trusted identity/profile content is intentionally absent.",
         "properties": {
+          "character_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Character Id"
+          },
+          "interaction_mode": {
+            "default": "system",
+            "enum": [
+              "system",
+              "character"
+            ],
+            "title": "Interaction Mode",
+            "type": "string"
+          },
           "model_id": {
             "anyOf": [
               {
@@ -1496,6 +1902,36 @@
             ],
             "title": "Provider Id"
           },
+          "read_memory": {
+            "default": false,
+            "title": "Read Memory",
+            "type": "boolean"
+          },
+          "research_mode_override": {
+            "anyOf": [
+              {
+                "enum": [
+                  "disabled",
+                  "quick",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Mode Override"
+          },
+          "shared_memory_access": {
+            "default": "none",
+            "enum": [
+              "none",
+              "read_only"
+            ],
+            "title": "Shared Memory Access",
+            "type": "string"
+          },
           "system_prompt": {
             "anyOf": [
               {
@@ -1517,6 +1953,33 @@
               }
             ],
             "title": "Title"
+          },
+          "transcript_policy": {
+            "default": "persistent",
+            "enum": [
+              "persistent",
+              "temporary",
+              "none"
+            ],
+            "title": "Transcript Policy",
+            "type": "string"
+          },
+          "voice_asset_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Asset Id"
+          },
+          "write_memory": {
+            "default": false,
+            "title": "Write Memory",
+            "type": "boolean"
           }
         },
         "title": "CreateChatSessionRequest",
@@ -3065,6 +3528,269 @@
         "title": "ReportListResponse",
         "type": "object"
       },
+      "ResearchBudgetStatus": {
+        "properties": {
+          "deep_max_extracts": {
+            "title": "Deep Max Extracts",
+            "type": "integer"
+          },
+          "deep_max_queries": {
+            "title": "Deep Max Queries",
+            "type": "integer"
+          },
+          "deep_max_sources": {
+            "title": "Deep Max Sources",
+            "type": "integer"
+          },
+          "deep_max_steps": {
+            "title": "Deep Max Steps",
+            "type": "integer"
+          },
+          "quick_max_results": {
+            "title": "Quick Max Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "quick_max_results",
+          "deep_max_steps",
+          "deep_max_queries",
+          "deep_max_sources",
+          "deep_max_extracts"
+        ],
+        "title": "ResearchBudgetStatus",
+        "type": "object"
+      },
+      "ResearchCompatibilityStatus": {
+        "properties": {
+          "alias_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Alias Counts",
+            "type": "object"
+          },
+          "aliases_enabled": {
+            "title": "Aliases Enabled",
+            "type": "boolean"
+          },
+          "canonical_field": {
+            "default": "web_research_mode",
+            "title": "Canonical Field",
+            "type": "string"
+          },
+          "sunset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sunset"
+          },
+          "total_legacy_requests": {
+            "default": 0,
+            "title": "Total Legacy Requests",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "aliases_enabled"
+        ],
+        "title": "ResearchCompatibilityStatus",
+        "type": "object"
+      },
+      "ResearchProviderStatus": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "coverage": {
+            "title": "Coverage",
+            "type": "string"
+          },
+          "credential_configured": {
+            "title": "Credential Configured",
+            "type": "boolean"
+          },
+          "credential_required": {
+            "title": "Credential Required",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "available",
+          "credential_required",
+          "credential_configured",
+          "coverage"
+        ],
+        "title": "ResearchProviderStatus",
+        "type": "object"
+      },
+      "ResearchReleaseAvailability": {
+        "properties": {
+          "deep": {
+            "title": "Deep",
+            "type": "boolean"
+          },
+          "disabled": {
+            "default": true,
+            "title": "Disabled",
+            "type": "boolean"
+          },
+          "hermes_planner": {
+            "title": "Hermes Planner",
+            "type": "boolean"
+          },
+          "quick": {
+            "title": "Quick",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "quick",
+          "deep",
+          "hermes_planner"
+        ],
+        "title": "ResearchReleaseAvailability",
+        "type": "object"
+      },
+      "ResearchReleaseStatus": {
+        "properties": {
+          "availability": {
+            "$ref": "#/components/schemas/ResearchReleaseAvailability"
+          },
+          "deep_local_enabled": {
+            "title": "Deep Local Enabled",
+            "type": "boolean"
+          },
+          "deep_local_percentage": {
+            "title": "Deep Local Percentage",
+            "type": "integer"
+          },
+          "hermes_enabled": {
+            "title": "Hermes Enabled",
+            "type": "boolean"
+          },
+          "hermes_percentage": {
+            "title": "Hermes Percentage",
+            "type": "integer"
+          },
+          "master_enabled": {
+            "title": "Master Enabled",
+            "type": "boolean"
+          },
+          "quick_enabled": {
+            "title": "Quick Enabled",
+            "type": "boolean"
+          },
+          "quick_percentage": {
+            "title": "Quick Percentage",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "master_enabled",
+          "quick_enabled",
+          "quick_percentage",
+          "deep_local_enabled",
+          "deep_local_percentage",
+          "hermes_enabled",
+          "hermes_percentage",
+          "availability"
+        ],
+        "title": "ResearchReleaseStatus",
+        "type": "object"
+      },
+      "ResearchRetentionStatus": {
+        "properties": {
+          "extraction_cache_ttl_seconds": {
+            "title": "Extraction Cache Ttl Seconds",
+            "type": "integer"
+          },
+          "raw_snapshot_retention_days": {
+            "title": "Raw Snapshot Retention Days",
+            "type": "integer"
+          },
+          "search_cache_ttl_seconds": {
+            "title": "Search Cache Ttl Seconds",
+            "type": "integer"
+          },
+          "source_manifest_retention_days": {
+            "title": "Source Manifest Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "search_cache_ttl_seconds",
+          "extraction_cache_ttl_seconds",
+          "raw_snapshot_retention_days",
+          "source_manifest_retention_days"
+        ],
+        "title": "ResearchRetentionStatus",
+        "type": "object"
+      },
+      "ResearchRuntimeStatus": {
+        "properties": {
+          "budgets": {
+            "$ref": "#/components/schemas/ResearchBudgetStatus"
+          },
+          "compatibility": {
+            "$ref": "#/components/schemas/ResearchCompatibilityStatus"
+          },
+          "deep_enabled": {
+            "title": "Deep Enabled",
+            "type": "boolean"
+          },
+          "default_mode": {
+            "title": "Default Mode",
+            "type": "string"
+          },
+          "diagnostics_enabled": {
+            "title": "Diagnostics Enabled",
+            "type": "boolean"
+          },
+          "hermes_planner_enabled": {
+            "title": "Hermes Planner Enabled",
+            "type": "boolean"
+          },
+          "privacy": {
+            "additionalProperties": true,
+            "title": "Privacy",
+            "type": "object"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ResearchProviderStatus"
+          },
+          "release": {
+            "$ref": "#/components/schemas/ResearchReleaseStatus"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/ResearchRetentionStatus"
+          }
+        },
+        "required": [
+          "default_mode",
+          "provider",
+          "budgets",
+          "retention",
+          "release",
+          "compatibility",
+          "deep_enabled",
+          "hermes_planner_enabled",
+          "diagnostics_enabled"
+        ],
+        "title": "ResearchRuntimeStatus",
+        "type": "object"
+      },
       "ResourceClass": {
         "enum": [
           "cpu",
@@ -3572,6 +4298,48 @@
               }
             ],
             "title": "Provider Id"
+          },
+          "research_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "disabled",
+                  "quick",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Mode"
+          },
+          "speech_segment_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech Segment Id"
+          },
+          "user_turn_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Turn Id"
           }
         },
         "required": [
@@ -4343,6 +5111,30 @@
     "/api/jobs": {
       "get": {
         "operationId": "list_jobs_api_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "full",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Full",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4353,6 +5145,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Jobs",
@@ -6118,6 +6920,20 @@
     "/api/rpg/sessions": {
       "get": {
         "operationId": "rpg_sessions_api_rpg_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6130,6 +6946,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Rpg Sessions",
