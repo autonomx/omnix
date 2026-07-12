@@ -108,6 +108,24 @@ export function getRpgTurnDiagnostics(sessionId: string): RpgTurnDiagnosticsSnap
   return [...(diagnosticsBySession.get(sessionId) || [])];
 }
 
+export function serializeRpgTurnDiagnostics(sessionId: string): string {
+  return JSON.stringify(
+    {
+      format_version: 'rpg_browser_timing_evidence_v1',
+      session_id: sessionId,
+      samples: getRpgTurnDiagnostics(sessionId),
+    },
+    null,
+    2,
+  );
+}
+
+export async function copyRpgTurnDiagnostics(sessionId: string): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false;
+  await navigator.clipboard.writeText(serializeRpgTurnDiagnostics(sessionId));
+  return true;
+}
+
 export function latestRpgTurnDiagnostics(sessionId: string): RpgTurnDiagnosticsSnapshot | undefined {
   return getRpgTurnDiagnostics(sessionId).at(-1);
 }
