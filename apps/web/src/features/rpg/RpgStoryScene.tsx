@@ -16,7 +16,7 @@ interface RpgStorySceneProps {
 export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSessionSummary, storyMessages = [] }: RpgStorySceneProps) {
   const isPreview = selectedSessionSummary.source === 'preview';
   const [recentEventsExpanded, setRecentEventsExpanded] = useState(false);
-  const visibleStoryMessages = useRpgTurnUiMessages(selectedSessionSummary.id, storyMessages);
+  const visibleStoryMessages = useRpgTurnUiMessages(selectedSessionSummary.id, [...storyMessages]);
 
   return (
     <section className="rpg-card rpg-story-card" aria-labelledby="rpg-story-scene-title">
