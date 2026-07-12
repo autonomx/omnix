@@ -52,11 +52,11 @@ def test_distinct_rpg_turn_commands_create_distinct_jobs(tmp_path, monkeypatch) 
     assert second.id != first.id
 
 
-def test_rpg_turn_visible_formatter_collapses_repeated_speaker_line() -> None:
+def test_rpg_turn_visible_text_collapses_repeated_speaker_line() -> None:
     import app.jobs
     from app.jobs import inline_feature_jobs
 
-    text = inline_feature_jobs._format_rpg_turn_first_call_visible_response(
+    text = inline_feature_jobs._rpg_turn_visible_text(
         {
             "visible_response": {
                 "narration": "Bran: It's been a fairly steady day, actually.",

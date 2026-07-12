@@ -17,7 +17,6 @@ from .rpg_map_editor_routes import install_rpg_map_editor_route_hook
 from .rpg_map_routes import install_rpg_map_route_hook
 from .rpg_session_routes import install_rpg_session_route_hook
 from .rpg_turn_job_mirror import install_rpg_turn_job_mirror_hook
-from .rpg_visible_response_bridge import install_rpg_visible_response_bridge
 from .tts_live_call_websocket import install_tts_live_call_websocket_hook
 from .tts_pcm_websocket import install_tts_pcm_websocket_hook
 from .tts_runtime_routes import install_tts_runtime_route_hook
@@ -32,7 +31,6 @@ install_rpg_map_editor_route_hook()
 install_rpg_map_route_hook()
 install_rpg_session_route_hook()
 install_rpg_turn_job_mirror_hook()
-install_rpg_visible_response_bridge()
 install_audiobook_websocket_hook()
 install_hermes_route_hook()
 install_realtime_route_hook()

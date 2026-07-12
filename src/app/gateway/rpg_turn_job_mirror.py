@@ -12,6 +12,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, Request
 
 from app.jobs.rpg_turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
+from app.rpg.presentation.visible_response import visible_response_text
 
 _DIRECT_RPG_TURN_ACTIVE: ContextVar[bool] = ContextVar("omnix_direct_rpg_turn_active", default=False)
 _DIRECT_RPG_SUBMISSION_ID: ContextVar[str] = ContextVar("omnix_direct_rpg_submission_id", default="")
@@ -210,7 +211,7 @@ def _apply_turn_with_job_mirror(
             _complete_durable_claim(durable_store, durable_claim, finalized)
             return finalized
 
-        content = _visible_turn_text(result, command)
+        content = visible_response_text(result, command) or f"Your command is accepted: {command}."
         completed = store.complete_job(
             running.id,
             CompleteJobRequest(
@@ -412,17 +413,3 @@ def _submission_lease_seconds() -> float:
         return max(0.1, min(600.0, float(raw)))
     except (TypeError, ValueError):
         return 30.0
-
-
-def _visible_turn_text(result: dict[str, Any], command: str) -> str:
-    for key in ("final_narration", "narration", "summary", "response", "content"):
-        value = result.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    nested = result.get("result")
-    if isinstance(nested, dict):
-        return _visible_turn_text(nested, command)
-    authoritative = result.get("authoritative")
-    if isinstance(authoritative, dict):
-        return _visible_turn_text(authoritative, command)
-    return f"Your command is accepted: {command}."
