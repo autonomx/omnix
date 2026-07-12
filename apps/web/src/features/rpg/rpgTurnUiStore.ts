@@ -196,7 +196,9 @@ export function useRpgTurnUiEntries(sessionId: string): RpgTurnUiEntry[] {
   useEffect(() => {
     const listener = () => setVersion((value) => value + 1);
     listeners.add(listener);
-    return () => listeners.delete(listener);
+    return () => {
+      listeners.delete(listener);
+    };
   }, []);
   return getRpgTurnUiEntries(sessionId);
 }
