@@ -186,6 +186,7 @@ def _absolute_fallback(
 
 def _compact_visible_response(value: Any) -> dict[str, Any]:
     visible = _dict(value)
+    narration = _truncate_utf8(visible.get("narration"), 8_000)
     messages: list[dict[str, Any]] = []
     raw_messages = visible.get("messages")
     if isinstance(raw_messages, list):
@@ -201,15 +202,26 @@ def _compact_visible_response(value: Any) -> dict[str, Any]:
             )
             if bounded:
                 messages.append(bounded)
+    plain_text = _truncate_utf8(visible.get("plain_text"), 12_000)
+    if not plain_text:
+        paragraphs = [narration] if narration else []
+        for message in messages:
+            text = _truncate_utf8(message.get("text"), 4_000)
+            speaker = _truncate_utf8(message.get("speaker"), 128)
+            if text:
+                paragraphs.append(f'{speaker}: "{text}"' if speaker else text)
+        plain_text = _truncate_utf8("\n\n".join(paragraphs), 12_000)
+    if not plain_text:
+        plain_text = _SHORTENED_TEXT
     return _drop_empty(
         {
             "format_version": _truncate_utf8(
                 visible.get("format_version") or "rpg_visible_response_v1",
                 128,
             ),
-            "narration": _truncate_utf8(visible.get("narration"), 8_000),
+            "narration": narration,
             "messages": messages,
-            "plain_text": _truncate_utf8(visible.get("plain_text"), 12_000),
+            "plain_text": plain_text,
         }
     )
 
