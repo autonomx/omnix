@@ -92,6 +92,7 @@ def _install_optional_fast_runtime_hooks() -> None:
         ("app.rpg.session.fast_visible_dialogue_hook.install_fast_visible_dialogue_hook", "install_fast_visible_dialogue_hook"),
         ("app.rpg.session.visible_response_runtime_hook.install_visible_response_runtime_guard", "install_visible_response_runtime_guard"),
         ("app.rpg.session.session_performance_hook.install_session_performance_hook", "install_session_performance_hook"),
+        ("app.rpg.session.interaction_event_store_hook.install_interaction_event_store_hook", "install_interaction_event_store_hook"),
         ("app.rpg.session.interaction_timeline_hook.install_interaction_timeline_hook", "install_interaction_timeline_hook"),
         ("app.rpg.debug_runtime_hook.install_rpg_runtime_debug_hook", "install_rpg_runtime_debug_hook"),
     ):

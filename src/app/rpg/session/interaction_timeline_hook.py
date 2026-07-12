@@ -5,6 +5,12 @@ import threading
 from functools import wraps
 from typing import Any, Callable
 
+from .interaction_event_store import (
+    append_interaction_event,
+    compact_interaction_event_log,
+    interaction_event_log_status,
+    interaction_log_requires_compaction,
+)
 from .interaction_timeline import commit_turn_interaction, mark_interaction_persisted
 
 _SENTINEL = "_omnix_interaction_timeline_hook_installed"
@@ -58,19 +64,37 @@ def install_interaction_timeline_hook() -> None:
                 session_override.clear()
                 session_override.update(session)
                 result["interaction_persisted"] = False
+                result["interaction_persistence"] = {
+                    "format_version": "rpg_interaction_persistence_v2",
+                    "mode": "session_override",
+                    "persisted": False,
+                }
                 return result
 
-            from .service import save_session
+            append_interaction_event(session_id, event)
+            snapshot_required = event.get("stateful") is not False or interaction_log_requires_compaction(session_id)
+            persistence_mode = "event_log"
+            if snapshot_required:
+                from .service import save_session
 
-            saved = save_session(session, compact=True)
-            result["session"] = saved
+                saved = save_session(session, compact=True)
+                result["session"] = saved
+                compact_interaction_event_log(
+                    session_id,
+                    through_sequence=int(event.get("sequence") or 0),
+                )
+                persistence_mode = "snapshot_compacted"
+
             mark_interaction_persisted(result)
             result["interaction_persistence"] = {
-                "format_version": "rpg_interaction_persistence_v1",
+                "format_version": "rpg_interaction_persistence_v2",
                 "interaction_id": event.get("interaction_id"),
                 "sequence": event.get("sequence"),
                 "state_revision": event.get("state_revision"),
                 "persisted": True,
+                "mode": persistence_mode,
+                "snapshot_written": snapshot_required,
+                "event_log": interaction_event_log_status(session_id),
             }
             return result
 
