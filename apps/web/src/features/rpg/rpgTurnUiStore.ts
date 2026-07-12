@@ -1,38 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { RpgStoryMessagePreview } from './rpgUiState';
+import {
+  beginRpgTurnDiagnostics,
+  completeRpgTurnDiagnostics,
+  nowRpgClientMs,
+  resetRpgTurnDiagnosticsForTests,
+  type RpgTurnClientMilestones,
+} from './rpgTurnDiagnostics';
 
-export type RpgTurnUiStatus = 'pending' | 'complete' | 'failed';
-
-export interface RpgTurnVisibleMessage {
-  kind?: string;
-  speaker_id?: string | null;
-  speaker?: string;
-  text?: string;
-}
-
-export interface RpgTurnVisibleResponse {
-  narration?: string;
-  messages?: RpgTurnVisibleMessage[];
-  plain_text?: string;
-}
-
-export interface RpgTurnResponseV2 {
-  ok?: boolean;
-  contract_version?: string;
-  session_id?: string;
-  submission_id?: string | null;
-  interaction_id?: string | null;
-  trace_id?: string | null;
-  visible_response?: RpgTurnVisibleResponse;
-  response?: string;
-  content?: string;
-  state?: {
-    revision?: number | null;
-    changed?: boolean;
-    changed_domains?: string[];
-  };
-  timing?: Record<string, number>;
-}
+export type RpgTurnUiStatus = 'optimistic' | 'pending' | 'complete' | 'failed';
 
 export interface RpgTurnUiEntry extends RpgStoryMessagePreview {
   id: string;
@@ -40,202 +16,217 @@ export interface RpgTurnUiEntry extends RpgStoryMessagePreview {
   submissionId: string;
   interactionId?: string;
   status: RpgTurnUiStatus;
+  messageKind?: string;
+  messageIndex?: number;
+}
+
+interface RpgVisibleMessageV2 {
+  kind?: string;
+  speaker_id?: string;
+  speaker?: string;
+  text?: string;
+}
+
+interface RpgVisibleResponseV2 {
+  narration?: string;
+  messages?: RpgVisibleMessageV2[];
+  plain_text?: string;
+}
+
+interface RpgTurnResponseV2 {
+  ok?: boolean;
+  contract_version?: string;
+  session_id?: string;
+  submission_id?: string;
+  interaction_id?: string;
+  turn_id?: string;
+  trace_id?: string;
+  visible_response?: RpgVisibleResponseV2;
+  response?: string;
+  content?: string;
+  state?: {
+    changed?: boolean;
+    changed_domains?: string[];
+  };
+  timing?: Record<string, number>;
+  performance?: Record<string, unknown>;
+}
+
+interface BeginSubmissionInput {
+  sessionId: string;
+  submissionId: string;
+  command: string;
+}
+
+interface CompleteSubmissionInput {
+  sessionId: string;
+  submissionId: string;
+  payload: RpgTurnResponseV2;
+  responseHeaders?: Headers;
+  milestones?: RpgTurnClientMilestones;
 }
 
 interface CachedResponse {
   body: string;
-  headers: Array<[string, string]>;
+  headers: [string, string][];
   status: number;
   statusText: string;
 }
 
-const listeners = new Set<() => void>();
 const entriesBySession = new Map<string, RpgTurnUiEntry[]>();
 const sessionResponseCache = new Map<string, CachedResponse>();
-const conversationRefreshSuppression = new Map<string, number>();
-let fetchInstalled = false;
-let originalFetch: typeof fetch | null = null;
-let mountedSubscribers = 0;
-let uninstallSharedInterceptor: (() => void) | null = null;
-
-const TURN_PATH = /^\/api\/rpg\/sessions\/([^/]+)\/turn$/;
-const SESSION_PATH = /^\/api\/rpg\/sessions\/([^/]+)$/;
-const REFRESH_SUPPRESSION_MS = 2_500;
+const listeners = new Set<() => void>();
 const MAX_ENTRIES_PER_SESSION = 24;
+const MAX_SESSION_CACHE_ENTRIES = 12;
+const ORIGINAL_FETCH_KEY = '__omnixRpgTurnOriginalFetch';
+const INSTALLED_FETCH_KEY = '__omnixRpgTurnFetchInstalled';
 
 export function createRpgSubmissionId(): string {
-  const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID().replace(/-/g, '')
-    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
-  return `submit:${random}`;
+  const cryptoValue = globalThis.crypto;
+  if (cryptoValue?.randomUUID) {
+    return `submit:${cryptoValue.randomUUID().replace(/-/g, '')}`;
+  }
+  return `submit:${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 }
 
-export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () => void {
-  const resolvedFetch = fetchImpl || globalThis.fetch;
-  if (fetchInstalled || typeof resolvedFetch !== 'function') return () => undefined;
-  fetchInstalled = true;
-  originalFetch = resolvedFetch;
-
-  globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const requestUrl = requestUrlString(input);
-    const url = new URL(requestUrl, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-    const request = isRequest(input) ? input : null;
-    const method = String(init.method || request?.method || 'GET').toUpperCase();
-    const turnMatch = url.pathname.match(TURN_PATH);
-    const sessionMatch = url.pathname.match(SESSION_PATH);
-
-    if (method === 'GET' && sessionMatch) {
-      const sessionId = decodeURIComponent(sessionMatch[1]);
-      const suppressUntil = conversationRefreshSuppression.get(sessionId) || 0;
-      const cached = sessionResponseCache.get(url.pathname);
-      if (cached && Date.now() <= suppressUntil) return restoreResponse(cached);
-    }
-
-    if (method === 'POST' && turnMatch) {
-      const sessionId = decodeURIComponent(turnMatch[1]);
-      const headers = new Headers(request?.headers);
-      new Headers(init.headers).forEach((value, key) => headers.set(key, value));
-      const submissionId = headers.get('X-Omnix-Rpg-Submission-Id')?.trim() || createRpgSubmissionId();
-      headers.set('X-Omnix-Rpg-Submission-Id', submissionId);
-      const command = readCommand(init.body);
-      beginRpgTurnUiSubmission({ sessionId, submissionId, command });
-      try {
-        const response = await resolvedFetch(input, { ...init, headers });
-        if (response.ok) {
-          const payload = await safeJson(response.clone());
-          if (payload.contract_version === 'rpg_turn_response_v2') {
-            completeRpgTurnUiSubmission({ sessionId, submissionId, payload });
-            if (refreshPathsForChangedDomains(sessionId, payload.state?.changed_domains || []).length === 0) {
-              conversationRefreshSuppression.set(sessionId, Date.now() + REFRESH_SUPPRESSION_MS);
-            }
-          } else {
-            discardRpgTurnUiSubmission(sessionId, submissionId);
-          }
-        } else if (response.status === 404) {
-          discardRpgTurnUiSubmission(sessionId, submissionId);
-        } else {
-          failRpgTurnUiSubmission({ sessionId, submissionId, message: `RPG turn failed with HTTP ${response.status}.` });
-        }
-        return response;
-      } catch (error) {
-        failRpgTurnUiSubmission({
-          sessionId,
-          submissionId,
-          message: error instanceof Error ? error.message : 'RPG turn request failed.',
-        });
-        throw error;
-      }
-    }
-
-    const response = await resolvedFetch(input, init);
-    if (method === 'GET' && sessionMatch && response.ok) {
-      void cacheSessionResponse(url.pathname, response.clone());
-    }
-    return response;
-  }) as typeof fetch;
-
-  return () => {
-    if (fetchInstalled && originalFetch === resolvedFetch) {
-      globalThis.fetch = resolvedFetch;
-      originalFetch = null;
-      fetchInstalled = false;
-    }
-  };
-}
-
-export function beginRpgTurnUiSubmission({
-  sessionId,
-  submissionId,
-  command,
-}: {
-  sessionId: string;
-  submissionId: string;
-  command: string;
-}): void {
-  const current = entriesBySession.get(sessionId) || [];
-  const withoutSubmission = current.filter((entry) => entry.submissionId !== submissionId);
-  setSessionEntries(sessionId, [
-    ...withoutSubmission,
-    {
-      id: `${submissionId}:player`,
-      sessionId,
-      submissionId,
-      status: 'pending',
-      avatar: '•',
-      speaker: 'You',
-      text: command || 'Submitting turn…',
-      tone: 'player',
-    },
-    {
-      id: `${submissionId}:pending`,
-      sessionId,
-      submissionId,
-      status: 'pending',
-      avatar: 'O',
-      speaker: 'Omnix (Narrator)',
-      text: 'Considering the scene…',
-      tone: 'narrator',
-    },
-  ]);
-}
-
-export function completeRpgTurnUiSubmission({
-  sessionId,
-  submissionId,
-  payload,
-}: {
-  sessionId: string;
-  submissionId: string;
-  payload: RpgTurnResponseV2;
-}): void {
-  const current = entriesBySession.get(sessionId) || [];
-  const player = current.find((entry) => entry.submissionId === submissionId && entry.tone === 'player');
-  const interactionId = payload.interaction_id || undefined;
-  const withoutSubmission = current.filter((entry) => entry.submissionId !== submissionId);
-  setSessionEntries(sessionId, [
-    ...withoutSubmission,
-    ...(player ? [{ ...player, status: 'complete' as const, interactionId }] : []),
-    ...responseEntries(sessionId, submissionId, interactionId, payload),
-  ]);
-}
-
-export function failRpgTurnUiSubmission({
-  sessionId,
-  submissionId,
-  message,
-}: {
-  sessionId: string;
-  submissionId: string;
-  message: string;
-}): void {
-  const current = entriesBySession.get(sessionId) || [];
-  setSessionEntries(
-    sessionId,
-    current.map((entry) => entry.submissionId === submissionId && entry.tone !== 'player'
-      ? { ...entry, status: 'failed', text: message }
-      : entry),
+export function beginRpgTurnUiSubmission(input: BeginSubmissionInput): void {
+  const current = getRpgTurnUiEntries(input.sessionId).filter(
+    (entry) => entry.submissionId !== input.submissionId,
   );
+  const playerEntry: RpgTurnUiEntry = {
+    id: `${input.submissionId}:player`,
+    sessionId: input.sessionId,
+    submissionId: input.submissionId,
+    status: 'optimistic',
+    avatar: 'Y',
+    speaker: 'You',
+    text: input.command,
+    tone: 'player',
+    messageKind: 'player',
+    messageIndex: 0,
+  };
+  const pendingEntry: RpgTurnUiEntry = {
+    id: `${input.submissionId}:pending`,
+    sessionId: input.sessionId,
+    submissionId: input.submissionId,
+    status: 'pending',
+    avatar: 'O',
+    speaker: 'Omnix',
+    text: 'Considering the scene…',
+    tone: 'narrator',
+    messageKind: 'pending',
+    messageIndex: 0,
+  };
+  setSessionEntries(input.sessionId, [...current, playerEntry, pendingEntry]);
+}
+
+export function completeRpgTurnUiSubmission(input: CompleteSubmissionInput): string[] {
+  const current = getRpgTurnUiEntries(input.sessionId);
+  const interactionId = input.payload.interaction_id?.trim() || input.submissionId;
+  const playerEntry = current.find(
+    (entry) => entry.submissionId === input.submissionId && entry.tone === 'player',
+  );
+  const remaining = current.filter((entry) => entry.submissionId !== input.submissionId);
+  const completedPlayer = playerEntry
+    ? {
+        ...playerEntry,
+        id: `${interactionId}:player`,
+        interactionId,
+        status: 'complete' as const,
+      }
+    : undefined;
+  const responseEntries = visibleEntriesFromPayload(
+    input.sessionId,
+    input.submissionId,
+    interactionId,
+    input.payload,
+  );
+  setSessionEntries(
+    input.sessionId,
+    [...remaining, ...(completedPlayer ? [completedPlayer] : []), ...responseEntries],
+  );
+
+  if (input.milestones && input.responseHeaders) {
+    completeRpgTurnDiagnostics({
+      sessionId: input.sessionId,
+      submissionId: input.submissionId,
+      interactionId,
+      traceId: input.payload.trace_id,
+      responseHeaders: input.responseHeaders,
+      milestones: { ...input.milestones, storeUpdatedMs: nowRpgClientMs() },
+      changedDomains: input.payload.state?.changed_domains || [],
+      serverPayloadTiming: input.payload.timing,
+      serverPerformance: input.payload.performance,
+    });
+  }
+  return input.payload.state?.changed_domains || [];
+}
+
+export function failRpgTurnUiSubmission(
+  sessionId: string,
+  submissionId: string,
+  errorMessage: string,
+): void {
+  const current = getRpgTurnUiEntries(sessionId);
+  const next = current.map((entry) => {
+    if (entry.submissionId !== submissionId) return entry;
+    if (entry.tone === 'player') return { ...entry, status: 'failed' as const };
+    return {
+      ...entry,
+      status: 'failed' as const,
+      text: errorMessage || 'The turn could not be completed.',
+    };
+  });
+  setSessionEntries(sessionId, next);
 }
 
 export function discardRpgTurnUiSubmission(sessionId: string, submissionId: string): void {
-  const current = entriesBySession.get(sessionId) || [];
-  setSessionEntries(sessionId, current.filter((entry) => entry.submissionId !== submissionId));
+  setSessionEntries(
+    sessionId,
+    getRpgTurnUiEntries(sessionId).filter((entry) => entry.submissionId !== submissionId),
+  );
 }
 
 export function getRpgTurnUiEntries(sessionId: string): RpgTurnUiEntry[] {
   return [...(entriesBySession.get(sessionId) || [])];
 }
 
+export function useRpgTurnUiEntries(sessionId: string): RpgTurnUiEntry[] {
+  const [, setVersion] = useState(0);
+  useEffect(() => {
+    const listener = () => setVersion((value) => value + 1);
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
+  return getRpgTurnUiEntries(sessionId);
+}
+
 export function mergeRpgTurnUiMessages(
   baseMessages: RpgStoryMessagePreview[],
-  incrementalEntries: RpgTurnUiEntry[],
+  entries: RpgTurnUiEntry[],
 ): RpgStoryMessagePreview[] {
-  const seen = new Set(baseMessages.map((message) => `${message.speaker}\u0000${message.text}`));
-  const merged = [...baseMessages];
-  for (const entry of incrementalEntries) {
-    const key = `${entry.speaker}\u0000${entry.text}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+  if (!entries.length) {
+    return baseMessages.map((message, index) => withBaseIdentity(message, index));
+  }
+
+  const authoritativeInteractionIds = new Set(
+    entries
+      .filter((entry) => entry.status === 'complete' && entry.interactionId)
+      .map((entry) => entry.interactionId as string),
+  );
+  const completeTurnCount = authoritativeInteractionIds.size;
+  const identifiedBase = baseMessages.map((message, index) => withBaseIdentity(message, index));
+  const identityFiltered = identifiedBase.filter(
+    (message) => !message.interactionId || !authoritativeInteractionIds.has(message.interactionId),
+  );
+  const baseWithoutReplacedTail = removeLatestBaseTurns(identityFiltered, completeTurnCount);
+  const seenIds = new Set(baseWithoutReplacedTail.map((message, index) => storyMessageIdentity(message, index)));
+  const merged = [...baseWithoutReplacedTail];
+  for (const entry of entries) {
+    if (seenIds.has(entry.id)) continue;
+    seenIds.add(entry.id);
     merged.push(entry);
   }
   return merged.slice(-10);
@@ -245,71 +236,139 @@ export function useRpgTurnUiMessages(
   sessionId: string,
   baseMessages: RpgStoryMessagePreview[],
 ): RpgStoryMessagePreview[] {
-  const [, setVersion] = useState(0);
-  useEffect(() => {
-    mountedSubscribers += 1;
-    if (mountedSubscribers === 1) uninstallSharedInterceptor = installRpgTurnUiFetchInterceptor();
-    const listener = () => setVersion((value) => value + 1);
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-      mountedSubscribers = Math.max(0, mountedSubscribers - 1);
-      if (mountedSubscribers === 0) {
-        uninstallSharedInterceptor?.();
-        uninstallSharedInterceptor = null;
-        entriesBySession.clear();
-        conversationRefreshSuppression.clear();
-      }
-    };
-  }, []);
-  return mergeRpgTurnUiMessages(baseMessages, getRpgTurnUiEntries(sessionId));
+  return mergeRpgTurnUiMessages(baseMessages, useRpgTurnUiEntries(sessionId));
+}
+
+export function storyMessageIdentity(message: RpgStoryMessagePreview, index: number): string {
+  return message.id?.trim()
+    || [message.interactionId, message.messageKind, message.messageIndex].filter((value) => value !== undefined && value !== '').join(':')
+    || `base:${index}`;
 }
 
 export function refreshPathsForChangedDomains(sessionId: string, changedDomains: string[]): string[] {
   const domains = new Set(changedDomains);
   if (domains.size === 1 && domains.has('conversation')) return [];
   const paths = new Set<string>([`/api/rpg/sessions/${encodeURIComponent(sessionId)}`]);
-  if (domains.has('inventory') || domains.has('currency') || domains.has('player')) {
+  if ([...domains].some((domain) => ['inventory', 'currency', 'merchant', 'player'].includes(domain))) {
     paths.add('/api/replay/inventory');
   }
-  if (domains.has('quests') || domains.has('journal') || domains.has('world') || domains.has('location')) {
+  if ([...domains].some((domain) => ['location', 'world', 'quests', 'journal'].includes(domain))) {
     paths.add('/api/reports');
   }
   return [...paths];
 }
 
+export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): void {
+  const scope = globalThis as typeof globalThis & Record<string, unknown>;
+  if (scope[INSTALLED_FETCH_KEY]) return;
+  const originalFetch = fetchImpl || globalThis.fetch?.bind(globalThis);
+  if (!originalFetch) return;
+  scope[ORIGINAL_FETCH_KEY] = originalFetch;
+  scope[INSTALLED_FETCH_KEY] = true;
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const requestUrl = new URL(requestUrlString(input), globalThis.location?.origin || 'http://localhost');
+    const turnMatch = requestUrl.pathname.match(/^\/api\/rpg\/sessions\/([^/]+)\/turn$/);
+    const sessionMatch = requestUrl.pathname.match(/^\/api\/rpg\/sessions\/([^/]+)$/);
+    const method = String(init?.method || (isRequest(input) ? input.method : 'GET')).toUpperCase();
+
+    if (turnMatch && method === 'POST') {
+      const sessionId = decodeURIComponent(turnMatch[1]);
+      const submissionId = createRpgSubmissionId();
+      const requestStartedMs = nowRpgClientMs();
+      const command = commandFromBody(init?.body);
+      const headers = new Headers(isRequest(input) ? input.headers : undefined);
+      new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+      headers.set('X-Omnix-Rpg-Submission-Id', submissionId);
+      headers.set('X-Omnix-Rpg-Client-Started', new Date().toISOString());
+      beginRpgTurnDiagnostics(sessionId, submissionId, requestStartedMs);
+      beginRpgTurnUiSubmission({ sessionId, submissionId, command });
+      try {
+        const response = await originalFetch(input, { ...init, headers });
+        const headersReceivedMs = nowRpgClientMs();
+        if (!response.ok) {
+          if (response.status === 404 || response.status === 405) {
+            discardRpgTurnUiSubmission(sessionId, submissionId);
+          } else {
+            failRpgTurnUiSubmission(sessionId, submissionId, `Turn failed (${response.status}).`);
+          }
+          return response;
+        }
+        const parsed = await parseTurnResponse(response.clone(), {
+          requestStartedMs,
+          headersReceivedMs,
+        });
+        if (parsed.payload.contract_version !== 'rpg_turn_response_v2') {
+          discardRpgTurnUiSubmission(sessionId, submissionId);
+          return response;
+        }
+        const changedDomains = completeRpgTurnUiSubmission({
+          sessionId,
+          submissionId,
+          payload: parsed.payload,
+          responseHeaders: response.headers,
+          milestones: parsed.milestones,
+        });
+        for (const path of refreshPathsForChangedDomains(sessionId, changedDomains)) {
+          sessionResponseCache.delete(path);
+        }
+        return response;
+      } catch (error) {
+        failRpgTurnUiSubmission(
+          sessionId,
+          submissionId,
+          error instanceof Error ? error.message : 'The turn request failed.',
+        );
+        throw error;
+      }
+    }
+
+    if (sessionMatch && method === 'GET') {
+      const cached = sessionResponseCache.get(requestUrl.pathname);
+      if (cached) return restoreResponse(cached);
+      const response = await originalFetch(input, init);
+      if (response.ok) void cacheSessionResponse(requestUrl.pathname, response.clone());
+      return response;
+    }
+
+    return originalFetch(input, init);
+  }) as typeof fetch;
+}
+
 export function resetRpgTurnUiStoreForTests(): void {
   entriesBySession.clear();
   sessionResponseCache.clear();
-  conversationRefreshSuppression.clear();
   listeners.clear();
-  mountedSubscribers = 0;
-  uninstallSharedInterceptor?.();
-  uninstallSharedInterceptor = null;
-  if (fetchInstalled && originalFetch) globalThis.fetch = originalFetch;
-  fetchInstalled = false;
-  originalFetch = null;
+  resetRpgTurnDiagnosticsForTests();
+  const scope = globalThis as typeof globalThis & Record<string, unknown>;
+  const originalFetch = scope[ORIGINAL_FETCH_KEY] as typeof fetch | undefined;
+  if (originalFetch) globalThis.fetch = originalFetch;
+  delete scope[ORIGINAL_FETCH_KEY];
+  delete scope[INSTALLED_FETCH_KEY];
 }
 
-function responseEntries(
+function visibleEntriesFromPayload(
   sessionId: string,
   submissionId: string,
-  interactionId: string | undefined,
+  interactionId: string,
   payload: RpgTurnResponseV2,
 ): RpgTurnUiEntry[] {
   const visible = payload.visible_response || {};
   const entries: RpgTurnUiEntry[] = [];
-  if (visible.narration?.trim()) {
+  const narration = visible.narration?.trim();
+  if (narration) {
     entries.push({
-      id: `${interactionId || submissionId}:narration`,
+      id: `${interactionId}:narration`,
       sessionId,
       submissionId,
       interactionId,
       status: 'complete',
       avatar: 'O',
       speaker: 'Omnix (Narrator)',
-      text: visible.narration.trim(),
+      text: narration,
       tone: 'narrator',
+      messageKind: 'narration',
+      messageIndex: 0,
     });
   }
   for (const [index, message] of (visible.messages || []).entries()) {
@@ -317,51 +376,83 @@ function responseEntries(
     if (!text) continue;
     const speaker = message.speaker?.trim() || 'NPC';
     entries.push({
-      id: `${interactionId || submissionId}:message:${index}`,
+      id: `${interactionId}:message:${index}`,
       sessionId,
       submissionId,
       interactionId,
       status: 'complete',
-      avatar: speaker.charAt(0).toUpperCase(),
+      avatar: speaker.charAt(0).toUpperCase() || 'N',
       speaker,
       text,
-      tone: 'npc',
+      tone: message.kind === 'narration' ? 'narrator' : 'npc',
+      messageKind: message.kind || 'npc_dialogue',
+      messageIndex: index,
     });
   }
   if (!entries.length) {
-    const text = payload.response?.trim() || payload.content?.trim();
-    if (text) {
+    const fallback = visible.plain_text?.trim() || payload.response?.trim() || payload.content?.trim();
+    if (fallback) {
       entries.push({
-        id: `${interactionId || submissionId}:response`,
+        id: `${interactionId}:response`,
         sessionId,
         submissionId,
         interactionId,
         status: 'complete',
         avatar: 'O',
-        speaker: 'Omnix (Narrator)',
-        text,
+        speaker: 'Omnix',
+        text: fallback,
         tone: 'narrator',
+        messageKind: 'response',
+        messageIndex: 0,
       });
     }
   }
   return entries;
 }
 
-function readCommand(body: BodyInit | null | undefined): string {
-  if (typeof body !== 'string') return '';
-  try {
-    const payload = JSON.parse(body) as Record<string, unknown>;
-    return typeof payload.command === 'string' ? payload.command.trim() : '';
-  } catch {
-    return '';
-  }
+function withBaseIdentity(message: RpgStoryMessagePreview, index: number): RpgStoryMessagePreview {
+  return message.id ? message : { ...message, id: `base:${index}` };
 }
 
-async function safeJson(response: Response): Promise<RpgTurnResponseV2> {
+function removeLatestBaseTurns(
+  messages: RpgStoryMessagePreview[],
+  completedTurnCount: number,
+): RpgStoryMessagePreview[] {
+  if (completedTurnCount <= 0) return messages;
+  const groups: RpgStoryMessagePreview[][] = [];
+  for (const message of messages) {
+    if (message.tone === 'player' || !groups.length) groups.push([message]);
+    else groups[groups.length - 1].push(message);
+  }
+  return groups.slice(0, Math.max(0, groups.length - completedTurnCount)).flat();
+}
+
+function commandFromBody(body: BodyInit | null | undefined): string {
+  if (typeof body !== 'string') return 'Continue the adventure.';
   try {
-    return await response.json() as RpgTurnResponseV2;
+    const payload = JSON.parse(body) as Record<string, unknown>;
+    for (const key of ['command', 'player_input', 'text', 'message']) {
+      const value = payload[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
   } catch {
-    return {};
+    // Non-JSON bodies are passed through without affecting the request.
+  }
+  return 'Continue the adventure.';
+}
+
+async function parseTurnResponse(
+  response: Response,
+  milestones: RpgTurnClientMilestones,
+): Promise<{ payload: RpgTurnResponseV2; milestones: RpgTurnClientMilestones }> {
+  try {
+    const body = await response.text();
+    const bodyReadMs = nowRpgClientMs();
+    const payload = JSON.parse(body) as RpgTurnResponseV2;
+    const jsonParsedMs = nowRpgClientMs();
+    return { payload, milestones: { ...milestones, bodyReadMs, jsonParsedMs } };
+  } catch {
+    return { payload: {}, milestones: { ...milestones, bodyReadMs: nowRpgClientMs(), jsonParsedMs: nowRpgClientMs() } };
   }
 }
 
@@ -383,6 +474,11 @@ async function cacheSessionResponse(pathname: string, response: Response): Promi
       status: response.status,
       statusText: response.statusText,
     });
+    while (sessionResponseCache.size > MAX_SESSION_CACHE_ENTRIES) {
+      const oldest = sessionResponseCache.keys().next().value as string | undefined;
+      if (!oldest) break;
+      sessionResponseCache.delete(oldest);
+    }
   } catch {
     // Cache misses fall through to the real refresh and never affect gameplay.
   }

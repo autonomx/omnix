@@ -1,6 +1,12 @@
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { RpgHeroSummaryPreview, RpgSessionSummaryPreview, RpgStoryMessagePreview } from './rpgUiState';
-import { useRpgTurnUiMessages } from './rpgTurnUiStore';
+import {
+  markRpgTurnReactCommitted,
+  markRpgTurnVisible,
+  rpgDiagnosticsEnabled,
+  useLatestRpgTurnDiagnostics,
+} from './rpgTurnDiagnostics';
+import { storyMessageIdentity, useRpgTurnUiMessages } from './rpgTurnUiStore';
 import './RpgVisualAssets.css';
 
 const SCENE_ART_SRC = '/rpg/glimmerdeep-pass-scene.svg';
@@ -17,6 +23,37 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
   const isPreview = selectedSessionSummary.source === 'preview';
   const [recentEventsExpanded, setRecentEventsExpanded] = useState(false);
   const visibleStoryMessages = useRpgTurnUiMessages(selectedSessionSummary.id, [...storyMessages]);
+  const diagnostics = useLatestRpgTurnDiagnostics(selectedSessionSummary.id);
+  const showDiagnostics = rpgDiagnosticsEnabled();
+  const dialogueRef = useRef<HTMLDivElement | null>(null);
+  const previousScrollHeight = useRef(0);
+  const interactionIds = useMemo(
+    () => [...new Set(visibleStoryMessages.map((message) => message.interactionId).filter((value): value is string => Boolean(value)))],
+    [visibleStoryMessages],
+  );
+  const interactionKey = interactionIds.join('|');
+
+  useLayoutEffect(() => {
+    const element = dialogueRef.current;
+    if (element) {
+      const priorHeight = previousScrollHeight.current;
+      const wasNearBottom = priorHeight === 0 || element.scrollTop + element.clientHeight >= priorHeight - 24;
+      if (!wasNearBottom && priorHeight > 0) {
+        element.scrollTop += Math.max(0, element.scrollHeight - priorHeight);
+      }
+      previousScrollHeight.current = element.scrollHeight;
+    }
+
+    markRpgTurnReactCommitted(selectedSessionSummary.id, interactionIds);
+    if (typeof requestAnimationFrame !== 'function') {
+      markRpgTurnVisible(selectedSessionSummary.id, interactionIds);
+      return undefined;
+    }
+    const frame = requestAnimationFrame(() => {
+      markRpgTurnVisible(selectedSessionSummary.id, interactionIds);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedSessionSummary.id, interactionKey]);
 
   return (
     <section className="rpg-card rpg-story-card" aria-labelledby="rpg-story-scene-title">
@@ -38,7 +75,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
         </div>
       </div>
       <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
-      <div className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite">
+      <div ref={dialogueRef} className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite">
         {isPreview ? (
           <>
             <article>
@@ -58,7 +95,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
           </>
         ) : visibleStoryMessages.length ? (
           visibleStoryMessages.slice(0, 10).map((message, index) => (
-            <article key={`${message.speaker}:${message.text}:${index}`}>
+            <article key={storyMessageIdentity(message, index)} data-interaction-id={message.interactionId}>
               <span className={`rpg-avatar rpg-avatar-small${message.tone === 'narrator' ? ' rpg-avatar-omnix' : ''}`}>
                 {message.avatar}
               </span>
@@ -70,7 +107,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
           ))
         ) : (
           recentEvents.slice(0, 2).map((event, index) => (
-            <article key={`${event}:${index}`}>
+            <article key={`recent-event:${index}`}>
               <span className="rpg-avatar rpg-avatar-small rpg-avatar-omnix">{index + 1}</span>
               <div>
                 <strong>Live session event</strong>
@@ -80,6 +117,27 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
           ))
         )}
       </div>
+      {showDiagnostics && diagnostics ? (
+        <details className="rpg-turn-diagnostics">
+          <summary>Turn diagnostics</summary>
+          <dl>
+            <DiagnosticRow label="Trace" value={diagnostics.traceId} />
+            <DiagnosticRow label="Submission" value={diagnostics.submissionId} />
+            <DiagnosticRow label="Interaction" value={diagnostics.interactionId} />
+            <DiagnosticRow label="Response bytes" value={diagnostics.responseBytes} />
+            <DiagnosticRow label="Server attribution" value={formatPercent(diagnostics.serverAttributionPercent)} />
+            <DiagnosticRow label="Request → headers" value={formatMs(diagnostics.client.requestToHeadersMs)} />
+            <DiagnosticRow label="Headers → body" value={formatMs(diagnostics.client.headersToBodyMs)} />
+            <DiagnosticRow label="Body → parse" value={formatMs(diagnostics.client.bodyToParseMs)} />
+            <DiagnosticRow label="Parse → store" value={formatMs(diagnostics.client.parseToStoreMs)} />
+            <DiagnosticRow label="Store → React commit" value={formatMs(diagnostics.client.storeToCommitMs)} />
+            <DiagnosticRow label="Commit → visible" value={formatMs(diagnostics.client.commitToVisibleMs)} />
+            <DiagnosticRow label="Request → visible" value={formatMs(diagnostics.client.requestToVisibleMs)} />
+          </dl>
+          {diagnostics.serverTiming ? <code>{diagnostics.serverTiming}</code> : null}
+          {diagnostics.serverPayloadTiming ? <pre>{JSON.stringify(diagnostics.serverPayloadTiming, null, 2)}</pre> : null}
+        </details>
+      ) : null}
       {children}
       <div className={`rpg-event-strip${recentEventsExpanded ? ' is-expanded' : ' is-collapsed'}`}>
         <button
@@ -95,10 +153,28 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
         </button>
         <ul id="rpg-recent-events-list">
           {recentEvents.map((event, index) => (
-            <li key={`${event}:${index}`}>{event}</li>
+            <li key={`recent-event-list:${index}`}>{event}</li>
           ))}
         </ul>
       </div>
     </section>
   );
+}
+
+function DiagnosticRow({ label, value }: { label: string; value: string | number | undefined }) {
+  if (value === undefined || value === '') return null;
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </>
+  );
+}
+
+function formatMs(value: number | undefined): string | undefined {
+  return value === undefined ? undefined : `${value.toFixed(1)} ms`;
+}
+
+function formatPercent(value: number | undefined): string | undefined {
+  return value === undefined ? undefined : `${value.toFixed(1)}%`;
 }
