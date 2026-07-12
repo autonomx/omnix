@@ -22,6 +22,28 @@ def test_dialogue_quality_report_passes_permanent_release_gate() -> None:
     assert gate["accepted_case_count"] >= 30
 
 
+def test_near_duplicate_rate_must_be_strictly_below_five_percent() -> None:
+    report = {
+        "accepted_case_count": 30,
+        "failures": [],
+        "metrics": {
+            "direct_answer_rate": 1.0,
+            "correct_speaker_rate": 1.0,
+            "grounded_specificity_rate": 1.0,
+            "continuity_rate": 1.0,
+            "candidate_rejection_rate": 1.0,
+            "near_duplicate_rate": 0.05,
+            "private_leak_rate": 0.0,
+            "empty_line_rate": 0.0,
+        },
+    }
+
+    gate = evaluate_dialogue_quality_release_gates(report)
+
+    assert gate["ok"] is False
+    assert "near_duplicate_rate_above_target" in gate["failures"]
+
+
 def test_performance_gate_requires_95_percent_attribution_and_50kb_response() -> None:
     passing = evaluate_performance_release_gates(
         {
@@ -58,6 +80,15 @@ def test_ui_gate_requires_identity_and_commit_to_visible_under_50ms() -> None:
             },
         }
     )
+    zero_millisecond = evaluate_ui_timing_release_gates(
+        {
+            "interactionId": "interaction:13",
+            "client": {
+                "commitToVisibleMs": 0.0,
+                "requestToVisibleMs": 0.0,
+            },
+        }
+    )
     failing = evaluate_ui_timing_release_gates(
         {
             "interactionId": "",
@@ -66,6 +97,9 @@ def test_ui_gate_requires_identity_and_commit_to_visible_under_50ms() -> None:
     )
 
     assert passing["ok"] is True
+    assert zero_millisecond["ok"] is True
+    assert zero_millisecond["commit_to_visible_ms"] == 0.0
+    assert zero_millisecond["request_to_visible_ms"] == 0.0
     assert failing["ok"] is False
     assert "missing_ui_interaction_identity" in failing["failures"]
     assert "react_commit_to_visible_above_50ms" in failing["failures"]
