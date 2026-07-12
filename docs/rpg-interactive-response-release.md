@@ -18,9 +18,9 @@ This release hardens the foreground RPG turn path so a player command is execute
 | 8 | Optimistic and incremental web transcript rendering | #1343 | `567df70d67aa7e0e62785e184c6d2df493a31eda` |
 | 9 | One interaction lifecycle across authoritative resolution and deferred narration | #1344 | `6b3a029f7b2284009f1b4373db58fe39c9fec8b6` |
 | 10 | Permanent provider-free structural release gates | #1345 | `635cdbd181da12cad06d87cc9346806ef4edcd37` |
-| 11 | Release evidence, local live-provider validation, rollout, and rollback runbook | current phase | recorded by the Phase 11 merge |
+| 11 | Release evidence, local live-provider validation, rollout, and rollback runbook | #1346 | `8b11adfda8aedb40a6aad11f4125a010f14aa1bb` |
 
-The machine-readable Phase 1–10 evidence index is in `src/app/rpg/release_finalization.py`.
+The machine-readable Phase 1–11 evidence index is in `src/app/rpg/release_finalization.py`.
 
 ## GitHub Actions policy
 
