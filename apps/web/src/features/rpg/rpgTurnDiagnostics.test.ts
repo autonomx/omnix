@@ -49,7 +49,7 @@ describe('rpgTurnDiagnostics evidence export', () => {
 
   it('copies the exported JSON when the clipboard API is available', async () => {
     beginRpgTurnDiagnostics('session:bran', 'submit:one', 10);
-    const writeText = vi.fn(async () => undefined);
+    const writeText = vi.fn(async (_value: string) => undefined);
     Object.defineProperty(globalThis.navigator, 'clipboard', {
       configurable: true,
       value: { writeText },
@@ -57,6 +57,6 @@ describe('rpgTurnDiagnostics evidence export', () => {
 
     await expect(copyRpgTurnDiagnostics('session:bran')).resolves.toBe(true);
     expect(writeText).toHaveBeenCalledOnce();
-    expect(writeText.mock.calls[0][0]).toContain('rpg_browser_timing_evidence_v1');
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('rpg_browser_timing_evidence_v1'));
   });
 });
