@@ -38,6 +38,7 @@ def _install_create_guard(sqlite_job_store_cls: Any) -> None:
 
     @wraps(original_create_job)
     def create_job_with_rpg_turn_guard(self: Any, request: Any) -> JobRecord:
+        _sanitize_foreground_record_compat(request)
         duplicate = _find_duplicate_rpg_turn_job(self, request)
         if duplicate is not None:
             return duplicate
@@ -64,6 +65,20 @@ def _install_terminal_guards(sqlite_job_store_cls: Any) -> None:
             return __original(self, job_id, *args, **kwargs)
 
         setattr(sqlite_job_store_cls, method_name, terminal_safe)
+
+
+def _sanitize_foreground_record_compat(request: Any) -> None:
+    if _text(getattr(request, "type", "")) != RPG_FOREGROUND_RECORD_TYPE:
+        return
+    compat = _dict_value(getattr(request, "compat", None))
+    compat.pop("synthetic_job_mirror", None)
+    compat.pop("direct_foreground_route", None)
+    compat["foreground_record"] = True
+    compat["record_only"] = True
+    try:
+        request.compat = compat
+    except Exception:
+        pass
 
 
 def _find_duplicate_rpg_turn_job(job_store: Any, request: Any) -> JobRecord | None:
