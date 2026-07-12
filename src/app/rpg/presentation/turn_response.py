@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .turn_response_budget import enforce_turn_response_budget
 from .visible_response import build_visible_response
 
 TURN_RESPONSE_CONTRACT_VERSION = "rpg_turn_response_v2"
@@ -76,7 +77,10 @@ def build_turn_response_v2(
         "session_summary": session_summary,
         "creation_server_trace": _compact_server_trace(_dict(root.get("creation_server_trace"))),
     }
-    return _drop_none(payload)
+    return enforce_turn_response_budget(
+        _drop_none(payload),
+        max_bytes=TURN_RESPONSE_MAX_BYTES,
+    )
 
 
 def turn_response_size_bytes(payload: dict[str, Any]) -> int:
