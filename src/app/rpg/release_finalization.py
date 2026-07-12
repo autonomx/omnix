@@ -94,6 +94,13 @@ PHASE_EVIDENCE: tuple[ReleasePhaseEvidence, ...] = (
         "cf6d6c1a1c453fb7ae0c11f7735708466a336ae9",
         "635cdbd181da12cad06d87cc9346806ef4edcd37",
     ),
+    ReleasePhaseEvidence(
+        11,
+        "Finalize interactive RPG release and local validation",
+        1346,
+        "3d190582333f3fec7011a069ebad309cddbc5eeb",
+        "8b11adfda8aedb40a6aad11f4125a010f14aa1bb",
+    ),
 )
 
 
@@ -123,10 +130,10 @@ def validate_release_evidence(
 ) -> list[str]:
     values = tuple(phases)
     failures: list[str] = []
-    expected = list(range(1, 11))
+    expected = list(range(1, 12))
     actual = [item.phase for item in values]
     if actual != expected:
-        failures.append("phase_sequence_must_be_1_through_10")
+        failures.append("phase_sequence_must_be_1_through_11")
     if len({item.pull_request for item in values}) != len(values):
         failures.append("duplicate_pull_request")
     for item in values:

@@ -58,10 +58,13 @@ def test_release_evidence_index_is_complete_and_provider_free() -> None:
 
     assert index["format_version"] == INTERACTIVE_RELEASE_VERSION
     assert index["ready_for_operator_validation"] is True
-    assert index["completed_phase_count"] == 10
-    assert [item["phase"] for item in index["completed_phases"]] == list(range(1, 11))
+    assert index["completed_phase_count"] == 11
+    assert [item["phase"] for item in index["completed_phases"]] == list(range(1, 12))
     assert all(item["provider_free_ci"] is True for item in index["completed_phases"])
-    assert len({item.pull_request for item in PHASE_EVIDENCE}) == 10
+    assert len({item.pull_request for item in PHASE_EVIDENCE}) == 11
+    assert PHASE_EVIDENCE[-1].pull_request == 1346
+    assert PHASE_EVIDENCE[-1].exact_head_sha == "3d190582333f3fec7011a069ebad309cddbc5eeb"
+    assert PHASE_EVIDENCE[-1].merge_sha == "8b11adfda8aedb40a6aad11f4125a010f14aa1bb"
     assert index["live_provider_validation"]["github_actions_allowed"] is False
 
 
@@ -134,5 +137,7 @@ def test_release_runbook_keeps_live_provider_validation_out_of_actions() -> None
     assert "GitHub Actions must remain provider-free" in runbook
     assert "Do not add it to a GitHub Actions workflow" in runbook
     assert "OMNIX_RPG_LIVE_SMOKE" in runbook
+    assert "#1346" in runbook
+    assert "8b11adfda8aedb40a6aad11f4125a010f14aa1bb" in runbook
     assert "rpg_interactive_live_smoke.py" not in workflows
     assert "OMNIX_RPG_LIVE_SMOKE" not in workflows
