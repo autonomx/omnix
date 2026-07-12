@@ -57,7 +57,7 @@ GitHub Actions must remain provider-free. Required checks are:
 
 The deterministic suite may use fakes, monkeypatches, SQLite, local files, static payloads, threads, and local processes. It must not call a live LLM, LM Studio, OpenRouter, OpenAI-compatible provider, or any external model endpoint.
 
-The local live smoke harnesses contain hard CI guards and require explicit operator opt-in. Do not add them to a GitHub Actions workflow.
+Each local live smoke harness contains a hard CI guard and requires explicit operator opt-in. Do not add it to a GitHub Actions workflow.
 
 ## Local live-provider validation
 
