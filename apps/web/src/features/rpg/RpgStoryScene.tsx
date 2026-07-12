@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { RpgHeroSummaryPreview, RpgSessionSummaryPreview, RpgStoryMessagePreview } from './rpgUiState';
+import { useRpgTurnUiMessages } from './rpgTurnUiStore';
 import './RpgVisualAssets.css';
 
 const SCENE_ART_SRC = '/rpg/glimmerdeep-pass-scene.svg';
@@ -15,6 +16,7 @@ interface RpgStorySceneProps {
 export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSessionSummary, storyMessages = [] }: RpgStorySceneProps) {
   const isPreview = selectedSessionSummary.source === 'preview';
   const [recentEventsExpanded, setRecentEventsExpanded] = useState(false);
+  const visibleStoryMessages = useRpgTurnUiMessages(selectedSessionSummary.id, storyMessages);
 
   return (
     <section className="rpg-card rpg-story-card" aria-labelledby="rpg-story-scene-title">
@@ -36,7 +38,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
         </div>
       </div>
       <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
-      <div className="rpg-dialogue-stack" aria-label="Conversation">
+      <div className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite">
         {isPreview ? (
           <>
             <article>
@@ -54,8 +56,8 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
               </div>
             </article>
           </>
-        ) : storyMessages.length ? (
-          storyMessages.slice(0, 10).map((message, index) => (
+        ) : visibleStoryMessages.length ? (
+          visibleStoryMessages.slice(0, 10).map((message, index) => (
             <article key={`${message.speaker}:${message.text}:${index}`}>
               <span className={`rpg-avatar rpg-avatar-small${message.tone === 'narrator' ? ' rpg-avatar-omnix' : ''}`}>
                 {message.avatar}
