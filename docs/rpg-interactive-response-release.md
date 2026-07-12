@@ -1,6 +1,6 @@
 # Interactive RPG response release
 
-Status: core implementation is merged through the recorded Phase 1–11 sequence. Original-roadmap completion follow-ups remain in progress and are tracked separately from the historical phase evidence.
+Status: original-roadmap implementation is complete through PR #1355, subject to provider-free CI on its exact head. Provider-, hardware-, and browser-specific acceptance evidence remains an explicit local operator run and is never executed in GitHub Actions.
 
 This release hardens the foreground RPG turn path so a player command is executed once, produces one canonical visible response, advances durable interaction continuity, and returns a bounded browser payload. Stateful mechanics remain authoritative; narration and dialogue enrich presentation only.
 
@@ -20,7 +20,20 @@ This release hardens the foreground RPG turn path so a player command is execute
 | 10 | Permanent provider-free structural release gates | #1345 | `635cdbd181da12cad06d87cc9346806ef4edcd37` |
 | 11 | Release evidence, local live-provider validation, rollout, and rollback runbook | #1346 | `8b11adfda8aedb40a6aad11f4125a010f14aa1bb` |
 
-The machine-readable historical Phase 1–11 evidence index is in `src/app/rpg/release_finalization.py`. It records what merged; it does not assert that every item in the original roadmap is finished.
+The machine-readable historical Phase 1–11 evidence index is in `src/app/rpg/release_finalization.py`. It records what merged; it does not substitute for the completion follow-ups below.
+
+## Original-roadmap completion follow-ups
+
+| Scope | Pull request | Merge SHA / status |
+|---|---:|---|
+| Deterministic Phase 0 baseline and original 1.5s / 2.5s targets | #1348 | `e14eed6a14d632afba33b1ee8de909a14b70fc5e` |
+| Durable cross-process submission ownership | #1349 | `5b4e39b140115817664d10c6450970fe18087579` |
+| Safe abandoned-owner recovery before execution | #1350 | `19f1e02199cb83b6764f09db69252c3c88743941` |
+| Runtime UTF-8 50KB response ceiling | #1351 | `17eb5d6f48a8879a95282f1845eb8c6de0701d05` |
+| Canonical response cleanup and duplicate route removal | #1352 | `3e26b13c862d17241e3807232e0c8434167afa32` |
+| Full-path attribution, CPU/RSS, provider-stage, and response telemetry | #1353 | `24340aa47c426c4a0aaa6e4c24c606edb61726bc` |
+| Interaction-keyed UI reconciliation and browser diagnostics | #1354 | `96c350b6bc7da445aeb894e681017bf7fa309bea` |
+| Save migration, expanded quality matrix, final gates, and local evidence bundle | #1355 | current completion PR; exact merge SHA is recorded after merge |
 
 ## Phase 0 reproducible baseline
 
@@ -40,7 +53,7 @@ GitHub Actions must remain provider-free. Required checks are:
 - `RPG deterministic PR gates`
 - `Live Chat hardening gates`
 
-The deterministic suite may use fakes, monkeypatches, SQLite, local files, and static payloads. It must not call a live LLM, LM Studio, OpenRouter, OpenAI-compatible provider, or any external model endpoint.
+The deterministic suite may use fakes, monkeypatches, SQLite, local files, static payloads, and static timing dictionaries. It must not call a live LLM, LM Studio, OpenRouter, OpenAI-compatible provider, or any external model endpoint.
 
 The local live smoke harness contains a hard CI guard and requires an explicit operator opt-in. Do not add it to a GitHub Actions workflow.
 
@@ -51,7 +64,8 @@ Run the gateway and configured local provider first. Use an existing RPG session
 ```powershell
 $env:PYTHONPATH = "src"
 $env:OMNIX_RPG_LIVE_SMOKE = "1"
-python scripts/rpg_interactive_live_smoke.py --session-id "<session-id>"
+python scripts/rpg_interactive_live_smoke.py --session-id "<session-id>" `
+  > resources/data/test-results/rpg-live-smoke.json
 ```
 
 Optional flags:
@@ -65,7 +79,29 @@ python scripts/rpg_interactive_live_smoke.py `
   --timeout-seconds 120
 ```
 
-The harness sends stable `X-Omnix-Rpg-Submission-Id` values, repeats the first submission to verify idempotency, validates the compact response gates, records response bytes, and reports mean, median, p95, and maximum latency. It exits unsuccessfully when a structural gate or latency target is missed. It does not mutate GitHub Actions or upload live-provider content.
+The harness sends stable `X-Omnix-Rpg-Submission-Id` values, repeats the first submission to verify idempotency, validates compact response gates, records provider-call count, provider time, non-provider overhead, final server attribution, trace ID, response bytes, and mean/median/p95/maximum latency. It exits unsuccessfully when a structural or live runtime target is missed.
+
+## Complete local acceptance bundle
+
+Export at least three browser timing snapshots from the developer diagnostics drawer. Enable the drawer in a local build or with `?rpgDiagnostics=1`. Keep private story content outside source control.
+
+Prepare:
+
+- the live smoke report;
+- a live-provider dialogue-quality report using the same metric shape as `rpg_dialogue_quality_benchmark_v1`;
+- a browser JSON object containing a `samples` list with interaction IDs and client timing fields.
+
+Then run:
+
+```powershell
+python scripts/rpg_interactive_local_acceptance.py `
+  --live-smoke-report resources/data/test-results/rpg-live-smoke.json `
+  --dialogue-quality-report resources/data/test-results/rpg-live-dialogue-quality.json `
+  --browser-timing-report resources/data/test-results/rpg-browser-timing.json `
+  --output resources/data/test-results/rpg-local-acceptance.json
+```
+
+This validator exits nonzero unless all three evidence surfaces pass.
 
 ## Operator acceptance criteria
 
@@ -73,20 +109,25 @@ Repository gates are necessary but do not prove local provider quality or latenc
 
 1. Three distinct commands produce three distinct interaction IDs.
 2. Replaying the same submission ID returns the original interaction ID and does not execute a second turn.
-3. Every response uses `rpg_turn_response_v2`, has visible text, and remains at or below 50,000 bytes.
-4. Dialogue shows the addressed NPC line, not only generic scene prose.
-5. A reload preserves recent interactions and pending/completed narration lifecycle state.
-6. A stateful command changes only authoritative domains and deferred narration does not rewrite mechanics.
-7. Median foreground dialogue latency is 1.5 seconds or less on the intended local provider and hardware.
-8. p95 foreground dialogue latency is 2.5 seconds or less on the intended local provider and hardware.
+3. Every response uses `rpg_turn_response_v2`, includes top-level `interaction_id` and `interaction_seq`, has visible text, and remains at or below 50,000 UTF-8 bytes.
+4. Each dialogue performs exactly one provider call.
+5. Foreground child spans explain at least 95% of request wall time.
+6. Non-provider HTTP overhead is at most 250ms.
+7. Browser React commit-to-visible time is at most 50ms.
+8. Direct-answer rate is at least 95%; correct-speaker rate is at least 99%; grounded-specificity rate is at least 90%; continuity rate is at least 95%.
+9. Near-duplicate rate is below 5%; private-leak and empty-line rates are zero.
+10. A reload preserves migrated recent interactions, monotonic sequence/revision, and pending/completed narration lifecycle state.
+11. A stateful command changes only authoritative domains and deferred narration does not rewrite mechanics.
+12. Median foreground dialogue latency is 1.5 seconds or less on the intended local provider and hardware.
+13. p95 foreground dialogue latency is 2.5 seconds or less on the intended local provider and hardware.
 
-Latency and provider-quality targets are operator evidence, not provider-free CI assertions.
+Latency, provider quality, and browser timing targets are operator evidence, not provider-free CI assertions.
 
 ## Staged rollout
 
 ### Stage 1 — single-session canary
 
-Use one disposable or backed-up session. Run the local smoke harness and inspect `resources/data/logs/rpg/*.jsonl` for the shared trace ID, response size, persistence spans, and duplicate execution warnings.
+Use one disposable or backed-up session. Run the local smoke harness and inspect `resources/data/logs/rpg/*.jsonl` for the shared trace ID, response size, persistence spans, attribution percentage, provider timing, and duplicate execution warnings.
 
 ### Stage 2 — continuity and reload
 
@@ -98,13 +139,13 @@ Exercise trade, travel, combat, inventory, and quest actions. Confirm each autho
 
 ### Stage 4 — extended local soak
 
-Run the existing provider-free 1000-turn deterministic endurance gate in CI and a separate local provider-backed conversational soak. Keep the provider-backed soak local. Record latency and quality summaries without committing private prompts, provider responses, secrets, or session payloads.
+Run the provider-free 1000-turn deterministic endurance gate in CI and a separate local provider-backed conversational soak. Keep the provider-backed soak local. Record latency and quality summaries without committing private prompts, provider responses, secrets, or session payloads.
 
 ## Rollback
 
 1. Stop new turn submissions before changing code.
 2. Back up the session JSON and adjacent `.interactions.jsonl` files.
-3. Revert phase merge commits in reverse order, starting with the newest affected phase. Do not delete append-only interaction logs during rollback.
+3. Revert completion and phase merge commits in reverse order, starting with the newest affected change. Do not delete append-only interaction logs during rollback.
 4. Restart the gateway and load the backed-up session. Older snapshots remain authoritative; event replay is additive and checksum-validated.
 5. Run provider-free deterministic gates on the rollback branch.
 6. Run a short local smoke only after the rollback build is stable and only outside CI.
