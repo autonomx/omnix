@@ -11,6 +11,7 @@ from app.gateway.rpg_turn_job_mirror import (
     _apply_turn_with_job_mirror,
     _submission_lock_count,
 )
+from app.jobs.rpg_last10_report_debug import build_turn_debug_payload
 from app.jobs.store import SQLiteJobStore
 from app.rpg.presentation.turn_response import build_turn_response_v2
 
@@ -77,6 +78,7 @@ def test_foreground_job_stores_only_bounded_v2_record(monkeypatch: Any, tmp_path
     output = jobs[0].output_refs[0]
     record = output["turn_response"]
     encoded = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    report_debug = build_turn_debug_payload(jobs[0])
 
     assert result["interaction_id"] == "interaction:1"
     assert output["record_version"] == "rpg_foreground_turn_record_v1"
@@ -88,6 +90,8 @@ def test_foreground_job_stores_only_bounded_v2_record(monkeypatch: Any, tmp_path
     assert record["state"]["revision"] == 11
     assert record["state"]["changed_domains"] == ["conversation", "inventory", "currency"]
     assert record["result"]["stateful"] is True
+    assert report_debug["turn_response_record"]["interaction_id"] == "interaction:1"
+    assert "raw_turn_result" not in report_debug
 
 
 def test_compact_replay_is_projection_stable(monkeypatch: Any, tmp_path: Path) -> None:
