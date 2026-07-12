@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: omnix-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${OMNIX_POSTGRES_DB:-omnix}
+      POSTGRES_USER: ${OMNIX_POSTGRES_USER:-omnix}
+      POSTGRES_PASSWORD: ${OMNIX_POSTGRES_PASSWORD:-omnix}
+      TZ: UTC
+      PGTZ: UTC
+    command:
+      - postgres
+      - -c
+      - timezone=UTC
+      - -c
+      - log_timezone=UTC
+      - -c
+      - max_connections=100
+    ports:
+      - "127.0.0.1:${OMNIX_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - omnix-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  omnix-postgres-data:
+    name: omnix-postgres-data
