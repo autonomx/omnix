@@ -1,4 +1,4 @@
-"""Deep debug extraction for RPG last-ten-turn reports."""
+"""Bounded debug extraction for RPG last-ten-turn reports."""
 from __future__ import annotations
 
 import json
@@ -59,15 +59,15 @@ _PROVIDER_METRIC_KEYS = (
 
 
 def build_turn_debug_payload(job: JobRecord) -> dict[str, Any]:
-    """Build non-mutating debug evidence for one completed RPG turn job."""
+    """Build non-mutating bounded debug evidence for one completed RPG turn job."""
 
-    raw_turn_result = _raw_turn_result(job)
-    intent = _intent_diagnostics(raw_turn_result, job)
-    dialogue = _dialogue_payload(raw_turn_result)
-    selection = _response_selection_trace(raw_turn_result, intent)
-    performance = _performance_trace(job, raw_turn_result, intent)
+    turn_response_record = _turn_response_record(job)
+    intent = _intent_diagnostics(turn_response_record, job)
+    dialogue = _dialogue_payload(turn_response_record)
+    selection = _response_selection_trace(turn_response_record, intent)
+    performance = _performance_trace(job, turn_response_record, intent)
     return {
-        "raw_turn_result": raw_turn_result,
+        "turn_response_record": turn_response_record,
         "raw_intent_diagnostics": intent,
         "dialogue_payload": dialogue,
         "response_selection_trace": selection,
@@ -78,17 +78,20 @@ def build_turn_debug_payload(job: JobRecord) -> dict[str, Any]:
     }
 
 
-def _raw_turn_result(job: JobRecord) -> dict[str, Any]:
+def _turn_response_record(job: JobRecord) -> dict[str, Any]:
     refs = _list_value(job.output_refs)
     priority_types = {
+        "rpg_turn_response",
         "rpg_turn_result",
-        "rpg_turn_raw_result",
+        "rpg_turn_response_payload",
         "rpg_turn_debug",
         "rpg_runtime_result",
-        "rpg_turn_response_payload",
     }
     for ref in refs:
         record = _dict_value(ref)
+        direct = _dict_value(record.get("turn_response"))
+        if direct:
+            return direct
         if _safe_str(record.get("type")) in priority_types:
             parsed = _record_payload(record)
             if parsed:
@@ -101,50 +104,53 @@ def _raw_turn_result(job: JobRecord) -> dict[str, Any]:
 
 
 def _record_payload(record: dict[str, Any]) -> dict[str, Any]:
-    for key in ("raw_result", "result", "payload", "content", "text", "message"):
+    for key in ("turn_response", "result", "payload", "content", "text", "message"):
         parsed = _parse_mapping(record.get(key))
         if parsed:
             return parsed
     return {}
 
 
-def _intent_diagnostics(raw: dict[str, Any], job: JobRecord) -> dict[str, Any]:
-    roots: list[Any] = [raw, job.input_payload, job.output_refs, job.logs]
+def _intent_diagnostics(record: dict[str, Any], job: JobRecord) -> dict[str, Any]:
+    roots: list[Any] = [record, job.input_payload, job.output_refs, job.logs]
     for root in roots:
         for key in _DIAGNOSTIC_KEYS:
             found = _find_key(root, key)
             if isinstance(found, dict):
                 return found
-    advisory = _find_key(raw, "first_call_action_advisory") or _find_key(raw, "first_call_semantic_advisory")
+    advisory = _find_key(record, "first_call_action_advisory") or _find_key(
+        record,
+        "first_call_semantic_advisory",
+    )
     nested = _find_key(advisory, "first_call_grounding_diagnostics")
     return nested if isinstance(nested, dict) else {}
 
 
-def _dialogue_payload(raw: dict[str, Any]) -> dict[str, Any]:
+def _dialogue_payload(record: dict[str, Any]) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for key in _DIALOGUE_PAYLOAD_KEYS:
-        value = _find_key(raw, key)
+        value = _find_key(record, key)
         if isinstance(value, dict):
             payload[key] = value
-    for key in ("npc", "raw_npc", "final_narration_candidate", "visible_response"):
-        value = _find_key(raw, key)
+    for key in ("npc", "final_narration_candidate", "visible_response"):
+        value = _find_key(record, key)
         if isinstance(value, dict):
             payload[key] = value
-    for key in ("npc_speaker", "npc_line", "raw_npc_speaker", "raw_npc_line", "target_npc", "target_name", "target_id"):
-        value = _find_key(raw, key)
+    for key in ("npc_speaker", "npc_line", "target_npc", "target_name", "target_id"):
+        value = _find_key(record, key)
         if value not in (None, ""):
             payload[key] = value
     return payload
 
 
-def _response_selection_trace(raw: dict[str, Any], intent: dict[str, Any]) -> dict[str, Any]:
+def _response_selection_trace(record: dict[str, Any], intent: dict[str, Any]) -> dict[str, Any]:
     trace: dict[str, Any] = {}
     for key in _SELECTION_SCALAR_KEYS:
-        value = _find_key(raw, key)
+        value = _find_key(record, key)
         if value not in (None, ""):
             trace[key] = value
     for key in _SELECTION_PAYLOAD_KEYS:
-        value = _find_key(raw, key)
+        value = _find_key(record, key)
         if value not in (None, "", [], {}):
             trace[key] = value
     visible_response = _find_key(intent, "visible_response")
@@ -155,10 +161,15 @@ def _response_selection_trace(raw: dict[str, Any], intent: dict[str, Any]) -> di
     return trace
 
 
-def _performance_trace(job: JobRecord, raw: dict[str, Any], intent: dict[str, Any]) -> dict[str, Any]:
+def _performance_trace(job: JobRecord, record: dict[str, Any], intent: dict[str, Any]) -> dict[str, Any]:
     stage_timings = [_stage_timing(_stage_dict(stage)) for stage in _list_value(job.stages)]
     provider_metrics: dict[str, Any] = {}
-    for root in (raw, intent, _find_key(raw, "performance_trace"), _find_key(raw, "provider_metrics")):
+    for root in (
+        record,
+        intent,
+        _find_key(record, "performance_trace"),
+        _find_key(record, "provider_metrics"),
+    ):
         for key in _PROVIDER_METRIC_KEYS:
             value = _find_key(root, key)
             if value not in (None, ""):
@@ -169,7 +180,10 @@ def _performance_trace(job: JobRecord, raw: dict[str, Any], intent: dict[str, An
     return {
         "job_timing_seconds": {
             "created_to_started": _duration(job.created_at, job.started_at),
-            "started_to_completed": _duration(job.started_at or job.created_at, job.completed_at or job.updated_at),
+            "started_to_completed": _duration(
+                job.started_at or job.created_at,
+                job.completed_at or job.updated_at,
+            ),
             "created_to_completed": _duration(job.created_at, job.completed_at or job.updated_at),
         },
         "stage_timings": stage_timings,
