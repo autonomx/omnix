@@ -28,7 +28,7 @@ def build_turn_response_v2(
     visible = build_visible_response(root, command)
     text = _text(visible.get("plain_text"))
     turn_id = _first_text(sources, "turn_id")
-    tick = _first_int(sources, "tick")
+    tick = _first_int(sources, "tick", "simulation_tick")
     submission_id = _first_text(sources, "submission_id")
     interaction_id = _first_text(sources, "interaction_id") or turn_id
     timing = _compact_timing(sources)
@@ -42,6 +42,8 @@ def build_turn_response_v2(
         "turn_id": turn_id or None,
         "tick": tick,
         "interaction_id": interaction_id or None,
+        "stateful": stateful,
+        "changed_domains": changed_domains,
         "action_type": _first_text(sources, "action_type") or None,
         "semantic_action_type": _first_text(sources, "semantic_action_type") or None,
         "semantic_family": _first_text(sources, "semantic_family") or None,
@@ -160,6 +162,8 @@ def _changed_domains(sources: tuple[dict[str, Any], ...], *, stateful: bool | No
     explicit: list[str] = []
     for source in sources:
         value = source.get("changed_domains")
+        if not isinstance(value, list):
+            value = _dict(source.get("state")).get("changed_domains")
         if isinstance(value, list):
             for item in value:
                 text = _text(item)
@@ -188,6 +192,12 @@ def _changed_domains(sources: tuple[dict[str, Any], ...], *, stateful: bool | No
 def _state_revision(session: dict[str, Any] | None, sources: tuple[dict[str, Any], ...]) -> int | None:
     runtime = _dict((session or {}).get("runtime_state"))
     value = runtime.get("state_revision")
+    if value is None:
+        for source in sources:
+            nested_state = _dict(source.get("state"))
+            if nested_state.get("revision") is not None:
+                value = nested_state.get("revision")
+                break
     if value is None:
         value = _first_value(sources, "state_revision", "revision")
     return _int_or_none(value)

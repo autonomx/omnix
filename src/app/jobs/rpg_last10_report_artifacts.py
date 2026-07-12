@@ -81,7 +81,7 @@ def render_rpg_last10_report_html(payload: dict[str, Any]) -> str:
             _performance_html(performance),
             "<h2>Last turn jobs</h2>",
             _turns_html(_list_value(payload.get("turns"))),
-            "<h2>Turn debug payloads</h2>",
+            "<h2>Turn response records</h2>",
             _turn_debug_html(_list_value(payload.get("turns"))),
             "<h2>Session event fallback</h2>",
             _events_html(_list_value(payload.get("session_events"))),
@@ -139,7 +139,7 @@ def _turns_html(turns: list[Any]) -> str:
 
 def _turn_debug_html(turns: list[Any]) -> str:
     if not turns:
-        return "<p>No turn debug payloads were found.</p>"
+        return "<p>No turn response records were found.</p>"
     sections = []
     for raw in turns:
         row = _dict_value(raw)
@@ -148,7 +148,7 @@ def _turn_debug_html(turns: list[Any]) -> str:
             "dialogue_payload": row.get("dialogue_payload"),
             "response_selection_trace": row.get("response_selection_trace"),
             "performance_trace": row.get("performance_trace"),
-            "raw_turn_result": row.get("raw_turn_result"),
+            "turn_response_record": row.get("turn_response_record"),
             "raw_input_payload": row.get("raw_input_payload"),
             "raw_output_refs": row.get("raw_output_refs"),
             "raw_logs": row.get("raw_logs"),

@@ -145,7 +145,7 @@ def build_rpg_last10_report_payload(job: JobRecord, *, job_store: Any | None = N
                 "rpg-last10-turn-report.zip",
             ],
             "debug_payloads": [
-                "raw_turn_result",
+                "turn_response_record",
                 "raw_intent_diagnostics",
                 "dialogue_payload",
                 "response_selection_trace",
@@ -227,7 +227,18 @@ def _collect_session_events(session_id: str | None, *, limit: int) -> list[dict[
     candidates: list[Any] = []
     for root in [item for item in roots if item]:
         journal = _dict_value(root.get("journal"))
-        for key in ("timeline", "recent_events", "events", "event_log", "turn_history", "turns", "history", "dialogue_log", "dialogue", "logs"):
+        for key in (
+            "timeline",
+            "recent_events",
+            "events",
+            "event_log",
+            "turn_history",
+            "turns",
+            "history",
+            "dialogue_log",
+            "dialogue",
+            "logs",
+        ):
             candidates.extend(_list_value(root.get(key)))
         candidates.extend(_list_value(journal.get("entries")))
     events = [_session_event_row(item, index + 1) for index, item in enumerate(candidates)]
@@ -243,15 +254,46 @@ def _session_event_row(item: Any, sequence: int) -> dict[str, Any] | None:
     return {
         "sequence": sequence,
         "turn": _number(record.get("turn") or record.get("turn_count") or record.get("index")),
-        "time": _text(record.get("time") or record.get("timestamp") or record.get("created_at") or record.get("updated_at") or record.get("turn_label")),
-        "title": _text(record.get("title") or record.get("label") or record.get("event") or record.get("kind") or record.get("type")) or f"Session event {sequence}",
-        "command": _text(record.get("command") or record.get("action") or record.get("player_action") or record.get("input")),
-        "detail": _text(record.get("narration") or record.get("response") or record.get("output") or record.get("summary") or record.get("result") or record.get("text") or record.get("message") or record.get("description")),
+        "time": _text(
+            record.get("time")
+            or record.get("timestamp")
+            or record.get("created_at")
+            or record.get("updated_at")
+            or record.get("turn_label")
+        ),
+        "title": _text(
+            record.get("title")
+            or record.get("label")
+            or record.get("event")
+            or record.get("kind")
+            or record.get("type")
+        )
+        or f"Session event {sequence}",
+        "command": _text(
+            record.get("command")
+            or record.get("action")
+            or record.get("player_action")
+            or record.get("input")
+        ),
+        "detail": _text(
+            record.get("narration")
+            or record.get("response")
+            or record.get("output")
+            or record.get("summary")
+            or record.get("result")
+            or record.get("text")
+            or record.get("message")
+            or record.get("description")
+        ),
     }
 
 
 def _performance_summary(turns: list[dict[str, Any]]) -> dict[str, Any]:
-    durations = [float(row["duration_seconds"]) for row in turns if isinstance(row.get("duration_seconds"), (int, float))]
+    durations = [
+        float(row["duration_seconds"])
+        for row in turns
+        if isinstance(row.get("duration_seconds"), (int, float))
+    ]
     stage_totals: dict[str, float] = {}
     provider_turns = 0
     for row in turns:
@@ -281,16 +323,48 @@ def _performance_summary(turns: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _diagnostics(session_id: str | None, turns: list[dict[str, Any]], session_events: list[dict[str, Any]], performance: dict[str, Any]) -> list[dict[str, Any]]:
+def _diagnostics(
+    session_id: str | None,
+    turns: list[dict[str, Any]],
+    session_events: list[dict[str, Any]],
+    performance: dict[str, Any],
+) -> list[dict[str, Any]]:
     diagnostics: list[dict[str, Any]] = []
     if not session_id:
-        diagnostics.append({"kind": "missing_session_id", "severity": "warning", "message": "No live RPG session id was attached to the report request."})
+        diagnostics.append(
+            {
+                "kind": "missing_session_id",
+                "severity": "warning",
+                "message": "No live RPG session id was attached to the report request.",
+            }
+        )
     if not turns:
-        diagnostics.append({"kind": "missing_completed_turn_jobs", "severity": "warning", "message": "No completed rpg.turn jobs were found for the selected session; session events are included as fallback evidence."})
+        diagnostics.append(
+            {
+                "kind": "missing_completed_turn_jobs",
+                "severity": "warning",
+                "message": (
+                    "No completed rpg.turn jobs were found for the selected session; "
+                    "session events are included as fallback evidence."
+                ),
+            }
+        )
     if not session_events:
-        diagnostics.append({"kind": "missing_session_events", "severity": "info", "message": "No session timeline/events were available as fallback evidence."})
+        diagnostics.append(
+            {
+                "kind": "missing_session_events",
+                "severity": "info",
+                "message": "No session timeline/events were available as fallback evidence.",
+            }
+        )
     if not performance.get("measured_turn_count"):
-        diagnostics.append({"kind": "missing_duration_metrics", "severity": "warning", "message": "Turn duration metrics could not be derived from job timestamps."})
+        diagnostics.append(
+            {
+                "kind": "missing_duration_metrics",
+                "severity": "warning",
+                "message": "Turn duration metrics could not be derived from job timestamps.",
+            }
+        )
     return diagnostics
 
 

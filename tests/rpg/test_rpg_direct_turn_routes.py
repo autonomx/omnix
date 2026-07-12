@@ -91,7 +91,9 @@ def test_direct_turn_route_persists_completed_rpg_turn_job(monkeypatch, tmp_path
     assert job.input_payload["command"] == "i ask bran how he is doing"
     assert job.output_refs[0]["type"] == "rpg_turn_response"
     assert job.output_refs[0]["content"] == "Bran says the hearth is warm and the day is kind."
-    assert job.output_refs[0]["raw_turn_result"]["ok"] is True
+    assert job.output_refs[0]["record_version"] == "rpg_foreground_turn_record_v1"
+    assert job.output_refs[0]["turn_response"]["ok"] is True
+    assert "session" not in job.output_refs[0]["turn_response"]
     assert job.completed_at is not None
 
 

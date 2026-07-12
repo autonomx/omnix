@@ -11,6 +11,10 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, Request
 
+from app.gateway.rpg_foreground_turn_record import (
+    FOREGROUND_TURN_RECORD_VERSION,
+    build_foreground_turn_record,
+)
 from app.jobs.rpg_turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
 from app.rpg.performance_trace import rpg_pipeline_span
 from app.rpg.presentation.visible_response import visible_response_text
@@ -19,7 +23,15 @@ _DIRECT_RPG_TURN_ACTIVE: ContextVar[bool] = ContextVar("omnix_direct_rpg_turn_ac
 _DIRECT_RPG_SUBMISSION_ID: ContextVar[str] = ContextVar("omnix_direct_rpg_submission_id", default="")
 _HOOK_SENTINEL = "_omnix_rpg_turn_job_mirror_hook_installed"
 _MIDDLEWARE_SENTINEL = "_omnix_rpg_turn_job_mirror_middleware_installed"
-_SUBMISSION_LOCKS: dict[str, threading.RLock] = {}
+
+
+class _SubmissionLockEntry:
+    def __init__(self) -> None:
+        self.lock = threading.RLock()
+        self.users = 0
+
+
+_SUBMISSION_LOCKS: dict[str, _SubmissionLockEntry] = {}
 _SUBMISSION_LOCKS_GUARD = threading.RLock()
 
 
@@ -106,7 +118,7 @@ def _apply_turn_with_job_mirror(
     from app.jobs.store import default_job_store
 
     resolved_submission_id = str(submission_id or f"submit:{uuid.uuid4().hex}").strip()
-    lock = _submission_lock(resolved_submission_id)
+    lock = _reserve_submission_lock(resolved_submission_id)
     with rpg_pipeline_span(
         "turn.submission_lock_wait",
         fields={"submission_id": resolved_submission_id},
@@ -153,7 +165,7 @@ def _apply_turn_with_job_mirror(
                     },
                     compat={
                         "direct_foreground_route": True,
-                        "synthetic_job_mirror": True,
+                        "foreground_record": True,
                         "record_only": True,
                     },
                 )
@@ -232,10 +244,22 @@ def _apply_turn_with_job_mirror(
                 )
             finalized = dict(result)
             finalized["submission_id"] = resolved_submission_id
-            _complete_durable_claim(durable_store, durable_claim, finalized)
+            durable_record = build_foreground_turn_record(
+                finalized,
+                session_id=session_id,
+                submission_id=resolved_submission_id,
+                command=command,
+            )
+            _complete_durable_claim(durable_store, durable_claim, durable_record)
             return finalized
 
         content = visible_response_text(result, command) or f"Your command is accepted: {command}."
+        turn_record = build_foreground_turn_record(
+            result,
+            session_id=session_id,
+            submission_id=resolved_submission_id,
+            command=command,
+        )
         with rpg_pipeline_span("turn.foreground_record_finalize") as finalize_span:
             completed = store.complete_job(
                 running.id,
@@ -249,7 +273,8 @@ def _apply_turn_with_job_mirror(
                             "session_id": session_id,
                             "submission_id": resolved_submission_id,
                             "command": command,
-                            "raw_turn_result": result,
+                            "record_version": FOREGROUND_TURN_RECORD_VERSION,
+                            "turn_response": turn_record,
                             "source": "direct_foreground_route",
                         }
                     ],
@@ -277,20 +302,43 @@ def _apply_turn_with_job_mirror(
                 "job_id": completed.id,
                 "submission_id": resolved_submission_id,
             }
+        durable_record = build_foreground_turn_record(
+            result,
+            session_id=session_id,
+            submission_id=resolved_submission_id,
+            command=command,
+        )
         with rpg_pipeline_span("turn.idempotency_result_finalize"):
-            _complete_durable_claim(durable_store, durable_claim, result)
+            _complete_durable_claim(durable_store, durable_claim, durable_record)
         return result
     finally:
-        lock.release()
+        _release_submission_lock(resolved_submission_id, lock)
 
 
-def _submission_lock(submission_id: str) -> threading.RLock:
+def _reserve_submission_lock(submission_id: str) -> threading.RLock:
     with _SUBMISSION_LOCKS_GUARD:
-        lock = _SUBMISSION_LOCKS.get(submission_id)
-        if lock is None:
-            lock = threading.RLock()
-            _SUBMISSION_LOCKS[submission_id] = lock
-        return lock
+        entry = _SUBMISSION_LOCKS.get(submission_id)
+        if entry is None:
+            entry = _SubmissionLockEntry()
+            _SUBMISSION_LOCKS[submission_id] = entry
+        entry.users += 1
+        return entry.lock
+
+
+def _release_submission_lock(submission_id: str, lock: threading.RLock) -> None:
+    lock.release()
+    with _SUBMISSION_LOCKS_GUARD:
+        entry = _SUBMISSION_LOCKS.get(submission_id)
+        if entry is None or entry.lock is not lock:
+            return
+        entry.users = max(0, entry.users - 1)
+        if entry.users == 0:
+            _SUBMISSION_LOCKS.pop(submission_id, None)
+
+
+def _submission_lock_count() -> int:
+    with _SUBMISSION_LOCKS_GUARD:
+        return len(_SUBMISSION_LOCKS)
 
 
 def _find_submission_record(store: Any, session_id: str, submission_id: str) -> Any | None:
@@ -319,10 +367,10 @@ def _recover_completed_result(job: Any | None) -> dict[str, Any] | None:
     if not isinstance(output_refs, list) or not output_refs:
         return None
     first = output_refs[0] if isinstance(output_refs[0], dict) else {}
-    raw = first.get("raw_turn_result")
-    if not isinstance(raw, dict):
+    record = first.get("turn_response")
+    if not isinstance(record, dict):
         return None
-    recovered = deepcopy(raw)
+    recovered = deepcopy(record)
     submission_id = str(first.get("submission_id") or "")
     recovered["submission_id"] = submission_id
     recovered["foreground_job"] = job.model_dump(mode="json")
