@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { RpgStoryMessagePreview } from './rpgUiState';
 
 export type RpgTurnUiStatus = 'pending' | 'complete' | 'failed';
@@ -55,6 +55,8 @@ const responseCache = new Map<string, CachedResponse>();
 const conversationRefreshSuppression = new Map<string, number>();
 let fetchInstalled = false;
 let originalFetch: typeof fetch | null = null;
+let mountedSubscribers = 0;
+let uninstallSharedInterceptor: (() => void) | null = null;
 
 const TURN_PATH = /^\/api\/rpg\/sessions\/([^/]+)\/turn$/;
 const SESSION_PATH = /^\/api\/rpg\/sessions\/([^/]+)$/;
@@ -68,39 +70,38 @@ export function createRpgSubmissionId(): string {
   return `submit:${random}`;
 }
 
-export function installRpgTurnUiFetchInterceptor(fetchImpl: typeof fetch = fetch): () => void {
-  if (fetchInstalled || typeof globalThis.fetch !== 'function') {
+export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () => void {
+  const resolvedFetch = fetchImpl || globalThis.fetch;
+  if (fetchInstalled || typeof resolvedFetch !== 'function') {
     return () => undefined;
   }
   fetchInstalled = true;
-  originalFetch = fetchImpl;
+  originalFetch = resolvedFetch;
 
   globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const requestUrl = requestUrlString(input);
     const url = new URL(requestUrl, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-    const method = String(init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    const request = isRequest(input) ? input : null;
+    const method = String(init.method || request?.method || 'GET').toUpperCase();
     const turnMatch = url.pathname.match(TURN_PATH);
 
     if (method === 'GET') {
       const cached = suppressedCachedResponse(url.pathname);
-      if (cached) {
-        return restoreResponse(cached);
-      }
+      if (cached) return restoreResponse(cached);
     }
 
     if (method === 'POST' && turnMatch) {
       const sessionId = decodeURIComponent(turnMatch[1]);
-      const headers = new Headers(input instanceof Request ? input.headers : undefined);
+      const headers = new Headers(request?.headers);
       new Headers(init.headers).forEach((value, key) => headers.set(key, value));
       const submissionId = headers.get('X-Omnix-Rpg-Submission-Id')?.trim() || createRpgSubmissionId();
       headers.set('X-Omnix-Rpg-Submission-Id', submissionId);
       const command = readCommand(init.body);
       beginRpgTurnUiSubmission({ sessionId, submissionId, command });
       try {
-        const response = await fetchImpl(input, { ...init, headers });
-        const clone = response.clone();
+        const response = await resolvedFetch(input, { ...init, headers });
         if (response.ok) {
-          const payload = await safeJson(clone);
+          const payload = await safeJson(response.clone());
           completeRpgTurnUiSubmission({ sessionId, submissionId, payload });
           applyRefreshPolicy(sessionId, payload.state?.changed_domains || []);
         } else {
@@ -117,7 +118,7 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl: typeof fetch = fetch
       }
     }
 
-    const response = await fetchImpl(input, init);
+    const response = await resolvedFetch(input, init);
     if (method === 'GET' && response.ok && isCacheableRefreshPath(url.pathname)) {
       void cacheResponse(url.pathname, response.clone());
     }
@@ -125,11 +126,11 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl: typeof fetch = fetch
   }) as typeof fetch;
 
   return () => {
-    if (originalFetch) {
-      globalThis.fetch = originalFetch;
+    if (fetchInstalled && originalFetch === resolvedFetch) {
+      globalThis.fetch = resolvedFetch;
+      originalFetch = null;
+      fetchInstalled = false;
     }
-    originalFetch = null;
-    fetchInstalled = false;
   };
 }
 
@@ -144,7 +145,8 @@ export function beginRpgTurnUiSubmission({
 }): void {
   const current = entriesBySession.get(sessionId) || [];
   const withoutSubmission = current.filter((entry) => entry.submissionId !== submissionId);
-  const pending: RpgTurnUiEntry[] = [
+  setSessionEntries(sessionId, [
+    ...withoutSubmission,
     {
       id: `${submissionId}:player`,
       sessionId,
@@ -165,8 +167,7 @@ export function beginRpgTurnUiSubmission({
       text: 'Considering the scene…',
       tone: 'narrator',
     },
-  ];
-  setSessionEntries(sessionId, [...withoutSubmission, ...pending]);
+  ]);
 }
 
 export function completeRpgTurnUiSubmission({
@@ -181,12 +182,11 @@ export function completeRpgTurnUiSubmission({
   const current = entriesBySession.get(sessionId) || [];
   const player = current.find((entry) => entry.submissionId === submissionId && entry.tone === 'player');
   const interactionId = payload.interaction_id || undefined;
-  const completed = responseEntries(sessionId, submissionId, interactionId, payload);
   const withoutSubmission = current.filter((entry) => entry.submissionId !== submissionId);
   setSessionEntries(sessionId, [
     ...withoutSubmission,
     ...(player ? [{ ...player, status: 'complete' as const, interactionId }] : []),
-    ...completed,
+    ...responseEntries(sessionId, submissionId, interactionId, payload),
   ]);
 }
 
@@ -216,8 +216,7 @@ export function mergeRpgTurnUiMessages(
   baseMessages: RpgStoryMessagePreview[],
   incrementalEntries: RpgTurnUiEntry[],
 ): RpgStoryMessagePreview[] {
-  const normalizedBase = baseMessages.map((message) => `${message.speaker}\u0000${message.text}`);
-  const seen = new Set(normalizedBase);
+  const seen = new Set(baseMessages.map((message) => `${message.speaker}\u0000${message.text}`));
   const merged = [...baseMessages];
   for (const entry of incrementalEntries) {
     const key = `${entry.speaker}\u0000${entry.text}`;
@@ -234,24 +233,27 @@ export function useRpgTurnUiMessages(
 ): RpgStoryMessagePreview[] {
   const [, setVersion] = useState(0);
   useEffect(() => {
-    installRpgTurnUiFetchInterceptor();
+    mountedSubscribers += 1;
+    if (mountedSubscribers === 1) {
+      uninstallSharedInterceptor = installRpgTurnUiFetchInterceptor();
+    }
     const listener = () => setVersion((value) => value + 1);
     listeners.add(listener);
     return () => {
       listeners.delete(listener);
+      mountedSubscribers = Math.max(0, mountedSubscribers - 1);
+      if (mountedSubscribers === 0) {
+        uninstallSharedInterceptor?.();
+        uninstallSharedInterceptor = null;
+      }
     };
   }, []);
-  return useMemo(
-    () => mergeRpgTurnUiMessages(baseMessages, getRpgTurnUiEntries(sessionId)),
-    [baseMessages, sessionId],
-  );
+  return mergeRpgTurnUiMessages(baseMessages, getRpgTurnUiEntries(sessionId));
 }
 
 export function refreshPathsForChangedDomains(sessionId: string, changedDomains: string[]): string[] {
   const domains = new Set(changedDomains);
-  if (!domains.size || (domains.size === 1 && domains.has('conversation'))) {
-    return [];
-  }
+  if (!domains.size || (domains.size === 1 && domains.has('conversation'))) return [];
   const paths = new Set<string>([`/api/rpg/sessions/${encodeURIComponent(sessionId)}`]);
   if (domains.has('inventory') || domains.has('currency') || domains.has('player')) {
     paths.add('/api/replay/inventory');
@@ -267,9 +269,10 @@ export function resetRpgTurnUiStoreForTests(): void {
   responseCache.clear();
   conversationRefreshSuppression.clear();
   listeners.clear();
-  if (fetchInstalled && originalFetch) {
-    globalThis.fetch = originalFetch;
-  }
+  mountedSubscribers = 0;
+  uninstallSharedInterceptor?.();
+  uninstallSharedInterceptor = null;
+  if (fetchInstalled && originalFetch) globalThis.fetch = originalFetch;
   fetchInstalled = false;
   originalFetch = null;
 }
@@ -354,6 +357,10 @@ function requestUrlString(input: RequestInfo | URL): string {
   return input.url;
 }
 
+function isRequest(input: RequestInfo | URL): input is Request {
+  return typeof Request !== 'undefined' && input instanceof Request;
+}
+
 function isCacheableRefreshPath(pathname: string): boolean {
   return SESSION_PATH.test(pathname)
     || pathname === '/api/replay/inventory'
@@ -387,7 +394,7 @@ async function cacheResponse(pathname: string, response: Response): Promise<void
       statusText: response.statusText,
     });
   } catch {
-    // A cache miss only falls back to the real refresh; it must never break gameplay.
+    // Cache misses fall through to the real refresh and never affect gameplay.
   }
 }
 
