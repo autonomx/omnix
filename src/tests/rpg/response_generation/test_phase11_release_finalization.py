@@ -7,6 +7,7 @@ import pytest
 from app.rpg.local_live_smoke import (
     assert_live_smoke_allowed,
     build_smoke_plan,
+    evaluate_latency_targets,
     evaluate_live_smoke_payload,
 )
 from app.rpg.release_finalization import (
@@ -120,8 +121,27 @@ def test_operator_acceptance_criteria_keep_latency_out_of_provider_free_ci() -> 
 
     assert criteria["required_contract_version"] == "rpg_turn_response_v2"
     assert criteria["maximum_turn_response_bytes"] == 50_000
-    assert criteria["target_p95_seconds"] == 5.0
+    assert criteria["target_median_seconds"] == 1.5
+    assert criteria["target_p95_seconds"] == 2.5
     assert criteria["target_is_operator_evidence_not_ci_assertion"] is True
+
+
+def test_local_latency_evaluator_fails_missed_targets_without_calling_a_provider() -> None:
+    report = evaluate_latency_targets([1.0, 1.4, 2.8])
+
+    assert report["ok"] is False
+    assert report["median"] == 1.4
+    assert report["p95"] == 2.8
+    assert report["failures"] == ["dialogue_p95_latency_target_missed"]
+
+
+def test_local_latency_evaluator_accepts_original_targets() -> None:
+    report = evaluate_latency_targets([0.9, 1.2, 2.0])
+
+    assert report["ok"] is True
+    assert report["failures"] == []
+    assert report["median"] == 1.2
+    assert report["p95"] == 2.0
 
 
 def test_release_runbook_keeps_live_provider_validation_out_of_actions() -> None:

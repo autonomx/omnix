@@ -1,10 +1,10 @@
 # Interactive RPG response release
 
-Status: repository implementation complete through Phase 11.
+Status: core implementation is merged through the recorded Phase 1–11 sequence. Original-roadmap completion follow-ups remain in progress and are tracked separately from the historical phase evidence.
 
 This release hardens the foreground RPG turn path so a player command is executed once, produces one canonical visible response, advances durable interaction continuity, and returns a bounded browser payload. Stateful mechanics remain authoritative; narration and dialogue enrich presentation only.
 
-## Completed phases
+## Completed historical phases
 
 | Phase | Scope | Pull request | Merge SHA |
 |---|---|---:|---|
@@ -20,7 +20,17 @@ This release hardens the foreground RPG turn path so a player command is execute
 | 10 | Permanent provider-free structural release gates | #1345 | `635cdbd181da12cad06d87cc9346806ef4edcd37` |
 | 11 | Release evidence, local live-provider validation, rollout, and rollback runbook | #1346 | `8b11adfda8aedb40a6aad11f4125a010f14aa1bb` |
 
-The machine-readable Phase 1–11 evidence index is in `src/app/rpg/release_finalization.py`.
+The machine-readable historical Phase 1–11 evidence index is in `src/app/rpg/release_finalization.py`. It records what merged; it does not assert that every item in the original roadmap is finished.
+
+## Phase 0 reproducible baseline
+
+The provider-free Rusty Flagon benchmark is documented in `docs/rpg-interactive-turn-performance-baseline.md` and implemented at:
+
+```text
+src/tests/rpg/performance/foreground_turn_benchmark.py
+```
+
+It executes one deterministic Bran business dialogue plus an idempotent replay and records apply-turn, provider-boundary, session load/save, job-transition, interaction, simulation, payload-size, serialization, and browser-visible response evidence. It uses a deterministic provider stub and does not contact an LLM.
 
 ## GitHub Actions policy
 
@@ -55,7 +65,7 @@ python scripts/rpg_interactive_live_smoke.py `
   --timeout-seconds 120
 ```
 
-The harness sends stable `X-Omnix-Rpg-Submission-Id` values, repeats the first submission to verify idempotency, validates the compact response gates, records response bytes, and reports mean, p95, and maximum latency. It does not mutate GitHub Actions or upload live-provider content.
+The harness sends stable `X-Omnix-Rpg-Submission-Id` values, repeats the first submission to verify idempotency, validates the compact response gates, records response bytes, and reports mean, median, p95, and maximum latency. It exits unsuccessfully when a structural gate or latency target is missed. It does not mutate GitHub Actions or upload live-provider content.
 
 ## Operator acceptance criteria
 
@@ -67,7 +77,10 @@ Repository gates are necessary but do not prove local provider quality or latenc
 4. Dialogue shows the addressed NPC line, not only generic scene prose.
 5. A reload preserves recent interactions and pending/completed narration lifecycle state.
 6. A stateful command changes only authoritative domains and deferred narration does not rewrite mechanics.
-7. The target p95 foreground latency is five seconds or less on the intended local provider and hardware. This is an operator target, not a provider-free CI assertion.
+7. Median foreground dialogue latency is 1.5 seconds or less on the intended local provider and hardware.
+8. p95 foreground dialogue latency is 2.5 seconds or less on the intended local provider and hardware.
+
+Latency and provider-quality targets are operator evidence, not provider-free CI assertions.
 
 ## Staged rollout
 

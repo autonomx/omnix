@@ -6,6 +6,8 @@ from typing import Any, Iterable
 
 INTERACTIVE_RELEASE_VERSION = "rpg_interactive_response_release_v1"
 LOCAL_LIVE_SMOKE_ENV = "OMNIX_RPG_LIVE_SMOKE"
+TARGET_DIALOGUE_MEDIAN_SECONDS = 1.5
+TARGET_DIALOGUE_P95_SECONDS = 2.5
 REQUIRED_PROVIDER_FREE_CHECKS = (
     "RPG Phase 0 architecture compliance",
     "RPG deterministic PR gates",
@@ -163,6 +165,7 @@ def local_live_acceptance_criteria() -> dict[str, Any]:
         "required_contract_version": "rpg_turn_response_v2",
         "required_visible_text": True,
         "required_monotonic_interaction_ids": True,
-        "target_p95_seconds": 5.0,
+        "target_median_seconds": TARGET_DIALOGUE_MEDIAN_SECONDS,
+        "target_p95_seconds": TARGET_DIALOGUE_P95_SECONDS,
         "target_is_operator_evidence_not_ci_assertion": True,
     }
