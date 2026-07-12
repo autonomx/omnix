@@ -25,6 +25,15 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
+def _safe_int(value: Any, default: int) -> int:
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _first_non_empty(*values: Any) -> str:
     for value in values:
         text = _safe_str(value).strip()
@@ -34,15 +43,17 @@ def _first_non_empty(*values: Any) -> str:
 
 
 def _normalize_session(value: Any) -> Dict[str, Any]:
-    """Normalize a session record into bounded deterministic state."""
+    """Normalize a session record while preserving durable manifest counters."""
+
     data = _safe_dict(value)
     manifest = _safe_dict(data.get("manifest"))
     state = _safe_dict(data.get("state"))
-    return {
-        "manifest": {
+    normalized_manifest = dict(manifest)
+    normalized_manifest.update(
+        {
             "id": _safe_str(manifest.get("id") or manifest.get("session_id")).strip(),
             "session_id": _safe_str(manifest.get("session_id") or manifest.get("id")).strip(),
-            "schema_version": int(manifest.get("schema_version") or 2),
+            "schema_version": _safe_int(manifest.get("schema_version"), 2),
             "title": _safe_str(manifest.get("title")).strip(),
             "status": _first_non_empty(manifest.get("status"), "active"),
             "created_at": _safe_str(manifest.get("created_at")).strip(),
@@ -50,7 +61,10 @@ def _normalize_session(value: Any) -> Dict[str, Any]:
             "source_pack_id": _safe_str(manifest.get("source_pack_id")).strip(),
             "source_template_id": _safe_str(manifest.get("source_template_id")).strip(),
             "archived": bool(manifest.get("archived")),
-        },
+        }
+    )
+    return {
+        "manifest": normalized_manifest,
         "state": state,
         "setup_payload": _safe_dict(data.get("setup_payload")),
         "simulation_state": _safe_dict(data.get("simulation_state")),
@@ -90,7 +104,6 @@ def save_session(root_state: Dict[str, Any], session: Dict[str, Any]) -> Dict[st
     normalized = _normalize_session(session)
 
     session_id = _safe_str(_safe_dict(normalized.get("manifest")).get("id"))
-    # Remove existing session with same id
     sessions = [
         item for item in sessions
         if _safe_str(_safe_dict(item.get("manifest")).get("id")) != session_id
