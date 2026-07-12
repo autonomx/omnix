@@ -79,7 +79,7 @@ def _migrate_legacy_interactions(session: dict[str, Any]) -> None:
                 "migrated_count": migrated_count,
                 "completed": True,
             }
-        _remove_legacy_transcripts(session)
+    _remove_legacy_transcripts(session)
 
     events = events[-_MAX_INTERACTIONS:]
     max_sequence = max((_safe_int(item.get("sequence")) for item in events), default=0)
@@ -299,16 +299,20 @@ def _bounded_visible_response(
 
 
 def _normalize_existing_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    indexed = list(enumerate(events[-_MAX_INTERACTIONS:]))
+    indexed.sort(key=lambda pair: (_safe_int(pair[1].get("sequence")) or 2**31, pair[0]))
     normalized: list[dict[str, Any]] = []
-    for index, raw in enumerate(events[-_MAX_INTERACTIONS:], start=1):
+    previous_sequence = 0
+    for _, raw in indexed:
         event = deepcopy(raw)
-        sequence = _safe_int(event.get("sequence")) or index
+        proposed = _safe_int(event.get("sequence"))
+        sequence = proposed if proposed > previous_sequence else previous_sequence + 1
+        previous_sequence = sequence
         event["format_version"] = _INTERACTION_TIMELINE_VERSION
         event["sequence"] = sequence
         event["interaction_id"] = _text(event.get("interaction_id")) or f"interaction:{sequence}"
         event["state_revision"] = max(sequence, _safe_int(event.get("state_revision")))
         normalized.append(event)
-    normalized.sort(key=lambda item: _safe_int(item.get("sequence")))
     return normalized
 
 
