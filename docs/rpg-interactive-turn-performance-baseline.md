@@ -61,6 +61,21 @@ The deterministic run must report:
 
 The report also records foreground orchestration time, serialization time, response bytes, job states, submission identity, interaction identity, and final browser-visible text. These timings are diagnostic only because CI hardware and the deterministic stub do not represent local model latency.
 
+## Durable submission ownership
+
+Foreground submission ownership is persisted in the same SQLite database as the job store. The primary key is the pair `(session_id, submission_id)`, so separate gateway processes using the same database cannot both own the same request.
+
+The owner receives an unguessable claim token. Only that token can attach the foreground job or finalize the durable result. A duplicate process waits for the owner to complete, then returns the persisted response with `idempotent_replay=true` instead of executing `apply_turn` again.
+
+Provider-free regression coverage starts two independent gateway processes against one temporary database and verifies:
+
+- one process executes the authoritative turn;
+- both callers receive the same interaction and submission IDs;
+- exactly one caller receives the original result and one receives an idempotent replay;
+- a non-owner claim token cannot complete or fail the submission.
+
+An abandoned claim is not automatically stolen. A duplicate request times out rather than risking a second authoritative execution. Lease-based abandoned-owner recovery remains a later hardening item.
+
 ## Live-provider acceptance baseline
 
 Live LLM validation must not run in GitHub Actions. It requires an active configured provider and explicit local opt-in through `OMNIX_RPG_LIVE_SMOKE=1`.
@@ -87,4 +102,4 @@ A passing deterministic benchmark proves the following narrow claims:
 - the expected Bran dialogue is browser-visible;
 - job, interaction, simulation, response-size, and serialization evidence is captured.
 
-It does not prove real-provider latency, natural dialogue quality, GPU queue behavior, browser commit latency, or cross-process idempotency. Those remain separate implementation and local-operator acceptance items.
+It does not prove real-provider latency, natural dialogue quality, GPU queue behavior, browser commit latency, or safe takeover of an abandoned durable claim. Those remain separate implementation and local-operator acceptance items.
