@@ -100,6 +100,34 @@ def evaluate_live_smoke_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def evaluate_latency_targets(
+    latencies: Iterable[float],
+    criteria: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Evaluate live-provider latency outside CI against the release targets."""
+
+    values = [max(0.0, float(value)) for value in latencies]
+    resolved = dict(criteria or local_live_acceptance_criteria())
+    median = statistics.median(values) if values else 0.0
+    p95 = _percentile(values, 0.95) if values else 0.0
+    failures: list[str] = []
+    target_median = float(resolved.get("target_median_seconds") or 0.0)
+    target_p95 = float(resolved.get("target_p95_seconds") or 0.0)
+    if values and target_median > 0.0 and median > target_median:
+        failures.append("dialogue_median_latency_target_missed")
+    if values and target_p95 > 0.0 and p95 > target_p95:
+        failures.append("dialogue_p95_latency_target_missed")
+    return {
+        "ok": not failures,
+        "failures": failures,
+        "mean": round(statistics.fmean(values), 3) if values else 0.0,
+        "median": round(median, 3),
+        "p95": round(p95, 3),
+        "maximum": round(max(values), 3) if values else 0.0,
+        "sample_count": len(values),
+    }
+
+
 def run_live_smoke(
     *,
     base_url: str,
@@ -109,6 +137,7 @@ def run_live_smoke(
     env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     assert_live_smoke_allowed(env)
+    criteria = local_live_acceptance_criteria()
     plan = build_smoke_plan(commands)
     results: list[SmokeResult] = []
     payloads_by_submission: dict[str, dict[str, Any]] = {}
@@ -147,24 +176,30 @@ def run_live_smoke(
     aggregate_failures: list[str] = []
     if len(interaction_ids) != len(set(interaction_ids)):
         aggregate_failures.append("distinct_submissions_reused_interaction_id")
+    minimum_interactions = int(criteria.get("minimum_distinct_interactions") or 0)
+    if len(set(interaction_ids)) < minimum_interactions:
+        aggregate_failures.append("minimum_distinct_interactions_not_met")
     if any(not result.gate_ok for result in results):
         aggregate_failures.append("one_or_more_turns_failed_release_gates")
-    latencies = [result.elapsed_seconds for result in non_replay]
-    p95 = _percentile(latencies, 0.95) if latencies else 0.0
+    latency = evaluate_latency_targets(
+        [result.elapsed_seconds for result in non_replay],
+        criteria,
+    )
+    aggregate_failures.extend(str(item) for item in latency["failures"])
 
     return {
         "format_version": "rpg_interactive_live_smoke_v1",
         "ok": not aggregate_failures,
-        "failures": aggregate_failures,
+        "failures": sorted(set(aggregate_failures)),
         "base_url": base_url.rstrip("/"),
         "session_id": session_id,
-        "criteria": local_live_acceptance_criteria(),
+        "criteria": criteria,
         "result_count": len(results),
         "distinct_interaction_count": len(set(interaction_ids)),
         "latency_seconds": {
-            "mean": round(statistics.fmean(latencies), 3) if latencies else 0.0,
-            "p95": round(p95, 3),
-            "maximum": round(max(latencies), 3) if latencies else 0.0,
+            key: value
+            for key, value in latency.items()
+            if key not in {"ok", "failures"}
         },
         "results": [asdict(item) for item in results],
     }
