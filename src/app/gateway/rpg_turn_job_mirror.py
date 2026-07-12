@@ -107,14 +107,13 @@ def _apply_turn_with_job_mirror(
     with _submission_lock(resolved_submission_id):
         store = default_job_store()
         durable_store = submission_store_for_job_store(store)
-        durable_claim = durable_store.claim(session_id, resolved_submission_id) if durable_store is not None else None
-        if durable_claim is not None and not durable_claim.owner:
-            return _wait_for_durable_result(
-                durable_store,
-                durable_claim,
-                session_id=session_id,
-                submission_id=resolved_submission_id,
-            )
+        durable_claim, durable_replay = _acquire_durable_claim(
+            durable_store,
+            session_id=session_id,
+            submission_id=resolved_submission_id,
+        )
+        if durable_replay is not None:
+            return durable_replay
 
         existing = _find_submission_record(store, session_id, resolved_submission_id)
         recovered = _recover_completed_result(existing)
@@ -144,17 +143,32 @@ def _apply_turn_with_job_mirror(
             )
         )
         if durable_store is not None and durable_claim is not None and durable_claim.claim_token:
-            durable_store.attach_job(
+            attached = durable_store.attach_job(
                 session_id,
                 resolved_submission_id,
                 durable_claim.claim_token,
                 job.id,
             )
+            if not attached:
+                return _wait_after_lost_claim(
+                    durable_store,
+                    session_id=session_id,
+                    submission_id=resolved_submission_id,
+                )
         if job.status == JobStatus.COMPLETED:
             recovered = _recover_completed_result(job)
             if recovered is not None:
                 _complete_durable_claim(durable_store, durable_claim, recovered)
                 return recovered
+
+        ownership_replay = _begin_durable_execution(
+            durable_store,
+            durable_claim,
+            session_id=session_id,
+            submission_id=resolved_submission_id,
+        )
+        if ownership_replay is not None:
+            return ownership_replay
         running = store.mark_running(job.id) or job
 
         try:
@@ -286,16 +300,63 @@ def _recover_completed_result(job: Any | None) -> dict[str, Any] | None:
     return recovered
 
 
-def _wait_for_durable_result(
+def _acquire_durable_claim(
+    durable_store: Any,
+    *,
+    session_id: str,
+    submission_id: str,
+) -> tuple[Any | None, dict[str, Any] | None]:
+    if durable_store is None:
+        return None, None
+    claim = durable_store.claim(
+        session_id,
+        submission_id,
+        lease_seconds=_submission_lease_seconds(),
+    )
+    if not claim.owner and claim.status == "claimed":
+        claim = durable_store.wait_for_terminal_or_claim(
+            session_id,
+            submission_id,
+            timeout_seconds=_submission_wait_seconds(),
+            lease_seconds=_submission_lease_seconds(),
+        )
+    recovered = _recover_durable_result(claim)
+    if recovered is not None:
+        return claim, recovered
+    if getattr(claim, "status", "") == "failed":
+        raise RuntimeError(getattr(claim, "error", None) or "foreground submission failed")
+    if getattr(claim, "owner", False):
+        return claim, None
+    raise TimeoutError(
+        f"foreground submission {submission_id} for {session_id} did not reach a terminal state"
+    )
+
+
+def _begin_durable_execution(
     durable_store: Any,
     claim: Any,
     *,
     session_id: str,
     submission_id: str,
+) -> dict[str, Any] | None:
+    token = getattr(claim, "claim_token", None)
+    if durable_store is None or not token:
+        return None
+    if durable_store.mark_execution_started(session_id, submission_id, token):
+        return None
+    return _wait_after_lost_claim(
+        durable_store,
+        session_id=session_id,
+        submission_id=submission_id,
+    )
+
+
+def _wait_after_lost_claim(
+    durable_store: Any,
+    *,
+    session_id: str,
+    submission_id: str,
 ) -> dict[str, Any]:
-    immediate = _recover_durable_result(claim)
-    if immediate is not None:
-        return immediate
     terminal = durable_store.wait_for_terminal(
         session_id,
         submission_id,
@@ -307,7 +368,7 @@ def _wait_for_durable_result(
     if getattr(terminal, "status", "") == "failed":
         raise RuntimeError(getattr(terminal, "error", None) or "foreground submission failed")
     raise TimeoutError(
-        f"foreground submission {submission_id} for {session_id} did not reach a terminal state"
+        f"foreground submission ownership changed before execution for {submission_id}"
     )
 
 
@@ -343,6 +404,14 @@ def _submission_wait_seconds() -> float:
         return max(0.1, min(600.0, float(raw)))
     except (TypeError, ValueError):
         return 120.0
+
+
+def _submission_lease_seconds() -> float:
+    raw = os.environ.get("OMNIX_RPG_SUBMISSION_LEASE_SECONDS", "30")
+    try:
+        return max(0.1, min(600.0, float(raw)))
+    except (TypeError, ValueError):
+        return 30.0
 
 
 def _visible_turn_text(result: dict[str, Any], command: str) -> str:

@@ -74,7 +74,19 @@ Provider-free regression coverage starts two independent gateway processes again
 - exactly one caller receives the original result and one receives an idempotent replay;
 - a non-owner claim token cannot complete or fail the submission.
 
-An abandoned claim is not automatically stolen. A duplicate request times out rather than risking a second authoritative execution. Lease-based abandoned-owner recovery remains a later hardening item.
+### Safe abandoned-owner recovery
+
+New claims have a short pre-execution lease, configured with `OMNIX_RPG_SUBMISSION_LEASE_SECONDS` and defaulting to 30 seconds. A duplicate process may take ownership only when all of the following are true:
+
+- the durable row is still in `claimed` state;
+- the lease has expired;
+- `execution_started_at` is still empty.
+
+The gateway records `execution_started_at` immediately before it marks the foreground job running and invokes `apply_turn`. Once that marker exists, the claim is never stolen, even after the lease timestamp passes. This prevents a delayed or paused process from causing a second authoritative execution.
+
+Upgrading an older database is conservative: any legacy nonterminal claim is marked as already started because the old schema cannot prove otherwise. An expired legacy row therefore cannot be taken over automatically.
+
+A process failure after authoritative execution begins still requires operator recovery or a future transactionally coupled turn ledger. The system deliberately times out instead of guessing whether mechanics were already committed.
 
 ## Live-provider acceptance baseline
 
@@ -100,6 +112,7 @@ A passing deterministic benchmark proves the following narrow claims:
 - the same submission is recovered rather than executed again;
 - one canonical compact response can be constructed;
 - the expected Bran dialogue is browser-visible;
-- job, interaction, simulation, response-size, and serialization evidence is captured.
+- job, interaction, simulation, response-size, and serialization evidence is captured;
+- an expired claim can be recovered only before authoritative execution starts.
 
-It does not prove real-provider latency, natural dialogue quality, GPU queue behavior, browser commit latency, or safe takeover of an abandoned durable claim. Those remain separate implementation and local-operator acceptance items.
+It does not prove real-provider latency, natural dialogue quality, GPU queue behavior, browser commit latency, or automatic recovery after an owner disappears during authoritative execution. Those remain separate implementation and local-operator acceptance items.
