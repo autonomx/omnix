@@ -98,9 +98,25 @@ describe('rpgTurnUiStore', () => {
     ]);
   });
 
-  it('does not request heavy query refreshes for conversation-only turns', () => {
+  it('discards optimistic entries when the client falls back from a missing foreground route', async () => {
+    const fetchImpl = vi.fn(async () => new Response('not found', { status: 404 }));
+    installRpgTurnUiFetchInterceptor(fetchImpl as typeof fetch);
+
+    const response = await fetch('/api/rpg/sessions/session%3Abran/turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: 'How is business?' }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(getRpgTurnUiEntries('session:bran')).toEqual([]);
+  });
+
+  it('does not request heavy query refreshes for explicit conversation-only turns', () => {
     expect(refreshPathsForChangedDomains('session:bran', ['conversation'])).toEqual([]);
-    expect(refreshPathsForChangedDomains('session:bran', [])).toEqual([]);
+    expect(refreshPathsForChangedDomains('session:bran', [])).toEqual([
+      '/api/rpg/sessions/session%3Abran',
+    ]);
     expect(refreshPathsForChangedDomains('session:bran', ['conversation', 'inventory', 'currency'])).toEqual([
       '/api/rpg/sessions/session%3Abran',
       '/api/replay/inventory',
