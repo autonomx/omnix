@@ -25,6 +25,15 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _first_non_empty(*values: Any) -> str:
     for value in values:
         text = _safe_str(value).strip()
@@ -42,7 +51,8 @@ def _normalize_session(value: Any) -> Dict[str, Any]:
         "manifest": {
             "id": _safe_str(manifest.get("id") or manifest.get("session_id")).strip(),
             "session_id": _safe_str(manifest.get("session_id") or manifest.get("id")).strip(),
-            "schema_version": int(manifest.get("schema_version") or 2),
+            "schema_version": _safe_int(manifest.get("schema_version"), 2),
+            "turn_count": _safe_int(manifest.get("turn_count") or data.get("turn_count"), 0),
             "title": _safe_str(manifest.get("title")).strip(),
             "status": _first_non_empty(manifest.get("status"), "active"),
             "created_at": _safe_str(manifest.get("created_at")).strip(),
@@ -90,7 +100,6 @@ def save_session(root_state: Dict[str, Any], session: Dict[str, Any]) -> Dict[st
     normalized = _normalize_session(session)
 
     session_id = _safe_str(_safe_dict(normalized.get("manifest")).get("id"))
-    # Remove existing session with same id
     sessions = [
         item for item in sessions
         if _safe_str(_safe_dict(item.get("manifest")).get("id")) != session_id
