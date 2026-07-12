@@ -1,6 +1,7 @@
 """Record direct foreground RPG turns without scheduling a second execution."""
 from __future__ import annotations
 
+import os
 import threading
 import uuid
 from contextvars import ContextVar
@@ -99,14 +100,26 @@ def _apply_turn_with_job_mirror(
     **kwargs: Any,
 ) -> dict[str, Any]:
     from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobStatus, ResourceClass
+    from app.jobs.rpg_foreground_submission_store import submission_store_for_job_store
     from app.jobs.store import default_job_store
 
     resolved_submission_id = str(submission_id or f"submit:{uuid.uuid4().hex}").strip()
     with _submission_lock(resolved_submission_id):
         store = default_job_store()
+        durable_store = submission_store_for_job_store(store)
+        durable_claim = durable_store.claim(session_id, resolved_submission_id) if durable_store is not None else None
+        if durable_claim is not None and not durable_claim.owner:
+            return _wait_for_durable_result(
+                durable_store,
+                durable_claim,
+                session_id=session_id,
+                submission_id=resolved_submission_id,
+            )
+
         existing = _find_submission_record(store, session_id, resolved_submission_id)
         recovered = _recover_completed_result(existing)
         if recovered is not None:
+            _complete_durable_claim(durable_store, durable_claim, recovered)
             return recovered
 
         job = store.create_job(
@@ -130,9 +143,17 @@ def _apply_turn_with_job_mirror(
                 },
             )
         )
+        if durable_store is not None and durable_claim is not None and durable_claim.claim_token:
+            durable_store.attach_job(
+                session_id,
+                resolved_submission_id,
+                durable_claim.claim_token,
+                job.id,
+            )
         if job.status == JobStatus.COMPLETED:
             recovered = _recover_completed_result(job)
             if recovered is not None:
+                _complete_durable_claim(durable_store, durable_claim, recovered)
                 return recovered
         running = store.mark_running(job.id) or job
 
@@ -152,6 +173,7 @@ def _apply_turn_with_job_mirror(
                     },
                 ),
             )
+            _fail_durable_claim(durable_store, durable_claim, str(exc) or "Direct RPG turn failed")
             raise
 
         if result.get("ok") is not True:
@@ -169,7 +191,10 @@ def _apply_turn_with_job_mirror(
                     },
                 ),
             )
-            return result
+            finalized = dict(result)
+            finalized["submission_id"] = resolved_submission_id
+            _complete_durable_claim(durable_store, durable_claim, finalized)
+            return finalized
 
         content = _visible_turn_text(result, command)
         completed = store.complete_job(
@@ -211,6 +236,7 @@ def _apply_turn_with_job_mirror(
                 "job_id": completed.id,
                 "submission_id": resolved_submission_id,
             }
+        _complete_durable_claim(durable_store, durable_claim, result)
         return result
 
 
@@ -258,6 +284,65 @@ def _recover_completed_result(job: Any | None) -> dict[str, Any] | None:
     recovered["foreground_job"] = job.model_dump(mode="json")
     recovered["idempotent_replay"] = True
     return recovered
+
+
+def _wait_for_durable_result(
+    durable_store: Any,
+    claim: Any,
+    *,
+    session_id: str,
+    submission_id: str,
+) -> dict[str, Any]:
+    immediate = _recover_durable_result(claim)
+    if immediate is not None:
+        return immediate
+    terminal = durable_store.wait_for_terminal(
+        session_id,
+        submission_id,
+        timeout_seconds=_submission_wait_seconds(),
+    )
+    recovered = _recover_durable_result(terminal)
+    if recovered is not None:
+        return recovered
+    if getattr(terminal, "status", "") == "failed":
+        raise RuntimeError(getattr(terminal, "error", None) or "foreground submission failed")
+    raise TimeoutError(
+        f"foreground submission {submission_id} for {session_id} did not reach a terminal state"
+    )
+
+
+def _recover_durable_result(claim: Any) -> dict[str, Any] | None:
+    if getattr(claim, "status", "") != "completed":
+        return None
+    raw = getattr(claim, "result", None)
+    if not isinstance(raw, dict):
+        return None
+    recovered = deepcopy(raw)
+    recovered["submission_id"] = str(getattr(claim, "submission_id", "") or recovered.get("submission_id") or "")
+    recovered["idempotent_replay"] = True
+    return recovered
+
+
+def _complete_durable_claim(durable_store: Any, claim: Any, result: dict[str, Any]) -> None:
+    token = getattr(claim, "claim_token", None)
+    if durable_store is None or not token:
+        return
+    durable_store.complete(claim.session_id, claim.submission_id, token, result)
+
+
+def _fail_durable_claim(durable_store: Any, claim: Any, error: str) -> None:
+    token = getattr(claim, "claim_token", None)
+    if durable_store is None or not token:
+        return
+    durable_store.fail(claim.session_id, claim.submission_id, token, error)
+
+
+def _submission_wait_seconds() -> float:
+    raw = os.environ.get("OMNIX_RPG_SUBMISSION_WAIT_SECONDS", "120")
+    try:
+        return max(0.1, min(600.0, float(raw)))
+    except (TypeError, ValueError):
+        return 120.0
 
 
 def _visible_turn_text(result: dict[str, Any], command: str) -> str:
