@@ -104,6 +104,8 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
           const payload = await safeJson(response.clone());
           completeRpgTurnUiSubmission({ sessionId, submissionId, payload });
           applyRefreshPolicy(sessionId, payload.state?.changed_domains || []);
+        } else if (response.status === 404) {
+          discardRpgTurnUiSubmission(sessionId, submissionId);
         } else {
           failRpgTurnUiSubmission({ sessionId, submissionId, message: `RPG turn failed with HTTP ${response.status}.` });
         }
@@ -208,6 +210,11 @@ export function failRpgTurnUiSubmission({
   );
 }
 
+export function discardRpgTurnUiSubmission(sessionId: string, submissionId: string): void {
+  const current = entriesBySession.get(sessionId) || [];
+  setSessionEntries(sessionId, current.filter((entry) => entry.submissionId !== submissionId));
+}
+
 export function getRpgTurnUiEntries(sessionId: string): RpgTurnUiEntry[] {
   return [...(entriesBySession.get(sessionId) || [])];
 }
@@ -245,6 +252,8 @@ export function useRpgTurnUiMessages(
       if (mountedSubscribers === 0) {
         uninstallSharedInterceptor?.();
         uninstallSharedInterceptor = null;
+        entriesBySession.clear();
+        conversationRefreshSuppression.clear();
       }
     };
   }, []);
