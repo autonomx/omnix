@@ -31,7 +31,10 @@ def register_direct_turn_route(app: FastAPI) -> None:
             status_code = 404 if result.get('error') == 'session_not_found' else 400
             raise HTTPException(status_code=status_code, detail=result)
         result_session = result.get('session')
-        session = save_session(result_session, compact=False) if isinstance(result_session, dict) else load_session(session_id)
+        if result.get('interaction_persisted') is True and isinstance(result_session, dict):
+            session = result_session
+        else:
+            session = save_session(result_session, compact=True) if isinstance(result_session, dict) else load_session(session_id)
         return build_turn_response_v2(
             result,
             session_id=session_id,
