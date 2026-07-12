@@ -8,11 +8,13 @@ from fastapi import HTTPException, Request
 from fastapi.responses import Response
 
 from app.rpg.performance_trace import (
+    attach_rpg_result_timing,
     build_traced_json_response,
     rpg_pipeline_span,
     rpg_pipeline_trace,
 )
 from app.rpg.presentation.turn_response import build_turn_response_v2
+from app.rpg.response_trace_headers import finalize_rpg_trace_headers
 
 
 async def execute_foreground_rpg_turn(
@@ -35,6 +37,7 @@ async def execute_foreground_rpg_turn(
         with rpg_pipeline_span("turn.request_received") as span:
             span["content_length"] = request.headers.get("content-length")
             span["submission_id"] = request.headers.get("x-omnix-rpg-submission-id")
+            span["client_request_started"] = request.headers.get("x-omnix-rpg-client-started")
 
         from app.rpg.session import interactive_first_call_runtime
 
@@ -46,9 +49,11 @@ async def execute_foreground_rpg_turn(
                     performance_override={"enable_live_narration_llm": False},
                 )
             )
+            attach_rpg_result_timing(result)
             span["ok"] = result.get("ok") is True if isinstance(result, dict) else False
             span["turn_id"] = result.get("turn_id") if isinstance(result, dict) else None
             span["interaction_id"] = result.get("interaction_id") if isinstance(result, dict) else None
+            span["idempotent_replay"] = result.get("idempotent_replay") is True if isinstance(result, dict) else False
 
         if not isinstance(result, dict) or result.get("ok") is not True:
             status_code = 404 if isinstance(result, dict) and result.get("error") == "session_not_found" else 400
@@ -58,6 +63,9 @@ async def execute_foreground_rpg_turn(
             session = _persisted_turn_session(result, session_id)
             span["interaction_persisted"] = result.get("interaction_persisted") is True
             span["state_revision"] = result.get("state_revision")
+            persistence = result.get("interaction_persistence") if isinstance(result.get("interaction_persistence"), dict) else {}
+            span["persistence_mode"] = persistence.get("mode")
+            span["snapshot_written"] = persistence.get("snapshot_written") is True
 
         with rpg_pipeline_span("turn.response_contract_build") as span:
             payload = build_turn_response_v2(
@@ -70,10 +78,13 @@ async def execute_foreground_rpg_turn(
             payload_timing = payload.get("timing") if isinstance(payload.get("timing"), dict) else {}
             payload_timing["pipeline_before_encode_ms"] = trace.elapsed_ms
             payload["timing"] = payload_timing
+            payload["performance"] = trace.public_summary()
             span["contract_version"] = payload.get("contract_version")
             span["changed_domains"] = (payload.get("state") or {}).get("changed_domains")
 
-        return build_traced_json_response(payload)
+        with rpg_pipeline_span("turn.response_send_prepare"):
+            response = build_traced_json_response(payload)
+        return finalize_rpg_trace_headers(response, trace)
 
 
 def _persisted_turn_session(result: dict[str, Any], session_id: str) -> dict[str, Any] | None:

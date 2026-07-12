@@ -5,6 +5,8 @@ import threading
 from functools import wraps
 from typing import Any, Callable
 
+from app.rpg.performance_trace import rpg_pipeline_span
+
 from .interaction_event_store import (
     append_interaction_event,
     compact_interaction_event_log,
@@ -34,8 +36,13 @@ def install_interaction_timeline_hook() -> None:
         *args: Any,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        with _session_lock(session_id):
-            result = original_apply_turn(session_id, player_input, action, *args, **kwargs)
+        lock = _session_lock(session_id)
+        with rpg_pipeline_span("turn.session_lock_wait", fields={"session_id": session_id}):
+            lock.acquire()
+        try:
+            with rpg_pipeline_span("turn.runtime_resolution") as runtime_span:
+                result = original_apply_turn(session_id, player_input, action, *args, **kwargs)
+                runtime_span["ok"] = result.get("ok") is True if isinstance(result, dict) else False
             if not isinstance(result, dict) or result.get("ok") is not True:
                 return result
             if result.get("interaction_persisted") is True:
@@ -52,13 +59,17 @@ def install_interaction_timeline_hook() -> None:
             if not isinstance(session, dict):
                 return result
 
-            session, result, event = commit_turn_interaction(
-                session,
-                result,
-                player_input=player_input,
-                submission_id=_current_submission_id(),
-                trace_id=_text(result.get("trace_id")),
-            )
+            with rpg_pipeline_span("turn.interaction_append") as interaction_span:
+                session, result, event = commit_turn_interaction(
+                    session,
+                    result,
+                    player_input=player_input,
+                    submission_id=_current_submission_id(),
+                    trace_id=_text(result.get("trace_id")),
+                )
+                interaction_span["interaction_id"] = event.get("interaction_id")
+                interaction_span["sequence"] = event.get("sequence")
+                interaction_span["stateful"] = event.get("stateful")
             result["session"] = session
             if isinstance(session_override, dict):
                 session_override.clear()
@@ -71,18 +82,25 @@ def install_interaction_timeline_hook() -> None:
                 }
                 return result
 
-            append_interaction_event(session_id, event)
+            with rpg_pipeline_span("turn.interaction_event_write") as event_span:
+                append_interaction_event(session_id, event)
+                event_span["sequence"] = event.get("sequence")
             snapshot_required = event.get("stateful") is not False or interaction_log_requires_compaction(session_id)
             persistence_mode = "event_log"
             if snapshot_required:
                 from .service import save_session
 
-                saved = save_session(session, compact=True)
+                with rpg_pipeline_span("turn.session_snapshot_write") as snapshot_span:
+                    saved = save_session(session, compact=True)
+                    snapshot_span["sequence"] = event.get("sequence")
+                    snapshot_span["stateful"] = event.get("stateful")
                 result["session"] = saved
-                compact_interaction_event_log(
-                    session_id,
-                    through_sequence=int(event.get("sequence") or 0),
-                )
+                with rpg_pipeline_span("turn.interaction_log_compaction") as compact_span:
+                    compact_interaction_event_log(
+                        session_id,
+                        through_sequence=int(event.get("sequence") or 0),
+                    )
+                    compact_span["through_sequence"] = event.get("sequence")
                 persistence_mode = "snapshot_compacted"
 
             mark_interaction_persisted(result)
@@ -97,6 +115,8 @@ def install_interaction_timeline_hook() -> None:
                 "event_log": interaction_event_log_status(session_id),
             }
             return result
+        finally:
+            lock.release()
 
     interactive_first_call_runtime.apply_turn = apply_turn_with_interaction_timeline
     setattr(interactive_first_call_runtime, _SENTINEL, True)
