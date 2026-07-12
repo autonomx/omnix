@@ -153,13 +153,17 @@ function submittedTurnInteractionId(job: JobRecord): string | undefined {
   return undefined;
 }
 
-function buildSubmittedTurnStoryMessages(
+export function buildSubmittedTurnStoryMessages(
   job: JobRecord | undefined,
   heroName: string,
   heroAvatar: string,
   selectedSessionId: string | null,
 ): RpgStoryMessagePreview[] {
   if (!job || !isRpgTurnJobType(job.type)) return [];
+  // Foreground-record jobs mirror the same structured response already owned
+  // by the turn UI store and durable session. Rendering their combined content
+  // creates a transient second response and can surface stale fallback prose.
+  if (job.type === 'rpg.turn.foreground_record') return [];
   const jobSessionId = submittedTurnSessionId(job);
   if (selectedSessionId && jobSessionId && jobSessionId !== selectedSessionId) return [];
 

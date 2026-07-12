@@ -46,7 +46,10 @@ async def execute_foreground_rpg_turn(
                 lambda: interactive_first_call_runtime.apply_turn(
                     session_id,
                     command,
-                    performance_override={"enable_live_narration_llm": False},
+                    performance_override={
+                        "enable_live_narration_llm": True,
+                        "narration_mode": "blocking",
+                    },
                 )
             )
             attach_rpg_result_timing(result)

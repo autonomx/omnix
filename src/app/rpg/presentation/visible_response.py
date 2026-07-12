@@ -26,8 +26,17 @@ def build_visible_response(result: Any, fallback_command: str = "") -> dict[str,
     sources = list(_iter_sources(result))
     player_input = _player_input(sources) or _text(fallback_command)
     narration, npc = _select_structured_response(sources, player_input)
-    speaker = _text(npc.get("speaker") or npc.get("name"))
+    speaker = _display_speaker(_text(npc.get("speaker") or npc.get("name")))
     line = _text(npc.get("line") or npc.get("text") or npc.get("content"))
+    line = _dialogue_only(line, speaker)
+    quest_evidence = _quest_evidence(sources)
+    clue_summary = _text(quest_evidence.get("clue_summary"))
+    if clue_summary and (not line or not _line_grounded_in_clue(line, clue_summary)):
+        line = clue_summary
+        speaker = _display_speaker(
+            _text(quest_evidence.get("actor_ref")) or speaker
+        ) or "NPC"
+        npc = {**npc, "speaker": speaker, "line": line}
     if _normalize(speaker) in _NON_NPC_SPEAKERS:
         speaker = ""
         line = ""
@@ -100,6 +109,7 @@ def _select_structured_response(
         npc = _dict(source.get("npc"))
         speaker = _text(npc.get("speaker") or npc.get("name"))
         line = _text(npc.get("line") or npc.get("text") or npc.get("content"))
+        line = _dialogue_only(line, speaker)
         narration = _text(
             source.get("narration")
             or source.get("final_narration")
@@ -122,6 +132,67 @@ def _select_structured_response(
                 npc = {}
             return narration, npc
     return "", {}
+
+
+def _dialogue_only(line: str, speaker: str) -> str:
+    """Strip duplicated attribution/narration from an NPC speech field."""
+
+    text = _text(line).strip()
+    if not text:
+        return ""
+    prefix = f"{_text(speaker).strip()}:"
+    if prefix != ":" and text.casefold().startswith(prefix.casefold()):
+        text = text[len(prefix):].strip()
+    normalized = text.replace("“", '"').replace("”", '"')
+    if speaker and normalized.casefold().startswith(_text(speaker).strip().casefold()):
+        quoted = re.search(r'"([^"\r\n]+)"\s*$', normalized)
+        if quoted:
+            text = quoted.group(1).strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {'"', "'"}:
+        text = text[1:-1].strip()
+    return text
+
+
+def _display_speaker(value: str) -> str:
+    speaker = _text(value).strip()
+    if speaker.casefold().startswith("npc:"):
+        speaker = speaker.split(":", 1)[1]
+    return speaker.replace("_", " ").strip()
+
+
+def _quest_evidence(sources: list[dict[str, Any]]) -> dict[str, Any]:
+    for source in sources:
+        transition = _dict(source.get("quest_transition"))
+        if not transition:
+            transition = _dict(_dict(source.get("service_application")).get("quest_transition"))
+        evidence = _dict(transition.get("evidence"))
+        if _text(evidence.get("clue_summary")):
+            return evidence
+    return {}
+
+
+_GROUNDING_STOPWORDS = {
+    "a", "an", "and", "are", "at", "by", "for", "from", "in", "is", "it",
+    "near", "of", "on", "or", "that", "the", "their", "there", "they", "this",
+    "to", "was", "were", "with",
+}
+
+
+def _grounding_tokens(value: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", _text(value).casefold())
+        if len(token) > 2 and token not in _GROUNDING_STOPWORDS
+    }
+
+
+def _line_grounded_in_clue(line: str, clue_summary: str) -> bool:
+    clue_tokens = _grounding_tokens(clue_summary)
+    if not clue_tokens:
+        return False
+    overlap = clue_tokens & _grounding_tokens(line)
+    required = min(len(clue_tokens), max(3, (len(clue_tokens) + 1) // 2))
+    return len(overlap) >= required
 
 
 def _iter_sources(value: Any) -> Iterable[dict[str, Any]]:

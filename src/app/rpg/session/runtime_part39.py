@@ -468,7 +468,7 @@ def _grounded_service_visible_response(resolved: Dict[str, Any]) -> Dict[str, An
         narration = f"You use {label} and rest for {elapsed // 60} hours. The reserved service is consumed."
     elif kind == "service_inquiry":
         transition = _safe_dict(resolved.get("quest_transition"))
-        if transition.get("applied") is not True:
+        if transition.get("applied") is not True and _clean(transition.get("reason")) != "quest_evidence_already_applied":
             return {}
         evidence = _safe_dict(transition.get("evidence"))
         clue = _clean(evidence.get("clue_summary"))

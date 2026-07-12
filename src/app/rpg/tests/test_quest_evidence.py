@@ -57,6 +57,8 @@ def test_quest_evidence_is_idempotent() -> None:
     assert first["applied"] is True
     assert second["applied"] is False
     assert second["reason"] == "quest_evidence_already_applied"
+    assert second["evidence"]["clue_summary"] == evidence["clue_summary"]
+    assert second["objective"] == "Investigate the strange lights near the old mill road."
 
 
 def test_unregistered_actor_cannot_advance_quest() -> None:
@@ -98,3 +100,10 @@ def test_registered_service_inquiry_emits_and_applies_quest_evidence() -> None:
     visible = _grounded_service_visible_response(authoritative["result"])
     assert "frightened traveler" in visible["narration"]
     assert "strange lights" in visible["npc"]["line"]
+
+    repeated = service_authoritative_result(authoritative["simulation_state"], action)
+    repeated_transition = repeated["result"]["quest_transition"]
+    repeated_visible = _grounded_service_visible_response(repeated["result"])
+    assert repeated_transition["reason"] == "quest_evidence_already_applied"
+    assert "frightened traveler" in repeated_visible["narration"]
+    assert repeated_visible["npc"]["line"] == transition["evidence"]["clue_summary"]

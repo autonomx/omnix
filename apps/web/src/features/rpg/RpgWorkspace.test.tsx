@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
-import { RpgWorkspace } from './RpgWorkspace';
+import { buildSubmittedTurnStoryMessages, RpgWorkspace } from './RpgWorkspace';
 
 function renderRpg() {
   const queryClient = new QueryClient({
@@ -89,6 +89,16 @@ afterEach(() => {
 });
 
 describe('RpgWorkspace', () => {
+  it('does not render foreground-record job content as a second story response', () => {
+    const job = {
+      type: 'rpg.turn.foreground_record',
+      status: 'completed',
+      output_refs: [{ content: 'Stale combined fallback response.' }],
+    } as unknown as Parameters<typeof buildSubmittedTurnStoryMessages>[0];
+
+    expect(buildSubmittedTurnStoryMessages(job, 'Alyndra', 'A', 'session:bran')).toEqual([]);
+  });
+
   it('restores the last selected live session after refresh instead of defaulting to the newest demo', async () => {
     window.localStorage.setItem('omnix:rpg:selected-session-id', 'ongoing-session');
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

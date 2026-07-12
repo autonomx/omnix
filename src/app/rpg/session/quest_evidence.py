@@ -102,12 +102,23 @@ def apply_quest_evidence(
             continue
         evidence_log = _list(quest.get("evidence"))
         clue_id = str(event.get("clue_id") or "")
-        if clue_id and any(str(_dict(row).get("clue_id") or "") == clue_id for row in evidence_log):
+        existing_evidence = next(
+            (
+                _dict(row)
+                for row in evidence_log
+                if clue_id and str(_dict(row).get("clue_id") or "") == clue_id
+            ),
+            {},
+        )
+        if existing_evidence:
             return {
                 "applied": False,
                 "reason": "quest_evidence_already_applied",
                 "quest_id": quest_id,
                 "clue_id": clue_id,
+                "objective_id": str(quest.get("objective_id") or ""),
+                "objective": str(quest.get("objective") or ""),
+                "evidence": deepcopy(existing_evidence),
                 "source": "deterministic_quest_evidence_runtime",
             }
         definition = _quest_definition(quest)

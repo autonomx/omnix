@@ -78,7 +78,10 @@ def test_direct_turn_route_applies_runtime_without_job_queue(monkeypatch) -> Non
         {
             "session_id": "rpg_test",
             "command": "i ask bran how he is doing",
-            "performance_override": {"enable_live_narration_llm": False},
+            "performance_override": {
+                "enable_live_narration_llm": True,
+                "narration_mode": "blocking",
+            },
         }
     ]
 
