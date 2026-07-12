@@ -37,11 +37,13 @@ def build_turn_response_v2(
     changed_domains = _changed_domains(sources, stateful=stateful)
     state_revision = _state_revision(session, sources)
     session_summary = _session_summary(session or _dict(root.get("session")))
+    interaction_seq = _interaction_seq(session_summary, sources)
     compact_result = {
         "ok": root.get("ok") is not False,
         "turn_id": turn_id or None,
         "tick": tick,
         "interaction_id": interaction_id or None,
+        "interaction_seq": interaction_seq,
         "action_type": _first_text(sources, "action_type") or None,
         "semantic_action_type": _first_text(sources, "semantic_action_type") or None,
         "semantic_family": _first_text(sources, "semantic_family") or None,
@@ -59,6 +61,7 @@ def build_turn_response_v2(
         "session_id": session_id,
         "submission_id": submission_id or None,
         "interaction_id": interaction_id or None,
+        "interaction_seq": interaction_seq,
         "turn_id": turn_id or None,
         "simulation_tick": tick,
         "job_id": job_id or None,
@@ -190,6 +193,13 @@ def _state_revision(session: dict[str, Any] | None, sources: tuple[dict[str, Any
     value = runtime.get("state_revision")
     if value is None:
         value = _first_value(sources, "state_revision", "revision")
+    return _int_or_none(value)
+
+
+def _interaction_seq(session_summary: dict[str, Any], sources: tuple[dict[str, Any], ...]) -> int | None:
+    value = session_summary.get("interaction_seq")
+    if value is None:
+        value = _first_value(sources, "interaction_seq", "sequence")
     return _int_or_none(value)
 
 
