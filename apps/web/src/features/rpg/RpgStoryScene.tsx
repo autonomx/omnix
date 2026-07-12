@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { RpgHeroSummaryPreview, RpgSessionSummaryPreview, RpgStoryMessagePreview } from './rpgUiState';
 import {
+  copyRpgTurnDiagnostics,
   markRpgTurnReactCommitted,
   markRpgTurnVisible,
   rpgDiagnosticsEnabled,
@@ -22,6 +23,7 @@ interface RpgStorySceneProps {
 export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSessionSummary, storyMessages = [] }: RpgStorySceneProps) {
   const isPreview = selectedSessionSummary.source === 'preview';
   const [recentEventsExpanded, setRecentEventsExpanded] = useState(false);
+  const [diagnosticsCopyState, setDiagnosticsCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const visibleStoryMessages = useRpgTurnUiMessages(selectedSessionSummary.id, [...storyMessages]);
   const diagnostics = useLatestRpgTurnDiagnostics(selectedSessionSummary.id);
   const showDiagnostics = rpgDiagnosticsEnabled();
@@ -54,6 +56,15 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
     });
     return () => cancelAnimationFrame(frame);
   }, [selectedSessionSummary.id, interactionKey]);
+
+  async function copyDiagnosticsEvidence() {
+    try {
+      const copied = await copyRpgTurnDiagnostics(selectedSessionSummary.id);
+      setDiagnosticsCopyState(copied ? 'copied' : 'failed');
+    } catch {
+      setDiagnosticsCopyState('failed');
+    }
+  }
 
   return (
     <section className="rpg-card rpg-story-card" aria-labelledby="rpg-story-scene-title">
@@ -136,6 +147,13 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
           </dl>
           {diagnostics.serverTiming ? <code>{diagnostics.serverTiming}</code> : null}
           {diagnostics.serverPayloadTiming ? <pre>{JSON.stringify(diagnostics.serverPayloadTiming, null, 2)}</pre> : null}
+          <button className="rpg-diagnostics-copy" onClick={copyDiagnosticsEvidence} type="button">
+            {diagnosticsCopyState === 'copied'
+              ? 'Diagnostics copied'
+              : diagnosticsCopyState === 'failed'
+                ? 'Copy unavailable'
+                : 'Copy diagnostics JSON'}
+          </button>
         </details>
       ) : null}
       {children}
