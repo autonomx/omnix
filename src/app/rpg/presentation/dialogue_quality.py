@@ -39,8 +39,6 @@ def enforce_dialogue_quality(
     session: dict[str, Any] | None,
     player_input: str,
 ) -> dict[str, Any]:
-    """Validate safe direct dialogue and deterministically repair weak output."""
-
     if not _is_nonstateful_direct_dialogue(result):
         return result
     session = session if isinstance(session, dict) else {}
@@ -123,8 +121,7 @@ def assess_dialogue_quality(
         warnings.append("above_target_word_range")
     if line and _is_player_restatement(line, player_input):
         violations.append("player_input_restatement")
-    lowered = combined.casefold()
-    if any(phrase in lowered for phrase in _GENERIC_PHRASES):
+    if any(phrase in combined.casefold() for phrase in _GENERIC_PHRASES):
         violations.append("generic_stock_phrase")
 
     leaked_terms = _private_leak_terms(profile, combined)
@@ -139,7 +136,7 @@ def assess_dialogue_quality(
         warnings.append("direct_answer_not_obvious")
 
     if allow_deterministic_fallback:
-        violations = [item for item in violations if item not in {"npc_line_too_brief"}]
+        violations = [item for item in violations if item != "npc_line_too_brief"]
     return {
         "acceptable": not violations,
         "violations": violations,
@@ -187,11 +184,7 @@ def build_profile_aware_dialogue_fallback(
             }
         ],
         "plain_text": f'{narration}\n\n{speaker}: "{line}"',
-        "npc": {
-            "speaker_id": speaker_id or None,
-            "speaker": speaker,
-            "line": line,
-        },
+        "npc": {"speaker_id": speaker_id or None, "speaker": speaker, "line": line},
     }
 
 
@@ -229,14 +222,12 @@ def _fallback_line(
     public = _public_profile_sentence(profile)
     style = _speech_style_hint(profile)
     detail = public or f"Things around {location} have been steady, though conditions keep changing."
-    hook = "What did you notice before you came in?"
     if topic == "wellbeing":
         detail = f"{speaker} has had a demanding but manageable day, with enough quiet to notice what others miss."
     elif topic == "opinion":
         detail = f"From practical experience, {speaker} trusts sound judgment more than showy certainty."
-    prefix = f"{continuity}" if continuity else ""
-    line = f"{prefix}{detail} {style} {hook}".strip()
-    return re.sub(r"\s+", " ", line)
+    line = f"{continuity}{detail} {style} What did you notice before you came in?"
+    return re.sub(r"\s+", " ", line).strip()
 
 
 def _scene_action(speaker: str, topic: str, location: str) -> str:
@@ -259,10 +250,7 @@ def _apply_visible_response(result: dict[str, Any], visible: dict[str, Any]) -> 
         "speaker": message.get("speaker"),
         "line": message.get("text"),
     }
-    result["visible_response"] = {
-        "narration": narration,
-        "npc": deepcopy(npc),
-    }
+    result["visible_response"] = {"narration": narration, "npc": deepcopy(npc)}
     result["final_narration"] = narration
     result["narration"] = narration
     result["summary"] = narration
@@ -270,13 +258,16 @@ def _apply_visible_response(result: dict[str, Any], visible: dict[str, Any]) -> 
     result["canonical_visible_response"] = deepcopy(visible)
     for key in ("result", "resolved_result"):
         nested = result.get(key)
-        if not isinstance(nested, dict):
-            continue
-        nested["visible_response"] = deepcopy(result["visible_response"])
-        nested["final_narration"] = narration
-        nested["narration"] = narration
-        nested["summary"] = narration
-        nested["npc"] = deepcopy(npc)
+        if isinstance(nested, dict):
+            nested.update(
+                {
+                    "visible_response": deepcopy(result["visible_response"]),
+                    "final_narration": narration,
+                    "narration": narration,
+                    "summary": narration,
+                    "npc": deepcopy(npc),
+                }
+            )
 
 
 def _is_nonstateful_direct_dialogue(result: dict[str, Any]) -> bool:
@@ -301,26 +292,23 @@ def _addressed_profile(
     simulation = _dict(session.get("simulation_state"))
     runtime = _dict(session.get("runtime_state"))
     candidates: list[dict[str, Any]] = []
-    for container in (
+    containers = (
         _dict(simulation.get("npc_index")),
         _dict(runtime.get("npc_index")),
         _dict(_dict(simulation.get("social_state")).get("profiles")),
         _dict(_dict(runtime.get("social_state")).get("profiles")),
-        _dict(_dict(_dict(result.get("first_call_grounding_diagnostics")).get("turn_grounding_packet")).get("npc_context")),
-    ):
+    )
+    for container in containers:
         for key, value in container.items():
             if isinstance(value, dict):
                 candidates.append({"id": key, **value})
     packet = _dict(_dict(result.get("first_call_grounding_diagnostics")).get("turn_grounding_packet"))
-    npc_context = _dict(packet.get("npc_context"))
-    candidates.extend(item for item in npc_context.get("addressed_npcs", []) if isinstance(item, dict))
+    addressed = _dict(packet.get("npc_context")).get("addressed_npcs", [])
+    candidates.extend(item for item in addressed if isinstance(item, dict))
+    target_ids = {_normalize(speaker_id), _normalize(speaker)}
     for profile in candidates:
-        ids = {
-            _normalize(profile.get("id")),
-            _normalize(profile.get("npc_id")),
-            _normalize(profile.get("name")),
-        }
-        if _normalize(speaker_id) in ids or _normalize(speaker) in ids:
+        ids = {_normalize(profile.get(key)) for key in ("id", "npc_id", "name")}
+        if target_ids & ids:
             return deepcopy(profile)
     return {"id": speaker_id, "npc_id": speaker_id, "name": speaker}
 
@@ -329,8 +317,7 @@ def _recent_interactions(session: dict[str, Any]) -> list[dict[str, Any]]:
     runtime = _dict(session.get("runtime_state"))
     value = runtime.get("recent_interactions")
     if not isinstance(value, list):
-        timeline = _dict(runtime.get("interaction_timeline"))
-        value = timeline.get("events")
+        value = _dict(runtime.get("interaction_timeline")).get("events")
     return [item for item in (value or []) if isinstance(item, dict)][-12:]
 
 
@@ -338,30 +325,20 @@ def _private_leak_terms(profile: dict[str, Any], text: str) -> list[str]:
     private_values: list[str] = []
     biography = _dict(profile.get("biography"))
     inventory = _dict(profile.get("inventory"))
-    for value in (biography.get("private"),):
-        if isinstance(value, str):
-            private_values.append(value)
-    for value in inventory.get("private", []) if isinstance(inventory.get("private"), list) else []:
-        if isinstance(value, str):
-            private_values.append(value)
-    boundaries = _dict(profile.get("knowledge_boundaries"))
-    forbidden = boundaries.get("must_not_reveal")
+    if isinstance(biography.get("private"), str):
+        private_values.append(biography["private"])
+    if isinstance(inventory.get("private"), list):
+        private_values.extend(str(value) for value in inventory["private"])
+    forbidden = _dict(profile.get("knowledge_boundaries")).get("must_not_reveal")
     if isinstance(forbidden, list):
         private_values.extend(str(value) for value in forbidden)
     normalized_text = _normalize(text)
-    leaks: list[str] = []
+    leaks: set[str] = set()
     for value in private_values:
-        for phrase in _distinctive_phrases(value):
-            if len(phrase.split()) >= 3 and phrase in normalized_text:
-                leaks.append(phrase)
-    return sorted(set(leaks))
-
-
-def _distinctive_phrases(value: str) -> list[str]:
-    words = _normalize(value).split()
-    if len(words) <= 8:
-        return [" ".join(words)] if words else []
-    return [" ".join(words[index:index + 5]) for index in range(0, len(words) - 4)]
+        words = _normalize(value).split()
+        phrases = [" ".join(words)] if len(words) <= 8 else [" ".join(words[i:i + 5]) for i in range(len(words) - 4)]
+        leaks.update(phrase for phrase in phrases if len(phrase.split()) >= 3 and phrase in normalized_text)
+    return sorted(leaks)
 
 
 def _near_duplicate_recent(line: str, recent: list[dict[str, Any]]) -> bool:
@@ -371,13 +348,9 @@ def _near_duplicate_recent(line: str, recent: list[dict[str, Any]]) -> bool:
     for event in recent[-6:]:
         prior = _text(event.get("npc_line"))
         if not prior:
-            prior_visible = _dict(event.get("visible_response"))
-            prior = _text(_npc_message(prior_visible).get("text"))
+            prior = _text(_npc_message(_dict(event.get("visible_response"))).get("text"))
         prior_words = set(_normalize(prior).split())
-        if len(prior_words) < 6:
-            continue
-        overlap = len(current & prior_words) / max(1, len(current | prior_words))
-        if overlap >= 0.72:
+        if len(prior_words) >= 6 and len(current & prior_words) / max(1, len(current | prior_words)) >= 0.72:
             return True
     return False
 
@@ -385,8 +358,8 @@ def _near_duplicate_recent(line: str, recent: list[dict[str, Any]]) -> bool:
 def _has_specific_grounding(text: str, profile: dict[str, Any]) -> bool:
     normalized = _normalize(text)
     public = _normalize(_dict(profile.get("biography")).get("public"))
-    values = _dict(profile.get("personality")).get("values")
     tokens = set(public.split())
+    values = _dict(profile.get("personality")).get("values")
     if isinstance(values, list):
         for value in values:
             tokens.update(_normalize(value).split())
@@ -395,31 +368,35 @@ def _has_specific_grounding(text: str, profile: dict[str, Any]) -> bool:
 
 
 def _looks_like_direct_answer(line: str, player_input: str) -> bool:
-    if not line:
-        return False
-    topic = _topic(player_input)
     topic_terms = {
         "business": {"business", "steady", "regulars", "road", "trade", "rooms", "food"},
         "wellbeing": {"day", "fine", "steady", "tired", "worse", "quiet"},
         "combat": {"guard", "footing", "stance", "blow", "fight", "combat"},
         "local_knowledge": {"road", "town", "travelers", "guards", "rumors"},
         "opinion": {"think", "trust", "prefer", "judgment", "believe"},
-    }.get(topic, set())
-    normalized = set(_normalize(line).split())
-    return not topic_terms or bool(topic_terms & normalized)
+    }.get(_topic(player_input), set())
+    return bool(line) and (not topic_terms or bool(topic_terms & set(_normalize(line).split())))
 
 
 def _topic(text: str) -> str:
     value = _normalize(text)
-    if any(term in value for term in ("business", "customers", "patrons", "trade", "tavern doing")):
+    if any(term in value for term in (
+        "business", "customers", "patrons", "trade", "tavern doing", "ale is selling", "ale selling",
+        "common room is empty", "common room empty", "rooms empty",
+    )):
         return "business"
-    if any(term in value for term in ("your day", "how are you", "how do you feel", "doing today", "going")):
+    if any(term in value for term in (
+        "your day", "how are you", "how do you feel", "doing today", "going", "feels tired", "feel tired", "are you tired",
+    )):
         return "wellbeing"
-    if any(term in value for term in ("sword", "combat", "fight", "guard", "battle")):
-        return "combat"
-    if any(term in value for term in ("road", "town", "rumor", "around here", "local")):
+    if any(term in value for term in (
+        "old road", "the road", "about the road", "town", "rumor", "around here", "local", "travelers",
+        "guards still", "guards stop", "stop here", "road is safe",
+    )):
         return "local_knowledge"
-    if any(term in value for term in ("think", "opinion", "prefer", "believe")):
+    if any(term in value for term in ("sword", "combat", "fight", "battle", "stance", "warrior")):
+        return "combat"
+    if any(term in value for term in ("think", "opinion", "prefer", "believe", "trustworthy")):
         return "opinion"
     if any(term in value for term in ("who are you", "your name", "about yourself")):
         return "identity"
@@ -440,9 +417,7 @@ def _public_profile_sentence(profile: dict[str, Any]) -> str:
 
 def _speech_style_hint(profile: dict[str, Any]) -> str:
     style = _text(_dict(profile.get("personality")).get("speech_style"))
-    if not style:
-        return ""
-    first = style.split(".")[0].strip()
+    first = style.split(".")[0].strip() if style else ""
     return f"Speaking plainly, {first[:1].lower() + first[1:]}." if first else ""
 
 
@@ -461,13 +436,11 @@ def _npc_message(visible: dict[str, Any]) -> dict[str, Any]:
             if isinstance(item, dict) and _text(item.get("kind")) == "npc_dialogue":
                 return item
     npc = _dict(visible.get("npc"))
-    if npc:
-        return {
-            "speaker_id": npc.get("speaker_id") or npc.get("npc_id") or npc.get("id"),
-            "speaker": npc.get("speaker") or npc.get("name"),
-            "text": npc.get("line") or npc.get("text"),
-        }
-    return {}
+    return {
+        "speaker_id": npc.get("speaker_id") or npc.get("npc_id") or npc.get("id"),
+        "speaker": npc.get("speaker") or npc.get("name"),
+        "text": npc.get("line") or npc.get("text"),
+    } if npc else {}
 
 
 def _first_value(sources: tuple[dict[str, Any], ...], *keys: str) -> Any:
@@ -481,10 +454,9 @@ def _first_value(sources: tuple[dict[str, Any], ...], *keys: str) -> Any:
 def _is_player_restatement(line: str, player_input: str) -> bool:
     line_normalized = _normalize(line)
     input_normalized = _normalize(player_input)
-    if not line_normalized or not input_normalized:
-        return False
-    return line_normalized == input_normalized or (
-        input_normalized in line_normalized and len(line_normalized) <= len(input_normalized) + 35
+    return bool(line_normalized and input_normalized) and (
+        line_normalized == input_normalized
+        or input_normalized in line_normalized and len(line_normalized) <= len(input_normalized) + 35
     )
 
 
