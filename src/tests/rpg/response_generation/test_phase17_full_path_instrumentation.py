@@ -10,6 +10,7 @@ from app.rpg.performance_trace import (
     rpg_pipeline_span,
     rpg_pipeline_trace,
 )
+from app.rpg.response_trace_headers import finalize_rpg_trace_headers
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -17,9 +18,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 def test_nested_spans_use_exclusive_top_level_attribution() -> None:
     with rpg_pipeline_trace("turn.pipeline", session_id="session:test", trace_id="trace:test") as trace:
         with rpg_pipeline_span("turn.apply"):
-            time.sleep(0.001)
+            time.sleep(0.02)
             with rpg_pipeline_span("turn.runtime_resolution"):
-                time.sleep(0.001)
+                time.sleep(0.02)
         summary = trace.summary()
 
     spans = {span["name"]: span for span in summary["spans"]}
@@ -68,7 +69,7 @@ def test_reported_provider_and_runtime_stages_are_named_without_llm_execution() 
     assert summary["interaction_id"] == "interaction:1"
 
 
-def test_response_headers_expose_trace_bytes_and_attribution() -> None:
+def test_response_headers_expose_trace_bytes_and_completed_attribution() -> None:
     payload = {
         "ok": True,
         "contract_version": "rpg_turn_response_v2",
@@ -79,9 +80,11 @@ def test_response_headers_expose_trace_bytes_and_attribution() -> None:
         "content": "Bran answers.",
     }
 
-    with rpg_pipeline_trace("turn.pipeline", trace_id="trace:headers"):
+    with rpg_pipeline_trace("turn.pipeline", trace_id="trace:headers") as trace:
         with rpg_pipeline_span("turn.response_send_prepare"):
+            time.sleep(0.01)
             response = build_traced_json_response(payload)
+        response = finalize_rpg_trace_headers(response, trace)
 
     body = json.loads(response.body)
     assert body["interaction_id"] == "interaction:1"
