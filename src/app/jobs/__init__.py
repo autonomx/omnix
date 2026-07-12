@@ -36,6 +36,7 @@ from .residency import (
 from .store import SQLiteJobStore, default_job_store
 from . import inline_feature_jobs as _inline_feature_jobs
 from .inline_feature_jobs import install_inline_feature_job_execution
+from .rpg_debug_job_hook import install_rpg_debug_job_hook
 from .rpg_last10_report import (
     RPG_LAST10_REPORT_JOB_TYPE,
     build_rpg_last10_report_payload,
@@ -51,6 +52,7 @@ install_rpg_turn_job_guard(SQLiteJobStore)
 install_voice_studio_job_execution(SQLiteJobStore)
 install_image_job_execution(SQLiteJobStore)
 install_research_job_execution(SQLiteJobStore)
+install_rpg_debug_job_hook(SQLiteJobStore)
 
 __all__ = [
     "CancelJobRequest",
