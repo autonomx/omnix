@@ -181,6 +181,17 @@ def _foreground_turn_text(result: dict[str, Any], command: str) -> str:
     return f"Your command is accepted: {command}."
 
 
+def _persisted_turn_session(result: dict[str, Any], session_id: str) -> dict[str, Any] | None:
+    result_session = result.get("session")
+    if result.get("interaction_persisted") is True and isinstance(result_session, dict):
+        return result_session
+    if isinstance(result_session, dict):
+        from app.rpg.session.service import save_session
+
+        return save_session(result_session, compact=True)
+    return load_session(session_id)
+
+
 def register_rpg_session_routes(app: FastAPI) -> None:
     """Attach the typed RPG session API once.
 
@@ -240,7 +251,6 @@ def register_rpg_session_routes(app: FastAPI) -> None:
         command = _foreground_turn_command(raw_payload)
 
         from app.rpg.session import interactive_first_call_runtime
-        from app.rpg.session.service import save_session
 
         result = await asyncio.to_thread(
             lambda: interactive_first_call_runtime.apply_turn(
@@ -252,8 +262,7 @@ def register_rpg_session_routes(app: FastAPI) -> None:
         if result.get("ok") is not True:
             status_code = 404 if result.get("error") == "session_not_found" else 400
             raise HTTPException(status_code=status_code, detail=result)
-        result_session = result.get("session")
-        session = save_session(result_session, compact=False) if isinstance(result_session, dict) else load_session(session_id)
+        session = _persisted_turn_session(result, session_id)
         return build_turn_response_v2(
             result,
             session_id=session_id,
