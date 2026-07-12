@@ -14,6 +14,13 @@ python-socketio>=5.9.0
 aiohttp>=3.8.0
 
 # ============================================
+# AUTHORITATIVE PERSISTENCE
+# ============================================
+# PostgreSQL is the sole supported structured-data runtime database.
+psycopg[binary]>=3.2.1,<4.0
+psycopg-pool>=3.2.1,<4.0
+
+# ============================================
 # LOCAL SMART HOME
 # ============================================
 # TP-Link Kasa/Tapo local-network discovery and control.
