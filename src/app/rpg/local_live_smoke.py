@@ -43,6 +43,11 @@ class SmokeResult:
     response_bytes: int
     gate_ok: bool
     failures: tuple[str, ...]
+    trace_id: str | None = None
+    provider_call_count: int | None = None
+    provider_ms: float | None = None
+    non_provider_overhead_ms: float | None = None
+    server_attribution_percent: float | None = None
 
 
 def assert_live_smoke_allowed(env: Mapping[str, str] | None = None) -> None:
@@ -97,6 +102,8 @@ def evaluate_live_smoke_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "failures": sorted(set(str(item) for item in failures)),
         "interaction_id": payload.get("interaction_id"),
         "response_bytes": int(gate.get("response_bytes") or 0),
+        "provider_call_count": _provider_call_count(payload),
+        "provider_ms": _provider_ms(payload),
     }
 
 
@@ -143,7 +150,7 @@ def run_live_smoke(
     payloads_by_submission: dict[str, dict[str, Any]] = {}
 
     for item in plan:
-        payload, elapsed_seconds, response_bytes = _post_turn(
+        payload, elapsed_seconds, response_bytes, response_headers = _post_turn(
             base_url=base_url,
             session_id=session_id,
             request=item,
@@ -159,6 +166,16 @@ def run_live_smoke(
                 failures.append("same_submission_changed_interaction_id")
         else:
             payloads_by_submission[item.submission_id] = payload
+        provider_ms = evaluation.get("provider_ms")
+        overhead_ms = (
+            max(0.0, elapsed_seconds * 1000.0 - float(provider_ms))
+            if isinstance(provider_ms, (int, float))
+            else None
+        )
+        attribution = _float_or_none(response_headers.get("x-omnix-rpg-attribution-pct"))
+        header_bytes = _int_or_none(response_headers.get("x-omnix-rpg-response-bytes"))
+        if header_bytes is not None and header_bytes != response_bytes:
+            failures.append("response_byte_header_mismatch")
         results.append(
             SmokeResult(
                 command=item.command,
@@ -168,6 +185,11 @@ def run_live_smoke(
                 response_bytes=response_bytes,
                 gate_ok=not failures,
                 failures=tuple(sorted(set(failures))),
+                trace_id=response_headers.get("x-omnix-rpg-trace-id") or str(payload.get("trace_id") or "") or None,
+                provider_call_count=evaluation.get("provider_call_count"),
+                provider_ms=round(float(provider_ms), 3) if isinstance(provider_ms, (int, float)) else None,
+                non_provider_overhead_ms=round(overhead_ms, 3) if overhead_ms is not None else None,
+                server_attribution_percent=round(attribution, 3) if attribution is not None else None,
             )
         )
 
@@ -186,9 +208,10 @@ def run_live_smoke(
         criteria,
     )
     aggregate_failures.extend(str(item) for item in latency["failures"])
+    aggregate_failures.extend(_evaluate_live_runtime_targets(non_replay, criteria))
 
     return {
-        "format_version": "rpg_interactive_live_smoke_v1",
+        "format_version": "rpg_interactive_live_smoke_v2",
         "ok": not aggregate_failures,
         "failures": sorted(set(aggregate_failures)),
         "base_url": base_url.rstrip("/"),
@@ -201,8 +224,36 @@ def run_live_smoke(
             for key, value in latency.items()
             if key not in {"ok", "failures"}
         },
+        "runtime_evidence": {
+            "provider_call_counts": [result.provider_call_count for result in non_replay],
+            "provider_ms": [result.provider_ms for result in non_replay],
+            "non_provider_overhead_ms": [result.non_provider_overhead_ms for result in non_replay],
+            "server_attribution_percent": [result.server_attribution_percent for result in non_replay],
+        },
         "results": [asdict(item) for item in results],
     }
+
+
+def _evaluate_live_runtime_targets(
+    results: list[SmokeResult],
+    criteria: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    required_calls = int(criteria.get("required_dialogue_provider_calls") or 0)
+    minimum_attribution = float(criteria.get("minimum_foreground_attribution_percent") or 0.0)
+    maximum_overhead = float(criteria.get("maximum_http_overhead_ms") or 0.0)
+    for result in results:
+        if required_calls and result.provider_call_count != required_calls:
+            failures.append("dialogue_provider_call_count_not_one")
+        if result.server_attribution_percent is None:
+            failures.append("missing_foreground_attribution_evidence")
+        elif result.server_attribution_percent < minimum_attribution:
+            failures.append("foreground_attribution_below_target")
+        if result.non_provider_overhead_ms is None:
+            failures.append("missing_non_provider_overhead_evidence")
+        elif maximum_overhead and result.non_provider_overhead_ms > maximum_overhead:
+            failures.append("non_provider_http_overhead_target_missed")
+    return failures
 
 
 def _post_turn(
@@ -211,7 +262,7 @@ def _post_turn(
     session_id: str,
     request: SmokeRequest,
     timeout_seconds: float,
-) -> tuple[dict[str, Any], float, int]:
+) -> tuple[dict[str, Any], float, int, dict[str, str]]:
     url = f"{base_url.rstrip('/')}/api/rpg/sessions/{session_id}/turn"
     body = json.dumps({"command": request.command}).encode("utf-8")
     http_request = urllib.request.Request(
@@ -228,6 +279,7 @@ def _post_turn(
     try:
         with urllib.request.urlopen(http_request, timeout=timeout_seconds) as response:
             raw = response.read()
+            headers = {str(key).casefold(): str(value) for key, value in response.headers.items()}
     except urllib.error.HTTPError as exc:
         raw = exc.read()
         raise RuntimeError(
@@ -242,7 +294,41 @@ def _post_turn(
         raise RuntimeError("turn response was not valid JSON") from exc
     if not isinstance(payload, dict):
         raise RuntimeError("turn response must be a JSON object")
-    return payload, elapsed, len(raw)
+    return payload, elapsed, len(raw), headers
+
+
+def _provider_call_count(payload: dict[str, Any]) -> int | None:
+    for source in _payload_sources(payload):
+        for key in ("provider_call_count", "llm_call_count"):
+            value = _int_or_none(source.get(key))
+            if value is not None:
+                return value
+        called = source.get("llm_called")
+        if isinstance(called, bool):
+            return 1 if called else 0
+    return None
+
+
+def _provider_ms(payload: dict[str, Any]) -> float | None:
+    for source in _payload_sources(payload):
+        for timing_key in ("timing", "manual_turn_stage_timing", "stage_timing"):
+            timing = source.get(timing_key)
+            if not isinstance(timing, dict):
+                continue
+            for key in ("provider_ms", "pre_runtime_intent_llm_ms"):
+                value = _float_or_none(timing.get(key))
+                if value is not None:
+                    return value
+    return None
+
+
+def _payload_sources(payload: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    sources = [payload]
+    for key in ("result", "authoritative"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            sources.append(value)
+    return tuple(sources)
 
 
 def _percentile(values: list[float], fraction: float) -> float:
@@ -251,6 +337,24 @@ def _percentile(values: list[float], fraction: float) -> float:
         return 0.0
     index = max(0, min(len(ordered) - 1, int(round((len(ordered) - 1) * fraction))))
     return ordered[index]
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
