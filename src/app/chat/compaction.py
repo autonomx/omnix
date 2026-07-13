@@ -1,20 +1,23 @@
-"""Durable, versioned long-conversation compaction."""
+"""Versioned long-conversation compaction.
+
+PostgreSQL is installed for production. Provider-free tests use the in-memory
+summary repository defined here; no SQLite schema remains.
+"""
 from __future__ import annotations
 
 import hashlib
-import json
 import os
-import sqlite3
+import threading
+from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.assistant_memory.settings import load_memory_runtime_settings
-from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, SQLiteJobStore, default_job_store
+from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, default_job_store
 
 from .models import MessageContentPurpose, project_message_content
-from .repository import default_chat_db_path
 
 if TYPE_CHECKING:
     from .prompt_store import ChatSessionStore
@@ -59,115 +62,55 @@ def compaction_threshold() -> int:
         return DEFAULT_COMPACTION_THRESHOLD
 
 
-class SQLiteConversationSummaryRepository:
-    def __init__(self, db_path: str | Path | None = None) -> None:
-        self.db_path = Path(db_path) if db_path is not None else default_chat_db_path()
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS chat_conversation_summaries (
-                    id TEXT PRIMARY KEY,
-                    session_id TEXT NOT NULL,
-                    through_message_id TEXT NOT NULL,
-                    source_message_count INTEGER NOT NULL,
-                    summary TEXT NOT NULL,
-                    durable_decisions_json TEXT NOT NULL,
-                    unresolved_items_json TEXT NOT NULL,
-                    token_estimate INTEGER NOT NULL,
-                    revision INTEGER NOT NULL,
-                    created_at TEXT NOT NULL,
-                    UNIQUE(session_id, through_message_id)
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_chat_summary_session_revision
-                ON chat_conversation_summaries(session_id, revision DESC)
-                """
-            )
+_SUMMARIES: dict[str, dict[str, ConversationSummary]] = {}
+_SUMMARY_LOCK = threading.RLock()
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(str(self.db_path), timeout=5.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA busy_timeout = 5000")
-        return connection
+
+class InMemoryConversationSummaryRepository:
+    def __init__(self, db_path: str | Path | None = None) -> None:
+        self.db_path = Path(db_path) if db_path is not None else Path(":memory:")
+        self._key = str(self.db_path)
 
     def save(self, summary: ConversationSummary) -> ConversationSummary:
-        with self._connect() as connection:
-            existing = connection.execute(
-                "SELECT revision FROM chat_conversation_summaries WHERE session_id = ? AND through_message_id = ?",
-                (summary.session_id, summary.through_message_id),
-            ).fetchone()
-            if existing is None:
-                latest = connection.execute(
-                    "SELECT COALESCE(MAX(revision), 0) FROM chat_conversation_summaries WHERE session_id = ?",
-                    (summary.session_id,),
-                ).fetchone()
-                summary = summary.model_copy(update={"revision": int(latest[0]) + 1})
-            connection.execute(
-                """
-                INSERT OR IGNORE INTO chat_conversation_summaries(
-                    id, session_id, through_message_id, source_message_count, summary,
-                    durable_decisions_json, unresolved_items_json, token_estimate,
-                    revision, created_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?)
-                """,
+        with _SUMMARY_LOCK:
+            records = _SUMMARIES.setdefault(self._key, {})
+            for existing in records.values():
+                if (
+                    existing.session_id == summary.session_id
+                    and existing.through_message_id == summary.through_message_id
+                ):
+                    return deepcopy(existing)
+            latest = max(
                 (
-                    summary.id,
-                    summary.session_id,
-                    summary.through_message_id,
-                    summary.source_message_count,
-                    summary.summary,
-                    json.dumps(summary.durable_decisions, sort_keys=True),
-                    json.dumps(summary.unresolved_items, sort_keys=True),
-                    summary.token_estimate,
-                    summary.revision,
-                    summary.created_at,
+                    item.revision
+                    for item in records.values()
+                    if item.session_id == summary.session_id
                 ),
+                default=0,
             )
-            row = connection.execute(
-                """
-                SELECT * FROM chat_conversation_summaries
-                WHERE session_id = ? AND through_message_id = ?
-                """,
-                (summary.session_id, summary.through_message_id),
-            ).fetchone()
-        return self._row(row)
+            stored = summary.model_copy(update={"revision": latest + 1})
+            records[stored.id] = deepcopy(stored)
+            return deepcopy(stored)
 
     def latest(self, session_id: str) -> ConversationSummary | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT * FROM chat_conversation_summaries
-                WHERE session_id = ? ORDER BY revision DESC LIMIT 1
-                """,
-                (session_id,),
-            ).fetchone()
-        return self._row(row) if row else None
+        with _SUMMARY_LOCK:
+            values = [
+                item
+                for item in _SUMMARIES.setdefault(self._key, {}).values()
+                if item.session_id == session_id
+            ]
+            values.sort(key=lambda item: (item.revision, item.created_at, item.id), reverse=True)
+            return deepcopy(values[0]) if values else None
 
-    @staticmethod
-    def _row(row: sqlite3.Row) -> ConversationSummary:
-        return ConversationSummary(
-            id=row["id"],
-            session_id=row["session_id"],
-            through_message_id=row["through_message_id"],
-            source_message_count=int(row["source_message_count"]),
-            summary=row["summary"],
-            durable_decisions=json.loads(row["durable_decisions_json"] or "[]"),
-            unresolved_items=json.loads(row["unresolved_items_json"] or "[]"),
-            token_estimate=int(row["token_estimate"]),
-            revision=int(row["revision"]),
-            created_at=row["created_at"],
-        )
+
+SQLiteConversationSummaryRepository = InMemoryConversationSummaryRepository
 
 
 def _estimate_tokens(text: str) -> int:
     return max(1, (len(text.encode("utf-8")) + 3) // 4) if text else 0
 
 
-def build_deterministic_summary(session, *, recent_message_limit: int = DEFAULT_RECENT_MESSAGE_LIMIT) -> ConversationSummary | None:
+def build_deterministic_summary(session: Any, *, recent_message_limit: int = DEFAULT_RECENT_MESSAGE_LIMIT) -> ConversationSummary | None:
     from datetime import datetime, timezone
 
     messages = [message for message in session.messages if message.role in {"user", "assistant"}]
@@ -193,7 +136,6 @@ def build_deterministic_summary(session, *, recent_message_limit: int = DEFAULT_
     if len(text) > 12_000:
         text = text[-12_000:]
     through = older[-1]
-    previous_revision = 0
     summary_id = hashlib.sha256(f"{session.id}\n{through.id}".encode("utf-8")).hexdigest()
     return ConversationSummary(
         id=f"summary:{summary_id}",
@@ -204,7 +146,7 @@ def build_deterministic_summary(session, *, recent_message_limit: int = DEFAULT_
         durable_decisions=list(dict.fromkeys(decisions))[:20],
         unresolved_items=list(dict.fromkeys(unresolved))[:20],
         token_estimate=_estimate_tokens(text),
-        revision=previous_revision + 1,
+        revision=1,
         created_at=datetime.now(timezone.utc).isoformat(),
     )
 
@@ -213,7 +155,7 @@ def compaction_idempotency_key(session_id: str, through_message_id: str) -> str:
     return hashlib.sha256(f"{HISTORY_COMPACT_JOB_TYPE}\n{session_id}\n{through_message_id}".encode("utf-8")).hexdigest()
 
 
-def enqueue_compaction_job(session, *, job_store: SQLiteJobStore | None = None) -> JobRecord | None:
+def enqueue_compaction_job(session: Any, *, job_store: Any | None = None) -> JobRecord | None:
     if not compaction_enabled() or len(session.messages) < compaction_threshold():
         return None
     messages = [message for message in session.messages if message.role in {"user", "assistant"}]
@@ -245,8 +187,8 @@ def process_compaction_job(
     job: JobRecord,
     *,
     chat_store: "ChatSessionStore",
-    summary_repository: SQLiteConversationSummaryRepository | None = None,
-    job_store: SQLiteJobStore | None = None,
+    summary_repository: Any | None = None,
+    job_store: Any | None = None,
 ) -> ConversationSummary | None:
     if job.type != HISTORY_COMPACT_JOB_TYPE:
         raise ValueError(f"unsupported compaction job type: {job.type}")
@@ -257,7 +199,7 @@ def process_compaction_job(
         recent_message_limit=payload.recent_message_limit,
     )
     if summary is not None and summary.through_message_id == payload.through_message_id:
-        summary = (summary_repository or SQLiteConversationSummaryRepository()).save(summary)
+        summary = (summary_repository or InMemoryConversationSummaryRepository()).save(summary)
     (job_store or default_job_store()).complete_job(
         job.id,
         CompleteJobRequest(
