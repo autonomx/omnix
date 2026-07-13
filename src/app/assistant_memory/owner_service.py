@@ -17,7 +17,7 @@ from .models import (
     MemorySnapshotItem,
     MemorySource,
 )
-from .owner_repository import OwnerAwareSQLiteMemoryRepository
+from .owner_repository import OwnerAwareInMemoryMemoryRepository
 from .policy import candidate_acceptance, explicit_save_decision, is_visible_in_scope, source_requires_approval
 from .repository import MemoryNotFoundError
 from .scope import scope_id_for
@@ -50,11 +50,11 @@ def _fingerprint(
 
 
 class OwnerAwareMemoryService(MemoryService):
-    def __init__(self, repository: OwnerAwareSQLiteMemoryRepository | None = None) -> None:
-        super().__init__(repository or OwnerAwareSQLiteMemoryRepository())
+    def __init__(self, repository: OwnerAwareInMemoryMemoryRepository | None = None) -> None:
+        super().__init__(repository or OwnerAwareInMemoryMemoryRepository())
 
     @property
-    def owner_repository(self) -> OwnerAwareSQLiteMemoryRepository:
+    def owner_repository(self) -> OwnerAwareInMemoryMemoryRepository:
         return self.repository  # type: ignore[return-value]
 
     def list_active(self, context: MemoryScopeContext) -> list[MemoryRecord]:
