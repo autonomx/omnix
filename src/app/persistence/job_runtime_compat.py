@@ -30,6 +30,6 @@ class PostgresJobStoreAdapter(_PostgresJobStoreAdapter):
         current = self.get_job(job_id)
         if current is None:
             return None
-        if current.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
+        if current.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELED}:
             return current
         return super().fail_job(job_id, request)
