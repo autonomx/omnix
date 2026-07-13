@@ -122,7 +122,7 @@ created_character = characters.create(CreateCharacterRequest(
     default_greeting="Hello.",
 ))
 assert created_character.active_version == 1
-assert characters.get("character:runtime") is not None
+assert characters.get(created_character.id) is not None
 
 from app.assistant_memory.models import MemoryRecord
 from app.persistence.memory_compat import PostgresMemoryRepositoryAdapter
