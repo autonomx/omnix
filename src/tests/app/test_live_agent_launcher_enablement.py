@@ -33,3 +33,25 @@ def test_windows_launcher_starts_existing_postgres_container_and_waits_for_healt
     assert '{{.State.Health.Status}}' in source
     assert "docker compose" not in source
     assert "Provision it with docker-compose.postgres.yml" in source
+
+
+def test_windows_launcher_loads_protected_database_credential_and_checks_health() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "start_all.bat").read_text(encoding="utf-8")
+    credential_script = (root / "scripts" / "manage_postgresql_credential.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'if not defined OMNIX_DATABASE_URL (' in source
+    assert "manage_postgresql_credential.ps1" in source
+    assert "-Action launch" in source
+    assert 'set "OMNIX_LAUNCHER_AUTO_START=1"' in source
+    assert 'set "OMNIX_LAUNCHER_OPEN_BROWSER=1"' in source
+    assert '"%RPG_FLUX_PYTHON%" -m app.persistence health' in source
+    assert 'if /I "%~1"=="--database-credential-injected-check"' in source
+    assert "ConvertFrom-SecureString" in credential_script
+    assert "ConvertTo-SecureString" in credential_script
+    assert "windows_dpapi_current_user" in credential_script
+    assert "POSTGRES_PASSWORD" in credential_script
+    assert "[switch]$CheckOnly" in credential_script
+    assert "Write-Output $databaseUrl" not in credential_script

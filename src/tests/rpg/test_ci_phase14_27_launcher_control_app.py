@@ -70,6 +70,39 @@ def test_default_service_specs_hermes_uses_launcher_flags_and_base_url(monkeypat
     assert hermes.env["HERMES_BASE_URL"] == "http://127.0.0.1:9864"
 
 
+def test_launcher_lifecycle_auto_starts_and_stops_managed_services(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeManager:
+        def start_auto_services(self):
+            calls.append("start")
+            return {"ok": True}
+
+        def stop_all(self):
+            calls.append("stop")
+            return {"ok": True}
+
+    monkeypatch.setenv("OMNIX_LAUNCHER_AUTO_START", "1")
+    monkeypatch.setattr(launcher_control_app, "get_default_manager", lambda: FakeManager())
+
+    launcher_control_app._start_managed_services_on_launcher_startup()
+    launcher_control_app._stop_managed_services_on_launcher_shutdown()
+
+    assert calls == ["start", "stop"]
+
+
+def test_launcher_lifecycle_auto_start_is_explicit(monkeypatch) -> None:
+    monkeypatch.delenv("OMNIX_LAUNCHER_AUTO_START", raising=False)
+
+    class FailIfCalled:
+        def start_auto_services(self):
+            raise AssertionError("auto start must remain disabled without the launcher flag")
+
+    monkeypatch.setattr(launcher_control_app, "get_default_manager", lambda: FailIfCalled())
+
+    launcher_control_app._start_managed_services_on_launcher_startup()
+
+
 def test_launcher_dashboard_lists_services_without_starting_processes() -> None:
     manager = LauncherServiceManager([
         ServiceSpec(service_id="fake", label="Fake Service", command=["python", "-V"], cwd=Path("."), description="fake"),
@@ -123,6 +156,66 @@ def test_start_enabled_services_clears_conflicting_ports_before_launch(monkeypat
     logs = manager.logs("fake")
     assert any("stopped conflicting process(es) on port 5000" in line for line in logs)
     assert any("stopped conflicting process(es) on port 5101" in line for line in logs)
+
+
+def test_managed_service_inherits_database_url_without_logging_it(monkeypatch) -> None:
+    captured_environment: dict[str, str] = {}
+
+    class FakeProcess:
+        pid = 12345
+        stdout: list[str] = []
+        returncode = None
+
+        def poll(self) -> None:
+            return None
+
+    def fake_popen(*_args, **kwargs):
+        captured_environment.update(kwargs["env"])
+        return FakeProcess()
+
+    database_url = "postgresql://omnix:not-for-logs@127.0.0.1:5432/omnix"
+    monkeypatch.setenv("OMNIX_DATABASE_URL", database_url)
+    monkeypatch.setattr(launcher_service_manager.subprocess, "Popen", fake_popen)
+    manager = LauncherServiceManager(
+        [ServiceSpec(service_id="gateway", label="Gateway", command=["python", "-V"], cwd=Path("."))]
+    )
+
+    result = manager.start("gateway")
+
+    assert result["ok"] is True
+    assert captured_environment["OMNIX_DATABASE_URL"] == database_url
+    assert all(database_url not in line for line in manager.logs("gateway"))
+
+
+def test_previous_log_thread_cannot_overwrite_restarted_process_status() -> None:
+    class ExitedProcess:
+        stdout: list[str] = []
+        returncode = 3
+
+        def poll(self) -> int:
+            return self.returncode
+
+    class RunningProcess:
+        pid = 54321
+        returncode = None
+
+        def poll(self) -> None:
+            return None
+
+    manager = LauncherServiceManager(
+        [ServiceSpec(service_id="gateway", label="Gateway", command=["python", "-V"], cwd=Path("."))]
+    )
+    service = manager._services["gateway"]
+    previous_process = ExitedProcess()
+    current_process = RunningProcess()
+    service.process = current_process
+    service.last_returncode = None
+
+    manager._pump_logs_for_process(service, previous_process)
+
+    assert service.process is current_process
+    assert service.last_returncode is None
+    assert service.status() == "running"
 
 
 def test_launcher_dashboard_html_uses_safe_script_and_event_handlers() -> None:

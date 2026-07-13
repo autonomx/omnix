@@ -152,7 +152,11 @@ class LauncherServiceManager:
             service.process = process
             service.started_at = time.time()
             service.last_returncode = None
-            thread = threading.Thread(target=self._pump_logs, args=(service,), daemon=True)
+            thread = threading.Thread(
+                target=self._pump_logs_for_process,
+                args=(service, process),
+                daemon=True,
+            )
             thread.start()
             return {"ok": True, "service": service.snapshot()}
 
@@ -215,9 +219,12 @@ class LauncherServiceManager:
                     else:
                         self._append(service, f"[launcher] warning: port {port} did not become bindable after cleanup")
 
-    def _pump_logs(self, service: ManagedProcess) -> None:
-        process = service.process
-        if process is None or process.stdout is None:
+    def _pump_logs_for_process(
+        self,
+        service: ManagedProcess,
+        process: subprocess.Popen[str],
+    ) -> None:
+        if process.stdout is None:
             return
         try:
             for line in process.stdout:
@@ -225,8 +232,8 @@ class LauncherServiceManager:
         finally:
             with service.lock:
                 if process.poll() is not None:
-                    service.last_returncode = process.returncode
                     if service.process is process:
+                        service.last_returncode = process.returncode
                         service.process = None
                     self._append(service, f"[launcher] exited with code {process.returncode}")
 

@@ -11,6 +11,8 @@ set "OMNIX_LAUNCHER_URL=http://127.0.0.1:5055"
 if not defined OMNIX_APP_OPEN_URL set "OMNIX_APP_OPEN_URL=http://localhost:5173/"
 if not defined OMNIX_POSTGRES_CONTAINER set "OMNIX_POSTGRES_CONTAINER=omnix-postgres"
 if not defined OMNIX_POSTGRES_START_WAIT_ATTEMPTS set "OMNIX_POSTGRES_START_WAIT_ATTEMPTS=30"
+if not defined OMNIX_LAUNCHER_AUTO_START set "OMNIX_LAUNCHER_AUTO_START=1"
+if not defined OMNIX_LAUNCHER_OPEN_BROWSER set "OMNIX_LAUNCHER_OPEN_BROWSER=1"
 
 call :ensure_postgres
 if errorlevel 1 (
@@ -20,6 +22,16 @@ if errorlevel 1 (
 if /I "%~1"=="--postgres-only" (
     endlocal
     exit /b 0
+)
+if not defined OMNIX_DATABASE_URL (
+    if /I "%~1"=="--database-credential-injected" (
+        echo ERROR: The protected PostgreSQL credential loader did not inject OMNIX_DATABASE_URL.
+        exit /b 1
+    )
+    echo [POSTGRES] Loading the current-user protected database credential...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\manage_postgresql_credential.ps1" -Action launch -BatchPath "%~f0"
+    set "OMNIX_CREDENTIAL_LAUNCH_EXIT=!ERRORLEVEL!"
+    endlocal & exit /b !OMNIX_CREDENTIAL_LAUNCH_EXIT!
 )
 
 REM Live Agent pilot defaults. Override these before running start_all.bat to disable or tune the pilot.
@@ -124,6 +136,17 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+echo [POSTGRES] Verifying authoritative database connectivity...
+"%RPG_FLUX_PYTHON%" -m app.persistence health
+if errorlevel 1 (
+    echo ERROR: PostgreSQL connectivity verification failed. Omnix services were not started.
+    pause
+    exit /b 1
+)
+if /I "%~1"=="--database-credential-injected-check" (
+    endlocal
+    exit /b 0
+)
 if /I "%OMNIX_KASA_ENABLED%"=="1" (
     "%RPG_FLUX_PYTHON%" -c "import kasa; print('[KASA] python-kasa OK')"
     if errorlevel 1 (
@@ -135,8 +158,12 @@ if /I "%OMNIX_KASA_ENABLED%"=="1" (
 echo.
 echo Starting launcher dashboard in this window...
 echo Use Ctrl+C here to stop the launcher itself. Use the dashboard to stop services.
-echo Opening browser: %OMNIX_LAUNCHER_URL%
-start "" "%OMNIX_LAUNCHER_URL%"
+if /I "%OMNIX_LAUNCHER_OPEN_BROWSER%"=="1" (
+    echo Opening browser: %OMNIX_LAUNCHER_URL%
+    start "" "%OMNIX_LAUNCHER_URL%"
+) else (
+    echo Browser launch disabled for this startup.
+)
 
 set "PYTHONPATH=%~dp0src"
 set "OMNIX_TTS_URL=%OMNIX_TTS_URL%"
@@ -148,6 +175,8 @@ set "OMNIX_IMAGE_WARMUP=%OMNIX_IMAGE_WARMUP%"
 set "OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD=%OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD%"
 set "OMNIX_IMAGE_URL=%OMNIX_IMAGE_URL%"
 set "OMNIX_APP_OPEN_URL=%OMNIX_APP_OPEN_URL%"
+set "OMNIX_LAUNCHER_AUTO_START=%OMNIX_LAUNCHER_AUTO_START%"
+set "OMNIX_LAUNCHER_OPEN_BROWSER=%OMNIX_LAUNCHER_OPEN_BROWSER%"
 set "OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"
 set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"
 set "HERMES_ENABLED=%HERMES_ENABLED%"

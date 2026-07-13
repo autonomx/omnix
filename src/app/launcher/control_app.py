@@ -18,6 +18,28 @@ app = FastAPI(title="Omnix Launcher Control", version=LAUNCHER_MANAGER_VERSION)
 _DEFAULT_APP_OPEN_URL = "http://localhost:5173/"
 
 
+def _launcher_auto_start_enabled() -> bool:
+    return os.environ.get("OMNIX_LAUNCHER_AUTO_START", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _start_managed_services_on_launcher_startup() -> None:
+    if _launcher_auto_start_enabled():
+        get_default_manager().start_auto_services()
+
+
+def _stop_managed_services_on_launcher_shutdown() -> None:
+    get_default_manager().stop_all()
+
+
+app.router.add_event_handler("startup", _start_managed_services_on_launcher_startup)
+app.router.add_event_handler("shutdown", _stop_managed_services_on_launcher_shutdown)
+
+
 def _app_open_url() -> str:
     url = (
         os.environ.get("OMNIX_APP_OPEN_URL")

@@ -17,6 +17,41 @@ python -m app.persistence verify
 
 `verify` requires healthy PostgreSQL, no checksum drift, and no pending migrations. SQLite URLs and silent fallback are rejected.
 
+## Protected Windows startup credential
+
+For the normal `start_all.bat` path, provision a current-user Windows DPAPI credential from the already configured PostgreSQL container:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/manage_postgresql_credential.ps1 `
+  -Action provision-from-container
+
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/manage_postgresql_credential.ps1 `
+  -Action status
+```
+
+The protected value is written outside the repository under
+`%LOCALAPPDATA%\Omnix\secrets\postgresql-url.dpapi`. Its directory ACL is restricted to the current Windows user and `SYSTEM`, and the encrypted value can only be decrypted by the Windows user that provisioned it. The scripts never print the database password or unredacted URL.
+
+`start_all.bat` now performs this sequence:
+
+1. Verify Docker is available and start the existing `omnix-postgres` container when needed.
+2. Wait for the container health check.
+3. Use an existing session-only `OMNIX_DATABASE_URL`, or decrypt the current-user DPAPI credential into the launcher process environment.
+4. Run `python -m app.persistence health` before opening the launcher dashboard.
+5. Auto-start launcher-managed services. Each child inherits the same database environment without placing it in command arguments or launcher logs.
+6. Stop launcher-managed child processes when the launcher shuts down.
+
+The session environment intentionally takes precedence over the DPAPI credential for recovery rehearsals and disposable test databases. If Docker, the provisioned container, the protected credential, or PostgreSQL health is unavailable, startup fails closed before application services launch.
+
+For a content-free credential and database startup rehearsal without opening the launcher or application services:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/manage_postgresql_credential.ps1 `
+  -Action launch -BatchPath .\start_all.bat -CheckOnly
+```
+
+Set `OMNIX_LAUNCHER_OPEN_BROWSER=0` before running `start_all.bat` when starting it under a background supervisor or during an unattended restart rehearsal.
+
 ## Authority and recovery status
 
 ```powershell
