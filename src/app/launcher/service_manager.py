@@ -350,7 +350,16 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         ServiceSpec(
             service_id="gateway",
             label="Omnix Gateway",
-            command=[app_python, "-m", "uvicorn", "app.gateway.main:app", "--host", "127.0.0.1", "--port", "8000"],
+            command=[
+                app_python,
+                str(root / "scripts" / "run_omnix_gateway.py"),
+                "--app",
+                "app.gateway.runtime_app:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+            ],
             cwd=root,
             env={
                 **common,

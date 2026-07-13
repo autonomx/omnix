@@ -70,6 +70,10 @@ from types import SimpleNamespace
 from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
 
+from app.characters import service as character_service
+assert character_service.CharacterRepository.__name__ == "PostgresCharacterRepositoryAdapter"
+assert character_service.default_character_service().repository.__class__.__name__ == "PostgresCharacterRepositoryAdapter"
+
 from app.assist_core import policy_store
 policy_store.write_pending({"confirmation:1": {"status": "pending"}})
 assert policy_store.read_pending()["confirmation:1"]["status"] == "pending"

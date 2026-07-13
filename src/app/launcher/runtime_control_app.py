@@ -28,16 +28,6 @@ def build_runtime_service_specs():
             specs.append(
                 replace(
                     spec,
-                    command=[
-                        spec.command[0],
-                        "-m",
-                        "uvicorn",
-                        "app.gateway.runtime_app:app",
-                        "--host",
-                        "127.0.0.1",
-                        "--port",
-                        "8000",
-                    ],
                     env={
                         **spec.env,
                         "OMNIX_IMAGE_ENABLED": "1" if image_available else "0",
