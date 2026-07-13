@@ -37,6 +37,10 @@ sessions_data = {}
 custom_voices = {}
 downloads = {}
 llamacpp_server_downloads = {}
+_settings_load_override = None
+_settings_save_override = None
+_sessions_load_override = None
+_sessions_save_override = None
 
 # Singleton Provider Instances
 _tts_provider_instance = None
@@ -276,7 +280,37 @@ def save_secrets(secrets):
     if previous_inputs != next_inputs:
         invalidate_provider_cache()
 
+def install_postgresql_document_callbacks(
+    *,
+    load_settings_callback,
+    save_settings_callback,
+    load_sessions_callback,
+    save_sessions_callback,
+):
+    global _settings_load_override, _settings_save_override
+    global _sessions_load_override, _sessions_save_override
+    _settings_load_override = load_settings_callback
+    _settings_save_override = save_settings_callback
+    _sessions_load_override = load_sessions_callback
+    _sessions_save_override = save_sessions_callback
+
+
+def clear_postgresql_document_callbacks():
+    global _settings_load_override, _settings_save_override
+    global _sessions_load_override, _sessions_save_override
+    _settings_load_override = None
+    _settings_save_override = None
+    _sessions_load_override = None
+    _sessions_save_override = None
+
+
 def load_settings():
+    if _settings_load_override is not None:
+        settings = migrate_settings(dict(_settings_load_override() or {}))
+        for key in ['cerebras', 'openrouter', 'lmstudio', 'llamacpp']:
+            if key not in settings:
+                settings[key] = DEFAULT_SETTINGS[key].copy()
+        return settings
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, 'r') as f:
@@ -298,8 +332,11 @@ def save_settings(settings):
     next_inputs = _llm_provider_cache_inputs_from_settings(settings)
     previous_settings = load_settings()
 
-    with open(SETTINGS_FILE, 'w') as f:
-        json.dump(settings, f, indent=2)
+    if _settings_save_override is not None:
+        _settings_save_override(settings)
+    else:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(settings, f, indent=2)
 
     if previous_inputs != next_inputs:
         invalidate_provider_cache()
@@ -323,6 +360,8 @@ def save_settings(settings):
         pass
 
 def load_sessions():
+    if _sessions_load_override is not None:
+        return dict(_sessions_load_override() or {})
     if os.path.exists(SESSIONS_FILE):
         try:
             with open(SESSIONS_FILE, 'r') as f:
@@ -331,8 +370,11 @@ def load_sessions():
     return {}
 
 def save_sessions(sessions):
-    with open(SESSIONS_FILE, 'w') as f:
-        json.dump(sessions, f, indent=2)
+    if _sessions_save_override is not None:
+        _sessions_save_override(dict(sessions or {}))
+    else:
+        with open(SESSIONS_FILE, 'w') as f:
+            json.dump(sessions, f, indent=2)
 
 def extract_thinking(content):
     """Extract thinking/analysis from content."""
@@ -673,8 +715,5 @@ def _init_custom_voices():
     for vid, vdata in custom_voices.items():
         if "gender" not in vdata:
             vdata["gender"] = "neutral"
-
-    with open(VOICE_CLONES_FILE, 'w') as f:
-        json.dump(custom_voices, f, indent=2)
 
 _init_custom_voices()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from argparse import Namespace
 from datetime import datetime, timezone
@@ -345,13 +346,24 @@ def _rpg_campaigns(directory: Path | None, submissions: list[dict[str, Any]]) ->
             raw = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
+        if not isinstance(raw, dict):
+            continue
         session = raw.get("session") if isinstance(raw.get("session"), dict) else raw
         if not isinstance(session, dict):
             continue
-        manifest = session.get("manifest") if isinstance(session.get("manifest"), dict) else {}
-        runtime = session.get("runtime_state") if isinstance(session.get("runtime_state"), dict) else {}
+        raw_manifest = session.get("manifest")
+        manifest: dict[str, Any] = (
+            dict(raw_manifest) if isinstance(raw_manifest, dict) else {}
+        )
+        raw_runtime = session.get("runtime_state")
+        runtime: dict[str, Any] = (
+            dict(raw_runtime) if isinstance(raw_runtime, dict) else {}
+        )
         campaign_id = str(manifest.get("session_id") or manifest.get("id") or path.stem).strip()
-        timeline = runtime.get("interaction_timeline") if isinstance(runtime.get("interaction_timeline"), dict) else {}
+        raw_timeline = runtime.get("interaction_timeline")
+        timeline: dict[str, Any] = (
+            dict(raw_timeline) if isinstance(raw_timeline, dict) else {}
+        )
         interactions = {
             str(item.get("interaction_id") or f"sequence:{item.get('sequence')}"): dict(item)
             for item in timeline.get("events", [])
@@ -379,27 +391,49 @@ def _rpg_campaigns(directory: Path | None, submissions: list[dict[str, Any]]) ->
     return result
 
 
-def _assets(path: Path | None) -> list[dict[str, Any]]:
-    source = _read_json(path, {})
-    source = source.get("assets") if isinstance(source, dict) and isinstance(source.get("assets"), dict) else source
-    if not isinstance(source, dict):
+def _paths(value: Any) -> list[Path]:
+    if value is None:
         return []
+    if isinstance(value, (list, tuple)):
+        return [Path(item) for item in value if item]
+    return [Path(value)]
+
+
+def _assets(paths: Path | list[Path] | None) -> list[dict[str, Any]]:
     result = []
-    for asset_id, raw_payload in sorted(source.items()):
-        payload = dict(raw_payload or {})
-        source_path = str(payload.get("storage_path") or payload.get("path") or "")
-        if source_path:
-            result.append(
-                {
-                    "id": str(asset_id),
-                    "module": str(payload.get("module") or "legacy"),
-                    "asset_type": str(payload.get("type") or payload.get("asset_type") or "report"),
-                    "mime_type": str(payload.get("mime_type") or "application/octet-stream"),
-                    "source_path": source_path,
-                    "metadata": dict(payload.get("metadata") or {}),
-                    "compat": {**dict(payload.get("compat") or {}), "legacy_manifest": str(path)},
-                }
-            )
+    for path in _paths(paths):
+        source = _read_json(path, {})
+        source = (
+            source.get("assets")
+            if isinstance(source, dict) and isinstance(source.get("assets"), dict)
+            else source
+        )
+        if not isinstance(source, dict):
+            continue
+        for asset_id, raw_payload in sorted(source.items()):
+            payload = dict(raw_payload or {})
+            source_path = str(payload.get("storage_path") or payload.get("path") or "")
+            if source_path:
+                result.append(
+                    {
+                        "id": str(asset_id),
+                        "module": str(payload.get("module") or "legacy"),
+                        "asset_type": str(
+                            payload.get("type")
+                            or payload.get("asset_type")
+                            or "report"
+                        ),
+                        "mime_type": str(
+                            payload.get("mime_type") or "application/octet-stream"
+                        ),
+                        "source_path": source_path,
+                        "metadata": dict(payload.get("metadata") or {}),
+                        "compat": {
+                            **dict(payload.get("compat") or {}),
+                            "legacy_manifest": str(path),
+                        },
+                    }
+                )
     return result
 
 
@@ -417,6 +451,165 @@ def _list_json(path: Path | None, key: str) -> list[dict[str, Any]]:
     if isinstance(value, dict):
         value = value.get(key, value.get("records", []))
     return [dict(item) for item in value] if isinstance(value, list) else []
+
+
+_SECRET_KEY_NAMES = frozenset(
+    {
+        "apikey",
+        "password",
+        "accesstoken",
+        "refreshtoken",
+        "secret",
+        "secretvalue",
+        "credential",
+        "credentialvalue",
+        "token",
+    }
+)
+
+
+def _is_secret_key(value: Any) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", str(value).casefold())
+    return normalized in _SECRET_KEY_NAMES
+
+
+def _without_secrets(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): _without_secrets(child)
+            for key, child in value.items()
+            if not _is_secret_key(key)
+        }
+    if isinstance(value, list):
+        return [_without_secrets(item) for item in value]
+    return value
+
+
+def _secret_reference_names(path: Path | None) -> set[str]:
+    payload = _read_json(path, {})
+    references = payload.get("api_keys") if isinstance(payload, dict) else None
+    if not isinstance(references, dict):
+        return set()
+    return {
+        str(key).strip()
+        for key in references
+        if str(key).strip()
+    }
+
+
+def _settings_and_providers(
+    path: Path | None,
+    *,
+    secret_references_path: Path | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    payload = _read_json(path, {})
+    if not isinstance(payload, dict):
+        return [], []
+    if isinstance(payload.get("settings"), list):
+        return [dict(item) for item in payload["settings"]], []
+
+    sanitized = _without_secrets(payload)
+    settings = [
+        {
+            "scope": "workspace",
+            "key": "application.settings",
+            "value": sanitized,
+        }
+    ]
+    selected = {
+        str(payload.get(key) or "").strip()
+        for key in ("provider", "audio_provider_tts", "audio_provider_stt")
+        if str(payload.get(key) or "").strip()
+    }
+    known = {
+        "lmstudio",
+        "openrouter",
+        "cerebras",
+        "llamacpp",
+        "chatterbox",
+        "faster-qwen3-tts",
+        "parakeet",
+    }
+    references = _secret_reference_names(secret_references_path)
+    providers = []
+    for provider_id in sorted(known.union(selected)):
+        raw_config = payload.get(provider_id)
+        if not isinstance(raw_config, dict):
+            continue
+        if provider_id in {"lmstudio", "openrouter", "cerebras", "llamacpp"}:
+            provider_type = "llm"
+        elif provider_id == str(payload.get("audio_provider_stt") or ""):
+            provider_type = "stt"
+        elif provider_id == str(payload.get("audio_provider_tts") or ""):
+            provider_type = "tts"
+        else:
+            provider_type = "legacy"
+        providers.append(
+            {
+                "id": provider_id,
+                "provider_type": provider_type,
+                "display_name": provider_id,
+                "config": _without_secrets(raw_config),
+                "secret_reference": (
+                    f"legacy-secret:{provider_id}" if provider_id in references else None
+                ),
+                "enabled": provider_id in selected
+                or bool(raw_config.get("enabled", True)),
+            }
+        )
+    return settings, providers
+
+
+def _module_documents(specifications: Any) -> list[dict[str, Any]]:
+    records = []
+    for specification in specifications or []:
+        module, record_type, raw_path = specification
+        path = Path(raw_path)
+        payload = _read_json(path, None)
+        if payload is None:
+            continue
+        records.append(
+            {
+                "record_id": "default",
+                "module": str(module),
+                "record_type": str(record_type),
+                "payload": _without_secrets(payload),
+                "status": "active",
+            }
+        )
+    return records
+
+
+def _module_jsonl_records(specifications: Any) -> list[dict[str, Any]]:
+    records = []
+    for specification in specifications or []:
+        module, record_type, id_field, raw_path = specification
+        path = Path(raw_path)
+        if not path.is_file():
+            continue
+        for line_number, raw in enumerate(
+            path.read_text(encoding="utf-8").splitlines(),
+            1,
+        ):
+            if not raw.strip():
+                continue
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            record_id = str(payload.get(id_field) or f"line:{line_number}").strip()
+            records.append(
+                {
+                    "record_id": record_id,
+                    "module": str(module),
+                    "record_type": str(record_type),
+                    "payload": _without_secrets(payload),
+                    "status": "active",
+                }
+            )
+    return records
 
 
 def _file_inventory(paths: dict[str, str]) -> list[dict[str, Any]]:
@@ -464,37 +657,65 @@ def _file_inventory(paths: dict[str, str]) -> list[dict[str, Any]]:
 
 def build_bundle(args: Namespace) -> dict[str, Any]:
     jobs, submissions = _jobs(getattr(args, "jobs_db", None))
+    asset_manifests = _paths(getattr(args, "asset_manifest", None))
+    settings, settings_providers = _settings_and_providers(
+        getattr(args, "settings_json", None),
+        secret_references_path=getattr(args, "secret_references_json", None),
+    )
+    explicit_providers = _list_json(getattr(args, "providers_json", None), "providers")
+    providers_by_id = {
+        str(item.get("id") or item.get("record_id") or item.get("key") or ""): item
+        for item in settings_providers
+    }
+    for item in explicit_providers:
+        providers_by_id[str(item.get("id") or item.get("record_id") or item.get("key") or "")] = item
+    module_records = _list_json(
+        getattr(args, "module_records_json", None),
+        "module_records",
+    )
+    module_records.extend(_module_documents(getattr(args, "module_document", None)))
+    module_records.extend(_module_jsonl_records(getattr(args, "module_jsonl", None)))
     source_paths = {
-        "asset_manifest": str(getattr(args, "asset_manifest", None) or ""),
         "character_db": str(getattr(args, "character_db", None) or ""),
         "memory_db": str(getattr(args, "memory_db", None) or ""),
         "chat_db": str(getattr(args, "chat_db", None) or ""),
         "jobs_db": str(getattr(args, "jobs_db", None) or ""),
         "rpg_sessions_dir": str(getattr(args, "rpg_sessions_dir", None) or ""),
         "settings_json": str(getattr(args, "settings_json", None) or ""),
+        "secret_references_json": str(
+            getattr(args, "secret_references_json", None) or ""
+        ),
         "providers_json": str(getattr(args, "providers_json", None) or ""),
         "prompts_json": str(getattr(args, "prompts_json", None) or ""),
         "research_json": str(getattr(args, "research_json", None) or ""),
         "reports_json": str(getattr(args, "reports_json", None) or ""),
         "module_records_json": str(getattr(args, "module_records_json", None) or ""),
     }
+    for index, path in enumerate(asset_manifests, 1):
+        source_paths[f"asset_manifest_{index}"] = str(path)
+    for index, specification in enumerate(getattr(args, "module_document", None) or [], 1):
+        source_paths[f"module_document_{index}"] = str(specification[2])
+    for index, specification in enumerate(getattr(args, "module_jsonl", None) or [], 1):
+        source_paths[f"module_jsonl_{index}"] = str(specification[3])
     bundle: dict[str, Any] = {
         "format_version": LEGACY_BUNDLE_FORMAT,
         "source_id": args.source_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "entities": {
-            "assets": _assets(getattr(args, "asset_manifest", None)),
+            "assets": _assets(asset_manifests),
             "characters": _characters(getattr(args, "character_db", None)),
             "memory_records": _memory(getattr(args, "memory_db", None)),
             "chat_sessions": _chat_sessions(getattr(args, "chat_db", None)),
             "jobs": jobs,
             "rpg_campaigns": _rpg_campaigns(getattr(args, "rpg_sessions_dir", None), submissions),
-            "settings": _list_json(getattr(args, "settings_json", None), "settings"),
-            "providers": _list_json(getattr(args, "providers_json", None), "providers"),
+            "settings": settings,
+            "providers": [
+                item for key, item in sorted(providers_by_id.items()) if key
+            ],
             "prompts": _list_json(getattr(args, "prompts_json", None), "prompts"),
             "research_records": _list_json(getattr(args, "research_json", None), "research_records"),
             "reports": _list_json(getattr(args, "reports_json", None), "reports"),
-            "module_records": _list_json(getattr(args, "module_records_json", None), "module_records"),
+            "module_records": module_records,
         },
         "source_paths": source_paths,
         "source_inventory": _file_inventory(source_paths),

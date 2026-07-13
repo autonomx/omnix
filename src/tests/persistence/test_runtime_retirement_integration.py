@@ -64,6 +64,7 @@ def _reset(database: PostgresDatabase) -> None:
 
 
 _RUNTIME_SCRIPT = r'''
+import os
 import sqlite3
 import tempfile
 from datetime import datetime, timezone
@@ -85,6 +86,59 @@ except LegacyPersistenceRetired:
     pass
 else:
     raise AssertionError("SQLite connection unexpectedly remained available")
+
+from app import shared
+
+shared.save_settings({"provider": "lmstudio", "lmstudio": {"model": "runtime-model"}})
+assert shared.load_settings()["lmstudio"]["model"] == "runtime-model"
+shared.save_sessions({"legacy:runtime": {"title": "Runtime legacy route"}})
+assert shared.load_sessions()["legacy:runtime"]["title"] == "Runtime legacy route"
+
+from app.chat.assistant_turns import default_assistant_turn_coordinator
+
+assistant_turn = default_assistant_turn_coordinator().start(
+    session_id="chat:runtime",
+    user_message_id="message:runtime",
+    user_turn_id="turn:runtime",
+)
+assert default_assistant_turn_coordinator().get(assistant_turn.assistant_turn_id) is not None
+
+from app.assistant_memory.settings import (
+    AssistantMemorySettingsUpdate,
+    AssistantMemorySettingsStore,
+)
+
+memory_settings = AssistantMemorySettingsStore()
+memory_settings.update(AssistantMemorySettingsUpdate(suggestions_enabled=True))
+assert memory_settings.load_persisted().suggestions_enabled is True
+
+from app.characters.live_conversation_profile import (
+    LiveConversationProfileUpdate,
+    default_live_conversation_profile_store,
+)
+
+conversation_profiles = default_live_conversation_profile_store()
+conversation_profiles.update_defaults(LiveConversationProfileUpdate(talkativeness=63))
+assert conversation_profiles.get_defaults().talkativeness == 63
+
+from app.assistant_tools.ledger import (
+    AssistantToolLedgerEntry,
+    append_assistant_tool_ledger_entry,
+    load_assistant_tool_ledger,
+)
+
+ledger_entry = append_assistant_tool_ledger_entry(
+    AssistantToolLedgerEntry(tool_id="tool:runtime", action_id="action:runtime")
+)
+assert load_assistant_tool_ledger().entries[0].execution_id == ledger_entry.execution_id
+
+for variable in (
+    "OMNIX_ASSISTANT_TURN_STORE_PATH",
+    "OMNIX_CHAT_MEMORY_SETTINGS_PATH",
+    "OMNIX_LIVE_CONVERSATION_PROFILE_PATH",
+    "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH",
+):
+    assert not Path(os.environ[variable]).exists(), variable
 
 from app.chat.models import ChatMessage, ChatSession
 from app.persistence.chat_compat import PostgresChatRepositoryAdapter
@@ -225,6 +279,10 @@ def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(tmp_p
             "OMNIX_DATABASE_URL": os.environ["OMNIX_TEST_DATABASE_URL"],
             "OMNIX_PERSISTENCE_MODE": "postgresql",
             "OMNIX_BLOB_ROOT": str(tmp_path / "blobs"),
+            "OMNIX_ASSISTANT_TURN_STORE_PATH": str(tmp_path / "assistant-turns.json"),
+            "OMNIX_CHAT_MEMORY_SETTINGS_PATH": str(tmp_path / "memory-settings.json"),
+            "OMNIX_LIVE_CONVERSATION_PROFILE_PATH": str(tmp_path / "conversation-profiles.json"),
+            "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH": str(tmp_path / "assistant-tools-ledger.jsonl"),
         }
     )
     environment.pop("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", None)

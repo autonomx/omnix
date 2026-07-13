@@ -178,10 +178,29 @@ class LiveConversationProfileStore:
 
 _default_store: LiveConversationProfileStore | None = None
 _default_store_path: Path | None = None
+_default_store_factory_override = None
+
+
+def install_live_conversation_profile_store_factory(factory) -> None:
+    global _default_store_factory_override, _default_store, _default_store_path
+    _default_store_factory_override = factory
+    _default_store = None
+    _default_store_path = None
+
+
+def clear_live_conversation_profile_store_factory() -> None:
+    global _default_store_factory_override, _default_store, _default_store_path
+    _default_store_factory_override = None
+    _default_store = None
+    _default_store_path = None
 
 
 def default_live_conversation_profile_store() -> LiveConversationProfileStore:
     global _default_store, _default_store_path
+    if _default_store_factory_override is not None:
+        if _default_store is None:
+            _default_store = _default_store_factory_override()
+        return _default_store
     path = default_live_conversation_profile_path()
     if _default_store is None or _default_store_path != path:
         _default_store = LiveConversationProfileStore(path)

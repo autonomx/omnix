@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
 from functools import lru_cache
 from typing import Any
 
@@ -48,12 +49,72 @@ def install_postgresql_runtime_adapters() -> None:
     # silently become authoritative after PostgreSQL activation.
     sqlite3.connect = _retired_sqlite_connect  # type: ignore[assignment]
 
+    _install_remaining_document_authority_adapters()
     _install_core_domain_adapters()
     _install_chat_runtime()
     _install_execution_runtime()
     _install_feature_document_runtime()
     _install_rpg_runtime()
     _INSTALLED = True
+
+
+def _install_remaining_document_authority_adapters() -> None:
+    from app import shared
+    from app.assistant_memory import settings as memory_settings_module
+    from app.assistant_tools import ledger as tool_ledger_module
+    from app.characters import live_conversation_profile as conversation_profile_module
+
+    from .runtime_document_compat import (
+        append_assistant_tool_ledger_entry_postgres,
+        default_postgres_live_conversation_profile_store,
+        load_application_settings,
+        load_assistant_tool_ledger_postgres,
+        load_legacy_chat_sessions,
+        postgres_assistant_memory_settings_store_class,
+        postgres_live_conversation_profile_store_class,
+        save_application_settings,
+        save_legacy_chat_sessions,
+    )
+
+    shared.install_postgresql_document_callbacks(
+        load_settings_callback=load_application_settings,
+        save_settings_callback=save_application_settings,
+        load_sessions_callback=load_legacy_chat_sessions,
+        save_sessions_callback=save_legacy_chat_sessions,
+    )
+    memory_settings_module.AssistantMemorySettingsStore = (
+        postgres_assistant_memory_settings_store_class()
+    )
+    conversation_profile_module.LiveConversationProfileStore = (
+        postgres_live_conversation_profile_store_class()
+    )
+    conversation_profile_module.install_live_conversation_profile_store_factory(
+        default_postgres_live_conversation_profile_store
+    )
+    tool_ledger_module.append_assistant_tool_ledger_entry = (
+        append_assistant_tool_ledger_entry_postgres
+    )
+    tool_ledger_module.load_assistant_tool_ledger = load_assistant_tool_ledger_postgres
+    for module_name in (
+        "app.assistant_tools.capability_dashboard",
+        "app.assistant_tools.hermes_bridge",
+        "app.assistant_tools.routes",
+    ):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
+        if hasattr(module, "append_assistant_tool_ledger_entry"):
+            setattr(
+                module,
+                "append_assistant_tool_ledger_entry",
+                append_assistant_tool_ledger_entry_postgres,
+            )
+        if hasattr(module, "load_assistant_tool_ledger"):
+            setattr(
+                module,
+                "load_assistant_tool_ledger",
+                load_assistant_tool_ledger_postgres,
+            )
 
 
 def _install_core_domain_adapters() -> None:
@@ -74,6 +135,7 @@ def _install_core_domain_adapters() -> None:
 
 def _install_chat_runtime() -> None:
     import app.chat as chat_package
+    from app.chat import assistant_turns as assistant_turns_module
     from app.chat import character_store as character_store_module
     from app.chat import compaction as compaction_module
     from app.chat import history_search as history_module
@@ -89,6 +151,12 @@ def _install_chat_runtime() -> None:
         default_chat_store,
         default_history_search_service,
     )
+    from .runtime_document_compat import postgres_assistant_turn_coordinator_class
+
+    assistant_turns_module.AssistantTurnCoordinator = (
+        postgres_assistant_turn_coordinator_class()
+    )
+    assistant_turns_module._default_coordinator = None
 
     prompt_store_module.ChatSessionStore = PostgresChatSessionStore
     base_store_module.ChatSessionStore = PostgresChatSessionStore
@@ -128,6 +196,9 @@ def _install_execution_runtime() -> None:
         PostgresModelResidencyStore,
         PostgresProviderModelRefreshStore,
     )
+
+    def _skip_legacy_voice_manifest(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
 
     @lru_cache(maxsize=1)
     def _default_postgres_job_store() -> PostgresJobStoreAdapter:
@@ -170,6 +241,7 @@ def _install_execution_runtime() -> None:
     image_inline.install_image_job_execution(PostgresJobStoreAdapter)
     research_inline.install_research_job_execution(PostgresJobStoreAdapter)
     rpg_debug_job_hook.install_rpg_debug_job_hook(PostgresJobStoreAdapter)
+    voice_inline._upsert_legacy_voice_manifest = _skip_legacy_voice_manifest
 
 
 def _install_feature_document_runtime() -> None:
@@ -273,7 +345,12 @@ def _install_rpg_runtime() -> None:
 
 def uninstall_runtime_adapters_for_test() -> None:
     global _INSTALLED
+    from app import shared
+    from app.characters import live_conversation_profile as conversation_profile_module
+
     sqlite3.connect = _ORIGINAL_SQLITE_CONNECT  # type: ignore[assignment]
+    shared.clear_postgresql_document_callbacks()
+    conversation_profile_module.clear_live_conversation_profile_store_factory()
     _INSTALLED = False
 
 

@@ -343,7 +343,7 @@ def test_changed_source_id_is_rejected_after_import(tmp_path: Path) -> None:
         database.close()
 
 
-def test_failed_item_is_reported_and_does_not_activate_cutover(tmp_path: Path) -> None:
+def test_missing_asset_is_rejected_before_import_run(tmp_path: Path) -> None:
     database = _database()
     try:
         _reset(database)
@@ -359,13 +359,14 @@ def test_failed_item_is_reported_and_does_not_activate_cutover(tmp_path: Path) -
         bundle["entities"]["assets"][0]["source_path"] = str(tmp_path / "missing.json")
         bundle["source_hash"] = bundle_hash(bundle)
 
-        result = importer.import_bundle(context, bundle)
-        assert result["ok"] is False
-        assert result["run"]["status"] == "failed"
-        assert result["verification"]["ok"] is False
-        assert result["errors"][0]["entity_type"] == "assets"
-        with pytest.raises(Exception):
-            importer.activate_cutover(run_id=result["run"]["id"])
+        with pytest.raises(LegacyBundleError, match="source file is missing"):
+            importer.import_bundle(context, bundle)
+        with database.connection() as connection:
+            run_count = connection.execute(
+                "SELECT COUNT(*) FROM omnix_legacy_import_runs WHERE source_id = %s",
+                (bundle["source_id"],),
+            ).fetchone()[0]
+        assert run_count == 0
     finally:
         _restore_runtime_authority(database)
         database.close()

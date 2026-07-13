@@ -69,6 +69,12 @@ def bundle_hash(bundle: dict[str, Any]) -> str:
 
 
 def _entity_id(entity_type: str, item: dict[str, Any]) -> str:
+    if entity_type == "module_records":
+        module = str(item.get("module") or "").strip()
+        record_type = str(item.get("record_type") or "").strip()
+        record_id = str(item.get("record_id") or item.get("id") or "").strip()
+        if module and record_type and record_id:
+            return f"{module}:{record_type}:{record_id}"
     for key in ("id", "record_id", "key"):
         value = str(item.get(key) or "").strip()
         if value:
@@ -133,7 +139,19 @@ def preflight_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
                 errors.append(f"duplicate {entity_type} id: {stable_id}")
             seen.add(stable_id)
             hashes[stable_id] = _sha256(raw_item)
+            if entity_type == "assets":
+                source_path = Path(str(raw_item.get("source_path") or ""))
+                if not source_path.is_file():
+                    errors.append(
+                        f"asset {stable_id} source file is missing: {source_path}"
+                    )
         item_hashes[entity_type] = hashes
+
+    for source in bundle.get("source_inventory") or []:
+        if not isinstance(source, dict):
+            continue
+        if str(source.get("path") or "").strip() and not source.get("exists"):
+            errors.append(f"legacy source is missing: {source.get('name')}")
 
     secret_paths = _scan_secrets(entities)
     if secret_paths:
@@ -613,11 +631,12 @@ class PostgresLegacyImporter:
             )
             return "omnix_reports", stable_id, None
         if entity_type == "module_records":
+            record_id = str(item.get("record_id") or item.get("id") or stable_id)
             work.module_records.put(
                 context,
                 module=item["module"],
                 record_type=item["record_type"],
-                record_id=stable_id,
+                record_id=record_id,
                 payload=dict(item.get("payload") or {}),
                 status=item.get("status", "active"),
                 expires_at=item.get("expires_at"),

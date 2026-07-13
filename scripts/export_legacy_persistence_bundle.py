@@ -14,18 +14,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--source-id", required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--asset-manifest", type=Path)
+    parser.add_argument("--asset-manifest", type=Path, action="append")
     parser.add_argument("--character-db", type=Path)
     parser.add_argument("--memory-db", type=Path)
     parser.add_argument("--chat-db", type=Path)
     parser.add_argument("--jobs-db", type=Path)
     parser.add_argument("--rpg-sessions-dir", type=Path)
     parser.add_argument("--settings-json", type=Path)
+    parser.add_argument("--secret-references-json", type=Path)
     parser.add_argument("--providers-json", type=Path)
     parser.add_argument("--prompts-json", type=Path)
     parser.add_argument("--research-json", type=Path)
     parser.add_argument("--reports-json", type=Path)
     parser.add_argument("--module-records-json", type=Path)
+    parser.add_argument(
+        "--module-document",
+        nargs=3,
+        action="append",
+        metavar=("MODULE", "RECORD_TYPE", "PATH"),
+    )
+    parser.add_argument(
+        "--module-jsonl",
+        nargs=4,
+        action="append",
+        metavar=("MODULE", "RECORD_TYPE", "ID_FIELD", "PATH"),
+    )
     return parser
 
 
