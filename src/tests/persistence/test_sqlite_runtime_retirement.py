@@ -3,13 +3,18 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from app.persistence.legacy_authority_block import RETIRED_MUTABLE_AUTHORITY_MODULES
+from app.persistence.legacy_authority_block import (
+    RETIRED_MUTABLE_AUTHORITY_MODULES,
+    install_legacy_authority_block,
+)
 from app.persistence.runtime import PersistenceMode
 
 
 ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = ROOT / "src" / "app"
 
+# Temporary migration-only baseline. Correction checkpoints 7 and 8 reduce this
+# set to zero and then remove the allowlist entirely.
 LEGACY_SQLITE_ADAPTER_FILES = {
     "assistant_memory/repository.py",
     "characters/avatar_generation_repository.py",
@@ -25,17 +30,6 @@ LEGACY_SQLITE_ADAPTER_FILES = {
     "providers/cache_status.py",
     "research/cache.py",
     "rpg/narrative/narrative_persistence.py",
-}
-
-EXPECTED_RETIRED_MUTABLE_MODULES = {
-    "app.assist_core.policy_store",
-    "app.assistant_tools.config_store",
-    "app.chat.prompt_store",
-    "app.gateway.live_chat_evaluation_store",
-    "app.image.asset_store",
-    "app.research.source_store",
-    "app.rpg.narrative.narrative_persistence",
-    "app.rpg.npc_evolution.profile_store",
 }
 
 
@@ -57,48 +51,40 @@ def _sqlite_connect_sites() -> set[str]:
     return sites
 
 
-def test_sqlite_connections_are_confined_to_frozen_legacy_adapters() -> None:
+def test_sqlite_connections_are_confined_to_frozen_migration_adapters() -> None:
     assert _sqlite_connect_sites() == LEGACY_SQLITE_ADAPTER_FILES
 
 
-def test_postgresql_runtime_modules_do_not_import_sqlite() -> None:
+def test_postgresql_runtime_modules_do_not_open_sqlite() -> None:
     persistence_root = APP_ROOT / "persistence"
     offenders: list[str] = []
     for path in persistence_root.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         if path.name == "runtime_install.py":
-            # runtime_install imports sqlite3 only to replace connect with a fail-closed sentinel.
+            # Imported only to replace connect with the fail-closed sentinel.
             continue
         if "import sqlite3" in text or "from sqlite3" in text:
             offenders.append(path.relative_to(ROOT).as_posix())
     assert offenders == []
 
 
-def test_production_default_is_postgresql_only() -> None:
-    runtime_text = (APP_ROOT / "persistence" / "runtime.py").read_text(encoding="utf-8")
-    sitecustomize = (ROOT / "src" / "sitecustomize.py").read_text(encoding="utf-8")
+def test_application_startup_is_explicit_and_postgresql_only() -> None:
+    startup = (APP_ROOT / "persistence" / "startup.py").read_text(encoding="utf-8")
+    launcher = (ROOT / "scripts" / "run_omnix_gateway.py").read_text(encoding="utf-8")
+    usercustomize = (ROOT / "src" / "usercustomize.py").read_text(encoding="utf-8")
     installer = (APP_ROOT / "persistence" / "runtime_install.py").read_text(encoding="utf-8")
 
     assert PersistenceMode.POSTGRESQL.value == "postgresql"
-    assert 'or "postgresql"' in runtime_text
-    assert "install_postgresql_runtime_adapters" in sitecustomize
+    assert "bootstrap_postgresql_runtime" in startup
+    assert "install_postgresql_runtime_adapters" in startup
+    assert "bootstrap_status_payload" in launcher
+    assert "install_legacy_authority_block" not in usercustomize
     assert "sqlite3.connect = _retired_sqlite_connect" in installer
-    assert "PostgresChatRepositoryAdapter" in installer
-    assert "PostgresMemoryRepositoryAdapter" in installer
-    assert "PostgresCharacterRepositoryAdapter" in installer
-    assert "PostgresJobStoreAdapter" in installer
-    assert "PostgresSharedAssetStoreAdapter" in installer
-    assert "save_session_to_postgres" in installer
 
 
-def test_mutable_json_authorities_are_import_blocked() -> None:
-    assert set(RETIRED_MUTABLE_AUTHORITY_MODULES) == EXPECTED_RETIRED_MUTABLE_MODULES
-    barrier = (APP_ROOT / "persistence" / "legacy_authority_block.py").read_text(
-        encoding="utf-8"
-    )
-    usercustomize = (ROOT / "src" / "usercustomize.py").read_text(encoding="utf-8")
-    assert "RetiredMutableAuthority" in barrier
-    assert "install_legacy_authority_block" in usercustomize
+def test_heuristic_import_blocker_is_disabled() -> None:
+    assert RETIRED_MUTABLE_AUTHORITY_MODULES == frozenset()
+    assert install_legacy_authority_block() is False
 
 
 def test_legacy_access_is_explicitly_limited_to_test_or_import() -> None:
