@@ -13,8 +13,8 @@ from app.persistence.runtime import PersistenceMode
 ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = ROOT / "src" / "app"
 
-# Temporary migration-only baseline. Correction checkpoints 7 and 8 reduce this
-# set to zero and then remove the allowlist entirely.
+# Temporary migration-only baseline. Correction checkpoints 7 and 8 reduce the
+# runtime subset to zero. ``persistence/legacy_export.py`` is a one-shot reader.
 LEGACY_SQLITE_ADAPTER_FILES = {
     "assistant_memory/repository.py",
     "characters/avatar_generation_repository.py",
@@ -30,6 +30,7 @@ LEGACY_SQLITE_ADAPTER_FILES = {
     "providers/cache_status.py",
     "research/cache.py",
     "rpg/narrative/narrative_persistence.py",
+    "persistence/legacy_export.py",
 }
 
 
@@ -60,8 +61,9 @@ def test_postgresql_runtime_modules_do_not_open_sqlite() -> None:
     offenders: list[str] = []
     for path in persistence_root.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        if path.name == "runtime_install.py":
-            # Imported only to replace connect with the fail-closed sentinel.
+        if path.name in {"runtime_install.py", "legacy_export.py"}:
+            # runtime_install replaces connect with a sentinel; legacy_export is
+            # an explicit one-shot migration reader.
             continue
         if "import sqlite3" in text or "from sqlite3" in text:
             offenders.append(path.relative_to(ROOT).as_posix())
