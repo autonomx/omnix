@@ -7,29 +7,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = REPO_ROOT / "src" / "app"
 
-# Phase 0 freezes the existing SQLite runtime surface. Later phases remove
-# entries from this set; no phase may add an entry. The complete legacy
-# extractor is an explicit one-shot migration tool, not a runtime store.
+# The only SQLite connection allowed anywhere under the application package is
+# the explicit one-shot legacy extractor. Runtime modules must have zero sites.
 LEGACY_SQLITE_CONNECTION_FILES = {
-    "src/app/assistant_memory/repository.py",
-    "src/app/characters/avatar_generation_repository.py",
-    "src/app/characters/avatar_repository.py",
-    "src/app/characters/avatar_viseme_generation.py",
-    "src/app/characters/repository.py",
-    "src/app/chat/compaction.py",
-    "src/app/chat/history_search.py",
-    "src/app/chat/repository.py",
-    "src/app/jobs/residency.py",
-    "src/app/jobs/rpg_foreground_submission_store.py",
-    "src/app/jobs/store.py",
-    "src/app/providers/cache_status.py",
-    "src/app/research/cache.py",
-    "src/app/rpg/narrative/narrative_persistence.py",
     "src/app/persistence/legacy_export.py",
 }
 
-# These are known legacy JSON/JSONL authorities. They are migration inputs,
-# not examples for new stores. Later phases delete entries as authority moves.
+# These are known legacy JSON/JSONL authorities. They remain migration inputs
+# until the final retirement checkpoint removes or converts each module.
 LEGACY_MUTABLE_JSON_STORE_FILES = {
     "src/app/assets/store.py",
     "src/app/assist_core/policy_store.py",
@@ -39,7 +24,6 @@ LEGACY_MUTABLE_JSON_STORE_FILES = {
     "src/app/gateway/live_chat_evaluation_store.py",
     "src/app/image/asset_store.py",
     "src/app/research/source_store.py",
-    "src/app/rpg/narrative/narrative_persistence.py",
     "src/app/rpg/npc_evolution/profile_store.py",
     "src/app/rpg/session/durable_store.py",
     "src/app/rpg/session/interaction_event_store.py",
@@ -80,23 +64,15 @@ def _looks_like_mutable_json_store(path: Path) -> bool:
 
 def test_no_new_sqlite_runtime_connection_sites() -> None:
     actual = {_relative(path) for path in _python_files() if _has_sqlite_connection(path)}
-    unexpected = sorted(actual - LEGACY_SQLITE_CONNECTION_FILES)
-    stale_baseline = sorted(LEGACY_SQLITE_CONNECTION_FILES - actual)
-
-    assert unexpected == [], (
-        "New sqlite3.connect runtime sites are forbidden. Use the PostgreSQL "
-        f"persistence package instead: {unexpected}"
-    )
-    assert stale_baseline == [], (
-        "Remove migrated files from LEGACY_SQLITE_CONNECTION_FILES: "
-        f"{stale_baseline}"
+    assert actual == LEGACY_SQLITE_CONNECTION_FILES, (
+        "SQLite is retired from runtime. Only the one-shot legacy extractor may "
+        f"open it. actual={sorted(actual)}"
     )
 
 
 def test_no_new_mutable_json_store_files() -> None:
     actual = {_relative(path) for path in _python_files() if _looks_like_mutable_json_store(path)}
     unexpected = sorted(actual - LEGACY_MUTABLE_JSON_STORE_FILES)
-
     assert unexpected == [], (
         "New mutable JSON/JSONL runtime stores are forbidden. Use PostgreSQL "
         f"metadata and BlobStore content instead: {unexpected}"
