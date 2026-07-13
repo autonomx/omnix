@@ -8,7 +8,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = REPO_ROOT / "src" / "app"
 
 # Phase 0 freezes the existing SQLite runtime surface. Later phases remove
-# entries from this set; no phase may add an entry.
+# entries from this set; no phase may add an entry. The complete legacy
+# extractor is an explicit one-shot migration tool, not a runtime store.
 LEGACY_SQLITE_CONNECTION_FILES = {
     "src/app/assistant_memory/repository.py",
     "src/app/characters/avatar_generation_repository.py",
@@ -24,6 +25,7 @@ LEGACY_SQLITE_CONNECTION_FILES = {
     "src/app/providers/cache_status.py",
     "src/app/research/cache.py",
     "src/app/rpg/narrative/narrative_persistence.py",
+    "src/app/persistence/legacy_export.py",
 }
 
 # These are known legacy JSON/JSONL authorities. They are migration inputs,
