@@ -14,10 +14,7 @@ from .conversation_repositories import (
     PostgresMemoryRepository,
 )
 from .database import PostgresDatabase, default_database
-from .execution_repositories import (
-    PostgresForegroundSubmissionRepository,
-    PostgresOutboxRepository,
-)
+from .execution_repositories import PostgresForegroundSubmissionRepository
 from .job_repository import PostgresJobRepository
 from .module_repositories import (
     PostgresModuleRecordRepository,
@@ -25,6 +22,11 @@ from .module_repositories import (
     PostgresPromptRepository,
     PostgresProviderRepository,
     PostgresResearchReportRepository,
+)
+from .outbox_repository import (
+    PostgresOutboxConsumerRepository,
+    PostgresOutboxRepository,
+    PostgresSideEffectRepository,
 )
 from .repositories import (
     PostgresAuditRepository,
@@ -55,6 +57,8 @@ class PostgresUnitOfWork:
         self.chats: PostgresChatRepository
         self.jobs: PostgresJobRepository
         self.outbox: PostgresOutboxRepository
+        self.outbox_consumers: PostgresOutboxConsumerRepository
+        self.side_effects: PostgresSideEffectRepository
         self.foreground_submissions: PostgresForegroundSubmissionRepository
         self.rpg: PostgresRpgRepository
         self.module_records: PostgresModuleRecordRepository
@@ -81,6 +85,8 @@ class PostgresUnitOfWork:
         self.chats = PostgresChatRepository(self.connection)
         self.jobs = PostgresJobRepository(self.connection)
         self.outbox = PostgresOutboxRepository(self.connection)
+        self.outbox_consumers = PostgresOutboxConsumerRepository(self.connection)
+        self.side_effects = PostgresSideEffectRepository(self.connection)
         self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
         self.rpg = PostgresRpgRepository(self.connection)
         self.module_records = PostgresModuleRecordRepository(self.connection)
