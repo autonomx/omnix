@@ -261,6 +261,3 @@ class InMemoryMemoryRepository:
         }
         self._state.next_event_id += 1
         self._state.events.append(event)
-
-
-SQLiteMemoryRepository = InMemoryMemoryRepository
