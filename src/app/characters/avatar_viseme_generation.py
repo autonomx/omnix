@@ -1,16 +1,21 @@
-"""Generate and persist expanded viseme frames for an existing Character avatar pack."""
+"""Generate and persist expanded viseme frames for an existing character avatar pack.
+
+Production batches and jobs use PostgreSQL. Provider-free tests use an in-memory
+batch repository; no SQLite schema or connection remains.
+"""
 from __future__ import annotations
 
-import json
-import sqlite3
+import threading
 import uuid
+from copy import deepcopy
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.jobs import CreateJobRequest, JobStatus, ResourceClass, SQLiteJobStore, default_job_store
+from app.jobs import CreateJobRequest, JobStatus, ResourceClass, default_job_store
 
 from .avatar_models import UpsertCharacterAvatarPackRequest
 from .avatar_service import CharacterAvatarService, default_character_avatar_service
@@ -46,33 +51,26 @@ class CharacterVisemeGenerationBatch(BaseModel):
     updated_at: str
 
 
+@dataclass
+class _State:
+    lock: threading.RLock = field(default_factory=threading.RLock)
+    batches: dict[str, CharacterVisemeGenerationBatch] = field(default_factory=dict)
+
+
+_STATES: dict[str, _State] = {}
+_STATES_LOCK = threading.RLock()
+
+
+def _state(path: str | Path | None) -> _State:
+    key = str(path or default_character_db_path())
+    with _STATES_LOCK:
+        return _STATES.setdefault(key, _State())
+
+
 class CharacterVisemeGenerationRepository:
     def __init__(self, db_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path) if db_path is not None else default_character_db_path()
-        if self.db_path != Path(":memory:"):
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS character_avatar_viseme_batches (
-                    id TEXT PRIMARY KEY,
-                    character_id TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    job_ids_json TEXT NOT NULL,
-                    asset_ids_json TEXT NOT NULL,
-                    avatar_pack_version INTEGER,
-                    error TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(str(self.db_path), timeout=5.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA busy_timeout = 5000")
-        return connection
+        self._state = _state(db_path)
 
     def create(self, character_id: str, job_ids: dict[str, str]) -> CharacterVisemeGenerationBatch:
         now = _utcnow()
@@ -80,32 +78,24 @@ class CharacterVisemeGenerationRepository:
             id=f"avatar-visemes:{uuid.uuid4().hex}",
             character_id=character_id,
             status="generating",
-            job_ids=job_ids,
+            job_ids=dict(job_ids),
             created_at=now,
             updated_at=now,
         )
-        with self._connect() as connection:
-            connection.execute(
-                "INSERT INTO character_avatar_viseme_batches VALUES (?,?,?,?,?,?,?,?,?)",
-                _values(batch),
-            )
-        return batch
+        with self._state.lock:
+            self._state.batches[batch.id] = deepcopy(batch)
+        return deepcopy(batch)
 
     def get(self, batch_id: str) -> CharacterVisemeGenerationBatch | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                "SELECT * FROM character_avatar_viseme_batches WHERE id = ?",
-                (batch_id,),
-            ).fetchone()
-        return _row(row) if row else None
+        with self._state.lock:
+            value = self._state.batches.get(batch_id)
+            return deepcopy(value) if value is not None else None
 
     def list(self, character_id: str) -> list[CharacterVisemeGenerationBatch]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT * FROM character_avatar_viseme_batches WHERE character_id = ? ORDER BY created_at DESC",
-                (character_id,),
-            ).fetchall()
-        return [_row(row) for row in rows]
+        with self._state.lock:
+            values = [item for item in self._state.batches.values() if item.character_id == character_id]
+            values.sort(key=lambda item: (item.created_at, item.id), reverse=True)
+            return deepcopy(values)
 
     def update(
         self,
@@ -117,26 +107,22 @@ class CharacterVisemeGenerationRepository:
         avatar_pack_version: int | None = None,
         error: str | None = None,
     ) -> CharacterVisemeGenerationBatch:
-        current = self.get(batch_id)
-        if current is None:
-            raise KeyError(batch_id)
-        updated = current.model_copy(update={
-            "status": status or current.status,
-            "job_ids": dict(job_ids) if job_ids is not None else current.job_ids,
-            "asset_ids": dict(asset_ids) if asset_ids is not None else current.asset_ids,
-            "avatar_pack_version": avatar_pack_version if avatar_pack_version is not None else current.avatar_pack_version,
-            "error": error if error is not None else current.error,
-            "updated_at": _utcnow(),
-        })
-        with self._connect() as connection:
-            connection.execute(
-                """
-                UPDATE character_avatar_viseme_batches SET status = ?, job_ids_json = ?,
-                    asset_ids_json = ?, avatar_pack_version = ?, error = ?, updated_at = ? WHERE id = ?
-                """,
-                (updated.status, _json(updated.job_ids), _json(updated.asset_ids), updated.avatar_pack_version, updated.error, updated.updated_at, updated.id),
+        with self._state.lock:
+            current = self._state.batches.get(batch_id)
+            if current is None:
+                raise KeyError(batch_id)
+            updated = current.model_copy(
+                update={
+                    "status": status or current.status,
+                    "job_ids": dict(job_ids) if job_ids is not None else current.job_ids,
+                    "asset_ids": dict(asset_ids) if asset_ids is not None else current.asset_ids,
+                    "avatar_pack_version": avatar_pack_version if avatar_pack_version is not None else current.avatar_pack_version,
+                    "error": error if error is not None else current.error,
+                    "updated_at": _utcnow(),
+                }
             )
-        return updated
+            self._state.batches[batch_id] = deepcopy(updated)
+            return deepcopy(updated)
 
 
 class CharacterVisemeGenerationService:
@@ -146,7 +132,7 @@ class CharacterVisemeGenerationService:
         *,
         character_service: CharacterService | None = None,
         avatar_service: CharacterAvatarService | None = None,
-        job_store: SQLiteJobStore | None = None,
+        job_store: Any | None = None,
     ) -> None:
         self.repository = repository or CharacterVisemeGenerationRepository()
         self.character_service = character_service or default_character_service()
@@ -178,7 +164,8 @@ class CharacterVisemeGenerationService:
         reference_asset_id = pack.mouth_frames.get("closed") or pack.base_asset_id
         if not reference_asset_id:
             raise ValueError("character avatar has no canonical portrait")
-        job = self.job_store.create_job(CreateJobRequest(
+        job = self.job_store.create_job(
+            CreateJobRequest(
                 owner_id=f"character:{batch.character_id}",
                 module="character-avatar",
                 type="image.generate",
@@ -198,7 +185,8 @@ class CharacterVisemeGenerationService:
                     "metadata": {"character_id": batch.character_id, "avatar_viseme": viseme},
                 },
                 compat={"character_id": batch.character_id, "avatar_viseme": viseme},
-            ))
+            )
+        )
         return self.repository.update(batch.id, job_ids={**batch.job_ids, viseme: job.id})
 
     def get(self, batch_id: str) -> CharacterVisemeGenerationBatch:
@@ -229,42 +217,35 @@ class CharacterVisemeGenerationService:
         mouth_frames = dict(current.mouth_frames)
         mouth_frames.update(assets)
         mouth_frames.setdefault("silence", mouth_frames.get("closed") or current.base_asset_id or "")
-        pack = self.avatar_service.upsert(batch.character_id, UpsertCharacterAvatarPackRequest(
-            expected_version=current.version,
-            render_mode="viseme",
-            renderer=current.renderer,
-            rig_asset_id=current.rig_asset_id,
-            base_asset_id=current.base_asset_id,
-            mouth_frames=mouth_frames,
-            blink_frames=current.blink_frames,
-            expression_frames=current.expression_frames,
-            outfit_frames=current.outfit_frames,
-            background_asset_ids=current.background_asset_ids,
-            active_outfit=current.active_outfit,
-            active_background=current.active_background,
-            mouth_anchor=current.mouth_anchor,
-        ))
-        return self.repository.update(batch.id, status="completed", asset_ids=assets, avatar_pack_version=pack.version, error="")
+        pack = self.avatar_service.upsert(
+            batch.character_id,
+            UpsertCharacterAvatarPackRequest(
+                expected_version=current.version,
+                render_mode="viseme",
+                renderer=current.renderer,
+                rig_asset_id=current.rig_asset_id,
+                base_asset_id=current.base_asset_id,
+                mouth_frames=mouth_frames,
+                blink_frames=current.blink_frames,
+                expression_frames=current.expression_frames,
+                outfit_frames=current.outfit_frames,
+                background_asset_ids=current.background_asset_ids,
+                active_outfit=current.active_outfit,
+                active_background=current.active_background,
+                mouth_anchor=current.mouth_anchor,
+            ),
+        )
+        return self.repository.update(
+            batch.id,
+            status="completed",
+            asset_ids=assets,
+            avatar_pack_version=pack.version,
+            error="",
+        )
 
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _json(value) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
-def _values(batch: CharacterVisemeGenerationBatch) -> tuple:
-    return (batch.id, batch.character_id, batch.status, _json(batch.job_ids), _json(batch.asset_ids), batch.avatar_pack_version, batch.error, batch.created_at, batch.updated_at)
-
-
-def _row(row: sqlite3.Row) -> CharacterVisemeGenerationBatch:
-    return CharacterVisemeGenerationBatch(
-        id=row["id"], character_id=row["character_id"], status=row["status"],
-        job_ids=json.loads(row["job_ids_json"] or "{}"), asset_ids=json.loads(row["asset_ids_json"] or "{}"),
-        avatar_pack_version=row["avatar_pack_version"], error=row["error"], created_at=row["created_at"], updated_at=row["updated_at"],
-    )
 
 
 __all__ = ["CharacterVisemeGenerationBatch", "CharacterVisemeGenerationService"]
