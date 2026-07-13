@@ -127,7 +127,7 @@ class PostgresRuntimeCoordinationRepository:
               FROM omnix_runtime_nodes
              WHERE status IN ('active', 'draining')
                AND lease_expires_at > CURRENT_TIMESTAMP
-               AND (%s IS NULL OR node_type = %s)
+               AND (%s::text IS NULL OR node_type = %s::text)
              ORDER BY node_type, id
             """,
             (node_type, node_type),
