@@ -6,10 +6,15 @@ from time import perf_counter
 from typing import Any, Iterator
 
 from .config import DatabaseSettings, database_settings
+from .transaction_policy import transaction_scope
 
 
 class DatabaseUnavailableError(RuntimeError):
     """Raised when the authoritative PostgreSQL service cannot be reached."""
+
+    def __init__(self, message: str, *, sqlstate: str | None = None) -> None:
+        super().__init__(message)
+        self.sqlstate = sqlstate
 
 
 class PostgresDatabase:
@@ -39,6 +44,10 @@ class PostgresDatabase:
                     "SELECT set_config('statement_timeout', %s, false)",
                     (str(self.settings.statement_timeout_ms),),
                 )
+                cursor.execute(
+                    "SELECT set_config('lock_timeout', %s, false)",
+                    (str(self.settings.lock_timeout_ms),),
+                )
             connection.commit()
 
         self._pool = ConnectionPool(
@@ -60,7 +69,8 @@ class PostgresDatabase:
             except Exception as exc:
                 self.close()
                 raise DatabaseUnavailableError(
-                    f"PostgreSQL is unavailable at {self.settings.redacted_url}"
+                    f"PostgreSQL is unavailable at {self.settings.redacted_url}",
+                    sqlstate=getattr(exc, "sqlstate", None),
                 ) from exc
 
     def close(self) -> None:
@@ -77,14 +87,23 @@ class PostgresDatabase:
                 yield connection
         except Exception as exc:
             if exc.__class__.__module__.startswith("psycopg"):
-                raise DatabaseUnavailableError("PostgreSQL operation failed") from exc
+                raise DatabaseUnavailableError(
+                    "PostgreSQL operation failed",
+                    sqlstate=getattr(exc, "sqlstate", None),
+                ) from exc
             raise
 
     @contextmanager
     def transaction(self) -> Iterator[Any]:
         with self.connection() as connection:
             with connection.transaction():
-                yield connection
+                connection.execute("SET LOCAL TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                connection.execute(
+                    "SELECT set_config('lock_timeout', %s, true)",
+                    (str(self.settings.lock_timeout_ms),),
+                )
+                with transaction_scope():
+                    yield connection
 
     def health(self) -> dict[str, Any]:
         started = perf_counter()
