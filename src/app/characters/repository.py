@@ -5,6 +5,7 @@ in-memory repository; no SQLite schema or connection remains.
 """
 from __future__ import annotations
 
+import os
 import re
 import threading
 import uuid
@@ -48,7 +49,16 @@ _STATES_LOCK = threading.RLock()
 
 
 def default_character_db_path() -> Path:
-    return Path(":memory:characters")
+    """Return a stable test-double namespace without opening the legacy file.
+
+    Existing tests and local compatibility callers already provide
+    ``OMNIX_CHARACTER_DB_PATH`` to isolate one application instance from
+    another. The in-memory repository uses that value only as a namespace key;
+    it never reads or writes the path.
+    """
+
+    override = (os.environ.get("OMNIX_CHARACTER_DB_PATH") or "").strip()
+    return Path(override) if override else Path(":memory:characters")
 
 
 def _state(path: str | Path | None) -> _State:
@@ -60,7 +70,7 @@ def _state(path: str | Path | None) -> _State:
 class InMemoryCharacterRepository:
     def __init__(self, db_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path) if db_path is not None else default_character_db_path()
-        self._state = _state(db_path)
+        self._state = _state(self.db_path)
 
     def create(self, request: CreateCharacterRequest) -> CharacterProfile:
         now = _utcnow()
