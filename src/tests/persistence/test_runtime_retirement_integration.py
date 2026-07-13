@@ -174,7 +174,7 @@ with tempfile.TemporaryDirectory() as directory:
     stored_asset = assets.upsert_asset(AssetRecord(
         id="asset:runtime",
         module="runtime-test",
-        type=AssetType.OTHER,
+        type=AssetType.REPORT,
         mime_type="text/plain",
         storage_path=str(source),
         metadata={"safe": True},
