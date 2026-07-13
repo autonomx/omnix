@@ -24,7 +24,7 @@ from .policy import (
     move_scope_decision,
     source_requires_approval,
 )
-from .repository import MemoryNotFoundError, SQLiteMemoryRepository
+from .repository import InMemoryMemoryRepository, MemoryNotFoundError
 from .scope import scope_id_for
 from .selection import MemorySelection, select_memory_records
 
@@ -56,8 +56,8 @@ def _candidate_fingerprint(
 
 
 class MemoryService:
-    def __init__(self, repository: SQLiteMemoryRepository | None = None) -> None:
-        self.repository = repository or SQLiteMemoryRepository()
+    def __init__(self, repository: InMemoryMemoryRepository | None = None) -> None:
+        self.repository = repository or InMemoryMemoryRepository()
 
     def list_active(self, context: MemoryScopeContext) -> list[MemoryRecord]:
         records: list[MemoryRecord] = []
