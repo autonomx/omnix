@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, SQLiteJobStore, default_job_store
+from app.jobs import CompleteJobRequest, CreateJobRequest, InMemoryJobStore, JobRecord, ResourceClass, default_job_store
 
 from .owner_defaults import default_memory_service
 from .scope import resolve_session_memory_scope
@@ -57,7 +57,7 @@ def create_memory_suggestion_job_request(session_id: str, user_message_id: str) 
     )
 
 
-def enqueue_memory_suggestion_job(session_id: str, user_message_id: str, *, job_store: SQLiteJobStore | None = None) -> JobRecord | None:
+def enqueue_memory_suggestion_job(session_id: str, user_message_id: str, *, job_store: InMemoryJobStore | None = None) -> JobRecord | None:
     if not memory_suggestions_enabled():
         return None
     store = job_store or default_job_store()
@@ -96,7 +96,7 @@ def extract_memory_candidates(content: str) -> tuple[list[dict[str, Any]], list[
     return [], ["no_durable_candidate"]
 
 
-def process_memory_suggestion_job(job: JobRecord, *, chat_store: ChatSessionStore, memory_service: MemoryService | None = None, job_store: SQLiteJobStore | None = None) -> MemorySuggestionJobResult:
+def process_memory_suggestion_job(job: JobRecord, *, chat_store: ChatSessionStore, memory_service: MemoryService | None = None, job_store: InMemoryJobStore | None = None) -> MemorySuggestionJobResult:
     if job.type != MEMORY_SUGGEST_JOB_TYPE:
         raise ValueError(f"unsupported memory job type: {job.type}")
     payload = MemorySuggestionJobInput.model_validate(job.input_payload or {})
