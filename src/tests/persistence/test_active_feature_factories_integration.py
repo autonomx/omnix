@@ -118,7 +118,7 @@ assert path
 assert "image:factory" in images.get_image_asset_manifest()["assets"]
 
 from app.jobs import residency
-assert residency.SQLiteModelResidencyStore.__name__ == "PostgresModelResidencyStore"
+assert residency.InMemoryModelResidencyStore.__name__ == "PostgresModelResidencyStore"
 residency_store = residency.default_model_residency_store()
 residency_store.upsert_record(residency.ModelResidencyRecord(
     model_id="model:factory",
@@ -131,7 +131,7 @@ residency_store.upsert_record(residency.ModelResidencyRecord(
 assert residency_store.list_records()[0].model_id == "model:factory"
 
 from app.providers import cache_status
-assert cache_status.SQLiteProviderModelRefreshStore.__name__ == "PostgresProviderModelRefreshStore"
+assert cache_status.InMemoryProviderModelRefreshStore.__name__ == "PostgresProviderModelRefreshStore"
 refresh_store = cache_status.default_provider_model_refresh_store()
 snapshot = refresh_store.record_snapshot(
     scope="all",
@@ -201,7 +201,7 @@ PostgresChatRepositoryAdapter().save_sessions([
         ],
     )
 ])
-summary_repo = compaction.SQLiteConversationSummaryRepository()
+summary_repo = compaction.InMemoryConversationSummaryRepository()
 summary = summary_repo.save(ConversationSummary(
     id="summary:factory",
     session_id="chat:factory",
