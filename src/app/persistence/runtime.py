@@ -8,7 +8,7 @@ from functools import lru_cache
 from typing import Any
 
 from .database import PostgresDatabase, default_database
-from .migrations import apply_migrations, migration_status
+from .migrations import apply_migrations, assert_schema_compatible, migration_status
 
 
 class PersistenceMode(str, Enum):
@@ -158,6 +158,10 @@ def ensure_postgresql_runtime_ready(
     apply_migrations(db)
     migrations = migration_status(db)
     pending = tuple(str(item) for item in migrations.get("pending") or ())
+    try:
+        assert_schema_compatible(migrations)
+    except Exception as exc:
+        raise PersistenceReadinessError(str(exc)) from exc
     if not migrations.get("ok") or pending:
         raise PersistenceReadinessError(
             f"PostgreSQL migration state is not ready: pending={list(pending)}"
@@ -193,6 +197,8 @@ def ensure_postgresql_runtime_ready(
         details={
             "health": health,
             "runtime_schema_version": str(runtime[1]),
+            "application_schema_min": migrations.get("application_schema_min"),
+            "application_schema_max": migrations.get("application_schema_max"),
             "metadata": dict(runtime[3]),
         },
     )
