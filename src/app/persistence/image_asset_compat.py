@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from app.assets.models import AssetRecord, AssetType
 
 from .asset_compat import PostgresSharedAssetStoreAdapter
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def save_image_asset_bytes_postgres(
@@ -31,6 +36,7 @@ def save_image_asset_bytes_postgres(
                 storage_path=str(path),
                 metadata=dict(metadata),
                 compat={"source": "image_asset_compat"},
+                created_at=_now(),
             )
         )
     return str(stored.storage_path)
@@ -50,6 +56,7 @@ def register_image_asset_file_postgres(
             storage_path=str(file_path),
             metadata=dict(metadata),
             compat={"source": "image_asset_compat"},
+            created_at=_now(),
         )
     )
     return str(stored.storage_path)
