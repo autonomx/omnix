@@ -14,6 +14,11 @@ from .conversation_repositories import (
     PostgresMemoryRepository,
 )
 from .database import PostgresDatabase, default_database
+from .execution_repositories import (
+    PostgresForegroundSubmissionRepository,
+    PostgresJobRepository,
+    PostgresOutboxRepository,
+)
 from .repositories import (
     PostgresAuditRepository,
     PostgresIdempotencyRepository,
@@ -40,6 +45,9 @@ class PostgresUnitOfWork:
         self.characters: PostgresCharacterRepository
         self.memories: PostgresMemoryRepository
         self.chats: PostgresChatRepository
+        self.jobs: PostgresJobRepository
+        self.outbox: PostgresOutboxRepository
+        self.foreground_submissions: PostgresForegroundSubmissionRepository
         self._connection_context: Any | None = None
         self._completed = False
 
@@ -57,6 +65,9 @@ class PostgresUnitOfWork:
         self.characters = PostgresCharacterRepository(self.connection)
         self.memories = PostgresMemoryRepository(self.connection)
         self.chats = PostgresChatRepository(self.connection)
+        self.jobs = PostgresJobRepository(self.connection)
+        self.outbox = PostgresOutboxRepository(self.connection)
+        self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
         return self
 
     def commit(self) -> None:
