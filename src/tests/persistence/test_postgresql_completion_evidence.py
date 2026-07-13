@@ -34,22 +34,23 @@ def test_corrective_contract_documents_exist() -> None:
         assert (_REPOSITORY_ROOT / relative).is_file(), relative
 
 
-def test_c0_through_c7_are_verified_and_c8_is_finalizing() -> None:
+def test_c0_through_c8_are_verified() -> None:
     roadmap = (
         _REPOSITORY_ROOT / "docs" / "CENTRALIZED_POSTGRESQL_COMPLETION_FIXES_ROADMAP.md"
     ).read_text(encoding="utf-8")
-    for phase in range(8):
+    assert "**Status:** Verified complete" in roadmap
+    for phase in range(9):
         line = next(line for line in roadmap.splitlines() if line.startswith(f"| C{phase} —"))
         assert "| verified |" in line
-    c8 = next(line for line in roadmap.splitlines() if line.startswith("| C8 —"))
-    assert "| in_progress |" in c8
 
 
 def test_evidence_ledger_records_every_verified_phase_head() -> None:
     evidence = (
         _REPOSITORY_ROOT / "docs" / "architecture" / "POSTGRESQL_COMPLETION_EVIDENCE.md"
     ).read_text(encoding="utf-8")
-    for phase in range(8):
+    for phase in range(9):
         assert f"| C{phase} |" in evidence
+    assert "4374619b2d8d192330b6c45c62c7658536e1f1a3" in evidence
+    assert "| C8 |" in evidence and "| 4315 | 233 | 505 | 4578 |" in evidence
     assert "continuous 1,000-turn public apply-turn endurance" in evidence
     assert "GitHub Actions remain provider-free" in evidence
