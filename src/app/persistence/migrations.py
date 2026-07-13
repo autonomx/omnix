@@ -18,12 +18,22 @@ CREATE TABLE IF NOT EXISTS omnix_schema_migrations (
 )
 """
 
+# Stable signed bigint derived from the ASCII identity "OMNIXPG". The lock is
+# transaction-scoped so a crashed migrator releases it automatically.
+MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
+APPLICATION_SCHEMA_MIN = "0010_complete_legacy_migration"
+APPLICATION_SCHEMA_MAX = "9999_omnix_release_ceiling"
+
 
 class MigrationError(RuntimeError):
     pass
 
 
 class MigrationDriftError(MigrationError):
+    pass
+
+
+class SchemaCompatibilityError(MigrationError):
     pass
 
 
@@ -58,6 +68,13 @@ def discover_migrations(root: Path | None = None) -> list[Migration]:
     return migrations
 
 
+def _acquire_migration_lock(connection: Any) -> None:
+    connection.execute(
+        "SELECT pg_advisory_xact_lock(%s)",
+        (MIGRATION_ADVISORY_LOCK_KEY,),
+    )
+
+
 def _applied(connection: Any) -> dict[str, dict[str, Any]]:
     connection.execute(_MIGRATION_TABLE_SQL)
     rows = connection.execute(
@@ -71,6 +88,27 @@ def _applied(connection: Any) -> dict[str, dict[str, Any]]:
             "execution_ms": float(row[3]),
         }
         for row in rows
+    }
+
+
+def _schema_compatibility(
+    *,
+    applied_versions: list[str],
+    drift: list[str],
+    unknown: list[str],
+) -> dict[str, Any]:
+    current = max(applied_versions) if applied_versions else None
+    compatible = (
+        current is not None
+        and APPLICATION_SCHEMA_MIN <= current <= APPLICATION_SCHEMA_MAX
+        and not drift
+        and not unknown
+    )
+    return {
+        "current_schema": current,
+        "application_schema_min": APPLICATION_SCHEMA_MIN,
+        "application_schema_max": APPLICATION_SCHEMA_MAX,
+        "compatible": compatible,
     }
 
 
@@ -93,15 +131,35 @@ def migration_status(
         elif record["checksum"] != migration.checksum:
             drift.append(migration.version)
     unknown = sorted(set(applied) - known_versions)
+    applied_versions = sorted(applied)
+    compatibility = _schema_compatibility(
+        applied_versions=applied_versions,
+        drift=drift,
+        unknown=unknown,
+    )
     return {
         "ok": not drift and not unknown,
         "discovered": [migration.version for migration in discovered],
-        "applied": sorted(applied),
+        "applied": applied_versions,
         "pending": pending,
         "checksum_drift": drift,
         "unknown_applied": unknown,
         "records": applied,
+        **compatibility,
     }
+
+
+def assert_schema_compatible(status: dict[str, Any]) -> None:
+    if status.get("compatible") is True:
+        return
+    raise SchemaCompatibilityError(
+        "PostgreSQL schema is incompatible with this Omnix release: "
+        f"current={status.get('current_schema')!r}, "
+        f"supported={status.get('application_schema_min')!r}.."
+        f"{status.get('application_schema_max')!r}, "
+        f"pending={status.get('pending') or []}, "
+        f"unknown={status.get('unknown_applied') or []}"
+    )
 
 
 def apply_migrations(
@@ -115,6 +173,7 @@ def apply_migrations(
     migrations = discover_migrations(root)
     applied_now: list[str] = []
     with db.transaction() as connection:
+        _acquire_migration_lock(connection)
         applied = _applied(connection)
         known_versions = {migration.version for migration in migrations}
         unknown = sorted(set(applied) - known_versions)
@@ -144,4 +203,5 @@ def apply_migrations(
             applied_now.append(migration.version)
     status = migration_status(db, root=root)
     status["applied_now"] = applied_now
+    assert_schema_compatible(status)
     return status
