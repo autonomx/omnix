@@ -64,16 +64,16 @@ def _reset(database: PostgresDatabase) -> None:
 
 
 _RUNTIME_SCRIPT = r'''
-import os
 import sqlite3
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.persistence.startup import bootstrap_postgresql_runtime
+from app.persistence.runtime import LegacyPersistenceRetired
 from app.persistence.runtime_install import runtime_adapters_installed
-from app.persistence.runtime import LegacyPersistenceRetired, ensure_postgresql_runtime_ready
 
-status = ensure_postgresql_runtime_ready()
+status = bootstrap_postgresql_runtime()
 assert status.ready is True
 assert status.backend == "postgresql"
 assert status.cutover_mode == "postgresql"
@@ -86,12 +86,11 @@ except LegacyPersistenceRetired:
 else:
     raise AssertionError("SQLite connection unexpectedly remained available")
 
-from app.chat.store import ChatStore
 from app.chat.models import ChatMessage, ChatSession
 from app.persistence.chat_compat import PostgresChatRepositoryAdapter
 
-chat_repository = PostgresChatRepositoryAdapter()
 now = datetime.now(timezone.utc).isoformat()
+chat_repository = PostgresChatRepositoryAdapter()
 chat_repository.save_sessions([
     ChatSession(
         id="chat:runtime",
@@ -104,9 +103,7 @@ chat_repository.save_sessions([
         transcript_policy="persistent",
         created_at=now,
         updated_at=now,
-        messages=[
-            ChatMessage(id="message:runtime", role="user", content="hello", created_at=now)
-        ],
+        messages=[ChatMessage(id="message:runtime", role="user", content="hello", created_at=now)],
     )
 ])
 loaded_chats = chat_repository.load_sessions()
@@ -131,7 +128,7 @@ from app.assistant_memory.models import MemoryRecord
 from app.persistence.memory_compat import PostgresMemoryRepositoryAdapter
 
 memories = PostgresMemoryRepositoryAdapter()
-memory = MemoryRecord(
+record = MemoryRecord(
     id="memory:runtime",
     scope="user",
     scope_id="user:local",
@@ -148,7 +145,7 @@ memory = MemoryRecord(
     created_at=now,
     updated_at=now,
 )
-memories.create_record(memory)
+memories.create_record(record)
 assert memories.get_record("memory:runtime").content == "PostgreSQL is authoritative"
 
 from app.jobs.models import CreateJobRequest, ResourceClass
@@ -210,7 +207,7 @@ print("runtime-postgresql-cutover-ok")
 '''
 
 
-def test_normal_process_uses_postgresql_and_rejects_sqlite(tmp_path: Path) -> None:
+def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(tmp_path: Path) -> None:
     database = _database()
     try:
         _reset(database)
@@ -236,7 +233,5 @@ def test_normal_process_uses_postgresql_and_rejects_sqlite(tmp_path: Path) -> No
         timeout=120,
         check=False,
     )
-    assert result.returncode == 0, (
-        f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
-    )
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
     assert "runtime-postgresql-cutover-ok" in result.stdout
