@@ -3,6 +3,11 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Any
 
+from .asset_repository import (
+    PostgresAssetRepository,
+    PostgresSecretReferenceRepository,
+    PostgresSettingsRepository,
+)
 from .database import PostgresDatabase, default_database
 from .repositories import (
     PostgresAuditRepository,
@@ -24,6 +29,9 @@ class PostgresUnitOfWork:
         self.identities: PostgresIdentityRepository
         self.audit: PostgresAuditRepository
         self.idempotency: PostgresIdempotencyRepository
+        self.assets: PostgresAssetRepository
+        self.settings: PostgresSettingsRepository
+        self.secret_references: PostgresSecretReferenceRepository
         self._connection_context: Any | None = None
         self._completed = False
 
@@ -35,6 +43,9 @@ class PostgresUnitOfWork:
         self.identities = PostgresIdentityRepository(self.connection)
         self.audit = PostgresAuditRepository(self.connection)
         self.idempotency = PostgresIdempotencyRepository(self.connection)
+        self.assets = PostgresAssetRepository(self.connection)
+        self.settings = PostgresSettingsRepository(self.connection)
+        self.secret_references = PostgresSecretReferenceRepository(self.connection)
         return self
 
     def commit(self) -> None:
