@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.assistant_memory import OwnerAwareSQLiteMemoryRepository
+from app.assistant_memory import OwnerAwareInMemoryMemoryRepository
 
 from .models import CharacterProfile, CharacterProfileVersion
 from .service import CharacterService
@@ -81,11 +81,11 @@ class CharacterManagementService:
         self,
         character_service: CharacterService,
         chat_store: Any,
-        memory_repository: OwnerAwareSQLiteMemoryRepository | None = None,
+        memory_repository: OwnerAwareInMemoryMemoryRepository | None = None,
     ) -> None:
         self.character_service = character_service
         self.chat_store = chat_store
-        self.memory_repository = memory_repository or OwnerAwareSQLiteMemoryRepository()
+        self.memory_repository = memory_repository or OwnerAwareInMemoryMemoryRepository()
 
     def export(self, character_id: str) -> CharacterDataExport:
         profile = self.character_service.get(character_id, include_archived=True)
@@ -192,55 +192,10 @@ class CharacterManagementService:
         return summaries
 
     def _delete_memory_owner(self, character_id: str) -> tuple[int, int, int]:
-        repository = self.memory_repository
-        with repository._connect() as connection:
-            record_count = int(
-                connection.execute(
-                    "SELECT COUNT(*) FROM memory_records WHERE owner_type='character' AND owner_id=?",
-                    (character_id,),
-                ).fetchone()[0]
-            )
-            candidate_count = int(
-                connection.execute(
-                    "SELECT COUNT(*) FROM memory_candidates WHERE owner_type='character' AND owner_id=?",
-                    (character_id,),
-                ).fetchone()[0]
-            )
-            snapshot_rows = connection.execute(
-                "SELECT id FROM memory_snapshots WHERE owner_type='character' AND owner_id=?",
-                (character_id,),
-            ).fetchall()
-            snapshot_ids = [row[0] for row in snapshot_rows]
-            if snapshot_ids:
-                placeholders = ",".join("?" for _ in snapshot_ids)
-                connection.execute(
-                    f"DELETE FROM memory_snapshot_items WHERE snapshot_id IN ({placeholders})",
-                    tuple(snapshot_ids),
-                )
-            connection.execute(
-                "DELETE FROM memory_snapshots WHERE owner_type='character' AND owner_id=?",
-                (character_id,),
-            )
-            connection.execute(
-                "DELETE FROM memory_candidates WHERE owner_type='character' AND owner_id=?",
-                (character_id,),
-            )
-            connection.execute(
-                "DELETE FROM memory_records WHERE owner_type='character' AND owner_id=?",
-                (character_id,),
-            )
-            repository._append_event(
-                connection,
-                "owner",
-                f"character:{character_id}",
-                "memory.owner_reset",
-                {
-                    "record_count": record_count,
-                    "candidate_count": candidate_count,
-                    "snapshot_count": len(snapshot_ids),
-                },
-            )
-        return record_count, candidate_count, len(snapshot_ids)
+        return self.memory_repository.delete_owner(
+            owner_type="character",
+            owner_id=character_id,
+        )
 
     def _delete_character_transcripts(self, character_id: str) -> int:
         repository = self.character_service.repository
