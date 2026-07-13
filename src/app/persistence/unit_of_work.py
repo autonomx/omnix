@@ -34,6 +34,7 @@ from .repositories import (
     PostgresIdentityRepository,
 )
 from .rpg_repository import PostgresRpgRepository
+from .transaction_policy import transaction_scope
 
 
 class UnitOfWorkClosedError(RuntimeError):
@@ -67,6 +68,7 @@ class PostgresUnitOfWork:
         self.prompts: PostgresPromptRepository
         self.research_reports: PostgresResearchReportRepository
         self._connection_context: Any | None = None
+        self._transaction_scope_context: Any | None = None
         self._completed = False
 
     def __enter__(self) -> "PostgresUnitOfWork":
@@ -74,6 +76,8 @@ class PostgresUnitOfWork:
             raise RuntimeError("Unit of Work cannot be entered twice")
         self._connection_context = self.database.connection()
         self.connection = self._connection_context.__enter__()
+        self._transaction_scope_context = transaction_scope()
+        self._transaction_scope_context.__enter__()
         self.identities = PostgresIdentityRepository(self.connection)
         self.audit = PostgresAuditRepository(self.connection)
         self.idempotency = PostgresIdempotencyRepository(self.connection)
@@ -117,9 +121,15 @@ class PostgresUnitOfWork:
             if exc_type is not None or not self._completed:
                 connection.rollback()
         finally:
+            transaction_context, self._transaction_scope_context = (
+                self._transaction_scope_context,
+                None,
+            )
             context, self._connection_context = self._connection_context, None
             self.connection = None
             self._completed = True
+            if transaction_context is not None:
+                transaction_context.__exit__(exc_type, exc, traceback)
             if context is not None:
                 context.__exit__(exc_type, exc, traceback)
         return False
