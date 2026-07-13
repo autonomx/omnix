@@ -39,13 +39,13 @@ from app.jobs import (
     CompleteJobRequest,
     CreateJobRequest,
     FailJobRequest,
+    InMemoryJobStore,
+    InMemoryModelResidencyStore,
     JobListResponse,
     JobRecord,
     ModelResidencyDiagnostics,
     ModelResidencyRecord,
     ResourceClass,
-    SQLiteJobStore,
-    SQLiteModelResidencyStore,
     default_job_store,
     default_model_residency_store,
 )
@@ -244,7 +244,7 @@ def _read_text_asset(asset: AssetRecord) -> AssetContentResponse:
     return AssetContentResponse(asset=asset, content=content, size_bytes=size_bytes)
 
 
-async def _live_job_event_stream(job_store: SQLiteJobStore, after_id: int = 0):
+async def _live_job_event_stream(job_store: InMemoryJobStore, after_id: int = 0):
     last_event_id = max(0, after_id)
     seconds_until_heartbeat = 0.0
     yield _sse_comment("omnix-events-open")
@@ -264,12 +264,12 @@ async def _live_job_event_stream(job_store: SQLiteJobStore, after_id: int = 0):
 
 
 def create_gateway_app(
-    job_store_factory: Callable[[], SQLiteJobStore] | None = None,
+    job_store_factory: Callable[[], InMemoryJobStore] | None = None,
     provider_facade_factory: Callable[[], ProviderFacade] | None = None,
     asset_store_factory: Callable[[], SharedAssetStore] | None = None,
     chat_store_factory: Callable[[], ChatSessionStore] | None = None,
     replay_adapter_factory: Callable[[], RpgReplayPersistenceAdapter] | None = None,
-    model_residency_store_factory: Callable[[], SQLiteModelResidencyStore] | None = None,
+    model_residency_store_factory: Callable[[], InMemoryModelResidencyStore] | None = None,
 ) -> FastAPI:
     _install_required_rpg_turn_hooks()
     get_job_store = job_store_factory or default_job_store
