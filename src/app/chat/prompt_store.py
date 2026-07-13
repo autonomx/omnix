@@ -14,12 +14,12 @@ from app.assistant_memory.jobs import (
 
 from .compaction import (
     DEFAULT_RECENT_MESSAGE_LIMIT,
-    SQLiteConversationSummaryRepository,
+    InMemoryConversationSummaryRepository,
     compaction_enabled,
     enqueue_compaction_job,
 )
 from .history_search import (
-    SQLiteHistorySearchService,
+    InMemoryHistorySearchService,
     default_history_search_service,
     history_recall_enabled,
 )
@@ -44,8 +44,8 @@ class ChatSessionStore(JsonChatSessionStore):
         path: str | Path | None = None,
         *,
         memory_service_factory: Callable[[], MemoryService] = default_memory_service,
-        history_search_factory: Callable[[], SQLiteHistorySearchService] = default_history_search_service,
-        summary_repository_factory: Callable[[], SQLiteConversationSummaryRepository] = SQLiteConversationSummaryRepository,
+        history_search_factory: Callable[[], InMemoryHistorySearchService] = default_history_search_service,
+        summary_repository_factory: Callable[[], InMemoryConversationSummaryRepository] = InMemoryConversationSummaryRepository,
     ) -> None:
         super().__init__(path)
         self.memory_service_factory = memory_service_factory
@@ -429,7 +429,7 @@ def chat_sqlite_store_enabled() -> bool:
 
 def default_chat_store() -> ChatSessionStore:
     if chat_sqlite_store_enabled():
-        from .sqlite_store import SQLiteChatSessionStore
+        from .sqlite_store import InMemoryChatSessionStore
 
-        return SQLiteChatSessionStore()
+        return InMemoryChatSessionStore()
     return ChatSessionStore()
