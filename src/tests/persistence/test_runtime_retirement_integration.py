@@ -197,11 +197,11 @@ from app import assets as assets_package
 from app.assets import store as asset_store_module
 from app.assistant_memory import service as memory_service_module
 from app.characters import service as character_service_module
-from app.chat import store as chat_store_module
+from app.chat import repository as chat_repository_module
 from app.jobs import store as job_store_module
 
-assert chat_store_module.SQLiteChatRepository.__name__ == "PostgresChatRepositoryAdapter"
-assert memory_service_module.SQLiteMemoryRepository.__name__ == "PostgresMemoryRepositoryAdapter"
+assert chat_repository_module.InMemoryChatRepository.__name__ == "PostgresChatRepositoryAdapter"
+assert memory_service_module.InMemoryMemoryRepository.__name__ == "PostgresMemoryRepositoryAdapter"
 assert character_service_module.CharacterRepository.__name__ == "PostgresCharacterRepositoryAdapter"
 assert asset_store_module.SharedAssetStore.__name__ == "PostgresSharedAssetStoreAdapter"
 assert assets_package.SharedAssetStore.__name__ == "PostgresSharedAssetStoreAdapter"
