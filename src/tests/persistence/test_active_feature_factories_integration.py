@@ -77,7 +77,7 @@ assert policy_store.read_pending()["confirmation:1"]["status"] == "pending"
 from app.assistant_tools import config_store
 config = config_store.load_assistant_tools_config()
 saved = config_store.save_assistant_tools_config(config)
-assert saved.format_version == config.format_version
+assert saved.model_dump(mode="json") == config.model_dump(mode="json")
 
 from app.gateway import live_chat_evaluation_store as evaluations
 assert evaluations.LiveChatEvaluationStore.__name__ == "PostgresLiveChatEvaluationStore"
