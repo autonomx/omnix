@@ -110,8 +110,5 @@ class InMemoryHistorySearchService:
         )
 
 
-SQLiteHistorySearchService = InMemoryHistorySearchService
-
-
 def default_history_search_service() -> InMemoryHistorySearchService:
     return InMemoryHistorySearchService()
