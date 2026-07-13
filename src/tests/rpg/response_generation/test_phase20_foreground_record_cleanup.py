@@ -12,7 +12,7 @@ from app.gateway.rpg_turn_job_mirror import (
     _submission_lock_count,
 )
 from app.jobs.rpg_last10_report_debug import build_turn_debug_payload
-from app.jobs.store import SQLiteJobStore
+from app.jobs.store import InMemoryJobStore
 from app.rpg.presentation.turn_response import build_turn_response_v2
 
 _FORBIDDEN_GRAPH_KEYS = {
@@ -63,7 +63,7 @@ def _contains_forbidden_graph_key(value: Any) -> bool:
 
 
 def test_foreground_job_stores_only_bounded_v2_record(monkeypatch: Any, tmp_path: Path) -> None:
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs")
     monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
 
     result = _apply_turn_with_job_mirror(
@@ -95,7 +95,7 @@ def test_foreground_job_stores_only_bounded_v2_record(monkeypatch: Any, tmp_path
 
 
 def test_compact_replay_is_projection_stable(monkeypatch: Any, tmp_path: Path) -> None:
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs")
     monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
     calls = 0
 
@@ -136,7 +136,7 @@ def test_submission_lock_entries_are_released_after_concurrent_replay(
     monkeypatch: Any,
     tmp_path: Path,
 ) -> None:
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs")
     monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
     calls = 0
     calls_guard = Lock()
@@ -164,7 +164,7 @@ def test_submission_lock_entries_are_released_after_concurrent_replay(
 
 
 def test_unique_submission_locks_do_not_accumulate(monkeypatch: Any, tmp_path: Path) -> None:
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs")
     monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
 
     for index in range(20):
