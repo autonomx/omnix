@@ -33,6 +33,9 @@ class DatabaseSettings:
     pool_max: int = 10
     connect_timeout_seconds: int = 5
     statement_timeout_ms: int = 30_000
+    lock_timeout_ms: int = 5_000
+    transaction_max_attempts: int = 3
+    transaction_retry_base_ms: int = 25
     application_name: str = "omnix"
 
     def __post_init__(self) -> None:
@@ -53,6 +56,16 @@ class DatabaseSettings:
             raise DatabaseConfigurationError("connect timeout must be positive")
         if self.statement_timeout_ms < 100:
             raise DatabaseConfigurationError("statement timeout must be at least 100ms")
+        if self.lock_timeout_ms < 100:
+            raise DatabaseConfigurationError("lock timeout must be at least 100ms")
+        if self.lock_timeout_ms > self.statement_timeout_ms:
+            raise DatabaseConfigurationError("lock timeout cannot exceed statement timeout")
+        if not 1 <= self.transaction_max_attempts <= 10:
+            raise DatabaseConfigurationError("transaction_max_attempts must be between 1 and 10")
+        if not 0 <= self.transaction_retry_base_ms <= 10_000:
+            raise DatabaseConfigurationError(
+                "transaction_retry_base_ms must be between 0 and 10000"
+            )
 
     @property
     def redacted_url(self) -> str:
@@ -69,6 +82,9 @@ class DatabaseSettings:
 def database_settings() -> DatabaseSettings:
     pool_min = _integer("OMNIX_DATABASE_POOL_MIN", 1, minimum=0, maximum=100)
     pool_max = _integer("OMNIX_DATABASE_POOL_MAX", 10, minimum=1, maximum=200)
+    statement_timeout_ms = _integer(
+        "OMNIX_DATABASE_STATEMENT_TIMEOUT", 30_000, minimum=100, maximum=3_600_000
+    )
     return DatabaseSettings(
         url=(os.environ.get("OMNIX_DATABASE_URL") or _DEFAULT_DATABASE_URL).strip(),
         pool_min=pool_min,
@@ -76,8 +92,15 @@ def database_settings() -> DatabaseSettings:
         connect_timeout_seconds=_integer(
             "OMNIX_DATABASE_CONNECT_TIMEOUT", 5, minimum=1, maximum=120
         ),
-        statement_timeout_ms=_integer(
-            "OMNIX_DATABASE_STATEMENT_TIMEOUT", 30_000, minimum=100, maximum=3_600_000
+        statement_timeout_ms=statement_timeout_ms,
+        lock_timeout_ms=_integer(
+            "OMNIX_DATABASE_LOCK_TIMEOUT", 5_000, minimum=100, maximum=statement_timeout_ms
+        ),
+        transaction_max_attempts=_integer(
+            "OMNIX_DATABASE_TRANSACTION_MAX_ATTEMPTS", 3, minimum=1, maximum=10
+        ),
+        transaction_retry_base_ms=_integer(
+            "OMNIX_DATABASE_TRANSACTION_RETRY_BASE_MS", 25, minimum=0, maximum=10_000
         ),
         application_name=(os.environ.get("OMNIX_DATABASE_APPLICATION_NAME") or "omnix").strip()
         or "omnix",
