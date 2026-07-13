@@ -128,9 +128,6 @@ class InMemoryProviderModelRefreshStore:
         return ProviderModelRefreshHistory(snapshots=self.list_snapshots(limit=limit))
 
 
-SQLiteProviderModelRefreshStore = InMemoryProviderModelRefreshStore
-
-
 def default_provider_model_refresh_db_path() -> Path:
     return Path(":memory:provider-refresh")
 
