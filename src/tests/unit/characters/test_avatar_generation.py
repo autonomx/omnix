@@ -19,7 +19,7 @@ from app.characters.voice_consent import (
     UpdateVoiceProfileGovernanceRequest,
     VoiceProfileGovernanceService,
 )
-from app.jobs import CompleteJobRequest, SQLiteJobStore
+from app.jobs import CompleteJobRequest, InMemoryJobStore
 
 
 def _runtime(tmp_path: Path, monkeypatch):
@@ -32,7 +32,7 @@ def _runtime(tmp_path: Path, monkeypatch):
         character_service_factory=lambda: character_service,
         asset_store_factory=lambda: assets,
     )
-    jobs = SQLiteJobStore(tmp_path / "jobs.sqlite3")
+    jobs = InMemoryJobStore(tmp_path / "jobs.sqlite3")
     generation_service = CharacterAvatarGenerationService(
         CharacterAvatarGenerationRepository(tmp_path / "characters.sqlite3"),
         character_service_factory=lambda: character_service,
@@ -45,7 +45,7 @@ def _runtime(tmp_path: Path, monkeypatch):
 
 def _complete_image_job(
     tmp_path: Path,
-    jobs: SQLiteJobStore,
+    jobs: InMemoryJobStore,
     assets: SharedAssetStore,
     job_id: str,
     name: str,
@@ -107,7 +107,7 @@ def _uploaded_source(tmp_path: Path, assets: SharedAssetStore, name: str = "user
 def _complete_variant_jobs_sequentially(
     tmp_path: Path,
     generations: CharacterAvatarGenerationService,
-    jobs: SQLiteJobStore,
+    jobs: InMemoryJobStore,
     assets: SharedAssetStore,
     batch_id: str,
     name: str,
