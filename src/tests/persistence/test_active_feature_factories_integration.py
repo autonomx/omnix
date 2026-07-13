@@ -125,7 +125,7 @@ residency_store.upsert_record(residency.ModelResidencyRecord(
     model_name="Factory",
     provider_id="provider:test",
     module="image",
-    resource_class="gpu",
+    resource_class="gpu:image",
     status="loaded",
 ))
 assert residency_store.list_records()[0].model_id == "model:factory"
