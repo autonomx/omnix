@@ -30,9 +30,16 @@ class PostgresDatabase:
             ) from exc
 
         def configure(connection: Any) -> None:
+            # psycopg_pool requires configure callbacks to return an idle
+            # connection. Apply session settings and commit them explicitly so
+            # the first borrower never inherits an open setup transaction.
             with connection.cursor() as cursor:
-                cursor.execute("SET TIME ZONE 'UTC'")
-                cursor.execute("SET statement_timeout = %s", (self.settings.statement_timeout_ms,))
+                cursor.execute("SELECT set_config('TimeZone', 'UTC', false)")
+                cursor.execute(
+                    "SELECT set_config('statement_timeout', %s, false)",
+                    (str(self.settings.statement_timeout_ms),),
+                )
+            connection.commit()
 
         self._pool = ConnectionPool(
             conninfo=self.settings.url,
