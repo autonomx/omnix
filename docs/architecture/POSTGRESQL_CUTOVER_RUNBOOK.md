@@ -1,235 +1,219 @@
-# PostgreSQL Migration and Cutover Runbook
+# PostgreSQL Live Cutover Runbook
 
-This runbook moves an existing local Omnix installation from legacy SQLite, JSON, JSONL, and manifest-backed authority to PostgreSQL and local BlobStore authority.
+This runbook moves an existing local Omnix installation from legacy SQLite, JSON, JSONL, and mutable manifests to PostgreSQL and BlobStore authority. Merged code is not evidence that an installation has been cut over.
 
-The migration is designed for a local maintenance window. Do not keep legacy and PostgreSQL writes active indefinitely.
+Do not begin against live data until the exact software revision containing the authoritative cutover CLI and runtime authority barrier is installed.
 
-## Preconditions
+## 1. Discover and enter maintenance mode
 
-- The implementation branch or release containing migrations through `0008_legacy_cutover.sql` is installed.
-- PostgreSQL is healthy and reachable through `OMNIX_DATABASE_URL`.
-- Omnix gateways, workers, idle RPG ticks, and generation services that mutate persistence are stopped.
-- PostgreSQL client tools are installed for backup and restore.
-- The operator has enough free disk space for:
-  - legacy backups;
-  - the migration bundle;
-  - copied BlobStore artifacts;
-  - a PostgreSQL backup after import.
+Record the repository path, Python environment, PostgreSQL/Docker availability, PostgreSQL client tools, every legacy authority path, active BlobStore root, running application processes/ports, free disk space, and backup destination. Stop if any authority source is unidentified.
 
-## 1. Record the exact software revision
+Stop gateways, workers, event consumers, idle RPG ticks, schedulers, and asset-generation processes. Confirm no process writes legacy files or PostgreSQL.
 
 ```powershell
+$maintenanceStart = Get-Date -AsUTC
 git status --short
 git rev-parse HEAD
 ```
 
-The working tree should be clean. Save the exact commit SHA in the migration notes.
+The worktree must be clean. Save the exact SHA as `<software-revision>`.
 
-## 2. Back up legacy data
+## 2. Back up legacy authority
 
-Copy all applicable legacy sources into a dated, read-only backup directory:
+Create a dated, read-only backup of every applicable source:
 
-- chat SQLite database;
-- assistant-memory SQLite database;
-- character SQLite database;
-- jobs SQLite database;
-- asset and image manifests;
-- RPG session JSON files and interaction JSONL files;
-- generated assets referenced by manifests;
-- provider and settings files;
-- prompt, research, report, and module-specific stores.
+- chat, assistant-memory, character, and job SQLite databases;
+- RPG session JSON and interaction JSONL;
+- asset/image manifests and every referenced artifact;
+- provider/settings references;
+- prompt, research, report, and module stores.
 
-Calculate a directory hash or file manifest for the backup. Do not delete or modify the original sources yet.
+Create a deterministic manifest containing relative path, byte size, and SHA-256. Do not alter originals. Record the manifest path and hash in the private operator report.
 
-## 3. Start and prepare PostgreSQL
+## 3. Prepare PostgreSQL
+
+Set `PYTHONPATH=src`, `OMNIX_DATABASE_URL`, and `OMNIX_SOFTWARE_REVISION` without printing the password.
 
 ```powershell
 docker compose -f docker-compose.postgres.yml up -d
+python -m app.persistence health
 python -m app.persistence migrate
+python -m app.persistence status
 python -m app.persistence verify
 ```
 
-Create a pre-import PostgreSQL backup when the database is not empty:
+All must report `ok: true`. If the database is not empty, create and rehearse a pre-import backup first.
+
+## 4. Export, preflight, and import
+
+Use discovered paths rather than these placeholders:
 
 ```powershell
-python -m app.persistence backup resources/data/backups/before-legacy-import.dump
-```
-
-## 4. Export a canonical migration bundle
-
-Example:
-
-```powershell
-$env:PYTHONPATH = "src"
 python scripts/export_legacy_persistence_bundle.py `
-  --source-id "local-installation-2026-07-12" `
+  --source-id "<unique-local-installation-id>" `
   --output "resources/data/migration/legacy-bundle.json" `
-  --asset-manifest "resources/data/assets/manifest.json" `
-  --character-db "resources/data/omnix_characters.sqlite3" `
-  --memory-db "resources/data/omnix_assistant_memory.sqlite3" `
-  --chat-db "resources/data/omnix_chat.sqlite3" `
-  --jobs-db "resources/data/omnix_jobs.sqlite" `
-  --rpg-sessions-dir "resources/data/rpg_sessions"
-```
+  --asset-manifest "<actual-manifest-path>" `
+  --character-db "<actual-character-db>" `
+  --memory-db "<actual-memory-db>" `
+  --chat-db "<actual-chat-db>" `
+  --jobs-db "<actual-jobs-db>" `
+  --rpg-sessions-dir "<actual-rpg-session-directory>"
 
-Arguments may be omitted when a source does not exist. The exporter reads legacy SQLite in a one-shot tool; normal Omnix runtime does not.
-
-The report records:
-
-- source ID;
-- canonical source hash;
-- entity counts;
-- validation errors;
-- output path.
-
-The bundle must not contain API keys, OAuth tokens, passwords, or other secret values. Only secret references may be migrated.
-
-## 5. Run preflight and dry-run import
-
-```powershell
 python scripts/import_legacy_persistence_bundle.py preflight `
   "resources/data/migration/legacy-bundle.json"
 
 python scripts/import_legacy_persistence_bundle.py import `
   "resources/data/migration/legacy-bundle.json" `
   --dry-run `
-  --blob-root "resources/data/blobs"
-```
+  --blob-root "<live-blob-root>"
 
-Both commands must return `ok: true`.
-
-Resolve duplicate IDs, unsupported records, missing files, source-hash mismatch, and secret-bearing values before continuing.
-
-## 6. Import
-
-```powershell
 python scripts/import_legacy_persistence_bundle.py import `
   "resources/data/migration/legacy-bundle.json" `
-  --blob-root "resources/data/blobs"
+  --blob-root "<live-blob-root>"
 ```
 
-The importer is resumable:
+Stop if secrets, missing source hashes/files, unsupported records, omitted authority, or validation errors appear. A clean import requires `ok = true`, `run.status = completed`, `verification.ok = true`, empty mismatches, and empty failed counts. Record the import run ID and bundle hash.
 
-- each item has a source hash;
-- completed items are reused;
-- changed source data is rejected;
-- failed items are recorded with bounded error details;
-- a completed source ID cannot be silently replaced by different content.
-
-A clean result requires:
-
-```text
-ok = true
-run.status = completed
-verification.ok = true
-verification.mismatches = {}
-verification.failed_counts = {}
-```
-
-Save the import run ID.
-
-## 7. Inspect and verify
-
-Check cutover status:
+## 5. Record import verification states
 
 ```powershell
-python scripts/import_legacy_persistence_bundle.py status
+python -m app.persistence cutover mark-imported-unverified `
+  --software-revision "<software-revision>" `
+  --schema-version "<current-schema>" `
+  --legacy-import-run-id "<import-run-id>" `
+  --operator-note "Canonical import completed; detailed checks begin"
 ```
 
-Before activation, it should remain `legacy_preflight`.
-
-Verify at minimum:
-
-- user/workspace bootstrap exists;
-- character versions and active versions match;
-- memory owner scopes and revisions match;
-- chat message order and counts match;
-- completed and failed job states are preserved;
-- RPG campaign revision and state hashes match;
-- referenced artifact files exist and pass checksum verification;
-- provider configs contain no credential values;
-- report and asset references resolve;
-- imported counts equal discovered counts.
-
-## 8. Back up the imported PostgreSQL database
+Verify counts, revisions, ordering, state hashes, artifact checksums, and absence of credential values. Then run:
 
 ```powershell
-python -m app.persistence backup `
-  "resources/data/backups/after-legacy-import-before-cutover.dump"
+python -m app.persistence cutover mark-imported-verified `
+  --software-revision "<software-revision>" `
+  --schema-version "<current-schema>" `
+  --legacy-import-run-id "<import-run-id>" `
+  --operator-note "Detailed import checks passed"
 ```
 
-Restore that backup into a disposable database and run:
+## 6. Create a coordinated recovery generation
 
 ```powershell
+python -m app.persistence recovery create-generation `
+  --software-revision "<software-revision>" `
+  --schema-version "<current-schema>" `
+  --blob-root "<live-blob-root>" `
+  --retention-days 30 --rpo-seconds 86400 --rto-seconds 3600 `
+  --encryption-required `
+  --operator-note "Post-import pre-activation generation"
+```
+
+Record the returned generation ID, then:
+
+```powershell
+python -m app.persistence recovery capture-manifest `
+  --backup-generation-id "<generation-id>"
+
+python -m app.persistence recovery copy-blobs `
+  --backup-generation-id "<generation-id>" `
+  --source-blob-root "<live-blob-root>" `
+  --destination-blob-root "<empty-generation-blob-backup-root>"
+
+python -m app.persistence backup "<generation-dump-path>"
+
+python -m app.persistence recovery record-database-backup `
+  --backup-generation-id "<generation-id>" `
+  --postgresql-dump-reference "<generation-dump-path>"
+```
+
+The dump reference must not contain credentials.
+
+## 7. Rehearse clean restoration
+
+Create an empty disposable PostgreSQL database and an empty disposable BlobStore directory. Save the real URL without printing it, switch to the disposable database, restore, and verify:
+
+```powershell
+$realDatabaseUrl = $env:OMNIX_DATABASE_URL
+$env:OMNIX_DATABASE_URL = "postgresql://omnix:<password>@127.0.0.1:5432/omnix_restore_test"
+python -m app.persistence restore "<generation-dump-path>" --clean
 python -m app.persistence verify
+# Run deterministic restored-database smoke checks.
 ```
 
-Do not activate cutover until a restore rehearsal passes.
+Restore/copy the generation BlobStore backup into the empty disposable BlobStore root. Do not verify the original live root.
 
-## 9. Activate PostgreSQL authority
+Return to the real database, then record combined evidence:
 
 ```powershell
-python scripts/import_legacy_persistence_bundle.py activate `
-  "<legacy-import-run-id>" `
-  --note "Legacy backup and PostgreSQL restore verified"
+$env:OMNIX_DATABASE_URL = $realDatabaseUrl
+python -m app.persistence recovery verify-blobs `
+  --backup-generation-id "<generation-id>" `
+  --blob-root "<empty-restored-blob-root>" `
+  --database-restore-verified `
+  --migrations-verified `
+  --smoke-checks-verified
+
+python -m app.persistence recovery status `
+  --backup-generation-id "<generation-id>"
 ```
 
-Activation is rejected unless the import run is completed and verification is clean.
+Require zero missing/mismatched blobs, matching manifest hash/count/bytes, healthy restored database, zero migration drift, and passing deterministic smoke checks.
 
-After activation, legacy sources are read-only backups. Omnix must not silently fall back to them.
-
-## 10. Restart and acceptance checks
-
-Start Omnix with the PostgreSQL configuration and run deterministic smoke checks for:
-
-- chat create/read/message append;
-- character read and version update;
-- memory read and snapshot access;
-- job create/claim/complete;
-- asset metadata and blob read;
-- RPG campaign load and one idempotent turn replay;
-- diagnostics and migration status.
-
-Run local provider-backed RPG acceptance separately when the configured local provider is available. It remains outside GitHub Actions.
-
-## 11. Rollback rehearsal
-
-A runtime failure after activation does not trigger automatic SQLite fallback.
-
-Restore the pre-cutover application and legacy backup deliberately. Record the rollback in the PostgreSQL migration ledger:
+## 8. Activate PostgreSQL frozen
 
 ```powershell
-python scripts/import_legacy_persistence_bundle.py record-rollback `
-  "<legacy-import-run-id>" `
-  --reason "<bounded operator reason>"
+python -m app.persistence cutover activate-frozen `
+  --software-revision "<software-revision>" `
+  --schema-version "<current-schema>" `
+  --legacy-import-run-id "<import-run-id>" `
+  --backup-generation-id "<generation-id>" `
+  --operator-note "Verified import and coordinated restore rehearsal"
 ```
 
-Then restore either:
+At `postgresql_activated_frozen`, PostgreSQL is selected authority but normal runtime start and mutations are blocked. Use CLI/database read-only inspection for users/workspaces, characters, memory, chats, jobs, assets/blobs, RPG revisions/state hashes, provider references, diagnostics, and migrations. Legacy files remain immutable and there is no fallback.
 
-- the verified pre-import PostgreSQL backup; or
-- the backed-up legacy installation and its matching software revision.
+## 9. Open writes
 
-Do not mix post-cutover writes into the legacy source set.
+Immediately before the irreversible gate, run `python -m app.persistence cutover status` and record the import run, generation, dump/blob backup locations, restore result, and current state. Explicitly acknowledge that legacy rollback cannot preserve new PostgreSQL writes.
 
-## 12. Archive legacy sources
+```powershell
+python -m app.persistence cutover open-writes `
+  --software-revision "<software-revision>" `
+  --schema-version "<current-schema>" `
+  --operator-note "Operator accepts that legacy rollback is no longer lossless" `
+  --write-reopen-acknowledged
+```
 
-After sustained verification:
+Start normal gateways, workers, consumers, and RPG runtime only after this succeeds.
 
-- mark the legacy backup directory read-only;
-- retain its file-hash manifest;
-- retain the canonical migration bundle and import report;
-- retain the before/after PostgreSQL backups according to the backup policy;
-- remove legacy files from normal runtime paths only during Phase 9 retirement.
+## 10. Acceptance and stabilization
 
-## Success criteria
+Run deterministic checks for chat, character versions, memory writes/snapshots, job lifecycle/retry, outbox/inbox/idempotency, assets/blob reads, RPG load/new deterministic turn/replay/stale revision, gateway/worker restart, recovery of unpublished events, runtime-node expiry, lifecycle, and capacity.
 
-Cutover is complete when:
+Run configured local-provider checks separately for LLM, image, TTS/STT, RPG, conversation, and asset generation. Do not place credentials or provider calls in CI.
 
-1. the import run is `completed`;
-2. discovered and imported counts match;
-3. no failed import items remain;
-4. PostgreSQL backup and restore pass;
-5. cutover mode is `postgresql`;
-6. deterministic smoke checks pass;
-7. no normal runtime write targets SQLite, JSONL, or mutable JSON manifests;
-8. legacy data remains an immutable rollback archive only.
+Monitor PostgreSQL health, pools, locks/timeouts, leases, outbox/dead letters, blob failures, runtime nodes, RPG conflicts, disk, cleanup, application errors, and deterministic state hashes for an operator-defined window. Do not stabilize after only one request.
+
+```powershell
+python -m app.persistence cutover stabilize `
+  --software-revision "<software-revision>" `
+  --schema-version "<current-schema>" `
+  --latest-authoritative-revision "<revision-marker>" `
+  --operator-note "Stabilization window and acceptance checks completed"
+```
+
+## 11. Rollback policy
+
+Before writes reopen, restore the coordinated generation or matching immutable legacy installation deliberately. After writes reopen, prefer forward repair or coordinated PostgreSQL-plus-BlobStore restoration. Never mix PostgreSQL writes back into legacy files.
+
+Recording legacy rollback after writes requires accepted data loss:
+
+```powershell
+python -m app.persistence cutover record-rollback `
+  --software-revision "<software-revision>" `
+  --schema-version "<current-schema>" `
+  --operator-note "<bounded reason and accepted data loss>" `
+  --destructive-rollback-acknowledged
+```
+
+## 12. Completion evidence
+
+Use [POSTGRESQL_CUTOVER_OPERATOR_REPORT_TEMPLATE.md](POSTGRESQL_CUTOVER_OPERATOR_REPORT_TEMPLATE.md). Keep the completed report private if it contains installation paths or user-derived counts. Cutover is complete only at `postgresql_stabilized`, with exact revision/schema, clean import, verified coordinated generation, clean restore rehearsals, passing acceptance, latest authoritative revision, immutable legacy archives, and no runtime writer targeting SQLite/JSONL/mutable JSON.

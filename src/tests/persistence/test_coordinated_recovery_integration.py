@@ -50,9 +50,18 @@ def _create_asset(work, context, *, asset_id: str, blob_store: LocalBlobStore, s
     )
 
 
+def _restore_store(source: LocalBlobStore, destination: LocalBlobStore) -> None:
+    for path in source.root.rglob("*"):
+        if path.is_file():
+            key = path.relative_to(source.root).as_posix()
+            destination.put_bytes(key, path.read_bytes())
+
+
 def test_backup_generation_captures_and_verifies_blob_authority(tmp_path) -> None:
     database = _database()
     blob_store = LocalBlobStore(tmp_path / "blobs")
+    backup_store = LocalBlobStore(tmp_path / "backup-blobs")
+    restored_store = LocalBlobStore(tmp_path / "restored-blobs")
     try:
         apply_migrations(database)
         context = bootstrap_local_tenant(database)
@@ -73,18 +82,30 @@ def test_backup_generation_captures_and_verifies_blob_authority(tmp_path) -> Non
                 software_revision="test-head",
                 schema_version="0013_coordinated_recovery",
                 blob_root=blob_store.root,
+                operator_note="integration recovery rehearsal",
             )
             manifest = recovery.capture_manifest(generation_id)
+            recovery.copy_manifested_blobs(
+                generation_id,
+                source=blob_store,
+                destination=backup_store,
+            )
             recovery.record_database_backup(generation_id, "backup:test.dump")
-            verified = recovery.verify_blobs(generation_id, blob_store)
+        _restore_store(backup_store, restored_store)
+        with database.transaction() as connection:
+            verified = CoordinatedRecoveryRepository(connection).verify_blobs(
+                generation_id,
+                restored_store,
+                database_restore_verified=True,
+                migrations_verified=True,
+                smoke_checks_verified=True,
+            )
 
         assert manifest["asset_count"] >= 1
-        assert verified == {
-            "ok": True,
-            "missing": [],
-            "mismatched": [],
-            "checked": manifest["asset_count"],
-        }
+        assert verified["ok"] is True
+        assert verified["missing"] == []
+        assert verified["mismatched"] == []
+        assert verified["checked"] == manifest["asset_count"]
         with database.connection() as connection:
             row = connection.execute(
                 "SELECT status, database_backup_reference, manifest_hash "
@@ -102,6 +123,8 @@ def test_backup_generation_captures_and_verifies_blob_authority(tmp_path) -> Non
 def test_backup_verification_reports_missing_blob(tmp_path) -> None:
     database = _database()
     blob_store = LocalBlobStore(tmp_path / "missing-blobs")
+    backup_store = LocalBlobStore(tmp_path / "missing-backup-blobs")
+    restored_store = LocalBlobStore(tmp_path / "missing-restored-blobs")
     try:
         apply_migrations(database)
         context = bootstrap_local_tenant(database)
@@ -121,12 +144,25 @@ def test_backup_verification_reports_missing_blob(tmp_path) -> None:
                 software_revision="test-head",
                 schema_version="0013_coordinated_recovery",
                 blob_root=blob_store.root,
+                operator_note="integration missing-blob rehearsal",
             )
             recovery.capture_manifest(generation_id)
+            recovery.copy_manifested_blobs(
+                generation_id,
+                source=blob_store,
+                destination=backup_store,
+            )
             recovery.record_database_backup(generation_id, "backup:missing.dump")
-        blob_store.delete("assets/missing.bin")
+        _restore_store(backup_store, restored_store)
+        restored_store.delete("assets/missing.bin")
         with database.transaction() as connection:
-            result = CoordinatedRecoveryRepository(connection).verify_blobs(generation_id, blob_store)
+            result = CoordinatedRecoveryRepository(connection).verify_blobs(
+                generation_id,
+                restored_store,
+                database_restore_verified=True,
+                migrations_verified=True,
+                smoke_checks_verified=True,
+            )
         assert result["ok"] is False
         assert "asset:missing-recovery" in result["missing"]
     finally:

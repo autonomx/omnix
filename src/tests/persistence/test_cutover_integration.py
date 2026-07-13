@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from app.persistence.authority import AuthorityOperation
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.cutover import (
@@ -62,9 +63,22 @@ def _reset(database: PostgresDatabase) -> None:
         connection.execute(
             """
             UPDATE omnix_persistence_cutover
-               SET mode = 'legacy_preflight', import_run_id = NULL,
+               SET mode = 'legacy_preflight', authority_state = 'legacy_preflight',
+                   import_run_id = NULL,
                    source_hash = NULL, activated_at = NULL,
                    rollback_recorded_at = NULL, metadata = '{}'::jsonb,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE singleton = TRUE
+            """
+        )
+
+
+def _restore_runtime_authority(database: PostgresDatabase) -> None:
+    with database.transaction() as connection:
+        connection.execute(
+            """
+            UPDATE omnix_persistence_cutover
+               SET mode = 'postgresql', authority_state = 'postgresql_stabilized',
                    updated_at = CURRENT_TIMESTAMP
              WHERE singleton = TRUE
             """
@@ -236,7 +250,10 @@ def test_end_to_end_import_is_verified_resumable_and_cutover_gated(tmp_path: Pat
     store = LocalBlobStore(tmp_path / "blobs")
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = bootstrap_local_tenant(
+            database,
+            authority_operation=AuthorityOperation.LEGACY_IMPORT,
+        )
         importer = PostgresLegacyImporter(database, blob_store=store)
         bundle = _bundle(tmp_path)
 
@@ -257,20 +274,11 @@ def test_end_to_end_import_is_verified_resumable_and_cutover_gated(tmp_path: Pat
 
         status_before = importer.cutover_status()
         assert status_before["mode"] == "legacy_preflight"
-        active = importer.activate_cutover(
-            run_id=run_id,
-            metadata={"operator": "test", "backup_verified": True},
-        )
-        assert active["mode"] == "postgresql"
-        assert active["source_hash"] == bundle["source_hash"]
-        assert active["metadata"]["backup_verified"] is True
-
-        rollback = importer.record_rollback(
-            run_id=run_id,
-            reason="synthetic rollback rehearsal",
-        )
-        assert rollback["mode"] == "rollback_recorded"
-        assert rollback["metadata"]["rollback_reason"] == "synthetic rollback rehearsal"
+        with pytest.raises(Exception, match="one-step activation is retired"):
+            importer.activate_cutover(
+                run_id=run_id,
+                metadata={"operator": "test", "backup_verified": True},
+            )
 
         with database.connection() as connection:
             counts = connection.execute(
@@ -307,6 +315,7 @@ def test_end_to_end_import_is_verified_resumable_and_cutover_gated(tmp_path: Pat
         )
         assert store.read_bytes("legacy/reports/report.json") == b"{}"
     finally:
+        _restore_runtime_authority(database)
         database.close()
 
 
@@ -314,7 +323,10 @@ def test_changed_source_id_is_rejected_after_import(tmp_path: Path) -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = bootstrap_local_tenant(
+            database,
+            authority_operation=AuthorityOperation.LEGACY_IMPORT,
+        )
         importer = PostgresLegacyImporter(
             database, blob_store=LocalBlobStore(tmp_path / "blobs")
         )
@@ -327,6 +339,7 @@ def test_changed_source_id_is_rejected_after_import(tmp_path: Path) -> None:
         with pytest.raises(LegacySourceChanged):
             importer.import_bundle(context, changed)
     finally:
+        _restore_runtime_authority(database)
         database.close()
 
 
@@ -334,7 +347,10 @@ def test_failed_item_is_reported_and_does_not_activate_cutover(tmp_path: Path) -
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = bootstrap_local_tenant(
+            database,
+            authority_operation=AuthorityOperation.LEGACY_IMPORT,
+        )
         importer = PostgresLegacyImporter(
             database, blob_store=LocalBlobStore(tmp_path / "blobs")
         )
@@ -351,6 +367,7 @@ def test_failed_item_is_reported_and_does_not_activate_cutover(tmp_path: Path) -
         with pytest.raises(Exception):
             importer.activate_cutover(run_id=result["run"]["id"])
     finally:
+        _restore_runtime_authority(database)
         database.close()
 
 
@@ -363,7 +380,11 @@ def test_declared_hash_drift_fails_preflight(tmp_path: Path) -> None:
             importer = PostgresLegacyImporter(
                 database, blob_store=LocalBlobStore(tmp_path / "blobs")
             )
-            context = bootstrap_local_tenant(database)
+            context = bootstrap_local_tenant(
+                database,
+                authority_operation=AuthorityOperation.LEGACY_IMPORT,
+            )
             importer.import_bundle(context, bundle, dry_run=True)
         finally:
+            _restore_runtime_authority(database)
             database.close()

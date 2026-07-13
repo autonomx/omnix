@@ -49,6 +49,18 @@ def _reset(connection) -> None:
     )
 
 
+def _restore_runtime_authority(database: PostgresDatabase) -> None:
+    with database.transaction() as connection:
+        connection.execute(
+            """
+            UPDATE omnix_persistence_cutover
+               SET mode = 'postgresql', authority_state = 'postgresql_stabilized',
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE singleton = TRUE
+            """
+        )
+
+
 def _seed_verified_import_and_backup(connection) -> tuple[str, str]:
     run_id = "legacy-import:state-machine"
     backup_id = "backup:state-machine"
@@ -124,9 +136,12 @@ def test_cutover_requires_verified_import_backup_and_write_acknowledgement() -> 
                 to_state="postgresql_stabilized",
                 software_revision="test-head",
                 schema_version="0015_cutover_state_machine",
+                operator_note="stabilization window healthy",
+                latest_authoritative_revision="campaign:1@42",
             )
             assert stabilized["authority_state"] == "postgresql_stabilized"
     finally:
+        _restore_runtime_authority(database)
         database.close()
 
 
@@ -170,4 +185,5 @@ def test_post_write_legacy_rollback_requires_destructive_acknowledgement() -> No
             ).fetchone()
             assert bool(row[0]) is True
     finally:
+        _restore_runtime_authority(database)
         database.close()

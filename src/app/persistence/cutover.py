@@ -5,8 +5,9 @@ import json
 import uuid
 from collections import Counter
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
+from .authority import AuthorityOperation
 from .blob_store import LocalBlobStore
 from .database import PostgresDatabase
 from .errors import PersistenceError
@@ -333,28 +334,11 @@ class PostgresLegacyImporter:
         run_id: str,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        run = self._run_by_id(run_id)
-        if run is None or run["status"] != "completed":
-            raise CutoverNotReady("cutover requires a completed import run")
-        verification = self.verify_run(run_id)
-        if not verification["ok"]:
-            raise CutoverNotReady("cutover verification is not clean")
-        with self.database.transaction() as connection:
-            row = connection.execute(
-                """
-                UPDATE omnix_persistence_cutover
-                   SET mode = 'postgresql', import_run_id = %s,
-                       source_hash = %s, activated_at = CURRENT_TIMESTAMP,
-                       rollback_recorded_at = NULL,
-                       updated_at = CURRENT_TIMESTAMP,
-                       metadata = %s::jsonb
-                 WHERE singleton = TRUE
-                RETURNING mode, import_run_id, source_hash, activated_at,
-                          rollback_recorded_at, updated_at, metadata
-                """,
-                (run_id, run["source_hash"], _canonical(metadata or {})),
-            ).fetchone()
-        return self._cutover_record(row)
+        del run_id, metadata
+        raise CutoverNotReady(
+            "one-step activation is retired; use python -m app.persistence cutover "
+            "mark-imported-unverified, mark-imported-verified, activate-frozen, and open-writes"
+        )
 
     def record_rollback(
         self,
@@ -362,26 +346,11 @@ class PostgresLegacyImporter:
         run_id: str,
         reason: str,
     ) -> dict[str, Any]:
-        with self.database.transaction() as connection:
-            current = connection.execute(
-                "SELECT import_run_id FROM omnix_persistence_cutover WHERE singleton = TRUE"
-            ).fetchone()
-            if current is None or str(current[0] or "") != run_id:
-                raise CutoverNotReady("rollback run does not match active cutover")
-            row = connection.execute(
-                """
-                UPDATE omnix_persistence_cutover
-                   SET mode = 'rollback_recorded',
-                       rollback_recorded_at = CURRENT_TIMESTAMP,
-                       updated_at = CURRENT_TIMESTAMP,
-                       metadata = metadata || %s::jsonb
-                 WHERE singleton = TRUE
-                RETURNING mode, import_run_id, source_hash, activated_at,
-                          rollback_recorded_at, updated_at, metadata
-                """,
-                (_canonical({"rollback_reason": reason[:1000]}),),
-            ).fetchone()
-        return self._cutover_record(row)
+        del run_id, reason
+        raise CutoverNotReady(
+            "legacy rollback recording is retired; use python -m app.persistence "
+            "cutover record-rollback with the required acknowledgements"
+        )
 
     def cutover_status(self) -> dict[str, Any]:
         with self.database.connection() as connection:
@@ -408,7 +377,11 @@ class PostgresLegacyImporter:
     ) -> None:
         cleanup_key: str | None = None
         try:
-            with unit_of_work(self.database) as work:
+            with unit_of_work(
+                self.database,
+                authority_operation=AuthorityOperation.LEGACY_IMPORT,
+            ) as work:
+                assert work.connection is not None
                 target_table, target_id, cleanup_key = self._dispatch(
                     work, context, entity_type, stable_id, item
                 )

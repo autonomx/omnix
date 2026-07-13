@@ -4,6 +4,7 @@ import hashlib
 import json
 from typing import Any
 
+from .authority import AuthorityOperation
 from .database import PostgresDatabase
 from .migrations import apply_migrations
 from .tenant import TenantContext
@@ -15,9 +16,13 @@ def _request_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def bootstrap_local_tenant(database: PostgresDatabase) -> TenantContext:
+def bootstrap_local_tenant(
+    database: PostgresDatabase,
+    *,
+    authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
+) -> TenantContext:
     apply_migrations(database)
-    with unit_of_work(database) as work:
+    with unit_of_work(database, authority_operation=authority_operation) as work:
         context = work.identities.ensure_local_identity()
         work.audit.append(
             context,
@@ -47,7 +52,7 @@ def rename_workspace(
     expected_revision: int,
     operation_key: str,
 ) -> dict[str, Any]:
-    request = {
+    request: dict[str, Any] = {
         "workspace_id": context.workspace_id,
         "name": str(name).strip(),
         "expected_revision": int(expected_revision),

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from app.persistence.authority import AuthorityOperation
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.complete_cutover import CompletePostgresLegacyImporter
 from app.persistence.config import DatabaseSettings
@@ -56,6 +57,30 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_assets, omnix_settings, omnix_secret_references, "
             "omnix_audit_events, omnix_idempotency_keys, "
             "omnix_workspace_memberships, omnix_workspaces, omnix_users CASCADE"
+        )
+        connection.execute(
+            """
+            UPDATE omnix_persistence_cutover
+               SET mode = 'legacy_preflight', authority_state = 'legacy_preflight',
+                   import_run_id = NULL, source_hash = NULL,
+                   backup_generation_id = NULL, activated_at = NULL,
+                   opened_for_writes_at = NULL, stabilized_at = NULL,
+                   rollback_recorded_at = NULL, latest_authoritative_revision = NULL,
+                   destructive_override_at = NULL, metadata = '{}'::jsonb
+             WHERE singleton = TRUE
+            """
+        )
+
+
+def _restore_runtime_authority(database: PostgresDatabase) -> None:
+    with database.transaction() as connection:
+        connection.execute(
+            """
+            UPDATE omnix_persistence_cutover
+               SET mode = 'postgresql', authority_state = 'postgresql_stabilized',
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE singleton = TRUE
+            """
         )
 
 
@@ -250,7 +275,10 @@ def test_real_legacy_sources_export_import_and_restore_all_lifecycle_records(tmp
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = bootstrap_local_tenant(
+            database,
+            authority_operation=AuthorityOperation.LEGACY_IMPORT,
+        )
         importer = CompletePostgresLegacyImporter(
             database,
             blob_store=LocalBlobStore(tmp_path / "blobs"),
@@ -281,4 +309,5 @@ def test_real_legacy_sources_export_import_and_restore_all_lifecycle_records(tmp
         assert values[7] >= 2
         assert values[8:] == (1, 1, 1, 1, 1)
     finally:
+        _restore_runtime_authority(database)
         database.close()

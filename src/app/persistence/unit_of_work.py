@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import os
+import sys
 from types import TracebackType
-from typing import Any
+from typing import Any, Literal
 
+from .authority import (
+    AuthorityOperation,
+    initialize_fresh_install_authority,
+    require_authority_operation,
+)
 from .asset_repository import (
     PostgresAssetRepository,
     PostgresSecretReferenceRepository,
@@ -44,8 +51,14 @@ class UnitOfWorkClosedError(RuntimeError):
 class PostgresUnitOfWork:
     """One explicit transaction shared by all repositories in an operation."""
 
-    def __init__(self, database: PostgresDatabase | None = None) -> None:
+    def __init__(
+        self,
+        database: PostgresDatabase | None = None,
+        *,
+        authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
+    ) -> None:
         self.database = database or default_database()
+        self.authority_operation = authority_operation
         self.connection: Any | None = None
         self.identities: PostgresIdentityRepository
         self.audit: PostgresAuditRepository
@@ -76,6 +89,28 @@ class PostgresUnitOfWork:
             raise RuntimeError("Unit of Work cannot be entered twice")
         self._connection_context = self.database.connection()
         self.connection = self._connection_context.__enter__()
+        try:
+            if self.authority_operation == AuthorityOperation.RUNTIME_MUTATION:
+                schema_row = self.connection.execute(
+                    "SELECT version FROM omnix_schema_migrations ORDER BY version DESC LIMIT 1"
+                ).fetchone()
+                initialize_fresh_install_authority(
+                    self.connection,
+                    software_revision=(
+                        os.environ.get("OMNIX_SOFTWARE_REVISION")
+                        or "fresh-install-unversioned"
+                    ).strip(),
+                    schema_version=(
+                        str(schema_row[0]) if schema_row is not None else "unknown-schema"
+                    ),
+                )
+            require_authority_operation(self.connection, self.authority_operation)
+        except BaseException:
+            context, self._connection_context = self._connection_context, None
+            self.connection = None
+            if context is not None:
+                context.__exit__(*sys.exc_info())
+            raise
         self._transaction_scope_context = transaction_scope()
         self._transaction_scope_context.__enter__()
         self.identities = PostgresIdentityRepository(self.connection)
@@ -115,7 +150,7 @@ class PostgresUnitOfWork:
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
         traceback: TracebackType | None,
-    ) -> bool:
+    ) -> Literal[False]:
         connection = self._require_connection()
         try:
             if exc_type is not None or not self._completed:
@@ -140,5 +175,9 @@ class PostgresUnitOfWork:
         return self.connection
 
 
-def unit_of_work(database: PostgresDatabase | None = None) -> PostgresUnitOfWork:
-    return PostgresUnitOfWork(database)
+def unit_of_work(
+    database: PostgresDatabase | None = None,
+    *,
+    authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
+) -> PostgresUnitOfWork:
+    return PostgresUnitOfWork(database, authority_operation=authority_operation)

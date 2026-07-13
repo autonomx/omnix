@@ -7,6 +7,12 @@ from enum import Enum
 from functools import lru_cache
 from typing import Any
 
+from .authority import (
+    AuthorityOperation,
+    PostgresAuthorityError,
+    initialize_fresh_install_authority,
+    require_authority_operation,
+)
 from .database import PostgresDatabase, default_database
 from .migrations import apply_migrations, assert_schema_compatible, migration_status
 
@@ -31,6 +37,7 @@ class RuntimePersistenceStatus:
     backend: str
     ready: bool
     cutover_mode: str | None
+    authority_state: str | None
     migrations_pending: tuple[str, ...]
     details: dict[str, Any]
 
@@ -80,62 +87,6 @@ def uses_postgresql_runtime() -> bool:
     return persistence_mode() == PersistenceMode.POSTGRESQL
 
 
-def _domain_row_count(connection: Any) -> int:
-    tables = (
-        "omnix_chat_sessions",
-        "omnix_characters",
-        "omnix_memory_records",
-        "omnix_jobs",
-        "omnix_assets",
-        "omnix_rpg_campaigns",
-        "omnix_provider_configs",
-        "omnix_prompt_templates",
-        "omnix_research_records",
-        "omnix_reports",
-        "omnix_module_records",
-    )
-    expressions = ", ".join(f"(SELECT COUNT(*) FROM {table})" for table in tables)
-    row = connection.execute(f"SELECT {expressions}").fetchone()
-    return sum(int(value) for value in row)
-
-
-def _ensure_fresh_install_cutover(database: PostgresDatabase) -> str:
-    with database.transaction() as connection:
-        row = connection.execute(
-            "SELECT mode FROM omnix_persistence_cutover WHERE singleton = TRUE FOR UPDATE"
-        ).fetchone()
-        if row is None:
-            connection.execute(
-                "INSERT INTO omnix_persistence_cutover (singleton, mode) "
-                "VALUES (TRUE, 'legacy_preflight')"
-            )
-            mode = "legacy_preflight"
-        else:
-            mode = str(row[0])
-        if mode == "legacy_preflight":
-            imports = int(
-                connection.execute(
-                    "SELECT COUNT(*) FROM omnix_legacy_import_runs"
-                ).fetchone()[0]
-            )
-            if imports == 0 and _domain_row_count(connection) == 0:
-                connection.execute(
-                    """
-                    UPDATE omnix_persistence_cutover
-                       SET mode = 'postgresql',
-                           activated_at = CURRENT_TIMESTAMP,
-                           updated_at = CURRENT_TIMESTAMP,
-                           metadata = metadata || jsonb_build_object(
-                               'fresh_installation', TRUE,
-                               'legacy_import_required', FALSE
-                           )
-                     WHERE singleton = TRUE
-                    """
-                )
-                mode = "postgresql"
-        return mode
-
-
 def ensure_postgresql_runtime_ready(
     database: PostgresDatabase | None = None,
     *,
@@ -148,6 +99,7 @@ def ensure_postgresql_runtime_ready(
             backend="legacy",
             ready=True,
             cutover_mode=None,
+            authority_state=None,
             migrations_pending=(),
             details={"restricted_mode": True},
         )
@@ -166,19 +118,25 @@ def ensure_postgresql_runtime_ready(
         raise PersistenceReadinessError(
             f"PostgreSQL migration state is not ready: pending={list(pending)}"
         )
-    if auto_initialize_fresh_install:
-        cutover_mode = _ensure_fresh_install_cutover(db)
-    else:
-        with db.connection() as connection:
-            row = connection.execute(
-                "SELECT mode FROM omnix_persistence_cutover WHERE singleton = TRUE"
-            ).fetchone()
-        cutover_mode = str(row[0]) if row is not None else None
-    if cutover_mode != "postgresql":
-        raise PersistenceReadinessError(
-            "PostgreSQL runtime is not activated. Complete or verify the legacy import "
-            "and run the cutover activation command."
-        )
+    schema_version = str(migrations.get("current_schema") or "unknown-schema")
+    software_revision = (
+        os.environ.get("OMNIX_SOFTWARE_REVISION") or "fresh-install-unversioned"
+    ).strip()
+    try:
+        with db.transaction() as connection:
+            if auto_initialize_fresh_install:
+                initialize_fresh_install_authority(
+                    connection,
+                    software_revision=software_revision,
+                    schema_version=schema_version,
+                )
+            policy = require_authority_operation(
+                connection,
+                AuthorityOperation.RUNTIME_START,
+            )
+    except PostgresAuthorityError as exc:
+        raise PersistenceReadinessError(str(exc)) from exc
+    cutover_mode = policy.mode
     with db.connection() as connection:
         runtime = connection.execute(
             """
@@ -193,9 +151,11 @@ def ensure_postgresql_runtime_ready(
         backend="postgresql",
         ready=True,
         cutover_mode=cutover_mode,
+        authority_state=policy.authority_state,
         migrations_pending=pending,
         details={
             "health": health,
+            "authority_state": policy.authority_state,
             "runtime_schema_version": str(runtime[1]),
             "application_schema_min": migrations.get("application_schema_min"),
             "application_schema_max": migrations.get("application_schema_max"),

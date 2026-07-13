@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from app.persistence.authority import AuthorityOperation
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.complete_cutover import CompletePostgresLegacyImporter
 from app.persistence.config import database_settings
@@ -50,28 +51,39 @@ def main() -> int:
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0 if report["ok"] else 1
 
+    if args.command in {"status", "activate", "record-rollback"}:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "DeprecatedCutoverCommand",
+                    "message": (
+                        "cutover authority is managed by python -m app.persistence cutover; "
+                        "the legacy importer cannot change or report authority state"
+                    ),
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+        return 1
+
     database = PostgresDatabase(database_settings())
     try:
         importer = CompletePostgresLegacyImporter(
             database,
             blob_store=LocalBlobStore(getattr(args, "blob_root", None)),
         )
-        if args.command == "status":
-            report = importer.cutover_status()
-        elif args.command == "import":
-            context = bootstrap_local_tenant(database)
+        if args.command == "import":
+            context = bootstrap_local_tenant(
+                database,
+                authority_operation=AuthorityOperation.LEGACY_IMPORT,
+            )
             report = importer.import_bundle(
                 context,
                 _bundle(args.bundle),
                 dry_run=args.dry_run,
             )
-        elif args.command == "activate":
-            report = importer.activate_cutover(
-                run_id=args.run_id,
-                metadata={"operator_note": args.note} if args.note else {},
-            )
-        elif args.command == "record-rollback":
-            report = importer.record_rollback(run_id=args.run_id, reason=args.reason)
         else:  # pragma: no cover
             raise RuntimeError(f"unsupported command: {args.command}")
         print(json.dumps(report, indent=2, ensure_ascii=False))

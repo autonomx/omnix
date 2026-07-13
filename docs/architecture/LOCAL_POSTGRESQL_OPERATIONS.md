@@ -1,63 +1,57 @@
 # Local PostgreSQL Operations
 
-Omnix uses PostgreSQL as its authoritative structured-data database even when every service runs on one offline workstation.
+Omnix uses PostgreSQL for authoritative structured data even when all services run on one offline workstation. Set an operator-owned password and do not place it in reports, shell transcripts, or Git.
 
-## Start
+## Start and verify
 
 ```powershell
-$env:OMNIX_POSTGRES_PASSWORD = "choose-a-local-password"
-docker compose -f docker-compose.postgres.yml up -d
+$env:OMNIX_POSTGRES_PASSWORD = "<operator-owned-password>"
 $env:OMNIX_DATABASE_URL = "postgresql://omnix:$env:OMNIX_POSTGRES_PASSWORD@127.0.0.1:5432/omnix"
-python -m app.persistence migrate
-python -m app.persistence verify
-```
-
-The default development credentials are intentionally simple for localhost-only evaluation. Set an operator-owned password before retaining real data.
-
-## Environment
-
-```text
-OMNIX_DATABASE_URL
-OMNIX_DATABASE_POOL_MIN=1
-OMNIX_DATABASE_POOL_MAX=10
-OMNIX_DATABASE_CONNECT_TIMEOUT=5
-OMNIX_DATABASE_STATEMENT_TIMEOUT=30000
-OMNIX_DATABASE_APPLICATION_NAME=omnix
-```
-
-SQLite URLs are rejected. Omnix does not silently fall back when PostgreSQL is unavailable.
-
-## Status and health
-
-```powershell
+$env:OMNIX_SOFTWARE_REVISION = (git rev-parse HEAD)
+docker compose -f docker-compose.postgres.yml up -d
 python -m app.persistence health
+python -m app.persistence migrate
 python -m app.persistence status
 python -m app.persistence verify
 ```
 
-`verify` requires a healthy database, no migration checksum drift, and no pending migrations.
+`verify` requires healthy PostgreSQL, no checksum drift, and no pending migrations. SQLite URLs and silent fallback are rejected.
 
-## Backup
-
-Install PostgreSQL client tools so `pg_dump` and `pg_restore` are available.
+## Authority and recovery status
 
 ```powershell
-python -m app.persistence backup resources/data/backups/omnix.dump
+python -m app.persistence cutover status
+python -m app.persistence recovery status
 ```
 
-Backups use PostgreSQL custom format without ownership or ACL records.
+All authority changes use `python -m app.persistence cutover ...`. The legacy import script only performs preflight and import; its old `status`, `activate`, and `record-rollback` commands fail closed.
 
-## Restore rehearsal
+## Backup and restore
+
+Install `pg_dump` and `pg_restore` and keep backup paths credential-free:
+
+```powershell
+python -m app.persistence backup "resources/data/backups/omnix.dump"
+```
+
+The CLI supplies database passwords to PostgreSQL tools through their environment, not process arguments, and redacts credential-bearing operator output.
 
 Restore into an empty disposable database first:
 
 ```powershell
+$realDatabaseUrl = $env:OMNIX_DATABASE_URL
 $env:OMNIX_DATABASE_URL = "postgresql://omnix:<password>@127.0.0.1:5432/omnix_restore_test"
-python -m app.persistence restore resources/data/backups/omnix.dump --clean
+python -m app.persistence restore "resources/data/backups/omnix.dump" --clean
 python -m app.persistence verify
+# Run deterministic restored-database smoke checks here.
+$env:OMNIX_DATABASE_URL = $realDatabaseUrl
 ```
 
-Do not declare a backup strategy complete until a full restore has been verified.
+Do not declare a generation verified until the clean database restore and clean BlobStore restore both pass.
+
+## Runtime authority barrier
+
+Normal gateway/worker startup succeeds only in `postgresql_open_for_writes` or `postgresql_stabilized`. `postgresql_activated_frozen` is for CLI/database inspection; normal runtime mutations remain blocked. `rollback_recorded` also blocks runtime mutation until deliberate repair or restore.
 
 ## Stop
 
@@ -65,14 +59,4 @@ Do not declare a backup strategy complete until a full restore has been verified
 docker compose -f docker-compose.postgres.yml down
 ```
 
-The named volume remains. To remove all PostgreSQL data deliberately:
-
-```powershell
-docker compose -f docker-compose.postgres.yml down -v
-```
-
-This operation is destructive and must not be part of normal shutdown.
-
-## Offline operation
-
-The PostgreSQL container, gateway, workers, and local model services communicate over localhost. Internet access is not required after images and dependencies are installed.
+Do not use `down -v` during normal operations; it destroys the PostgreSQL volume.
