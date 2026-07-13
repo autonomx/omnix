@@ -57,6 +57,31 @@ UPDATE omnix_rpg_participants AS participant
  WHERE participant.campaign_id = campaign.id
    AND participant.workspace_id IS NULL;
 
+CREATE OR REPLACE FUNCTION omnix_set_participant_workspace()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    SELECT workspace_id
+      INTO NEW.workspace_id
+      FROM omnix_rpg_campaigns
+     WHERE id = NEW.campaign_id;
+    IF NEW.workspace_id IS NULL THEN
+        RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id
+            USING ERRCODE = '23503';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_omnix_set_participant_workspace
+    ON omnix_rpg_participants;
+CREATE TRIGGER trg_omnix_set_participant_workspace
+BEFORE INSERT OR UPDATE OF campaign_id
+ON omnix_rpg_participants
+FOR EACH ROW
+EXECUTE FUNCTION omnix_set_participant_workspace();
+
 ALTER TABLE omnix_rpg_participants
     ALTER COLUMN workspace_id SET NOT NULL,
     DROP CONSTRAINT IF EXISTS omnix_rpg_participants_campaign_id_fkey,
