@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS omnix_schema_migrations (
 # Stable signed bigint derived from the ASCII identity "OMNIXPG". The lock is
 # transaction-scoped so a crashed migrator releases it automatically.
 MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
-APPLICATION_SCHEMA_MIN = "0012_tenant_integrity_security"
-APPLICATION_SCHEMA_MAX = "0012_tenant_integrity_security"
+APPLICATION_SCHEMA_MIN = "0010_complete_legacy_migration"
+APPLICATION_SCHEMA_MAX = "9999_omnix_release_ceiling"
 
 
 class MigrationError(RuntimeError):
