@@ -1,4 +1,4 @@
-"""Idempotent import of the legacy JSON Chat store into SQLite."""
+"""Idempotent import of the legacy JSON Chat store into the provider-free repository."""
 from __future__ import annotations
 
 import hashlib
@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import ChatSession
-from .repository import ChatImportState, SQLiteChatRepository
+from .repository import ChatImportState, InMemoryChatRepository
 from .store import default_chat_store_path
 
 
@@ -68,7 +68,7 @@ def _validated_sessions(payload: dict[str, Any]) -> tuple[list[ChatSession], int
 
 
 def import_legacy_chat_json(
-    repository: SQLiteChatRepository,
+    repository: InMemoryChatRepository,
     source_path: str | Path | None = None,
 ) -> ChatImportState | None:
     path = Path(source_path) if source_path is not None else default_chat_store_path()

@@ -1,20 +1,24 @@
-"""TTL-bounded search and extraction caches for web research."""
+"""TTL-bounded in-memory caches for web research.
+
+These records are explicitly reconstructible and disposable. Durable research
+metadata lives in PostgreSQL; no SQLite cache database remains.
+"""
 from __future__ import annotations
 
-import json
-import os
-import sqlite3
+import threading
 import time
+from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from app.runtime_paths import resources_data_root
+
+_CACHE_STATES: dict[str, dict[str, dict[str, Any]]] = {}
+_CACHE_LOCK = threading.RLock()
 
 
 def default_research_cache_path() -> Path:
-    override = os.environ.get("OMNIX_RESEARCH_CACHE_DB_PATH")
-    return Path(override) if override else resources_data_root() / "research_cache.sqlite"
+    return Path(":memory:research-cache")
 
 
 class ResearchCacheStore:
@@ -25,45 +29,11 @@ class ResearchCacheStore:
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.path = Path(path) if path is not None else default_research_cache_path()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.clock = clock
-        self._init_schema()
-
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(str(self.path))
-        connection.row_factory = sqlite3.Row
-        return connection
-
-    def _init_schema(self) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS research_search_cache (
-                    cache_key TEXT PRIMARY KEY,
-                    payload_json TEXT NOT NULL,
-                    created_at REAL NOT NULL,
-                    expires_at REAL NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS research_extraction_cache (
-                    cache_key TEXT PRIMARY KEY,
-                    payload_json TEXT NOT NULL,
-                    content_hash TEXT,
-                    created_at REAL NOT NULL,
-                    expires_at REAL NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_research_search_expiry "
-                "ON research_search_cache(expires_at)"
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_research_extraction_expiry "
-                "ON research_extraction_cache(expires_at)"
+        with _CACHE_LOCK:
+            _CACHE_STATES.setdefault(
+                str(self.path),
+                {"research_search_cache": {}, "research_extraction_cache": {}},
             )
 
     def get_search(
@@ -75,11 +45,13 @@ class ResearchCacheStore:
         max_results: int,
         freshness: str,
     ) -> list[dict[str, Any]] | None:
-        key = search_cache_key(provider, query, locale, max_results, freshness)
-        payload = self._get("research_search_cache", key)
-        if not isinstance(payload, list):
+        value = self._get(
+            "research_search_cache",
+            search_cache_key(provider, query, locale, max_results, freshness),
+        )
+        if not isinstance(value, list):
             return None
-        return [item for item in payload if isinstance(item, dict)]
+        return [dict(item) for item in value if isinstance(item, dict)]
 
     def put_search(
         self,
@@ -92,9 +64,12 @@ class ResearchCacheStore:
         results: list[Any],
         ttl_seconds: int,
     ) -> None:
-        key = search_cache_key(provider, query, locale, max_results, freshness)
-        serializable = [_serializable(item) for item in results]
-        self._put("research_search_cache", key, serializable, ttl_seconds)
+        self._put(
+            "research_search_cache",
+            search_cache_key(provider, query, locale, max_results, freshness),
+            [_serializable(item) for item in results],
+            ttl_seconds,
+        )
 
     def get_extraction(
         self,
@@ -102,9 +77,11 @@ class ResearchCacheStore:
         canonical_url: str,
         extractor_version: str,
     ) -> dict[str, Any] | None:
-        key = extraction_cache_key(canonical_url, extractor_version)
-        payload = self._get("research_extraction_cache", key)
-        return payload if isinstance(payload, dict) else None
+        value = self._get(
+            "research_extraction_cache",
+            extraction_cache_key(canonical_url, extractor_version),
+        )
+        return dict(value) if isinstance(value, dict) else None
 
     def put_extraction(
         self,
@@ -114,88 +91,50 @@ class ResearchCacheStore:
         page: Any,
         ttl_seconds: int,
     ) -> None:
-        key = extraction_cache_key(canonical_url, extractor_version)
-        payload = _serializable(page)
-        content_hash = str(payload.get("content_hash") or "") if isinstance(payload, dict) else ""
         self._put(
             "research_extraction_cache",
-            key,
-            payload,
+            extraction_cache_key(canonical_url, extractor_version),
+            _serializable(page),
             ttl_seconds,
-            content_hash=content_hash or None,
         )
 
     def purge_expired(self) -> dict[str, int]:
         now = self.clock()
         counts: dict[str, int] = {}
-        with self._connect() as connection:
-            for table in ("research_search_cache", "research_extraction_cache"):
-                cursor = connection.execute(f"DELETE FROM {table} WHERE expires_at <= ?", (now,))
-                counts[table] = max(0, cursor.rowcount)
+        with _CACHE_LOCK:
+            state = _CACHE_STATES[str(self.path)]
+            for name, values in state.items():
+                expired = [key for key, item in values.items() if float(item["expires_at"]) <= now]
+                for key in expired:
+                    values.pop(key, None)
+                counts[name] = len(expired)
         return counts
 
     def clear(self) -> None:
-        with self._connect() as connection:
-            connection.execute("DELETE FROM research_search_cache")
-            connection.execute("DELETE FROM research_extraction_cache")
+        with _CACHE_LOCK:
+            state = _CACHE_STATES[str(self.path)]
+            state["research_search_cache"].clear()
+            state["research_extraction_cache"].clear()
 
     def _get(self, table: str, key: str) -> Any | None:
         now = self.clock()
-        with self._connect() as connection:
-            row = connection.execute(
-                f"SELECT payload_json, expires_at FROM {table} WHERE cache_key = ?",
-                (key,),
-            ).fetchone()
-            if row is None:
+        with _CACHE_LOCK:
+            item = _CACHE_STATES[str(self.path)][table].get(key)
+            if item is None:
                 return None
-            if float(row["expires_at"]) <= now:
-                connection.execute(f"DELETE FROM {table} WHERE cache_key = ?", (key,))
+            if float(item["expires_at"]) <= now:
+                _CACHE_STATES[str(self.path)][table].pop(key, None)
                 return None
-        try:
-            return json.loads(str(row["payload_json"]))
-        except json.JSONDecodeError:
-            return None
+            return deepcopy(item["payload"])
 
-    def _put(
-        self,
-        table: str,
-        key: str,
-        payload: Any,
-        ttl_seconds: int,
-        *,
-        content_hash: str | None = None,
-    ) -> None:
+    def _put(self, table: str, key: str, payload: Any, ttl_seconds: int) -> None:
         now = self.clock()
-        expires_at = now + max(1, int(ttl_seconds))
-        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        with self._connect() as connection:
-            if table == "research_extraction_cache":
-                connection.execute(
-                    """
-                    INSERT INTO research_extraction_cache(
-                        cache_key, payload_json, content_hash, created_at, expires_at
-                    ) VALUES(?,?,?,?,?)
-                    ON CONFLICT(cache_key) DO UPDATE SET
-                        payload_json=excluded.payload_json,
-                        content_hash=excluded.content_hash,
-                        created_at=excluded.created_at,
-                        expires_at=excluded.expires_at
-                    """,
-                    (key, serialized, content_hash, now, expires_at),
-                )
-            else:
-                connection.execute(
-                    """
-                    INSERT INTO research_search_cache(
-                        cache_key, payload_json, created_at, expires_at
-                    ) VALUES(?,?,?,?)
-                    ON CONFLICT(cache_key) DO UPDATE SET
-                        payload_json=excluded.payload_json,
-                        created_at=excluded.created_at,
-                        expires_at=excluded.expires_at
-                    """,
-                    (key, serialized, now, expires_at),
-                )
+        with _CACHE_LOCK:
+            _CACHE_STATES[str(self.path)][table][key] = {
+                "payload": deepcopy(payload),
+                "created_at": now,
+                "expires_at": now + max(1, int(ttl_seconds)),
+            }
 
 
 def search_cache_key(

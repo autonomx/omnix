@@ -20,18 +20,18 @@ INLINE_FEATURE_JOB_EXECUTOR_ENV = "OMNIX_INLINE_FEATURE_JOB_EXECUTOR"
 THREAD_EXECUTOR = "thread"
 
 
-def install_inline_feature_job_execution(sqlite_job_store_cls: Any) -> None:
-    """Patch ``SQLiteJobStore.create_job`` once with local-first feature execution.
+def install_inline_feature_job_execution(job_store_cls: Any) -> None:
+    """Patch the active job store once with local-first feature execution.
 
     The shared job queue remains worker-compatible. This wrapper only handles the
     feature jobs that the React UI creates directly and that otherwise have no
     local worker attached in the current gateway runtime.
     """
 
-    if getattr(sqlite_job_store_cls, "_omnix_inline_feature_jobs_installed", False):
+    if getattr(job_store_cls, "_omnix_inline_feature_jobs_installed", False):
         return
 
-    original_create_job: Callable[..., JobRecord] = sqlite_job_store_cls.create_job
+    original_create_job: Callable[..., JobRecord] = job_store_cls.create_job
 
     def create_job_with_inline_execution(self: Any, request: Any) -> JobRecord:
         job = original_create_job(self, request)
@@ -42,8 +42,8 @@ def install_inline_feature_job_execution(sqlite_job_store_cls: Any) -> None:
             return job
         return _execute_feature_job(self, job)
 
-    sqlite_job_store_cls.create_job = create_job_with_inline_execution
-    sqlite_job_store_cls._omnix_inline_feature_jobs_installed = True
+    job_store_cls.create_job = create_job_with_inline_execution
+    job_store_cls._omnix_inline_feature_jobs_installed = True
 
 
 def _start_background_feature_job(job_store: Any, job: JobRecord) -> None:
@@ -99,9 +99,9 @@ def _start_background_feature_job_process(db_path: str, job_id: str) -> None:
 
 
 def execute_feature_job_by_id(db_path: str, job_id: str) -> JobRecord:
-    from .store import SQLiteJobStore
+    from .store import InMemoryJobStore
 
-    job_store = SQLiteJobStore(db_path)
+    job_store = InMemoryJobStore(db_path)
     job = job_store.get_job(job_id)
     if job is None:
         raise RuntimeError(f"Inline feature job not found: {job_id}")
@@ -247,7 +247,6 @@ def _render_job(job: JobRecord) -> dict[str, Any]:
                 "model_id": model_id,
                 "resolved_model": None,
             }
-
         # Compatibility for tests and callers that intentionally submit a turn
         # without a persisted RPG session.
         prompt = (

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from app import shared
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.gateway.main import create_gateway_app
-from app.jobs import SQLiteJobStore
+from app.jobs import InMemoryJobStore
 from app.jobs.inline_feature_jobs import (
     INLINE_FEATURE_JOB_EXECUTOR_ENV,
     THREAD_EXECUTOR,
@@ -214,7 +214,7 @@ def test_rpg_turn_job_queues_deferred_narration(monkeypatch) -> None:
 
 
 def _wait_for_job_status(
-    store: SQLiteJobStore,
+    store: InMemoryJobStore,
     job_id: str,
     statuses: set[JobStatus],
     *,
@@ -280,7 +280,7 @@ def _gateway_client(tmp_path, monkeypatch, *, provider_content: str = "Hello fro
     provider = FakeProvider(provider_content)
     monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(job_store_factory=lambda: store)
     return TestClient(app), provider, store
 
@@ -397,7 +397,6 @@ def test_rpg_turn_jobs_execute_in_background_and_complete(monkeypatch, tmp_path)
     assert response.status_code == 200
     assert payload["status"] == "queued"
     assert payload["output_refs"] == []
-
     completed = _wait_for_job_status(store, payload["id"], {JobStatus.COMPLETED})
     assert completed.output_refs[0]["type"] == "rpg_turn_response"
     assert completed.output_refs[0]["title"] == "look around"
@@ -483,7 +482,7 @@ def test_rpg_turn_jobs_return_before_background_completion(monkeypatch, tmp_path
     provider = BlockingProvider()
     monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(job_store_factory=lambda: store)
     client = TestClient(app)
 
@@ -526,7 +525,7 @@ def test_rpg_turn_jobs_spawn_detached_worker_process_by_default(monkeypatch, tmp
             launched.append({"command": command, "kwargs": kwargs})
 
     monkeypatch.setattr(subprocess, "Popen", FakePopen)
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs.sqlite")
 
     job = store.create_job(
         CreateJobRequest(

@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from .models import ClaimJobRequest, CompleteJobRequest, FailJobRequest, JobRecord, ResourceClass
-from .store import SQLiteJobStore
+from .store import InMemoryJobStore
 
 HandlerResult = Mapping[str, Any] | None
 JobHandler = Callable[[JobRecord], HandlerResult | Awaitable[HandlerResult]]
@@ -17,7 +17,7 @@ class LocalJobExecutor:
 
     def __init__(
         self,
-        store: SQLiteJobStore,
+        store: InMemoryJobStore,
         handlers: Mapping[str, JobHandler],
         *,
         worker_id: str = "local:executor",

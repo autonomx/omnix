@@ -8,7 +8,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, HTTPException, Query
 
 from app.assets import AssetListResponse, AssetRecord, AssetType, default_asset_store
-from app.jobs import CreateJobRequest, JobListResponse, JobRecord, JobStatus, SQLiteJobStore, default_job_store
+from app.jobs import CreateJobRequest, JobListResponse, JobRecord, JobStatus, default_job_store
 
 from .job_summaries import summarize_job
 
@@ -124,7 +124,7 @@ def _is_usable_image_asset(asset: AssetRecord) -> bool:
         return False
 
 
-def _is_character_avatar_asset(asset: AssetRecord, job_store: SQLiteJobStore) -> bool:
+def _is_character_avatar_asset(asset: AssetRecord, job_store: Any) -> bool:
     if asset.module == "character-avatar":
         return True
     if str((asset.metadata or {}).get("source_module") or "").strip() == "character-avatar":
@@ -230,25 +230,7 @@ def _is_image_job(job: JobRecord) -> bool:
 
 
 def _recent_image_jobs(store: Any, limit: int) -> list[Any]:
-    if isinstance(store, SQLiteJobStore):
-        with store._connect() as conn:  # noqa: SLF001 - bounded read adapter
-            rows = conn.execute(
-                """
-                SELECT * FROM jobs
-                WHERE type = ? OR module IN (?, ?)
-                ORDER BY created_at DESC, id DESC
-                LIMIT ?
-                """,
-                ("image.generate", "image", "image-generation", limit),
-            ).fetchall()
-        jobs = []
-        for row in rows:
-            try:
-                jobs.append(store._row_to_job(row))  # noqa: SLF001
-            except Exception:
-                continue
-        return jobs
-    return [job for job in store.list_jobs() if _is_image_job(job)][:limit]
+    return [job for job in store.list_jobs(limit=max(limit, DEFAULT_IMAGE_JOB_LIMIT)) if _is_image_job(job)][:limit]
 
 
 def install_image_workspace_route_hook() -> None:

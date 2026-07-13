@@ -7,7 +7,7 @@ from app.assistant_memory.hermes_adapter import (
     export_approved_memory_to_hermes,
     import_hermes_memory,
 )
-from app.assistant_memory.owner_repository import OwnerAwareSQLiteMemoryRepository
+from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
 from app.assistant_memory.owner_service import OwnerAwareMemoryService
 from app.characters.hermes_adapter import (
     export_character_memory_to_hermes,
@@ -17,7 +17,7 @@ from app.characters.hermes_adapter import (
 
 def _service(tmp_path: Path) -> OwnerAwareMemoryService:
     return OwnerAwareMemoryService(
-        OwnerAwareSQLiteMemoryRepository(tmp_path / "memory.sqlite3")
+        OwnerAwareInMemoryMemoryRepository(tmp_path / "memory.sqlite3")
     )
 
 

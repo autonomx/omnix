@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from app.gateway.rpg_turn_job_mirror import _apply_turn_with_job_mirror
-from app.jobs.store import SQLiteJobStore
+from app.jobs.store import InMemoryJobStore
 from app.rpg.presentation.turn_response import build_turn_response_v2, turn_response_size_bytes
 
 FORMAT_VERSION = "rpg_foreground_turn_benchmark_v1"
@@ -23,8 +23,8 @@ SESSION_ID = "session:phase0:rusty-flagon"
 SUBMISSION_ID = "submit:phase0:bran-business"
 
 
-class InstrumentedJobStore(SQLiteJobStore):
-    """SQLite store with deterministic transition counters for benchmark evidence."""
+class InstrumentedJobStore(InMemoryJobStore):
+    """In-memory store with deterministic transition counters for benchmark evidence."""
 
     def __init__(self, path: Path) -> None:
         super().__init__(path)
@@ -65,7 +65,7 @@ def run_foreground_turn_benchmark(work_dir: Path | None = None) -> dict[str, Any
 def _run_benchmark(work_dir: Path) -> dict[str, Any]:
     from app.jobs import store as job_store_module
 
-    store = InstrumentedJobStore(work_dir / "foreground-turn-jobs.sqlite")
+    store = InstrumentedJobStore(work_dir / "foreground-turn-jobs")
     counters = {
         "apply_turn": 0,
         "provider_calls": 0,

@@ -14,7 +14,7 @@ from .models import (
     MemorySnapshotItem,
 )
 from .owner_defaults import default_memory_service
-from .owner_repository import OwnerAwareSQLiteMemoryRepository
+from .owner_repository import OwnerAwareInMemoryMemoryRepository
 from .owner_service import OwnerAwareMemoryService
 from .policy import (
     candidate_acceptance,
@@ -26,9 +26,9 @@ from .policy import (
     source_requires_approval,
 )
 from .repository import (
+    InMemoryMemoryRepository,
     MemoryConflictError,
     MemoryNotFoundError,
-    SQLiteMemoryRepository,
     default_memory_db_path,
 )
 from .scope import (
@@ -44,6 +44,7 @@ from .service import MemoryPolicyError, MemoryService, normalize_memory_content
 __all__ = [
     "DEFAULT_PROFILE_ID",
     "DEFAULT_WORKSPACE_ID",
+    "InMemoryMemoryRepository",
     "MemoryCandidate",
     "MemoryCategory",
     "MemoryConflictError",
@@ -61,9 +62,8 @@ __all__ = [
     "MemorySnapshotItem",
     "MemorySnapshotView",
     "MemorySnapshotViewItem",
+    "OwnerAwareInMemoryMemoryRepository",
     "OwnerAwareMemoryService",
-    "OwnerAwareSQLiteMemoryRepository",
-    "SQLiteMemoryRepository",
     "SYSTEM_MEMORY_OWNER_ID",
     "candidate_acceptance",
     "default_memory_db_path",

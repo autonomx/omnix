@@ -16,7 +16,7 @@ from app.characters import (
 from .assistant_turns import default_assistant_turn_coordinator
 from .models import ChatMessage, ChatSession, ChatSessionSummary, CreateChatSessionRequest, SendChatMessageRequest
 from .prompt_store import ChatSessionStore as BaseChatSessionStore, chat_sqlite_store_enabled
-from .sqlite_store import SQLiteChatSessionStore as BaseSQLiteChatSessionStore
+from .sqlite_store import InMemoryChatSessionStore as BaseInMemoryChatSessionStore
 from .store import serialized_chat_mutation
 
 
@@ -265,12 +265,12 @@ class ChatSessionStore(_CharacterSessionMixin, BaseChatSessionStore):
     pass
 
 
-class SQLiteChatSessionStore(_CharacterSessionMixin, BaseSQLiteChatSessionStore):
+class InMemoryChatSessionStore(_CharacterSessionMixin, BaseInMemoryChatSessionStore):
     pass
 
 
-def default_chat_store() -> ChatSessionStore | SQLiteChatSessionStore:
-    return SQLiteChatSessionStore() if chat_sqlite_store_enabled() else ChatSessionStore()
+def default_chat_store() -> ChatSessionStore | InMemoryChatSessionStore:
+    return InMemoryChatSessionStore() if chat_sqlite_store_enabled() else ChatSessionStore()
 
 
 def _character_repository():

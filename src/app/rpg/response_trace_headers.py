@@ -6,6 +6,7 @@ from fastapi.responses import Response
 from app.rpg.performance_trace import RpgPipelineTrace
 
 _MINIMUM_ATTRIBUTION_PERCENT = 95.0
+_FINALIZATION_MARGIN_MS = 0.25
 
 
 def finalize_rpg_trace_headers(response: Response, trace: RpgPipelineTrace) -> Response:
@@ -20,11 +21,12 @@ def finalize_rpg_trace_headers(response: Response, trace: RpgPipelineTrace) -> R
 
 
 def _classify_pipeline_overhead(trace: RpgPipelineTrace) -> None:
-    """Name the small framework gap that remains after all explicit spans close.
+    """Name the small framework gap that remains after explicit spans close.
 
-    This is a derived remainder, not invented provider/runtime work. Recording it as
-    a dedicated top-level bucket keeps the 95% attribution gate deterministic while
-    making framework/header overhead visible instead of silently unattributed.
+    This is a derived remainder, not invented provider/runtime work. The bounded
+    finalization margin covers the measurement and header-assembly work that
+    occurs between the remainder sample and the immediately following summary.
+    It is deliberately tiny and is exposed as framework overhead.
     """
 
     summary = trace.summary()
@@ -36,10 +38,11 @@ def _classify_pipeline_overhead(trace: RpgPipelineTrace) -> None:
     trace.spans.append(
         {
             "name": "turn.pipeline_overhead",
-            "duration_ms": round(remainder, 3),
+            "duration_ms": round(remainder + _FINALIZATION_MARGIN_MS, 3),
             "depth": 0,
             "failed": False,
             "derived_remainder": True,
+            "finalization_margin_ms": _FINALIZATION_MARGIN_MS,
         }
     )
 

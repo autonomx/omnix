@@ -21,11 +21,11 @@ from .residency import (
     ModelResidencyDiagnostics,
     GpuResidencyPolicy,
     GpuResidencyRequest,
+    InMemoryModelResidencyStore,
     ModelResidencyRecord,
     ModelResidencyStatus,
     ResidencyDecision,
     ResidencyDecisionAction,
-    SQLiteModelResidencyStore,
     create_model_evict_job_request,
     create_model_load_job_request,
     create_model_residency_handlers,
@@ -33,7 +33,7 @@ from .residency import (
     get_model_residency_diagnostics,
     plan_model_residency,
 )
-from .store import SQLiteJobStore, default_job_store
+from .store import InMemoryJobStore, default_job_store
 from . import inline_feature_jobs as _inline_feature_jobs
 from .inline_feature_jobs import install_inline_feature_job_execution
 from .rpg_debug_job_hook import install_rpg_debug_job_hook
@@ -45,14 +45,14 @@ from .rpg_last10_report import (
 from .rpg_turn_job_guard import install_rpg_turn_job_guard
 from .voice_inline import install_voice_studio_job_execution
 
-install_inline_feature_job_execution(SQLiteJobStore)
+install_inline_feature_job_execution(InMemoryJobStore)
 install_rpg_last10_report_inline_job()
 _inline_feature_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES.discard(RPG_LAST10_REPORT_JOB_TYPE)
-install_rpg_turn_job_guard(SQLiteJobStore)
-install_voice_studio_job_execution(SQLiteJobStore)
-install_image_job_execution(SQLiteJobStore)
-install_research_job_execution(SQLiteJobStore)
-install_rpg_debug_job_hook(SQLiteJobStore)
+install_rpg_turn_job_guard(InMemoryJobStore)
+install_voice_studio_job_execution(InMemoryJobStore)
+install_image_job_execution(InMemoryJobStore)
+install_research_job_execution(InMemoryJobStore)
+install_rpg_debug_job_hook(InMemoryJobStore)
 
 __all__ = [
     "CancelJobRequest",
@@ -63,6 +63,8 @@ __all__ = [
     "FailJobRequest",
     "GpuResidencyPolicy",
     "GpuResidencyRequest",
+    "InMemoryJobStore",
+    "InMemoryModelResidencyStore",
     "JobListResponse",
     "JobRecord",
     "JobStatus",
@@ -74,8 +76,6 @@ __all__ = [
     "ResourceClass",
     "ResidencyDecision",
     "ResidencyDecisionAction",
-    "SQLiteJobStore",
-    "SQLiteModelResidencyStore",
     "build_rpg_last10_report_payload",
     "create_model_evict_job_request",
     "create_model_load_job_request",

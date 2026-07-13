@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Temporary-store preflight for optional Character Hermes compatibility."""
+"""Temporary in-memory preflight for optional Character Hermes compatibility."""
 from __future__ import annotations
 
 import argparse
-import gc
 import hashlib
 import json
 import os
@@ -19,8 +18,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from app.assistant_memory import (  # noqa: E402
+    OwnerAwareInMemoryMemoryRepository,
     OwnerAwareMemoryService,
-    OwnerAwareSQLiteMemoryRepository,
     resolve_chat_scope,
 )
 from app.characters.hermes_adapter import (  # noqa: E402
@@ -63,7 +62,7 @@ def run_preflight() -> dict[str, Any]:
 
     with tempfile.TemporaryDirectory(prefix="omnix-character-stage6-") as raw:
         temp = Path(raw)
-        service = OwnerAwareMemoryService(OwnerAwareSQLiteMemoryRepository(temp / "memory.sqlite3"))
+        service = OwnerAwareMemoryService(OwnerAwareInMemoryMemoryRepository(temp / "memory"))
         maya = resolve_chat_scope("character-hermes:stage6-maya", owner_type="character", owner_id="stage6-maya")
         alex = resolve_chat_scope("character-hermes:stage6-alex", owner_type="character", owner_id="stage6-alex")
         system = resolve_chat_scope("character-hermes:system")
@@ -203,16 +202,12 @@ def run_preflight() -> dict[str, Any]:
         if exported_text is not None:
             check("rollback.non_destructive", rollback_check)
 
-        # sqlite3 connection context managers commit/rollback but do not close;
-        # collect short-lived connection objects before Windows removes the temp DB.
-        gc.collect()
-
     return {
         "format_version": "character-stage6-preflight-v1",
         "decision": "pass" if not errors else "blocked",
         "checks": checks,
         "notes": [
-            "Temporary files and SQLite state are deleted after the preflight.",
+            "Temporary files and in-memory state are deleted after the preflight.",
             "The report contains IDs, hashes, counts, statuses, and reasons only.",
         ],
     }

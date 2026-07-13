@@ -59,12 +59,13 @@ def install_interaction_timeline_hook() -> None:
             if not isinstance(session, dict):
                 return result
 
+            submission_id = _current_submission_id()
             with rpg_pipeline_span("turn.interaction_append") as interaction_span:
                 session, result, event = commit_turn_interaction(
                     session,
                     result,
                     player_input=player_input,
-                    submission_id=_current_submission_id(),
+                    submission_id=submission_id,
                     trace_id=_text(result.get("trace_id")),
                 )
                 interaction_span["interaction_id"] = event.get("interaction_id")
@@ -79,6 +80,36 @@ def install_interaction_timeline_hook() -> None:
                     "format_version": "rpg_interaction_persistence_v2",
                     "mode": "session_override",
                     "persisted": False,
+                }
+                return result
+
+            if _postgresql_runtime_active():
+                from app.persistence.rpg_turn_service import persist_foreground_turn
+
+                with rpg_pipeline_span("turn.postgresql_commit") as transaction_span:
+                    transaction = persist_foreground_turn(
+                        session_id=session_id,
+                        player_input=player_input,
+                        session=session,
+                        result=result,
+                        event=event,
+                        submission_id=submission_id,
+                    )
+                    transaction_span["interaction_id"] = event.get("interaction_id")
+                    transaction_span["sequence"] = event.get("sequence")
+                    transaction_span["submission_id"] = submission_id
+                mark_interaction_persisted(result)
+                result["interaction_persistence"] = {
+                    "format_version": "rpg_interaction_persistence_v3",
+                    "interaction_id": event.get("interaction_id"),
+                    "sequence": event.get("sequence"),
+                    "state_revision": event.get("state_revision"),
+                    "submission_id": submission_id,
+                    "persisted": True,
+                    "mode": "postgresql_unit_of_work",
+                    "snapshot_written": transaction.get("snapshot") is not None,
+                    "turn_id": (transaction.get("turn") or {}).get("id"),
+                    "job_id": (transaction.get("job") or {}).get("id"),
                 }
                 return result
 
@@ -120,6 +151,15 @@ def install_interaction_timeline_hook() -> None:
 
     interactive_first_call_runtime.apply_turn = apply_turn_with_interaction_timeline
     setattr(interactive_first_call_runtime, _SENTINEL, True)
+
+
+def _postgresql_runtime_active() -> bool:
+    try:
+        from app.persistence.runtime_install import runtime_adapters_installed
+
+        return runtime_adapters_installed()
+    except Exception:
+        return False
 
 
 def _session_lock(session_id: str) -> threading.RLock:

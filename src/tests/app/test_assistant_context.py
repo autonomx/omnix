@@ -18,7 +18,7 @@ from app.assistant_context.service import AssistantContextService
 from app.assistant_context.vision import DesktopVisionClient
 from app.assistant_context.web_search import should_search_automatically
 from app.chat import ChatSessionStore, CreateChatSessionRequest
-from app.jobs import SQLiteJobStore
+from app.jobs import InMemoryJobStore
 
 
 class FakeProvider:
@@ -226,7 +226,7 @@ def test_enriched_chat_route_keeps_visible_message_clean_and_injects_context(mon
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
 
     chat_store = ChatSessionStore(tmp_path / "chat.json")
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     session = chat_store.create_session(
         CreateChatSessionRequest(
             title="New chat",

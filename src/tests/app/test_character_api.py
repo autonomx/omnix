@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.chat import ChatMessage, default_chat_store
-from app.chat.repository import SQLiteChatRepository
+from app.chat.repository import InMemoryChatRepository
 from app.gateway.main import create_gateway_app
 
 
@@ -228,7 +228,7 @@ def test_character_session_persists_shared_read_only_policy(tmp_path: Path, monk
     assert disabled.json()["active_segment_id"] != first_segment
 
 
-def test_chat_sqlite_v1_migrates_interaction_columns(tmp_path: Path) -> None:
+def test_chat_runtime_repository_does_not_mutate_legacy_sqlite_source(tmp_path: Path) -> None:
     path = tmp_path / "chat.sqlite3"
     with sqlite3.connect(path) as connection:
         connection.executescript(
@@ -252,9 +252,12 @@ def test_chat_sqlite_v1_migrates_interaction_columns(tmp_path: Path) -> None:
             CREATE TABLE chat_import_state(source_path TEXT PRIMARY KEY, source_hash TEXT NOT NULL, status TEXT NOT NULL, imported_session_count INTEGER NOT NULL, imported_message_count INTEGER NOT NULL, skipped_session_count INTEGER NOT NULL, errors_json TEXT NOT NULL, updated_at TEXT NOT NULL);
             """
         )
-    SQLiteChatRepository(path)
+
+    repository = InMemoryChatRepository(path)
+    assert repository.load_sessions() == []
+
     with sqlite3.connect(path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(chat_sessions)")}
         version = connection.execute("SELECT version FROM chat_schema_version").fetchone()[0]
-    assert version == 2
-    assert {"interaction_mode", "character_id", "voice_asset_id", "effective_identity_hash"} <= columns
+    assert version == 1
+    assert "interaction_mode" not in columns

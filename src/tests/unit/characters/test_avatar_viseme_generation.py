@@ -13,12 +13,13 @@ from app.characters.avatar_viseme_generation import (
     CharacterVisemeGenerationService,
 )
 from app.characters.service import CharacterService
-from app.jobs import CompleteJobRequest, SQLiteJobStore
+from app.jobs import CompleteJobRequest
+from app.testing.in_memory_job_store import InMemoryJobStore
 
 
 def _complete_image_job(
     tmp_path: Path,
-    jobs: SQLiteJobStore,
+    jobs: InMemoryJobStore,
     assets: SharedAssetStore,
     job_id: str,
     name: str,
@@ -103,7 +104,7 @@ def test_viseme_generation_upgrades_existing_pack_and_preserves_fallbacks(tmp_pa
             expression_frames={"listening": "image:maya-closed"},
         ),
     )
-    jobs = SQLiteJobStore(tmp_path / "jobs.sqlite3")
+    jobs = InMemoryJobStore(tmp_path / "jobs.sqlite3")
     service = CharacterVisemeGenerationService(
         CharacterVisemeGenerationRepository(database),
         character_service=character_service,
@@ -134,7 +135,7 @@ def test_viseme_generation_upgrades_existing_pack_and_preserves_fallbacks(tmp_pa
     assert pack.expression_frames["listening"] == "image:maya-closed"
 
 
-def test_avatar_repository_migrates_renderer_columns_without_data_loss(tmp_path: Path) -> None:
+def test_avatar_runtime_repository_does_not_mutate_legacy_sqlite_source(tmp_path: Path) -> None:
     database = tmp_path / "characters.sqlite3"
     with sqlite3.connect(database) as connection:
         connection.execute(
@@ -167,9 +168,13 @@ def test_avatar_repository_migrates_renderer_columns_without_data_loss(tmp_path:
                 "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00",
             ),
         )
+
     repository = CharacterAvatarRepository(database)
-    pack = repository.get("maya")
-    assert pack is not None
-    assert pack.renderer == "sprite"
-    assert pack.rig_asset_id is None
-    assert pack.mouth_frames["closed"] == "image:maya"
+    assert repository.get("maya") is None
+
+    with sqlite3.connect(database) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(character_avatar_packs)")}
+        row_count = connection.execute("SELECT COUNT(*) FROM character_avatar_packs").fetchone()[0]
+    assert row_count == 1
+    assert "renderer" not in columns
+    assert "rig_asset_id" not in columns

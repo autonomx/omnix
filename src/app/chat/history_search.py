@@ -1,16 +1,19 @@
-"""Scope-first FTS5 retrieval for historical Chat messages."""
+"""Scope-first provider-free retrieval for historical chat messages.
+
+PostgreSQL full-text/search queries are installed for production. Tests use the
+in-memory chat repository and deterministic token matching.
+"""
 from __future__ import annotations
 
-import json
 import re
-import sqlite3
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.assistant_memory.settings import load_memory_runtime_settings
+from app.testing.in_memory_chat_repository import sessions_for_path
 
-from .models import ChatMessage, MessageContentPurpose, project_message_content
+from .models import MessageContentPurpose, project_message_content
 from .prompt_assembly import PromptHistoryItem
 from .repository import default_chat_db_path
 
@@ -35,106 +38,77 @@ def history_recall_enabled() -> bool:
     return load_memory_runtime_settings().history_recall_enabled
 
 
-class SQLiteHistorySearchService:
+class InMemoryHistorySearchService:
     def __init__(self, db_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path) if db_path is not None else default_chat_db_path()
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(str(self.db_path), timeout=5.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA busy_timeout = 5000")
-        return connection
-
     def ensure_index(self) -> HistorySearchStatus:
-        try:
-            with self._connect() as connection:
-                connection.execute("""
-                    CREATE VIRTUAL TABLE IF NOT EXISTS chat_message_fts USING fts5(
-                        message_id UNINDEXED, session_id UNINDEXED, profile_id UNINDEXED,
-                        workspace_id UNINDEXED, project_id UNINDEXED, role UNINDEXED,
-                        content, created_at UNINDEXED
-                    )
-                """)
-                count = int(connection.execute("SELECT COUNT(*) FROM chat_message_fts").fetchone()[0])
-            return HistorySearchStatus(available=True, reason="ready", indexed_messages=count)
-        except sqlite3.OperationalError as exc:
-            return HistorySearchStatus(available=False, reason=f"fts5_unavailable:{exc}")
+        count = sum(
+            1
+            for session in sessions_for_path(self.db_path)
+            for message in session.messages
+            if message.role in {"user", "assistant"}
+            and project_message_content(message, MessageContentPurpose.SEARCH).strip()
+        )
+        return HistorySearchStatus(
+            available=True,
+            reason="in_memory_ready",
+            indexed_messages=count,
+        )
 
     def sync_index(self) -> HistorySearchStatus:
-        status = self.ensure_index()
-        if not status.available:
-            return status
-        try:
-            with self._connect() as connection:
-                rows = connection.execute("""
-                    SELECT message.id, message.session_id, session.profile_id,
-                           session.workspace_id, COALESCE(session.project_id, '') AS project_id,
-                           message.role, message.content, message.created_at, message.metadata_json
-                    FROM chat_messages AS message
-                    JOIN chat_sessions AS session ON session.id = message.session_id
-                    WHERE message.role IN ('user', 'assistant')
-                    ORDER BY message.session_id ASC, message.position ASC
-                """).fetchall()
-                connection.execute("DELETE FROM chat_message_fts")
-                indexed = 0
-                for row in rows:
-                    message = ChatMessage(
-                        id=row["id"], role=row["role"], content=row["content"],
-                        created_at=row["created_at"], metadata=json.loads(row["metadata_json"] or "{}"),
-                    )
-                    content = project_message_content(message, MessageContentPurpose.SEARCH)
-                    if not content.strip():
-                        continue
-                    connection.execute("""
-                        INSERT INTO chat_message_fts(
-                            message_id, session_id, profile_id, workspace_id,
-                            project_id, role, content, created_at
-                        ) VALUES (?,?,?,?,?,?,?,?)
-                    """, (
-                        row["id"], row["session_id"], row["profile_id"], row["workspace_id"],
-                        row["project_id"], row["role"], content, row["created_at"],
-                    ))
-                    indexed += 1
-            return HistorySearchStatus(available=True, reason="ready", indexed_messages=indexed)
-        except sqlite3.OperationalError as exc:
-            return HistorySearchStatus(available=False, reason=f"fts5_sync_failed:{exc}")
+        return self.ensure_index()
 
-    def search(self, query: str, *, profile_id: str, workspace_id: str,
-               project_id: str | None, exclude_session_id: str | None = None,
-               limit: int = 6) -> HistorySearchResult:
-        status = self.sync_index()
+    def search(
+        self,
+        query: str,
+        *,
+        profile_id: str,
+        workspace_id: str,
+        project_id: str | None,
+        exclude_session_id: str | None = None,
+        limit: int = 6,
+    ) -> HistorySearchResult:
         terms = list(dict.fromkeys(term.casefold() for term in _TERM_PATTERN.findall(query)))[:12]
-        if not status.available or not terms:
+        status = self.ensure_index()
+        if not terms:
             return HistorySearchResult(items=[], query_terms=terms, status=status)
-        fts_query = " OR ".join(f'"{term}"' for term in terms)
-        clauses = ["chat_message_fts MATCH ?", "profile_id = ?", "workspace_id = ?", "project_id = ?"]
-        params: list[object] = [fts_query, profile_id, workspace_id, project_id or ""]
-        if exclude_session_id:
-            clauses.append("session_id != ?")
-            params.append(exclude_session_id)
-        params.append(max(0, min(limit, 50)))
-        query_sql = (
-            "SELECT message_id, session_id, role, content, created_at, bm25(chat_message_fts) AS rank "
-            "FROM chat_message_fts WHERE " + " AND ".join(clauses)
-            + " ORDER BY rank ASC, created_at DESC, message_id ASC LIMIT ?"
-        )
-        try:
-            with self._connect() as connection:
-                rows = connection.execute(query_sql, tuple(params)).fetchall()
-        except sqlite3.OperationalError as exc:
-            failed = HistorySearchStatus(
-                available=False, reason=f"fts5_query_failed:{exc}",
-                indexed_messages=status.indexed_messages,
-            )
-            return HistorySearchResult(items=[], query_terms=terms, status=failed)
+        matches: list[tuple[int, str, PromptHistoryItem]] = []
+        for session in sessions_for_path(self.db_path):
+            if session.profile_id != profile_id or session.workspace_id != workspace_id:
+                continue
+            if (session.project_id or "") != (project_id or ""):
+                continue
+            if exclude_session_id and session.id == exclude_session_id:
+                continue
+            for message in session.messages:
+                if message.role not in {"user", "assistant"}:
+                    continue
+                content = project_message_content(message, MessageContentPurpose.SEARCH)
+                lowered = content.casefold()
+                score = sum(1 for term in terms if term in lowered)
+                if score == 0:
+                    continue
+                matches.append(
+                    (
+                        -score,
+                        message.created_at,
+                        PromptHistoryItem(
+                            session_id=session.id,
+                            message_id=message.id,
+                            role=message.role,
+                            content=content,
+                            created_at=message.created_at,
+                        ),
+                    )
+                )
+        matches.sort(key=lambda item: (item[0], item[1], item[2].message_id), reverse=False)
         return HistorySearchResult(
-            items=[PromptHistoryItem(
-                session_id=row["session_id"], message_id=row["message_id"], role=row["role"],
-                content=row["content"], created_at=row["created_at"],
-            ) for row in rows],
-            query_terms=terms, status=status,
+            items=[item[2] for item in matches[: max(0, min(int(limit), 50))]],
+            query_terms=terms,
+            status=status,
         )
 
 
-def default_history_search_service() -> SQLiteHistorySearchService:
-    return SQLiteHistorySearchService()
+def default_history_search_service() -> InMemoryHistorySearchService:
+    return InMemoryHistorySearchService()

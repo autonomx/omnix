@@ -7,7 +7,7 @@ from typing import Any
 
 from app.gateway.rpg_turn_job_mirror import _apply_turn_with_job_mirror
 from app.jobs.rpg_foreground_submission_store import RpgForegroundSubmissionStore
-from app.jobs.store import SQLiteJobStore
+from app.testing.in_memory_job_store import InMemoryJobStore
 
 
 def _time(second: int = 0) -> datetime:
@@ -122,11 +122,11 @@ def test_pre_execution_lease_can_be_renewed(tmp_path: Path) -> None:
     assert after_expiry.claim_token != first.claim_token
 
 
-def test_legacy_claim_migration_is_conservative(tmp_path: Path) -> None:
+def test_runtime_claim_store_does_not_read_or_mutate_legacy_sqlite_claims(tmp_path: Path) -> None:
     db_path = tmp_path / "jobs.sqlite"
     legacy_time = _time().isoformat()
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
             """
             CREATE TABLE rpg_foreground_submissions (
                 session_id TEXT NOT NULL,
@@ -142,7 +142,7 @@ def test_legacy_claim_migration_is_conservative(tmp_path: Path) -> None:
             )
             """
         )
-        conn.execute(
+        connection.execute(
             """
             INSERT INTO rpg_foreground_submissions (
                 session_id, submission_id, status, claim_token,
@@ -153,16 +153,27 @@ def test_legacy_claim_migration_is_conservative(tmp_path: Path) -> None:
         )
 
     store = RpgForegroundSubmissionStore(db_path)
-    migrated = store.get("session:legacy", "submit:legacy")
-    duplicate = store.claim(
-        "session:legacy",
-        "submit:legacy",
+
+    assert store.get("session:legacy", "submit:legacy") is None
+    fresh = store.claim(
+        "session:fresh",
+        "submit:fresh",
         now=_time() + timedelta(days=1),
     )
+    assert fresh.owner is True
+    assert not hasattr(store, "_connect")
 
-    assert migrated is not None
-    assert migrated.execution_started_at == legacy_time
-    assert duplicate.owner is False
+    with sqlite3.connect(db_path) as connection:
+        rows = connection.execute(
+            "SELECT session_id, submission_id, status, claim_token FROM rpg_foreground_submissions"
+        ).fetchall()
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(rpg_foreground_submissions)").fetchall()
+        }
+    assert rows == [("session:legacy", "submit:legacy", "claimed", "legacy-token")]
+    assert "lease_expires_at" not in columns
+    assert "execution_started_at" not in columns
 
 
 def test_gateway_recovers_abandoned_pre_execution_claim(
@@ -170,7 +181,7 @@ def test_gateway_recovers_abandoned_pre_execution_claim(
     tmp_path: Path,
 ) -> None:
     db_path = tmp_path / "jobs.sqlite"
-    job_store = SQLiteJobStore(db_path)
+    job_store = InMemoryJobStore(db_path)
     submission_store = RpgForegroundSubmissionStore(db_path)
     old_claim = submission_store.claim(
         "session:gateway-recovery",

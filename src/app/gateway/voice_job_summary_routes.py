@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, Query
 
-from app.jobs import JobListResponse, SQLiteJobStore, default_job_store
+from app.jobs import JobListResponse, default_job_store
 
 from .job_summaries import voice_job_projections
 
@@ -33,23 +33,10 @@ def register_voice_job_summary_routes(gateway: FastAPI) -> None:
 
 
 def _recent_voice_jobs(store: Any, limit: int) -> list[Any]:
-    """Read only the requested recent rows when the SQLite store is available."""
-    if isinstance(store, SQLiteJobStore):
-        with store._connect() as conn:  # noqa: SLF001 - bounded projection adapter
-            rows = conn.execute(
-                """
-                SELECT * FROM jobs
-                WHERE module IN (?, ?)
-                ORDER BY created_at DESC, id DESC
-                LIMIT ?
-                """,
-                (*VOICE_JOB_MODULES, limit),
-            ).fetchall()
-        return [store._row_to_job(row) for row in rows]  # noqa: SLF001
-
+    """Read a bounded projection through the active job-store contract."""
     return [
         job
-        for job in store.list_jobs()
+        for job in store.list_jobs(limit=max(limit, DEFAULT_VOICE_JOB_LIMIT))
         if job.module in VOICE_JOB_MODULES
     ][:limit]
 
@@ -67,4 +54,4 @@ def install_voice_job_summary_hook() -> None:
             register_voice_job_summary_routes(self)
 
     FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)
+    setattr(FastAPI, _ROUTE_SENTINEL, True)
