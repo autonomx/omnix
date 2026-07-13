@@ -1,11 +1,10 @@
-"""Final Omnix persistence retirement hook loaded after ``sitecustomize``."""
+"""Omnix user customization hook.
+
+Persistence startup is intentionally not installed through Python's implicit
+``usercustomize`` mechanism. The supported application launcher calls the
+explicit PostgreSQL bootstrap before importing feature modules. Keeping this
+module inert prevents test collection, package installation, and unrelated
+operator scripts from contacting the authoritative database unexpectedly.
+"""
 
 from __future__ import annotations
-
-import os
-
-
-if (os.environ.get("OMNIX_PERSISTENCE_MODE") or "postgresql").strip().lower() == "postgresql":
-    from app.persistence.legacy_authority_block import install_legacy_authority_block
-
-    install_legacy_authority_block()
