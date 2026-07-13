@@ -16,9 +16,9 @@ from .conversation_repositories import (
 from .database import PostgresDatabase, default_database
 from .execution_repositories import (
     PostgresForegroundSubmissionRepository,
-    PostgresJobRepository,
     PostgresOutboxRepository,
 )
+from .job_repository import PostgresJobRepository
 from .repositories import (
     PostgresAuditRepository,
     PostgresIdempotencyRepository,
