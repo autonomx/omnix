@@ -1,25 +1,26 @@
-"""Provider/model cache status without heavyweight provider instantiation."""
+"""Provider/model cache status without heavyweight provider instantiation.
+
+Production refresh history is PostgreSQL-backed. Provider-free tests use an
+in-memory history store; no SQLite database or schema remains.
+"""
 from __future__ import annotations
 
-import json
-import os
-import sqlite3
 import socket
+import threading
 import uuid
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 
 from app.jobs.executor import JobHandler
-from app.jobs.models import CreateJobRequest, JobStage, ResourceClass
-from app.jobs.models import JobRecord
+from app.jobs.models import CreateJobRequest, JobRecord, JobStage, ResourceClass
 from app.providers.facade import default_provider_facade
-from app.runtime_paths import resources_data_root, resources_models_root
-
+from app.runtime_paths import resources_models_root
 
 CacheStatus = Literal["available", "configured", "missing_path", "not_configured", "unreachable"]
 RefreshScope = Literal["providers", "models", "all"]
@@ -71,47 +72,14 @@ UrlReachable = Callable[[str], bool]
 ProviderFacadeFactory = Callable[[], Any]
 CacheStatusFactory = Callable[[], ProviderModelCachePayload]
 
-
-def default_provider_model_refresh_db_path() -> Path:
-    override = os.environ.get("OMNIX_PROVIDER_MODEL_REFRESH_DB_PATH")
-    if override:
-        return Path(override)
-    return resources_data_root() / "omnix_provider_model_refresh.sqlite"
+_REFRESH_HISTORY: dict[str, list[ProviderModelRefreshSnapshot]] = {}
+_REFRESH_LOCK = threading.RLock()
 
 
-class SQLiteProviderModelRefreshStore:
-    """Durable provider/model discovery refresh history."""
-
+class InMemoryProviderModelRefreshStore:
     def __init__(self, db_path: str | Path | None = None) -> None:
-        self.db_path = Path(db_path) if db_path is not None else default_provider_model_refresh_db_path()
-        if self.db_path != Path(":memory:"):
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
-
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init_schema(self) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS provider_model_refresh_snapshots (
-                    id TEXT PRIMARY KEY,
-                    scope TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    snapshot_json TEXT NOT NULL
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_provider_model_refresh_created
-                ON provider_model_refresh_snapshots(created_at)
-                """
-            )
+        self.db_path = Path(db_path) if db_path is not None else Path(":memory:")
+        self._key = str(self.db_path)
 
     def record_snapshot(
         self,
@@ -123,37 +91,24 @@ class SQLiteProviderModelRefreshStore:
     ) -> ProviderModelRefreshSnapshot:
         provider_data = _payload_to_dict(provider_payload)
         cache_data = _payload_to_dict(cache_payload)
-        provider_count = len(_safe_list(provider_data.get("providers")))
-        model_count = len(_safe_list(provider_data.get("models")))
-        cache_status = _safe_str(cache_data.get("status")).strip() or "unknown"
-        diagnostics = [item for item in _safe_list(cache_data.get("diagnostics")) if isinstance(item, dict)]
+        diagnostics = [
+            item for item in _safe_list(cache_data.get("diagnostics")) if isinstance(item, dict)
+        ]
         snapshot = ProviderModelRefreshSnapshot(
             id=f"provider-model-refresh:{uuid.uuid4().hex}",
             scope=scope,
             reason=reason,
-            status="degraded" if diagnostics or cache_status == "degraded" else "ready",
-            provider_count=provider_count,
-            model_count=model_count,
-            cache_status=cache_status,
+            status="degraded" if diagnostics or _safe_str(cache_data.get("status")) == "degraded" else "ready",
+            provider_count=len(_safe_list(provider_data.get("providers"))),
+            model_count=len(_safe_list(provider_data.get("models"))),
+            cache_status=_safe_str(cache_data.get("status")).strip() or "unknown",
             diagnostics=diagnostics,
             provider_payload=provider_data,
             cache_payload=cache_data,
             created_at=_utcnow(),
         )
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO provider_model_refresh_snapshots (id, scope, status, created_at, snapshot_json)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    snapshot.id,
-                    snapshot.scope,
-                    snapshot.status,
-                    snapshot.created_at,
-                    json.dumps(snapshot.model_dump(mode="json"), sort_keys=True, separators=(",", ":")),
-                ),
-            )
+        with _REFRESH_LOCK:
+            _REFRESH_HISTORY.setdefault(self._key, []).append(deepcopy(snapshot))
         return snapshot
 
     def latest_snapshot(self) -> ProviderModelRefreshSnapshot | None:
@@ -161,24 +116,27 @@ class SQLiteProviderModelRefreshStore:
         return snapshots[0] if snapshots else None
 
     def list_snapshots(self, *, limit: int = 20) -> list[ProviderModelRefreshSnapshot]:
-        safe_limit = max(1, min(int(limit), 500))
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT snapshot_json FROM provider_model_refresh_snapshots
-                ORDER BY created_at DESC, id DESC
-                LIMIT ?
-                """,
-                (safe_limit,),
-            ).fetchall()
-        return [ProviderModelRefreshSnapshot(**_json_loads(str(row["snapshot_json"]))) for row in rows]
+        with _REFRESH_LOCK:
+            values = sorted(
+                _REFRESH_HISTORY.setdefault(self._key, []),
+                key=lambda item: (item.created_at, item.id),
+                reverse=True,
+            )
+            return deepcopy(values[: max(1, min(int(limit), 500))])
 
     def history(self, *, limit: int = 20) -> ProviderModelRefreshHistory:
         return ProviderModelRefreshHistory(snapshots=self.list_snapshots(limit=limit))
 
 
-def default_provider_model_refresh_store() -> SQLiteProviderModelRefreshStore:
-    return SQLiteProviderModelRefreshStore()
+SQLiteProviderModelRefreshStore = InMemoryProviderModelRefreshStore
+
+
+def default_provider_model_refresh_db_path() -> Path:
+    return Path(":memory:provider-refresh")
+
+
+def default_provider_model_refresh_store() -> InMemoryProviderModelRefreshStore:
+    return InMemoryProviderModelRefreshStore()
 
 
 class ProviderModelCacheStatusService:
@@ -354,33 +312,17 @@ def get_provider_model_cache_status() -> ProviderModelCachePayload:
 
 
 def create_provider_model_refresh_job_request(request: ProviderModelRefreshRequest) -> CreateJobRequest:
-    stages = [
-        JobStage(
-            id="discover-providers",
-            label="Discover providers",
-            resource_class=ResourceClass.CPU,
-        ),
-        JobStage(
-            id="discover-local-models",
-            label="Discover local models",
-            resource_class=ResourceClass.CPU,
-        ),
-        JobStage(
-            id="publish-cache-status",
-            label="Publish provider/model cache status",
-            resource_class=ResourceClass.CPU,
-        ),
-    ]
     return CreateJobRequest(
         module="platform",
         type="providers.models.refresh",
         resource_class=ResourceClass.CPU,
         priority=request.priority,
-        stages=stages,
-        input_payload={
-            "scope": request.scope,
-            "reason": request.reason,
-        },
+        stages=[
+            JobStage(id="discover-providers", label="Discover providers", resource_class=ResourceClass.CPU),
+            JobStage(id="discover-local-models", label="Discover local models", resource_class=ResourceClass.CPU),
+            JobStage(id="publish-cache-status", label="Publish provider/model cache status", resource_class=ResourceClass.CPU),
+        ],
+        input_payload={"scope": request.scope, "reason": request.reason},
         compat={
             "contract": "provider_model_refresh_v1",
             "event_families": ["job.created", "job.updated", "job.completed", "job.failed", "job.canceled"],
@@ -389,7 +331,7 @@ def create_provider_model_refresh_job_request(request: ProviderModelRefreshReque
 
 
 def create_provider_model_refresh_handlers(
-    store: SQLiteProviderModelRefreshStore,
+    store: Any,
     *,
     provider_facade_factory: ProviderFacadeFactory = default_provider_facade,
     cache_status_factory: CacheStatusFactory = get_provider_model_cache_status,
@@ -406,45 +348,37 @@ def create_provider_model_refresh_handlers(
 
 def _handle_provider_model_refresh_job(
     job: JobRecord,
-    store: SQLiteProviderModelRefreshStore,
+    store: Any,
     *,
     provider_facade_factory: ProviderFacadeFactory,
     cache_status_factory: CacheStatusFactory,
 ) -> dict[str, Any]:
     payload = job.input_payload or {}
-    scope = _safe_refresh_scope(payload.get("scope"))
-    reason = _safe_optional_str(payload.get("reason"))
-    provider_payload = provider_facade_factory().payload()
-    cache_payload = cache_status_factory()
     snapshot = store.record_snapshot(
-        scope=scope,
-        reason=reason,
-        provider_payload=provider_payload,
-        cache_payload=cache_payload,
+        scope=_safe_refresh_scope(payload.get("scope")),
+        reason=_safe_optional_str(payload.get("reason")),
+        provider_payload=provider_facade_factory().payload(),
+        cache_payload=cache_status_factory(),
     )
     return {
-        "logs": [
-            {
-                "level": "info",
-                "message": "provider/model refresh completed",
-                "snapshot_id": snapshot.id,
-                "scope": snapshot.scope,
-                "provider_count": snapshot.provider_count,
-                "model_count": snapshot.model_count,
-                "cache_status": snapshot.cache_status,
-            }
-        ],
-        "output_refs": [
-            {
-                "kind": "provider_model_refresh",
-                "snapshot_id": snapshot.id,
-                "scope": snapshot.scope,
-                "provider_count": snapshot.provider_count,
-                "model_count": snapshot.model_count,
-                "cache_status": snapshot.cache_status,
-                "status": snapshot.status,
-            }
-        ],
+        "logs": [{
+            "level": "info",
+            "message": "provider/model refresh completed",
+            "snapshot_id": snapshot.id,
+            "scope": snapshot.scope,
+            "provider_count": snapshot.provider_count,
+            "model_count": snapshot.model_count,
+            "cache_status": snapshot.cache_status,
+        }],
+        "output_refs": [{
+            "kind": "provider_model_refresh",
+            "snapshot_id": snapshot.id,
+            "scope": snapshot.scope,
+            "provider_count": snapshot.provider_count,
+            "model_count": snapshot.model_count,
+            "cache_status": snapshot.cache_status,
+            "status": snapshot.status,
+        }],
     }
 
 
@@ -457,11 +391,7 @@ def _safe_list(value: Any) -> list[Any]:
 
 
 def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
+    return "" if value is None else value if isinstance(value, str) else str(value)
 
 
 def _safe_optional_str(value: Any) -> str | None:
@@ -471,20 +401,13 @@ def _safe_optional_str(value: Any) -> str | None:
 
 def _safe_refresh_scope(value: Any) -> RefreshScope:
     text = _safe_str(value).strip()
-    if text in {"providers", "models", "all"}:
-        return text  # type: ignore[return-value]
-    return "all"
+    return text if text in {"providers", "models", "all"} else "all"  # type: ignore[return-value]
 
 
 def _payload_to_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, BaseModel):
         return value.model_dump(mode="json")
     return value if isinstance(value, dict) else {}
-
-
-def _json_loads(value: str) -> dict[str, Any]:
-    data = json.loads(value)
-    return data if isinstance(data, dict) else {}
 
 
 def _utcnow() -> str:
