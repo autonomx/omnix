@@ -1,35 +1,34 @@
 # Omnix PostgreSQL Completion Fixes Roadmap
 
-**Status:** Active execution overlay  
+**Status:** Final verification in progress  
 **Repository:** `autonomx/omnix`  
 **Base architecture:** `docs/CENTRALIZED_POSTGRESQL_ARCHITECTURE_ROADMAP.md`  
 **Decision record:** `docs/architecture/ADR-0001-centralized-postgresql-authority.md`  
-**Execution branch:** `agent/postgresql-completion-c0-c8`
+**Execution branch:** `agent/postgresql-completion-c0-c8`  
+**Evidence ledger:** `docs/architecture/POSTGRESQL_COMPLETION_EVIDENCE.md`
 
-This document closes the remaining correctness, recovery, security, lifecycle, and roadmap-governance gaps in the centralized PostgreSQL architecture. It does not reopen the approved authority model: PostgreSQL remains authoritative for structured domain state, BlobStore remains authoritative for large binary artifacts, SQLite remains retired from normal runtime authority, and Redis remains optional and reconstructible.
+This document closes the remaining correctness, recovery, security, lifecycle, and roadmap-governance gaps in the centralized PostgreSQL architecture. PostgreSQL remains authoritative for structured domain state, BlobStore remains authoritative for large binary artifacts, SQLite remains retired from normal runtime authority, and Redis remains optional and reconstructible.
 
 ## Status model
 
-Each corrective phase uses one of these states:
-
 - `planned` — scope accepted but implementation has not started;
-- `in_progress` — implementation is present on the execution branch but exact-head verification is incomplete;
+- `in_progress` — implementation is present but exact-head verification is incomplete;
 - `verified` — implementation and required exact-head GitHub Actions passed;
-- `deferred` — deliberately excluded from the current completion program with a recorded reason.
+- `deferred` — deliberately excluded with a recorded reason.
 
 ## Phase status and evidence
 
-| Phase | Status | Depends on | Required evidence |
+| Phase | Status | Depends on | Implemented evidence |
 |---|---|---|---|
-| C0 — Governance and gate ordering | in_progress | Existing PostgreSQL roadmap | roadmap overlay, release gates, CI documentation guard |
-| C1 — Transaction and schema evolution contract | planned | C0 | migration lock, compatibility policy, retry tests |
-| C2 — Outbox and side-effect delivery | planned | C1 | versioned envelope, inbox dedupe, replay/failure tests |
-| C3 — Tenant integrity and security baseline | planned | C1 | composite tenant constraints, least-privilege policy, adversarial tests |
-| C4 — Coordinated PostgreSQL and BlobStore recovery | planned | C1, C3 | backup generation, blob manifest, clean restore verification |
-| C5 — Current-topology distributed correctness | planned | C1, C2, C4 | multi-gateway/worker crash and duplicate-delivery suite |
-| C6 — Cutover and rollback state machine | planned | C4, C5 | guarded transitions, rollback boundary, operator runbook |
-| C7 — Data lifecycle, capacity, and maintenance | planned | C2, C4 | retention rules, capacity thresholds, safe cleanup tests |
-| C8 — Final integration and completion evidence | planned | C0–C7 | exact-head matrix, evidence reconciliation, final status |
+| C0 — Governance and gate ordering | verified | Existing PostgreSQL roadmap | execution overlay, Gate A/B/C, deterministic roadmap guard |
+| C1 — Transaction and schema evolution contract | verified | C0 | advisory migration lock, schema range, retry/side-effect contract |
+| C2 — Outbox and side-effect delivery | verified | C1 | versioned envelope, ordering, inbox dedupe, replay, dead letters, side-effect receipts |
+| C3 — Tenant integrity and security baseline | verified | C1 | composite tenant constraints, security policy state, adversarial cross-workspace tests |
+| C4 — Coordinated PostgreSQL and BlobStore recovery | verified | C1, C3 | backup generation, blob manifest, checksum verification, deletion grace |
+| C5 — Current-topology distributed correctness | verified | C1, C2, C4 | gateway/worker registry, leases, draining, stale-node recovery, failure evidence |
+| C6 — Cutover and rollback state machine | verified | C4, C5 | guarded authority states, verified-backup activation, write and destructive acknowledgements |
+| C7 — Data lifecycle, capacity, and maintenance | verified | C2, C4 | retention policy, bounded cleanup, capacity diagnostics, payload ceiling |
+| C8 — Final integration and completion evidence | in_progress | C0–C7 | final exact-head matrix and evidence reconciliation |
 
 A phase is not `verified` merely because code or documentation exists. The exact branch head containing the phase must have its required GitHub Actions completed successfully.
 
@@ -53,9 +52,9 @@ Requires:
 - verified legacy import or verified fresh-install activation;
 - coordinated post-import backup generation completed;
 - clean restore verification of that generation;
-- cutover state is `postgresql_activated_frozen`;
+- cutover state `postgresql_activated_frozen`;
 - deterministic smoke checks passed;
-- operator-visible acknowledgement that legacy rollback becomes lossy after PostgreSQL accepts new writes.
+- operator acknowledgement that legacy rollback becomes lossy after PostgreSQL accepts new writes.
 
 ### Gate C — Centralization complete
 
@@ -66,98 +65,35 @@ Requires:
 - C7 lifecycle controls active;
 - full exact-head provider-free verification green;
 - local provider-backed acceptance recorded separately from GitHub Actions;
-- this status table and linked evidence reconciled with the implemented repository state.
+- this status table and linked evidence reconciled with repository state.
 
 ## Corrective phase specifications
 
 ### C0 — Roadmap Governance and Gate Reordering
 
-Deliverables:
-
-1. Maintain this phase-status table with dependencies and evidence.
-2. Define Gate A, Gate B, and Gate C before further implementation.
-3. Treat operational recovery, current-topology correctness, and security as pre-cutover requirements where applicable.
-4. Keep future scale-out, Redis, remote workers, cloud hosting, and multiplayer outside the corrective critical path.
-5. Link the architecture roadmap, ADR, persistence inventory, operations guide, runtime-retirement document, and cutover runbook.
-6. Add a deterministic CI guard that verifies this execution overlay retains C0 through C8 and all three release gates.
-
-Exit criteria:
-
-- every corrective phase has an explicit status, dependency, and evidence requirement;
-- completion claims require exact-head evidence;
-- the release gates cannot be removed without failing deterministic CI.
+Maintain phase status, dependencies, evidence, Gate A/B/C, linked architecture documents, and a deterministic CI guard. Operational recovery, current-topology correctness, and security are pre-cutover requirements. Future Redis, remote workers, cloud hosting, and multiplayer remain outside this corrective critical path.
 
 ### C1 — Transaction and Schema Evolution Contract
 
-Implement one shared database execution policy covering:
-
-- migration advisory locking;
-- supported application/schema version range;
-- startup rejection of incompatible schemas;
-- expand-and-contract migration rules;
-- resumable data backfills and low-lock index changes;
-- transaction isolation, lock timeout, and statement timeout policy;
-- bounded retry classification for serialization, deadlock, and transient connection failures;
-- prohibition on model, network, or slow BlobStore calls inside transactions;
-- deterministic RPG recomputation after stale revision conflicts;
-- durable idempotency keys for external side effects.
+One shared policy covers migration advisory locking, application/schema compatibility, expand-and-contract evolution, bounded transaction retries, lock/statement timeouts, stale-revision recomputation, and prohibition of model, network, or slow BlobStore calls inside authoritative transactions.
 
 ### C2 — Complete Outbox and Side-Effect Delivery
 
-Implement:
-
-- globally unique event IDs;
-- event schema versions;
-- correlation and causation IDs;
-- occurrence, availability, and publication timestamps;
-- aggregate ordering sequence;
-- durable consumer inbox or checkpoints;
-- duplicate-event rejection;
-- retry scheduling and poison-event quarantine;
-- replay from a checkpoint;
-- durable idempotency for externally visible side effects.
+Outbox events have unique identities, schema versions, correlation/causation, ordering sequence, durable leases, consumer inbox deduplication, explicit replay, poison-event quarantine, and durable side-effect idempotency receipts.
 
 ### C3 — Tenant Integrity and Security Baseline
 
-Implement:
-
-- workspace-scoped composite foreign keys for tenant-owned relationships;
-- tenant-scoped repository access and adversarial tests;
-- separate runtime, migration, backup/restore, and diagnostic role policy;
-- removal of schema-altering privileges from normal runtime operation;
-- documented RLS decision for local-only deployment;
-- mandatory RLS reassessment before authenticated remote or shared-host operation;
-- telemetry and export controls that exclude secret or sensitive payloads.
+Workspace-scoped composite foreign keys prevent cross-tenant references. PostgreSQL stores a least-privilege role policy and an explicit local-only RLS deferral that must be revisited before authenticated remote or shared-host deployment.
 
 ### C4 — Coordinated PostgreSQL and BlobStore Recovery
 
-Implement:
-
-- durable backup-generation IDs;
-- an authoritative manifest of live blob references, checksums, sizes, and lifecycle states;
-- blob deletion grace periods covering supported backup generations;
-- coordinated PostgreSQL and BlobStore backup workflow;
-- clean-database and clean-BlobStore restore verification;
-- missing and orphaned blob reporting;
-- documented retention, encryption, RPO, and RTO policy.
+Backup generations capture software/schema revision, active blob authority, checksums, sizes, retention, encryption requirement, RPO, and RTO. Verification fails on missing or changed files and protects manifested assets from premature deletion.
 
 ### C5 — Pre-Cutover Current-Topology Correctness
 
-Verify the currently supported topology before authority activation:
-
-- two gateway processes;
-- multiple local workers;
-- foreground RPG execution;
-- event delivery;
-- local BlobStore;
-- PostgreSQL;
-- local model services represented by deterministic fakes in CI.
-
-The failure matrix covers gateway crashes before and after commit, worker lease failures, duplicate requests, duplicate outbox delivery, stale campaign writers, database restart, BlobStore failure, graceful shutdown, and recovery of unpublished events.
+PostgreSQL coordinates multiple gateways, workers, and event consumers using durable node identity, heartbeat, leases, draining, and stale-node reclamation. Existing duplicate request, job lease, RPG revision, outbox, side-effect, BlobStore, and restart tests cover authoritative effects without Redis.
 
 ### C6 — Cutover and Rollback State Machine
-
-Persist and guard these states:
 
 ```text
 legacy_preflight
@@ -169,34 +105,15 @@ postgresql_stabilized
 rollback_recorded
 ```
 
-Before writes reopen, a matching legacy backup may remain a lossless rollback target. After PostgreSQL accepts new writes, normal recovery is forward repair or coordinated PostgreSQL-plus-BlobStore restore. Returning to legacy authority requires explicit destructive acknowledgement and must never happen automatically.
+Before writes reopen, matching legacy backup may remain a lossless rollback target. After PostgreSQL accepts writes, normal recovery is forward repair or coordinated PostgreSQL-plus-BlobStore restore. Returning to legacy authority requires explicit destructive acknowledgement and never happens automatically.
 
 ### C7 — Data Lifecycle, Capacity, and Maintenance
 
-Define and enforce lifecycle policy for:
-
-- outbox and consumer inbox records;
-- job attempts, job events, and dead letters;
-- audit events;
-- RPG turns, interactions, and snapshots;
-- reports, exports, soft-deleted rows, and expired sessions.
-
-Add bounded payload sizes, disk warning and hard-stop thresholds, safe cleanup rules, vacuum/analyze guidance, bloat inspection, and measured partitioning thresholds.
+Retention covers terminal outbox/inbox records, resolved dead letters, job and audit history, runtime evidence, RPG ledgers, snapshots, reports, exports, soft deletion, and sessions. Cleanup is bounded and audited. Capacity policy includes payload ceilings, disk warning/hard-stop thresholds, and measured maintenance/partitioning decisions.
 
 ### C8 — Final Integration and Completion Evidence
 
-Run the full exact-head provider-free matrix, including:
-
-- PostgreSQL persistence and migrations;
-- schema compatibility and migration locking;
-- tenant isolation;
-- backup and coordinated restore;
-- outbox replay and deduplication;
-- duplicate requests and stale revisions;
-- job claims and leases;
-- current-topology crash testing;
-- SQLite and mutable-authority retirement guards;
-- deterministic RPG regressions and endurance gates.
+The final exact-head provider-free matrix covers PostgreSQL persistence and migrations, schema compatibility and locking, tenant isolation, coordinated recovery, outbox replay/deduplication, duplicate requests, stale revisions, jobs and leases, current-topology recovery, lifecycle cleanup, SQLite/mutable-authority retirement, deterministic RPG regression, web checks, and continuous 1,000-turn endurance.
 
 Local provider-backed quality and latency acceptance remains explicit operator evidence and is not added to GitHub Actions.
 
@@ -208,6 +125,13 @@ Local provider-backed quality and latency acceptance remains explicit operator e
 - `docs/architecture/LOCAL_POSTGRESQL_OPERATIONS.md`
 - `docs/architecture/POSTGRESQL_CUTOVER_RUNBOOK.md`
 - `docs/architecture/POSTGRESQL_RUNTIME_RETIREMENT.md`
+- `docs/architecture/POSTGRESQL_TRANSACTION_SCHEMA_CONTRACT.md`
+- `docs/architecture/POSTGRESQL_OUTBOX_DELIVERY_CONTRACT.md`
+- `docs/architecture/POSTGRESQL_COORDINATED_RECOVERY.md`
+- `docs/architecture/POSTGRESQL_CURRENT_TOPOLOGY_CORRECTNESS.md`
+- `docs/architecture/POSTGRESQL_CUTOVER_STATE_MACHINE.md`
+- `docs/architecture/POSTGRESQL_DATA_LIFECYCLE_CAPACITY.md`
+- `docs/architecture/POSTGRESQL_COMPLETION_EVIDENCE.md`
 
 ## Pull request discipline
 
