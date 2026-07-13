@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from .models import CreateJobRequest, JobRecord, JobStage, ResourceClass
-from .store import SQLiteJobStore
+from .store import InMemoryJobStore
 
 
 class LegacyTTSQueue(Protocol):
@@ -20,7 +20,7 @@ class LegacyTTSQueue(Protocol):
 
 
 def enqueue_tts_job(
-    store: SQLiteJobStore,
+    store: InMemoryJobStore,
     legacy_queue: LegacyTTSQueue,
     *,
     text: str,
@@ -75,7 +75,7 @@ def enqueue_tts_job(
 
 
 def enqueue_image_job(
-    store: SQLiteJobStore,
+    store: InMemoryJobStore,
     *,
     payload: dict[str, Any],
     owner_id: str | None = None,
