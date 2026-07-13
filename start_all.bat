@@ -13,6 +13,7 @@ if not defined OMNIX_POSTGRES_CONTAINER set "OMNIX_POSTGRES_CONTAINER=omnix-post
 if not defined OMNIX_POSTGRES_START_WAIT_ATTEMPTS set "OMNIX_POSTGRES_START_WAIT_ATTEMPTS=30"
 if not defined OMNIX_LAUNCHER_AUTO_START set "OMNIX_LAUNCHER_AUTO_START=1"
 if not defined OMNIX_LAUNCHER_OPEN_BROWSER set "OMNIX_LAUNCHER_OPEN_BROWSER=1"
+if not defined OMNIX_BLOB_ROOT for %%I in ("%~dp0..\omnix-runtime\blobs") do set "OMNIX_BLOB_ROOT=%%~fI"
 
 call :ensure_postgres
 if errorlevel 1 (

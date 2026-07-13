@@ -6,6 +6,7 @@ from functools import lru_cache
 from typing import Any
 
 from .asset_compat import PostgresSharedAssetStoreAdapter
+from .avatar_compat import PostgresCharacterAvatarRepositoryAdapter
 from .character_compat import PostgresCharacterRepositoryAdapter
 from .chat_compat import PostgresChatRepositoryAdapter
 from .foreground_submission_compat import (
@@ -171,6 +172,8 @@ def _install_core_domain_adapters() -> None:
     from app.assets import store as asset_store_module
     from app.assistant_memory import service as memory_service_module
     from app.characters import repository as character_repository_module
+    from app.characters import avatar_repository as avatar_repository_module
+    from app.characters import avatar_service as avatar_service_module
     from app.characters import service as character_service_module
     from app.chat import repository as chat_repository_module
 
@@ -178,6 +181,12 @@ def _install_core_domain_adapters() -> None:
     memory_service_module.InMemoryMemoryRepository = PostgresMemoryRepositoryAdapter
     character_repository_module.CharacterRepository = PostgresCharacterRepositoryAdapter
     character_service_module.CharacterRepository = PostgresCharacterRepositoryAdapter
+    avatar_repository_module.CharacterAvatarRepository = (
+        PostgresCharacterAvatarRepositoryAdapter
+    )
+    avatar_service_module.CharacterAvatarRepository = (
+        PostgresCharacterAvatarRepositoryAdapter
+    )
     asset_store_module.SharedAssetStore = PostgresSharedAssetStoreAdapter
     assets_package.SharedAssetStore = PostgresSharedAssetStoreAdapter
 

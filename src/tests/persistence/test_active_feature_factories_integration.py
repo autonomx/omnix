@@ -74,6 +74,55 @@ from app.characters import service as character_service
 assert character_service.CharacterRepository.__name__ == "PostgresCharacterRepositoryAdapter"
 assert character_service.default_character_service().repository.__class__.__name__ == "PostgresCharacterRepositoryAdapter"
 
+from app.characters import avatar_service
+from app.characters.avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
+from app.characters.repository import CharacterConflictError
+assert avatar_service.CharacterAvatarRepository.__name__ == "PostgresCharacterAvatarRepositoryAdapter"
+avatar_repository = avatar_service.default_character_avatar_service().repository
+assert avatar_repository.__class__.__name__ == "PostgresCharacterAvatarRepositoryAdapter"
+avatar = avatar_repository.upsert(
+    "character:factory",
+    UpsertCharacterAvatarPackRequest(
+        render_mode="static",
+        base_asset_id="image:factory-avatar",
+        mouth_frames={"closed": "image:factory-avatar"},
+    ),
+)
+assert avatar.version == 1
+assert avatar_repository.get("character:factory") == avatar
+try:
+    avatar_repository.upsert(
+        "character:factory",
+        UpsertCharacterAvatarPackRequest(
+            expected_version=2,
+            render_mode="static",
+            base_asset_id="image:factory-avatar",
+        ),
+    )
+except CharacterConflictError:
+    pass
+else:
+    raise AssertionError("avatar optimistic version conflict was not enforced")
+assert avatar_repository.delete("character:factory") is True
+assert avatar_repository.get("character:factory") is None
+imported_avatar = CharacterAvatarPack(
+    character_id="character:imported",
+    version=7,
+    render_mode="viseme",
+    base_asset_id="image:imported-avatar",
+    mouth_frames={"closed": "image:imported-avatar"},
+    created_at="2026-07-01T00:00:00+00:00",
+    updated_at="2026-07-02T00:00:00+00:00",
+)
+assert avatar_repository.import_pack(imported_avatar) == imported_avatar
+assert avatar_repository.import_pack(imported_avatar) == imported_avatar
+try:
+    avatar_repository.import_pack(imported_avatar.model_copy(update={"version": 8}))
+except CharacterConflictError:
+    pass
+else:
+    raise AssertionError("non-identical avatar import replacement was not rejected")
+
 from app.assist_core import policy_store
 policy_store.write_pending({"confirmation:1": {"status": "pending"}})
 assert policy_store.read_pending()["confirmation:1"]["status"] == "pending"

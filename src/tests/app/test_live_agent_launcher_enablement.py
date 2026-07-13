@@ -47,6 +47,8 @@ def test_windows_launcher_loads_protected_database_credential_and_checks_health(
     assert "-Action launch" in source
     assert 'set "OMNIX_LAUNCHER_AUTO_START=1"' in source
     assert 'set "OMNIX_LAUNCHER_OPEN_BROWSER=1"' in source
+    assert 'if not defined OMNIX_BLOB_ROOT' in source
+    assert r"..\omnix-runtime\blobs" in source
     assert '"%RPG_FLUX_PYTHON%" -m app.persistence health' in source
     assert 'if /I "%~1"=="--database-credential-injected-check"' in source
     assert "ConvertFrom-SecureString" in credential_script
