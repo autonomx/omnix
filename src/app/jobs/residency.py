@@ -1,17 +1,18 @@
-"""Pure GPU model residency planning for the shared job scheduler."""
+"""Pure GPU model residency planning for the shared job scheduler.
+
+Production records are PostgreSQL-backed. Provider-free tests use the in-memory
+store defined here; no SQLite database or schema remains.
+"""
 from __future__ import annotations
 
-import json
-import os
-import sqlite3
+import threading
+from copy import deepcopy
 from enum import Enum
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel, Field
-
-from app.runtime_paths import resources_data_root
 
 from .executor import JobHandler
 from .models import CreateJobRequest, JobRecord, JobStage, ResourceClass
@@ -85,90 +86,49 @@ class ModelResidencyDiagnostics(BaseModel):
 
 ModelResidencyHook = Callable[[ModelResidencyRecord, JobRecord], dict[str, Any] | None]
 
+_RESIDENCY: dict[str, dict[str, ModelResidencyRecord]] = {}
+_RESIDENCY_LOCK = threading.RLock()
+
 
 def default_model_residency_db_path() -> Path:
-    override = os.environ.get("OMNIX_MODEL_RESIDENCY_DB_PATH")
-    if override:
-        return Path(override)
-    return resources_data_root() / "omnix_model_residency.sqlite"
+    return Path(":memory:model-residency")
 
 
-class SQLiteModelResidencyStore:
-    """Durable worker-reported model residency records."""
-
+class InMemoryModelResidencyStore:
     def __init__(self, db_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path) if db_path is not None else default_model_residency_db_path()
-        if self.db_path != Path(":memory:"):
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
-
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init_schema(self) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS model_residency (
-                    model_id TEXT PRIMARY KEY,
-                    worker_id TEXT,
-                    resource_class TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    record_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_model_residency_worker ON model_residency(worker_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_model_residency_status ON model_residency(status)")
+        self._key = str(self.db_path)
 
     def upsert_record(self, record: ModelResidencyRecord) -> ModelResidencyRecord:
-        payload = record.model_dump(mode="json")
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO model_residency (model_id, worker_id, resource_class, status, record_json, updated_at)
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(model_id) DO UPDATE SET
-                    worker_id = excluded.worker_id,
-                    resource_class = excluded.resource_class,
-                    status = excluded.status,
-                    record_json = excluded.record_json,
-                    updated_at = excluded.updated_at
-                """,
-                (
-                    record.model_id,
-                    record.worker_id,
-                    record.resource_class.value,
-                    record.status.value,
-                    json.dumps(payload, sort_keys=True, separators=(",", ":")),
-                ),
-            )
+        with _RESIDENCY_LOCK:
+            _RESIDENCY.setdefault(self._key, {})[record.model_id] = deepcopy(record)
         return record
 
     def delete_record(self, model_id: str) -> bool:
-        with self._connect() as conn:
-            result = conn.execute("DELETE FROM model_residency WHERE model_id = ?", (model_id,))
-        return bool(result.rowcount)
+        with _RESIDENCY_LOCK:
+            return _RESIDENCY.setdefault(self._key, {}).pop(model_id, None) is not None
 
     def list_records(self) -> list[ModelResidencyRecord]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT record_json FROM model_residency
-                ORDER BY worker_id ASC, resource_class ASC, model_id ASC
-                """
-            ).fetchall()
-        return [ModelResidencyRecord(**_json_loads(str(row["record_json"]))) for row in rows]
+        with _RESIDENCY_LOCK:
+            records = list(_RESIDENCY.setdefault(self._key, {}).values())
+            records.sort(
+                key=lambda item: (
+                    item.worker_id or "",
+                    item.resource_class.value,
+                    item.model_id,
+                )
+            )
+            return deepcopy(records)
 
     def diagnostics(self, policy: GpuResidencyPolicy | None = None) -> ModelResidencyDiagnostics:
         return get_model_residency_diagnostics(self.list_records(), policy)
 
 
-def default_model_residency_store() -> SQLiteModelResidencyStore:
-    return SQLiteModelResidencyStore()
+SQLiteModelResidencyStore = InMemoryModelResidencyStore
+
+
+def default_model_residency_store() -> InMemoryModelResidencyStore:
+    return InMemoryModelResidencyStore()
 
 
 def get_model_residency_diagnostics(
@@ -179,7 +139,11 @@ def get_model_residency_diagnostics(
     active = [
         record
         for record in records
-        if record.status in {ModelResidencyStatus.LOADING, ModelResidencyStatus.LOADED, ModelResidencyStatus.UNLOADING}
+        if record.status in {
+            ModelResidencyStatus.LOADING,
+            ModelResidencyStatus.LOADED,
+            ModelResidencyStatus.UNLOADING,
+        }
     ]
     errors = [record for record in records if record.status == ModelResidencyStatus.ERROR]
     warnings = []
@@ -201,13 +165,11 @@ def create_model_load_job_request(request: GpuResidencyRequest, *, priority: int
         type="model.load",
         resource_class=request.resource_class,
         priority=priority,
-        stages=[
-            JobStage(
-                id="load-model",
-                label=f"Load {request.model_name or request.model_id}",
-                resource_class=request.resource_class,
-            )
-        ],
+        stages=[JobStage(
+            id="load-model",
+            label=f"Load {request.model_name or request.model_id}",
+            resource_class=request.resource_class,
+        )],
         input_payload={
             "model_id": request.model_id,
             "model_name": request.model_name,
@@ -228,13 +190,11 @@ def create_model_evict_job_request(record: ModelResidencyRecord, *, priority: in
         type="model.evict",
         resource_class=record.resource_class,
         priority=priority,
-        stages=[
-            JobStage(
-                id="evict-model",
-                label=f"Evict {record.model_name or record.model_id}",
-                resource_class=record.resource_class,
-            )
-        ],
+        stages=[JobStage(
+            id="evict-model",
+            label=f"Evict {record.model_name or record.model_id}",
+            resource_class=record.resource_class,
+        )],
         input_payload={
             "model_id": record.model_id,
             "model_name": record.model_name,
@@ -250,7 +210,7 @@ def create_model_evict_job_request(record: ModelResidencyRecord, *, priority: in
 
 
 def create_model_residency_handlers(
-    store: SQLiteModelResidencyStore,
+    store: Any,
     *,
     load_model: ModelResidencyHook | None = None,
     evict_model: ModelResidencyHook | None = None,
@@ -263,7 +223,7 @@ def create_model_residency_handlers(
 
 def _handle_model_load_job(
     job: JobRecord,
-    store: SQLiteModelResidencyStore,
+    store: Any,
     *,
     load_model: ModelResidencyHook | None,
 ) -> dict[str, Any]:
@@ -274,37 +234,29 @@ def _handle_model_load_job(
         if load_model is not None:
             hook_result = load_model(record, job) or {}
     except Exception as exc:
-        errored = record.model_copy(update={"status": ModelResidencyStatus.ERROR, "error": str(exc)})
-        store.upsert_record(errored)
+        store.upsert_record(record.model_copy(update={"status": ModelResidencyStatus.ERROR, "error": str(exc)}))
         raise
-
-    loaded_record = record.model_copy(update={"status": ModelResidencyStatus.LOADED, "error": None})
-    store.upsert_record(loaded_record)
+    loaded = record.model_copy(update={"status": ModelResidencyStatus.LOADED, "error": None})
+    store.upsert_record(loaded)
     return {
-        "logs": [
-            {
-                "level": "info",
-                "message": "model residency marked loaded",
-                "model_id": loaded_record.model_id,
-                "worker_id": loaded_record.worker_id or "",
-            }
-        ]
-        + _safe_hook_items(hook_result.get("logs")),
-        "output_refs": [
-            {
-                "kind": "model_residency",
-                "action": "loaded",
-                "model_id": loaded_record.model_id,
-                "worker_id": loaded_record.worker_id,
-            }
-        ]
-        + _safe_hook_items(hook_result.get("output_refs")),
+        "logs": [{
+            "level": "info",
+            "message": "model residency marked loaded",
+            "model_id": loaded.model_id,
+            "worker_id": loaded.worker_id or "",
+        }] + _safe_hook_items(hook_result.get("logs")),
+        "output_refs": [{
+            "kind": "model_residency",
+            "action": "loaded",
+            "model_id": loaded.model_id,
+            "worker_id": loaded.worker_id,
+        }] + _safe_hook_items(hook_result.get("output_refs")),
     }
 
 
 def _handle_model_evict_job(
     job: JobRecord,
-    store: SQLiteModelResidencyStore,
+    store: Any,
     *,
     evict_model: ModelResidencyHook | None,
 ) -> dict[str, Any]:
@@ -315,30 +267,22 @@ def _handle_model_evict_job(
         if evict_model is not None:
             hook_result = evict_model(record, job) or {}
     except Exception as exc:
-        errored = record.model_copy(update={"status": ModelResidencyStatus.ERROR, "error": str(exc)})
-        store.upsert_record(errored)
+        store.upsert_record(record.model_copy(update={"status": ModelResidencyStatus.ERROR, "error": str(exc)}))
         raise
-
     removed = store.delete_record(record.model_id)
     return {
-        "logs": [
-            {
-                "level": "info",
-                "message": "model residency marked unloaded",
-                "model_id": record.model_id,
-                "removed": removed,
-            }
-        ]
-        + _safe_hook_items(hook_result.get("logs")),
-        "output_refs": [
-            {
-                "kind": "model_residency",
-                "action": "evicted",
-                "model_id": record.model_id,
-                "removed": removed,
-            }
-        ]
-        + _safe_hook_items(hook_result.get("output_refs")),
+        "logs": [{
+            "level": "info",
+            "message": "model residency marked unloaded",
+            "model_id": record.model_id,
+            "removed": removed,
+        }] + _safe_hook_items(hook_result.get("logs")),
+        "output_refs": [{
+            "kind": "model_residency",
+            "action": "evicted",
+            "model_id": record.model_id,
+            "removed": removed,
+        }] + _safe_hook_items(hook_result.get("output_refs")),
     }
 
 
@@ -387,15 +331,9 @@ def plan_model_residency(
     residency: list[ModelResidencyRecord],
     policy: GpuResidencyPolicy | None = None,
 ) -> ResidencyDecision:
-    """Return a deterministic scheduling decision without mutating scheduler state."""
     policy = policy or GpuResidencyPolicy()
     if not _is_gpu_resource(request.resource_class):
-        return ResidencyDecision(
-            action=ResidencyDecisionAction.CAN_RUN,
-            reason="non_gpu_job",
-            requested_model_id=request.model_id,
-        )
-
+        return ResidencyDecision(action=ResidencyDecisionAction.CAN_RUN, reason="non_gpu_job", requested_model_id=request.model_id)
     errored = [record for record in residency if record.model_id == request.model_id and record.status == ModelResidencyStatus.ERROR]
     if errored:
         return ResidencyDecision(
@@ -403,98 +341,42 @@ def plan_model_residency(
             reason="requested_model_in_error",
             requested_model_id=request.model_id,
             blocking_model_ids=sorted({record.model_id for record in errored}),
-            diagnostics=[
-                {
-                    "kind": "model_residency_error",
-                    "model_id": record.model_id,
-                    "message": record.error or "model residency is in error state",
-                }
-                for record in errored
-            ],
+            diagnostics=[{
+                "kind": "model_residency_error",
+                "model_id": record.model_id,
+                "message": record.error or "model residency is in error state",
+            } for record in errored],
         )
-
-    active = [
-        record
-        for record in residency
-        if record.status in {ModelResidencyStatus.LOADING, ModelResidencyStatus.LOADED, ModelResidencyStatus.UNLOADING}
-    ]
+    active = [record for record in residency if record.status in {ModelResidencyStatus.LOADING, ModelResidencyStatus.LOADED, ModelResidencyStatus.UNLOADING}]
     if not active:
-        return ResidencyDecision(
-            action=ResidencyDecisionAction.CAN_RUN,
-            reason="gpu_idle",
-            requested_model_id=request.model_id,
-        )
-
-    matching_loaded = [
-        record
-        for record in active
-        if record.model_id == request.model_id and record.status == ModelResidencyStatus.LOADED
-    ]
-    if matching_loaded:
-        return ResidencyDecision(
-            action=ResidencyDecisionAction.CAN_RUN,
-            reason="requested_model_already_loaded",
-            requested_model_id=request.model_id,
-        )
-
-    loading_or_unloading = [
-        record
-        for record in active
-        if record.status in {ModelResidencyStatus.LOADING, ModelResidencyStatus.UNLOADING}
-    ]
-    if loading_or_unloading:
+        return ResidencyDecision(action=ResidencyDecisionAction.CAN_RUN, reason="gpu_idle", requested_model_id=request.model_id)
+    if any(record.model_id == request.model_id and record.status == ModelResidencyStatus.LOADED for record in active):
+        return ResidencyDecision(action=ResidencyDecisionAction.CAN_RUN, reason="requested_model_already_loaded", requested_model_id=request.model_id)
+    transitioning = [record for record in active if record.status in {ModelResidencyStatus.LOADING, ModelResidencyStatus.UNLOADING}]
+    if transitioning:
         return ResidencyDecision(
             action=ResidencyDecisionAction.QUEUE,
             reason="model_transition_in_progress",
             requested_model_id=request.model_id,
-            blocking_model_ids=sorted({record.model_id for record in loading_or_unloading}),
+            blocking_model_ids=sorted({record.model_id for record in transitioning}),
         )
-
     loaded = [record for record in active if record.status == ModelResidencyStatus.LOADED]
     if not policy.allow_co_residency:
-        return ResidencyDecision(
-            action=ResidencyDecisionAction.EVICT_FIRST,
-            reason="conservative_single_gpu_policy",
-            requested_model_id=request.model_id,
-            blocking_model_ids=sorted({record.model_id for record in loaded}),
-            eviction_model_ids=sorted({record.model_id for record in loaded}),
-        )
-
+        ids = sorted({record.model_id for record in loaded})
+        return ResidencyDecision(action=ResidencyDecisionAction.EVICT_FIRST, reason="conservative_single_gpu_policy", requested_model_id=request.model_id, blocking_model_ids=ids, eviction_model_ids=ids)
     incompatible = [record for record in loaded if not _compatible(record, request, policy)]
     if incompatible:
-        return ResidencyDecision(
-            action=ResidencyDecisionAction.EVICT_FIRST,
-            reason="incompatible_loaded_model",
-            requested_model_id=request.model_id,
-            blocking_model_ids=sorted({record.model_id for record in incompatible}),
-            eviction_model_ids=sorted({record.model_id for record in incompatible}),
-        )
-
+        ids = sorted({record.model_id for record in incompatible})
+        return ResidencyDecision(action=ResidencyDecisionAction.EVICT_FIRST, reason="incompatible_loaded_model", requested_model_id=request.model_id, blocking_model_ids=ids, eviction_model_ids=ids)
     if request.estimated_vram_mb is None or any(record.estimated_vram_mb is None for record in loaded):
-        return ResidencyDecision(
-            action=ResidencyDecisionAction.EVICT_FIRST,
-            reason="unknown_vram_requires_exclusive_gpu",
-            requested_model_id=request.model_id,
-            blocking_model_ids=sorted({record.model_id for record in loaded}),
-            eviction_model_ids=sorted({record.model_id for record in loaded}),
-        )
-
+        ids = sorted({record.model_id for record in loaded})
+        return ResidencyDecision(action=ResidencyDecisionAction.EVICT_FIRST, reason="unknown_vram_requires_exclusive_gpu", requested_model_id=request.model_id, blocking_model_ids=ids, eviction_model_ids=ids)
     if policy.total_vram_mb is not None:
-        used_vram = sum(record.estimated_vram_mb or 0 for record in loaded)
-        if used_vram + request.estimated_vram_mb > policy.total_vram_mb:
-            return ResidencyDecision(
-                action=ResidencyDecisionAction.EVICT_FIRST,
-                reason="insufficient_vram",
-                requested_model_id=request.model_id,
-                blocking_model_ids=sorted({record.model_id for record in loaded}),
-                eviction_model_ids=sorted({record.model_id for record in loaded}),
-            )
-
-    return ResidencyDecision(
-        action=ResidencyDecisionAction.CAN_RUN,
-        reason="compatible_vram_available",
-        requested_model_id=request.model_id,
-    )
+        used = sum(record.estimated_vram_mb or 0 for record in loaded)
+        if used + request.estimated_vram_mb > policy.total_vram_mb:
+            ids = sorted({record.model_id for record in loaded})
+            return ResidencyDecision(action=ResidencyDecisionAction.EVICT_FIRST, reason="insufficient_vram", requested_model_id=request.model_id, blocking_model_ids=ids, eviction_model_ids=ids)
+    return ResidencyDecision(action=ResidencyDecisionAction.CAN_RUN, reason="compatible_vram_available", requested_model_id=request.model_id)
 
 
 def _is_gpu_resource(resource_class: ResourceClass) -> bool:
@@ -512,21 +394,12 @@ def _compatible(record: ModelResidencyRecord, request: GpuResidencyRequest, poli
     return False
 
 
-def _json_loads(value: str) -> dict[str, Any]:
-    data = json.loads(value)
-    return data if isinstance(data, dict) else {}
-
-
 def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
+    return "" if value is None else value if isinstance(value, str) else str(value)
 
 
 def _safe_optional_int(value: Any) -> int | None:
-    if value is None or value == "":
+    if value in (None, ""):
         return None
     try:
         return int(value)
@@ -535,6 +408,4 @@ def _safe_optional_int(value: Any) -> int | None:
 
 
 def _safe_hook_items(value: Any) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        return []
-    return [item for item in value if isinstance(item, dict)]
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
