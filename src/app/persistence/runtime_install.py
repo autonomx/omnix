@@ -33,8 +33,8 @@ _ORIGINAL_SQLITE_CONNECT = sqlite3.connect
 def _retired_sqlite_connect(*args: Any, **kwargs: Any) -> Any:
     del args, kwargs
     raise LegacyPersistenceRetired(
-        "SQLite runtime access is retired. Use PostgreSQL or an explicit Phase 8 "
-        "legacy import/test process."
+        "SQLite runtime access is retired. Use PostgreSQL or an explicit legacy "
+        "import/test process."
     )
 
 
@@ -48,44 +48,201 @@ def install_postgresql_runtime_adapters() -> None:
     # silently become authoritative after PostgreSQL activation.
     sqlite3.connect = _retired_sqlite_connect  # type: ignore[assignment]
 
+    _install_core_domain_adapters()
+    _install_chat_runtime()
+    _install_execution_runtime()
+    _install_feature_document_runtime()
+    _install_rpg_runtime()
+    _INSTALLED = True
+
+
+def _install_core_domain_adapters() -> None:
     from app import assets as assets_package
     from app.assets import store as asset_store_module
     from app.assistant_memory import service as memory_service_module
-    from app.characters import service as character_service_module
     from app.characters import repository as character_repository_module
+    from app.characters import service as character_service_module
     from app.chat import repository as chat_repository_module
     from app.chat import store as chat_store_module
-    from app.jobs import rpg_foreground_submission_store as submission_store_module
-    from app.jobs import store as job_store_module
-    import app.jobs as jobs_package
-    from app.rpg.session import durable_store as durable_store_module
-    from app.rpg.session import interaction_event_store as interaction_store_module
-    from app.rpg.session import service as session_service_module
-    import app.rpg.session as session_package
 
     chat_repository_module.SQLiteChatRepository = PostgresChatRepositoryAdapter
     chat_store_module.SQLiteChatRepository = PostgresChatRepositoryAdapter
-
     memory_service_module.SQLiteMemoryRepository = PostgresMemoryRepositoryAdapter
-
     character_repository_module.CharacterRepository = PostgresCharacterRepositoryAdapter
     character_service_module.CharacterRepository = PostgresCharacterRepositoryAdapter
-
     asset_store_module.SharedAssetStore = PostgresSharedAssetStoreAdapter
     assets_package.SharedAssetStore = PostgresSharedAssetStoreAdapter
+
+
+def _install_chat_runtime() -> None:
+    import app.chat as chat_package
+    from app.chat import character_store as character_store_module
+    from app.chat import compaction as compaction_module
+    from app.chat import history_search as history_module
+    from app.chat import prompt_store as prompt_store_module
+    from app.chat import store as base_store_module
+    from app.chat.live_agent_store import install_live_agent_store_hooks
+
+    from .chat_runtime_compat import (
+        PostgresCharacterChatSessionStore,
+        PostgresChatSessionStore,
+        PostgresConversationSummaryRepository,
+        PostgresHistorySearchService,
+        default_chat_store,
+        default_history_search_service,
+    )
+
+    prompt_store_module.ChatSessionStore = PostgresChatSessionStore
+    base_store_module.ChatSessionStore = PostgresChatSessionStore
+    character_store_module.ChatSessionStore = PostgresCharacterChatSessionStore
+    character_store_module.SQLiteChatSessionStore = PostgresCharacterChatSessionStore
+    character_store_module.default_chat_store = default_chat_store
+    chat_package.ChatSessionStore = PostgresCharacterChatSessionStore
+    chat_package.SQLiteChatSessionStore = PostgresCharacterChatSessionStore
+    chat_package.default_chat_store = default_chat_store
+
+    compaction_module.SQLiteConversationSummaryRepository = (
+        PostgresConversationSummaryRepository
+    )
+    history_module.SQLiteHistorySearchService = PostgresHistorySearchService
+    history_module.default_history_search_service = default_history_search_service
+
+    install_live_agent_store_hooks(
+        PostgresCharacterChatSessionStore,
+        PostgresCharacterChatSessionStore,
+    )
+
+
+def _install_execution_runtime() -> None:
+    import app.jobs as jobs_package
+    from app.jobs import image_inline
+    from app.jobs import inline_feature_jobs
+    from app.jobs import research_inline
+    from app.jobs import residency as residency_module
+    from app.jobs import rpg_debug_job_hook
+    from app.jobs import rpg_turn_job_guard
+    from app.jobs import store as job_store_module
+    from app.jobs import voice_inline
+    from app.jobs import rpg_foreground_submission_store as submission_store_module
+    from app.providers import cache_status as cache_status_module
+
+    from .execution_feature_compat import (
+        PostgresModelResidencyStore,
+        PostgresProviderModelRefreshStore,
+    )
 
     @lru_cache(maxsize=1)
     def _default_postgres_job_store() -> PostgresJobStoreAdapter:
         return PostgresJobStoreAdapter()
 
+    @lru_cache(maxsize=1)
+    def _default_postgres_residency_store() -> PostgresModelResidencyStore:
+        return PostgresModelResidencyStore()
+
+    @lru_cache(maxsize=1)
+    def _default_postgres_refresh_store() -> PostgresProviderModelRefreshStore:
+        return PostgresProviderModelRefreshStore()
+
+    job_store_module.SQLiteJobStore = PostgresJobStoreAdapter
     job_store_module.default_job_store = _default_postgres_job_store
+    jobs_package.SQLiteJobStore = PostgresJobStoreAdapter
     jobs_package.default_job_store = _default_postgres_job_store
+
+    residency_module.SQLiteModelResidencyStore = PostgresModelResidencyStore
+    residency_module.default_model_residency_store = _default_postgres_residency_store
+    jobs_package.SQLiteModelResidencyStore = PostgresModelResidencyStore
+    jobs_package.default_model_residency_store = _default_postgres_residency_store
+
+    cache_status_module.SQLiteProviderModelRefreshStore = PostgresProviderModelRefreshStore
+    cache_status_module.default_provider_model_refresh_store = _default_postgres_refresh_store
 
     submission_store_module.RpgForegroundSubmissionStore = (
         PostgresForegroundSubmissionStoreAdapter
     )
     submission_store_module.submission_store_for_job_store = (
         postgres_submission_store_for_job_store
+    )
+
+    # Existing decorators were attached to the retired SQLite class during
+    # module import. Install the same deterministic handlers on the authoritative
+    # PostgreSQL job facade before any worker is created.
+    inline_feature_jobs.install_inline_feature_job_execution(PostgresJobStoreAdapter)
+    rpg_turn_job_guard.install_rpg_turn_job_guard(PostgresJobStoreAdapter)
+    voice_inline.install_voice_studio_job_execution(PostgresJobStoreAdapter)
+    image_inline.install_image_job_execution(PostgresJobStoreAdapter)
+    research_inline.install_research_job_execution(PostgresJobStoreAdapter)
+    rpg_debug_job_hook.install_rpg_debug_job_hook(PostgresJobStoreAdapter)
+
+
+def _install_feature_document_runtime() -> None:
+    from app.assist_core import policy_store as policy_module
+    from app.assistant_tools import config_store as tool_config_module
+    from app.gateway import live_chat_evaluation_store as evaluation_module
+    from app.image import asset_store as image_module
+    from app.research import source_store as research_module
+
+    from .configuration_compat import (
+        add_assist_pending,
+        append_assist_action_log,
+        load_assistant_tools_config,
+        read_assist_pending,
+        save_assistant_tools_config,
+        write_assist_pending,
+    )
+    from .document_feature_compat import (
+        PostgresLiveChatEvaluationStore,
+        PostgresResearchSourceStore,
+    )
+    from .image_asset_compat import (
+        cleanup_unused_image_assets_postgres,
+        delete_image_asset_postgres,
+        get_image_asset_manifest_postgres,
+        register_image_asset_file_postgres,
+        save_image_asset_bytes_postgres,
+    )
+
+    policy_module.read_pending = read_assist_pending
+    policy_module.write_pending = write_assist_pending
+    policy_module.add_pending = add_assist_pending
+    policy_module.append_log = append_assist_action_log
+
+    tool_config_module.load_assistant_tools_config = load_assistant_tools_config
+    tool_config_module.save_assistant_tools_config = save_assistant_tools_config
+
+    @lru_cache(maxsize=1)
+    def _default_evaluation_store() -> PostgresLiveChatEvaluationStore:
+        return PostgresLiveChatEvaluationStore()
+
+    evaluation_module.LiveChatEvaluationStore = PostgresLiveChatEvaluationStore
+    evaluation_module.default_live_chat_evaluation_store = _default_evaluation_store
+
+    @lru_cache(maxsize=1)
+    def _default_research_store() -> PostgresResearchSourceStore:
+        return PostgresResearchSourceStore()
+
+    research_module.ResearchSourceStore = PostgresResearchSourceStore
+    research_module.default_research_source_store = _default_research_store
+
+    image_module.save_image_asset_bytes = save_image_asset_bytes_postgres
+    image_module.register_image_asset_file = register_image_asset_file_postgres
+    image_module.get_image_asset_manifest = get_image_asset_manifest_postgres
+    image_module.delete_image_asset = delete_image_asset_postgres
+    image_module.cleanup_unused_image_assets = cleanup_unused_image_assets_postgres
+
+
+def _install_rpg_runtime() -> None:
+    import app.rpg.session as session_package
+    from app.rpg.narrative import narrative_persistence as narrative_module
+    from app.rpg.npc_evolution import profile_store as profile_module
+    from app.rpg.session import durable_store as durable_store_module
+    from app.rpg.session import interaction_event_store as interaction_store_module
+    from app.rpg.session import service as session_service_module
+
+    from .rpg_feature_compat import (
+        PostgresNarrativeEventStore,
+        load_npc_evolution_profiles_for_runtime_postgres,
+        load_npc_profile_postgres,
+        persist_npc_evolution_profiles_postgres,
     )
 
     durable_store_module.save_session_to_disk = save_session_to_postgres
@@ -108,7 +265,12 @@ def install_postgresql_runtime_adapters() -> None:
     interaction_store_module.compact_interaction_event_log = compact_interaction_events_postgres
     interaction_store_module.interaction_event_log_status = interaction_log_status_postgres
 
-    _INSTALLED = True
+    narrative_module.NarrativeEventStore = PostgresNarrativeEventStore
+    profile_module.load_npc_profile = load_npc_profile_postgres
+    profile_module.persist_npc_evolution_profiles = persist_npc_evolution_profiles_postgres
+    profile_module.load_npc_evolution_profiles_for_runtime = (
+        load_npc_evolution_profiles_for_runtime_postgres
+    )
 
 
 def uninstall_runtime_adapters_for_test() -> None:
