@@ -13,23 +13,9 @@ from app.persistence.runtime import PersistenceMode
 ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = ROOT / "src" / "app"
 
-# Temporary migration-only baseline. Correction checkpoints 7 and 8 reduce the
-# runtime subset to zero. ``persistence/legacy_export.py`` is a one-shot reader.
+# Runtime has zero SQLite connection sites. The one-shot migration extractor is
+# the only application module allowed to read a legacy SQLite file.
 LEGACY_SQLITE_ADAPTER_FILES = {
-    "assistant_memory/repository.py",
-    "characters/avatar_generation_repository.py",
-    "characters/avatar_repository.py",
-    "characters/avatar_viseme_generation.py",
-    "characters/repository.py",
-    "chat/compaction.py",
-    "chat/history_search.py",
-    "chat/repository.py",
-    "jobs/residency.py",
-    "jobs/rpg_foreground_submission_store.py",
-    "jobs/store.py",
-    "providers/cache_status.py",
-    "research/cache.py",
-    "rpg/narrative/narrative_persistence.py",
     "persistence/legacy_export.py",
 }
 
@@ -52,7 +38,7 @@ def _sqlite_connect_sites() -> set[str]:
     return sites
 
 
-def test_sqlite_connections_are_confined_to_frozen_migration_adapters() -> None:
+def test_sqlite_connections_exist_only_in_one_shot_legacy_extractor() -> None:
     assert _sqlite_connect_sites() == LEGACY_SQLITE_ADAPTER_FILES
 
 
@@ -62,8 +48,6 @@ def test_postgresql_runtime_modules_do_not_open_sqlite() -> None:
     for path in persistence_root.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         if path.name in {"runtime_install.py", "legacy_export.py"}:
-            # runtime_install replaces connect with a sentinel; legacy_export is
-            # an explicit one-shot migration reader.
             continue
         if "import sqlite3" in text or "from sqlite3" in text:
             offenders.append(path.relative_to(ROOT).as_posix())
