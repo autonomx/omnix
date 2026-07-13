@@ -1,8 +1,4 @@
-"""Pure GPU model residency planning for the shared job scheduler.
-
-Production records are PostgreSQL-backed. Provider-free tests use the in-memory
-store defined here; no SQLite database or schema remains.
-"""
+"""Pure GPU model residency planning for the shared job scheduler."""
 from __future__ import annotations
 
 import threading
@@ -86,23 +82,22 @@ class ModelResidencyDiagnostics(BaseModel):
 
 ModelResidencyHook = Callable[[ModelResidencyRecord, JobRecord], dict[str, Any] | None]
 
+
 _RESIDENCY: dict[str, dict[str, ModelResidencyRecord]] = {}
 _RESIDENCY_LOCK = threading.RLock()
 
 
-def default_model_residency_db_path() -> Path:
-    return Path(":memory:model-residency")
-
-
 class InMemoryModelResidencyStore:
+    """Provider-free deterministic residency state keyed by test namespace."""
+
     def __init__(self, db_path: str | Path | None = None) -> None:
-        self.db_path = Path(db_path) if db_path is not None else default_model_residency_db_path()
+        self.db_path = Path(db_path) if db_path is not None else Path(":memory:residency")
         self._key = str(self.db_path)
 
     def upsert_record(self, record: ModelResidencyRecord) -> ModelResidencyRecord:
         with _RESIDENCY_LOCK:
             _RESIDENCY.setdefault(self._key, {})[record.model_id] = deepcopy(record)
-        return record
+        return deepcopy(record)
 
     def delete_record(self, model_id: str) -> bool:
         with _RESIDENCY_LOCK:
@@ -110,21 +105,12 @@ class InMemoryModelResidencyStore:
 
     def list_records(self) -> list[ModelResidencyRecord]:
         with _RESIDENCY_LOCK:
-            records = list(_RESIDENCY.setdefault(self._key, {}).values())
-            records.sort(
-                key=lambda item: (
-                    item.worker_id or "",
-                    item.resource_class.value,
-                    item.model_id,
-                )
-            )
-            return deepcopy(records)
+            values = list(_RESIDENCY.setdefault(self._key, {}).values())
+            values.sort(key=lambda item: (item.worker_id or "", item.resource_class.value, item.model_id))
+            return deepcopy(values)
 
     def diagnostics(self, policy: GpuResidencyPolicy | None = None) -> ModelResidencyDiagnostics:
         return get_model_residency_diagnostics(self.list_records(), policy)
-
-
-SQLiteModelResidencyStore = InMemoryModelResidencyStore
 
 
 def default_model_residency_store() -> InMemoryModelResidencyStore:
@@ -139,11 +125,7 @@ def get_model_residency_diagnostics(
     active = [
         record
         for record in records
-        if record.status in {
-            ModelResidencyStatus.LOADING,
-            ModelResidencyStatus.LOADED,
-            ModelResidencyStatus.UNLOADING,
-        }
+        if record.status in {ModelResidencyStatus.LOADING, ModelResidencyStatus.LOADED, ModelResidencyStatus.UNLOADING}
     ]
     errors = [record for record in records if record.status == ModelResidencyStatus.ERROR]
     warnings = []
@@ -165,11 +147,7 @@ def create_model_load_job_request(request: GpuResidencyRequest, *, priority: int
         type="model.load",
         resource_class=request.resource_class,
         priority=priority,
-        stages=[JobStage(
-            id="load-model",
-            label=f"Load {request.model_name or request.model_id}",
-            resource_class=request.resource_class,
-        )],
+        stages=[JobStage(id="load-model", label=f"Load {request.model_name or request.model_id}", resource_class=request.resource_class)],
         input_payload={
             "model_id": request.model_id,
             "model_name": request.model_name,
@@ -190,11 +168,7 @@ def create_model_evict_job_request(record: ModelResidencyRecord, *, priority: in
         type="model.evict",
         resource_class=record.resource_class,
         priority=priority,
-        stages=[JobStage(
-            id="evict-model",
-            label=f"Evict {record.model_name or record.model_id}",
-            resource_class=record.resource_class,
-        )],
+        stages=[JobStage(id="evict-model", label=f"Evict {record.model_name or record.model_id}", resource_class=record.resource_class)],
         input_payload={
             "model_id": record.model_id,
             "model_name": record.model_name,
