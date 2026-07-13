@@ -60,6 +60,7 @@ def install_postgresql_runtime_adapters() -> None:
 
 def _install_remaining_document_authority_adapters() -> None:
     from app import shared
+    from app.assist_core import house_state as house_state_module
     from app.assistant_memory import settings as memory_settings_module
     from app.assistant_tools import ledger as tool_ledger_module
     from app.characters import live_conversation_profile as conversation_profile_module
@@ -68,11 +69,13 @@ def _install_remaining_document_authority_adapters() -> None:
         append_assistant_tool_ledger_entry_postgres,
         default_postgres_live_conversation_profile_store,
         load_application_settings,
+        load_assist_house_state,
         load_assistant_tool_ledger_postgres,
         load_legacy_chat_sessions,
         postgres_assistant_memory_settings_store_class,
         postgres_live_conversation_profile_store_class,
         save_application_settings,
+        save_assist_house_state,
         save_legacy_chat_sessions,
     )
 
@@ -82,6 +85,8 @@ def _install_remaining_document_authority_adapters() -> None:
         load_sessions_callback=load_legacy_chat_sessions,
         save_sessions_callback=save_legacy_chat_sessions,
     )
+    house_state_module.load_house_state = load_assist_house_state
+    house_state_module.save_house_state = save_assist_house_state
     memory_settings_module.AssistantMemorySettingsStore = (
         postgres_assistant_memory_settings_store_class()
     )

@@ -79,6 +79,25 @@ def save_legacy_chat_sessions(payload: dict[str, Any]) -> None:
     )
 
 
+def load_assist_house_state() -> dict[str, Any]:
+    from app.assist_core.house_state import DEFAULT_HOUSE_STATE
+
+    payload = PostgresDocumentStore().read(
+        module="assist-core",
+        record_type="house-state",
+        default=DEFAULT_HOUSE_STATE,
+    )
+    return dict(payload) if isinstance(payload, dict) else dict(DEFAULT_HOUSE_STATE)
+
+
+def save_assist_house_state(payload: dict[str, Any]) -> None:
+    PostgresDocumentStore().write(
+        dict(payload),
+        module="assist-core",
+        record_type="house-state",
+    )
+
+
 class PostgresAssistantTurnCoordinator:
     """Drop-in assistant-turn coordinator backed by one PostgreSQL document."""
 

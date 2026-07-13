@@ -94,6 +94,11 @@ assert shared.load_settings()["lmstudio"]["model"] == "runtime-model"
 shared.save_sessions({"legacy:runtime": {"title": "Runtime legacy route"}})
 assert shared.load_sessions()["legacy:runtime"]["title"] == "Runtime legacy route"
 
+from app.assist_core.house_state import load_house_state, save_house_state
+
+save_house_state({"rooms": {"office": {"lights": "on"}}, "reminders": []})
+assert load_house_state()["rooms"]["office"]["lights"] == "on"
+
 from app.chat.assistant_turns import default_assistant_turn_coordinator
 
 assistant_turn = default_assistant_turn_coordinator().start(

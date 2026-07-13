@@ -53,6 +53,9 @@ def test_bounded_runtime_documents_use_postgresql_facade(monkeypatch) -> None:
     assert compat.load_application_settings() == {"provider": "lmstudio"}
     assert compat.load_legacy_chat_sessions() == {"legacy:1": {"title": "Legacy"}}
 
+    compat.save_assist_house_state({"rooms": {"office": {"lights": "on"}}})
+    assert compat.load_assist_house_state()["rooms"]["office"]["lights"] == "on"
+
     coordinator_type = compat.postgres_assistant_turn_coordinator_class()
     coordinator = coordinator_type()
     turn = coordinator.start(
