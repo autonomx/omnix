@@ -7,7 +7,11 @@ from typing import Any
 from .asset_compat import PostgresSharedAssetStoreAdapter
 from .character_compat import PostgresCharacterRepositoryAdapter
 from .chat_compat import PostgresChatRepositoryAdapter
-from .job_compat import PostgresJobStoreAdapter
+from .foreground_submission_compat import (
+    PostgresForegroundSubmissionStoreAdapter,
+    submission_store_for_job_store as postgres_submission_store_for_job_store,
+)
+from .job_runtime_compat import PostgresJobStoreAdapter
 from .memory_compat import PostgresMemoryRepositoryAdapter
 from .rpg_compat import (
     append_interaction_event_postgres,
@@ -51,6 +55,7 @@ def install_postgresql_runtime_adapters() -> None:
     from app.characters import repository as character_repository_module
     from app.chat import repository as chat_repository_module
     from app.chat import store as chat_store_module
+    from app.jobs import rpg_foreground_submission_store as submission_store_module
     from app.jobs import store as job_store_module
     import app.jobs as jobs_package
     from app.rpg.session import durable_store as durable_store_module
@@ -75,6 +80,13 @@ def install_postgresql_runtime_adapters() -> None:
 
     job_store_module.default_job_store = _default_postgres_job_store
     jobs_package.default_job_store = _default_postgres_job_store
+
+    submission_store_module.RpgForegroundSubmissionStore = (
+        PostgresForegroundSubmissionStoreAdapter
+    )
+    submission_store_module.submission_store_for_job_store = (
+        postgres_submission_store_for_job_store
+    )
 
     durable_store_module.save_session_to_disk = save_session_to_postgres
     durable_store_module.load_session_from_disk = load_session_from_postgres
