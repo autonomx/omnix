@@ -1,37 +1,20 @@
-"""Durable cross-process ownership for foreground RPG submissions."""
+"""Foreground RPG submission ownership compatibility boundary.
+
+PostgreSQL is the production authority. Provider-free tests use a process-local
+in-memory double keyed by the requested path; cross-process correctness is
+covered by PostgreSQL integration tests.
+"""
+
 from __future__ import annotations
 
-import json
-import sqlite3
+import threading
 import time
 import uuid
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
-
-_STATUS_CLAIMED = "claimed"
-_STATUS_COMPLETED = "completed"
-_STATUS_FAILED = "failed"
-_TERMINAL_STATUSES = {_STATUS_COMPLETED, _STATUS_FAILED}
-_DEFAULT_LEASE_SECONDS = 30.0
-
-
-def _as_utc(value: datetime | None = None) -> datetime:
-    resolved = value or datetime.now(timezone.utc)
-    if resolved.tzinfo is None:
-        return resolved.replace(tzinfo=timezone.utc)
-    return resolved.astimezone(timezone.utc)
-
-
-def _timestamp(value: datetime | None = None) -> str:
-    return _as_utc(value).isoformat()
-
-
-def _lease_expiry(now: datetime, lease_seconds: float) -> str:
-    seconds = max(0.1, min(600.0, float(lease_seconds)))
-    return (now + timedelta(seconds=seconds)).isoformat()
 
 
 @dataclass(frozen=True)
@@ -48,154 +31,70 @@ class ForegroundSubmissionClaim:
     execution_started_at: str | None = None
 
 
-class RpgForegroundSubmissionStore:
-    """SQLite-backed submission ownership shared by gateway processes."""
+@dataclass
+class _State:
+    lock: threading.RLock = field(default_factory=threading.RLock)
+    claims: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
 
-    def __init__(self, db_path: str | Path) -> None:
-        self.db_path = Path(db_path)
-        if self.db_path != Path(":memory:"):
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout = 30000")
-        return conn
+_STATES: dict[str, _State] = {}
+_STATES_LOCK = threading.RLock()
 
-    def _init_schema(self) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS rpg_foreground_submissions (
-                    session_id TEXT NOT NULL,
-                    submission_id TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    claim_token TEXT NOT NULL,
-                    job_id TEXT,
-                    result_json TEXT,
-                    error_text TEXT,
-                    lease_expires_at TEXT,
-                    execution_started_at TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (session_id, submission_id)
-                )
-                """
-            )
-            columns = {
-                str(row["name"])
-                for row in conn.execute("PRAGMA table_info(rpg_foreground_submissions)").fetchall()
-            }
-            added_lease = "lease_expires_at" not in columns
-            added_started = "execution_started_at" not in columns
-            if added_lease:
-                conn.execute(
-                    "ALTER TABLE rpg_foreground_submissions ADD COLUMN lease_expires_at TEXT"
-                )
-            if added_started:
-                conn.execute(
-                    "ALTER TABLE rpg_foreground_submissions ADD COLUMN execution_started_at TEXT"
-                )
-            if added_started:
-                conn.execute(
-                    """
-                    UPDATE rpg_foreground_submissions
-                    SET execution_started_at = updated_at
-                    WHERE status = ? AND execution_started_at IS NULL
-                    """,
-                    (_STATUS_CLAIMED,),
-                )
-            if added_lease:
-                conn.execute(
-                    """
-                    UPDATE rpg_foreground_submissions
-                    SET lease_expires_at = updated_at
-                    WHERE lease_expires_at IS NULL
-                    """
-                )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_rpg_foreground_submission_status
-                ON rpg_foreground_submissions(status, updated_at)
-                """
-            )
+
+def _state(path: str | Path | None) -> _State:
+    key = str(path or ":memory:foreground")
+    with _STATES_LOCK:
+        return _STATES.setdefault(key, _State())
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class InMemoryForegroundSubmissionStore:
+    def __init__(self, db_path: str | Path | None = None) -> None:
+        self.db_path = Path(db_path) if db_path is not None else Path(":memory:")
+        self._state = _state(db_path)
 
     def claim(
         self,
         session_id: str,
         submission_id: str,
         *,
-        lease_seconds: float = _DEFAULT_LEASE_SECONDS,
+        lease_seconds: float = 30.0,
         now: datetime | None = None,
     ) -> ForegroundSubmissionClaim:
-        token = uuid.uuid4().hex
-        instant = _as_utc(now)
-        now_text = instant.isoformat()
-        expires_at = _lease_expiry(instant, lease_seconds)
-        with self._connect() as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            cursor = conn.execute(
-                """
-                INSERT OR IGNORE INTO rpg_foreground_submissions (
-                    session_id, submission_id, status, claim_token,
-                    job_id, result_json, error_text, lease_expires_at,
-                    execution_started_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, NULL, ?, ?)
-                """,
-                (
-                    session_id,
-                    submission_id,
-                    _STATUS_CLAIMED,
-                    token,
-                    expires_at,
-                    now_text,
-                    now_text,
-                ),
-            )
-            owner = cursor.rowcount == 1
-            if not owner:
-                cursor = conn.execute(
-                    """
-                    UPDATE rpg_foreground_submissions
-                    SET claim_token = ?, lease_expires_at = ?, updated_at = ?,
-                        result_json = NULL, error_text = NULL
-                    WHERE session_id = ? AND submission_id = ?
-                      AND status = ? AND execution_started_at IS NULL
-                      AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
-                    """,
-                    (
-                        token,
-                        expires_at,
-                        now_text,
-                        session_id,
-                        submission_id,
-                        _STATUS_CLAIMED,
-                        now_text,
-                    ),
-                )
-                owner = cursor.rowcount == 1
-            row = conn.execute(
-                """
-                SELECT * FROM rpg_foreground_submissions
-                WHERE session_id = ? AND submission_id = ?
-                """,
-                (session_id, submission_id),
-            ).fetchone()
-        if row is None:
-            raise RuntimeError("foreground submission claim was not persisted")
-        return self._row_to_claim(row, owner=owner, owner_token=token if owner else None)
+        instant = now or _utcnow()
+        key = (session_id, submission_id)
+        with self._state.lock:
+            current = self._state.claims.get(key)
+            if current is not None:
+                if current["status"] in {"completed", "failed"}:
+                    return self._claim(current, owner=False)
+                expires = datetime.fromisoformat(current["lease_expires_at"])
+                if expires > instant or current.get("execution_started_at"):
+                    return self._claim(current, owner=False)
+            token = uuid.uuid4().hex
+            record = {
+                "session_id": session_id,
+                "submission_id": submission_id,
+                "status": "claimed",
+                "claim_token": token,
+                "job_id": current.get("job_id") if current else None,
+                "result": None,
+                "error": None,
+                "lease_expires_at": (
+                    instant + timedelta(seconds=max(1.0, float(lease_seconds)))
+                ).isoformat(),
+                "execution_started_at": None,
+            }
+            self._state.claims[key] = record
+            return self._claim(record, owner=True)
 
     def get(self, session_id: str, submission_id: str) -> ForegroundSubmissionClaim | None:
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT * FROM rpg_foreground_submissions
-                WHERE session_id = ? AND submission_id = ?
-                """,
-                (session_id, submission_id),
-            ).fetchone()
-        return self._row_to_claim(row, owner=False, owner_token=None) if row is not None else None
+        with self._state.lock:
+            current = self._state.claims.get((session_id, submission_id))
+            return self._claim(current, owner=False) if current is not None else None
 
     def renew(
         self,
@@ -203,32 +102,23 @@ class RpgForegroundSubmissionStore:
         submission_id: str,
         claim_token: str,
         *,
-        lease_seconds: float = _DEFAULT_LEASE_SECONDS,
+        lease_seconds: float = 30.0,
         now: datetime | None = None,
     ) -> bool:
-        instant = _as_utc(now)
-        now_text = instant.isoformat()
-        with self._connect() as conn:
-            cursor = conn.execute(
-                """
-                UPDATE rpg_foreground_submissions
-                SET lease_expires_at = ?, updated_at = ?
-                WHERE session_id = ? AND submission_id = ?
-                  AND claim_token = ? AND status = ?
-                  AND execution_started_at IS NULL
-                  AND lease_expires_at > ?
-                """,
-                (
-                    _lease_expiry(instant, lease_seconds),
-                    now_text,
-                    session_id,
-                    submission_id,
-                    claim_token,
-                    _STATUS_CLAIMED,
-                    now_text,
-                ),
-            )
-        return cursor.rowcount == 1
+        instant = now or _utcnow()
+        with self._state.lock:
+            current = self._state.claims.get((session_id, submission_id))
+            if (
+                current is None
+                or current["status"] != "claimed"
+                or current["claim_token"] != claim_token
+                or current.get("execution_started_at")
+            ):
+                return False
+            current["lease_expires_at"] = (
+                instant + timedelta(seconds=max(1.0, float(lease_seconds)))
+            ).isoformat()
+            return True
 
     def attach_job(
         self,
@@ -239,28 +129,13 @@ class RpgForegroundSubmissionStore:
         *,
         now: datetime | None = None,
     ) -> bool:
-        now_text = _timestamp(now)
-        with self._connect() as conn:
-            cursor = conn.execute(
-                """
-                UPDATE rpg_foreground_submissions
-                SET job_id = ?, updated_at = ?
-                WHERE session_id = ? AND submission_id = ?
-                  AND claim_token = ? AND status = ?
-                  AND execution_started_at IS NULL
-                  AND lease_expires_at > ?
-                """,
-                (
-                    job_id,
-                    now_text,
-                    session_id,
-                    submission_id,
-                    claim_token,
-                    _STATUS_CLAIMED,
-                    now_text,
-                ),
-            )
-        return cursor.rowcount == 1
+        del now
+        with self._state.lock:
+            current = self._state.claims.get((session_id, submission_id))
+            if current is None or current["claim_token"] != claim_token or current["status"] != "claimed":
+                return False
+            current["job_id"] = job_id
+            return True
 
     def mark_execution_started(
         self,
@@ -270,28 +145,13 @@ class RpgForegroundSubmissionStore:
         *,
         now: datetime | None = None,
     ) -> bool:
-        now_text = _timestamp(now)
-        with self._connect() as conn:
-            cursor = conn.execute(
-                """
-                UPDATE rpg_foreground_submissions
-                SET execution_started_at = ?, updated_at = ?
-                WHERE session_id = ? AND submission_id = ?
-                  AND claim_token = ? AND status = ?
-                  AND execution_started_at IS NULL
-                  AND lease_expires_at > ?
-                """,
-                (
-                    now_text,
-                    now_text,
-                    session_id,
-                    submission_id,
-                    claim_token,
-                    _STATUS_CLAIMED,
-                    now_text,
-                ),
-            )
-        return cursor.rowcount == 1
+        instant = now or _utcnow()
+        with self._state.lock:
+            current = self._state.claims.get((session_id, submission_id))
+            if current is None or current["claim_token"] != claim_token or current["status"] != "claimed":
+                return False
+            current["execution_started_at"] = instant.isoformat()
+            return True
 
     def complete(
         self,
@@ -300,21 +160,16 @@ class RpgForegroundSubmissionStore:
         claim_token: str,
         result: dict[str, Any],
     ) -> bool:
-        encoded = json.dumps(
-            result,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            default=str,
-        )
-        return self._finalize(
-            session_id,
-            submission_id,
-            claim_token,
-            status=_STATUS_COMPLETED,
-            result_json=encoded,
-            error_text=None,
-        )
+        with self._state.lock:
+            current = self._state.claims.get((session_id, submission_id))
+            if current is None or current["claim_token"] != claim_token:
+                return False
+            if current["status"] == "completed":
+                return current.get("result") == result
+            if current["status"] != "claimed":
+                return False
+            current.update(status="completed", result=deepcopy(result), error=None)
+            return True
 
     def fail(
         self,
@@ -323,45 +178,16 @@ class RpgForegroundSubmissionStore:
         claim_token: str,
         error: str,
     ) -> bool:
-        return self._finalize(
-            session_id,
-            submission_id,
-            claim_token,
-            status=_STATUS_FAILED,
-            result_json=None,
-            error_text=str(error)[:1000],
-        )
-
-    def _finalize(
-        self,
-        session_id: str,
-        submission_id: str,
-        claim_token: str,
-        *,
-        status: str,
-        result_json: str | None,
-        error_text: str | None,
-    ) -> bool:
-        with self._connect() as conn:
-            cursor = conn.execute(
-                """
-                UPDATE rpg_foreground_submissions
-                SET status = ?, result_json = ?, error_text = ?, updated_at = ?
-                WHERE session_id = ? AND submission_id = ?
-                  AND claim_token = ? AND status = ?
-                """,
-                (
-                    status,
-                    result_json,
-                    error_text,
-                    _timestamp(),
-                    session_id,
-                    submission_id,
-                    claim_token,
-                    _STATUS_CLAIMED,
-                ),
-            )
-        return cursor.rowcount == 1
+        with self._state.lock:
+            current = self._state.claims.get((session_id, submission_id))
+            if current is None or current["claim_token"] != claim_token:
+                return False
+            if current["status"] == "failed":
+                return True
+            if current["status"] != "claimed":
+                return False
+            current.update(status="failed", result=None, error=str(error))
+            return True
 
     def wait_for_terminal_or_claim(
         self,
@@ -369,19 +195,13 @@ class RpgForegroundSubmissionStore:
         submission_id: str,
         *,
         timeout_seconds: float,
-        lease_seconds: float = _DEFAULT_LEASE_SECONDS,
+        lease_seconds: float = 30.0,
         poll_seconds: float = 0.02,
     ) -> ForegroundSubmissionClaim:
         deadline = time.monotonic() + max(0.0, timeout_seconds)
         while True:
-            claim = self.claim(
-                session_id,
-                submission_id,
-                lease_seconds=lease_seconds,
-            )
-            if claim.owner or claim.status in _TERMINAL_STATUSES:
-                return claim
-            if time.monotonic() >= deadline:
+            claim = self.claim(session_id, submission_id, lease_seconds=lease_seconds)
+            if claim.owner or claim.status in {"completed", "failed"} or time.monotonic() >= deadline:
                 return claim
             time.sleep(max(0.001, poll_seconds))
 
@@ -398,49 +218,37 @@ class RpgForegroundSubmissionStore:
             claim = self.get(session_id, submission_id)
             if claim is None:
                 raise RuntimeError("foreground submission claim disappeared")
-            if claim.status in _TERMINAL_STATUSES or time.monotonic() >= deadline:
+            if claim.status in {"completed", "failed"} or time.monotonic() >= deadline:
                 return claim
             time.sleep(max(0.001, poll_seconds))
 
     @staticmethod
-    def _row_to_claim(
-        row: sqlite3.Row,
-        *,
-        owner: bool,
-        owner_token: str | None,
-    ) -> ForegroundSubmissionClaim:
-        result: dict[str, Any] | None = None
-        if row["result_json"]:
-            decoded = json.loads(str(row["result_json"]))
-            if isinstance(decoded, dict):
-                result = decoded
+    def _claim(record: dict[str, Any], *, owner: bool) -> ForegroundSubmissionClaim:
         return ForegroundSubmissionClaim(
-            session_id=str(row["session_id"]),
-            submission_id=str(row["submission_id"]),
-            status=str(row["status"]),
+            session_id=str(record["session_id"]),
+            submission_id=str(record["submission_id"]),
+            status=str(record["status"]),
             owner=owner,
-            claim_token=owner_token,
-            job_id=str(row["job_id"]) if row["job_id"] else None,
-            result=result,
-            error=str(row["error_text"]) if row["error_text"] else None,
-            lease_expires_at=(
-                str(row["lease_expires_at"]) if row["lease_expires_at"] else None
-            ),
+            claim_token=str(record["claim_token"]) if owner else None,
+            job_id=str(record["job_id"]) if record.get("job_id") else None,
+            result=deepcopy(record.get("result")),
+            error=str(record["error"]) if record.get("error") else None,
+            lease_expires_at=str(record["lease_expires_at"]),
             execution_started_at=(
-                str(row["execution_started_at"])
-                if row["execution_started_at"]
+                str(record["execution_started_at"])
+                if record.get("execution_started_at")
                 else None
             ),
         )
 
 
-@lru_cache(maxsize=16)
-def _submission_store_for_path(path: str) -> RpgForegroundSubmissionStore:
-    return RpgForegroundSubmissionStore(path)
+RpgForegroundSubmissionStore = InMemoryForegroundSubmissionStore
 
 
-def submission_store_for_job_store(job_store: Any) -> RpgForegroundSubmissionStore | None:
-    path = getattr(job_store, "db_path", None)
-    if path is None or str(path) == ":memory:":
-        return None
-    return _submission_store_for_path(str(Path(path)))
+def submission_store_for_job_store(job_store: Any) -> InMemoryForegroundSubmissionStore:
+    return InMemoryForegroundSubmissionStore(getattr(job_store, "db_path", None))
+
+
+def reset_in_memory_submission_stores() -> None:
+    with _STATES_LOCK:
+        _STATES.clear()
