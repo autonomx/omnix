@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 
 from app.persistence.blob_store import LocalBlobStore
+from app.persistence.complete_cutover import CompletePostgresLegacyImporter
 from app.persistence.config import database_settings
-from app.persistence.cutover import PostgresLegacyImporter, preflight_bundle
+from app.persistence.cutover import preflight_bundle
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import bootstrap_local_tenant
 
@@ -51,7 +52,7 @@ def main() -> int:
 
     database = PostgresDatabase(database_settings())
     try:
-        importer = PostgresLegacyImporter(
+        importer = CompletePostgresLegacyImporter(
             database,
             blob_store=LocalBlobStore(getattr(args, "blob_root", None)),
         )
