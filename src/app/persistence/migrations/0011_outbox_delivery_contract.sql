@@ -1,3 +1,5 @@
+CREATE SEQUENCE IF NOT EXISTS omnix_outbox_event_key_seq;
+
 ALTER TABLE omnix_outbox_events
     ADD COLUMN IF NOT EXISTS event_key TEXT,
     ADD COLUMN IF NOT EXISTS schema_version INTEGER NOT NULL DEFAULT 1,
@@ -12,6 +14,9 @@ UPDATE omnix_outbox_events
  WHERE event_key IS NULL;
 
 ALTER TABLE omnix_outbox_events
+    ALTER COLUMN event_key SET DEFAULT (
+        'event:' || nextval('omnix_outbox_event_key_seq')::text
+    ),
     ALTER COLUMN event_key SET NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_omnix_outbox_event_key
