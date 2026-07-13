@@ -9,8 +9,9 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.foreground_submission_compat import PostgresForegroundSubmissionStoreAdapter
+from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.migrations import apply_migrations
+from app.persistence.unit_of_work import unit_of_work
 
 
 pytestmark = pytest.mark.skipif(
@@ -40,37 +41,40 @@ def test_concurrent_postgresql_claims_select_one_authoritative_owner() -> None:
 
     try:
         apply_migrations(first_database)
-        first = PostgresForegroundSubmissionStoreAdapter(first_database)
-        second = PostgresForegroundSubmissionStoreAdapter(second_database)
+        context = bootstrap_local_tenant(first_database)
         barrier = Barrier(2)
 
-        def claim(store: PostgresForegroundSubmissionStoreAdapter):
+        def claim(database: PostgresDatabase) -> dict:
             barrier.wait(timeout=5)
-            return store.claim(
-                session_id,
-                submission_id,
-                lease_seconds=300,
-            )
+            with unit_of_work(database) as work:
+                record = work.foreground_submissions.claim(
+                    context,
+                    session_id=session_id,
+                    submission_id=submission_id,
+                    lease_seconds=300,
+                )
+                work.commit()
+                return record
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            claims = list(executor.map(claim, (first, second)))
+            claims = list(executor.map(claim, (first_database, second_database)))
 
-        owners = [claim for claim in claims if claim.owner]
-        duplicates = [claim for claim in claims if not claim.owner]
+        owners = [claim for claim in claims if claim["owner"]]
+        duplicates = [claim for claim in claims if not claim["owner"]]
         assert len(owners) == 1
         assert len(duplicates) == 1
-        assert owners[0].claim_token
-        assert duplicates[0].claim_token is None
-        assert {claim.status for claim in claims} == {"claimed"}
+        assert owners[0]["claim_token"]
+        assert duplicates[0]["claim_token"] is None
+        assert {claim["status"] for claim in claims} == {"claimed"}
 
         with first_database.connection() as connection:
             row = connection.execute(
                 """
                 SELECT COUNT(*), MIN(status), COUNT(DISTINCT claim_token)
                   FROM omnix_rpg_foreground_submissions
-                 WHERE session_id = %s AND submission_id = %s
+                 WHERE workspace_id = %s AND session_id = %s AND submission_id = %s
                 """,
-                (session_id, submission_id),
+                (context.workspace_id, session_id, submission_id),
             ).fetchone()
         assert int(row[0]) == 1
         assert str(row[1]) == "claimed"
