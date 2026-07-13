@@ -10,13 +10,8 @@ from __future__ import annotations
 from app.testing.in_memory_job_store import InMemoryJobStore
 
 
-# Transitional alias for callers/tests migrated in checkpoint 8. It is an
-# in-memory test double, not a SQLite implementation.
-SQLiteJobStore = InMemoryJobStore
-
-
 def default_job_store() -> InMemoryJobStore:
     return InMemoryJobStore()
 
 
-__all__ = ["InMemoryJobStore", "SQLiteJobStore", "default_job_store"]
+__all__ = ["InMemoryJobStore", "default_job_store"]
