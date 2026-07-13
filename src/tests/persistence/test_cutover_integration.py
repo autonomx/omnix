@@ -377,6 +377,7 @@ def test_declared_hash_drift_fails_preflight(tmp_path: Path) -> None:
     with pytest.raises(LegacyBundleError):
         database = _database()
         try:
+            _reset(database)
             importer = PostgresLegacyImporter(
                 database, blob_store=LocalBlobStore(tmp_path / "blobs")
             )

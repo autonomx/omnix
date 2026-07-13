@@ -33,6 +33,20 @@ def _database() -> PostgresDatabase:
     )
 
 
+def _reset(database: PostgresDatabase) -> None:
+    apply_migrations(database)
+    with database.transaction() as connection:
+        connection.execute(
+            "TRUNCATE omnix_backup_blob_manifest, omnix_backup_generations, "
+            "omnix_asset_versions, omnix_assets CASCADE"
+        )
+        connection.execute(
+            "UPDATE omnix_persistence_cutover "
+            "SET mode = 'postgresql', authority_state = 'postgresql_stabilized', "
+            "updated_at = CURRENT_TIMESTAMP WHERE singleton = TRUE"
+        )
+
+
 def _create_asset(work, context, *, asset_id: str, blob_store: LocalBlobStore, storage_key: str, content: bytes) -> None:
     blob = blob_store.put_bytes(storage_key, content)
     work.assets.create(
@@ -63,7 +77,7 @@ def test_backup_generation_captures_and_verifies_blob_authority(tmp_path) -> Non
     backup_store = LocalBlobStore(tmp_path / "backup-blobs")
     restored_store = LocalBlobStore(tmp_path / "restored-blobs")
     try:
-        apply_migrations(database)
+        _reset(database)
         context = bootstrap_local_tenant(database)
         with unit_of_work(database) as work:
             _create_asset(
@@ -126,7 +140,7 @@ def test_backup_verification_reports_missing_blob(tmp_path) -> None:
     backup_store = LocalBlobStore(tmp_path / "missing-backup-blobs")
     restored_store = LocalBlobStore(tmp_path / "missing-restored-blobs")
     try:
-        apply_migrations(database)
+        _reset(database)
         context = bootstrap_local_tenant(database)
         with unit_of_work(database) as work:
             _create_asset(

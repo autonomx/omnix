@@ -116,6 +116,7 @@ def test_cutover_requires_verified_import_backup_and_write_acknowledgement() -> 
                 software_revision="test-head",
                 schema_version="0015_cutover_state_machine",
                 backup_generation_id=backup_id,
+                operator_note="verified backup captured before activation",
             )
             assert activated["mode"] == "postgresql"
             with pytest.raises(CutoverTransitionError, match="acknowledgement"):
@@ -123,6 +124,7 @@ def test_cutover_requires_verified_import_backup_and_write_acknowledgement() -> 
                     to_state="postgresql_open_for_writes",
                     software_revision="test-head",
                     schema_version="0015_cutover_state_machine",
+                    operator_note="write reopening acknowledgement test",
                 )
             opened = state.transition(
                 to_state="postgresql_open_for_writes",
@@ -130,6 +132,7 @@ def test_cutover_requires_verified_import_backup_and_write_acknowledgement() -> 
                 schema_version="0015_cutover_state_machine",
                 write_reopen_acknowledged=True,
                 latest_authoritative_revision="campaign:1@42",
+                operator_note="operator accepts PostgreSQL write authority",
             )
             assert opened["authority_state"] == "postgresql_open_for_writes"
             stabilized = state.transition(
@@ -163,6 +166,7 @@ def test_post_write_legacy_rollback_requires_destructive_acknowledgement() -> No
                     to_state=target,
                     software_revision="test-head",
                     schema_version="0015_cutover_state_machine",
+                    operator_note=f"integration transition to {target}",
                     **kwargs,
                 )
             with pytest.raises(CutoverTransitionError, match="destructive acknowledgement"):
@@ -170,6 +174,7 @@ def test_post_write_legacy_rollback_requires_destructive_acknowledgement() -> No
                     to_state="rollback_recorded",
                     software_revision="test-head",
                     schema_version="0015_cutover_state_machine",
+                    operator_note="rollback acknowledgement validation",
                 )
             rolled_back = state.transition(
                 to_state="rollback_recorded",

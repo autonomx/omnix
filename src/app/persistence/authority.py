@@ -114,6 +114,9 @@ def initialize_fresh_install_authority(
     software_revision: str,
     schema_version: str,
 ) -> PostgresAuthorityPolicy:
+    policy = current_authority_policy(connection)
+    if policy.authority_state != "legacy_preflight" or policy.mode != "legacy_preflight":
+        return policy
     policy = current_authority_policy(connection, for_update=True)
     if policy.authority_state != "legacy_preflight" or policy.mode != "legacy_preflight":
         return policy
