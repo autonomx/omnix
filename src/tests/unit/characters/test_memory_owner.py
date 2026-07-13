@@ -6,13 +6,13 @@ from pathlib import Path
 import pytest
 
 from app.assistant_memory import MemoryPolicyError, resolve_chat_scope, resolve_snapshot_view
-from app.assistant_memory.owner_repository import OwnerAwareSQLiteMemoryRepository
+from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
 from app.assistant_memory.owner_service import OwnerAwareMemoryService
 
 
 def _service(tmp_path: Path) -> OwnerAwareMemoryService:
     return OwnerAwareMemoryService(
-        OwnerAwareSQLiteMemoryRepository(tmp_path / "memory.sqlite3")
+        OwnerAwareInMemoryMemoryRepository(tmp_path / "memory.sqlite3")
     )
 
 
@@ -153,7 +153,7 @@ def test_snapshots_have_independent_owner_revisions_and_visibility(tmp_path: Pat
     assert maya_view.active_count == 1
 
 
-def test_v1_database_migrates_existing_rows_to_system_owner(tmp_path: Path) -> None:
+def test_memory_runtime_repository_does_not_mutate_legacy_sqlite_source(tmp_path: Path) -> None:
     path = tmp_path / "legacy-memory.sqlite3"
     with sqlite3.connect(path) as connection:
         connection.executescript(
@@ -205,13 +205,12 @@ def test_v1_database_migrates_existing_rows_to_system_owner(tmp_path: Path) -> N
             """
         )
 
-    repository = OwnerAwareSQLiteMemoryRepository(path)
-    records = repository.list_records()
+    repository = OwnerAwareInMemoryMemoryRepository(path)
+    assert repository.list_records() == []
+
     with sqlite3.connect(path) as connection:
         version = connection.execute("SELECT version FROM memory_schema_version").fetchone()[0]
         columns = {row[1] for row in connection.execute("PRAGMA table_info(memory_records)")}
-
-    assert version == 2
-    assert {"owner_type", "owner_id"} <= columns
-    assert records[0].owner_type == "system"
-    assert records[0].owner_id == "system-assistant"
+    assert version == 1
+    assert "owner_type" not in columns
+    assert "owner_id" not in columns
