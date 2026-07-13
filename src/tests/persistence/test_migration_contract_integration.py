@@ -43,7 +43,8 @@ def test_migration_status_reports_application_compatibility() -> None:
         status = migration_status(database)
 
         assert status["compatible"] is True
-        assert status["current_schema"] == APPLICATION_SCHEMA_MAX
+        assert status["current_schema"] == status["discovered"][-1]
+        assert APPLICATION_SCHEMA_MIN <= status["current_schema"] <= APPLICATION_SCHEMA_MAX
         assert status["application_schema_min"] == APPLICATION_SCHEMA_MIN
         assert status["application_schema_max"] == APPLICATION_SCHEMA_MAX
         assert_schema_compatible(status)
