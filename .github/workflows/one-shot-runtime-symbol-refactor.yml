@@ -1,0 +1,42 @@
+name: One-shot runtime symbol refactor
+
+on:
+  push:
+    branches:
+      - agent/postgresql-roadmap-corrections
+    paths:
+      - .github/workflows/one-shot-runtime-symbol-refactor.yml
+      - scripts/refactor_sqlite_runtime_symbols.py
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/postgresql-roadmap-corrections
+          fetch-depth: 0
+
+      - name: Apply exact runtime symbol migration
+        run: python scripts/refactor_sqlite_runtime_symbols.py
+
+      - name: Validate generated diff
+        run: git diff --check
+
+      - name: Commit generated migration
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No symbol migration changes remain."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app src/tests tests scripts
+          git commit -m "Retire transitional SQLite runtime symbols"
+          git push origin HEAD:agent/postgresql-roadmap-corrections
