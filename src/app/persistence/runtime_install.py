@@ -63,11 +63,9 @@ def _install_core_domain_adapters() -> None:
     from app.characters import repository as character_repository_module
     from app.characters import service as character_service_module
     from app.chat import repository as chat_repository_module
-    from app.chat import store as chat_store_module
 
-    chat_repository_module.SQLiteChatRepository = PostgresChatRepositoryAdapter
-    chat_store_module.SQLiteChatRepository = PostgresChatRepositoryAdapter
-    memory_service_module.SQLiteMemoryRepository = PostgresMemoryRepositoryAdapter
+    chat_repository_module.InMemoryChatRepository = PostgresChatRepositoryAdapter
+    memory_service_module.InMemoryMemoryRepository = PostgresMemoryRepositoryAdapter
     character_repository_module.CharacterRepository = PostgresCharacterRepositoryAdapter
     character_service_module.CharacterRepository = PostgresCharacterRepositoryAdapter
     asset_store_module.SharedAssetStore = PostgresSharedAssetStoreAdapter
@@ -95,16 +93,16 @@ def _install_chat_runtime() -> None:
     prompt_store_module.ChatSessionStore = PostgresChatSessionStore
     base_store_module.ChatSessionStore = PostgresChatSessionStore
     character_store_module.ChatSessionStore = PostgresCharacterChatSessionStore
-    character_store_module.SQLiteChatSessionStore = PostgresCharacterChatSessionStore
+    character_store_module.InMemoryChatSessionStore = PostgresCharacterChatSessionStore
     character_store_module.default_chat_store = default_chat_store
     chat_package.ChatSessionStore = PostgresCharacterChatSessionStore
-    chat_package.SQLiteChatSessionStore = PostgresCharacterChatSessionStore
+    chat_package.InMemoryChatSessionStore = PostgresCharacterChatSessionStore
     chat_package.default_chat_store = default_chat_store
 
-    compaction_module.SQLiteConversationSummaryRepository = (
+    compaction_module.InMemoryConversationSummaryRepository = (
         PostgresConversationSummaryRepository
     )
-    history_module.SQLiteHistorySearchService = PostgresHistorySearchService
+    history_module.InMemoryHistorySearchService = PostgresHistorySearchService
     history_module.default_history_search_service = default_history_search_service
 
     install_live_agent_store_hooks(
@@ -143,17 +141,17 @@ def _install_execution_runtime() -> None:
     def _default_postgres_refresh_store() -> PostgresProviderModelRefreshStore:
         return PostgresProviderModelRefreshStore()
 
-    job_store_module.SQLiteJobStore = PostgresJobStoreAdapter
+    job_store_module.InMemoryJobStore = PostgresJobStoreAdapter
     job_store_module.default_job_store = _default_postgres_job_store
-    jobs_package.SQLiteJobStore = PostgresJobStoreAdapter
+    jobs_package.InMemoryJobStore = PostgresJobStoreAdapter
     jobs_package.default_job_store = _default_postgres_job_store
 
-    residency_module.SQLiteModelResidencyStore = PostgresModelResidencyStore
+    residency_module.InMemoryModelResidencyStore = PostgresModelResidencyStore
     residency_module.default_model_residency_store = _default_postgres_residency_store
-    jobs_package.SQLiteModelResidencyStore = PostgresModelResidencyStore
+    jobs_package.InMemoryModelResidencyStore = PostgresModelResidencyStore
     jobs_package.default_model_residency_store = _default_postgres_residency_store
 
-    cache_status_module.SQLiteProviderModelRefreshStore = PostgresProviderModelRefreshStore
+    cache_status_module.InMemoryProviderModelRefreshStore = PostgresProviderModelRefreshStore
     cache_status_module.default_provider_model_refresh_store = _default_postgres_refresh_store
 
     submission_store_module.RpgForegroundSubmissionStore = (
@@ -163,7 +161,7 @@ def _install_execution_runtime() -> None:
         postgres_submission_store_for_job_store
     )
 
-    # Existing decorators were attached to the retired SQLite class during
+    # Existing decorators were attached to the provider-free job class during
     # module import. Install the same deterministic handlers on the authoritative
     # PostgreSQL job facade before any worker is created.
     inline_feature_jobs.install_inline_feature_job_execution(PostgresJobStoreAdapter)
