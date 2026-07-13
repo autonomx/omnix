@@ -1,6 +1,6 @@
 # Omnix PostgreSQL Completion Fixes Roadmap
 
-**Status:** Final verification in progress  
+**Status:** Verified complete  
 **Repository:** `autonomx/omnix`  
 **Base architecture:** `docs/CENTRALIZED_POSTGRESQL_ARCHITECTURE_ROADMAP.md`  
 **Decision record:** `docs/architecture/ADR-0001-centralized-postgresql-authority.md`  
@@ -28,7 +28,7 @@ This document closes the remaining correctness, recovery, security, lifecycle, a
 | C5 — Current-topology distributed correctness | verified | C1, C2, C4 | gateway/worker registry, leases, draining, stale-node recovery, failure evidence |
 | C6 — Cutover and rollback state machine | verified | C4, C5 | guarded authority states, verified-backup activation, write and destructive acknowledgements |
 | C7 — Data lifecycle, capacity, and maintenance | verified | C2, C4 | retention policy, bounded cleanup, capacity diagnostics, payload ceiling |
-| C8 — Final integration and completion evidence | in_progress | C0–C7 | final exact-head matrix and evidence reconciliation |
+| C8 — Final integration and completion evidence | verified | C0–C7 | exact-head matrix, evidence reconciliation, final status |
 
 A phase is not `verified` merely because code or documentation exists. The exact branch head containing the phase must have its required GitHub Actions completed successfully.
 
