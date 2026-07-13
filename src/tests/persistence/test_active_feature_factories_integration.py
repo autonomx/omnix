@@ -82,6 +82,9 @@ assert saved.model_dump(mode="json") == config.model_dump(mode="json")
 from app.gateway import live_chat_evaluation_store as evaluations
 assert evaluations.LiveChatEvaluationStore.__name__ == "PostgresLiveChatEvaluationStore"
 store = evaluations.default_live_chat_evaluation_store()
+from app.gateway import live_chat_evaluation_routes as evaluation_routes
+assert evaluation_routes.LiveChatEvaluationStore.__name__ == "PostgresLiveChatEvaluationStore"
+assert evaluation_routes.default_live_chat_evaluation_store().__class__.__name__ == "PostgresLiveChatEvaluationStore"
 record = store.upsert(evaluations.VoiceSessionEvaluationCreate(
     call_id="call:postgresql",
     session_id="chat:factory",

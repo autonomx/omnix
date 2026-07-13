@@ -294,6 +294,7 @@ def _install_execution_runtime() -> None:
 
 
 def _install_feature_document_runtime() -> None:
+    from app.gateway import live_chat_evaluation_routes as evaluation_routes_module
     from app.assist_core import policy_store as policy_module
     from app.assistant_tools import config_store as tool_config_module
     from app.gateway import live_chat_evaluation_store as evaluation_module
@@ -334,6 +335,10 @@ def _install_feature_document_runtime() -> None:
 
     evaluation_module.LiveChatEvaluationStore = PostgresLiveChatEvaluationStore
     evaluation_module.default_live_chat_evaluation_store = _default_evaluation_store
+    evaluation_routes_module.LiveChatEvaluationStore = PostgresLiveChatEvaluationStore
+    evaluation_routes_module.default_live_chat_evaluation_store = (
+        _default_evaluation_store
+    )
 
     @lru_cache(maxsize=1)
     def _default_research_store() -> PostgresResearchSourceStore:
