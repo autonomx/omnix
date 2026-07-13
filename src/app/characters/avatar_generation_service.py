@@ -12,7 +12,7 @@ from app.image.reference_assets import (
     close_image_references,
     load_image_reference_assets,
 )
-from app.jobs import CreateJobRequest, JobRecord, JobStatus, ResourceClass, SQLiteJobStore, default_job_store
+from app.jobs import CreateJobRequest, InMemoryJobStore, JobRecord, JobStatus, ResourceClass, default_job_store
 
 from .avatar_generation_models import (
     BackfillClonedVoiceCharactersRequest,
@@ -53,7 +53,7 @@ class CharacterAvatarGenerationService:
         *,
         character_service_factory: Callable[[], CharacterService] = default_character_service,
         avatar_service_factory: Callable[[], CharacterAvatarService] = default_character_avatar_service,
-        job_store_factory: Callable[[], SQLiteJobStore] = default_job_store,
+        job_store_factory: Callable[[], InMemoryJobStore] = default_job_store,
         asset_store_factory: Callable[[], SharedAssetStore] = default_asset_store,
     ) -> None:
         self.repository = repository or CharacterAvatarGenerationRepository()
