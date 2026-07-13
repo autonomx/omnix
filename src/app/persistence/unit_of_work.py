@@ -8,6 +8,11 @@ from .asset_repository import (
     PostgresSecretReferenceRepository,
     PostgresSettingsRepository,
 )
+from .conversation_repositories import (
+    PostgresCharacterRepository,
+    PostgresChatRepository,
+    PostgresMemoryRepository,
+)
 from .database import PostgresDatabase, default_database
 from .repositories import (
     PostgresAuditRepository,
@@ -32,6 +37,9 @@ class PostgresUnitOfWork:
         self.assets: PostgresAssetRepository
         self.settings: PostgresSettingsRepository
         self.secret_references: PostgresSecretReferenceRepository
+        self.characters: PostgresCharacterRepository
+        self.memories: PostgresMemoryRepository
+        self.chats: PostgresChatRepository
         self._connection_context: Any | None = None
         self._completed = False
 
@@ -46,6 +54,9 @@ class PostgresUnitOfWork:
         self.assets = PostgresAssetRepository(self.connection)
         self.settings = PostgresSettingsRepository(self.connection)
         self.secret_references = PostgresSecretReferenceRepository(self.connection)
+        self.characters = PostgresCharacterRepository(self.connection)
+        self.memories = PostgresMemoryRepository(self.connection)
+        self.chats = PostgresChatRepository(self.connection)
         return self
 
     def commit(self) -> None:
