@@ -103,9 +103,6 @@ class InMemoryConversationSummaryRepository:
             return deepcopy(values[0]) if values else None
 
 
-SQLiteConversationSummaryRepository = InMemoryConversationSummaryRepository
-
-
 def _estimate_tokens(text: str) -> int:
     return max(1, (len(text.encode("utf-8")) + 3) // 4) if text else 0
 
