@@ -5,7 +5,6 @@ import os
 
 import pytest
 
-from app.persistence.asset_repository import PostgresAssetRepository
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.coordinated_recovery import CoordinatedRecoveryRepository
@@ -34,27 +33,37 @@ def _database() -> PostgresDatabase:
     )
 
 
+def _create_asset(work, context, *, asset_id: str, blob_store: LocalBlobStore, storage_key: str, content: bytes) -> None:
+    blob = blob_store.put_bytes(storage_key, content)
+    work.assets.create(
+        context,
+        {
+            "id": asset_id,
+            "module": "test",
+            "asset_type": "binary",
+            "mime_type": "application/octet-stream",
+            "byte_size": len(content),
+            "checksum_sha256": hashlib.sha256(content).hexdigest(),
+            "storage_provider": blob_store.provider,
+            "storage_key": blob["storage_key"],
+        },
+    )
+
+
 def test_backup_generation_captures_and_verifies_blob_authority(tmp_path) -> None:
     database = _database()
     blob_store = LocalBlobStore(tmp_path / "blobs")
     try:
         apply_migrations(database)
         context = bootstrap_local_tenant(database)
-        content = b"coordinated-backup-content"
-        blob = blob_store.put_bytes("assets/recovery.bin", content)
         with unit_of_work(database) as work:
-            work.assets.create_asset(
+            _create_asset(
+                work,
                 context,
-                {
-                    "id": "asset:recovery",
-                    "module": "test",
-                    "asset_type": "binary",
-                    "mime_type": "application/octet-stream",
-                    "byte_size": len(content),
-                    "checksum_sha256": hashlib.sha256(content).hexdigest(),
-                    "storage_provider": blob_store.provider,
-                    "storage_key": blob["storage_key"],
-                },
+                asset_id="asset:recovery",
+                blob_store=blob_store,
+                storage_key="assets/recovery.bin",
+                content=b"coordinated-backup-content",
             )
             work.commit()
 
@@ -70,7 +79,12 @@ def test_backup_generation_captures_and_verifies_blob_authority(tmp_path) -> Non
             verified = recovery.verify_blobs(generation_id, blob_store)
 
         assert manifest["asset_count"] >= 1
-        assert verified == {"ok": True, "missing": [], "mismatched": [], "checked": manifest["asset_count"]}
+        assert verified == {
+            "ok": True,
+            "missing": [],
+            "mismatched": [],
+            "checked": manifest["asset_count"],
+        }
         with database.connection() as connection:
             row = connection.execute(
                 "SELECT status, database_backup_reference, manifest_hash "
@@ -91,21 +105,14 @@ def test_backup_verification_reports_missing_blob(tmp_path) -> None:
     try:
         apply_migrations(database)
         context = bootstrap_local_tenant(database)
-        content = b"will-be-missing"
-        blob = blob_store.put_bytes("assets/missing.bin", content)
         with unit_of_work(database) as work:
-            work.assets.create_asset(
+            _create_asset(
+                work,
                 context,
-                {
-                    "id": "asset:missing-recovery",
-                    "module": "test",
-                    "asset_type": "binary",
-                    "mime_type": "application/octet-stream",
-                    "byte_size": len(content),
-                    "checksum_sha256": hashlib.sha256(content).hexdigest(),
-                    "storage_provider": blob_store.provider,
-                    "storage_key": blob["storage_key"],
-                },
+                asset_id="asset:missing-recovery",
+                blob_store=blob_store,
+                storage_key="assets/missing.bin",
+                content=b"will-be-missing",
             )
             work.commit()
         with database.transaction() as connection:
