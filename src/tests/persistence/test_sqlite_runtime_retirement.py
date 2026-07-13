@@ -38,8 +38,37 @@ def _sqlite_connect_sites() -> set[str]:
     return sites
 
 
+def _legacy_sqlite_symbol_sites() -> list[str]:
+    """Return transitional runtime identifiers that still advertise SQLite."""
+
+    sites: set[str] = set()
+    for path in APP_ROOT.rglob("*.py"):
+        relative = path.relative_to(APP_ROOT).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            names: list[str] = []
+            if isinstance(node, ast.Name):
+                names.append(node.id)
+            elif isinstance(node, ast.Attribute):
+                names.append(node.attr)
+            elif isinstance(node, ast.alias):
+                names.append(node.name.rsplit(".", 1)[-1])
+                if node.asname:
+                    names.append(node.asname)
+            elif isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                names.append(node.name)
+            for name in names:
+                if "SQLite" in name:
+                    sites.add(f"{relative}:{name}")
+    return sorted(sites)
+
+
 def test_sqlite_connections_exist_only_in_one_shot_legacy_extractor() -> None:
     assert _sqlite_connect_sites() == LEGACY_SQLITE_ADAPTER_FILES
+
+
+def test_runtime_exports_have_no_transitional_sqlite_symbols() -> None:
+    assert _legacy_sqlite_symbol_sites() == []
 
 
 def test_postgresql_runtime_modules_do_not_open_sqlite() -> None:
