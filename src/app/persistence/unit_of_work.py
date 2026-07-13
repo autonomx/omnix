@@ -24,6 +24,7 @@ from .repositories import (
     PostgresIdempotencyRepository,
     PostgresIdentityRepository,
 )
+from .rpg_repository import PostgresRpgRepository
 
 
 class UnitOfWorkClosedError(RuntimeError):
@@ -48,6 +49,7 @@ class PostgresUnitOfWork:
         self.jobs: PostgresJobRepository
         self.outbox: PostgresOutboxRepository
         self.foreground_submissions: PostgresForegroundSubmissionRepository
+        self.rpg: PostgresRpgRepository
         self._connection_context: Any | None = None
         self._completed = False
 
@@ -68,6 +70,7 @@ class PostgresUnitOfWork:
         self.jobs = PostgresJobRepository(self.connection)
         self.outbox = PostgresOutboxRepository(self.connection)
         self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
+        self.rpg = PostgresRpgRepository(self.connection)
         return self
 
     def commit(self) -> None:
