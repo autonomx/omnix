@@ -101,12 +101,15 @@ class PostgresOutboxRepository:
                 SELECT candidate.id
                   FROM omnix_outbox_events AS candidate
                  WHERE (
-                       candidate.status IN ('pending', 'retrying')
-                       AND candidate.available_at <= CURRENT_TIMESTAMP
-                 ) OR (
-                       candidate.status = 'claimed'
-                       AND candidate.claim_expires_at <= CURRENT_TIMESTAMP
-                 )
+                           (
+                               candidate.status IN ('pending', 'retrying')
+                               AND candidate.available_at <= CURRENT_TIMESTAMP
+                           )
+                           OR (
+                               candidate.status = 'claimed'
+                               AND candidate.claim_expires_at <= CURRENT_TIMESTAMP
+                           )
+                       )
                    AND (
                        candidate.ordering_key IS NULL
                        OR NOT EXISTS (
