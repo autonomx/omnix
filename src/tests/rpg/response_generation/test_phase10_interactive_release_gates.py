@@ -7,7 +7,7 @@ from threading import Lock
 from typing import Any
 
 from app.gateway.rpg_turn_job_mirror import _apply_turn_with_job_mirror
-from app.jobs.store import SQLiteJobStore
+from app.jobs.store import InMemoryJobStore
 from app.rpg.presentation.dialogue_quality import enforce_dialogue_quality
 from app.rpg.presentation.turn_response import build_turn_response_v2
 from app.rpg.presentation.visible_response import visible_response_text
@@ -71,7 +71,7 @@ def _dialogue_result(line: str = "Fine.") -> dict[str, Any]:
 
 
 def test_release_gate_exactly_once_under_concurrent_duplicate_submissions(monkeypatch: Any, tmp_path: Path) -> None:
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs")
     monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
     calls = 0
     call_lock = Lock()
