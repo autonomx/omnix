@@ -128,11 +128,4 @@ class OwnerAwareInMemoryMemoryRepository(InMemoryMemoryRepository):
             return len(record_ids), len(candidate_ids), len(snapshot_ids)
 
 
-# Transitional historical symbol. It is in-memory and contains no SQLite code.
-OwnerAwareSQLiteMemoryRepository = OwnerAwareInMemoryMemoryRepository
-
-
-__all__ = [
-    "OwnerAwareInMemoryMemoryRepository",
-    "OwnerAwareSQLiteMemoryRepository",
-]
+__all__ = ["OwnerAwareInMemoryMemoryRepository"]
