@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS omnix_schema_migrations (
 # Stable signed bigint derived from the ASCII identity "OMNIXPG". The lock is
 # transaction-scoped so a crashed migrator releases it automatically.
 MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
-APPLICATION_SCHEMA_MIN = "0010_complete_legacy_migration"
-APPLICATION_SCHEMA_MAX = "0010_complete_legacy_migration"
+APPLICATION_SCHEMA_MIN = "0011_outbox_delivery_contract"
+APPLICATION_SCHEMA_MAX = "0011_outbox_delivery_contract"
 
 
 class MigrationError(RuntimeError):
