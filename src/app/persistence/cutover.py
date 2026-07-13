@@ -442,7 +442,10 @@ class PostgresLegacyImporter:
         if entity_type == "assets":
             source_path = Path(str(item["source_path"]))
             content = source_path.read_bytes()
-            storage_key = str(item.get("storage_key") or f"legacy/{stable_id}/{source_path.name}")
+            storage_key = str(
+                item.get("storage_key")
+                or f"legacy/{hashlib.sha256(stable_id.encode('utf-8')).hexdigest()}/{source_path.name}"
+            )
             blob = self.blob_store.put_bytes(storage_key, content)
             work.assets.create(
                 context,
@@ -588,13 +591,22 @@ class PostgresLegacyImporter:
             )
             return "omnix_settings", stable_id, None
         if entity_type == "providers":
+            secret_reference = item.get("secret_reference")
+            if secret_reference:
+                work.secret_references.register(
+                    context,
+                    reference=str(secret_reference),
+                    provider=stable_id,
+                    purpose="provider-api-key",
+                    metadata={"legacy_import": True},
+                )
             work.providers.create(
                 context,
                 provider_id=stable_id,
                 provider_type=item.get("provider_type", "legacy"),
                 display_name=item.get("display_name", stable_id),
                 config=dict(item.get("config") or {}),
-                secret_reference=item.get("secret_reference"),
+                secret_reference=secret_reference,
                 enabled=bool(item.get("enabled", True)),
             )
             return "omnix_provider_configs", stable_id, None

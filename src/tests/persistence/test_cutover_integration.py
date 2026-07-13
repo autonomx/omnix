@@ -319,6 +319,45 @@ def test_end_to_end_import_is_verified_resumable_and_cutover_gated(tmp_path: Pat
         database.close()
 
 
+def test_import_generates_portable_asset_key_and_registers_secret_reference(
+    tmp_path: Path,
+) -> None:
+    database = _database()
+    store = LocalBlobStore(tmp_path / "blobs")
+    try:
+        _reset(database)
+        context = bootstrap_local_tenant(
+            database,
+            authority_operation=AuthorityOperation.LEGACY_IMPORT,
+        )
+        importer = PostgresLegacyImporter(database, blob_store=store)
+        bundle = _bundle(tmp_path)
+        bundle["source_id"] = "local-installation:portable-asset-key"
+        bundle["entities"]["assets"][0].pop("storage_key")
+        bundle["entities"]["providers"][0]["secret_reference"] = (
+            "legacy-secret:lmstudio"
+        )
+        bundle["source_hash"] = bundle_hash(bundle)
+
+        imported = importer.import_bundle(context, bundle)
+
+        assert imported["ok"] is True
+        with database.connection() as connection:
+            storage_key, secret_reference = connection.execute(
+                "SELECT storage_key, "
+                "(SELECT secret_reference FROM omnix_provider_configs "
+                "WHERE id = 'provider:lmstudio') "
+                "FROM omnix_assets WHERE id = 'asset:legacy-report'"
+            ).fetchone()
+        assert storage_key.startswith("legacy/")
+        assert ":" not in storage_key
+        assert store.read_bytes(storage_key) == b"{}"
+        assert secret_reference == "legacy-secret:lmstudio"
+    finally:
+        _restore_runtime_authority(database)
+        database.close()
+
+
 def test_changed_source_id_is_rejected_after_import(tmp_path: Path) -> None:
     database = _database()
     try:
