@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.assistant_memory import MemoryService, SQLiteMemoryRepository, resolve_chat_scope
+from app.assistant_memory import InMemoryMemoryRepository, MemoryService, resolve_chat_scope
 from app.assistant_memory.hermes_adapter import (
     export_approved_memory_to_hermes,
     import_hermes_memory,
@@ -8,7 +8,7 @@ from app.assistant_memory.hermes_adapter import (
 
 
 def setup_service(tmp_path):
-    service = MemoryService(SQLiteMemoryRepository(tmp_path / "memory.sqlite3"))
+    service = MemoryService(InMemoryMemoryRepository(tmp_path / "memory.sqlite3"))
     context = resolve_chat_scope("chat:one", project_id="project:omnix")
     return service, context
 
