@@ -23,7 +23,9 @@ The corrective program advances only after all four required provider-free workf
 | C5 | `4c409b364dc51e8824861a0063579cd5dae33031` | 4303 | 221 | 493 | 4566 |
 | C6 | `895151a0e0e9c3182ef633427deb37e25e6c14bb` | 4307 | 225 | 497 | 4570 |
 | C7 | `9fdc08054eb0d9d14854d22b9124174d0902a750` | 4312 | 230 | 502 | 4575 |
-| C8 | pending final exact-head verification | — | — | — | — |
+| C8 | `4374619b2d8d192330b6c45c62c7658536e1f1a3` | 4315 | 233 | 505 | 4578 |
+
+The reconciled completion documentation is reverified once more on its own final exact head before the pull request leaves draft state.
 
 ## Implemented contracts
 
@@ -35,6 +37,7 @@ The corrective program advances only after all four required provider-free workf
 - C5: `docs/architecture/POSTGRESQL_CURRENT_TOPOLOGY_CORRECTNESS.md`
 - C6: `docs/architecture/POSTGRESQL_CUTOVER_STATE_MACHINE.md`
 - C7: `docs/architecture/POSTGRESQL_DATA_LIFECYCLE_CAPACITY.md`
+- C8: `src/tests/persistence/test_postgresql_completion_evidence.py` and this evidence ledger
 
 ## Failure corrections
 
