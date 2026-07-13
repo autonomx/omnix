@@ -36,13 +36,14 @@ def test_cleanup_removes_only_expired_terminal_records() -> None:
         apply_migrations(database)
         context = bootstrap_local_tenant(database)
         with database.transaction() as connection:
-            connection.execute(
-                "DELETE FROM omnix_outbox_consumer_inbox; "
-                "DELETE FROM omnix_outbox_dead_letters; "
-                "DELETE FROM omnix_outbox_events; "
-                "DELETE FROM omnix_runtime_failure_evidence; "
-                "DELETE FROM omnix_lifecycle_cleanup_runs"
-            )
+            for table in (
+                "omnix_outbox_consumer_inbox",
+                "omnix_outbox_dead_letters",
+                "omnix_outbox_events",
+                "omnix_runtime_failure_evidence",
+                "omnix_lifecycle_cleanup_runs",
+            ):
+                connection.execute(f"DELETE FROM {table}")
             old_id = connection.execute(
                 """
                 INSERT INTO omnix_outbox_events (
