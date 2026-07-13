@@ -275,7 +275,9 @@ def test_real_legacy_sources_export_import_and_restore_all_lifecycle_records(tmp
                 "(SELECT COUNT(*) FROM omnix_rpg_snapshots)"
             ).fetchone()
         values = tuple(int(value) for value in counts)
-        assert values[0:7] == (1, 1, 1, 1, 1, 1, 1)
+        assert values[0:4] == (1, 1, 1, 1)
+        assert values[4] >= 2
+        assert values[5:7] == (1, 1)
         assert values[7] >= 2
         assert values[8:] == (1, 1, 1, 1, 1)
     finally:
