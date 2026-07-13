@@ -19,6 +19,13 @@ from .execution_repositories import (
     PostgresOutboxRepository,
 )
 from .job_repository import PostgresJobRepository
+from .module_repositories import (
+    PostgresModuleRecordRepository,
+    PostgresProjectionRepository,
+    PostgresPromptRepository,
+    PostgresProviderRepository,
+    PostgresResearchReportRepository,
+)
 from .repositories import (
     PostgresAuditRepository,
     PostgresIdempotencyRepository,
@@ -50,6 +57,11 @@ class PostgresUnitOfWork:
         self.outbox: PostgresOutboxRepository
         self.foreground_submissions: PostgresForegroundSubmissionRepository
         self.rpg: PostgresRpgRepository
+        self.module_records: PostgresModuleRecordRepository
+        self.projections: PostgresProjectionRepository
+        self.providers: PostgresProviderRepository
+        self.prompts: PostgresPromptRepository
+        self.research_reports: PostgresResearchReportRepository
         self._connection_context: Any | None = None
         self._completed = False
 
@@ -71,6 +83,11 @@ class PostgresUnitOfWork:
         self.outbox = PostgresOutboxRepository(self.connection)
         self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
         self.rpg = PostgresRpgRepository(self.connection)
+        self.module_records = PostgresModuleRecordRepository(self.connection)
+        self.projections = PostgresProjectionRepository(self.connection)
+        self.providers = PostgresProviderRepository(self.connection)
+        self.prompts = PostgresPromptRepository(self.connection)
+        self.research_reports = PostgresResearchReportRepository(self.connection)
         return self
 
     def commit(self) -> None:
