@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 from typing import Any
@@ -9,7 +10,7 @@ from typing import Any
 from .database import PostgresDatabase, default_database
 from .document_store import PostgresDocumentStore
 from .identity_service import bootstrap_local_tenant
-from .runtime import ensure_postgresql_runtime_ready
+from .runtime import LegacyPersistenceRetired, ensure_postgresql_runtime_ready
 from .unit_of_work import unit_of_work
 
 
@@ -77,6 +78,51 @@ def save_legacy_chat_sessions(payload: dict[str, Any]) -> None:
         module="platform",
         record_type="legacy-chat-sessions",
     )
+
+
+def load_environment_provider_secrets() -> dict[str, Any]:
+    return {
+        "api_keys": {
+            "openrouter": os.environ.get("OPENROUTER_API_KEY", "").strip(),
+            "cerebras": os.environ.get("CEREBRAS_API_KEY", "").strip(),
+        }
+    }
+
+
+def reject_plaintext_provider_secret_write(payload: dict[str, Any]) -> None:
+    del payload
+    raise LegacyPersistenceRetired(
+        "plaintext provider-secret JSON is retired; configure provider keys in the "
+        "process environment or an operator-owned secret provider"
+    )
+
+
+def load_empty_assistant_tool_credentials(path: Path | None = None):
+    if path is not None:
+        raise LegacyPersistenceRetired("plaintext assistant-tool credential JSON is retired")
+    from app.assistant_tools.credentials import AssistantToolCredentialsPayload
+
+    return AssistantToolCredentialsPayload()
+
+
+def load_empty_assistant_tool_oauth_clients(path: Path | None = None):
+    if path is not None:
+        raise LegacyPersistenceRetired("plaintext assistant-tool OAuth client JSON is retired")
+    from app.assistant_tools.credentials import AssistantToolOAuthClientsPayload
+
+    return AssistantToolOAuthClientsPayload()
+
+
+def unavailable_assistant_tool_secret(*args: Any, **kwargs: Any):
+    del args, kwargs
+    raise LegacyPersistenceRetired(
+        "assistant-tool credential persistence requires an encrypted or OS credential store"
+    )
+
+
+def no_assistant_tool_credential(*args: Any, **kwargs: Any) -> None:
+    del args, kwargs
+    return None
 
 
 def load_assist_house_state() -> dict[str, Any]:

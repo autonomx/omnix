@@ -62,6 +62,8 @@ def _install_remaining_document_authority_adapters() -> None:
     from app import shared
     from app.assist_core import house_state as house_state_module
     from app.assistant_memory import settings as memory_settings_module
+    from app.assistant_tools import credentials as tool_credentials_module
+    from app.assistant_tools import config_store as tool_config_module
     from app.assistant_tools import ledger as tool_ledger_module
     from app.characters import live_conversation_profile as conversation_profile_module
 
@@ -71,12 +73,18 @@ def _install_remaining_document_authority_adapters() -> None:
         load_application_settings,
         load_assist_house_state,
         load_assistant_tool_ledger_postgres,
+        load_empty_assistant_tool_credentials,
+        load_empty_assistant_tool_oauth_clients,
+        load_environment_provider_secrets,
         load_legacy_chat_sessions,
+        no_assistant_tool_credential,
         postgres_assistant_memory_settings_store_class,
         postgres_live_conversation_profile_store_class,
+        reject_plaintext_provider_secret_write,
         save_application_settings,
         save_assist_house_state,
         save_legacy_chat_sessions,
+        unavailable_assistant_tool_secret,
     )
 
     shared.install_postgresql_document_callbacks(
@@ -84,6 +92,8 @@ def _install_remaining_document_authority_adapters() -> None:
         save_settings_callback=save_application_settings,
         load_sessions_callback=load_legacy_chat_sessions,
         save_sessions_callback=save_legacy_chat_sessions,
+        load_secrets_callback=load_environment_provider_secrets,
+        save_secrets_callback=reject_plaintext_provider_secret_write,
     )
     house_state_module.load_house_state = load_assist_house_state
     house_state_module.save_house_state = save_assist_house_state
@@ -100,6 +110,40 @@ def _install_remaining_document_authority_adapters() -> None:
         append_assistant_tool_ledger_entry_postgres
     )
     tool_ledger_module.load_assistant_tool_ledger = load_assistant_tool_ledger_postgres
+    tool_credentials_module.load_assistant_tool_credentials = (
+        load_empty_assistant_tool_credentials
+    )
+    tool_credentials_module.load_assistant_tool_oauth_clients = (
+        load_empty_assistant_tool_oauth_clients
+    )
+    tool_credentials_module.save_assistant_tool_credentials = (
+        unavailable_assistant_tool_secret
+    )
+    tool_credentials_module.save_assistant_tool_oauth_clients = (
+        unavailable_assistant_tool_secret
+    )
+    tool_credentials_module.credential_for_tool = no_assistant_tool_credential
+    tool_credentials_module.oauth_client_for_provider = no_assistant_tool_credential
+    tool_credentials_module.upsert_tool_credential = unavailable_assistant_tool_secret
+    tool_credentials_module.upsert_oauth_client = unavailable_assistant_tool_secret
+    tool_credentials_module.delete_tool_credential = no_assistant_tool_credential
+    tool_config_module.delete_tool_credential = no_assistant_tool_credential
+    secret_consumer_replacements = {
+        "credential_for_tool": no_assistant_tool_credential,
+        "oauth_client_for_provider": no_assistant_tool_credential,
+        "upsert_tool_credential": unavailable_assistant_tool_secret,
+        "upsert_oauth_client": unavailable_assistant_tool_secret,
+    }
+    for module_name in (
+        "app.assistant_tools.connections",
+        "app.assistant_tools.gmail_adapter",
+    ):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
+        for name, replacement in secret_consumer_replacements.items():
+            if hasattr(module, name):
+                setattr(module, name, replacement)
     for module_name in (
         "app.assistant_tools.capability_dashboard",
         "app.assistant_tools.hermes_bridge",

@@ -30,6 +30,8 @@ Create a dated, read-only backup of every applicable source:
 
 Create a deterministic manifest containing relative path, byte size, and SHA-256. Do not alter originals. Record the manifest path and hash in the private operator report.
 
+Credential values are not migration entities. Before PostgreSQL runtime starts, configure provider keys through `OPENROUTER_API_KEY` and `CEREBRAS_API_KEY` in an operator-owned process secret provider. PostgreSQL mode does not read or write the legacy `secrets.json`. Assistant-tool OAuth/token storage also fails closed until an encrypted or operating-system credential provider is configured.
+
 ## 3. Prepare PostgreSQL
 
 Set `PYTHONPATH=src`, `OMNIX_DATABASE_URL`, and `OMNIX_SOFTWARE_REVISION` without printing the password.
@@ -53,11 +55,20 @@ python scripts/export_legacy_persistence_bundle.py `
   --source-id "<unique-local-installation-id>" `
   --output "resources/data/migration/legacy-bundle.json" `
   --asset-manifest "<actual-manifest-path>" `
+  --asset-manifest "<actual-generated-image-manifest-path>" `
   --character-db "<actual-character-db>" `
   --memory-db "<actual-memory-db>" `
   --chat-db "<actual-chat-db>" `
   --jobs-db "<actual-jobs-db>" `
-  --rpg-sessions-dir "<actual-rpg-session-directory>"
+  --rpg-sessions-dir "<actual-rpg-session-directory>" `
+  --settings-json "<actual-settings-json>" `
+  --secret-references-json "<actual-secret-reference-json>" `
+  --module-document assistant-memory runtime-settings "<actual-memory-settings-json>" `
+  --module-document assistant-tools configuration "<actual-tool-config-json>" `
+  --module-document live-chat evaluation-policy-store "<actual-live-evaluation-json>" `
+  --module-document live-chat conversation-profiles "<actual-live-profile-json>" `
+  --module-document assist-core house-state "<actual-house-state-json>" `
+  --module-jsonl assistant-tools execution-ledger execution_id "<actual-tool-ledger-jsonl>"
 
 python scripts/import_legacy_persistence_bundle.py preflight `
   "resources/data/migration/legacy-bundle.json"

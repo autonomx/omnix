@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import pytest
+
 from app.assistant_memory.settings import AssistantMemorySettingsUpdate
 from app.assistant_tools.ledger import AssistantToolLedgerEntry
 from app.characters.live_conversation_profile import LiveConversationProfileUpdate
 from app.persistence import runtime_document_compat as compat
+from app.persistence.runtime import LegacyPersistenceRetired
 
 
 class _Documents:
@@ -80,6 +83,21 @@ def test_bounded_runtime_documents_use_postgresql_facade(monkeypatch) -> None:
     compat.append_assistant_tool_ledger_entry_postgres(entry)
     ledger = compat.load_assistant_tool_ledger_postgres(limit=10)
     assert [item.execution_id for item in ledger.entries] == [entry.execution_id]
+
+
+def test_postgresql_secret_surfaces_use_environment_or_fail_closed(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "environment-openrouter")
+    monkeypatch.setenv("CEREBRAS_API_KEY", "environment-cerebras")
+    assert compat.load_environment_provider_secrets() == {
+        "api_keys": {
+            "openrouter": "environment-openrouter",
+            "cerebras": "environment-cerebras",
+        }
+    }
+    with pytest.raises(LegacyPersistenceRetired):
+        compat.reject_plaintext_provider_secret_write({"api_keys": {"openrouter": "x"}})
+    with pytest.raises(LegacyPersistenceRetired):
+        compat.unavailable_assistant_tool_secret(object())
 
 
 class _ApplicationSettings:

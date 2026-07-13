@@ -93,6 +93,32 @@ shared.save_settings({"provider": "lmstudio", "lmstudio": {"model": "runtime-mod
 assert shared.load_settings()["lmstudio"]["model"] == "runtime-model"
 shared.save_sessions({"legacy:runtime": {"title": "Runtime legacy route"}})
 assert shared.load_sessions()["legacy:runtime"]["title"] == "Runtime legacy route"
+assert shared.load_secrets() == {
+    "api_keys": {
+        "openrouter": "runtime-openrouter-key",
+        "cerebras": "runtime-cerebras-key",
+    }
+}
+try:
+    shared.save_secrets({"api_keys": {"openrouter": "must-not-write"}})
+except LegacyPersistenceRetired:
+    pass
+else:
+    raise AssertionError("plaintext provider-secret JSON unexpectedly remained writable")
+
+from app.assistant_tools.credentials import (
+    AssistantToolCredentialsPayload,
+    load_assistant_tool_credentials,
+    save_assistant_tool_credentials,
+)
+
+assert load_assistant_tool_credentials().credentials == []
+try:
+    save_assistant_tool_credentials(AssistantToolCredentialsPayload())
+except LegacyPersistenceRetired:
+    pass
+else:
+    raise AssertionError("plaintext assistant-tool credentials unexpectedly remained writable")
 
 from app.assist_core.house_state import load_house_state, save_house_state
 
@@ -142,6 +168,8 @@ for variable in (
     "OMNIX_CHAT_MEMORY_SETTINGS_PATH",
     "OMNIX_LIVE_CONVERSATION_PROFILE_PATH",
     "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH",
+    "OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH",
+    "OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH",
 ):
     assert not Path(os.environ[variable]).exists(), variable
 
@@ -288,6 +316,10 @@ def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(tmp_p
             "OMNIX_CHAT_MEMORY_SETTINGS_PATH": str(tmp_path / "memory-settings.json"),
             "OMNIX_LIVE_CONVERSATION_PROFILE_PATH": str(tmp_path / "conversation-profiles.json"),
             "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH": str(tmp_path / "assistant-tools-ledger.jsonl"),
+            "OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH": str(tmp_path / "assistant-tool-credentials.json"),
+            "OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH": str(tmp_path / "assistant-tool-oauth-clients.json"),
+            "OPENROUTER_API_KEY": "runtime-openrouter-key",
+            "CEREBRAS_API_KEY": "runtime-cerebras-key",
         }
     )
     environment.pop("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", None)

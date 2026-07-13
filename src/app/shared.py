@@ -41,6 +41,8 @@ _settings_load_override = None
 _settings_save_override = None
 _sessions_load_override = None
 _sessions_save_override = None
+_secrets_load_override = None
+_secrets_save_override = None
 
 # Singleton Provider Instances
 _tts_provider_instance = None
@@ -237,6 +239,8 @@ def migrate_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
 
 def load_secrets():
     """Load API keys and sensitive configuration from secrets file."""
+    if _secrets_load_override is not None:
+        return dict(_secrets_load_override() or {"api_keys": {}})
     if os.path.exists(SECRETS_FILE):
         try:
             with open(SECRETS_FILE, 'r') as f:
@@ -274,8 +278,11 @@ def save_secrets(secrets):
     previous_inputs = _llm_provider_cache_inputs_from_secrets(load_secrets())
     next_inputs = _llm_provider_cache_inputs_from_secrets(secrets)
 
-    with open(SECRETS_FILE, 'w') as f:
-        json.dump(secrets, f, indent=2)
+    if _secrets_save_override is not None:
+        _secrets_save_override(dict(secrets or {}))
+    else:
+        with open(SECRETS_FILE, 'w') as f:
+            json.dump(secrets, f, indent=2)
 
     if previous_inputs != next_inputs:
         invalidate_provider_cache()
@@ -286,22 +293,30 @@ def install_postgresql_document_callbacks(
     save_settings_callback,
     load_sessions_callback,
     save_sessions_callback,
+    load_secrets_callback,
+    save_secrets_callback,
 ):
     global _settings_load_override, _settings_save_override
     global _sessions_load_override, _sessions_save_override
+    global _secrets_load_override, _secrets_save_override
     _settings_load_override = load_settings_callback
     _settings_save_override = save_settings_callback
     _sessions_load_override = load_sessions_callback
     _sessions_save_override = save_sessions_callback
+    _secrets_load_override = load_secrets_callback
+    _secrets_save_override = save_secrets_callback
 
 
 def clear_postgresql_document_callbacks():
     global _settings_load_override, _settings_save_override
     global _sessions_load_override, _sessions_save_override
+    global _secrets_load_override, _secrets_save_override
     _settings_load_override = None
     _settings_save_override = None
     _sessions_load_override = None
     _sessions_save_override = None
+    _secrets_load_override = None
+    _secrets_save_override = None
 
 
 def load_settings():
