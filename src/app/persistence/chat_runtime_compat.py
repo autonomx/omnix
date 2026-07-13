@@ -8,10 +8,7 @@ from typing import Any
 
 from app.assistant_memory import MemoryService, default_memory_service
 from app.chat.compaction import ConversationSummary
-from app.chat.history_search import (
-    HistorySearchResult,
-    HistorySearchStatus,
-)
+from app.chat.history_search import HistorySearchResult, HistorySearchStatus
 from app.chat.prompt_assembly import PromptHistoryItem
 from app.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
 
@@ -167,5 +164,25 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         self._repository.save_sessions(sessions)
 
 
+class PostgresCharacterChatSessionStore(PostgresChatSessionStore):
+    """Character-aware PostgreSQL chat store with the existing mixin behavior."""
+
+    def __new__(cls, *args: Any, **kwargs: Any):
+        from app.chat.character_store import _CharacterSessionMixin
+
+        if _CharacterSessionMixin not in cls.__mro__:
+            dynamic = type(
+                "PostgresCharacterChatSessionStore",
+                (_CharacterSessionMixin, PostgresChatSessionStore),
+                {},
+            )
+            return super(PostgresCharacterChatSessionStore, dynamic).__new__(dynamic)
+        return super().__new__(cls)
+
+
 def default_history_search_service() -> PostgresHistorySearchService:
     return PostgresHistorySearchService()
+
+
+def default_chat_store() -> PostgresCharacterChatSessionStore:
+    return PostgresCharacterChatSessionStore()
