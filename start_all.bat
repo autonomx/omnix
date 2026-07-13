@@ -9,6 +9,18 @@ set "OMNIX_TTS_URL=http://127.0.0.1:5101"
 set "OMNIX_STT_URL=http://127.0.0.1:5201"
 set "OMNIX_LAUNCHER_URL=http://127.0.0.1:5055"
 if not defined OMNIX_APP_OPEN_URL set "OMNIX_APP_OPEN_URL=http://localhost:5173/"
+if not defined OMNIX_POSTGRES_CONTAINER set "OMNIX_POSTGRES_CONTAINER=omnix-postgres"
+if not defined OMNIX_POSTGRES_START_WAIT_ATTEMPTS set "OMNIX_POSTGRES_START_WAIT_ATTEMPTS=30"
+
+call :ensure_postgres
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
+if /I "%~1"=="--postgres-only" (
+    endlocal
+    exit /b 0
+)
 
 REM Live Agent pilot defaults. Override these before running start_all.bat to disable or tune the pilot.
 if not defined HERMES_ENABLED set "HERMES_ENABLED=1"
@@ -154,5 +166,56 @@ set "KASA_USERNAME=%KASA_USERNAME%"
 set "KASA_PASSWORD=%KASA_PASSWORD%"
 
 "%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host 127.0.0.1 --port 5055
+set "OMNIX_EXIT_CODE=%ERRORLEVEL%"
 
-endlocal
+endlocal & exit /b %OMNIX_EXIT_CODE%
+
+:ensure_postgres
+echo [POSTGRES] Checking Docker and container %OMNIX_POSTGRES_CONTAINER%...
+where docker >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Docker CLI was not found. Install or repair Docker Desktop before starting Omnix.
+    exit /b 1
+)
+
+docker info >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Docker Desktop is not running or is not accessible.
+    echo        Start Docker Desktop, wait for it to become ready, and try again.
+    exit /b 1
+)
+
+docker inspect "%OMNIX_POSTGRES_CONTAINER%" >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: PostgreSQL container %OMNIX_POSTGRES_CONTAINER% does not exist.
+    echo        Provision it with docker-compose.postgres.yml and operator-owned credentials first.
+    exit /b 1
+)
+
+set "OMNIX_POSTGRES_RUNNING="
+for /f "usebackq delims=" %%S in (`docker inspect --format "{{.State.Running}}" "%OMNIX_POSTGRES_CONTAINER%" 2^>nul`) do set "OMNIX_POSTGRES_RUNNING=%%S"
+if /I not "!OMNIX_POSTGRES_RUNNING!"=="true" (
+    echo [POSTGRES] Starting existing container %OMNIX_POSTGRES_CONTAINER%...
+    docker start "%OMNIX_POSTGRES_CONTAINER%" >nul
+    if errorlevel 1 (
+        echo ERROR: Failed to start PostgreSQL container %OMNIX_POSTGRES_CONTAINER%.
+        exit /b 1
+    )
+) else (
+    echo [POSTGRES] Container is already running.
+)
+
+echo [POSTGRES] Waiting for the database health check...
+for /L %%I in (1,1,%OMNIX_POSTGRES_START_WAIT_ATTEMPTS%) do (
+    set "OMNIX_POSTGRES_HEALTH="
+    for /f "usebackq delims=" %%H in (`docker inspect --format "{{.State.Health.Status}}" "%OMNIX_POSTGRES_CONTAINER%" 2^>nul`) do set "OMNIX_POSTGRES_HEALTH=%%H"
+    if /I "!OMNIX_POSTGRES_HEALTH!"=="healthy" (
+        echo [POSTGRES] Database is healthy.
+        exit /b 0
+    )
+    timeout /t 2 /nobreak >nul
+)
+
+echo ERROR: PostgreSQL container %OMNIX_POSTGRES_CONTAINER% did not become healthy.
+docker ps --filter "name=%OMNIX_POSTGRES_CONTAINER%" --format "table {{.Names}}\t{{.Status}}"
+exit /b 1
