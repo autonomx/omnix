@@ -1,7 +1,7 @@
 """End-to-end World Forge pipeline used before campaign launch."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
 from .canon_audit import CanonAuditReport, audit_generated_canon
@@ -73,6 +73,33 @@ def _graph_from_payload(value: Mapping[str, Any]) -> CampaignTopicGraph:
     )
 
 
+def _with_story_reference_dependencies(
+    graph: CampaignTopicGraph,
+) -> CampaignTopicGraph:
+    """Expose faction dossiers to story generation so it never duplicates canon IDs."""
+
+    changed = False
+    nodes: list[CampaignTopicNode] = []
+    for node in graph.nodes:
+        if node.category == "story" and "factions" not in node.dependencies:
+            node = replace(
+                node,
+                dependencies=tuple(dict.fromkeys((*node.dependencies, "factions"))),
+            )
+            changed = True
+        nodes.append(node)
+    if not changed:
+        return graph
+    return replace(
+        graph,
+        nodes=tuple(nodes),
+        metadata={
+            **dict(graph.metadata),
+            "story_reference_dependencies_completed": True,
+        },
+    )
+
+
 def _default_generator() -> WorldForgeTopicGenerator:
     from app.rpg_world_forge_provider import (
         build_production_world_forge_generator,
@@ -104,6 +131,7 @@ def run_campaign_world_forge(
             starting_location=contract.world_options.starting_location,
             background_expansion=contract.world_forge.background_expansion,
         )
+    graph = _with_story_reference_dependencies(graph)
     graph_issues = graph.validate()
     if graph_issues:
         raise ValueError("invalid campaign topic graph: " + ",".join(graph_issues))
