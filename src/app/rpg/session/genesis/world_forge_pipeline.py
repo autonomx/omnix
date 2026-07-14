@@ -73,7 +73,9 @@ def _graph_from_payload(value: Mapping[str, Any]) -> CampaignTopicGraph:
 
 
 def _default_generator() -> WorldForgeTopicGenerator:
-    from .world_forge_provider import build_production_world_forge_generator
+    from app.rpg_world_forge_provider import (
+        build_production_world_forge_generator,
+    )
 
     return build_production_world_forge_generator()
 
