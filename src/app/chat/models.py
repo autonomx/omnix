@@ -142,6 +142,13 @@ class CreateChatSessionRequest(BaseModel):
     shared_memory_access: SharedMemoryAccess = "none"
     transcript_policy: TranscriptPolicy = "persistent"
 
+    @model_validator(mode="before")
+    @classmethod
+    def apply_central_defaults(cls, value: Any) -> Any:
+        from app.platform.effective_defaults import apply_chat_session_defaults
+
+        return apply_chat_session_defaults(value)
+
     @model_validator(mode="after")
     def validate_interaction_selection(self) -> "CreateChatSessionRequest":
         if self.interaction_mode == "system":
