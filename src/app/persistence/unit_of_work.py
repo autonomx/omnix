@@ -41,6 +41,7 @@ from .repositories import (
     PostgresIdentityRepository,
 )
 from .rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
+from .rpg_campaign_genesis_repository import PostgresRpgCampaignGenesisRepository
 from .rpg_hermes_research_repository import PostgresRpgHermesResearchRepository
 from .rpg_narrative_response_repository import PostgresRpgNarrativeResponseRepository
 from .rpg_repository import PostgresRpgRepository
@@ -80,6 +81,7 @@ class PostgresUnitOfWork:
         self.foreground_submissions: PostgresForegroundSubmissionRepository
         self.rpg: PostgresRpgRepository
         self.campaign_bibles: PostgresRpgCampaignBibleRepository
+        self.campaign_genesis: PostgresRpgCampaignGenesisRepository
         self.world_forge: PostgresRpgWorldForgeRepository
         self.hermes_research: PostgresRpgHermesResearchRepository
         self.narrative_responses: PostgresRpgNarrativeResponseRepository
@@ -137,6 +139,7 @@ class PostgresUnitOfWork:
         self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
         self.rpg = PostgresRpgRepository(self.connection)
         self.campaign_bibles = PostgresRpgCampaignBibleRepository(self.connection)
+        self.campaign_genesis = PostgresRpgCampaignGenesisRepository(self.connection)
         self.world_forge = PostgresRpgWorldForgeRepository(self.connection)
         self.hermes_research = PostgresRpgHermesResearchRepository(self.connection)
         self.narrative_responses = PostgresRpgNarrativeResponseRepository(self.connection)
