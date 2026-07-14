@@ -26,11 +26,16 @@ from .repository import (
     InMemoryNarrativeResponseRepository,
     NarrativeResponseRepository,
 )
-from .validation import (
-    ValidatedWriterResult,
-    write_validate_repair,
-)
-from .writer import DeterministicNarrativeWriter, NarrativeWriter
+from .validation import ValidatedWriterResult, write_validate_repair
+from .writer import NarrativeWriter
+
+
+def _production_writer() -> NarrativeWriter:
+    """Resolve the configured provider outside the isolated package at runtime."""
+
+    from app.rpg.narrative_provider import build_production_narrative_writer
+
+    return build_production_narrative_writer()
 
 
 @dataclass(frozen=True)
@@ -56,7 +61,7 @@ class NarrativeEngineService:
         delivery: NarrativeDeliveryCoordinator | None = None,
     ) -> None:
         self.evidence_broker = evidence_broker
-        self.writer = writer or DeterministicNarrativeWriter()
+        self.writer = writer or _production_writer()
         self.planner = planner or DeterministicBeatPlanner()
         self.repository = repository or InMemoryNarrativeResponseRepository()
         self.delivery = delivery or NarrativeDeliveryCoordinator()
@@ -72,23 +77,11 @@ class NarrativeEngineService:
             self.writer,
         )
         if not validated.validation.passed:
-            codes = ",".join(
-                issue.code for issue in validated.validation.issues
-            )
-            raise RuntimeError(
-                f"canonical narrative failed validation: {codes}"
-            )
-        canonical = self._assemble(
-            request,
-            plan,
-            evidence,
-            validated,
-        )
+            codes = ",".join(issue.code for issue in validated.validation.issues)
+            raise RuntimeError(f"canonical narrative failed validation: {codes}")
+        canonical = self._assemble(request, plan, evidence, validated)
         persisted = self.repository.save(canonical)
-        delivered = self.delivery.prepare(
-            persisted,
-            request.delivery_mode,
-        )
+        delivered = self.delivery.prepare(persisted, request.delivery_mode)
         return NarrativeEngineResult(
             request=request,
             retrieval=retrieval,
@@ -111,10 +104,7 @@ class NarrativeEngineService:
         return tuple(
             dict.fromkeys(
                 value
-                for value in (
-                    *request.actor_ids,
-                    request.target_actor_id or "",
-                )
+                for value in (*request.actor_ids, request.target_actor_id or "")
                 if value
             )
         )
@@ -228,17 +218,11 @@ class NarrativeEngineService:
         )
         revision = max(
             1,
-            int(
-                request.metadata.get("presentation_revision")
-                or 1
-            ),
+            int(request.metadata.get("presentation_revision") or 1),
         )
         response_id = str(
             request.metadata.get("response_id")
-            or (
-                f"narrative:{request.campaign_id}:"
-                f"{request.turn_id}:{revision}"
-            )
+            or f"narrative:{request.campaign_id}:{request.turn_id}:{revision}"
         )
         grounding_metadata = {
             "hermes_research_id": str(
@@ -260,8 +244,7 @@ class NarrativeEngineService:
                 request.metadata.get("campaign_bible_hash") or ""
             ),
             "campaign_bible_evidence_count": int(
-                request.metadata.get("campaign_bible_evidence_count")
-                or 0
+                request.metadata.get("campaign_bible_evidence_count") or 0
             ),
             "runtime_evidence_count": int(
                 request.metadata.get("runtime_evidence_count") or 0
@@ -288,12 +271,11 @@ class NarrativeEngineService:
                 attempt_count=writer_result.attempt_count,
                 evidence_count=len(evidence),
                 beat_count=len(plan.beats),
-                hermes_used=(
-                    request.metadata.get("hermes_used") is True
-                ),
+                hermes_used=request.metadata.get("hermes_used") is True,
                 metadata={
                     "fallback_used": validated.fallback_used,
                     "retrieval_selected_ids": list(evidence_used),
+                    "writer_raw_metadata": dict(writer_result.raw_metadata or {}),
                     "evidence_grants": {
                         "player": int(plan.metadata.get("player_evidence_count") or 0),
                         "narrator": int(plan.metadata.get("narrator_evidence_count") or 0),
