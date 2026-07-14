@@ -84,8 +84,8 @@ Replace fragmented RPG presentation orchestration with one isolated engine that 
 | 13 | complete | revisioned PostgreSQL Campaign Bible and evidence adapter |
 | 14 | complete | reviewable World Forge proposals and contradiction audit |
 | 15 | complete | bounded cited read-only Hermes narrative research |
-| 16 | in progress | canonical consumer bundle and gateway/session publication |
-| 17 | pending | |
+| 16 | complete | canonical consumer bundle and gateway/session publication |
+| 17 | in progress | PostgreSQL canonical response repository and replay/delivery certification |
 | 18 | pending | |
 | 19 | pending | |
 
