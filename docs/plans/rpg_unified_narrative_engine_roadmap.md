@@ -1,7 +1,8 @@
 # Unified RPG Narrative Engine Implementation Roadmap
 
-Status: active implementation source of truth  
+Status: implementation complete; awaiting pull-request review  
 ADR: `docs/architecture/ADR-0002-unified-rpg-narrative-engine.md`  
+Completion evidence: `docs/architecture/RPG_NARRATIVE_ENGINE_COMPLETION_EVIDENCE.md`  
 Branch: `agent/rne-milestones-a-d`
 
 ## Program objective
@@ -87,14 +88,14 @@ Replace fragmented RPG presentation orchestration with one isolated engine that 
 | 16 | complete | canonical consumer bundle and gateway/session publication |
 | 17 | complete | PostgreSQL canonical response repository and replay/delivery certification |
 | 18 | complete | guarded canonical publisher, zero-alternate telemetry, and static ownership audit |
-| 19 | in progress | fail-closed final path certification and projection-only compatibility retirement |
+| 19 | complete | fail-closed final path certification and projection-only compatibility retirement |
 
 ## Validation policy
 
-Each phase is committed independently. After each phase, GitHub Actions must complete. Failures caused by the phase are fixed on the same branch before the next phase begins.
+Each phase was committed independently. After every phase, GitHub Actions completed; failures caused by the phase were fixed on the same branch before work continued.
 
 Hosted CI remains provider-free. Live-provider prose and latency evaluation is local operational evidence and must not be fabricated in GitHub Actions.
 
 ## Legacy retirement policy
 
-Legacy compatibility fields may remain only as projections from the canonical response while downstream callers migrate. No legacy generator may own visible production prose. Deletion or hard disabling occurs only after deterministic evidence proves zero alternate publisher calls, save/load and replay equivalence, and blocking/deferred content-hash identity.
+Legacy compatibility fields may remain only as projections from the canonical response while downstream callers migrate. No legacy generator owns visible production prose. The production gateway rejects alternate publishers and certifies canonical response identity, hash, block order, replay, persistence, and delivery equivalence before publishing.
