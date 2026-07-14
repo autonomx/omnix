@@ -72,6 +72,15 @@ from .projections import (
     transcript_projection,
     tts_projection,
 )
+from .publisher_audit import PublisherOwnershipAudit, audit_publisher_ownership
+from .publisher_guard import (
+    CANONICAL_PUBLISHER,
+    LegacyNarrativePublisherError,
+    NarrativePublisherGuard,
+    NarrativePublisherTelemetry,
+    publish_canonical_bundle,
+    publisher_guard,
+)
 from .renderer import CanonicalNarrativeRenderer, RenderedNarrative, deduplicate_blocks, render_plain_text
 from .repository import (
     InMemoryNarrativeResponseRepository,
@@ -102,6 +111,7 @@ __all__ = [
     "AuthorityClass",
     "BeatKind",
     "BeatPurpose",
+    "CANONICAL_PUBLISHER",
     "CampaignBibleEvidenceSource",
     "CampaignBibleSnapshot",
     "CanonicalNarrativeRenderer",
@@ -125,6 +135,7 @@ __all__ = [
     "HermesResearchSource",
     "InMemoryEvidenceSource",
     "InMemoryNarrativeResponseRepository",
+    "LegacyNarrativePublisherError",
     "NarrativeBeat",
     "NarrativeBlock",
     "NarrativeCertificationReport",
@@ -133,6 +144,8 @@ __all__ = [
     "NarrativeEngineService",
     "NarrativePlan",
     "NarrativeProfilePolicy",
+    "NarrativePublisherGuard",
+    "NarrativePublisherTelemetry",
     "NarrativeRepairer",
     "NarrativeResponseConflict",
     "NarrativeResponseRepository",
@@ -140,6 +153,7 @@ __all__ = [
     "NarrativeValidator",
     "NarrativeWriter",
     "PresentationProfile",
+    "PublisherOwnershipAudit",
     "RenderedNarrative",
     "RetrievalTrace",
     "SceneChange",
@@ -156,6 +170,7 @@ __all__ = [
     "WriterResult",
     "adaptive_profile",
     "apply_world_forge_proposal",
+    "audit_publisher_ownership",
     "audit_world_forge_proposal",
     "bran_fixture_evidence",
     "campaign_bible_evidence",
@@ -174,6 +189,8 @@ __all__ = [
     "ordered_blocks",
     "parse_structured_blocks",
     "profile_policy",
+    "publish_canonical_bundle",
+    "publisher_guard",
     "recap_projection",
     "render_plain_text",
     "replay_projection",
