@@ -40,6 +40,7 @@ from .repositories import (
     PostgresIdempotencyRepository,
     PostgresIdentityRepository,
 )
+from .rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
 from .rpg_repository import PostgresRpgRepository
 from .transaction_policy import transaction_scope
 
@@ -75,6 +76,7 @@ class PostgresUnitOfWork:
         self.side_effects: PostgresSideEffectRepository
         self.foreground_submissions: PostgresForegroundSubmissionRepository
         self.rpg: PostgresRpgRepository
+        self.campaign_bibles: PostgresRpgCampaignBibleRepository
         self.module_records: PostgresModuleRecordRepository
         self.projections: PostgresProjectionRepository
         self.providers: PostgresProviderRepository
@@ -128,6 +130,7 @@ class PostgresUnitOfWork:
         self.side_effects = PostgresSideEffectRepository(self.connection)
         self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
         self.rpg = PostgresRpgRepository(self.connection)
+        self.campaign_bibles = PostgresRpgCampaignBibleRepository(self.connection)
         self.module_records = PostgresModuleRecordRepository(self.connection)
         self.projections = PostgresProjectionRepository(self.connection)
         self.providers = PostgresProviderRepository(self.connection)
