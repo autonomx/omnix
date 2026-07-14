@@ -17,7 +17,19 @@ const useOptions: Array<{ id: VoiceAllowedUse; label: string }> = [
   { id: 'general_tts', label: 'Use for general text-to-speech' },
 ];
 
-export function VoiceGovernancePanel({ assetId, character }: { assetId?: string | null; character?: CharacterProfile }) {
+export function VoiceGovernancePanel({
+  assetId,
+  character,
+  characterIsActive = false,
+  activationPending = false,
+  onActivateCharacter,
+}: {
+  assetId?: string | null;
+  character?: CharacterProfile;
+  characterIsActive?: boolean;
+  activationPending?: boolean;
+  onActivateCharacter?: () => void;
+}) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<UpdateVoiceProfileGovernanceInput>({
     subject_owner: '', source_type: 'unknown', source_reference: '', creator_id: '',
@@ -89,6 +101,7 @@ export function VoiceGovernancePanel({ assetId, character }: { assetId?: string 
   const displayName = current?.subject_owner || (assetId ? 'Linked cloned voice' : 'No linked voice');
   const consentReady = current?.consent_status === 'granted' && current.deletion_state === 'active';
   const clonedVoices = (voiceAssetsQuery.data?.assets ?? []).filter(isUsableClonedVoice);
+  const selectedVoiceIsCurrent = Boolean(selectedVoiceId) && selectedVoiceId === assetId;
 
   return <section className="character-dashboard-section character-voice-section">
     <header className="character-section-heading">
@@ -103,8 +116,33 @@ export function VoiceGovernancePanel({ assetId, character }: { assetId?: string 
           {clonedVoices.map((voice) => <option key={voice.id} value={voice.id}>{voiceLabel(voice.id, voice.metadata)}</option>)}
         </select>
       </label>
-      <button type="button" disabled={!selectedVoiceId || selectedVoiceId === assetId || assignmentMutation.isPending} onClick={() => assignmentMutation.mutate()}>
-        {assignmentMutation.isPending ? 'Assigning…' : 'Use for character live calls'}
+      <button
+        type="button"
+        className={selectedVoiceIsCurrent ? 'current' : undefined}
+        disabled={!selectedVoiceId || selectedVoiceIsCurrent || assignmentMutation.isPending}
+        title={selectedVoiceIsCurrent ? `${voiceLabel(selectedVoiceId)} is already used for this character's live calls.` : undefined}
+        onClick={() => assignmentMutation.mutate()}
+      >
+        {assignmentMutation.isPending
+          ? 'Assigning…'
+          : selectedVoiceIsCurrent
+            ? 'Currently used for live calls'
+            : 'Use for character live calls'}
+      </button>
+    </div> : null}
+
+    {character && onActivateCharacter ? <div className="character-live-activation">
+      <div>
+        <strong>{characterIsActive ? `${character.display_name} is active in Live Voice` : `Use ${character.display_name} in Live Voice`}</strong>
+        <small>{characterIsActive ? 'The live-call identity, linked voice, and avatar come from this character.' : 'Switch the current chat from System Assistant to this character, including its linked voice and avatar.'}</small>
+      </div>
+      <button
+        type="button"
+        className={characterIsActive ? 'current' : undefined}
+        disabled={characterIsActive || activationPending}
+        onClick={onActivateCharacter}
+      >
+        {activationPending ? 'Activating…' : characterIsActive ? 'Active in Live Voice' : `Use ${character.display_name}`}
       </button>
     </div> : null}
 

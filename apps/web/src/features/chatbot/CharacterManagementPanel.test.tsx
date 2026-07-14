@@ -4,8 +4,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
+import type { SessionInteraction } from './characterClient';
 
-function renderPanel() {
+function renderPanel(props: { sessionId?: string | null; onSessionResolved?: (sessionId: string) => void } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -15,7 +16,7 @@ function renderPanel() {
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
       <QueryClientProvider client={queryClient}>
-        <CharacterManagementPanel />
+        <CharacterManagementPanel {...props} />
       </QueryClientProvider>
     </MantineProvider>,
   );
@@ -146,6 +147,59 @@ describe('CharacterManagementPanel dashboard', () => {
     expect(screen.getByLabelText('Upload source image')).toBeInTheDocument();
     expect(screen.getByText('Viseme support (9 mouth shapes)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create characters from cloned voices' })).toBeInTheDocument();
+  });
+
+  it('activates the selected character for the current chat and Live Voice runtime', async () => {
+    const interactionBodies: Array<Record<string, unknown>> = [];
+    let interaction: SessionInteraction = {
+      id: 'chat:voice', title: 'Live voice call', interaction_mode: 'system', character_id: null,
+      voice_asset_id: null, read_memory: false, write_memory: false, shared_memory_access: 'none',
+      transcript_policy: 'persistent', character_profile_version: null, effective_identity_hash: null, messages: [],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/characters') return Response.json({ characters: [legacyCharacter] });
+      if (path === '/api/characters/maya/data') return Response.json(legacyData);
+      if (path === '/api/characters/maya/avatar-pack') return new Response('not found', { status: 404 });
+      if (path === '/api/assets') return Response.json({ assets: [{
+        id: 'voice-cloning:maya', module: 'voice-cloning', type: 'voice_profile',
+        metadata: { voice_governance: { consent_status: 'granted', deletion_state: 'active', allowed_uses: ['character', 'live_call'] } },
+      }] });
+      if (path === '/api/voice-profiles/voice-cloning%3Amaya/governance') return Response.json({
+        asset_id: 'voice-cloning:maya', subject_owner: 'Maya', source_type: 'user_recording', source_reference: '',
+        creator_id: 'local-user', consent_status: 'granted', allowed_uses: ['character', 'live_call'],
+        deletion_state: 'active', deletion_reason: '', updated_at: '2026-01-01T00:00:00Z',
+      });
+      if (path === '/api/chat/sessions/chat%3Avoice/interaction') {
+        if (init?.method === 'POST') {
+          interactionBodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+          interaction = {
+            ...interaction,
+            interaction_mode: 'character',
+            character_id: 'maya',
+            voice_asset_id: 'voice-cloning:maya',
+            character_profile_version: 2,
+          };
+        }
+        return Response.json(interaction);
+      }
+      return new Response('not found', { status: 404 });
+    }));
+
+    renderPanel({ sessionId: 'chat:voice' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Use Maya' }));
+
+    await waitFor(() => expect(interactionBodies).toEqual([{
+      interaction_mode: 'character',
+      character_id: 'maya',
+      voice_asset_id: 'voice-cloning:maya',
+      read_memory: false,
+      write_memory: false,
+      shared_memory_access: 'none',
+      transcript_policy: 'persistent',
+    }]));
+    expect(await screen.findByRole('button', { name: 'Active in Live Voice' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Maya is now active in this chat and Live Voice with its linked voice');
   });
 
   it('uploads an owned image and queues the full avatar pipeline', async () => {

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { omnixApiClient } from '../../api/client';
 import { CharacterAvatarPanel } from './CharacterAvatarPanel';
 import { characterAvatarAssetUrl, characterAvatarClient } from './characterAvatarClient';
 import { characterClient, type CharacterDataExport, type CharacterProfile } from './characterClient';
@@ -10,7 +11,13 @@ import './CharacterManagementPanel.css';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'omnix.chatbot.selectedCharacterId';
 
-export function CharacterManagementPanel() {
+export function CharacterManagementPanel({
+  sessionId = null,
+  onSessionResolved,
+}: {
+  sessionId?: string | null;
+  onSessionResolved?: (sessionId: string) => void;
+}) {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState(() => window.localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY) ?? '');
   const [draft, setDraft] = useState({ display_name: '', description: '', personality_prompt: '', default_greeting: '', gender: '' });
@@ -29,6 +36,11 @@ export function CharacterManagementPanel() {
     queryKey: ['feature', 'chatbot', 'character-data', selected?.id],
     queryFn: () => characterClient.data(selected?.id ?? ''),
     enabled: Boolean(selected?.id),
+  });
+  const interactionQuery = useQuery({
+    queryKey: ['feature', 'chatbot', 'interaction', sessionId],
+    queryFn: () => characterClient.session(sessionId ?? ''),
+    enabled: Boolean(sessionId),
   });
 
   useEffect(() => {
@@ -100,6 +112,39 @@ export function CharacterManagementPanel() {
     },
   });
 
+  const activateCharacterMutation = useMutation({
+    mutationFn: async () => {
+      if (!selected) throw new Error('Select a character first.');
+      let resolvedSessionId: string;
+      if (sessionId) {
+        resolvedSessionId = sessionId;
+      } else {
+        const created = await omnixApiClient.createChatSession({ title: `Live Chat with ${selected.display_name}` });
+        resolvedSessionId = created.id;
+      }
+      const interaction = await characterClient.setSession(resolvedSessionId, {
+        interaction_mode: 'character',
+        character_id: selected.id,
+        voice_asset_id: selected.default_voice_asset_id ?? null,
+        read_memory: false,
+        write_memory: false,
+        shared_memory_access: 'none',
+      });
+      return { interaction, resolvedSessionId };
+    },
+    onSuccess: async ({ interaction, resolvedSessionId }) => {
+      onSessionResolved?.(resolvedSessionId);
+      setStatus(`${selected?.display_name ?? 'Character'} is now active in this chat and Live Voice${interaction.voice_asset_id ? ' with its linked voice' : ''}.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'interaction', resolvedSessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'session', resolvedSessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'sessions'] }),
+        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'live-call-runtime'] }),
+      ]);
+    },
+    onError: (error) => setStatus(error instanceof Error ? error.message : 'Character activation failed.'),
+  });
+
   const actionMutation = useMutation({
     mutationFn: () => characterClient.applyDataActions(selected?.id ?? '', {
       confirm_character_id: confirmation,
@@ -125,6 +170,8 @@ export function CharacterManagementPanel() {
   }
 
   const hasAction = Object.values(actions).some(Boolean);
+  const selectedCharacterIsActive = interactionQuery.data?.interaction_mode === 'character'
+    && interactionQuery.data.character_id === selected?.id;
 
   return (
     <article className="character-management-card" aria-label="Character management">
@@ -210,7 +257,13 @@ export function CharacterManagementPanel() {
                 <p className="character-section-note">Profile instructions apply to this Character Mode identity and its Omnix Chat conversations.</p>
               </section>
 
-              <VoiceGovernancePanel assetId={selected.default_voice_asset_id} character={selected} />
+              <VoiceGovernancePanel
+                assetId={selected.default_voice_asset_id}
+                character={selected}
+                characterIsActive={selectedCharacterIsActive}
+                activationPending={activateCharacterMutation.isPending}
+                onActivateCharacter={() => activateCharacterMutation.mutate()}
+              />
               <CharacterAvatarPanel character={selected} />
 
               <section className="character-dashboard-section character-backfill-section">
