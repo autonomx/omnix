@@ -35,10 +35,24 @@ def writer_payload(
     plan: NarrativePlan,
     evidence: Sequence[EvidenceRecord],
 ) -> dict[str, Any]:
+    by_id = {record.evidence_id: record for record in evidence}
     approved_ids = {ref for beat in plan.beats for ref in beat.evidence_refs}
     selected_evidence = [record.as_dict() for record in evidence if record.evidence_id in approved_ids]
+    beats = []
+    evidence_by_beat: dict[str, list[dict[str, Any]]] = {}
+    for beat in plan.beats:
+        scoped = [
+            by_id[ref].as_dict()
+            for ref in beat.evidence_refs
+            if ref in by_id
+        ]
+        row = beat.as_dict()
+        row["approved_evidence"] = scoped
+        row["evidence_scope"] = str(beat.metadata.get("evidence_scope") or "player")
+        beats.append(row)
+        evidence_by_beat[beat.beat_id] = scoped
     return {
-        "schema_version": "rpg_narrative_writer_request_v1",
+        "schema_version": "rpg_narrative_writer_request_v2",
         "request_id": request.request_id,
         "turn_id": request.turn_id,
         "player_input": request.player_input,
@@ -47,10 +61,12 @@ def writer_payload(
         "profile": plan.profile.value,
         "word_budget": list(plan.word_budget),
         "authoritative_outcome": dict(request.authoritative_outcome),
-        "beats": [beat.as_dict() for beat in plan.beats],
+        "beats": beats,
         "approved_evidence": selected_evidence,
+        "evidence_by_beat": evidence_by_beat,
         "forbidden_rules": [
             "Do not add speakers, facts, outcomes, state changes, or secrets outside approved beats and evidence.",
+            "Use only each beat's approved_evidence for that beat; never move narrator-only or another speaker's private evidence into dialogue.",
             "Do not choose an action for the player.",
             "Return one JSON object with a blocks array only.",
         ],
@@ -106,7 +122,10 @@ def parse_structured_blocks(payload: Mapping[str, Any], plan: NarrativePlan) -> 
                 speaker_id=beat.speaker_id,
                 evidence_refs=beat.evidence_refs,
                 claim_refs=beat.required_claim_refs,
-                metadata={"writer_contract": "structured_v1"},
+                metadata={
+                    "writer_contract": "structured_v2",
+                    "evidence_scope": str(beat.metadata.get("evidence_scope") or "player"),
+                },
             )
         )
     return tuple(sorted(blocks, key=lambda block: block.sequence))
@@ -211,7 +230,10 @@ class DeterministicNarrativeWriter:
                 speaker_id=beat.speaker_id,
                 evidence_refs=beat.evidence_refs,
                 claim_refs=beat.required_claim_refs,
-                metadata={"writer_contract": "deterministic_v1"},
+                metadata={
+                    "writer_contract": "deterministic_v2",
+                    "evidence_scope": str(beat.metadata.get("evidence_scope") or "player"),
+                },
             )
             for beat in plan.beats
         )
