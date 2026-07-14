@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.rpg.narrative_reference import canonical_narrative_reference
 from app.rpg.presentation.turn_response import build_turn_response_v2
 from app.rpg.presentation.turn_response_budget import enforce_turn_response_budget
 
-FOREGROUND_TURN_RECORD_VERSION = "rpg_foreground_turn_record_v1"
+FOREGROUND_TURN_RECORD_VERSION = "rpg_foreground_turn_record_v2"
 FOREGROUND_TURN_RECORD_MAX_BYTES = 20_000
 
 
@@ -33,6 +34,9 @@ def build_foreground_turn_record(
             command=command,
             session=None,
         )
+        reference = canonical_narrative_reference(source)
+        if reference:
+            payload["canonical_narrative"] = reference
         payload["submission_id"] = submission_id
         payload["record_version"] = FOREGROUND_TURN_RECORD_VERSION
     return enforce_turn_response_budget(
