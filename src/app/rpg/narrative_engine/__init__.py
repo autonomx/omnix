@@ -56,7 +56,16 @@ from .hermes_research import (
 )
 from .planner import DeterministicBeatPlanner, NarrativePlan
 from .profiles import NarrativeProfilePolicy, adaptive_profile, profile_policy
-from .projections import journal_projection, legacy_response_projection, transcript_projection, tts_projection
+from .projections import (
+    canonical_consumer_bundle,
+    journal_projection,
+    legacy_response_projection,
+    recap_projection,
+    replay_projection,
+    report_projection,
+    transcript_projection,
+    tts_projection,
+)
 from .renderer import CanonicalNarrativeRenderer, RenderedNarrative, deduplicate_blocks, render_plain_text
 from .repository import (
     InMemoryNarrativeResponseRepository,
@@ -142,6 +151,7 @@ __all__ = [
     "audit_world_forge_proposal",
     "bran_fixture_evidence",
     "campaign_bible_evidence",
+    "canonical_consumer_bundle",
     "canonical_json",
     "deduplicate_blocks",
     "detect_scene_changes",
@@ -152,7 +162,10 @@ __all__ = [
     "ordered_blocks",
     "parse_structured_blocks",
     "profile_policy",
+    "recap_projection",
     "render_plain_text",
+    "replay_projection",
+    "report_projection",
     "run_bounded_hermes_research",
     "stable_hash",
     "transcript_projection",
