@@ -157,17 +157,10 @@ def report_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
 
 def replay_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
     frozen = response.with_content_hash()
-    return {
-        "schema_version": frozen.schema_version,
-        "response_id": frozen.response_id,
-        "request_id": frozen.request_id,
-        "turn_id": frozen.turn_id,
-        "campaign_id": frozen.campaign_id,
-        "revision": frozen.revision,
-        "content_hash": frozen.content_hash,
-        "blocks": [block.as_dict() for block in _blocks(frozen)],
-        "evidence_used": list(frozen.evidence_used),
-    }
+    payload = frozen.as_dict()
+    payload["projection_version"] = "rpg_narrative_replay_v1"
+    payload["blocks"] = [block.as_dict() for block in _blocks(frozen)]
+    return payload
 
 
 def canonical_consumer_bundle(response: CanonicalNarrativeResponse) -> dict[str, Any]:
