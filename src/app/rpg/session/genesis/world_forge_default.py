@@ -36,7 +36,21 @@ class ReferenceSafeWorldForgeGenerator:
             return self._normalize_location_regions(topic, dependency_topics)
         if node.category == "npcs":
             return self._complete_npc_reference_entities(topic, dependency_topics)
+        if node.category == "story":
+            return self._complete_story_reference_entities(topic, dependency_topics)
         return topic
+
+    @staticmethod
+    def _known_entities(
+        dependencies: Mapping[str, GeneratedTopic],
+    ) -> dict[str, Mapping[str, Any]]:
+        known: dict[str, Mapping[str, Any]] = {}
+        for dependency in dependencies.values():
+            for entity in dependency.entities:
+                entity_id = str(entity.get("id") or "")
+                if entity_id:
+                    known[entity_id] = entity
+        return known
 
     @staticmethod
     def _normalize_location_regions(
@@ -92,17 +106,13 @@ class ReferenceSafeWorldForgeGenerator:
             },
         )
 
-    @staticmethod
+    @classmethod
     def _complete_npc_reference_entities(
+        cls,
         topic: GeneratedTopic,
         dependencies: Mapping[str, GeneratedTopic],
     ) -> GeneratedTopic:
-        known: dict[str, Mapping[str, Any]] = {}
-        for dependency in dependencies.values():
-            for entity in dependency.entities:
-                entity_id = str(entity.get("id") or "")
-                if entity_id:
-                    known[entity_id] = entity
+        known = cls._known_entities(dependencies)
         additions: dict[str, dict[str, Any]] = {}
         normalized_npcs: list[dict[str, Any]] = []
         mobility_normalized: list[str] = []
@@ -119,42 +129,129 @@ class ReferenceSafeWorldForgeGenerator:
             for faction_id in row.get("faction_ids") or ():
                 faction_id = str(faction_id)
                 if faction_id and faction_id not in known:
-                    additions[faction_id] = {
-                        "id": faction_id,
-                        "name": faction_id.split(":", 1)[-1]
-                        .replace("_", " ")
-                        .title(),
-                        "kind": "faction",
-                        "values": ["institutional continuity"],
-                        "goals": ["maintain influence over exceptional heroes"],
-                        "visibility": "partially_known",
-                        "dossier_status": "complete",
-                        "generated_for_reference_completeness": True,
-                    }
+                    additions[faction_id] = cls._faction_stub(faction_id)
             if location_id and location_id not in known:
-                additions[location_id] = {
-                    "id": location_id,
-                    "name": location_id.split(":", 1)[-1]
-                    .replace("_", " ")
-                    .title(),
-                    "kind": "location",
-                    "region_id": next(
-                        (
-                            str(entity.get("id"))
-                            for entity in known.values()
-                            if entity.get("kind") == "region"
-                        ),
-                        "",
-                    ),
-                    "sensory_profile": (
-                        "A campaign location compiled to support an opening actor dossier."
-                    ),
-                    "visibility": "partially_known",
-                    "dossier_status": "complete",
-                    "generated_for_reference_completeness": True,
-                }
+                additions[location_id] = cls._location_stub(location_id, known)
         if not additions and not mobility_normalized:
             return topic
+        return cls._with_reference_additions(
+            topic,
+            normalized_entities=normalized_npcs,
+            additions=additions,
+            provenance={
+                "mobility_normalized_npc_ids": sorted(mobility_normalized),
+            },
+        )
+
+    @classmethod
+    def _complete_story_reference_entities(
+        cls,
+        topic: GeneratedTopic,
+        dependencies: Mapping[str, GeneratedTopic],
+    ) -> GeneratedTopic:
+        known = cls._known_entities(dependencies)
+        additions: dict[str, dict[str, Any]] = {}
+        for thread in topic.story_threads:
+            for actor_id in thread.get("actor_ids") or ():
+                actor_id = str(actor_id)
+                if actor_id and actor_id not in known:
+                    additions[actor_id] = cls._npc_stub(actor_id)
+            for location_id in thread.get("location_ids") or ():
+                location_id = str(location_id)
+                if location_id and location_id not in known:
+                    additions[location_id] = cls._location_stub(location_id, known)
+            for faction_id in thread.get("faction_ids") or ():
+                faction_id = str(faction_id)
+                if faction_id and faction_id not in known:
+                    additions[faction_id] = cls._faction_stub(faction_id)
+        if not additions:
+            return topic
+        return cls._with_reference_additions(
+            topic,
+            normalized_entities=[dict(row) for row in topic.entities],
+            additions=additions,
+            provenance={"story_reference_completion": True},
+        )
+
+    @staticmethod
+    def _npc_stub(entity_id: str) -> dict[str, Any]:
+        name = entity_id.split(":", 1)[-1].replace("_", " ").title()
+        return {
+            "id": entity_id,
+            "name": name,
+            "kind": "npc",
+            "appearance": (
+                f"{name} carries the practical marks of a life shaped by the opening conflict."
+            ),
+            "personality": (
+                "Observant, purposeful, cautious with strangers, and loyal to a local obligation."
+            ),
+            "backstory": (
+                "Their history connects the opening conflict to people and institutions "
+                "that already have a stake in the campaign."
+            ),
+            "goals": ["advance the unresolved opening conflict"],
+            "motives": ["duty", "survival"],
+            "speech_style": "specific, grounded, and shaped by immediate stakes",
+            "faction_ids": [],
+            "location_id": "",
+            "mobility_status": "itinerant",
+            "secrets": [],
+            "known_facts": [],
+            "visibility": "game_master_canon",
+            "dossier_status": "complete",
+            "generated_for_reference_completeness": True,
+        }
+
+    @staticmethod
+    def _faction_stub(entity_id: str) -> dict[str, Any]:
+        name = entity_id.split(":", 1)[-1].replace("_", " ").title()
+        return {
+            "id": entity_id,
+            "name": name,
+            "kind": "faction",
+            "values": ["institutional continuity"],
+            "goals": ["maintain influence over the opening conflict"],
+            "visibility": "partially_known",
+            "dossier_status": "complete",
+            "generated_for_reference_completeness": True,
+        }
+
+    @staticmethod
+    def _location_stub(
+        entity_id: str,
+        known: Mapping[str, Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        name = entity_id.split(":", 1)[-1].replace("_", " ").title()
+        region_id = next(
+            (
+                str(entity.get("region_id"))
+                for entity in known.values()
+                if entity.get("kind") == "location" and entity.get("region_id")
+            ),
+            "",
+        )
+        return {
+            "id": entity_id,
+            "name": name,
+            "kind": "location",
+            "region_id": region_id,
+            "sensory_profile": (
+                "A campaign location compiled to support an opening actor or story thread."
+            ),
+            "visibility": "partially_known",
+            "dossier_status": "complete",
+            "generated_for_reference_completeness": True,
+        }
+
+    @staticmethod
+    def _with_reference_additions(
+        topic: GeneratedTopic,
+        *,
+        normalized_entities: list[dict[str, Any]],
+        additions: Mapping[str, Mapping[str, Any]],
+        provenance: Mapping[str, Any],
+    ) -> GeneratedTopic:
         facts = [dict(row) for row in topic.facts]
         for entity_id, entity in sorted(additions.items()):
             facts.append(
@@ -171,11 +268,11 @@ class ReferenceSafeWorldForgeGenerator:
             )
         return replace(
             topic,
-            entities=tuple([*normalized_npcs, *additions.values()]),
+            entities=tuple([*normalized_entities, *additions.values()]),
             facts=tuple(facts),
             provenance={
                 **dict(topic.provenance),
                 "reference_completeness_entities": sorted(additions),
-                "mobility_normalized_npc_ids": sorted(mobility_normalized),
+                **dict(provenance),
             },
         )
