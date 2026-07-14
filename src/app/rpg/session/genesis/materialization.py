@@ -48,7 +48,9 @@ def materialize_world_forge_into_session(
             for row in bible.get("documents") or ()
             if isinstance(row, Mapping)
         )
-        if document_id and str(document.get("visibility") or "") in {"public", "player_known", "learned", "partially_known", "disputed"}
+        if document_id
+        and str(document.get("visibility") or "")
+        in {"public", "player_known", "learned", "partially_known", "disputed"}
     }
     npc_dossiers = {
         entity_id: dict(entity)
@@ -99,16 +101,21 @@ def materialize_world_forge_into_session(
     }
     manifest["campaign_bible_revision"] = bible.get("canon_revision")
     manifest["campaign_bible_content_hash"] = bible.get("content_hash")
-    manifest["campaign_generation_status"] = "ready" if world_forge.launch_ready else "failed"
+    manifest["campaign_generation_status"] = (
+        "ready" if world_forge.launch_ready else "failed"
+    )
     session["state"] = state
     session["runtime_state"] = runtime
     session["setup_payload"] = setup
     session["manifest"] = manifest
     session["campaign_bible_projection"] = {
         "documents": list(bible.get("documents") or ()),
+        "entities": dict(bible.get("entities") or {}),
+        "facts": list(bible.get("facts") or ()),
         "retrieval_cards": list(bible.get("retrieval_cards") or ()),
         "relationships": list(bible.get("relationships") or ()),
         "knowledge_rules": list(bible.get("knowledge_rules") or ()),
+        "story_threads": list(bible.get("story_threads") or ()),
         "indexes": dict(bible.get("indexes") or {}),
         "discovery_state": dict(bible.get("discovery_state") or {}),
         "content_hash": bible.get("content_hash"),
@@ -153,7 +160,9 @@ def persist_campaign_genesis(
                     title=str(state.get("title") or manifest.get("title") or campaign_id),
                     state=state,
                     engine_version="rne-campaign-genesis-v1",
-                    schema_version=str(manifest.get("schema_version") or "rpg-session-v1"),
+                    schema_version=str(
+                        manifest.get("schema_version") or "rpg-session-v1"
+                    ),
                     seed=str(contract.world_options.seed or 0),
                     metadata={
                         "campaign_template": contract.campaign_template,
@@ -167,7 +176,11 @@ def persist_campaign_genesis(
                 campaign_id=campaign_id,
                 depth=contract.world_forge.depth,
                 topic_graph=world_forge.graph.as_dict(),
-                progress={**progress, "status": "materializing", "stage": "materializing"},
+                progress={
+                    **progress,
+                    "status": "materializing",
+                    "stage": "materializing",
+                },
             )
             stored_bible = work.campaign_bibles.put(
                 context,
@@ -191,9 +204,15 @@ def persist_campaign_genesis(
                 audit=world_forge.audit.as_dict(),
                 bible_revision=int(stored_bible["revision"]),
                 bible_content_hash=str(stored_bible["content_hash"]),
-                error={} if world_forge.launch_ready else {
-                    "missing_requirements": list(world_forge.compilation.missing_requirements)
-                },
+                error=(
+                    {}
+                    if world_forge.launch_ready
+                    else {
+                        "missing_requirements": list(
+                            world_forge.compilation.missing_requirements
+                        )
+                    }
+                ),
             )
             work.commit()
         return {
