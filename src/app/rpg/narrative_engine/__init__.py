@@ -27,6 +27,7 @@ from .certification import (
 )
 from .contracts import (
     CanonicalNarrativeResponse,
+    ClaimAssertion,
     DeliveryMetadata,
     EvidenceRecord,
     GenerationMetadata,
@@ -124,6 +125,7 @@ __all__ = [
     "CampaignBibleSnapshot",
     "CanonicalNarrativeRenderer",
     "CanonicalNarrativeResponse",
+    "ClaimAssertion",
     "DeliveryMetadata",
     "DeliveryMode",
     "DeterministicBeatPlanner",
