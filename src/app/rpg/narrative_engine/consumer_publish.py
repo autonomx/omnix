@@ -20,6 +20,8 @@ def _patch_latest_interaction(
     bundle: Mapping[str, Any],
     canonical: Mapping[str, Any],
     telemetry: Mapping[str, Any],
+    grounding: Mapping[str, Any],
+    grounding_footer: Mapping[str, Any],
 ) -> bool:
     runtime = _mapping(session.get("runtime_state"))
     interactions = runtime.get("recent_interactions")
@@ -46,7 +48,13 @@ def _patch_latest_interaction(
     selected["canonical_narrative_response"] = dict(canonical)
     selected["narrative_projections"] = dict(bundle)
     selected["visible_response"] = dict(bundle.get("visible_response") or {})
-    selected["narration"] = str(_mapping(bundle.get("visible_response")).get("narration") or "")
+    selected["narration"] = str(
+        _mapping(bundle.get("visible_response")).get("narration") or ""
+    )
+    if grounding:
+        selected["narrative_grounding"] = dict(grounding)
+    if grounding_footer:
+        selected["narrative_grounding_footer"] = dict(grounding_footer)
     runtime["recent_interactions"] = interactions
     session["runtime_state"] = runtime
     return True
@@ -65,6 +73,8 @@ def attach_canonical_consumer_bundle(result: dict[str, Any]) -> dict[str, Any]:
     bundle, telemetry_snapshot = publish_canonical_bundle(projected)
     telemetry = telemetry_snapshot.as_dict()
     visible = dict(bundle["visible_response"])
+    grounding = _mapping(result.get("narrative_grounding"))
+    grounding_footer = _mapping(result.get("narrative_grounding_footer"))
     result["canonical_narrative_response"] = canonical
     result["narrative_projections"] = bundle
     result["narrative_publisher"] = CANONICAL_PUBLISHER
@@ -84,6 +94,10 @@ def attach_canonical_consumer_bundle(result: dict[str, Any]) -> dict[str, Any]:
         nested["visible_response"] = visible
         nested["narration"] = result["narration"]
         nested["summary"] = result["summary"]
+        if grounding:
+            nested["narrative_grounding"] = grounding
+        if grounding_footer:
+            nested["narrative_grounding_footer"] = grounding_footer
         result["result"] = nested
 
     session = result.get("session")
@@ -95,6 +109,8 @@ def attach_canonical_consumer_bundle(result: dict[str, Any]) -> dict[str, Any]:
             bundle=bundle,
             canonical=canonical,
             telemetry=telemetry,
+            grounding=grounding,
+            grounding_footer=grounding_footer,
         )
         result["narrative_session_projection_patched"] = patched
     return result
