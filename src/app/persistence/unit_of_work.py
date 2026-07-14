@@ -42,6 +42,7 @@ from .repositories import (
 )
 from .rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
 from .rpg_repository import PostgresRpgRepository
+from .rpg_world_forge_repository import PostgresRpgWorldForgeRepository
 from .transaction_policy import transaction_scope
 
 
@@ -77,6 +78,7 @@ class PostgresUnitOfWork:
         self.foreground_submissions: PostgresForegroundSubmissionRepository
         self.rpg: PostgresRpgRepository
         self.campaign_bibles: PostgresRpgCampaignBibleRepository
+        self.world_forge: PostgresRpgWorldForgeRepository
         self.module_records: PostgresModuleRecordRepository
         self.projections: PostgresProjectionRepository
         self.providers: PostgresProviderRepository
@@ -131,6 +133,7 @@ class PostgresUnitOfWork:
         self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
         self.rpg = PostgresRpgRepository(self.connection)
         self.campaign_bibles = PostgresRpgCampaignBibleRepository(self.connection)
+        self.world_forge = PostgresRpgWorldForgeRepository(self.connection)
         self.module_records = PostgresModuleRecordRepository(self.connection)
         self.projections = PostgresProjectionRepository(self.connection)
         self.providers = PostgresProviderRepository(self.connection)
