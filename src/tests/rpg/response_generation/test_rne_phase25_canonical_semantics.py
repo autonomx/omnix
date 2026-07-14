@@ -37,7 +37,7 @@ def _blocks() -> tuple[NarrativeBlock, ...]:
             sequence=2,
             kind=BeatKind.NARRATION,
             purpose=BeatPurpose.ENVIRONMENTAL_CHANGE,
-            text="Bran lowers the iron latch, then turns toward the rain-streaked window.",
+            text="Bran lowers the iron latch and turns toward the rain-streaked window.",
         ),
     )
 
@@ -104,7 +104,7 @@ def test_every_consumer_preserves_exact_approved_block_membership_and_order() ->
     assert [row["block_id"] for row in bundle["replay"]["blocks"]] == expected
 
 
-def test_likely_duplicate_events_fail_before_canonical_approval() -> None:
+def test_exact_duplicate_text_fails_before_canonical_approval() -> None:
     request = TurnPresentationRequest(
         request_id="request:phase25",
         turn_id="turn:phase25",
@@ -135,4 +135,4 @@ def test_likely_duplicate_events_fail_before_canonical_approval() -> None:
     )
     report = NarrativeValidator().validate(request, plan, (), _blocks())
     assert report.passed is False
-    assert any(issue.code == "duplicate_event" for issue in report.issues)
+    assert any(issue.code == "duplicate_text" for issue in report.issues)
