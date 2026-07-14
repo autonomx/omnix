@@ -63,6 +63,16 @@ def _append(
     changes.append(SceneChange(kind=kind, importance=importance, evidence_refs=evidence_refs))
 
 
+def _explicit_first_turn(current: Mapping[str, Any]) -> bool:
+    value = current.get("turn_index")
+    if value is None:
+        return False
+    try:
+        return int(value) == 0
+    except (TypeError, ValueError):
+        return False
+
+
 def detect_scene_changes(
     previous: Mapping[str, Any] | None,
     current: Mapping[str, Any] | None,
@@ -71,7 +81,7 @@ def detect_scene_changes(
     after = dict(current or {})
     changes: list[SceneChange] = []
 
-    is_new_game = not before or bool(after.get("new_game")) or int(after.get("turn_index") or 0) == 0
+    is_new_game = not before or bool(after.get("new_game")) or _explicit_first_turn(after)
     if is_new_game:
         _append(changes, kind="new_game", importance="major", current=after, evidence_key="location_evidence_id")
     else:
@@ -100,9 +110,8 @@ def detect_scene_changes(
     kinds = {change.kind for change in changes}
     if kinds.intersection({"new_game", "location_changed", "region_changed", "changed_return_visit"}):
         required.append(BeatPurpose.SCENE_ESTABLISHMENT)
-    if kinds.difference({"new_game"}) or "new_game" in kinds:
-        if changes:
-            required.append(BeatPurpose.ENVIRONMENTAL_CHANGE)
+    if changes:
+        required.append(BeatPurpose.ENVIRONMENTAL_CHANGE)
     return SceneChangeReport(
         changes=tuple(changes),
         required_beat_purposes=tuple(dict.fromkeys(required)),
