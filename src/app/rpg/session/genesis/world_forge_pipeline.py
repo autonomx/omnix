@@ -18,6 +18,7 @@ from .world_forge_generation import (
     WorldForgeTopicGenerator,
     generate_campaign_topics,
 )
+from .world_forge_quality import apply_world_forge_quality_audit
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,7 @@ def run_campaign_world_forge(
         generation.topics,
         compiled_relationships=relationships,
     )
+    audit = apply_world_forge_quality_audit(generation.topics, audit)
     compilation = compile_campaign_bible(
         generation,
         compiled_relationships=relationships,
