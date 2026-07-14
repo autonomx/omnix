@@ -21,6 +21,7 @@ from .evidence import (
     EvidenceRetrievalResult,
     RetrievalTrace,
 )
+from .persistence_policy import repository_save_deferred
 from .planner import DeterministicBeatPlanner, NarrativePlan
 from .repository import NarrativeResponseRepository
 from .validation import ValidatedWriterResult, write_validate_repair
@@ -81,7 +82,11 @@ class NarrativeEngineService:
             codes = ",".join(issue.code for issue in validated.validation.issues)
             raise RuntimeError(f"canonical narrative failed validation: {codes}")
         canonical = self._assemble(request, plan, evidence, validated)
-        persisted = self.repository.save(canonical)
+        persist_now = not (
+            repository_save_deferred()
+            or request.metadata.get("defer_repository_save") is True
+        )
+        persisted = self.repository.save(canonical) if persist_now else canonical
         delivered = self.delivery.prepare(persisted, request.delivery_mode)
         return NarrativeEngineResult(
             request=request,
