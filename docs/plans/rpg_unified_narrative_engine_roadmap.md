@@ -86,8 +86,8 @@ Replace fragmented RPG presentation orchestration with one isolated engine that 
 | 15 | complete | bounded cited read-only Hermes narrative research |
 | 16 | complete | canonical consumer bundle and gateway/session publication |
 | 17 | complete | PostgreSQL canonical response repository and replay/delivery certification |
-| 18 | in progress | guarded canonical publisher, zero-alternate telemetry, and static ownership audit |
-| 19 | pending | |
+| 18 | complete | guarded canonical publisher, zero-alternate telemetry, and static ownership audit |
+| 19 | in progress | fail-closed final path certification and projection-only compatibility retirement |
 
 ## Validation policy
 
