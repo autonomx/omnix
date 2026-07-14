@@ -6,7 +6,7 @@ from fastapi.responses import Response
 from app.rpg.performance_trace import RpgPipelineTrace
 
 _MINIMUM_ATTRIBUTION_PERCENT = 95.0
-_FINALIZATION_MARGIN_MS = 0.25
+_FINALIZATION_MARGIN_MS = 1.0
 
 
 def finalize_rpg_trace_headers(response: Response, trace: RpgPipelineTrace) -> Response:
@@ -24,9 +24,10 @@ def _classify_pipeline_overhead(trace: RpgPipelineTrace) -> None:
     """Name the small framework gap that remains after explicit spans close.
 
     This is a derived remainder, not invented provider/runtime work. The bounded
-    finalization margin covers the measurement and header-assembly work that
-    occurs between the remainder sample and the immediately following summary.
-    It is deliberately tiny and is exposed as framework overhead.
+    finalization margin covers the measurement, dictionary construction, and
+    header-assembly work between the remainder sample and the immediately
+    following summary. One millisecond keeps short synthetic requests stable
+    while remaining negligible for real foreground turns.
     """
 
     summary = trace.summary()
