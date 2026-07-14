@@ -16,6 +16,7 @@ from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
 from .hermes_rpg_submit_bridge import RpgSubmitter
 from .hermes_assist_mode import hermes_assist_mode_policy
 from .hermes_rpg_context_pack import build_hermes_rpg_context_pack
+from .hermes_rpg_narrative_research import hermes_rpg_narrative_research_payload
 from .hermes_sequence_planner_loop import hermes_sequence_planner_loop
 from .hermes_sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
 from .hermes_sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
@@ -157,3 +158,10 @@ def hermes_rpg_sequence_plan_route(payload: dict[str, Any] | None = Body(default
     sequence = data.get("sequence") if isinstance(data.get("sequence"), dict) else data
     context_pack = data.get("context_pack") if isinstance(data.get("context_pack"), dict) else {}
     return hermes_sequence_planner_loop(sequence, context_pack)
+
+
+@hermes_rpg_approved_bp.post("/api/hermes/rpg/narrative-research")
+def hermes_rpg_narrative_research_route(
+    payload: dict[str, Any] | None = Body(default=None),
+) -> dict[str, object]:
+    return hermes_rpg_narrative_research_payload(payload)
