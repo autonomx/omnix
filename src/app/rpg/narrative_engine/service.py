@@ -16,8 +16,10 @@ from .delivery import NarrativeDeliveryCoordinator
 from .evidence import (
     EvidenceAccessContext,
     EvidenceBroker,
+    EvidenceGrantSet,
     EvidenceQuery,
     EvidenceRetrievalResult,
+    RetrievalTrace,
 )
 from .planner import DeterministicBeatPlanner, NarrativePlan
 from .repository import (
@@ -35,6 +37,7 @@ from .writer import DeterministicNarrativeWriter, NarrativeWriter
 class NarrativeEngineResult:
     request: TurnPresentationRequest
     retrieval: EvidenceRetrievalResult
+    grants: EvidenceGrantSet
     plan: NarrativePlan
     response: CanonicalNarrativeResponse
     writer_result: ValidatedWriterResult
@@ -59,9 +62,9 @@ class NarrativeEngineService:
         self.delivery = delivery or NarrativeDeliveryCoordinator()
 
     def generate(self, request: TurnPresentationRequest) -> NarrativeEngineResult:
-        retrieval = self.evidence_broker.retrieve(self._query(request))
-        evidence = retrieval.evidence
-        plan = self.planner.plan(request, evidence)
+        grants, retrieval = self._retrieve_grants(request)
+        evidence = grants.all_records()
+        plan = self.planner.plan(request, evidence, grants=grants)
         validated = write_validate_repair(
             request,
             plan,
@@ -89,19 +92,23 @@ class NarrativeEngineService:
         return NarrativeEngineResult(
             request=request,
             retrieval=retrieval,
+            grants=grants,
             plan=plan,
             response=delivered,
             writer_result=validated,
         )
 
     @staticmethod
-    def _query(request: TurnPresentationRequest) -> EvidenceQuery:
-        speaker = (
+    def _speaker(request: TurnPresentationRequest) -> str | None:
+        return (
             request.target_actor_id
             or str(request.metadata.get("speaker_id") or "")
             or None
         )
-        entity_ids = tuple(
+
+    @staticmethod
+    def _entity_ids(request: TurnPresentationRequest) -> tuple[str, ...]:
+        return tuple(
             dict.fromkeys(
                 value
                 for value in (
@@ -111,22 +118,98 @@ class NarrativeEngineService:
                 if value
             )
         )
-        return EvidenceQuery(
-            text=request.player_input,
-            entity_ids=entity_ids,
-            limit=int(request.metadata.get("evidence_limit") or 12),
-            access=EvidenceAccessContext(
-                player_id=str(
-                    request.metadata.get("player_id") or "player"
-                ),
+
+    def _retrieve(
+        self,
+        request: TurnPresentationRequest,
+        access: EvidenceAccessContext,
+    ) -> EvidenceRetrievalResult:
+        return self.evidence_broker.retrieve(
+            EvidenceQuery(
+                text=request.player_input,
+                entity_ids=self._entity_ids(request),
+                limit=int(request.metadata.get("evidence_limit") or 12),
+                access=access,
+            )
+        )
+
+    def _retrieve_grants(
+        self,
+        request: TurnPresentationRequest,
+    ) -> tuple[EvidenceGrantSet, EvidenceRetrievalResult]:
+        speaker = self._speaker(request)
+        player_id = str(request.metadata.get("player_id") or "player")
+        actor_ids = request.actor_ids
+        speaker_factions = tuple(request.metadata.get("faction_ids") or ())
+        player_factions = tuple(request.metadata.get("player_faction_ids") or ())
+
+        player_result = self._retrieve(
+            request,
+            EvidenceAccessContext(
+                player_id=player_id,
+                actor_ids=actor_ids,
+                faction_ids=player_factions,
+                narrator_mode=False,
+            ),
+        )
+        narrator_result = self._retrieve(
+            request,
+            EvidenceAccessContext(
+                player_id=player_id,
                 speaker_id=speaker,
-                actor_ids=request.actor_ids,
-                faction_ids=tuple(
-                    request.metadata.get("faction_ids") or ()
-                ),
+                actor_ids=actor_ids,
+                faction_ids=speaker_factions,
                 narrator_mode=True,
             ),
         )
+        speakers: dict[str, tuple[EvidenceRecord, ...]] = {}
+        traces: dict[str, RetrievalTrace] = {
+            "player": player_result.trace,
+            "narrator": narrator_result.trace,
+        }
+        if speaker:
+            speaker_result = self._retrieve(
+                request,
+                EvidenceAccessContext(
+                    player_id=player_id,
+                    speaker_id=speaker,
+                    actor_ids=actor_ids,
+                    faction_ids=speaker_factions,
+                    narrator_mode=False,
+                ),
+            )
+            speakers[speaker] = speaker_result.evidence
+            traces[f"speaker:{speaker}"] = speaker_result.trace
+
+        grants = EvidenceGrantSet(
+            player=player_result.evidence,
+            narrator=narrator_result.evidence,
+            speakers=speakers,
+            traces=traces,
+        )
+        all_records = grants.all_records()
+        excluded = tuple(
+            sorted(
+                {
+                    row
+                    for trace in traces.values()
+                    for row in trace.excluded
+                }
+            )
+        )
+        aggregate = EvidenceRetrievalResult(
+            evidence=all_records,
+            trace=RetrievalTrace(
+                query=request.player_input,
+                selected_ids=tuple(record.evidence_id for record in all_records),
+                excluded=excluded,
+                candidate_count=max(
+                    (trace.candidate_count for trace in traces.values()),
+                    default=len(all_records),
+                ),
+            ),
+        )
+        return grants, aggregate
 
     @staticmethod
     def _assemble(
@@ -186,9 +269,7 @@ class NarrativeEngineService:
             "hermes_evidence_count": int(
                 request.metadata.get("hermes_evidence_count") or 0
             ),
-            "grounding_passed": (
-                request.metadata.get("grounding_passed") is True
-            ),
+            "grounding_passed": validated.validation.passed,
         }
         return CanonicalNarrativeResponse(
             response_id=response_id,
@@ -213,6 +294,11 @@ class NarrativeEngineService:
                 metadata={
                     "fallback_used": validated.fallback_used,
                     "retrieval_selected_ids": list(evidence_used),
+                    "evidence_grants": {
+                        "player": int(plan.metadata.get("player_evidence_count") or 0),
+                        "narrator": int(plan.metadata.get("narrator_evidence_count") or 0),
+                        "speaker": int(plan.metadata.get("speaker_evidence_count") or 0),
+                    },
                     **grounding_metadata,
                 },
             ),
