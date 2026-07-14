@@ -100,6 +100,8 @@ class NarrativeValidator:
             if normalized in seen_text:
                 issues.append(ValidationIssue("duplicate_text", "Visible text repeats another block.", block.block_id))
             seen_text.add(normalized)
+            if _LABEL_PREFIX.match(text):
+                issues.append(ValidationIssue("legacy_label_prefix", "Visible prose contains a legacy presentation label.", block.block_id))
             if "�" in text or any(marker in text.casefold() for marker in _TRUNCATION_MARKERS):
                 issues.append(ValidationIssue("malformed_or_truncated", "Output contains malformed or truncated text.", block.block_id))
             scripts = _scripts(text)
