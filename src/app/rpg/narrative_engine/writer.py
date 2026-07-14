@@ -1,0 +1,231 @@
+"""Structured prose writing from approved beats and evidence only."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from time import perf_counter
+from typing import Any, Callable, Mapping, Protocol, Sequence
+
+from .authority import BeatKind, BeatPurpose
+from .contracts import EvidenceRecord, NarrativeBeat, NarrativeBlock, TurnPresentationRequest
+from .planner import NarrativePlan
+
+
+@dataclass(frozen=True)
+class WriterResult:
+    blocks: tuple[NarrativeBlock, ...]
+    source: str
+    provider: str = ""
+    model: str = ""
+    latency_ms: float = 0.0
+    attempt_count: int = 1
+    raw_metadata: Mapping[str, Any] | None = None
+
+
+class NarrativeWriter(Protocol):
+    def write(
+        self,
+        request: TurnPresentationRequest,
+        plan: NarrativePlan,
+        evidence: Sequence[EvidenceRecord],
+    ) -> WriterResult: ...
+
+
+def writer_payload(
+    request: TurnPresentationRequest,
+    plan: NarrativePlan,
+    evidence: Sequence[EvidenceRecord],
+) -> dict[str, Any]:
+    approved_ids = {ref for beat in plan.beats for ref in beat.evidence_refs}
+    selected_evidence = [
+        record.as_dict()
+        for record in evidence
+        if record.evidence_id in approved_ids
+    ]
+    return {
+        "schema_version": "rpg_narrative_writer_request_v1",
+        "request_id": request.request_id,
+        "turn_id": request.turn_id,
+        "player_input": request.player_input,
+        "must_answer": plan.must_answer,
+        "mode": plan.mode,
+        "profile": plan.profile.value,
+        "word_budget": list(plan.word_budget),
+        "authoritative_outcome": dict(request.authoritative_outcome),
+        "beats": [beat.as_dict() for beat in plan.beats],
+        "approved_evidence": selected_evidence,
+        "forbidden_rules": [
+            "Do not add speakers, facts, outcomes, state changes, or secrets outside approved beats and evidence.",
+            "Do not choose an action for the player.",
+            "Return one JSON object with a blocks array only.",
+        ],
+    }
+
+
+def _text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def parse_structured_blocks(
+    payload: Mapping[str, Any],
+    plan: NarrativePlan,
+) -> tuple[NarrativeBlock, ...]:
+    rows = payload.get("blocks")
+    if not isinstance(rows, list):
+        raise ValueError("structured narrative output requires a blocks array")
+    expected = {beat.beat_id: beat for beat in plan.beats}
+    if len(rows) != len(expected):
+        raise ValueError("structured narrative output must contain exactly one block per planned beat")
+    blocks: list[NarrativeBlock] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise ValueError("structured narrative block must be an object")
+        beat_id = _text(row.get("beat_id"))
+        beat = expected.get(beat_id)
+        if beat is None or beat_id in seen:
+            raise ValueError(f"unplanned or duplicate narrative beat: {beat_id}")
+        seen.add(beat_id)
+        text = _text(row.get("text"))
+        if not text:
+            raise ValueError(f"narrative beat has empty text: {beat_id}")
+        sequence = int(row.get("sequence") or beat.sequence)
+        kind = _text(row.get("kind") or beat.kind.value)
+        purpose = _text(row.get("purpose") or beat.purpose.value)
+        speaker_id = _text(row.get("speaker_id")) or beat.speaker_id
+        if sequence != beat.sequence:
+            raise ValueError(f"narrative beat sequence changed: {beat_id}")
+        if kind != beat.kind.value or purpose != beat.purpose.value:
+            raise ValueError(f"narrative beat kind or purpose changed: {beat_id}")
+        if speaker_id != beat.speaker_id:
+            raise ValueError(f"narrative beat speaker changed: {beat_id}")
+        blocks.append(
+            NarrativeBlock(
+                block_id=_text(row.get("block_id")) or f"block:{beat_id}",
+                beat_id=beat_id,
+                sequence=beat.sequence,
+                kind=beat.kind,
+                purpose=beat.purpose,
+                text=text,
+                speaker_id=beat.speaker_id,
+                evidence_refs=beat.evidence_refs,
+                claim_refs=beat.required_claim_refs,
+                metadata={"writer_contract": "structured_v1"},
+            )
+        )
+    return tuple(sorted(blocks, key=lambda block: block.sequence))
+
+
+class StructuredNarrativeWriter:
+    """Invoke one provider callable and require native ordered block output."""
+
+    def __init__(
+        self,
+        generate: Callable[[Mapping[str, Any]], Mapping[str, Any]],
+        *,
+        provider: str = "provider",
+        model: str = "",
+    ) -> None:
+        self._generate = generate
+        self.provider = provider
+        self.model = model
+
+    def write(
+        self,
+        request: TurnPresentationRequest,
+        plan: NarrativePlan,
+        evidence: Sequence[EvidenceRecord],
+    ) -> WriterResult:
+        started = perf_counter()
+        raw = self._generate(writer_payload(request, plan, evidence))
+        if not isinstance(raw, Mapping):
+            raise ValueError("narrative provider returned a non-object response")
+        blocks = parse_structured_blocks(raw, plan)
+        return WriterResult(
+            blocks=blocks,
+            source="structured_provider",
+            provider=self.provider,
+            model=self.model,
+            latency_ms=round((perf_counter() - started) * 1000.0, 3),
+            raw_metadata=_mapping(raw.get("metadata")),
+        )
+
+
+def _evidence_text(beat: NarrativeBeat, evidence: Mapping[str, EvidenceRecord]) -> str:
+    for ref in beat.evidence_refs:
+        record = evidence.get(ref)
+        if record and record.content.strip():
+            return record.content.strip()
+    return ""
+
+
+def _deterministic_text(
+    beat: NarrativeBeat,
+    request: TurnPresentationRequest,
+    evidence: Mapping[str, EvidenceRecord],
+) -> str:
+    grounded = _evidence_text(beat, evidence)
+    target = beat.speaker_id or request.target_actor_id or "The nearby figure"
+    name = target.split(":")[-1].replace("_", " ").title()
+    if beat.purpose is BeatPurpose.PHYSICAL_REACTION:
+        if "Bran" in name:
+            return "Bran pauses with the cloth still wrapped around the cup, weighing the question before he answers."
+        if "Vexira" in name:
+            return "Vexira stills, her attention sharpening as the chamber seems to hold its breath with her."
+        return f"{name} pauses, giving the question their full attention."
+    if beat.purpose is BeatPurpose.DIRECT_ANSWER:
+        if grounded:
+            return grounded
+        return "I can answer only from what is known here and now."
+    if beat.purpose is BeatPurpose.SCENE_ESTABLISHMENT:
+        return grounded or "The changed scene settles into view, its immediate paths and occupants becoming clear."
+    if beat.purpose is BeatPurpose.ENVIRONMENTAL_CHANGE:
+        return grounded or "A meaningful change in the surroundings draws immediate notice."
+    if beat.purpose is BeatPurpose.LORE_REVEAL:
+        return grounded or "A relevant piece of history gives the exchange greater weight."
+    if beat.purpose is BeatPurpose.EMOTIONAL_ESCALATION:
+        return f"{name} shifts with deliberate purpose, turning the exchange from argument into warning."
+    if beat.purpose is BeatPurpose.ULTIMATUM:
+        return "Decide whether you will accept what this moment demands, or stand against it."
+    if beat.purpose is BeatPurpose.RESOLVED_ACTION:
+        return grounded or "The attempted action resolves according to the authoritative outcome."
+    if beat.purpose is BeatPurpose.CONSEQUENCE:
+        return grounded or "The immediate consequence leaves the next situation clear."
+    if beat.kind is BeatKind.CHOICE:
+        return "The next move remains yours."
+    return grounded or "The moment advances without adding any unconfirmed fact."
+
+
+class DeterministicNarrativeWriter:
+    """Provider-free canonical writer used for CI and outage fallback."""
+
+    def write(
+        self,
+        request: TurnPresentationRequest,
+        plan: NarrativePlan,
+        evidence: Sequence[EvidenceRecord],
+    ) -> WriterResult:
+        by_id = {record.evidence_id: record for record in evidence}
+        blocks = tuple(
+            NarrativeBlock(
+                block_id=f"block:{beat.beat_id}",
+                beat_id=beat.beat_id,
+                sequence=beat.sequence,
+                kind=beat.kind,
+                purpose=beat.purpose,
+                text=_deterministic_text(beat, request, by_id),
+                speaker_id=beat.speaker_id,
+                evidence_refs=beat.evidence_refs,
+                claim_refs=beat.required_claim_refs,
+                metadata={"writer_contract": "deterministic_v1"},
+            )
+            for beat in plan.beats
+        )
+        return WriterResult(
+            blocks=blocks,
+            source="deterministic_writer",
+            evidence_count=len(evidence) if False else 0,
+        )
