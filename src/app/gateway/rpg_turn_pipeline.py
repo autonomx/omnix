@@ -70,11 +70,6 @@ async def execute_foreground_rpg_turn(
             span["ready"] = gate.get("ready")
 
         from app.rpg.session import interactive_first_call_runtime
-        from app.rpg.session.narrative_engine_direct_dialogue_hook import (
-            install_interactive_direct_dialogue_cutover,
-        )
-
-        install_interactive_direct_dialogue_cutover(interactive_first_call_runtime)
 
         with rpg_pipeline_span("turn.apply") as span:
             result = await asyncio.to_thread(
