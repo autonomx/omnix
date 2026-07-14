@@ -80,6 +80,7 @@ def _request() -> TurnPresentationRequest:
         player_input="Bran, how is the east road?",
         actor_ids=("npc:bran",),
         target_actor_id="npc:bran",
+        presentation_profile=PresentationProfile.FAST,
         metadata={"response_mode": "dialogue"},
     )
 
@@ -139,6 +140,40 @@ def _structured_payload() -> str:
                         }
                     ],
                 }
+            ]
+        }
+    )
+
+
+def _service_payload() -> str:
+    return json.dumps(
+        {
+            "blocks": [
+                {
+                    "beat_id": "beat:1:physical_reaction",
+                    "sequence": 1,
+                    "kind": "narration",
+                    "purpose": "physical_reaction",
+                    "text": "Bran pauses over the cup before answering.",
+                    "claims": [],
+                },
+                {
+                    "beat_id": "beat:2:direct_answer",
+                    "sequence": 2,
+                    "kind": "dialogue",
+                    "purpose": "direct_answer",
+                    "speaker_id": "npc:bran",
+                    "text": "The east road is muddy but passable.",
+                    "claims": [
+                        {
+                            "claim_id": "claim:road",
+                            "text": "The east road is muddy but passable.",
+                            "authority": "objective_canon",
+                            "evidence_refs": ["evidence:road"],
+                            "scope": "speaker",
+                        }
+                    ],
+                },
             ]
         }
     )
@@ -229,7 +264,7 @@ def test_offline_mode_deliberately_uses_deterministic_writer() -> None:
 
 
 def test_service_default_resolves_production_writer_factory(monkeypatch) -> None:
-    provider = _Provider([_structured_payload()])
+    provider = _Provider([_service_payload()])
     writer = ProductionStructuredNarrativeWriter(
         ProviderNarrativeGenerator(
             provider,
