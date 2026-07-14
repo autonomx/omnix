@@ -39,6 +39,36 @@ async def execute_foreground_rpg_turn(
             span["submission_id"] = request.headers.get("x-omnix-rpg-submission-id")
             span["client_request_started"] = request.headers.get("x-omnix-rpg-client-started")
 
+        with rpg_pipeline_span("turn.campaign_genesis_gate") as span:
+            from app.rpg.session.genesis.launch_readiness import (
+                CampaignLaunchBlockedError,
+                require_campaign_launch_ready,
+            )
+            from app.rpg.session.service import load_session
+
+            launch_session = load_session(session_id)
+            if not launch_session:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"ok": False, "error": "session_not_found", "session_id": session_id},
+                )
+            try:
+                gate = require_campaign_launch_ready(launch_session)
+            except CampaignLaunchBlockedError as exc:
+                span["ready"] = False
+                span["error"] = str(exc)
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "ok": False,
+                        "error": "campaign_genesis_incomplete",
+                        "session_id": session_id,
+                        "message": str(exc),
+                    },
+                ) from exc
+            span["enabled"] = gate.get("enabled")
+            span["ready"] = gate.get("ready")
+
         from app.rpg.session import interactive_first_call_runtime
         from app.rpg.session.narrative_engine_direct_dialogue_hook import (
             install_interactive_direct_dialogue_cutover,
