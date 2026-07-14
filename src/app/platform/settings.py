@@ -193,11 +193,15 @@ def apply_settings_payload(
 def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
     from app.shared import load_secrets, load_settings, save_secrets, save_settings
 
+    from .audio_cache import invalidate_changed_audio_caches
+
     settings = load_settings()
+    previous_settings = _deep_copy(settings)
     secrets = load_secrets()
     secrets_changed = apply_settings_payload(settings, secrets, data)
 
     if secrets_changed:
         save_secrets(secrets)
     save_settings(settings)
+    invalidate_changed_audio_caches(previous_settings, settings)
     return SettingsSaveResponse()
