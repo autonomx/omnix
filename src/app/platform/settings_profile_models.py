@@ -17,7 +17,7 @@ from .settings_profile_voice import VoiceSettingsProfile
 class SettingsProfile(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
-    schema_version: int = SETTINGS_SCHEMA_VERSION
+    schema_version: int = Field(SETTINGS_SCHEMA_VERSION, alias="schemaVersion")
     revision: str = "default"
     global_settings: GlobalSettingsProfile = Field(default_factory=GlobalSettingsProfile, alias="global")
     provider_configs: ProviderConfigs = Field(default_factory=ProviderConfigs, alias="providerConfigs")
