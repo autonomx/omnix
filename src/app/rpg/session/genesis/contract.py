@@ -1,8 +1,8 @@
 """Typed Campaign Genesis Contract v2 models.
 
 The genesis contract is declarative player/scenario intent. It is the durable
-input to future compiler/bootstrap phases and must not depend on rendered summary
-text for machine-readable state.
+input to compiler/bootstrap phases and must not depend on rendered summary text
+for machine-readable state.
 """
 
 from __future__ import annotations
@@ -78,6 +78,19 @@ class GenesisWorldOptions(BaseModel):
     seed: int | None = None
 
 
+class GenesisWorldForgeOptions(BaseModel):
+    """Campaign-scoped rich world generation policy."""
+
+    enabled: bool = True
+    depth: Literal["quick", "standard", "epic"] = "standard"
+    background_expansion: bool = False
+    use_hermes: bool = True
+    require_consistency_audit: bool = True
+    require_opening_dossiers: bool = True
+    max_parallel_jobs: int | None = None
+    custom_directives: list[str] = Field(default_factory=list)
+
+
 class GenesisSystemOptions(BaseModel):
     autosave: bool = True
     companions: bool = True
@@ -103,6 +116,7 @@ class CampaignGenesisContract(BaseModel):
     starter_gear_tags: list[str] = Field(default_factory=list)
     story_options: GenesisStoryOptions = Field(default_factory=GenesisStoryOptions)
     world_options: GenesisWorldOptions = Field(default_factory=GenesisWorldOptions)
+    world_forge: GenesisWorldForgeOptions = Field(default_factory=GenesisWorldForgeOptions)
     system_options: GenesisSystemOptions = Field(default_factory=GenesisSystemOptions)
 
 
