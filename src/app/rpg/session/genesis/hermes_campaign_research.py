@@ -194,7 +194,7 @@ def research_campaign_turn(
         speaker_id=speaker_id,
         actor_ids=actor_ids,
         faction_ids=faction_ids,
-        narrator_mode=True,
+        narrator_mode=False,
     )
     request = HermesResearchRequest(
         research_id=research_id
@@ -207,6 +207,7 @@ def research_campaign_turn(
             "speaker_id": speaker_id,
             "actor_ids": list(actor_ids),
             "faction_ids": list(faction_ids),
+            "evidence_scope": "speaker" if speaker_id else "player",
         },
     )
     policy = HermesResearchPolicy(
