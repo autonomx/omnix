@@ -34,6 +34,8 @@ def _session() -> dict:
             }
         },
         "runtime_state": {
+            "campaign_bible_revision": 3,
+            "campaign_bible_content_hash": "sha256:bible",
             "campaign_generation": {
                 "status": "ready",
                 "stage": "launch_ready",
@@ -43,9 +45,7 @@ def _session() -> dict:
                     {"topic_id": "realm", "status": "completed"},
                     {"topic_id": "npcs", "status": "completed"},
                 ],
-                "campaign_bible_revision": 3,
-                "campaign_bible_content_hash": "sha256:bible",
-            }
+            },
         },
         "setup_payload": {
             "world_forge": {
