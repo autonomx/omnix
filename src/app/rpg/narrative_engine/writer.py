@@ -5,8 +5,14 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from .authority import BeatKind, BeatPurpose
-from .contracts import EvidenceRecord, NarrativeBeat, NarrativeBlock, TurnPresentationRequest
+from .authority import AuthorityClass, BeatKind, BeatPurpose
+from .contracts import (
+    ClaimAssertion,
+    EvidenceRecord,
+    NarrativeBeat,
+    NarrativeBlock,
+    TurnPresentationRequest,
+)
 from .planner import NarrativePlan
 
 
@@ -49,10 +55,23 @@ def writer_payload(
         row = beat.as_dict()
         row["approved_evidence"] = scoped
         row["evidence_scope"] = str(beat.metadata.get("evidence_scope") or "player")
+        row["claim_contract"] = {
+            "required_claim_ids": list(beat.required_claim_refs),
+            "return_fields": [
+                "claim_id",
+                "text",
+                "authority",
+                "evidence_refs",
+                "scope",
+                "subject_id",
+                "predicate",
+                "value",
+            ],
+        }
         beats.append(row)
         evidence_by_beat[beat.beat_id] = scoped
     return {
-        "schema_version": "rpg_narrative_writer_request_v2",
+        "schema_version": "rpg_narrative_writer_request_v3",
         "request_id": request.request_id,
         "turn_id": request.turn_id,
         "player_input": request.player_input,
@@ -67,6 +86,7 @@ def writer_payload(
         "forbidden_rules": [
             "Do not add speakers, facts, outcomes, state changes, or secrets outside approved beats and evidence.",
             "Use only each beat's approved_evidence for that beat; never move narrator-only or another speaker's private evidence into dialogue.",
+            "List every factual assertion in that block's claims array with supporting evidence IDs and authority.",
             "Do not choose an action for the player.",
             "Return one JSON object with a blocks array only.",
         ],
@@ -79,6 +99,42 @@ def _text(value: Any) -> str:
 
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
+
+
+def _claims(row: Mapping[str, Any], beat: NarrativeBeat) -> tuple[ClaimAssertion, ...]:
+    raw = row.get("claims")
+    if not isinstance(raw, list | tuple):
+        return ()
+    claims: list[ClaimAssertion] = []
+    for index, item in enumerate(raw, start=1):
+        if not isinstance(item, Mapping):
+            raise ValueError(f"claim entry must be an object: {beat.beat_id}:{index}")
+        try:
+            authority = AuthorityClass(
+                _text(item.get("authority")) or AuthorityClass.PUBLIC_KNOWLEDGE.value
+            )
+        except ValueError as exc:
+            raise ValueError(f"invalid claim authority: {beat.beat_id}:{index}") from exc
+        evidence_refs = tuple(
+            str(value)
+            for value in item.get("evidence_refs") or beat.evidence_refs
+            if str(value).strip()
+        )
+        claims.append(
+            ClaimAssertion(
+                claim_id=_text(item.get("claim_id")) or f"claim:{beat.beat_id}:{index}",
+                text=_text(item.get("text")) or _text(row.get("text")),
+                authority=authority,
+                evidence_refs=evidence_refs,
+                scope=_text(item.get("scope"))
+                or str(beat.metadata.get("evidence_scope") or "player"),
+                subject_id=_text(item.get("subject_id")) or beat.speaker_id,
+                predicate=_text(item.get("predicate")),
+                value=item.get("value"),
+                metadata=dict(item.get("metadata") or {}),
+            )
+        )
+    return tuple(claims)
 
 
 def parse_structured_blocks(payload: Mapping[str, Any], plan: NarrativePlan) -> tuple[NarrativeBlock, ...]:
@@ -111,6 +167,7 @@ def parse_structured_blocks(payload: Mapping[str, Any], plan: NarrativePlan) -> 
             raise ValueError(f"narrative beat kind or purpose changed: {beat_id}")
         if speaker_id != beat.speaker_id:
             raise ValueError(f"narrative beat speaker changed: {beat_id}")
+        claims = _claims(row, beat)
         blocks.append(
             NarrativeBlock(
                 block_id=_text(row.get("block_id")) or f"block:{beat_id}",
@@ -122,9 +179,11 @@ def parse_structured_blocks(payload: Mapping[str, Any], plan: NarrativePlan) -> 
                 speaker_id=beat.speaker_id,
                 evidence_refs=beat.evidence_refs,
                 claim_refs=beat.required_claim_refs,
+                claims=claims,
                 metadata={
-                    "writer_contract": "structured_v2",
+                    "writer_contract": "structured_v3",
                     "evidence_scope": str(beat.metadata.get("evidence_scope") or "player"),
+                    "claim_source": "provider" if claims else "pending_inference",
                 },
             )
         )
@@ -231,8 +290,9 @@ class DeterministicNarrativeWriter:
                 evidence_refs=beat.evidence_refs,
                 claim_refs=beat.required_claim_refs,
                 metadata={
-                    "writer_contract": "deterministic_v2",
+                    "writer_contract": "deterministic_v3",
                     "evidence_scope": str(beat.metadata.get("evidence_scope") or "player"),
+                    "claim_source": "pending_inference",
                 },
             )
             for beat in plan.beats
