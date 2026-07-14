@@ -5,14 +5,18 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from time import perf_counter
+from typing import Any, Callable, Mapping, Sequence
 
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse
 from app.providers.registry import get_provider
-from app.rpg.narrative_engine import (
-    DeterministicNarrativeWriter,
-    NarrativeWriter,
-    StructuredNarrativeWriter,
+from app.rpg.narrative_engine import DeterministicNarrativeWriter, NarrativeWriter
+from app.rpg.narrative_engine.contracts import EvidenceRecord, TurnPresentationRequest
+from app.rpg.narrative_engine.planner import NarrativePlan
+from app.rpg.narrative_engine.writer import (
+    WriterResult,
+    parse_structured_blocks,
+    writer_payload,
 )
 
 _JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
@@ -91,11 +95,7 @@ def _system_prompt() -> str:
 class ProviderNarrativeGenerator:
     """Callable bridge from provider chat completion to structured JSON."""
 
-    def __init__(
-        self,
-        provider: BaseProvider,
-        config: NarrativeProviderConfig,
-    ) -> None:
+    def __init__(self, provider: BaseProvider, config: NarrativeProviderConfig) -> None:
         self.provider = provider
         self.config = config
         self.last_attempt_count = 0
@@ -104,10 +104,7 @@ class ProviderNarrativeGenerator:
     def __call__(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
         messages = [
             ChatMessage(role="system", content=_system_prompt()),
-            ChatMessage(
-                role="user",
-                content=json.dumps(payload, ensure_ascii=False, sort_keys=True),
-            ),
+            ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False, sort_keys=True)),
         ]
         last_error: Exception | None = None
         for attempt in range(1, self.config.max_retries + 2):
@@ -141,31 +138,71 @@ class ProviderNarrativeGenerator:
         ) from last_error
 
 
+class ProductionStructuredNarrativeWriter:
+    """Provider-backed writer with structured blocks and attempt telemetry."""
+
+    def __init__(self, generator: ProviderNarrativeGenerator) -> None:
+        self.generator = generator
+
+    def write(
+        self,
+        request: TurnPresentationRequest,
+        plan: NarrativePlan,
+        evidence: Sequence[EvidenceRecord],
+    ) -> WriterResult:
+        started = perf_counter()
+        raw = self.generator(writer_payload(request, plan, evidence))
+        blocks = parse_structured_blocks(raw, plan)
+        return WriterResult(
+            blocks=blocks,
+            source="structured_provider",
+            provider=self.generator.config.provider,
+            model=self.generator.config.model,
+            latency_ms=round((perf_counter() - started) * 1000.0, 3),
+            attempt_count=max(1, self.generator.last_attempt_count),
+            raw_metadata=dict(raw.get("metadata") or {}),
+        )
+
+
+class UnavailableNarrativeWriter:
+    """Raise inside validation orchestration so the canonical fallback is recorded."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    def write(self, request, plan, evidence) -> WriterResult:
+        raise RuntimeError(self.reason)
+
+
 def build_production_narrative_writer(
     config: NarrativeProviderConfig | None = None,
     *,
     provider_factory: Callable[[str, Mapping[str, Any] | None], BaseProvider | None] = get_provider,
 ) -> NarrativeWriter:
-    """Create the configured live structured writer or the explicit safe fallback."""
+    """Create the configured live structured writer or an explicit safe fallback."""
 
     resolved = config or NarrativeProviderConfig.from_environment()
     if not resolved.live_enabled:
         return DeterministicNarrativeWriter()
-    provider = provider_factory(
-        resolved.provider,
-        {
-            "api_key": resolved.api_key,
-            "base_url": resolved.base_url,
-            "model": resolved.model or None,
-            "timeout": resolved.timeout_seconds,
-            "max_retries": resolved.max_retries,
-        },
-    )
+    try:
+        provider = provider_factory(
+            resolved.provider,
+            {
+                "api_key": resolved.api_key,
+                "base_url": resolved.base_url,
+                "model": resolved.model or None,
+                "timeout": resolved.timeout_seconds,
+                "max_retries": resolved.max_retries,
+            },
+        )
+    except Exception as exc:
+        return UnavailableNarrativeWriter(
+            f"configured RPG narrative provider could not initialize: {exc}"
+        )
     if provider is None:
-        raise RuntimeError(f"configured RPG narrative provider is unavailable: {resolved.provider}")
-    generator = ProviderNarrativeGenerator(provider, resolved)
-    return StructuredNarrativeWriter(
-        generator,
-        provider=resolved.provider,
-        model=resolved.model,
+        return UnavailableNarrativeWriter(
+            f"configured RPG narrative provider is unavailable: {resolved.provider}"
+        )
+    return ProductionStructuredNarrativeWriter(
+        ProviderNarrativeGenerator(provider, resolved)
     )
