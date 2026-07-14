@@ -121,6 +121,24 @@ class NarrativeBeat:
 
 
 @dataclass(frozen=True)
+class ClaimAssertion:
+    """One normalized factual assertion made by a canonical block."""
+
+    claim_id: str
+    text: str
+    authority: AuthorityClass
+    evidence_refs: tuple[str, ...]
+    scope: str = "player"
+    subject_id: str | None = None
+    predicate: str = ""
+    value: Any = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return _jsonable(self)
+
+
+@dataclass(frozen=True)
 class NarrativeBlock:
     block_id: str
     beat_id: str
@@ -131,6 +149,7 @@ class NarrativeBlock:
     speaker_id: str | None = None
     evidence_refs: tuple[str, ...] = ()
     claim_refs: tuple[str, ...] = ()
+    claims: tuple[ClaimAssertion, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -195,12 +214,7 @@ class CanonicalNarrativeResponse:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def semantic_content_payload(self) -> dict[str, Any]:
-        """Return meaning-bearing response content used for stable identity.
-
-        Operational generation and delivery telemetry are intentionally excluded.
-        The same approved blocks therefore retain one semantic hash across provider,
-        latency, retry, blocking, and deferred-delivery differences.
-        """
+        """Return meaning-bearing response content used for stable identity."""
 
         return {
             "schema_version": self.schema_version,
@@ -214,8 +228,6 @@ class CanonicalNarrativeResponse:
         }
 
     def content_payload(self) -> dict[str, Any]:
-        """Compatibility alias for the semantic payload used by older callers."""
-
         return self.semantic_content_payload()
 
     @property
