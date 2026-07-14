@@ -61,6 +61,13 @@ from .hermes_research import (
     run_bounded_hermes_research,
 )
 from .planner import DeterministicBeatPlanner, NarrativePlan
+from .production_path import (
+    NarrativeProductionCertification,
+    NarrativeProductionPathError,
+    certify_production_narrative_result,
+    enforce_production_narrative_result,
+    retire_legacy_presentation_ownership,
+)
 from .profiles import NarrativeProfilePolicy, adaptive_profile, profile_policy
 from .projections import (
     canonical_consumer_bundle,
@@ -143,6 +150,8 @@ __all__ = [
     "NarrativeEngineResult",
     "NarrativeEngineService",
     "NarrativePlan",
+    "NarrativeProductionCertification",
+    "NarrativeProductionPathError",
     "NarrativeProfilePolicy",
     "NarrativePublisherGuard",
     "NarrativePublisherTelemetry",
@@ -180,8 +189,10 @@ __all__ = [
     "certify_delivery_equivalence",
     "certify_narrative_persistence_and_delivery",
     "certify_narrative_roundtrip",
+    "certify_production_narrative_result",
     "deduplicate_blocks",
     "detect_scene_changes",
+    "enforce_production_narrative_result",
     "journal_projection",
     "legacy_response_projection",
     "narrative_fixture_evidence",
@@ -195,6 +206,7 @@ __all__ = [
     "render_plain_text",
     "replay_projection",
     "report_projection",
+    "retire_legacy_presentation_ownership",
     "run_bounded_hermes_research",
     "stable_hash",
     "transcript_projection",
