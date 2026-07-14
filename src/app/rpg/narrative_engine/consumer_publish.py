@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .projections import canonical_consumer_bundle
+from .publisher_guard import CANONICAL_PUBLISHER, publish_canonical_bundle
 from .serialization import canonical_response_from_dict
 
 
@@ -18,6 +19,7 @@ def _patch_latest_interaction(
     turn_id: str,
     bundle: Mapping[str, Any],
     canonical: Mapping[str, Any],
+    telemetry: Mapping[str, Any],
 ) -> bool:
     runtime = _mapping(session.get("runtime_state"))
     interactions = runtime.get("recent_interactions")
@@ -39,6 +41,8 @@ def _patch_latest_interaction(
         return False
     selected["narrative_response_id"] = response_id
     selected["narrative_content_hash"] = str(bundle.get("content_hash") or "")
+    selected["narrative_publisher"] = CANONICAL_PUBLISHER
+    selected["narrative_publisher_telemetry"] = dict(telemetry)
     selected["canonical_narrative_response"] = dict(canonical)
     selected["narrative_projections"] = dict(bundle)
     selected["visible_response"] = dict(bundle.get("visible_response") or {})
@@ -49,7 +53,7 @@ def _patch_latest_interaction(
 
 
 def attach_canonical_consumer_bundle(result: dict[str, Any]) -> dict[str, Any]:
-    """Attach and persist-ready patch canonical projections without regenerating prose."""
+    """Attach canonical projections through the only production publisher gate."""
     if not isinstance(result, dict):
         return result
     canonical_raw = result.get("canonical_narrative_response")
@@ -57,10 +61,14 @@ def attach_canonical_consumer_bundle(result: dict[str, Any]) -> dict[str, Any]:
         return result
     response = canonical_response_from_dict(canonical_raw)
     canonical = response.as_dict()
-    bundle = canonical_consumer_bundle(response)
+    projected = canonical_consumer_bundle(response)
+    bundle, telemetry_snapshot = publish_canonical_bundle(projected)
+    telemetry = telemetry_snapshot.as_dict()
     visible = dict(bundle["visible_response"])
     result["canonical_narrative_response"] = canonical
     result["narrative_projections"] = bundle
+    result["narrative_publisher"] = CANONICAL_PUBLISHER
+    result["narrative_publisher_telemetry"] = telemetry
     result["visible_response"] = visible
     result["narration"] = str(visible.get("narration") or "")
     result["final_narration"] = result["narration"]
@@ -71,6 +79,8 @@ def attach_canonical_consumer_bundle(result: dict[str, Any]) -> dict[str, Any]:
     if nested:
         nested["canonical_narrative_response"] = canonical
         nested["narrative_projections"] = bundle
+        nested["narrative_publisher"] = CANONICAL_PUBLISHER
+        nested["narrative_publisher_telemetry"] = telemetry
         nested["visible_response"] = visible
         nested["narration"] = result["narration"]
         nested["summary"] = result["summary"]
@@ -84,6 +94,7 @@ def attach_canonical_consumer_bundle(result: dict[str, Any]) -> dict[str, Any]:
             turn_id=response.turn_id,
             bundle=bundle,
             canonical=canonical,
+            telemetry=telemetry,
         )
         result["narrative_session_projection_patched"] = patched
     return result
