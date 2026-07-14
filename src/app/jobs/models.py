@@ -98,6 +98,14 @@ class CreateJobRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def apply_central_defaults(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        module = str(value.get("module") or "").strip()
+        resource_class = str(value.get("resource_class") or "").strip()
+        defaulted_modules = {"storyteller", "podcast", "voice", "voice-cloning", "stt", "image-generation"}
+        if module not in defaulted_modules and resource_class != ResourceClass.GPU_LLM.value:
+            return value
+
         from app.platform.effective_defaults import apply_job_defaults
 
         return apply_job_defaults(value)
