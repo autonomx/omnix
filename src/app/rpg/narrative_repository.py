@@ -8,11 +8,15 @@ from typing import Any, Callable
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.rpg_narrative_response_repository import (
+    NarrativeResponsePersistenceConflict,
+)
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.narrative_engine import CanonicalNarrativeResponse
 from app.rpg.narrative_engine.repository import (
     InMemoryNarrativeResponseRepository,
+    NarrativeResponseConflict,
     NarrativeResponseRepository,
 )
 
@@ -44,10 +48,14 @@ class PostgresNarrativeResponseRepositoryAdapter:
         response: CanonicalNarrativeResponse,
     ) -> CanonicalNarrativeResponse:
         with self._unit_of_work_factory(self.database) as work:
-            saved = work.narrative_responses.save(
-                self._context(),
-                response.with_content_hash(),
-            )
+            try:
+                saved = work.narrative_responses.save(
+                    self._context(),
+                    response.with_content_hash(),
+                )
+            except NarrativeResponsePersistenceConflict as exc:
+                work.rollback()
+                raise NarrativeResponseConflict(str(exc)) from exc
             work.commit()
             return saved
 
