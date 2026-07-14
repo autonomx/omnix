@@ -38,6 +38,13 @@ Replace fragmented RPG presentation orchestration with one isolated engine that 
 - Phase 14: World Forge proposal and contradiction-audit pipeline
 - Phase 15: bounded Hermes narrative research
 
+### Milestone E — Consumer convergence and legacy retirement
+
+- Phase 16: UI, TTS, transcript, journal, recap, report, and replay projections converge on canonical blocks
+- Phase 17: save/load, replay, and blocking/deferred content-hash certification
+- Phase 18: zero-legacy-publisher telemetry and architecture enforcement
+- Phase 19: retire alternate presentation ownership and certify the final production path
+
 ## Required release invariants
 
 - one presentation request per interaction;
@@ -52,28 +59,35 @@ Replace fragmented RPG presentation orchestration with one isolated engine that 
 - delivery mode does not alter canonical meaning;
 - compatibility fields are projections only;
 - Narrative Engine imports no legacy prose generators;
-- Campaign Bible authority is PostgreSQL-backed and revisioned.
+- Campaign Bible authority is PostgreSQL-backed and revisioned;
+- every downstream presentation consumer derives from canonical blocks;
+- persisted and replayed responses preserve response ID, block order, and content hash;
+- production publishing records zero alternate legacy publisher calls.
 
 ## Phase progress
 
 | Phase | Status | Evidence |
 |---:|---|---|
-| 0 | in progress | ADR and roadmap added |
-| 1 | pending | |
-| 2 | pending | |
-| 3 | pending | |
-| 4 | pending | |
-| 5 | pending | |
-| 6 | pending | |
-| 7 | pending | |
-| 8 | pending | |
-| 9 | pending | |
-| 10 | pending | |
-| 11 | pending | |
-| 12 | pending | |
-| 13 | pending | |
-| 14 | pending | |
-| 15 | pending | |
+| 0 | complete | ADR, roadmap, baseline inventory, and telemetry |
+| 1 | complete | isolated contracts and prohibited-import architecture gate |
+| 2 | complete | ordered renderer and compatibility projections |
+| 3 | complete | evidence broker plus Bran/Vexira fixtures |
+| 4 | complete | deterministic scene-change detector |
+| 5 | complete | adaptive profiles and deterministic beat planner |
+| 6 | complete | structured and provider-free deterministic writers |
+| 7 | complete | fail-closed validation, bounded repair, and fallback |
+| 8 | complete | canonical repository and blocking/deferred delivery |
+| 9 | complete | sampled shadow generation and diagnostics |
+| 10 | complete | direct-dialogue canonical cutover |
+| 11 | complete | environment, observation, investigation, and travel cutover |
+| 12 | complete | remaining stateful and resolved turn modes cut over |
+| 13 | complete | revisioned PostgreSQL Campaign Bible and evidence adapter |
+| 14 | complete | reviewable World Forge proposals and contradiction audit |
+| 15 | complete | bounded cited read-only Hermes narrative research |
+| 16 | in progress | canonical consumer bundle and gateway/session publication |
+| 17 | pending | |
+| 18 | pending | |
+| 19 | pending | |
 
 ## Validation policy
 
@@ -81,6 +95,6 @@ Each phase is committed independently. After each phase, GitHub Actions must com
 
 Hosted CI remains provider-free. Live-provider prose and latency evaluation is local operational evidence and must not be fabricated in GitHub Actions.
 
-## Legacy deletion follow-up
+## Legacy retirement policy
 
-Milestones A-D establish the replacement and cut over production modes. Full consumer convergence and deletion of legacy generation remain the next milestone and require zero verified production publisher calls, save/load and replay evidence, blocking/deferred hash equivalence, and local provider-backed quality evidence.
+Legacy compatibility fields may remain only as projections from the canonical response while downstream callers migrate. No legacy generator may own visible production prose. Deletion or hard disabling occurs only after deterministic evidence proves zero alternate publisher calls, save/load and replay equivalence, and blocking/deferred content-hash identity.
