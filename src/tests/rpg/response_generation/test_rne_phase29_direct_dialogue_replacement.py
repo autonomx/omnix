@@ -113,7 +113,7 @@ def test_fast_immersive_and_cinematic_profiles_use_the_same_canonical_engine(
         lambda: DeterministicNarrativeWriter(),
     )
     session = _session()
-    for profile in ("fast", "immersive", "cinematic"):
+    for index, profile in enumerate(("fast", "immersive", "cinematic"), start=1):
         intent = build_canonical_direct_dialogue_intent(
             session=session,
             simulation_state=session["simulation_state"],
@@ -123,6 +123,7 @@ def test_fast_immersive_and_cinematic_profiles_use_the_same_canonical_engine(
             semantic_advisory=_advisory(),
         )
         intent["presentation_profile"] = profile
+        intent["turn_id"] = f"turn:profile:{index}"
         generated = canonicalize_direct_dialogue_result(
             intent,
             session_id="campaign:phase29",
