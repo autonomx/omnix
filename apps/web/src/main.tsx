@@ -8,6 +8,7 @@ import { omnixTheme } from './design/theme';
 import './features/chatbot/sessionTools';
 import './features/chatbot/researchProgressController';
 import './features/chatbot/researchProgressController.css';
+import { bootstrapCentralAssistantSettings } from './features/chatbot/assistantSettingsBootstrap';
 import { initializeLiveChatWorkspace } from './features/chatbot/live-chat-workspace';
 import { initializeVoiceSessionEvaluationWorkspace } from './features/chatbot/voice-session-evaluation-workspace';
 import './features/podcast/podcastSessionGuard';
@@ -70,15 +71,20 @@ initializeLiveConversationDurableEvaluationController();
 initializeLiveChatWorkspace(queryClient);
 initializeVoiceSessionEvaluationWorkspace();
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      <QueryClientProvider client={queryClient}>
-        <OmnixApp />
-      </QueryClientProvider>
-    </MantineProvider>
-  </React.StrictMode>,
-);
+async function mountApplication(): Promise<void> {
+  await bootstrapCentralAssistantSettings();
+  ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+    <React.StrictMode>
+      <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
+        <QueryClientProvider client={queryClient}>
+          <OmnixApp />
+        </QueryClientProvider>
+      </MantineProvider>
+    </React.StrictMode>,
+  );
+}
+
+void mountApplication();
 
 window.setTimeout(() => {
   // Install the congestion-aware capture handler before the legacy stream-button handler.
