@@ -19,6 +19,12 @@ from .campaign_bible import (
     CampaignBibleSnapshot,
     campaign_bible_evidence,
 )
+from .certification import (
+    NarrativeCertificationReport,
+    certify_delivery_equivalence,
+    certify_narrative_persistence_and_delivery,
+    certify_narrative_roundtrip,
+)
 from .contracts import (
     CanonicalNarrativeResponse,
     DeliveryMetadata,
@@ -73,6 +79,7 @@ from .repository import (
     NarrativeResponseRepository,
 )
 from .scene_change import SceneChangeReport, detect_scene_changes
+from .serialization import canonical_response_from_dict
 from .service import NarrativeEngineResult, NarrativeEngineService
 from .validation import NarrativeRepairer, NarrativeValidator, ValidatedWriterResult, write_validate_repair
 from .world_forge import (
@@ -120,6 +127,7 @@ __all__ = [
     "InMemoryNarrativeResponseRepository",
     "NarrativeBeat",
     "NarrativeBlock",
+    "NarrativeCertificationReport",
     "NarrativeDeliveryCoordinator",
     "NarrativeEngineResult",
     "NarrativeEngineService",
@@ -153,6 +161,10 @@ __all__ = [
     "campaign_bible_evidence",
     "canonical_consumer_bundle",
     "canonical_json",
+    "canonical_response_from_dict",
+    "certify_delivery_equivalence",
+    "certify_narrative_persistence_and_delivery",
+    "certify_narrative_roundtrip",
     "deduplicate_blocks",
     "detect_scene_changes",
     "journal_projection",
