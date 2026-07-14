@@ -13,6 +13,7 @@ from .contracts import (
     stable_hash,
 )
 from .evidence import EvidenceGrantSet, EvidenceRetrievalResult, RetrievalTrace
+from .persistence_policy import repository_save_deferred
 from .planner import NarrativePlan
 from .repository import NarrativeResponseConflict
 from .service import NarrativeEngineResult, NarrativeEngineService as _NarrativeEngineService
@@ -176,6 +177,13 @@ class NarrativeEngineService(_NarrativeEngineService):
         ).with_content_hash()
 
     def generate(self, request: TurnPresentationRequest) -> NarrativeEngineResult:
+        deferred = (
+            repository_save_deferred()
+            or request.metadata.get("defer_repository_save") is True
+        )
+        if deferred:
+            return super().generate(request)
+
         existing = self.repository.get_for_turn(request.campaign_id, request.turn_id)
         if existing is not None:
             return _replay_result(self, request, existing)
