@@ -43,6 +43,14 @@ from .profiles import NarrativeProfilePolicy, adaptive_profile, profile_policy
 from .projections import journal_projection, legacy_response_projection, transcript_projection, tts_projection
 from .renderer import CanonicalNarrativeRenderer, RenderedNarrative, deduplicate_blocks, render_plain_text
 from .scene_change import SceneChangeReport, detect_scene_changes
+from .writer import (
+    DeterministicNarrativeWriter,
+    NarrativeWriter,
+    StructuredNarrativeWriter,
+    WriterResult,
+    parse_structured_blocks,
+    writer_payload,
+)
 
 __all__ = [
     "AuthorityClass",
@@ -53,6 +61,7 @@ __all__ = [
     "DeliveryMetadata",
     "DeliveryMode",
     "DeterministicBeatPlanner",
+    "DeterministicNarrativeWriter",
     "EvidenceAccessContext",
     "EvidenceBroker",
     "EvidenceLifetime",
@@ -66,15 +75,18 @@ __all__ = [
     "NarrativePlan",
     "NarrativeProfilePolicy",
     "NarrativeSignificance",
+    "NarrativeWriter",
     "PresentationProfile",
     "RenderedNarrative",
     "RetrievalTrace",
     "SceneChange",
     "SceneChangeReport",
+    "StructuredNarrativeWriter",
     "TurnPresentationRequest",
     "ValidationIssue",
     "ValidationReport",
     "VisibilityClass",
+    "WriterResult",
     "adaptive_profile",
     "bran_fixture_evidence",
     "canonical_json",
@@ -84,10 +96,12 @@ __all__ = [
     "legacy_response_projection",
     "narrative_fixture_evidence",
     "ordered_blocks",
+    "parse_structured_blocks",
     "profile_policy",
     "render_plain_text",
     "stable_hash",
     "transcript_projection",
     "tts_projection",
     "vexira_fixture_evidence",
+    "writer_payload",
 ]
