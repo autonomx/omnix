@@ -2,10 +2,16 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .authority import PresentationProfile
-from .contracts import CanonicalNarrativeResponse, NarrativeBeat, TurnPresentationRequest
+from .contracts import (
+    CanonicalNarrativeResponse,
+    EvidenceRecord,
+    NarrativeBeat,
+    TurnPresentationRequest,
+    stable_hash,
+)
 from .evidence import EvidenceGrantSet, EvidenceRetrievalResult, RetrievalTrace
 from .planner import NarrativePlan
 from .repository import NarrativeResponseConflict
@@ -20,6 +26,12 @@ class NarrativeTurnIdentityConflict(NarrativeResponseConflict):
 
 def _metadata(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _request_identity_hash(request: TurnPresentationRequest) -> str:
+    payload = request.as_dict()
+    payload.pop("delivery_mode", None)
+    return stable_hash(payload)
 
 
 def _profile(
@@ -80,7 +92,14 @@ def _replay_result(
     request: TurnPresentationRequest,
     response: CanonicalNarrativeResponse,
 ) -> NarrativeEngineResult:
-    if response.request_id != request.request_id:
+    stored_identity_hash = str(response.metadata.get("request_identity_hash") or "")
+    if (
+        response.request_id != request.request_id
+        or (
+            stored_identity_hash
+            and stored_identity_hash != _request_identity_hash(request)
+        )
+    ):
         raise NarrativeTurnIdentityConflict(
             "turn already belongs to a different presentation request: "
             f"{request.campaign_id}/{request.turn_id}"
@@ -134,6 +153,27 @@ def _replay_result(
 
 class NarrativeEngineService(_NarrativeEngineService):
     """Generate at most once per campaign turn and replay durable canon thereafter."""
+
+    @staticmethod
+    def _assemble(
+        request: TurnPresentationRequest,
+        plan: NarrativePlan,
+        evidence: Sequence[EvidenceRecord],
+        validated: ValidatedWriterResult,
+    ) -> CanonicalNarrativeResponse:
+        response = _NarrativeEngineService._assemble(
+            request,
+            plan,
+            evidence,
+            validated,
+        )
+        return replace(
+            response,
+            metadata={
+                **_metadata(response.metadata),
+                "request_identity_hash": _request_identity_hash(request),
+            },
+        ).with_content_hash()
 
     def generate(self, request: TurnPresentationRequest) -> NarrativeEngineResult:
         existing = self.repository.get_for_turn(request.campaign_id, request.turn_id)
