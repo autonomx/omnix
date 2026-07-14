@@ -122,11 +122,22 @@ def get_settings_payload() -> SettingsPayload:
     )
 
 
-def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
-    from app.shared import DEFAULT_SETTINGS, load_secrets, load_settings, save_secrets, save_settings
+def apply_settings_payload(
+    settings: dict[str, Any],
+    secrets: dict[str, Any],
+    data: dict[str, Any],
+) -> bool:
+    """Apply a legacy settings request in memory and report whether secrets changed.
 
-    settings = load_settings()
-    secrets = load_secrets()
+    PostgreSQL authority stores application settings as one document while provider
+    secrets are environment-owned. Keeping mutation separate from persistence lets
+    the SCC adapter perform one atomic settings write and avoid touching the retired
+    plaintext secret writer for ordinary provider/configuration changes.
+    """
+
+    from app.shared import DEFAULT_SETTINGS
+
+    secrets_changed = False
 
     if "provider" in data:
         settings["provider"] = data["provider"]
@@ -139,7 +150,10 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
         incoming = _safe_dict(data["openrouter"])
         api_key = str(incoming.get("api_key") or "")
         if api_key and not api_key.startswith("***"):
-            secrets.setdefault("api_keys", {})["openrouter"] = api_key
+            api_keys = secrets.setdefault("api_keys", {})
+            if str(api_keys.get("openrouter") or "") != api_key:
+                api_keys["openrouter"] = api_key
+                secrets_changed = True
         _merge_settings_section(
             settings,
             "openrouter",
@@ -151,7 +165,10 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
         incoming = _safe_dict(data["cerebras"])
         api_key = str(incoming.get("api_key") or "")
         if api_key and not api_key.startswith("***"):
-            secrets.setdefault("api_keys", {})["cerebras"] = api_key
+            api_keys = secrets.setdefault("api_keys", {})
+            if str(api_keys.get("cerebras") or "") != api_key:
+                api_keys["cerebras"] = api_key
+                secrets_changed = True
         _merge_settings_section(
             settings,
             "cerebras",
@@ -170,6 +187,17 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
         if key in data:
             _merge_settings_section(settings, key, data[key], _safe_dict(DEFAULT_SETTINGS.get(key)))
 
-    save_secrets(secrets)
+    return secrets_changed
+
+
+def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
+    from app.shared import load_secrets, load_settings, save_secrets, save_settings
+
+    settings = load_settings()
+    secrets = load_secrets()
+    secrets_changed = apply_settings_payload(settings, secrets, data)
+
+    if secrets_changed:
+        save_secrets(secrets)
     save_settings(settings)
     return SettingsSaveResponse()
