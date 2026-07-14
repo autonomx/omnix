@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from .authority import DeliveryMode
-from .contracts import CanonicalNarrativeResponse
+from .contracts import CanonicalNarrativeResponse, stable_hash
 from .delivery import NarrativeDeliveryCoordinator
 from .projections import replay_projection
 from .serialization import canonical_response_from_dict
@@ -34,12 +34,16 @@ def certify_narrative_roundtrip(
 ) -> NarrativeCertificationReport:
     frozen = response.with_content_hash()
     payload = frozen.as_dict()
+    replay_payload = replay_projection(frozen)
     restored = canonical_response_from_dict(payload)
-    replayed = canonical_response_from_dict(replay_projection(frozen))
+    replayed = canonical_response_from_dict(replay_payload)
     expected_order = tuple(block.block_id for block in frozen.blocks)
+    restored_hash = stable_hash(restored.content_payload())
+    replayed_hash = stable_hash(replayed.content_payload())
     checks = {
         "response_id_preserved": restored.response_id == frozen.response_id == replayed.response_id,
         "content_hash_preserved": restored.content_hash == frozen.content_hash == replayed.content_hash,
+        "content_hash_recomputed": restored_hash == frozen.content_hash == replayed_hash,
         "turn_id_preserved": restored.turn_id == frozen.turn_id == replayed.turn_id,
         "campaign_id_preserved": restored.campaign_id == frozen.campaign_id == replayed.campaign_id,
         "block_order_preserved": (
@@ -59,7 +63,10 @@ def certify_narrative_roundtrip(
         diagnostics={
             "block_ids": list(expected_order),
             "serialized_schema_version": payload.get("schema_version"),
-            "replay_schema_version": replay_projection(frozen).get("schema_version"),
+            "replay_schema_version": replay_payload.get("schema_version"),
+            "replay_projection_version": replay_payload.get("projection_version"),
+            "restored_hash": restored_hash,
+            "replayed_hash": replayed_hash,
         },
     )
 
