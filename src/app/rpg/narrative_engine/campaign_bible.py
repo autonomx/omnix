@@ -68,7 +68,7 @@ def campaign_bible_evidence(snapshot: CampaignBibleSnapshot) -> tuple[EvidenceRe
                 authority=_enum(
                     AuthorityClass,
                     raw.get("authority"),
-                    AuthorityClass.CANON,
+                    AuthorityClass.OBJECTIVE_CANON,
                 ),
                 visibility=_enum(
                     VisibilityClass,
