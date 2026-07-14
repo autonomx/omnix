@@ -38,18 +38,9 @@ from .evidence import (
     RetrievalTrace,
 )
 from .fixtures import bran_fixture_evidence, narrative_fixture_evidence, vexira_fixture_evidence
-from .projections import (
-    journal_projection,
-    legacy_response_projection,
-    transcript_projection,
-    tts_projection,
-)
-from .renderer import (
-    CanonicalNarrativeRenderer,
-    RenderedNarrative,
-    deduplicate_blocks,
-    render_plain_text,
-)
+from .projections import journal_projection, legacy_response_projection, transcript_projection, tts_projection
+from .renderer import CanonicalNarrativeRenderer, RenderedNarrative, deduplicate_blocks, render_plain_text
+from .scene_change import SceneChangeReport, detect_scene_changes
 
 __all__ = [
     "AuthorityClass",
@@ -74,6 +65,7 @@ __all__ = [
     "RenderedNarrative",
     "RetrievalTrace",
     "SceneChange",
+    "SceneChangeReport",
     "TurnPresentationRequest",
     "ValidationIssue",
     "ValidationReport",
@@ -81,6 +73,7 @@ __all__ = [
     "bran_fixture_evidence",
     "canonical_json",
     "deduplicate_blocks",
+    "detect_scene_changes",
     "journal_projection",
     "legacy_response_projection",
     "narrative_fixture_evidence",
