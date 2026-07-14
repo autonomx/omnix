@@ -1,4 +1,4 @@
-"""End-to-end in-memory World Forge pipeline used before campaign launch."""
+"""End-to-end World Forge pipeline used before campaign launch."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -73,9 +73,9 @@ def _graph_from_payload(value: Mapping[str, Any]) -> CampaignTopicGraph:
 
 
 def _default_generator() -> WorldForgeTopicGenerator:
-    from .world_forge_default import ReferenceSafeWorldForgeGenerator
+    from .world_forge_provider import build_production_world_forge_generator
 
-    return ReferenceSafeWorldForgeGenerator()
+    return build_production_world_forge_generator()
 
 
 def run_campaign_world_forge(
