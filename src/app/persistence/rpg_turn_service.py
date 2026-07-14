@@ -183,7 +183,7 @@ def persist_foreground_turn(
             session_id=session_id,
             submission_id=submission_id,
             claim_token=claim_token,
-            interaction_id=interaction_id,
+            interaction_id=interaction_record_id,
             response=compact_response,
         ):
             raise RuntimeError("foreground RPG submission result could not be finalized")
