@@ -24,6 +24,49 @@ class SettingsProfileRevisionConflict(ValueError):
         self.actual = actual
 
 
+_PROFILE_KEY_ALIASES = {
+    "schema_version": "schemaVersion",
+    "voice_cloning": "voiceCloning",
+    "image_prompt": "imagePrompt",
+    "fallback_behavior": "fallbackBehavior",
+    "task_overrides": "taskOverrides",
+    "provider_id": "providerId",
+    "model_id": "modelId",
+    "writing_style": "writingStyle",
+    "read_speed": "readSpeed",
+    "pause_paragraph_ms": "pauseParagraphMs",
+    "pause_chapter_ms": "pauseChapterMs",
+    "read_chapter_titles": "readChapterTitles",
+    "read_style_preset": "readStylePreset",
+    "duration_minutes": "durationMinutes",
+    "generation_style": "generationStyle",
+    "playback_rate": "playbackRate",
+    "cloning_language": "cloningLanguage",
+    "cloning_quality": "cloningQuality",
+    "world_activity": "worldActivity",
+    "economy_pressure": "economyPressure",
+    "combat_lethality": "combatLethality",
+    "background_soft_audit": "backgroundSoftAudit",
+    "llm_narration": "llmNarration",
+    "image_generation": "imageGeneration",
+    "campaign_defaults": "campaignDefaults",
+    "hermes_assist_mode": "hermesAssistMode",
+    "aspect_ratio": "aspectRatio",
+    "portrait_preset": "portraitPreset",
+    "scene_preset": "scenePreset",
+    "unload_after_generation": "unloadAfterGeneration",
+    "save_transcript": "saveTranscript",
+    "microphone_device_id": "microphoneDeviceId",
+    "noise_suppression": "noiseSuppression",
+    "echo_cancellation": "echoCancellation",
+    "save_output_by_default": "saveOutputByDefault",
+    "retention_days": "retentionDays",
+    "temporary_asset_cleanup": "temporaryAssetCleanup",
+    "reduce_motion": "reduceMotion",
+    "live_captions": "liveCaptions",
+}
+
+
 def _copy(value: Any) -> Any:
     return json.loads(json.dumps(value))
 
@@ -32,10 +75,21 @@ def _record(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _canonical_keys(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_canonical_keys(item) for item in value]
+    if not isinstance(value, dict):
+        return _copy(value)
+    canonical: dict[str, Any] = {}
+    for key, item in value.items():
+        canonical[_PROFILE_KEY_ALIASES.get(key, key)] = _canonical_keys(item)
+    return canonical
+
+
 def _merge_known(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     merged = _copy(base)
     for key, value in patch.items():
-        if key not in base or key in {"schema_version", "revision"}:
+        if key not in base or key in {"schemaVersion", "revision"}:
             continue
         if isinstance(base[key], dict) and isinstance(value, dict):
             merged[key] = _merge_known(base[key], value)
@@ -139,7 +193,7 @@ def load_settings_profile(settings: dict[str, Any]) -> SettingsProfile:
     raw = settings.get(SETTINGS_PROFILE_KEY)
     legacy = _legacy_seed(settings)
     default_profile = SettingsProfile.model_validate(legacy).model_dump(mode="json", by_alias=True)
-    source = _merge_known(default_profile, raw) if isinstance(raw, dict) else default_profile
+    source = _merge_known(default_profile, _canonical_keys(raw)) if isinstance(raw, dict) else default_profile
     for key in ("openrouter", "cerebras"):
         legacy_key = str(_record(_record(legacy.get("providerConfigs")).get(key)).get("apiKey") or "")
         source_provider_configs = _record(source.get("providerConfigs"))
@@ -163,7 +217,7 @@ def save_settings_profile(settings: dict[str, Any], patch: dict[str, Any], base_
     if base_revision and base_revision != current.revision:
         raise SettingsProfileRevisionConflict(base_revision, current.revision)
     current_payload = current.model_dump(mode="json", by_alias=True)
-    merged = _merge_known(current_payload, _record(patch))
+    merged = _merge_known(current_payload, _canonical_keys(_record(patch)))
     try:
         profile = SettingsProfile.model_validate(merged)
     except ValidationError as exc:
