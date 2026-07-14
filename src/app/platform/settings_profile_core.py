@@ -8,25 +8,31 @@ SETTINGS_SCHEMA_VERSION = 1
 
 
 class ProviderDefaults(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     llm: str = "lmstudio"
     tts: str = "faster-qwen3-tts"
     stt: str = "parakeet"
     image: str = ""
-    voice_cloning: str = ""
+    voice_cloning: str = Field("", alias="voiceCloning")
 
 
 class ModelDefaults(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     chat: str = ""
     fast: str = ""
     quality: str = ""
     background: str = ""
     embedding: str = ""
-    image_prompt: str = ""
+    image_prompt: str = Field("", alias="imagePrompt")
 
 
 class RoutingDefaults(BaseModel):
-    fallback_behavior: str = "next-available"
-    task_overrides: dict[str, dict[str, str]] = Field(default_factory=dict)
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    fallback_behavior: str = Field("next-available", alias="fallbackBehavior")
+    task_overrides: dict[str, dict[str, str]] = Field(default_factory=dict, alias="taskOverrides")
 
 
 class LmStudioProviderConfig(BaseModel):
