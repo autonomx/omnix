@@ -29,6 +29,7 @@ from .contracts import (
     ordered_blocks,
     stable_hash,
 )
+from .delivery import NarrativeDeliveryCoordinator
 from .evidence import (
     EvidenceAccessContext,
     EvidenceBroker,
@@ -42,13 +43,14 @@ from .planner import DeterministicBeatPlanner, NarrativePlan
 from .profiles import NarrativeProfilePolicy, adaptive_profile, profile_policy
 from .projections import journal_projection, legacy_response_projection, transcript_projection, tts_projection
 from .renderer import CanonicalNarrativeRenderer, RenderedNarrative, deduplicate_blocks, render_plain_text
-from .scene_change import SceneChangeReport, detect_scene_changes
-from .validation import (
-    NarrativeRepairer,
-    NarrativeValidator,
-    ValidatedWriterResult,
-    write_validate_repair,
+from .repository import (
+    InMemoryNarrativeResponseRepository,
+    NarrativeResponseConflict,
+    NarrativeResponseRepository,
 )
+from .scene_change import SceneChangeReport, detect_scene_changes
+from .service import NarrativeEngineResult, NarrativeEngineService
+from .validation import NarrativeRepairer, NarrativeValidator, ValidatedWriterResult, write_validate_repair
 from .writer import (
     DeterministicNarrativeWriter,
     NarrativeWriter,
@@ -76,11 +78,17 @@ __all__ = [
     "EvidenceRetrievalResult",
     "GenerationMetadata",
     "InMemoryEvidenceSource",
+    "InMemoryNarrativeResponseRepository",
     "NarrativeBeat",
     "NarrativeBlock",
+    "NarrativeDeliveryCoordinator",
+    "NarrativeEngineResult",
+    "NarrativeEngineService",
     "NarrativePlan",
     "NarrativeProfilePolicy",
     "NarrativeRepairer",
+    "NarrativeResponseConflict",
+    "NarrativeResponseRepository",
     "NarrativeSignificance",
     "NarrativeValidator",
     "NarrativeWriter",
