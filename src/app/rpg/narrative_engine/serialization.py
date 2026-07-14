@@ -41,6 +41,15 @@ def _claims(row: Mapping[str, Any]) -> tuple[ClaimAssertion, ...]:
     )
 
 
+def _integer(
+    value: Mapping[str, Any],
+    key: str,
+    default: int,
+) -> int:
+    raw = value.get(key)
+    return default if raw is None else int(raw)
+
+
 def canonical_response_from_dict(value: Mapping[str, Any]) -> CanonicalNarrativeResponse:
     blocks = tuple(
         NarrativeBlock(
@@ -91,9 +100,9 @@ def canonical_response_from_dict(value: Mapping[str, Any]) -> CanonicalNarrative
             provider=str(generation_raw.get("provider") or ""),
             model=str(generation_raw.get("model") or ""),
             latency_ms=float(generation_raw.get("latency_ms") or 0.0),
-            attempt_count=int(generation_raw.get("attempt_count") or 1),
-            evidence_count=int(generation_raw.get("evidence_count") or 0),
-            beat_count=int(generation_raw.get("beat_count") or len(blocks)),
+            attempt_count=_integer(generation_raw, "attempt_count", 1),
+            evidence_count=_integer(generation_raw, "evidence_count", 0),
+            beat_count=_integer(generation_raw, "beat_count", len(blocks)),
             hermes_used=bool(generation_raw.get("hermes_used")),
             metadata=dict(generation_raw.get("metadata") or {}),
         ),
