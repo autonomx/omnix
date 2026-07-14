@@ -71,6 +71,7 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
     @app.get(
         "/api/rpg/sessions/{session_id}/campaign-genesis",
         tags=["rpg-session"],
+        include_in_schema=False,
     )
     def rpg_campaign_genesis(session_id: str) -> dict[str, Any]:
         session = _session_or_404(session_id)
@@ -83,6 +84,7 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
     @app.get(
         "/api/rpg/sessions/{session_id}/lore",
         tags=["rpg-session"],
+        include_in_schema=False,
     )
     def rpg_campaign_lore(session_id: str) -> dict[str, Any]:
         session = _session_or_404(session_id)
@@ -94,6 +96,7 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
     @app.get(
         "/api/rpg/sessions/{session_id}/lore/document",
         tags=["rpg-session"],
+        include_in_schema=False,
     )
     def rpg_campaign_lore_document(
         session_id: str,
@@ -114,6 +117,7 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/sessions/{session_id}/lore/discovery",
         tags=["rpg-session"],
+        include_in_schema=False,
     )
     def rpg_campaign_lore_discovery(
         session_id: str,
