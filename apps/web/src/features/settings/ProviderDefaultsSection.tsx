@@ -78,7 +78,10 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
           <div className="provider-config-group">
             <h4>OpenRouter</h4>
             <div className="settings-form-grid">
-              <SettingsField label="API key"><input type="password" autoComplete="off" value={configs.openrouter.apiKey} onChange={updateString(dispatch, 'providerConfigs.openrouter.apiKey')} /></SettingsField>
+              <SettingsField label="API key">
+                <input type="password" autoComplete="off" value={configs.openrouter.apiKey} disabled placeholder="Set OPENROUTER_API_KEY" />
+                <small>Environment-owned. Set OPENROUTER_API_KEY and restart the backend.</small>
+              </SettingsField>
               <SettingsField label="Model"><input value={configs.openrouter.model} onChange={updateString(dispatch, 'providerConfigs.openrouter.model')} /></SettingsField>
               <SettingsField label="Context size"><input type="number" min={1024} step={1024} value={configs.openrouter.contextSize} onChange={updateNumber(dispatch, 'providerConfigs.openrouter.contextSize')} /></SettingsField>
               <SettingsField label="Thinking budget"><input type="number" min={0} value={configs.openrouter.thinkingBudget} onChange={updateNumber(dispatch, 'providerConfigs.openrouter.thinkingBudget')} /></SettingsField>
@@ -89,7 +92,10 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
           <div className="provider-config-group">
             <h4>Cerebras</h4>
             <div className="settings-form-grid">
-              <SettingsField label="API key"><input type="password" autoComplete="off" value={configs.cerebras.apiKey} onChange={updateString(dispatch, 'providerConfigs.cerebras.apiKey')} /></SettingsField>
+              <SettingsField label="API key">
+                <input type="password" autoComplete="off" value={configs.cerebras.apiKey} disabled placeholder="Set CEREBRAS_API_KEY" />
+                <small>Environment-owned. Set CEREBRAS_API_KEY and restart the backend.</small>
+              </SettingsField>
               <SettingsField label="Model"><input value={configs.cerebras.model} onChange={updateString(dispatch, 'providerConfigs.cerebras.model')} /></SettingsField>
             </div>
           </div>

@@ -87,7 +87,6 @@ export function createSettingsSaveRequest(base: SettingsDocument, draft: Setting
   }
   if (JSON.stringify(base.providerConfigs.openrouter) !== JSON.stringify(draft.providerConfigs.openrouter)) {
     request.openrouter = {
-      api_key: draft.providerConfigs.openrouter.apiKey,
       model: draft.providerConfigs.openrouter.model,
       context_size: draft.providerConfigs.openrouter.contextSize,
       thinking_budget: draft.providerConfigs.openrouter.thinkingBudget,
@@ -95,7 +94,6 @@ export function createSettingsSaveRequest(base: SettingsDocument, draft: Setting
   }
   if (JSON.stringify(base.providerConfigs.cerebras) !== JSON.stringify(draft.providerConfigs.cerebras)) {
     request.cerebras = {
-      api_key: draft.providerConfigs.cerebras.apiKey,
       model: draft.providerConfigs.cerebras.model,
     };
   }
