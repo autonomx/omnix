@@ -100,10 +100,14 @@ async def execute_foreground_rpg_turn(
 
             result = attach_canonical_consumer_bundle(result)
             bundle = result.get("narrative_projections") if isinstance(result.get("narrative_projections"), dict) else {}
+            publisher = result.get("narrative_publisher_telemetry") if isinstance(result.get("narrative_publisher_telemetry"), dict) else {}
             span["attached"] = bool(bundle)
             span["response_id"] = bundle.get("response_id")
             span["content_hash"] = bundle.get("content_hash")
             span["session_patched"] = result.get("narrative_session_projection_patched") is True
+            span["publisher"] = result.get("narrative_publisher")
+            span["alternate_publish_count"] = publisher.get("alternate_publish_count")
+            span["zero_alternate_publishers"] = publisher.get("zero_alternate_publishers")
 
         with rpg_pipeline_span("turn.narrative_shadow") as span:
             from app.rpg.narrative_engine.shadow import attach_shadow_report
@@ -137,6 +141,9 @@ async def execute_foreground_rpg_turn(
                 payload["canonical_narrative_response"] = dict(result["canonical_narrative_response"])
             if isinstance(result.get("narrative_projections"), dict):
                 payload["narrative_projections"] = dict(result["narrative_projections"])
+            if isinstance(result.get("narrative_publisher_telemetry"), dict):
+                payload["narrative_publisher"] = result.get("narrative_publisher")
+                payload["narrative_publisher_telemetry"] = dict(result["narrative_publisher_telemetry"])
             payload_timing = payload.get("timing") if isinstance(payload.get("timing"), dict) else {}
             payload_timing["pipeline_before_encode_ms"] = trace.elapsed_ms
             payload["timing"] = payload_timing
