@@ -72,6 +72,12 @@ def _graph_from_payload(value: Mapping[str, Any]) -> CampaignTopicGraph:
     )
 
 
+def _default_generator() -> WorldForgeTopicGenerator:
+    from .world_forge_default import ReferenceSafeWorldForgeGenerator
+
+    return ReferenceSafeWorldForgeGenerator()
+
+
 def run_campaign_world_forge(
     contract: CampaignGenesisContract,
     *,
@@ -107,7 +113,7 @@ def run_campaign_world_forge(
     )
     generation = generate_campaign_topics(
         graph,
-        generator=generator,
+        generator=generator or _default_generator(),
         seed=seed,
         campaign_context={
             "campaign_id": campaign_id,
