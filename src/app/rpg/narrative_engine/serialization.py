@@ -3,15 +3,42 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .authority import BeatKind, BeatPurpose, DeliveryMode
+from .authority import AuthorityClass, BeatKind, BeatPurpose, DeliveryMode
 from .contracts import (
     CanonicalNarrativeResponse,
+    ClaimAssertion,
     DeliveryMetadata,
     GenerationMetadata,
     NarrativeBlock,
     ValidationIssue,
     ValidationReport,
 )
+
+
+def _claims(row: Mapping[str, Any]) -> tuple[ClaimAssertion, ...]:
+    return tuple(
+        ClaimAssertion(
+            claim_id=str(claim.get("claim_id") or ""),
+            text=str(claim.get("text") or ""),
+            authority=AuthorityClass(
+                str(claim.get("authority") or AuthorityClass.PUBLIC_KNOWLEDGE.value)
+            ),
+            evidence_refs=tuple(
+                str(item) for item in claim.get("evidence_refs") or ()
+            ),
+            scope=str(claim.get("scope") or "player"),
+            subject_id=(
+                str(claim.get("subject_id"))
+                if claim.get("subject_id") is not None
+                else None
+            ),
+            predicate=str(claim.get("predicate") or ""),
+            value=claim.get("value"),
+            metadata=dict(claim.get("metadata") or {}),
+        )
+        for claim in row.get("claims") or ()
+        if isinstance(claim, Mapping)
+    )
 
 
 def canonical_response_from_dict(value: Mapping[str, Any]) -> CanonicalNarrativeResponse:
@@ -26,6 +53,7 @@ def canonical_response_from_dict(value: Mapping[str, Any]) -> CanonicalNarrative
             speaker_id=str(row.get("speaker_id")) if row.get("speaker_id") is not None else None,
             evidence_refs=tuple(str(item) for item in row.get("evidence_refs") or ()),
             claim_refs=tuple(str(item) for item in row.get("claim_refs") or ()),
+            claims=_claims(row),
             metadata=dict(row.get("metadata") or {}),
         )
         for row in value.get("blocks") or ()
