@@ -18,7 +18,7 @@ This branch fixes that critical path by applying compatibility and typed-profile
 |---|---|---|---|
 | Settings Control Center provider save | **Broken** | Ordinary provider changes invoked the retired plaintext secret writer under PostgreSQL and returned a failed save. | Fixed on this branch. |
 | Settings write atomicity | **Broken** | Combined SCC requests wrote legacy settings and typed settings separately. | Fixed: one validated authoritative settings commit. |
-| Provider secret editing | **Misleading** | PostgreSQL runtime reads OpenRouter/Cerebras keys from environment variables and intentionally rejects plaintext writes, while the UI still renders editable password fields. | Follow-up: render environment-owned read-only status instead of editable inputs. |
+| Provider secret editing | **Misleading** | PostgreSQL runtime reads OpenRouter/Cerebras keys from environment variables and intentionally rejects plaintext writes, while the UI still rendered editable password fields. | Fixed: fields are read-only environment status and settings requests omit secret bytes. |
 | LLM provider cache | **Wired** | Cache key includes provider, base URL, model, and API-key fingerprint; settings/secret changes invalidate it. | Retain existing behavior and add the PostgreSQL save regression test. |
 | TTS provider cache | **Stale-config risk** | Cache identity is provider name only. Changing Qwen model directory, device, dtype, or generation settings while keeping the same provider reuses the old instance. | Follow-up: fingerprint effective TTS configuration or explicitly invalidate the audio cache. |
 | STT provider cache | **Stale-config risk** | Cache identity is provider name only. Changing the Parakeet base URL while keeping `parakeet` selected reuses the old instance. | Follow-up: fingerprint effective STT configuration or explicitly invalidate the audio cache. |
@@ -60,12 +60,12 @@ The SCC adapter regression suite now covers:
 - exactly one authoritative application-settings write for a combined compatibility/profile request;
 - the selected provider being synchronized into both the runtime legacy key and typed profile;
 - a real provider-key edit failing closed before any settings commit;
-- continued legacy-file behavior for installations/tests that explicitly use the legacy persistence boundary.
+- continued legacy-file behavior for installations/tests that explicitly use the legacy persistence boundary;
+- frontend save requests never serializing OpenRouter or Cerebras API-key bytes.
 
 ## Remaining implementation order
 
-1. Replace editable provider-secret inputs with environment-owned configuration status.
-2. Make TTS/STT cache identity configuration-sensitive.
-3. Add one shared frontend `effectiveSettingsDefaults` adapter and wire Chatbot, Storyteller, Podcast, and Image Generation.
-4. Add field-level adoption tests for Voice, Voice Cloning, STT, and RPG new-campaign creation.
-5. Add a source guard that prevents a setting marked `targetOwner: settings-api` from remaining permanently unconsumed by its module.
+1. Make TTS/STT cache identity configuration-sensitive.
+2. Add one shared frontend `effectiveSettingsDefaults` adapter and wire Chatbot, Storyteller, Podcast, and Image Generation.
+3. Add field-level adoption tests for Voice, Voice Cloning, STT, and RPG new-campaign creation.
+4. Add a source guard that prevents a setting marked `targetOwner: settings-api` from remaining permanently unconsumed by its module.
