@@ -159,11 +159,12 @@ def test_repository_response_identity_mismatch_fails_closed() -> None:
         )
 
 
-def test_gateway_hydrates_replay_before_any_canonical_generation() -> None:
+def test_gateway_hydrates_replay_before_single_canonical_presenter() -> None:
     source = (ROOT / "src/app/gateway/rpg_turn_pipeline.py").read_text(
         encoding="utf-8"
     )
     hydration = source.index("hydrate_canonical_narrative_replay(")
-    assert hydration < source.index("canonicalize_scene_turn_result(")
-    assert hydration < source.index("canonicalize_resolved_turn_result(")
+    presenter = source.index("present_authoritative_turn(")
+    assert hydration < presenter
+    assert source.count("present_authoritative_turn(") == 1
     assert 'rpg_pipeline_span("turn.narrative_replay_hydration")' in source
