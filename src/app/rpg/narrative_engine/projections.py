@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from .authority import BeatKind
+from .authority import BeatKind, BeatPurpose
 from .contracts import CanonicalNarrativeResponse, NarrativeBlock
 from .renderer import CanonicalNarrativeRenderer, deduplicate_blocks, render_block_text
 
@@ -17,7 +17,6 @@ def legacy_response_projection(response: CanonicalNarrativeResponse) -> dict[str
 
     The projection is calculated at the boundary and is never authoritative.
     """
-
     blocks = _blocks(response)
     narration_blocks = tuple(
         block
@@ -51,10 +50,12 @@ def legacy_response_projection(response: CanonicalNarrativeResponse) -> dict[str
         "visible_response": {
             "format_version": "rpg_visible_response_v2",
             "response_id": response.response_id,
+            "content_hash": response.content_hash or response.with_content_hash().content_hash,
             "narration": narration,
             "messages": [
                 {
                     "kind": "npc",
+                    "speaker": item["speaker_id"],
                     "speaker_id": item["speaker_id"],
                     "text": item["text"],
                     "block_id": item["block_id"],
@@ -71,9 +72,11 @@ def transcript_projection(response: CanonicalNarrativeResponse) -> list[dict[str
     return [
         {
             "response_id": response.response_id,
+            "content_hash": response.content_hash or response.with_content_hash().content_hash,
             "block_id": block.block_id,
             "sequence": block.sequence,
             "kind": block.kind.value,
+            "purpose": block.purpose.value,
             "speaker_id": block.speaker_id,
             "text": block.text.strip(),
         }
@@ -84,6 +87,7 @@ def transcript_projection(response: CanonicalNarrativeResponse) -> list[dict[str
 def tts_projection(response: CanonicalNarrativeResponse) -> list[dict[str, str]]:
     return [
         {
+            "response_id": response.response_id,
             "block_id": block.block_id,
             "speaker_id": block.speaker_id or "narrator",
             "text": block.text.strip(),
@@ -97,11 +101,90 @@ def journal_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
     rendered = CanonicalNarrativeRenderer().render(response)
     return {
         "response_id": response.response_id,
+        "content_hash": response.content_hash or response.with_content_hash().content_hash,
         "turn_id": response.turn_id,
         "campaign_id": response.campaign_id,
         "text": rendered.text,
         "block_ids": list(rendered.block_ids),
         "evidence_used": list(response.evidence_used),
+    }
+
+
+def recap_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
+    blocks = _blocks(response)
+    consequential = [
+        block
+        for block in blocks
+        if block.purpose
+        in {
+            BeatPurpose.CONSEQUENCE,
+            BeatPurpose.RESOLVED_ACTION,
+            BeatPurpose.LORE_REVEAL,
+            BeatPurpose.ENVIRONMENTAL_CHANGE,
+        }
+    ]
+    selected = consequential or list(blocks)
+    return {
+        "response_id": response.response_id,
+        "content_hash": response.content_hash or response.with_content_hash().content_hash,
+        "turn_id": response.turn_id,
+        "text": " ".join(block.text.strip() for block in selected if block.text.strip()),
+        "block_ids": [block.block_id for block in selected],
+    }
+
+
+def report_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
+    return {
+        "response_id": response.response_id,
+        "request_id": response.request_id,
+        "turn_id": response.turn_id,
+        "campaign_id": response.campaign_id,
+        "revision": response.revision,
+        "content_hash": response.content_hash or response.with_content_hash().content_hash,
+        "validation": response.validation.as_dict(),
+        "generation": {
+            "source": response.generation.source,
+            "provider": response.generation.provider,
+            "model": response.generation.model,
+            "latency_ms": response.generation.latency_ms,
+            "evidence_count": response.generation.evidence_count,
+            "beat_count": response.generation.beat_count,
+            "hermes_used": response.generation.hermes_used,
+        },
+        "blocks": [block.as_dict() for block in _blocks(response)],
+    }
+
+
+def replay_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
+    frozen = response.with_content_hash()
+    return {
+        "schema_version": frozen.schema_version,
+        "response_id": frozen.response_id,
+        "request_id": frozen.request_id,
+        "turn_id": frozen.turn_id,
+        "campaign_id": frozen.campaign_id,
+        "revision": frozen.revision,
+        "content_hash": frozen.content_hash,
+        "blocks": [block.as_dict() for block in _blocks(frozen)],
+        "evidence_used": list(frozen.evidence_used),
+    }
+
+
+def canonical_consumer_bundle(response: CanonicalNarrativeResponse) -> dict[str, Any]:
+    """One immutable source bundle for UI, speech, logs, journals, reports, and replay."""
+    frozen = response.with_content_hash()
+    legacy = legacy_response_projection(frozen)
+    return {
+        "schema_version": "rpg_narrative_consumer_bundle_v1",
+        "response_id": frozen.response_id,
+        "content_hash": frozen.content_hash,
+        "visible_response": legacy["visible_response"],
+        "transcript": transcript_projection(frozen),
+        "tts": tts_projection(frozen),
+        "journal": journal_projection(frozen),
+        "recap": recap_projection(frozen),
+        "report": report_projection(frozen),
+        "replay": replay_projection(frozen),
     }
 
 
