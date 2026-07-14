@@ -56,6 +56,13 @@ from .repository import (
 from .scene_change import SceneChangeReport, detect_scene_changes
 from .service import NarrativeEngineResult, NarrativeEngineService
 from .validation import NarrativeRepairer, NarrativeValidator, ValidatedWriterResult, write_validate_repair
+from .world_forge import (
+    WorldForgeAudit,
+    WorldForgeIssue,
+    WorldForgeProposal,
+    apply_world_forge_proposal,
+    audit_world_forge_proposal,
+)
 from .writer import (
     DeterministicNarrativeWriter,
     NarrativeWriter,
@@ -110,8 +117,13 @@ __all__ = [
     "ValidationIssue",
     "ValidationReport",
     "VisibilityClass",
+    "WorldForgeAudit",
+    "WorldForgeIssue",
+    "WorldForgeProposal",
     "WriterResult",
     "adaptive_profile",
+    "apply_world_forge_proposal",
+    "audit_world_forge_proposal",
     "bran_fixture_evidence",
     "campaign_bible_evidence",
     "canonical_json",
