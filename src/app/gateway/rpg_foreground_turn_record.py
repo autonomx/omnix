@@ -5,10 +5,14 @@ from typing import Any
 
 from app.rpg.narrative_reference import canonical_narrative_reference
 from app.rpg.presentation.turn_response import build_turn_response_v2
-from app.rpg.presentation.turn_response_budget import enforce_turn_response_budget
+from app.rpg.presentation.turn_response_budget import (
+    encoded_size_bytes,
+    enforce_turn_response_budget,
+)
 
 FOREGROUND_TURN_RECORD_VERSION = "rpg_foreground_turn_record_v2"
 FOREGROUND_TURN_RECORD_MAX_BYTES = 20_000
+_SHORT_REPLAY_TEXT = "The turn completed. Its canonical presentation is available by reference."
 
 
 def build_foreground_turn_record(
@@ -21,6 +25,7 @@ def build_foreground_turn_record(
     """Project a runtime result into a bounded record that can be replayed safely."""
 
     source = result if isinstance(result, dict) else {}
+    reference: dict[str, Any] = {}
     if source.get("ok") is not True:
         payload = _failed_record(
             source,
@@ -39,10 +44,70 @@ def build_foreground_turn_record(
             payload["canonical_narrative"] = reference
         payload["submission_id"] = submission_id
         payload["record_version"] = FOREGROUND_TURN_RECORD_VERSION
-    return enforce_turn_response_budget(
+    bounded = enforce_turn_response_budget(
         payload,
         max_bytes=FOREGROUND_TURN_RECORD_MAX_BYTES,
     )
+    return _preserve_canonical_reference(
+        bounded,
+        reference,
+        session_id=session_id,
+        submission_id=submission_id,
+    )
+
+
+def _preserve_canonical_reference(
+    payload: dict[str, Any],
+    reference: dict[str, Any],
+    *,
+    session_id: str,
+    submission_id: str,
+) -> dict[str, Any]:
+    if not reference:
+        return payload
+    output = dict(payload)
+    output["canonical_narrative"] = dict(reference)
+    if encoded_size_bytes(output) <= FOREGROUND_TURN_RECORD_MAX_BYTES:
+        return output
+
+    visible = dict(output.get("visible_response") or {})
+    visible.update(
+        {
+            "format_version": "rpg_visible_response_v1",
+            "narration": "",
+            "messages": [],
+            "plain_text": _SHORT_REPLAY_TEXT,
+        }
+    )
+    output["visible_response"] = visible
+    output["response"] = _SHORT_REPLAY_TEXT
+    output["content"] = _SHORT_REPLAY_TEXT
+    if encoded_size_bytes(output) <= FOREGROUND_TURN_RECORD_MAX_BYTES:
+        return output
+
+    return {
+        "ok": True,
+        "contract_version": "rpg_turn_response_v2",
+        "record_version": FOREGROUND_TURN_RECORD_VERSION,
+        "session_id": session_id,
+        "submission_id": submission_id,
+        "turn_id": reference["turn_id"],
+        "canonical_narrative": dict(reference),
+        "visible_response": {
+            "format_version": "rpg_visible_response_v1",
+            "narration": "",
+            "messages": [],
+            "plain_text": _SHORT_REPLAY_TEXT,
+        },
+        "response": _SHORT_REPLAY_TEXT,
+        "content": _SHORT_REPLAY_TEXT,
+        "response_budget": {
+            "compacted": True,
+            "fallback": True,
+            "canonical_reference_preserved": True,
+            "maximum_bytes": FOREGROUND_TURN_RECORD_MAX_BYTES,
+        },
+    }
 
 
 def _failed_record(
