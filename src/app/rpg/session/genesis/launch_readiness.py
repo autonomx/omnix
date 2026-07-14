@@ -68,18 +68,12 @@ def dossier_readiness(
     entity_id: str,
 ) -> dict[str, Any]:
     entity_id = str(entity_id or "").strip()
-    if not _world_forge_enabled(session):
-        return {
-            "entity_id": entity_id,
-            "kind": "legacy",
-            "ready": True,
-            "reason": "not_required",
-        }
     state = _mapping(session.get("state"))
+    npc_dossiers = _mapping(state.get("npc_dossiers"))
+    location_dossiers = _mapping(state.get("location_dossiers"))
+
     if entity_id.startswith("npc:"):
-        dossier = _mapping(
-            _mapping(state.get("npc_dossiers")).get(entity_id)
-        )
+        dossier = _mapping(npc_dossiers.get(entity_id))
         kind = "npc"
         required = (
             "name",
@@ -91,9 +85,7 @@ def dossier_readiness(
             "speech_style",
         )
     elif entity_id.startswith("location:"):
-        dossier = _mapping(
-            _mapping(state.get("location_dossiers")).get(entity_id)
-        )
+        dossier = _mapping(location_dossiers.get(entity_id))
         kind = "location"
         required = ("name", "sensory_profile", "region_id")
     else:
@@ -103,6 +95,18 @@ def dossier_readiness(
             "ready": True,
             "reason": "not_required",
         }
+
+    # Legacy campaigns that have no World Forge state and no dossier remain
+    # compatible. Once a dossier exists, however, it is an explicit contract
+    # and must be complete before the entity can be treated as launch-ready.
+    if not dossier and not _world_forge_enabled(session):
+        return {
+            "entity_id": entity_id,
+            "kind": "legacy",
+            "ready": True,
+            "reason": "not_required",
+        }
+
     missing = [field for field in required if not dossier.get(field)]
     ready = (
         dossier.get("dossier_status") == "complete"
