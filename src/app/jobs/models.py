@@ -101,18 +101,21 @@ class CreateJobRequest(BaseModel):
         if not isinstance(value, dict):
             return value
         module = str(value.get("module") or "").strip()
-        resource_class = str(value.get("resource_class") or "").strip()
+        raw_resource_class = value.get("resource_class")
+        resource_class = str(getattr(raw_resource_class, "value", raw_resource_class) or "").strip()
         defaulted_modules = {"storyteller", "podcast", "voice", "voice-cloning", "stt", "image-generation"}
         if module not in defaulted_modules and resource_class != ResourceClass.GPU_LLM.value:
             return value
+        routed_value = dict(value)
+        routed_value["resource_class"] = resource_class
         if module == "voice-cloning":
             from app.platform.voice_cloning_defaults import apply_voice_cloning_defaults
 
-            return apply_voice_cloning_defaults(value)
+            return apply_voice_cloning_defaults(routed_value)
 
         from app.platform.effective_defaults import apply_job_defaults
 
-        return apply_job_defaults(value)
+        return apply_job_defaults(routed_value)
 
 
 class ClaimJobRequest(BaseModel):
