@@ -95,6 +95,16 @@ async def execute_foreground_rpg_turn(
             span["block_count"] = len(canonical.get("blocks") or [])
             span["source"] = result.get("canonical_narrative_source")
 
+        with rpg_pipeline_span("turn.narrative_consumer_projection") as span:
+            from app.rpg.narrative_engine.consumer_publish import attach_canonical_consumer_bundle
+
+            result = attach_canonical_consumer_bundle(result)
+            bundle = result.get("narrative_projections") if isinstance(result.get("narrative_projections"), dict) else {}
+            span["attached"] = bool(bundle)
+            span["response_id"] = bundle.get("response_id")
+            span["content_hash"] = bundle.get("content_hash")
+            span["session_patched"] = result.get("narrative_session_projection_patched") is True
+
         with rpg_pipeline_span("turn.narrative_shadow") as span:
             from app.rpg.narrative_engine.shadow import attach_shadow_report
 
@@ -112,6 +122,7 @@ async def execute_foreground_rpg_turn(
             persistence = result.get("interaction_persistence") if isinstance(result.get("interaction_persistence"), dict) else {}
             span["persistence_mode"] = persistence.get("mode")
             span["snapshot_written"] = persistence.get("snapshot_written") is True
+            span["canonical_projection_saved"] = result.get("narrative_session_projection_patched") is True
 
         with rpg_pipeline_span("turn.response_contract_build") as span:
             payload = build_turn_response_v2(
@@ -124,6 +135,8 @@ async def execute_foreground_rpg_turn(
             payload["narrative_engine_shadow"] = dict(result.get("narrative_engine_shadow") or {})
             if isinstance(result.get("canonical_narrative_response"), dict):
                 payload["canonical_narrative_response"] = dict(result["canonical_narrative_response"])
+            if isinstance(result.get("narrative_projections"), dict):
+                payload["narrative_projections"] = dict(result["narrative_projections"])
             payload_timing = payload.get("timing") if isinstance(payload.get("timing"), dict) else {}
             payload_timing["pipeline_before_encode_ms"] = trace.elapsed_ms
             payload["timing"] = payload_timing
@@ -138,12 +151,15 @@ async def execute_foreground_rpg_turn(
 
 def _persisted_turn_session(result: dict[str, Any], session_id: str) -> dict[str, Any] | None:
     result_session = result.get("session")
-    if result.get("interaction_persisted") is True and isinstance(result_session, dict):
-        return result_session
-    if isinstance(result_session, dict):
+    canonical_patch = result.get("narrative_session_projection_patched") is True
+    if isinstance(result_session, dict) and (
+        canonical_patch or result.get("interaction_persisted") is not True
+    ):
         from app.rpg.session.service import save_session
 
         return save_session(result_session, compact=True)
+    if result.get("interaction_persisted") is True and isinstance(result_session, dict):
+        return result_session
     from app.rpg.session.service import load_session
 
     return load_session(session_id)
