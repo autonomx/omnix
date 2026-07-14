@@ -9,7 +9,7 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     expect(createAssistantWorkspaceRuntimeConfig({})).toEqual(DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG);
   });
 
-  it('reads workspace services, defaults, and feature flags from Vite env values', () => {
+  it('reads workspace services and feature flags while leaving provider defaults server-owned', () => {
     const config = createAssistantWorkspaceRuntimeConfig({
       VITE_ASSISTANT_WORKSPACE_ID: 'workspace:lab',
       VITE_ASSISTANT_PROJECT_ID: 'project:omnix',
@@ -27,8 +27,8 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     expect(config).toMatchObject({
       workspaceId: 'workspace:lab',
       projectId: 'project:omnix',
-      defaultProviderId: 'lmstudio',
-      defaultModelId: 'qwen-local',
+      defaultProviderId: undefined,
+      defaultModelId: undefined,
       sttServiceUrl: 'http://localhost:5201/transcribe',
       ttsServiceUrl: 'http://localhost:5101/synthesize',
       ttsVoice: 'narrator',

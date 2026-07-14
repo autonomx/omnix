@@ -7,10 +7,13 @@ from app.research import ResearchMode
 
 
 class AppearanceSettingsProfile(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     mode: str = "system"
+    theme: str = "aurora"
     density: str = "comfortable"
-    reduce_motion: bool = False
-    live_captions: bool = True
+    reduce_motion: bool = Field(False, alias="reduceMotion")
+    live_captions: bool = Field(True, alias="liveCaptions")
 
 
 class AssistantSettingsProfile(BaseModel):

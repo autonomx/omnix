@@ -3,6 +3,82 @@ import type { SettingsDocument } from './settingsDocumentTypes';
 
 const DEFAULT_IMAGE_PROVIDER_ID = 'image:flux_klein';
 
+type ModelTier = keyof SettingsDocument['global']['models'];
+
+export function effectiveTaskRoute(
+  document: SettingsDocument = DEFAULT_SETTINGS_DOCUMENT,
+  taskId: string,
+  moduleId: string,
+  moduleProviderId = '',
+  moduleModelId = '',
+  modelTier: ModelTier = 'chat',
+) {
+  const taskOverrides = document.global.routing.taskOverrides;
+  const override = taskOverrides[taskId] ?? taskOverrides[`${moduleId}:${taskId}`] ?? taskOverrides[moduleId];
+  return {
+    providerId: override?.providerId || moduleProviderId || document.global.providers.llm,
+    modelId: override?.modelId || moduleModelId || document.global.models[modelTier] || document.global.models.chat,
+    fallbackBehavior: document.global.routing.fallbackBehavior,
+  };
+}
+
+export function assistantChatDefaults(document: SettingsDocument = DEFAULT_SETTINGS_DOCUMENT) {
+  const route = effectiveTaskRoute(document, 'chat.generate', 'chatbot');
+  return {
+    ...route,
+    personalityId: document.assistant.personalityId,
+    customPersonality: document.assistant.customPersonality,
+    voiceId: document.assistant.voiceId,
+    autoSpeakReplies: document.assistant.autoSpeakReplies,
+    speechLanguage: document.assistant.speechLanguage,
+    streamingAudio: document.assistant.streamingAudio,
+  };
+}
+
+export function storytellerDefaults(document: SettingsDocument = DEFAULT_SETTINGS_DOCUMENT) {
+  return {
+    ...effectiveTaskRoute(
+      document,
+      'story.generate',
+      'storyteller',
+      document.storyteller.providerId,
+      document.storyteller.modelId,
+      'quality',
+    ),
+    tone: document.storyteller.tone,
+    writingStyle: document.storyteller.writingStyle,
+    readSpeed: document.storyteller.readSpeed,
+    pauseParagraphMs: document.storyteller.pauseParagraphMs,
+    pauseChapterMs: document.storyteller.pauseChapterMs,
+    readChapterTitles: document.storyteller.readChapterTitles,
+    readStylePreset: document.storyteller.readStylePreset,
+    pronunciation: { ...document.storyteller.pronunciation },
+  };
+}
+
+export function podcastDefaults(document: SettingsDocument = DEFAULT_SETTINGS_DOCUMENT) {
+  return {
+    ...effectiveTaskRoute(
+      document,
+      'podcast.script',
+      'podcast',
+      document.podcast.providerId,
+      document.podcast.modelId,
+      'quality',
+    ),
+    format: document.podcast.format,
+    durationMinutes: document.podcast.durationMinutes,
+    tone: document.podcast.tone,
+    language: document.podcast.language,
+    generationStyle: document.podcast.generationStyle,
+    autoplay: document.podcast.autoplay,
+    playbackRate: document.podcast.playbackRate,
+    stability: document.podcast.stability,
+    similarity: document.podcast.similarity,
+    effects: [...document.podcast.effects],
+  };
+}
+
 export function imageGenerationDefaults(document: SettingsDocument = DEFAULT_SETTINGS_DOCUMENT) {
   return {
     providerId: document.global.providers.image || DEFAULT_IMAGE_PROVIDER_ID,

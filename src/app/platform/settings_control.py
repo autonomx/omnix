@@ -1,11 +1,13 @@
 """Typed Settings Control Center adapter over legacy settings APIs."""
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from app.persistence.runtime import LegacyPersistenceRetired
 from app.shared import load_secrets, load_settings, save_secrets, save_settings
 
+from .audio_cache import invalidate_changed_audio_caches
 from .settings import SettingsPayload, SettingsSaveResponse, apply_settings_payload
 from .settings import get_settings_payload as get_legacy_settings_payload
 from .settings_profile_core import SETTINGS_PROFILE_KEY
@@ -54,6 +56,7 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
     """
 
     settings = load_settings()
+    previous_settings = deepcopy(settings)
     secrets = load_secrets()
     legacy = _legacy_request(data)
     secrets_changed = apply_settings_payload(settings, secrets, legacy) if legacy else False
@@ -79,6 +82,7 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
         if secrets_changed:
             save_secrets(secrets)
         save_settings(settings)
+        invalidate_changed_audio_caches(previous_settings, settings)
     except (
         LegacyPersistenceRetired,
         SettingsProfileRevisionConflict,

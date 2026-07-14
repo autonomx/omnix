@@ -24,6 +24,54 @@ class SettingsProfileRevisionConflict(ValueError):
         self.actual = actual
 
 
+_PROFILE_KEY_ALIASES = {
+    "schema_version": "schemaVersion",
+    "voice_cloning": "voiceCloning",
+    "image_prompt": "imagePrompt",
+    "fallback_behavior": "fallbackBehavior",
+    "task_overrides": "taskOverrides",
+    "provider_id": "providerId",
+    "model_id": "modelId",
+    "writing_style": "writingStyle",
+    "read_speed": "readSpeed",
+    "pause_paragraph_ms": "pauseParagraphMs",
+    "pause_chapter_ms": "pauseChapterMs",
+    "read_chapter_titles": "readChapterTitles",
+    "read_style_preset": "readStylePreset",
+    "duration_minutes": "durationMinutes",
+    "generation_style": "generationStyle",
+    "playback_rate": "playbackRate",
+    "cloning_language": "cloningLanguage",
+    "cloning_quality": "cloningQuality",
+    "world_activity": "worldActivity",
+    "economy_pressure": "economyPressure",
+    "combat_lethality": "combatLethality",
+    "background_soft_audit": "backgroundSoftAudit",
+    "llm_narration": "llmNarration",
+    "image_generation": "imageGeneration",
+    "campaign_defaults": "campaignDefaults",
+    "hermes_assist_mode": "hermesAssistMode",
+    "aspect_ratio": "aspectRatio",
+    "portrait_preset": "portraitPreset",
+    "scene_preset": "scenePreset",
+    "unload_after_generation": "unloadAfterGeneration",
+    "save_transcript": "saveTranscript",
+    "microphone_device_id": "microphoneDeviceId",
+    "noise_suppression": "noiseSuppression",
+    "echo_cancellation": "echoCancellation",
+    "save_output_by_default": "saveOutputByDefault",
+    "retention_days": "retentionDays",
+    "temporary_asset_cleanup": "temporaryAssetCleanup",
+    "reduce_motion": "reduceMotion",
+    "live_captions": "liveCaptions",
+}
+_OPEN_RECORD_PATHS = {
+    ("global", "routing", "taskOverrides"),
+    ("storyteller", "pronunciation"),
+    ("rpg", "campaignDefaults"),
+}
+
+
 def _copy(value: Any) -> Any:
     return json.loads(json.dumps(value))
 
@@ -32,13 +80,30 @@ def _record(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _merge_known(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+def _merge_open_record(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     merged = _copy(base)
     for key, value in patch.items():
-        if key not in base or key in {"schema_version", "revision"}:
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_open_record(merged[key], value)
+        else:
+            merged[key] = _copy(value)
+    return merged
+
+
+def _merge_known(
+    base: dict[str, Any],
+    patch: dict[str, Any],
+    path: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    if path in _OPEN_RECORD_PATHS:
+        return _merge_open_record(base, patch)
+    merged = _copy(base)
+    for raw_key, value in patch.items():
+        key = _PROFILE_KEY_ALIASES.get(raw_key, raw_key)
+        if key not in base or key in {"schemaVersion", "revision"}:
             continue
         if isinstance(base[key], dict) and isinstance(value, dict):
-            merged[key] = _merge_known(base[key], value)
+            merged[key] = _merge_known(base[key], value, (*path, key))
         else:
             merged[key] = _copy(value)
     return merged
