@@ -13,6 +13,7 @@ from app.rpg.narrative_engine import (
     NarrativeBeat,
     NarrativeBlock,
     NarrativePlan,
+    NarrativeValidator,
     PresentationProfile,
     TurnPresentationRequest,
     ValidationReport,
@@ -118,6 +119,21 @@ def _block(
     )
 
 
+def _validate(
+    block: NarrativeBlock,
+    *,
+    request: TurnPresentationRequest | None = None,
+    plan: NarrativePlan | None = None,
+    evidence: tuple[EvidenceRecord, ...] | None = None,
+):
+    return NarrativeValidator().validate(
+        request or _request(),
+        plan or _plan(),
+        evidence or _evidence(),
+        (block,),
+    )
+
+
 def test_supported_explicit_claim_passes_semantic_grounding() -> None:
     claim = ClaimAssertion(
         claim_id="claim:road",
@@ -137,7 +153,7 @@ def test_supported_explicit_claim_passes_semantic_grounding() -> None:
     assert result.validation.metadata["explicit_claim_count"] == 1
 
 
-def test_unsupported_factual_claim_fails_even_with_valid_evidence_id() -> None:
+def test_unsupported_factual_claim_is_rejected_before_fallback() -> None:
     claim = ClaimAssertion(
         claim_id="claim:bridge",
         text="The stone bridge has collapsed into the river.",
@@ -145,16 +161,11 @@ def test_unsupported_factual_claim_fails_even_with_valid_evidence_id() -> None:
         evidence_refs=("evidence:road",),
         scope="speaker",
     )
-    result = write_validate_repair(
-        _request(),
-        _plan(),
-        _evidence(),
-        _Writer(_block(claim.text, claim=claim)),
-    )
-    assert result.validation.passed is False
+    report = _validate(_block(claim.text, claim=claim))
+    assert report.passed is False
     assert any(
         issue.code == "unsupported_claim_text"
-        for issue in result.validation.issues
+        for issue in report.issues
     )
 
 
@@ -166,16 +177,14 @@ def test_npc_belief_cannot_validate_as_objective_canon() -> None:
         evidence_refs=("evidence:road",),
         scope="speaker",
     )
-    result = write_validate_repair(
-        _request(),
-        _plan(),
-        _evidence(AuthorityClass.NPC_BELIEF),
-        _Writer(_block(claim.text, claim=claim)),
+    report = _validate(
+        _block(claim.text, claim=claim),
+        evidence=_evidence(AuthorityClass.NPC_BELIEF),
     )
-    assert result.validation.passed is False
+    assert report.passed is False
     assert any(
         issue.code == "claim_authority_unsupported"
-        for issue in result.validation.issues
+        for issue in report.issues
     )
 
 
@@ -201,20 +210,22 @@ def test_authoritative_state_claim_must_match_ledger_value() -> None:
         predicate="gold_balance",
         value=99,
     )
-    result = write_validate_repair(
-        _request(claim_id=claim_id, ledger=ledger),
-        _plan(claim_id),
-        _evidence(AuthorityClass.CONFIRMED_TURN),
-        _Writer(_block(claim.text, claim=claim, claim_ref=claim_id)),
+    request = _request(claim_id=claim_id, ledger=ledger)
+    plan = _plan(claim_id)
+    report = _validate(
+        _block(claim.text, claim=claim, claim_ref=claim_id),
+        request=request,
+        plan=plan,
+        evidence=_evidence(AuthorityClass.CONFIRMED_TURN),
     )
-    assert result.validation.passed is False
+    assert report.passed is False
     assert any(
         issue.code == "authoritative_claim_mismatch"
-        for issue in result.validation.issues
+        for issue in report.issues
     )
 
 
-def test_inferred_claims_are_attached_to_deterministic_compatibility_output() -> None:
+def test_inferred_claims_are_attached_to_compatibility_output() -> None:
     result = write_validate_repair(
         _request(),
         _plan(),
