@@ -35,8 +35,11 @@ export function createAssistantWorkspaceRuntimeConfig(
   return {
     workspaceId: readString(env, 'VITE_ASSISTANT_WORKSPACE_ID') ?? DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.workspaceId,
     projectId: readString(env, 'VITE_ASSISTANT_PROJECT_ID') ?? DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.projectId,
-    defaultProviderId: readString(env, 'VITE_ASSISTANT_PROVIDER_ID'),
-    defaultModelId: readString(env, 'VITE_ASSISTANT_MODEL_ID'),
+    // Provider and model defaults are authoritative in the Settings Control Center.
+    // Leaving these unset lets new sessions resolve PostgreSQL-backed defaults while
+    // explicit selectors and existing session overrides continue to win.
+    defaultProviderId: undefined,
+    defaultModelId: undefined,
     sttServiceUrl: readString(env, 'VITE_ASSISTANT_STT_URL'),
     ttsServiceUrl: readString(env, 'VITE_ASSISTANT_TTS_URL'),
     ttsVoice: readString(env, 'VITE_ASSISTANT_TTS_VOICE'),
