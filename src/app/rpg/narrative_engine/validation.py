@@ -14,7 +14,6 @@ from .contracts import (
     ValidationReport,
 )
 from .planner import NarrativePlan
-from .renderer import deduplicate_blocks
 from .writer import DeterministicNarrativeWriter, NarrativeWriter, WriterResult
 
 _TRUNCATION_MARKERS = ("...[truncated]", "[truncated]", "<truncated>")
@@ -129,13 +128,21 @@ class NarrativeRepairer:
         expected = {beat.beat_id: beat for beat in plan.beats}
         repaired: list[NarrativeBlock] = []
         history: list[str] = []
-        for block in deduplicate_blocks(blocks):
+        seen_text: set[str] = set()
+        for block in sorted(blocks, key=lambda item: (item.sequence, item.block_id)):
             beat = expected.get(block.beat_id)
             if beat is None:
                 history.append(f"removed_unplanned:{block.block_id}")
                 continue
             text = _WHITESPACE.sub(" ", _LABEL_PREFIX.sub("", block.text)).strip()
-            if text != block.text:
+            normalized = " ".join(text.casefold().split())
+            if normalized in seen_text:
+                purpose = beat.purpose.value.replace("_", " ").capitalize()
+                text = f"{purpose}: {text}"
+                normalized = " ".join(text.casefold().split())
+                history.append(f"contextualized_duplicate:{block.block_id}")
+            seen_text.add(normalized)
+            if text != block.text and not any(item.endswith(block.block_id) for item in history):
                 history.append(f"normalized_text:{block.block_id}")
             repaired.append(
                 replace(
@@ -159,6 +166,27 @@ class ValidatedWriterResult:
     fallback_used: bool
 
 
+def _validated_fallback(
+    request: TurnPresentationRequest,
+    plan: NarrativePlan,
+    evidence: Sequence[EvidenceRecord],
+    fallback_writer: NarrativeWriter,
+    validator: NarrativeValidator,
+    repairer: NarrativeRepairer,
+) -> ValidatedWriterResult:
+    fallback = fallback_writer.write(request, plan, evidence)
+    report = validator.validate(request, plan, evidence, fallback.blocks)
+    if report.passed:
+        return ValidatedWriterResult(fallback, report, True)
+    repaired, history = repairer.repair(plan, fallback.blocks)
+    repaired_report = validator.validate(request, plan, evidence, repaired)
+    return ValidatedWriterResult(
+        replace(fallback, blocks=repaired),
+        replace(repaired_report, repair_history=history),
+        True,
+    )
+
+
 def write_validate_repair(
     request: TurnPresentationRequest,
     plan: NarrativePlan,
@@ -175,9 +203,7 @@ def write_validate_repair(
     try:
         result = writer.write(request, plan, evidence)
     except Exception:
-        fallback = fallback_writer.write(request, plan, evidence)
-        report = validator.validate(request, plan, evidence, fallback.blocks)
-        return ValidatedWriterResult(fallback, report, True)
+        return _validated_fallback(request, plan, evidence, fallback_writer, validator, repairer)
 
     report = validator.validate(request, plan, evidence, result.blocks)
     if report.passed:
@@ -190,6 +216,4 @@ def write_validate_repair(
             replace(repaired_report, repair_history=history),
             False,
         )
-    fallback = fallback_writer.write(request, plan, evidence)
-    fallback_report = validator.validate(request, plan, evidence, fallback.blocks)
-    return ValidatedWriterResult(fallback, fallback_report, True)
+    return _validated_fallback(request, plan, evidence, fallback_writer, validator, repairer)
