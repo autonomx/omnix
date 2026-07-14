@@ -47,7 +47,6 @@ from .evidence import (
     EvidenceBroker,
     EvidenceGrantSet,
     EvidenceQuery,
-    EvidenceRecord,
     EvidenceRetrievalResult,
     InMemoryEvidenceSource,
     RetrievalTrace,
