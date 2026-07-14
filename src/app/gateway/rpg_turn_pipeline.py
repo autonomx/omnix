@@ -40,6 +40,11 @@ async def execute_foreground_rpg_turn(
             span["client_request_started"] = request.headers.get("x-omnix-rpg-client-started")
 
         from app.rpg.session import interactive_first_call_runtime
+        from app.rpg.session.narrative_engine_direct_dialogue_hook import (
+            install_interactive_direct_dialogue_cutover,
+        )
+
+        install_interactive_direct_dialogue_cutover(interactive_first_call_runtime)
 
         with rpg_pipeline_span("turn.apply") as span:
             result = await asyncio.to_thread(
@@ -89,6 +94,8 @@ async def execute_foreground_rpg_turn(
                 trace_id=trace.trace_id,
             )
             payload["narrative_engine_shadow"] = dict(result.get("narrative_engine_shadow") or {})
+            if isinstance(result.get("canonical_narrative_response"), dict):
+                payload["canonical_narrative_response"] = dict(result["canonical_narrative_response"])
             payload_timing = payload.get("timing") if isinstance(payload.get("timing"), dict) else {}
             payload_timing["pipeline_before_encode_ms"] = trace.elapsed_ms
             payload["timing"] = payload_timing
