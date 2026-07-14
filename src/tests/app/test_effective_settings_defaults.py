@@ -18,7 +18,7 @@ def _settings() -> dict:
                     "tts": "faster-qwen3-tts",
                     "stt": "parakeet",
                     "image": "image:flux_klein",
-                    "voiceCloning": "faster-qwen3-tts",
+                    "voiceCloning": "clone-provider",
                 },
                 "models": {
                     "chat": "chat-model",
@@ -154,7 +154,7 @@ def test_storyteller_job_uses_task_route_and_central_creative_defaults(monkeypat
     }
 
 
-def test_podcast_voice_stt_and_image_jobs_adopt_field_defaults(monkeypatch) -> None:
+def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypatch) -> None:
     _install(monkeypatch)
 
     podcast = CreateJobRequest(
@@ -189,6 +189,19 @@ def test_podcast_voice_stt_and_image_jobs_adopt_field_defaults(monkeypatch) -> N
     assert voice.input_payload["output_settings"]["speed"] == 1.2
     assert voice.input_payload["audio_effects"] == ["De-esser"]
 
+    cloning = CreateJobRequest(
+        module="voice-cloning",
+        type="voice-cloning.create-profile",
+        resource_class=ResourceClass.GPU_TTS,
+        input_payload={"profile_name": "Maya"},
+    )
+    assert cloning.input_payload == {
+        "profile_name": "Maya",
+        "provider_id": "clone-provider",
+        "language": "French",
+        "quality": "Studio",
+    }
+
     stt = CreateJobRequest(
         module="stt",
         type="stt.transcribe",
@@ -212,3 +225,16 @@ def test_podcast_voice_stt_and_image_jobs_adopt_field_defaults(monkeypatch) -> N
     assert image.input_payload["width"] == 1024
     assert image.input_payload["height"] == 640
     assert image.input_payload["unload_after_generation"] is False
+
+
+def test_unrelated_cpu_job_payload_is_not_mutated(monkeypatch) -> None:
+    _install(monkeypatch)
+
+    request = CreateJobRequest(
+        module="maintenance",
+        type="cleanup",
+        resource_class=ResourceClass.CPU,
+        input_payload=None,
+    )
+
+    assert request.input_payload is None
