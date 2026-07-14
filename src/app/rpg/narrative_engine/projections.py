@@ -4,12 +4,12 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from .authority import BeatKind, BeatPurpose
-from .contracts import CanonicalNarrativeResponse, NarrativeBlock
-from .renderer import CanonicalNarrativeRenderer, deduplicate_blocks, render_block_text
+from .contracts import CanonicalNarrativeResponse, NarrativeBlock, ordered_blocks
+from .renderer import CanonicalNarrativeRenderer, render_block_text
 
 
 def _blocks(response: CanonicalNarrativeResponse) -> tuple[NarrativeBlock, ...]:
-    return deduplicate_blocks(response.blocks)
+    return ordered_blocks(response.blocks)
 
 
 def legacy_response_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
@@ -41,6 +41,7 @@ def legacy_response_projection(response: CanonicalNarrativeResponse) -> dict[str
             "line": dialogue_payload[0]["text"],
         }
     plain_text = CanonicalNarrativeRenderer().render(response).text
+    frozen = response.with_content_hash()
     return {
         "narration": narration,
         "final_narration": narration,
@@ -49,8 +50,8 @@ def legacy_response_projection(response: CanonicalNarrativeResponse) -> dict[str
         "dialogue_blocks": dialogue_payload,
         "visible_response": {
             "format_version": "rpg_visible_response_v2",
-            "response_id": response.response_id,
-            "content_hash": response.content_hash or response.with_content_hash().content_hash,
+            "response_id": frozen.response_id,
+            "content_hash": frozen.content_hash,
             "narration": narration,
             "messages": [
                 {
@@ -69,10 +70,11 @@ def legacy_response_projection(response: CanonicalNarrativeResponse) -> dict[str
 
 
 def transcript_projection(response: CanonicalNarrativeResponse) -> list[dict[str, Any]]:
+    frozen = response.with_content_hash()
     return [
         {
-            "response_id": response.response_id,
-            "content_hash": response.content_hash or response.with_content_hash().content_hash,
+            "response_id": frozen.response_id,
+            "content_hash": frozen.content_hash,
             "block_id": block.block_id,
             "sequence": block.sequence,
             "kind": block.kind.value,
@@ -80,38 +82,41 @@ def transcript_projection(response: CanonicalNarrativeResponse) -> list[dict[str
             "speaker_id": block.speaker_id,
             "text": block.text.strip(),
         }
-        for block in _blocks(response)
+        for block in _blocks(frozen)
     ]
 
 
 def tts_projection(response: CanonicalNarrativeResponse) -> list[dict[str, str]]:
+    frozen = response.with_content_hash()
     return [
         {
-            "response_id": response.response_id,
+            "response_id": frozen.response_id,
             "block_id": block.block_id,
             "speaker_id": block.speaker_id or "narrator",
             "text": block.text.strip(),
         }
-        for block in _blocks(response)
+        for block in _blocks(frozen)
         if block.text.strip()
     ]
 
 
 def journal_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
-    rendered = CanonicalNarrativeRenderer().render(response)
+    frozen = response.with_content_hash()
+    rendered = CanonicalNarrativeRenderer().render(frozen)
     return {
-        "response_id": response.response_id,
-        "content_hash": response.content_hash or response.with_content_hash().content_hash,
-        "turn_id": response.turn_id,
-        "campaign_id": response.campaign_id,
+        "response_id": frozen.response_id,
+        "content_hash": frozen.content_hash,
+        "turn_id": frozen.turn_id,
+        "campaign_id": frozen.campaign_id,
         "text": rendered.text,
         "block_ids": list(rendered.block_ids),
-        "evidence_used": list(response.evidence_used),
+        "evidence_used": list(frozen.evidence_used),
     }
 
 
 def recap_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
-    blocks = _blocks(response)
+    frozen = response.with_content_hash()
+    blocks = _blocks(frozen)
     consequential = [
         block
         for block in blocks
@@ -125,33 +130,34 @@ def recap_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
     ]
     selected = consequential or list(blocks)
     return {
-        "response_id": response.response_id,
-        "content_hash": response.content_hash or response.with_content_hash().content_hash,
-        "turn_id": response.turn_id,
+        "response_id": frozen.response_id,
+        "content_hash": frozen.content_hash,
+        "turn_id": frozen.turn_id,
         "text": " ".join(block.text.strip() for block in selected if block.text.strip()),
         "block_ids": [block.block_id for block in selected],
     }
 
 
 def report_projection(response: CanonicalNarrativeResponse) -> dict[str, Any]:
+    frozen = response.with_content_hash()
     return {
-        "response_id": response.response_id,
-        "request_id": response.request_id,
-        "turn_id": response.turn_id,
-        "campaign_id": response.campaign_id,
-        "revision": response.revision,
-        "content_hash": response.content_hash or response.with_content_hash().content_hash,
-        "validation": response.validation.as_dict(),
+        "response_id": frozen.response_id,
+        "request_id": frozen.request_id,
+        "turn_id": frozen.turn_id,
+        "campaign_id": frozen.campaign_id,
+        "revision": frozen.revision,
+        "content_hash": frozen.content_hash,
+        "validation": frozen.validation.as_dict(),
         "generation": {
-            "source": response.generation.source,
-            "provider": response.generation.provider,
-            "model": response.generation.model,
-            "latency_ms": response.generation.latency_ms,
-            "evidence_count": response.generation.evidence_count,
-            "beat_count": response.generation.beat_count,
-            "hermes_used": response.generation.hermes_used,
+            "source": frozen.generation.source,
+            "provider": frozen.generation.provider,
+            "model": frozen.generation.model,
+            "latency_ms": frozen.generation.latency_ms,
+            "evidence_count": frozen.generation.evidence_count,
+            "beat_count": frozen.generation.beat_count,
+            "hermes_used": frozen.generation.hermes_used,
         },
-        "blocks": [block.as_dict() for block in _blocks(response)],
+        "blocks": [block.as_dict() for block in _blocks(frozen)],
     }
 
 
