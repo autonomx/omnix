@@ -4,7 +4,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from .authority import BeatKind, BeatPurpose, NarrativeSignificance, PresentationProfile
+from .authority import (
+    AuthorityClass,
+    BeatKind,
+    BeatPurpose,
+    NarrativeSignificance,
+    PresentationProfile,
+)
 from .contracts import EvidenceRecord, NarrativeBeat, TurnPresentationRequest
 from .profiles import NarrativeProfilePolicy, adaptive_profile, profile_policy
 
@@ -58,12 +64,17 @@ def _evidence_ids(evidence: Sequence[EvidenceRecord], *entity_hints: str) -> tup
     hints = {hint for hint in entity_hints if hint}
     if not hints:
         return tuple(record.evidence_id for record in evidence[:3])
-    matching = [
+    matching = [record.evidence_id for record in evidence if hints.intersection(record.entity_refs)]
+    return tuple(matching[:4])
+
+
+def _authoritative_evidence_ids(evidence: Sequence[EvidenceRecord]) -> tuple[str, ...]:
+    authoritative = tuple(
         record.evidence_id
         for record in evidence
-        if hints.intersection(record.entity_refs)
-    ]
-    return tuple(matching[:4])
+        if record.authority is AuthorityClass.CONFIRMED_TURN
+    )
+    return authoritative[:4] or tuple(record.evidence_id for record in evidence[:4])
 
 
 def _claim_refs(request: TurnPresentationRequest) -> tuple[str, ...]:
@@ -112,12 +123,9 @@ def _append_scene_beats(
                 BeatKind.NARRATION,
                 purpose,
                 evidence_refs=tuple(
-                    dict.fromkeys(
-                        ref
-                        for change in request.scene_changes
-                        for ref in change.evidence_refs
-                    )
-                ) or _evidence_ids(evidence, *request.actor_ids),
+                    dict.fromkeys(ref for change in request.scene_changes for ref in change.evidence_refs)
+                )
+                or _evidence_ids(evidence, *request.actor_ids),
                 instructions=(
                     "Establish the changed scene using concrete spatial and sensory evidence."
                     if purpose is BeatPurpose.SCENE_ESTABLISHMENT
@@ -157,9 +165,7 @@ def _dialogue_beats(
     )
     if policy.allow_lore_expansion and len(beats) < policy.maximum_beats:
         lore_ids = tuple(
-            record.evidence_id
-            for record in evidence
-            if record.evidence_id not in speaker_evidence
+            record.evidence_id for record in evidence if record.evidence_id not in speaker_evidence
         )[:4]
         if lore_ids:
             beats.append(
@@ -215,13 +221,14 @@ def _action_beats(
     policy: NarrativeProfilePolicy,
 ) -> None:
     claims = _claim_refs(request)
+    authoritative_refs = _authoritative_evidence_ids(evidence)
     action_kind = BeatKind.ACTION if mode not in {"transaction", "failure"} else BeatKind.RESULT
     beats.append(
         _beat(
             len(beats) + 1,
             action_kind,
             BeatPurpose.RESOLVED_ACTION,
-            evidence_refs=_evidence_ids(evidence, *request.actor_ids),
+            evidence_refs=authoritative_refs,
             claim_refs=claims,
             instructions="Describe the authoritative resolved action without changing or extending its outcome.",
         )
@@ -232,7 +239,7 @@ def _action_beats(
                 len(beats) + 1,
                 BeatKind.RESULT,
                 BeatPurpose.CONSEQUENCE,
-                evidence_refs=tuple(record.evidence_id for record in evidence[:4]),
+                evidence_refs=authoritative_refs,
                 claim_refs=claims,
                 instructions="Present the immediate consequence and current actionable situation using only resolved facts.",
             )
@@ -243,7 +250,7 @@ def _action_beats(
                 len(beats) + 1,
                 BeatKind.CHOICE,
                 BeatPurpose.OFFERED_CHOICE,
-                evidence_refs=tuple(record.evidence_id for record in evidence[:3]),
+                evidence_refs=authoritative_refs,
                 instructions="Offer a grounded next option only when useful; preserve player agency.",
                 required=False,
             )
