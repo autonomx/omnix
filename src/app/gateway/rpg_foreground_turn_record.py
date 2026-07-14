@@ -10,7 +10,7 @@ from app.rpg.presentation.turn_response_budget import (
     enforce_turn_response_budget,
 )
 
-FOREGROUND_TURN_RECORD_VERSION = "rpg_foreground_turn_record_v2"
+FOREGROUND_TURN_RECORD_VERSION = "rpg_foreground_turn_record_v1"
 FOREGROUND_TURN_RECORD_MAX_BYTES = 20_000
 _SHORT_REPLAY_TEXT = "The turn completed. Its canonical presentation is available by reference."
 
