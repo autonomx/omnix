@@ -44,6 +44,16 @@ from .evidence import (
     RetrievalTrace,
 )
 from .fixtures import bran_fixture_evidence, narrative_fixture_evidence, vexira_fixture_evidence
+from .hermes_research import (
+    HermesNarrativeResearcher,
+    HermesResearchFinding,
+    HermesResearchPolicy,
+    HermesResearchRequest,
+    HermesResearchResult,
+    HermesResearchSource,
+    normalize_hermes_research,
+    run_bounded_hermes_research,
+)
 from .planner import DeterministicBeatPlanner, NarrativePlan
 from .profiles import NarrativeProfilePolicy, adaptive_profile, profile_policy
 from .projections import journal_projection, legacy_response_projection, transcript_projection, tts_projection
@@ -91,6 +101,12 @@ __all__ = [
     "EvidenceRecord",
     "EvidenceRetrievalResult",
     "GenerationMetadata",
+    "HermesNarrativeResearcher",
+    "HermesResearchFinding",
+    "HermesResearchPolicy",
+    "HermesResearchRequest",
+    "HermesResearchResult",
+    "HermesResearchSource",
     "InMemoryEvidenceSource",
     "InMemoryNarrativeResponseRepository",
     "NarrativeBeat",
@@ -132,10 +148,12 @@ __all__ = [
     "journal_projection",
     "legacy_response_projection",
     "narrative_fixture_evidence",
+    "normalize_hermes_research",
     "ordered_blocks",
     "parse_structured_blocks",
     "profile_policy",
     "render_plain_text",
+    "run_bounded_hermes_research",
     "stable_hash",
     "transcript_projection",
     "tts_projection",
