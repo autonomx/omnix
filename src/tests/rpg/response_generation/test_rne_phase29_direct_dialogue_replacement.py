@@ -135,14 +135,14 @@ def test_fast_immersive_and_cinematic_profiles_use_the_same_canonical_engine(
 
 
 def test_production_sources_no_longer_use_dialogue_monkey_patch_or_legacy_line_writer() -> None:
-    gateway = (ROOT / "app" / "gateway" / "rpg_turn_pipeline.py").read_text(
-        encoding="utf-8"
-    )
+    gateway = (
+        ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py"
+    ).read_text(encoding="utf-8")
     bridge = (
-        ROOT / "app" / "rpg" / "session" / "narrative_engine_bridge.py"
+        ROOT / "src" / "app" / "rpg" / "session" / "narrative_engine_bridge.py"
     ).read_text(encoding="utf-8")
     first_call = (
-        ROOT / "app" / "rpg" / "session" / "first_call_dialogue.py"
+        ROOT / "src" / "app" / "rpg" / "session" / "first_call_dialogue.py"
     ).read_text(encoding="utf-8")
     assert "install_interactive_direct_dialogue_cutover" not in gateway
     assert "_GroundedDialogueWriter" not in bridge
