@@ -38,6 +38,8 @@ from .evidence import (
     RetrievalTrace,
 )
 from .fixtures import bran_fixture_evidence, narrative_fixture_evidence, vexira_fixture_evidence
+from .planner import DeterministicBeatPlanner, NarrativePlan
+from .profiles import NarrativeProfilePolicy, adaptive_profile, profile_policy
 from .projections import journal_projection, legacy_response_projection, transcript_projection, tts_projection
 from .renderer import CanonicalNarrativeRenderer, RenderedNarrative, deduplicate_blocks, render_plain_text
 from .scene_change import SceneChangeReport, detect_scene_changes
@@ -50,6 +52,7 @@ __all__ = [
     "CanonicalNarrativeResponse",
     "DeliveryMetadata",
     "DeliveryMode",
+    "DeterministicBeatPlanner",
     "EvidenceAccessContext",
     "EvidenceBroker",
     "EvidenceLifetime",
@@ -60,6 +63,8 @@ __all__ = [
     "InMemoryEvidenceSource",
     "NarrativeBeat",
     "NarrativeBlock",
+    "NarrativePlan",
+    "NarrativeProfilePolicy",
     "NarrativeSignificance",
     "PresentationProfile",
     "RenderedNarrative",
@@ -70,6 +75,7 @@ __all__ = [
     "ValidationIssue",
     "ValidationReport",
     "VisibilityClass",
+    "adaptive_profile",
     "bran_fixture_evidence",
     "canonical_json",
     "deduplicate_blocks",
@@ -78,6 +84,7 @@ __all__ = [
     "legacy_response_projection",
     "narrative_fixture_evidence",
     "ordered_blocks",
+    "profile_policy",
     "render_plain_text",
     "stable_hash",
     "transcript_projection",
