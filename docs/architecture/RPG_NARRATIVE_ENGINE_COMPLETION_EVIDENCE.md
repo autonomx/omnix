@@ -72,14 +72,16 @@ Turn-time research and player-facing Lore use the same revisioned Campaign Bible
 
 ## Deterministic evidence
 
-The Milestone F implementation head `0eb9100d1a44db827426066b74592c1e817b0ce0` passed all four associated GitHub Actions workflows:
+The final Milestone F implementation head `d1c91bd347bcc35438b2cf1777f5845b0638ffec` passed all four associated GitHub Actions workflows:
 
 - RPG Phase 0 architecture compliance;
 - PostgreSQL persistence gates;
 - Live Chat hardening gates;
 - RPG deterministic PR gates, including web typecheck, web unit tests, 324 provider-free response-generation tests, representative deterministic smoke coverage, and the 1,000-turn public apply-turn endurance job.
 
-A Phase 22 regression initially exposed that explicit incomplete dossiers in legacy-shaped sessions were being treated as not required. The readiness policy was corrected so legacy sessions without dossiers remain compatible while any explicit dossier must satisfy its required completeness contract. The exact patched implementation head above passed all workflows.
+A Phase 22 regression initially exposed that explicit incomplete dossiers in legacy-shaped sessions were being treated as not required. The readiness policy was corrected so legacy sessions without dossiers remain compatible while any explicit dossier must satisfy its required completeness contract.
+
+A later exact-head run exposed a short-request timing flake at 94.95% attribution. The response-header finalizer now recalculates the measured framework remainder through bounded passes rather than relying on one fixed margin. The exact patched head above passed every workflow, including the previously flaky full-path instrumentation assertion.
 
 ## Release invariants certified
 
