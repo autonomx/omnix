@@ -92,34 +92,63 @@ async def execute_foreground_rpg_turn(
             status_code = 404 if isinstance(result, dict) and result.get("error") == "session_not_found" else 400
             raise HTTPException(status_code=status_code, detail=result)
 
-        with rpg_pipeline_span("turn.narrative_present") as span:
-            from app.rpg.session.turn_presenter import (
-                TurnPresentationInvariantError,
-                present_authoritative_turn,
+        with rpg_pipeline_span("turn.narrative_replay_hydration") as span:
+            from app.rpg.narrative_replay import (
+                CanonicalNarrativeReplayError,
+                hydrate_canonical_narrative_replay,
             )
 
             try:
-                result = present_authoritative_turn(
+                result = hydrate_canonical_narrative_replay(
                     result,
-                    session_id=session_id,
-                    player_input=command,
+                    campaign_id=session_id,
                 )
-            except TurnPresentationInvariantError as exc:
-                span["published"] = False
+            except CanonicalNarrativeReplayError as exc:
+                span["hydrated"] = False
                 span["error"] = str(exc)
                 raise HTTPException(
-                    status_code=500,
+                    status_code=409,
                     detail={
-                        "error": "rpg_turn_presentation_invariant_failed",
+                        "ok": False,
+                        "error": "canonical_narrative_replay_mismatch",
+                        "session_id": session_id,
                         "message": str(exc),
                     },
                 ) from exc
+            replay = result.get("canonical_narrative_replay")
+            replay = replay if isinstance(replay, dict) else {}
+            span["idempotent_replay"] = result.get("idempotent_replay") is True
+            span["hydrated"] = replay.get("hydrated") is True
+            span["status"] = replay.get("status")
+            span["response_id"] = replay.get("response_id")
+
+        from app.rpg.session.narrative_engine_bridge import (
+            canonicalize_resolved_turn_result,
+            canonicalize_scene_turn_result,
+        )
+
+        with rpg_pipeline_span("turn.narrative_scene_cutover") as span:
+            result = canonicalize_scene_turn_result(
+                result,
+                session_id=session_id,
+                player_input=command,
+            )
+            canonical = result.get("canonical_narrative_response") if isinstance(result.get("canonical_narrative_response"), dict) else {}
+            span["published"] = bool(canonical)
+            span["response_id"] = canonical.get("response_id")
+            span["block_count"] = len(canonical.get("blocks") or [])
+
+        with rpg_pipeline_span("turn.narrative_resolved_cutover") as span:
+            result = canonicalize_resolved_turn_result(
+                result,
+                session_id=session_id,
+                player_input=command,
+            )
             canonical = result.get("canonical_narrative_response") if isinstance(result.get("canonical_narrative_response"), dict) else {}
             span["published"] = bool(canonical)
             span["response_id"] = canonical.get("response_id")
             span["block_count"] = len(canonical.get("blocks") or [])
             span["source"] = result.get("canonical_narrative_source")
-            span["request_count"] = result.get("turn_presentation_request_count")
 
         with rpg_pipeline_span("turn.narrative_consumer_projection") as span:
             from app.rpg.narrative_engine.consumer_publish import attach_canonical_consumer_bundle
@@ -198,8 +227,8 @@ async def execute_foreground_rpg_turn(
                 payload["narrative_production_certification"] = dict(result["narrative_production_certification"])
                 payload["legacy_presentation_ownership_retired"] = True
                 payload["legacy_compatibility_fields_source"] = "canonical_projection_only"
-            payload["turn_presentation_request_count"] = result.get("turn_presentation_request_count")
-            payload["turn_presentation_response_id"] = result.get("turn_presentation_response_id")
+            if isinstance(result.get("canonical_narrative_replay"), dict):
+                payload["canonical_narrative_replay"] = dict(result["canonical_narrative_replay"])
             payload_timing = payload.get("timing") if isinstance(payload.get("timing"), dict) else {}
             payload_timing["pipeline_before_encode_ms"] = trace.elapsed_ms
             payload["timing"] = payload_timing
