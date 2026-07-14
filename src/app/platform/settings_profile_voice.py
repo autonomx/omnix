@@ -1,8 +1,10 @@
 """Voice settings profile model."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class VoiceSettingsProfile(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     language: str = "English"
     stability: float = 0.75
     similarity: float = 0.8
@@ -12,5 +14,5 @@ class VoiceSettingsProfile(BaseModel):
     volume: float = 0.0
     effects: list[str] = Field(default_factory=list)
     streaming: bool = True
-    cloning_language: str = "English"
-    cloning_quality: str = "High"
+    cloning_language: str = Field("English", alias="cloningLanguage")
+    cloning_quality: str = Field("High", alias="cloningQuality")
