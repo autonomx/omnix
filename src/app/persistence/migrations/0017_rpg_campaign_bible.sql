@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS omnix_rpg_campaign_bibles (
-    workspace_id UUID NOT NULL,
+    workspace_id TEXT NOT NULL,
     campaign_id TEXT NOT NULL,
     revision BIGINT NOT NULL DEFAULT 0 CHECK (revision >= 0),
     document_jsonb JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS omnix_rpg_campaign_bibles (
 );
 
 CREATE TABLE IF NOT EXISTS omnix_rpg_campaign_bible_revisions (
-    workspace_id UUID NOT NULL,
+    workspace_id TEXT NOT NULL,
     campaign_id TEXT NOT NULL,
     revision BIGINT NOT NULL CHECK (revision >= 1),
     document_jsonb JSONB NOT NULL,
