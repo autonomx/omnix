@@ -10,7 +10,7 @@ from app.rpg.narrative_engine.shadow import (
 )
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
 def _result() -> dict:
