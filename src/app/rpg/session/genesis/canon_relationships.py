@@ -1,4 +1,4 @@
-"""Compile explicit and dossier-derived cross-domain canon relationships."""
+"""Compile dossier-derived cross-domain canon relationships."""
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
@@ -42,12 +42,14 @@ def _strings(value: Any) -> tuple[str, ...]:
 def compile_cross_domain_relationships(
     topics: Iterable[GeneratedTopic],
 ) -> tuple[dict[str, Any], ...]:
-    """Derive relationship records from structured entity dossier fields."""
+    """Derive new relationship records from structured entity dossier fields.
 
-    explicit: list[dict[str, Any]] = []
+    Explicit generator relationships remain in their source topics. Returning
+    derived-only rows prevents the audit/compiler merge from seeing duplicates.
+    """
+
     entities: dict[str, Mapping[str, Any]] = {}
     for topic in topics:
-        explicit.extend(dict(row) for row in topic.relationships)
         for row in topic.entities:
             entity_id = str(row.get("id") or "").strip()
             if entity_id:
@@ -77,7 +79,8 @@ def compile_cross_domain_relationships(
         ):
             for target_id in _strings(row.get(field)):
                 derived.append(_relationship(entity_id, target_id, kind))
-        for route in row.get("travel_routes") or () if isinstance(row.get("travel_routes"), list | tuple) else ():
+        routes = row.get("travel_routes")
+        for route in routes if isinstance(routes, list | tuple) else ():
             if not isinstance(route, Mapping):
                 continue
             target_id = str(route.get("target_id") or route.get("to") or "").strip()
@@ -88,12 +91,13 @@ def compile_cross_domain_relationships(
                         target_id,
                         "travel_route",
                         visibility=str(route.get("visibility") or "public"),
-                        content=str(route.get("description") or "") or f"A travel route links {entity_id} and {target_id}.",
+                        content=str(route.get("description") or "")
+                        or f"A travel route links {entity_id} and {target_id}.",
                     )
                 )
 
     unique: dict[str, dict[str, Any]] = {}
-    for row in [*explicit, *derived]:
+    for row in derived:
         relationship_id = str(row.get("id") or "").strip()
         if relationship_id:
             unique.setdefault(relationship_id, row)
