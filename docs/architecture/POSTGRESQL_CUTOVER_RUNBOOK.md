@@ -30,7 +30,7 @@ Create a dated, read-only backup of every applicable source:
 
 Create a deterministic manifest containing relative path, byte size, and SHA-256. Do not alter originals. Record the manifest path and hash in the private operator report.
 
-Credential values are not migration entities. Before PostgreSQL runtime starts, configure provider keys through `OPENROUTER_API_KEY` and `CEREBRAS_API_KEY` in an operator-owned process secret provider. PostgreSQL mode does not read or write the legacy `secrets.json`. Assistant-tool OAuth/token storage also fails closed until an encrypted or operating-system credential provider is configured.
+Credential values are not PostgreSQL migration entities. On local Windows installs, provider keys entered in Settings are stored with current-user DPAPI protection outside the repository and database. `OPENROUTER_API_KEY` and `CEREBRAS_API_KEY` remain supported as higher-priority operator-owned process overrides. PostgreSQL mode does not read or write the legacy `secrets.json`. Assistant-tool OAuth/token storage also fails closed until an encrypted or operating-system credential provider is configured.
 
 ## 3. Prepare PostgreSQL
 

@@ -162,6 +162,11 @@ class PostgresJobStoreAdapter:
         current = self.get_job(job_id)
         if current is None:
             return None
+        if self._runs_without_worker_lease(current):
+            with unit_of_work(self.database) as work:
+                record = work.jobs.mark_record_only_running(self.context, job_id=job_id)
+                work.commit()
+            return self._record(record)
         lease = getattr(current, "lease", None)
         owner = self._lease_value(lease, "worker_id", "owner_id")
         token = self._lease_value(lease, "lease_token", "token")
@@ -185,6 +190,18 @@ class PostgresJobStoreAdapter:
         owner = self._lease_value(lease, "worker_id", "owner_id")
         token = self._lease_value(lease, "lease_token", "token")
         if not owner or not token:
+            if self._runs_without_worker_lease(current):
+                request_payload = request.model_dump(mode="json")
+                with unit_of_work(self.database) as work:
+                    self._append_compat_logs(work, job_id, request_payload.get("logs") or [])
+                    record = work.jobs.complete_record_only(
+                        self.context,
+                        job_id=job_id,
+                        output_refs=request.output_refs,
+                        progress={"current": 1, "total": 1, "message": "completed"},
+                    )
+                    work.commit()
+                return self._record(record)
             raise JobClaimConflict(f"job completion requires an active lease: {job_id}")
         request_payload = request.model_dump(mode="json")
         with unit_of_work(self.database) as work:
@@ -208,6 +225,22 @@ class PostgresJobStoreAdapter:
         owner = self._lease_value(lease, "worker_id", "owner_id")
         token = self._lease_value(lease, "lease_token", "token")
         if not owner or not token:
+            if self._runs_without_worker_lease(current):
+                payload = request.model_dump(mode="json")
+                error = {
+                    "code": payload.get("code") or "job_failed",
+                    "message": payload.get("message") or "job failed",
+                    "details": payload.get("details") or {},
+                }
+                with unit_of_work(self.database) as work:
+                    self._append_compat_logs(work, job_id, payload.get("logs") or [])
+                    record = work.jobs.fail_record_only(
+                        self.context,
+                        job_id=job_id,
+                        error=error,
+                    )
+                    work.commit()
+                return self._record(record)
             raise JobClaimConflict(f"job failure requires an active lease: {job_id}")
         payload = request.model_dump(mode="json")
         error = payload.get("error") or {
@@ -329,6 +362,10 @@ class PostgresJobStoreAdapter:
         return None
 
     @staticmethod
+    def _runs_without_worker_lease(job: JobRecord) -> bool:
+        return job.compat.get("record_only") is True or job.compat.get("inline_execution") is True
+
+    @staticmethod
     def _json(value: Any) -> str:
         import json
 
@@ -342,14 +379,20 @@ class PostgresJobStoreAdapter:
             return
         metadata = dict(record.get("metadata") or {})
         contract = dict(metadata.get("compat_contract") or {})
-        existing = list(contract.get("logs") or [])
-        existing.extend(str(item) for item in logs)
+        existing = [self._compat_log(item) for item in contract.get("logs") or []]
+        existing.extend(self._compat_log(item) for item in logs)
         contract["logs"] = existing[-500:]
         metadata["compat_contract"] = contract
         work.connection.execute(
             "UPDATE omnix_jobs SET metadata = %s::jsonb WHERE id = %s AND workspace_id = %s",
             (self._json(metadata), job_id, self.context.workspace_id),
         )
+
+    @staticmethod
+    def _compat_log(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return dict(value)
+        return {"level": "info", "message": str(value)}
 
     def _record(self, value: dict[str, Any]) -> JobRecord:
         metadata = dict(value.get("metadata") or {})
@@ -372,7 +415,7 @@ class PostgresJobStoreAdapter:
             )
         cancel = _model(CancelState, dict(contract.get("cancel") or {}))
         resource_class = value["resource_class"]
-        status = value["status"]
+        status = "canceled" if value["status"] == "cancelled" else value["status"]
         return _model(
             JobRecord,
             {
@@ -386,7 +429,7 @@ class PostgresJobStoreAdapter:
                 "priority": value["priority"],
                 "stages": stages,
                 "progress": progress,
-                "logs": list(contract.get("logs") or []),
+                "logs": [self._compat_log(item) for item in contract.get("logs") or []],
                 "input_ref": contract.get("input_ref"),
                 "input_payload": value.get("input_payload") or {},
                 "output_refs": value.get("output_refs") or [],

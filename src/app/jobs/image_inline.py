@@ -14,6 +14,7 @@ from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_s
 from app.jobs.models import JobStatus
 
 from .image_contracts import ImageGenerateInput, ImageOutputRef, image_title_from_prompt
+from .inline_execution_compat import mark_inline_execution
 from .models import CompleteJobRequest, FailJobRequest, JobRecord
 
 IMAGE_JOB_TYPE = "image.generate"
@@ -29,6 +30,8 @@ def install_image_job_execution(sqlite_job_store_cls: Any) -> None:
     original_create_job = sqlite_job_store_cls.create_job
 
     def create_job_with_image_execution(self: Any, request: Any) -> JobRecord:
+        if request.type == IMAGE_JOB_TYPE and _executor_enabled():
+            request = mark_inline_execution(request)
         job = original_create_job(self, request)
         if job.type == IMAGE_JOB_TYPE and _executor_enabled():
             _start_image_job(self, job)

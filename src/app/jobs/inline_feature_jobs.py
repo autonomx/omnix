@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .models import CompleteJobRequest, FailJobRequest, JobRecord
+from .inline_execution_compat import mark_inline_execution
 
 RPG_LAST10_REPORT_JOB_TYPE = "rpg.report.last10"
 
@@ -34,6 +35,8 @@ def install_inline_feature_job_execution(job_store_cls: Any) -> None:
     original_create_job: Callable[..., JobRecord] = job_store_cls.create_job
 
     def create_job_with_inline_execution(self: Any, request: Any) -> JobRecord:
+        if request.type in INLINE_FEATURE_JOB_TYPES:
+            request = mark_inline_execution(request)
         job = original_create_job(self, request)
         if job.type not in INLINE_FEATURE_JOB_TYPES:
             return job

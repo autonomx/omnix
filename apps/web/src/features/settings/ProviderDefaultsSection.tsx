@@ -79,8 +79,8 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
             <h4>OpenRouter</h4>
             <div className="settings-form-grid">
               <SettingsField label="API key">
-                <input type="password" autoComplete="off" value={configs.openrouter.apiKey} disabled placeholder="Set OPENROUTER_API_KEY" />
-                <small>Environment-owned. Set OPENROUTER_API_KEY and restart the backend.</small>
+                <input type="password" autoComplete="off" value={configs.openrouter.apiKey} onChange={updateString(dispatch, 'providerConfigs.openrouter.apiKey')} placeholder="Enter API key" />
+                <small>Stored with Windows user-scoped encryption. OPENROUTER_API_KEY overrides this value.</small>
               </SettingsField>
               <SettingsField label="Model"><input value={configs.openrouter.model} onChange={updateString(dispatch, 'providerConfigs.openrouter.model')} /></SettingsField>
               <SettingsField label="Context size"><input type="number" min={1024} step={1024} value={configs.openrouter.contextSize} onChange={updateNumber(dispatch, 'providerConfigs.openrouter.contextSize')} /></SettingsField>
@@ -93,8 +93,8 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
             <h4>Cerebras</h4>
             <div className="settings-form-grid">
               <SettingsField label="API key">
-                <input type="password" autoComplete="off" value={configs.cerebras.apiKey} disabled placeholder="Set CEREBRAS_API_KEY" />
-                <small>Environment-owned. Set CEREBRAS_API_KEY and restart the backend.</small>
+                <input type="password" autoComplete="off" value={configs.cerebras.apiKey} onChange={updateString(dispatch, 'providerConfigs.cerebras.apiKey')} placeholder="Enter API key" />
+                <small>Stored with Windows user-scoped encryption. CEREBRAS_API_KEY overrides this value.</small>
               </SettingsField>
               <SettingsField label="Model"><input value={configs.cerebras.model} onChange={updateString(dispatch, 'providerConfigs.cerebras.model')} /></SettingsField>
             </div>

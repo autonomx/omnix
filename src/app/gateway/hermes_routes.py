@@ -7,17 +7,19 @@ from typing import Any, Callable
 from fastapi import FastAPI
 
 from app.assist_core.hermes_api import router as hermes_router
+from app.assist_core.hermes_rpg_approved_routes import hermes_rpg_approved_bp
 
 _ROUTE_SENTINEL = "_omnix_hermes_routes_registered"
 _HOOK_SENTINEL = "_omnix_hermes_route_hook_installed"
 
 
 def register_hermes_routes(app: FastAPI) -> None:
-    """Attach the read-only Hermes router to the local gateway app once."""
+    """Attach Hermes diagnostics and approved RPG workflow routes once."""
     if getattr(app.state, _ROUTE_SENTINEL, False):
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
     app.include_router(hermes_router)
+    app.include_router(hermes_rpg_approved_bp)
 
 
 def install_hermes_route_hook() -> None:

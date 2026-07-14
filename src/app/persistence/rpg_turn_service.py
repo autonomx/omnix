@@ -31,7 +31,8 @@ def persist_foreground_turn(
     if state_revision < 1:
         raise ValueError("foreground RPG turn requires a positive state revision")
     expected_revision = state_revision - 1
-    turn_id = str(event.get("turn_id") or f"turn:{session_id}:{state_revision}")
+    turn_id = _campaign_record_id("turn", session_id, state_revision)
+    interaction_record_id = _campaign_record_id("interaction", session_id, state_revision)
 
     from app.gateway.rpg_foreground_turn_record import build_foreground_turn_record
 
@@ -109,7 +110,7 @@ def persist_foreground_turn(
             campaign_id=session_id,
             turn_id=turn_id,
             submission_id=submission_id,
-            interaction_id=interaction_id,
+            interaction_id=interaction_record_id,
             expected_revision=expected_revision,
             command={"player_input": player_input},
             next_state=session,
@@ -132,26 +133,50 @@ def persist_foreground_turn(
             else:
                 lease_owner = str(job.get("lease_owner") or "")
                 lease_token = str(job.get("lease_token") or "")
-                if not lease_owner or not lease_token:
+                metadata_value = job.get("metadata")
+                metadata = metadata_value if isinstance(metadata_value, dict) else {}
+                contract_value = metadata.get("compat_contract")
+                contract = contract_value if isinstance(contract_value, dict) else {}
+                compat_value = contract.get("compat")
+                compat = compat_value if isinstance(compat_value, dict) else {}
+                if compat.get("record_only") is True:
+                    completed_job = work.jobs.complete_record_only(
+                        context,
+                        job_id=job_id,
+                        output_refs=[
+                            {
+                                "type": "rpg_turn_response",
+                                "module": "rpg",
+                                "session_id": session_id,
+                                "submission_id": submission_id,
+                                "interaction_id": interaction_id,
+                                "turn_response": compact_response,
+                                "source": "postgresql_foreground_transaction",
+                            }
+                        ],
+                        progress={"current": 1, "total": 1, "message": "completed"},
+                    )
+                elif not lease_owner or not lease_token:
                     raise RuntimeError(f"foreground RPG job has no active lease: {job_id}")
-                completed_job = work.jobs.complete(
-                    context,
-                    job_id=job_id,
-                    worker_id=lease_owner,
-                    lease_token=lease_token,
-                    output_refs=[
-                        {
-                            "type": "rpg_turn_response",
-                            "module": "rpg",
-                            "session_id": session_id,
-                            "submission_id": submission_id,
-                            "interaction_id": interaction_id,
-                            "turn_response": compact_response,
-                            "source": "postgresql_foreground_transaction",
-                        }
-                    ],
-                    progress={"current": 1, "total": 1, "message": "completed"},
-                )
+                else:
+                    completed_job = work.jobs.complete(
+                        context,
+                        job_id=job_id,
+                        worker_id=lease_owner,
+                        lease_token=lease_token,
+                        output_refs=[
+                            {
+                                "type": "rpg_turn_response",
+                                "module": "rpg",
+                                "session_id": session_id,
+                                "submission_id": submission_id,
+                                "interaction_id": interaction_id,
+                                "turn_response": compact_response,
+                                "source": "postgresql_foreground_transaction",
+                            }
+                        ],
+                        progress={"current": 1, "total": 1, "message": "completed"},
+                    )
 
         if not work.foreground_submissions.complete(
             context,
@@ -172,6 +197,7 @@ def persist_foreground_turn(
                 "campaign_id": session_id,
                 "submission_id": submission_id,
                 "interaction_id": interaction_id,
+                "interaction_record_id": interaction_record_id,
                 "resulting_revision": state_revision,
             },
         )
@@ -186,8 +212,14 @@ def persist_foreground_turn(
         "response": compact_response,
         "submission_id": submission_id,
         "interaction_id": interaction_id,
+        "interaction_record_id": interaction_record_id,
         "transaction": "postgresql_unit_of_work",
     }
+
+
+def _campaign_record_id(kind: str, session_id: str, state_revision: int) -> str:
+    """Build a globally unique PostgreSQL record id from campaign-local counters."""
+    return f"{kind}:{session_id}:{state_revision}"
 
 
 def _canonical_effects(result: dict[str, Any]) -> dict[str, Any]:

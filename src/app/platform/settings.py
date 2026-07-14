@@ -130,9 +130,9 @@ def apply_settings_payload(
     """Apply a legacy settings request in memory and report whether secrets changed.
 
     PostgreSQL authority stores application settings as one document while provider
-    secrets are environment-owned. Keeping mutation separate from persistence lets
-    the SCC adapter perform one atomic settings write and avoid touching the retired
-    plaintext secret writer for ordinary provider/configuration changes.
+    secrets live in a separate OS-protected store. Keeping mutation separate from
+    persistence lets the SCC adapter perform one atomic settings write and avoid
+    touching the secret store for ordinary provider/configuration changes.
     """
 
     from app.shared import DEFAULT_SETTINGS
@@ -149,10 +149,13 @@ def apply_settings_payload(
     if "openrouter" in data:
         incoming = _safe_dict(data["openrouter"])
         api_key = str(incoming.get("api_key") or "")
-        if api_key and not api_key.startswith("***"):
+        if "api_key" in incoming and not api_key.startswith("***"):
             api_keys = secrets.setdefault("api_keys", {})
             if str(api_keys.get("openrouter") or "") != api_key:
-                api_keys["openrouter"] = api_key
+                if api_key:
+                    api_keys["openrouter"] = api_key
+                else:
+                    api_keys.pop("openrouter", None)
                 secrets_changed = True
         _merge_settings_section(
             settings,
@@ -164,10 +167,13 @@ def apply_settings_payload(
     if "cerebras" in data:
         incoming = _safe_dict(data["cerebras"])
         api_key = str(incoming.get("api_key") or "")
-        if api_key and not api_key.startswith("***"):
+        if "api_key" in incoming and not api_key.startswith("***"):
             api_keys = secrets.setdefault("api_keys", {})
             if str(api_keys.get("cerebras") or "") != api_key:
-                api_keys["cerebras"] = api_key
+                if api_key:
+                    api_keys["cerebras"] = api_key
+                else:
+                    api_keys.pop("cerebras", None)
                 secrets_changed = True
         _merge_settings_section(
             settings,

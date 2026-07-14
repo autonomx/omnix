@@ -135,6 +135,47 @@ def test_skip_locked_claims_distinct_jobs_and_completes() -> None:
         database.close()
 
 
+def test_record_only_job_transitions_without_worker_lease() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = bootstrap_local_tenant(database)
+        with unit_of_work(database) as work:
+            work.jobs.create_job(
+                context,
+                {
+                    "id": "job:foreground-record",
+                    "module": "rpg",
+                    "job_type": "rpg.turn.foreground_record",
+                    "resource_class": "cpu",
+                    "input_payload": {"command": "ask Bran about business"},
+                    "metadata": {
+                        "compat_contract": {
+                            "compat": {"record_only": True},
+                            "logs": [],
+                        }
+                    },
+                },
+            )
+            running = work.jobs.mark_record_only_running(
+                context,
+                job_id="job:foreground-record",
+            )
+            completed = work.jobs.complete_record_only(
+                context,
+                job_id="job:foreground-record",
+                output_refs=[{"session_id": "rpg:test"}],
+            )
+            work.commit()
+
+        assert running["status"] == "running"
+        assert running["lease_token"] is None
+        assert completed["status"] == "completed"
+        assert completed["output_refs"] == [{"session_id": "rpg:test"}]
+    finally:
+        database.close()
+
+
 def test_job_retry_then_dead_letter() -> None:
     database = _database()
     try:
@@ -211,7 +252,7 @@ def test_cancel_queued_and_active_jobs() -> None:
             assert claimed is not None and claimed["id"] == "job:active"
             active = work.jobs.request_cancel(context, "job:active")
             work.commit()
-        assert queued["status"] == "cancelled"
+        assert queued["status"] == "canceled"
         assert active["status"] == "cancel_requested"
     finally:
         database.close()

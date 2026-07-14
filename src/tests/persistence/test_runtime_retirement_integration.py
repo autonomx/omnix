@@ -99,12 +99,16 @@ assert shared.load_secrets() == {
         "cerebras": "runtime-cerebras-key",
     }
 }
-try:
-    shared.save_secrets({"api_keys": {"openrouter": "must-not-write"}})
-except LegacyPersistenceRetired:
-    pass
-else:
-    raise AssertionError("plaintext provider-secret JSON unexpectedly remained writable")
+shared.save_secrets({"api_keys": {"openrouter": "environment-cannot-be-overridden"}})
+assert shared.load_secrets() == {
+    "api_keys": {
+        "openrouter": "runtime-openrouter-key",
+        "cerebras": "runtime-cerebras-key",
+    }
+}
+protected_provider_keys = Path(os.environ["OMNIX_PROVIDER_SECRETS_PATH"])
+assert protected_provider_keys.exists()
+assert b"environment-cannot-be-overridden" not in protected_provider_keys.read_bytes()
 
 from app.assistant_tools.credentials import (
     AssistantToolCredentialsPayload,
@@ -318,6 +322,7 @@ def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(tmp_p
             "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH": str(tmp_path / "assistant-tools-ledger.jsonl"),
             "OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH": str(tmp_path / "assistant-tool-credentials.json"),
             "OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH": str(tmp_path / "assistant-tool-oauth-clients.json"),
+            "OMNIX_PROVIDER_SECRETS_PATH": str(tmp_path / "provider-api-keys.dpapi"),
             "OPENROUTER_API_KEY": "runtime-openrouter-key",
             "CEREBRAS_API_KEY": "runtime-cerebras-key",
         }

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .errors import EntityNotFound, PersistenceError
@@ -291,6 +290,105 @@ class PostgresJobRepository:
         self._event(context, job_id, "job.running", {"worker_id": worker_id})
         return result
 
+    def mark_record_only_running(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+    ) -> dict[str, Any]:
+        """Start a synchronously executed audit record without a worker lease."""
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_jobs
+               SET status = 'running',
+                   started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE id = %s AND workspace_id = %s
+               AND status = 'queued'
+               AND (
+                   metadata #>> '{{compat_contract,compat,record_only}}' = 'true'
+                   OR metadata #>> '{{compat_contract,compat,inline_execution}}' = 'true'
+               )
+            RETURNING {_JOB_COLUMNS}
+            """,
+            (job_id, context.workspace_id),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"record-only job cannot enter running state: {job_id}")
+        result = _job(row)
+        self._event(context, job_id, "job.running", {"execution": "foreground_record"})
+        return result
+
+    def complete_record_only(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        output_refs: list[dict[str, Any]] | list[str],
+        progress: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Complete a foreground audit record that is never worker-claimed."""
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_jobs
+               SET status = 'completed', output_refs = %s::jsonb,
+                   progress = %s::jsonb, error = NULL,
+                   completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+             WHERE id = %s AND workspace_id = %s
+               AND status IN ('queued', 'running')
+               AND (
+                   metadata #>> '{{compat_contract,compat,record_only}}' = 'true'
+                   OR metadata #>> '{{compat_contract,compat,inline_execution}}' = 'true'
+               )
+            RETURNING {_JOB_COLUMNS}
+            """,
+            (
+                _json(output_refs),
+                _json(progress or {"current": 1, "total": 1, "message": "completed"}),
+                job_id,
+                context.workspace_id,
+            ),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"record-only job completion rejected: {job_id}")
+        result = _job(row)
+        self._event(context, job_id, "job.completed", {"execution": "foreground_record"})
+        return result
+
+    def fail_record_only(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        error: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Fail a foreground audit record without scheduling worker retries."""
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_jobs
+               SET status = 'failed', error = %s::jsonb,
+                   completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+             WHERE id = %s AND workspace_id = %s
+               AND status IN ('queued', 'running')
+               AND (
+                   metadata #>> '{{compat_contract,compat,record_only}}' = 'true'
+                   OR metadata #>> '{{compat_contract,compat,inline_execution}}' = 'true'
+               )
+            RETURNING {_JOB_COLUMNS}
+            """,
+            (_json(error), job_id, context.workspace_id),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"record-only job failure rejected: {job_id}")
+        result = _job(row)
+        self._event(
+            context,
+            job_id,
+            "job.failed",
+            {"execution": "foreground_record", "error": error},
+        )
+        return result
+
     def complete(
         self,
         context: TenantContext,
@@ -410,7 +508,7 @@ class PostgresJobRepository:
             f"""
             UPDATE omnix_jobs
                SET status = CASE
-                       WHEN status IN ('queued', 'retrying', 'waiting') THEN 'cancelled'
+                       WHEN status IN ('queued', 'retrying', 'waiting') THEN 'canceled'
                        WHEN status IN ('leased', 'running') THEN 'cancel_requested'
                        ELSE status
                    END,

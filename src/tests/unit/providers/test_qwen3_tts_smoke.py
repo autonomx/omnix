@@ -245,6 +245,36 @@ def test_generate_audio_defaults_to_parity_mode(monkeypatch, tmp_path):
     assert model.calls == [True]
 
 
+def test_generate_audio_can_disable_cuda_graphs_before_generation(monkeypatch, tmp_path):
+    from app.providers import faster_qwen3_tts_provider as provider_module
+    from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+
+    sample_rate = 12000
+    preview_audio = np.sin(np.linspace(0, 20, sample_rate, dtype=np.float32)) * 0.1
+    sf.write(tmp_path / "Studio.wav", preview_audio, sample_rate)
+    monkeypatch.setattr(provider_module, "VOICE_CLONES_DIR", str(tmp_path))
+
+    class GraphRecordingModel:
+        _cuda_graphs_enabled = True
+
+        def generate_voice_clone(self, **kwargs):
+            assert self._cuda_graphs_enabled is False
+            return [preview_audio], sample_rate
+
+    model = GraphRecordingModel()
+    provider = FasterQwen3TTSProvider(config={"device": "cpu"})
+    monkeypatch.setattr(provider, "_get_model", lambda: model)
+
+    out = provider.generate_audio(
+        text="stable studio generation",
+        speaker="Studio",
+        language="en",
+        use_cuda_graphs=False,
+    )
+
+    assert out["success"] is True
+
+
 def test_generate_audio_retries_tensor_size_generation_failure(monkeypatch, tmp_path):
     from app.providers import faster_qwen3_tts_provider as provider_module
     from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider

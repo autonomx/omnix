@@ -1,6 +1,7 @@
 """Chat store adapter that routes provider generation through PromptAssembly."""
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -34,6 +35,12 @@ from .store import (
     _pop_ready_sentences,
     _provider_key,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _memory_suggestions_allowed(session: ChatSession) -> bool:
+    return session.interaction_mode != "character" or session.write_memory
 
 
 class ChatSessionStore(JsonChatSessionStore):
@@ -184,6 +191,24 @@ class ChatSessionStore(JsonChatSessionStore):
                 ),
             )
 
+    def _run_post_turn_maintenance(self, session: ChatSession, user_message_id: str) -> None:
+        """Run optional memory maintenance without changing chat delivery success."""
+        if _memory_suggestions_allowed(session):
+            try:
+                self._enqueue_memory_suggestion_job(session.id, user_message_id)
+            except Exception:
+                logger.warning(
+                    "memory suggestion maintenance unavailable after completed chat turn",
+                    exc_info=True,
+                )
+        try:
+            enqueue_compaction_job(session)
+        except Exception:
+            logger.warning(
+                "history compaction maintenance unavailable after completed chat turn",
+                exc_info=True,
+            )
+
     def begin_user_message(
         self,
         session_id: str,
@@ -225,8 +250,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 context_diagnostics=context_diagnostics,
             )
             if appended is not None:
-                self._enqueue_memory_suggestion_job(session_id, appended[1].id)
-                enqueue_compaction_job(appended[0])
+                self._run_post_turn_maintenance(appended[0], appended[1].id)
             return appended
         appended = self.begin_user_message(
             session_id,
@@ -274,8 +298,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 None,
             )
             if user_message is not None and not user_message.metadata.get("memory_command"):
-                self._enqueue_memory_suggestion_job(session_id, user_message_id)
-                enqueue_compaction_job(completed)
+                self._run_post_turn_maintenance(completed, user_message_id)
         return completed
 
     def _generate_provider_reply(

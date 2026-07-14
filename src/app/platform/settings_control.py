@@ -59,16 +59,24 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
     previous_settings = deepcopy(settings)
     secrets = load_secrets()
     legacy = _legacy_request(data)
-    secrets_changed = apply_settings_payload(settings, secrets, legacy) if legacy else False
     patch = data.get(PROFILE_PATCH_KEY)
     base_revision = data.get(PROFILE_BASE_REVISION_KEY)
 
     try:
+        # Validate the revision against the unmodified authoritative document.
+        # Applying the compatibility payload first changes the derived revision
+        # and makes a combined provider/profile save conflict with itself.
+        if isinstance(patch, dict) and base_revision:
+            current = load_settings_profile(settings)
+            if current.revision != str(base_revision):
+                raise SettingsProfileRevisionConflict("settings profile revision conflict")
+
+        secrets_changed = apply_settings_payload(settings, secrets, legacy) if legacy else False
         if isinstance(patch, dict):
             save_settings_profile(
                 settings,
                 patch,
-                str(base_revision) if base_revision else None,
+                None,
             )
         elif legacy:
             current = load_settings_profile(settings)
@@ -76,9 +84,9 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
         else:
             load_settings_profile(settings)
 
-        # Provider credentials are environment-owned in PostgreSQL mode. Ordinary
-        # provider/config updates never call this retired writer; a real key edit
-        # fails before the authoritative settings document is committed.
+        # Provider credentials remain outside PostgreSQL. Ordinary provider/config
+        # updates do not touch the OS-protected store; a real key edit is committed
+        # before the authoritative settings document so failures remain atomic.
         if secrets_changed:
             save_secrets(secrets)
         save_settings(settings)

@@ -645,6 +645,8 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             
             # Load the model
             model = self._get_model()
+            if kwargs.get("use_cuda_graphs") is False:
+                _disable_cuda_graphs_for_retry(model)
             
             # Prepare generation parameters
             gen_kwargs = {

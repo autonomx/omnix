@@ -92,6 +92,7 @@ def _prepare(
     campaign_id: str,
     submission_id: str,
     lease_job: bool,
+    record_only: bool = False,
 ) -> str:
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
@@ -112,6 +113,11 @@ def _prepare(
                 "job_type": "rpg.foreground_turn_record",
                 "resource_class": "cpu",
                 "input_payload": {"submission_id": submission_id},
+                "metadata": {
+                    "compat_contract": {
+                        "compat": {"record_only": record_only},
+                    }
+                },
             },
         )
         if lease_job:
@@ -205,7 +211,7 @@ def test_foreground_turn_commits_every_authoritative_record_together() -> None:
         assert int(counts[3]) >= 2
         assert str(job[0]) == "completed"
         assert str(submission[0]) == "completed"
-        assert str(submission[1]) == "interaction:1"
+        assert str(submission[1]) == f"interaction:{campaign_id}:1"
         assert dict(submission[2])["interaction_id"] == "interaction:1"
     finally:
         database.close()
@@ -261,5 +267,48 @@ def test_job_completion_failure_rolls_back_turn_campaign_and_outbox() -> None:
         assert int(interaction_count) == 0
         assert str(job[0]) == "queued"
         assert str(submission[0]) == "claimed"
+    finally:
+        database.close()
+
+
+def test_record_only_foreground_turn_commits_without_worker_lease() -> None:
+    database = _database()
+    campaign_id = "campaign:record-only"
+    submission_id = "submission:record-only"
+    try:
+        _reset(database)
+        job_id = _prepare(
+            database,
+            campaign_id=campaign_id,
+            submission_id=submission_id,
+            lease_job=False,
+            record_only=True,
+        )
+
+        persisted = persist_foreground_turn(
+            database=database,
+            session_id=campaign_id,
+            player_input="I buy a ration.",
+            session=_next_session(campaign_id),
+            result={"ok": True, "narration": "You buy a ration."},
+            event=_event(submission_id),
+            submission_id=submission_id,
+        )
+
+        assert persisted["transaction"] == "postgresql_unit_of_work"
+        assert persisted["turn"]["id"] == f"turn:{campaign_id}:1"
+        assert persisted["interaction_record_id"] == f"interaction:{campaign_id}:1"
+        with database.connection() as connection:
+            job = connection.execute(
+                "SELECT status, lease_token FROM omnix_jobs WHERE id = %s",
+                (job_id,),
+            ).fetchone()
+            revision = connection.execute(
+                "SELECT revision FROM omnix_rpg_campaigns WHERE id = %s",
+                (campaign_id,),
+            ).fetchone()[0]
+        assert str(job[0]) == "completed"
+        assert job[1] is None
+        assert int(revision) == 1
     finally:
         database.close()

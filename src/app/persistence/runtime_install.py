@@ -76,25 +76,25 @@ def _install_remaining_document_authority_adapters() -> None:
         load_assistant_tool_ledger_postgres,
         load_empty_assistant_tool_credentials,
         load_empty_assistant_tool_oauth_clients,
-        load_environment_provider_secrets,
         load_legacy_chat_sessions,
         no_assistant_tool_credential,
         postgres_assistant_memory_settings_store_class,
         postgres_live_conversation_profile_store_class,
-        reject_plaintext_provider_secret_write,
         save_application_settings,
         save_assist_house_state,
         save_legacy_chat_sessions,
         unavailable_assistant_tool_secret,
     )
 
+    from .provider_secret_store import load_provider_secrets, save_provider_secrets
+
     shared.install_postgresql_document_callbacks(
         load_settings_callback=load_application_settings,
         save_settings_callback=save_application_settings,
         load_sessions_callback=load_legacy_chat_sessions,
         save_sessions_callback=save_legacy_chat_sessions,
-        load_secrets_callback=load_environment_provider_secrets,
-        save_secrets_callback=reject_plaintext_provider_secret_write,
+        load_secrets_callback=load_provider_secrets,
+        save_secrets_callback=save_provider_secrets,
     )
     house_state_module.load_house_state = load_assist_house_state
     house_state_module.save_house_state = save_assist_house_state

@@ -16,6 +16,7 @@ from app.assets import AssetRecord, AssetType, default_asset_store
 from app.runtime_paths import resources_data_root
 
 from .models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord
+from .inline_execution_compat import mark_inline_execution
 
 VOICE_STUDIO_JOB_TYPES = {
     "tts.synthesize",
@@ -33,6 +34,8 @@ def install_voice_studio_job_execution(sqlite_job_store_cls: Any) -> None:
     original_create_job = sqlite_job_store_cls.create_job
 
     def create_job_with_voice_studio_execution(self: Any, request: CreateJobRequest) -> JobRecord:
+        if request.type in VOICE_STUDIO_JOB_TYPES:
+            request = mark_inline_execution(request)
         job = original_create_job(self, request)
         if job.type not in VOICE_STUDIO_JOB_TYPES:
             return job
@@ -219,6 +222,9 @@ def _generate_audio_bytes(text: str, *, speaker: str, payload: dict[str, Any]) -
             language=_tts_language_code(payload.get("language")),
             output_settings=payload.get("output_settings") or {},
             audio_effects=payload.get("audio_effects") or [],
+            parity_mode=True,
+            non_streaming_mode=True,
+            use_cuda_graphs=False,
         )
         if not isinstance(result, dict):
             raise RuntimeError("TTS provider returned an invalid response")

@@ -25,7 +25,7 @@ describe('settings API adapter', () => {
     expect(JSON.parse(sent).settings_profile_patch).toEqual({ assistant: draft.assistant });
   });
 
-  it('mirrors provider config without sending environment-owned API keys', () => {
+  it('sends provider keys only through the legacy secret channel', () => {
     const base = migrateSettingsDocument(DEFAULT_SETTINGS_DOCUMENT);
     const draft = migrateSettingsDocument({
       ...base,
@@ -33,16 +33,20 @@ describe('settings API adapter', () => {
       providerConfigs: {
         ...base.providerConfigs,
         openrouter: { ...base.providerConfigs.openrouter, apiKey: 'sk-live', model: 'anthropic/claude-sonnet-4' },
+        cerebras: { ...base.providerConfigs.cerebras, apiKey: 'csk-live' },
       },
     });
     const request = createSettingsSaveRequest(base, draft);
     expect(request.provider).toBe('openrouter');
     expect(request.openrouter).toEqual({
+      api_key: 'sk-live',
       model: 'anthropic/claude-sonnet-4',
       context_size: 128000,
       thinking_budget: 0,
     });
+    expect(request.cerebras).toEqual({ api_key: 'csk-live', model: 'llama-3.3-70b-versatile' });
     expect(request.settings_profile_patch.providerConfigs?.openrouter?.apiKey).toBeUndefined();
-    expect(JSON.stringify(request)).not.toContain('sk-live');
+    expect(request.settings_profile_patch.providerConfigs?.cerebras?.apiKey).toBeUndefined();
+    expect(JSON.stringify(request.settings_profile_patch)).not.toContain('sk-live');
   });
 });

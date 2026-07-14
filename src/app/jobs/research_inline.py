@@ -24,6 +24,7 @@ from .models import (
     JobRecord,
     JobStatus,
 )
+from .inline_execution_compat import mark_inline_execution
 
 RESEARCH_EXECUTOR_ENV = "OMNIX_INLINE_RESEARCH_JOB_EXECUTOR"
 ResearchWorkflow = Callable[
@@ -57,6 +58,8 @@ def install_research_job_execution(sqlite_job_store_cls: Any) -> None:
     original_create_job = sqlite_job_store_cls.create_job
 
     def create_job_with_research_execution(self: Any, request: Any) -> JobRecord:
+        if request.type == RESEARCH_JOB_TYPE and _executor_enabled():
+            request = mark_inline_execution(request)
         job = original_create_job(self, request)
         if job.type == RESEARCH_JOB_TYPE and _executor_enabled():
             _start_research_job(self, job)
