@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Sequence
 
 from .authority import BeatKind
+from .claims import infer_claims, validate_claims
 from .contracts import (
     EvidenceRecord,
     NarrativeBlock,
@@ -109,6 +110,13 @@ class NarrativeValidator:
             if block.kind is BeatKind.DIALOGUE and text.count('"') % 2 == 1:
                 issues.append(ValidationIssue("unbalanced_quote", "Dialogue contains an unbalanced quote.", block.block_id))
 
+        claim_issues, claim_metadata = validate_claims(
+            request,
+            plan,
+            evidence,
+            blocks,
+        )
+        issues.extend(claim_issues)
         required_beats = {beat.beat_id for beat in plan.beats if beat.required}
         missing = required_beats.difference(seen_beats)
         if missing:
@@ -118,7 +126,14 @@ class NarrativeValidator:
             issues.append(ValidationIssue("invalid_sequence", "Blocks are not in a unique ascending sequence."))
         if _word_count(blocks) > plan.word_budget[1]:
             issues.append(ValidationIssue("word_budget_exceeded", "Response exceeds the configured maximum word budget."))
-        return ValidationReport(passed=not issues, issues=tuple(issues))
+        return ValidationReport(
+            passed=not issues,
+            issues=tuple(issues),
+            metadata={
+                **dict(claim_metadata),
+                "grounding_passed": not issues,
+            },
+        )
 
 
 class NarrativeRepairer:
@@ -166,6 +181,18 @@ class ValidatedWriterResult:
     fallback_used: bool
 
 
+def _prepare(
+    request: TurnPresentationRequest,
+    plan: NarrativePlan,
+    evidence: Sequence[EvidenceRecord],
+    result: WriterResult,
+) -> WriterResult:
+    return replace(
+        result,
+        blocks=infer_claims(request, plan, evidence, result.blocks),
+    )
+
+
 def _validated_fallback(
     request: TurnPresentationRequest,
     plan: NarrativePlan,
@@ -174,11 +201,17 @@ def _validated_fallback(
     validator: NarrativeValidator,
     repairer: NarrativeRepairer,
 ) -> ValidatedWriterResult:
-    fallback = fallback_writer.write(request, plan, evidence)
+    fallback = _prepare(
+        request,
+        plan,
+        evidence,
+        fallback_writer.write(request, plan, evidence),
+    )
     report = validator.validate(request, plan, evidence, fallback.blocks)
     if report.passed:
         return ValidatedWriterResult(fallback, report, True)
     repaired, history = repairer.repair(plan, fallback.blocks)
+    repaired = infer_claims(request, plan, evidence, repaired)
     repaired_report = validator.validate(request, plan, evidence, repaired)
     return ValidatedWriterResult(
         replace(fallback, blocks=repaired),
@@ -201,7 +234,12 @@ def write_validate_repair(
     repairer = repairer or NarrativeRepairer()
     fallback_writer = fallback_writer or DeterministicNarrativeWriter()
     try:
-        result = writer.write(request, plan, evidence)
+        result = _prepare(
+            request,
+            plan,
+            evidence,
+            writer.write(request, plan, evidence),
+        )
     except Exception:
         return _validated_fallback(request, plan, evidence, fallback_writer, validator, repairer)
 
@@ -209,6 +247,7 @@ def write_validate_repair(
     if report.passed:
         return ValidatedWriterResult(result, report, False)
     repaired, history = repairer.repair(plan, result.blocks)
+    repaired = infer_claims(request, plan, evidence, repaired)
     repaired_report = validator.validate(request, plan, evidence, repaired)
     if repaired_report.passed:
         return ValidatedWriterResult(
