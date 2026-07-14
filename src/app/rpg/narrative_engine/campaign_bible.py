@@ -19,6 +19,24 @@ def _enum(enum_type: type[_EnumT], value: Any, default: _EnumT) -> _EnumT:
         return default
 
 
+def _visibility(value: Any) -> VisibilityClass:
+    normalized = str(value or "public").strip().casefold()
+    aliases = {
+        "public": VisibilityClass.PUBLIC,
+        "player_known": VisibilityClass.PLAYER_KNOWN,
+        "learned": VisibilityClass.PLAYER_KNOWN,
+        "partially_known": VisibilityClass.PLAYER_KNOWN,
+        "disputed": VisibilityClass.PLAYER_KNOWN,
+        "npc_private": VisibilityClass.NPC_PRIVATE,
+        "faction_private": VisibilityClass.FACTION_PRIVATE,
+        "narrator_only": VisibilityClass.NARRATOR_ONLY,
+        "hidden_from_player": VisibilityClass.GAME_MASTER_ONLY,
+        "game_master_canon": VisibilityClass.GAME_MASTER_ONLY,
+        "game_master_only": VisibilityClass.GAME_MASTER_ONLY,
+    }
+    return aliases.get(normalized, VisibilityClass.GAME_MASTER_ONLY)
+
+
 def _strings(value: Any) -> tuple[str, ...]:
     if not isinstance(value, list | tuple | set):
         return ()
@@ -57,10 +75,19 @@ def campaign_bible_evidence(snapshot: CampaignBibleSnapshot) -> tuple[EvidenceRe
 
     records: list[EvidenceRecord] = []
     for index, raw in enumerate(raw_records, start=1):
-        content = str(raw.get("content") or raw.get("summary") or raw.get("statement") or "").strip()
+        content = str(
+            raw.get("content")
+            or raw.get("summary")
+            or raw.get("statement")
+            or ""
+        ).strip()
         if not content:
             continue
-        evidence_id = str(raw.get("evidence_id") or raw.get("id") or f"bible:{snapshot.campaign_id}:{index}")
+        evidence_id = str(
+            raw.get("evidence_id")
+            or raw.get("id")
+            or f"bible:{snapshot.campaign_id}:{index}"
+        )
         records.append(
             EvidenceRecord(
                 evidence_id=evidence_id,
@@ -70,15 +97,16 @@ def campaign_bible_evidence(snapshot: CampaignBibleSnapshot) -> tuple[EvidenceRe
                     raw.get("authority"),
                     AuthorityClass.OBJECTIVE_CANON,
                 ),
-                visibility=_enum(
-                    VisibilityClass,
-                    raw.get("visibility"),
-                    VisibilityClass.PUBLIC,
-                ),
+                visibility=_visibility(raw.get("visibility")),
                 known_by=_strings(raw.get("known_by")),
-                entity_refs=_strings(raw.get("entity_refs") or raw.get("entities")),
+                entity_refs=_strings(
+                    raw.get("entity_refs") or raw.get("entities")
+                ),
                 source_revision=snapshot.revision,
-                confidence=max(0.0, min(float(raw.get("confidence") or 1.0), 1.0)),
+                confidence=max(
+                    0.0,
+                    min(float(raw.get("confidence") or 1.0), 1.0),
+                ),
                 lifetime=_enum(
                     EvidenceLifetime,
                     raw.get("lifetime"),
@@ -90,6 +118,13 @@ def campaign_bible_evidence(snapshot: CampaignBibleSnapshot) -> tuple[EvidenceRe
                     "campaign_id": snapshot.campaign_id,
                     "campaign_bible_hash": snapshot.content_hash,
                     "category": str(raw.get("category") or "fact"),
+                    "document_id": str(raw.get("document_id") or ""),
+                    "title": str(raw.get("title") or ""),
+                    "fact_id": str(raw.get("fact_id") or ""),
+                    "keywords": list(raw.get("keywords") or ()),
+                    "canon_revision": int(
+                        raw.get("canon_revision") or snapshot.revision
+                    ),
                 },
             )
         )
