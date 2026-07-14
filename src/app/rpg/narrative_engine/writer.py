@@ -36,11 +36,7 @@ def writer_payload(
     evidence: Sequence[EvidenceRecord],
 ) -> dict[str, Any]:
     approved_ids = {ref for beat in plan.beats for ref in beat.evidence_refs}
-    selected_evidence = [
-        record.as_dict()
-        for record in evidence
-        if record.evidence_id in approved_ids
-    ]
+    selected_evidence = [record.as_dict() for record in evidence if record.evidence_id in approved_ids]
     return {
         "schema_version": "rpg_narrative_writer_request_v1",
         "request_id": request.request_id,
@@ -69,10 +65,7 @@ def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
-def parse_structured_blocks(
-    payload: Mapping[str, Any],
-    plan: NarrativePlan,
-) -> tuple[NarrativeBlock, ...]:
+def parse_structured_blocks(payload: Mapping[str, Any], plan: NarrativePlan) -> tuple[NarrativeBlock, ...]:
     rows = payload.get("blocks")
     if not isinstance(rows, list):
         raise ValueError("structured narrative output requires a blocks array")
@@ -177,9 +170,7 @@ def _deterministic_text(
             return "Vexira stills, her attention sharpening as the chamber seems to hold its breath with her."
         return f"{name} pauses, giving the question their full attention."
     if beat.purpose is BeatPurpose.DIRECT_ANSWER:
-        if grounded:
-            return grounded
-        return "I can answer only from what is known here and now."
+        return grounded or "I can answer only from what is known here and now."
     if beat.purpose is BeatPurpose.SCENE_ESTABLISHMENT:
         return grounded or "The changed scene settles into view, its immediate paths and occupants becoming clear."
     if beat.purpose is BeatPurpose.ENVIRONMENTAL_CHANGE:
@@ -191,7 +182,7 @@ def _deterministic_text(
     if beat.purpose is BeatPurpose.ULTIMATUM:
         return "Decide whether you will accept what this moment demands, or stand against it."
     if beat.purpose is BeatPurpose.RESOLVED_ACTION:
-        return grounded or "The attempted action resolves according to the authoritative outcome."
+        return grounded or "The resolved action takes effect exactly as determined."
     if beat.purpose is BeatPurpose.CONSEQUENCE:
         return grounded or "The immediate consequence leaves the next situation clear."
     if beat.kind is BeatKind.CHOICE:
@@ -224,8 +215,4 @@ class DeterministicNarrativeWriter:
             )
             for beat in plan.beats
         )
-        return WriterResult(
-            blocks=blocks,
-            source="deterministic_writer",
-            evidence_count=len(evidence) if False else 0,
-        )
+        return WriterResult(blocks=blocks, source="deterministic_writer")
