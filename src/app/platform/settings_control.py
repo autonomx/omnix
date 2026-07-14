@@ -65,7 +65,7 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
             save_settings_profile(
                 settings,
                 patch,
-                None if legacy else str(base_revision) if base_revision else None,
+                str(base_revision) if base_revision else None,
             )
         elif legacy:
             current = load_settings_profile(settings)
