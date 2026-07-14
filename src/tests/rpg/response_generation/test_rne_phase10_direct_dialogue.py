@@ -63,10 +63,9 @@ def test_direct_dialogue_is_republished_as_ordered_canonical_blocks() -> None:
         "continuation",
     ]
     assert result["narration"].startswith("Bran pauses")
-    assert result["npc"] == {
-        "speaker": "npc:bran",
-        "line": "The road is muddy, but passable.",
-    }
+    dialogue = result["dialogue_blocks"]
+    assert dialogue[0]["speaker_id"] == "npc:bran"
+    assert dialogue[0]["text"] == "The road is muddy, but passable."
     assert result["narration"].count("muddy, but passable") == 0
     assert result["summary"].count("muddy, but passable") == 1
 
