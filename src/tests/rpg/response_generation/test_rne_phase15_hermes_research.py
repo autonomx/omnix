@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from app.assist_core.hermes_rpg_narrative_research import hermes_rpg_narrative_research_payload
+from app.assist_core.hermes_rpg_narrative_research import (
+    hermes_rpg_narrative_research_payload,
+)
 from app.rpg.narrative_engine import (
     AuthorityClass,
     HermesResearchPolicy,
@@ -18,7 +20,7 @@ def _request() -> HermesResearchRequest:
     )
 
 
-def test_hermes_research_is_bounded_cited_and_never_objective_canon() -> None:
+def test_hermes_research_is_bounded_cited_and_never_mutates_canon() -> None:
     raw = {
         "provider": "hermes-test",
         "model": "provider-free-fixture",
@@ -39,15 +41,18 @@ def test_hermes_research_is_bounded_cited_and_never_objective_canon() -> None:
         "findings": [
             {
                 "finding_id": "finding:mud",
-                "content": "Caravan records describe the East Road as muddy after heavy rain.",
+                "content": (
+                    "Caravan records describe the East Road as muddy "
+                    "after heavy rain."
+                ),
                 "source_refs": ["source:ledger"],
                 "authority": "historical_record",
                 "entity_refs": ["location:east_road"],
                 "confidence": 0.9,
             },
             {
-                "finding_id": "finding:forbidden",
-                "content": "This should not become canon automatically.",
+                "finding_id": "finding:canon",
+                "content": "The old east bridge is established campaign canon.",
                 "source_refs": ["source:chronicle"],
                 "authority": "objective_canon",
             },
@@ -62,36 +67,48 @@ def test_hermes_research_is_bounded_cited_and_never_objective_canon() -> None:
     result = normalize_hermes_research(
         _request(),
         raw,
-        policy=HermesResearchPolicy(max_sources=2, max_findings=3, max_total_chars=2_000),
+        policy=HermesResearchPolicy(
+            max_sources=2,
+            max_findings=3,
+            max_total_chars=2_000,
+        ),
     )
-    assert [finding.finding_id for finding in result.findings] == ["finding:mud"]
+    assert [finding.finding_id for finding in result.findings] == [
+        "finding:mud",
+        "finding:canon",
+    ]
     assert result.findings[0].authority is AuthorityClass.HISTORICAL_RECORD
+    assert result.findings[1].authority is AuthorityClass.OBJECTIVE_CANON
     reasons = {item["reason"] for item in result.rejected_items}
-    assert reasons == {"forbidden_authority", "missing_or_unknown_source"}
+    assert reasons == {"missing_or_unknown_source"}
     evidence = result.evidence()[0]
     assert evidence.authority is AuthorityClass.HISTORICAL_RECORD
     assert evidence.metadata["source_refs"] == ["source:ledger"]
     assert result.metadata["may_mutate_campaign_bible"] is False
 
 
-def test_hermes_route_is_read_only_and_requires_configured_result() -> None:
-    disabled = hermes_rpg_narrative_research_payload(
+def test_hermes_route_is_read_only_and_reports_missing_campaign_bible() -> None:
+    unavailable = hermes_rpg_narrative_research_payload(
         {
             "research_id": "research:none",
             "campaign_id": "campaign:hermes",
             "query": "road history",
         }
     )
-    assert disabled["ok"] is False
-    assert disabled["error"] == "hermes_narrative_research_not_configured"
-    assert disabled["state_changed"] is False
+    assert unavailable["ok"] is False
+    assert unavailable["error"] == "campaign_bible_not_available"
+    assert unavailable["state_changed"] is False
 
     payload = hermes_rpg_narrative_research_payload(
         {
             "research_id": "research:bounded",
             "campaign_id": "campaign:hermes",
             "query": "road history",
-            "policy": {"max_sources": 1, "max_findings": 1, "max_total_chars": 1_000},
+            "policy": {
+                "max_sources": 1,
+                "max_findings": 1,
+                "max_total_chars": 1_000,
+            },
             "research_result": {
                 "sources": [
                     {
