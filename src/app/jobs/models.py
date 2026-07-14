@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class JobStatus(str, Enum):
@@ -94,6 +94,13 @@ class CreateJobRequest(BaseModel):
     input_ref: dict[str, Any] | None = None
     input_payload: dict[str, Any] | None = None
     compat: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def apply_central_defaults(cls, value: Any) -> Any:
+        from app.platform.effective_defaults import apply_job_defaults
+
+        return apply_job_defaults(value)
 
 
 class ClaimJobRequest(BaseModel):
