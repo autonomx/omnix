@@ -109,6 +109,30 @@ async def execute_foreground_rpg_turn(
             span["alternate_publish_count"] = publisher.get("alternate_publish_count")
             span["zero_alternate_publishers"] = publisher.get("zero_alternate_publishers")
 
+        with rpg_pipeline_span("turn.narrative_production_certification") as span:
+            from app.rpg.narrative_engine.production_path import (
+                NarrativeProductionPathError,
+                enforce_production_narrative_result,
+            )
+
+            try:
+                result = enforce_production_narrative_result(result)
+            except NarrativeProductionPathError as exc:
+                span["passed"] = False
+                span["error"] = str(exc)
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "error": "rpg_narrative_production_certification_failed",
+                        "message": str(exc),
+                    },
+                ) from exc
+            certification = result.get("narrative_production_certification") if isinstance(result.get("narrative_production_certification"), dict) else {}
+            span["passed"] = certification.get("passed") is True
+            span["response_id"] = certification.get("response_id")
+            span["content_hash"] = certification.get("content_hash")
+            span["legacy_ownership_retired"] = result.get("legacy_presentation_ownership_retired") is True
+
         with rpg_pipeline_span("turn.narrative_shadow") as span:
             from app.rpg.narrative_engine.shadow import attach_shadow_report
 
@@ -144,6 +168,10 @@ async def execute_foreground_rpg_turn(
             if isinstance(result.get("narrative_publisher_telemetry"), dict):
                 payload["narrative_publisher"] = result.get("narrative_publisher")
                 payload["narrative_publisher_telemetry"] = dict(result["narrative_publisher_telemetry"])
+            if isinstance(result.get("narrative_production_certification"), dict):
+                payload["narrative_production_certification"] = dict(result["narrative_production_certification"])
+                payload["legacy_presentation_ownership_retired"] = True
+                payload["legacy_compatibility_fields_source"] = "canonical_projection_only"
             payload_timing = payload.get("timing") if isinstance(payload.get("timing"), dict) else {}
             payload_timing["pipeline_before_encode_ms"] = trace.elapsed_ms
             payload["timing"] = payload_timing
