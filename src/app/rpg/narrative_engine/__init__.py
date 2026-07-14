@@ -44,6 +44,7 @@ from .delivery import NarrativeDeliveryCoordinator
 from .evidence import (
     EvidenceAccessContext,
     EvidenceBroker,
+    EvidenceGrantSet,
     EvidenceQuery,
     EvidenceRetrievalResult,
     InMemoryEvidenceSource,
@@ -129,6 +130,7 @@ __all__ = [
     "DeterministicNarrativeWriter",
     "EvidenceAccessContext",
     "EvidenceBroker",
+    "EvidenceGrantSet",
     "EvidenceLifetime",
     "EvidenceQuery",
     "EvidenceRecord",
