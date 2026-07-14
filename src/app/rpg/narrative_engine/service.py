@@ -22,20 +22,21 @@ from .evidence import (
     RetrievalTrace,
 )
 from .planner import DeterministicBeatPlanner, NarrativePlan
-from .repository import (
-    InMemoryNarrativeResponseRepository,
-    NarrativeResponseRepository,
-)
+from .repository import NarrativeResponseRepository
 from .validation import ValidatedWriterResult, write_validate_repair
 from .writer import NarrativeWriter
 
 
 def _production_writer() -> NarrativeWriter:
-    """Resolve the configured provider outside the isolated package at runtime."""
-
     from app.rpg.narrative_provider import build_production_narrative_writer
 
     return build_production_narrative_writer()
+
+
+def _production_repository() -> NarrativeResponseRepository:
+    from app.rpg.narrative_repository import build_production_narrative_repository
+
+    return build_production_narrative_repository()
 
 
 @dataclass(frozen=True)
@@ -63,7 +64,7 @@ class NarrativeEngineService:
         self.evidence_broker = evidence_broker
         self.writer = writer or _production_writer()
         self.planner = planner or DeterministicBeatPlanner()
-        self.repository = repository or InMemoryNarrativeResponseRepository()
+        self.repository = repository or _production_repository()
         self.delivery = delivery or NarrativeDeliveryCoordinator()
 
     def generate(self, request: TurnPresentationRequest) -> NarrativeEngineResult:
