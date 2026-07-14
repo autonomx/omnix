@@ -43,6 +43,12 @@ from .profiles import NarrativeProfilePolicy, adaptive_profile, profile_policy
 from .projections import journal_projection, legacy_response_projection, transcript_projection, tts_projection
 from .renderer import CanonicalNarrativeRenderer, RenderedNarrative, deduplicate_blocks, render_plain_text
 from .scene_change import SceneChangeReport, detect_scene_changes
+from .validation import (
+    NarrativeRepairer,
+    NarrativeValidator,
+    ValidatedWriterResult,
+    write_validate_repair,
+)
 from .writer import (
     DeterministicNarrativeWriter,
     NarrativeWriter,
@@ -74,7 +80,9 @@ __all__ = [
     "NarrativeBlock",
     "NarrativePlan",
     "NarrativeProfilePolicy",
+    "NarrativeRepairer",
     "NarrativeSignificance",
+    "NarrativeValidator",
     "NarrativeWriter",
     "PresentationProfile",
     "RenderedNarrative",
@@ -83,6 +91,7 @@ __all__ = [
     "SceneChangeReport",
     "StructuredNarrativeWriter",
     "TurnPresentationRequest",
+    "ValidatedWriterResult",
     "ValidationIssue",
     "ValidationReport",
     "VisibilityClass",
@@ -103,5 +112,6 @@ __all__ = [
     "transcript_projection",
     "tts_projection",
     "vexira_fixture_evidence",
+    "write_validate_repair",
     "writer_payload",
 ]
