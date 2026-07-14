@@ -95,13 +95,27 @@ class PostgresNarrativeResponseRepositoryAdapter:
             return values
 
 
+def _runtime_postgresql_active() -> bool:
+    try:
+        from app.persistence.runtime_install import runtime_adapters_installed
+
+        return runtime_adapters_installed()
+    except Exception:
+        return False
+
+
 def _repository_mode(environ: dict[str, str] | None = None) -> str:
-    env = environ or os.environ
-    return str(
+    env = os.environ if environ is None else environ
+    explicit = str(
         env.get("OMNIX_RPG_NARRATIVE_REPOSITORY")
         or env.get("OMNIX_RPG_PERSISTENCE_MODE")
-        or "in_memory"
+        or ""
     ).strip().casefold()
+    if explicit:
+        return explicit
+    if environ is None and _runtime_postgresql_active():
+        return "postgresql"
+    return "in_memory"
 
 
 @lru_cache(maxsize=4)
@@ -117,7 +131,7 @@ def build_production_narrative_repository(
     *,
     environ: dict[str, str] | None = None,
 ) -> NarrativeResponseRepository:
-    """Resolve the live repository once; production modes select PostgreSQL."""
+    """Resolve one shared repository; installed production runtime implies PostgreSQL."""
 
     return _cached_repository(_repository_mode(environ))
 
