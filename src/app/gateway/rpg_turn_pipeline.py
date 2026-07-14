@@ -67,9 +67,12 @@ async def execute_foreground_rpg_turn(
             status_code = 404 if isinstance(result, dict) and result.get("error") == "session_not_found" else 400
             raise HTTPException(status_code=status_code, detail=result)
 
-        with rpg_pipeline_span("turn.narrative_scene_cutover") as span:
-            from app.rpg.session.narrative_engine_bridge import canonicalize_scene_turn_result
+        from app.rpg.session.narrative_engine_bridge import (
+            canonicalize_resolved_turn_result,
+            canonicalize_scene_turn_result,
+        )
 
+        with rpg_pipeline_span("turn.narrative_scene_cutover") as span:
             result = canonicalize_scene_turn_result(
                 result,
                 session_id=session_id,
@@ -79,6 +82,18 @@ async def execute_foreground_rpg_turn(
             span["published"] = bool(canonical)
             span["response_id"] = canonical.get("response_id")
             span["block_count"] = len(canonical.get("blocks") or [])
+
+        with rpg_pipeline_span("turn.narrative_resolved_cutover") as span:
+            result = canonicalize_resolved_turn_result(
+                result,
+                session_id=session_id,
+                player_input=command,
+            )
+            canonical = result.get("canonical_narrative_response") if isinstance(result.get("canonical_narrative_response"), dict) else {}
+            span["published"] = bool(canonical)
+            span["response_id"] = canonical.get("response_id")
+            span["block_count"] = len(canonical.get("blocks") or [])
+            span["source"] = result.get("canonical_narrative_source")
 
         with rpg_pipeline_span("turn.narrative_shadow") as span:
             from app.rpg.narrative_engine.shadow import attach_shadow_report
