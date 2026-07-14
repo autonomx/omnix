@@ -1,11 +1,9 @@
-"""One-way migration bridges from turn execution into the Narrative Engine."""
+"""One-way migration bridges from authoritative turns into the Narrative Engine."""
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
 from app.rpg.narrative_engine import (
-    BeatPurpose,
     DeliveryMode,
     EvidenceBroker,
     EvidenceRecord,
@@ -15,10 +13,8 @@ from app.rpg.narrative_engine import (
     PresentationProfile,
     SceneChange,
     TurnPresentationRequest,
-    WriterResult,
     legacy_response_projection,
 )
-from app.rpg.narrative_engine.writer import DeterministicNarrativeWriter
 from app.rpg.session.genesis.turn_grounding import (
     TurnGroundingPacket,
     build_turn_grounding_packet,
@@ -70,29 +66,27 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _npc_line(result: Mapping[str, Any]) -> tuple[str, str]:
+def _npc_identity(result: Mapping[str, Any]) -> tuple[str, str]:
     npc = _mapping(result.get("npc"))
     visible = _mapping(result.get("visible_response"))
     visible_npc = _mapping(visible.get("npc"))
-    speaker = _text(
+    resolved = _mapping(result.get("resolved_result") or result.get("result"))
+    raw_id = _text(
         npc.get("speaker_id")
-        or npc.get("speaker")
         or visible_npc.get("speaker_id")
+        or resolved.get("target_id")
+    )
+    name = _text(
+        npc.get("speaker")
         or visible_npc.get("speaker")
+        or resolved.get("target_name")
         or "NPC"
     )
-    line = _text(
-        npc.get("line")
-        or npc.get("text")
-        or visible_npc.get("line")
-        or visible_npc.get("text")
-    )
-    speaker_id = (
-        speaker
-        if speaker.startswith("npc:")
-        else f"npc:{speaker.casefold().replace(' ', '_')}"
-    )
-    return speaker_id, line
+    if raw_id and not raw_id.startswith("npc:"):
+        raw_id = f"npc:{raw_id.casefold().replace(' ', '_')}"
+    if not raw_id:
+        raw_id = f"npc:{name.casefold().replace(' ', '_')}"
+    return raw_id, name
 
 
 def _response_mode(result: Mapping[str, Any]) -> str:
@@ -106,6 +100,21 @@ def _response_mode(result: Mapping[str, Any]) -> str:
         or "action"
     ).casefold()
     return _MODE_ALIASES.get(mode, mode)
+
+
+def _profile(result: Mapping[str, Any], default: PresentationProfile) -> PresentationProfile:
+    session = _mapping(result.get("session"))
+    runtime = _mapping(session.get("runtime_state") or result.get("runtime_state"))
+    settings = _mapping(runtime.get("runtime_settings") or runtime.get("settings"))
+    value = _text(
+        result.get("presentation_profile")
+        or runtime.get("presentation_profile")
+        or settings.get("presentation_profile")
+    ).casefold()
+    try:
+        return PresentationProfile(value) if value else default
+    except ValueError:
+        return default
 
 
 def _scene_changes(
@@ -124,10 +133,7 @@ def _scene_changes(
     changes: list[SceneChange] = []
     scene_ref = (
         "runtime:scene:current"
-        if any(
-            row.evidence_id == "runtime:scene:current"
-            for row in evidence
-        )
+        if any(row.evidence_id == "runtime:scene:current" for row in evidence)
         else ""
     )
     if isinstance(raw_triggers, list | tuple):
@@ -142,8 +148,7 @@ def _scene_changes(
                         kind=kind,
                         importance=(
                             "major"
-                            if kind
-                            in {
+                            if kind in {
                                 "new_game",
                                 "location_changed",
                                 "region_changed",
@@ -184,40 +189,6 @@ def _scene_changes(
     return tuple(unique.values())
 
 
-class _GroundedDialogueWriter:
-    """Use the prior grounded line inside the ordered canonical contract."""
-
-    def __init__(self, line: str) -> None:
-        self.line = line
-        self._fallback = DeterministicNarrativeWriter()
-
-    def write(
-        self,
-        request: Any,
-        plan: Any,
-        evidence: Sequence[EvidenceRecord],
-    ) -> WriterResult:
-        base = self._fallback.write(request, plan, evidence)
-        blocks = tuple(
-            replace(
-                block,
-                text=self.line,
-                metadata={
-                    **dict(block.metadata),
-                    "source": "grounded_first_call",
-                },
-            )
-            if block.purpose is BeatPurpose.DIRECT_ANSWER and self.line
-            else block
-            for block in base.blocks
-        )
-        return replace(
-            base,
-            blocks=blocks,
-            source="narrative_engine_grounded_dialogue",
-        )
-
-
 def _publish(
     result: dict[str, Any],
     generated: Any,
@@ -233,6 +204,7 @@ def _publish(
     result["canonical_narrative_response"] = generated.response.as_dict()
     result["canonical_narrative_source"] = "unified_narrative_engine_v1"
     result["source"] = source
+    result["legacy_visible_prose_consumed"] = False
     result["narrative_grounding"] = {
         **dict(grounding.metadata),
         "footer": footer,
@@ -248,6 +220,7 @@ def _publish(
         nested.update(projection)
         nested["canonical_narrative_response"] = generated.response.as_dict()
         nested["canonical_narrative_source"] = "unified_narrative_engine_v1"
+        nested["legacy_visible_prose_consumed"] = False
         nested["narrative_grounding"] = result["narrative_grounding"]
         nested["narrative_grounding_footer"] = footer
         result["result"] = nested
@@ -267,14 +240,13 @@ def _request(
     significance: NarrativeSignificance = NarrativeSignificance.ROUTINE,
     target_actor_id: str | None = None,
 ) -> TurnPresentationRequest:
-    speaker_id, _ = _npc_line(result)
-    has_speaker = bool(_text(_mapping(result.get("npc")).get("speaker")))
+    speaker_id, _ = _npc_identity(result)
+    has_speaker = bool(target_actor_id or _text(_mapping(result.get("npc")).get("speaker")))
     turn_token = result.get("turn_id") or result.get("tick") or 0
     actor_ids = (speaker_id,) if has_speaker else ()
     return TurnPresentationRequest(
         request_id=f"{mode}:{session_id}:{turn_token}",
-        turn_id=_text(result.get("turn_id"))
-        or f"turn:{result.get('tick') or 0}",
+        turn_id=_text(result.get("turn_id")) or f"turn:{result.get('tick') or 0}",
         campaign_id=session_id,
         player_input=player_input,
         authoritative_outcome=_mapping(
@@ -299,8 +271,6 @@ def _request(
 def _generate(
     grounding: TurnGroundingPacket,
     request: TurnPresentationRequest,
-    *,
-    writer: Any | None = None,
 ) -> Any:
     return NarrativeEngineService(
         evidence_broker=EvidenceBroker(
@@ -310,8 +280,7 @@ def _generate(
                     source_id="turn_grounding",
                 )
             ]
-        ),
-        writer=writer,
+        )
     ).generate(request)
 
 
@@ -321,9 +290,13 @@ def canonicalize_direct_dialogue_result(
     session_id: str,
     player_input: str,
 ) -> dict[str, Any]:
+    """Generate all direct-dialogue prose through the canonical writer."""
+
     if not isinstance(result, dict) or result.get("ok") is not True:
         return result
-    speaker_id, line = _npc_line(result)
+    if isinstance(result.get("canonical_narrative_response"), dict):
+        return result
+    speaker_id, _ = _npc_identity(result)
     grounding = build_turn_grounding_packet(
         result,
         campaign_id=session_id,
@@ -338,18 +311,14 @@ def canonicalize_direct_dialogue_result(
         mode="dialogue",
         evidence=grounding.evidence,
         grounding_metadata=grounding.metadata,
-        profile=PresentationProfile.IMMERSIVE,
+        profile=_profile(result, PresentationProfile.FAST),
         target_actor_id=speaker_id,
     )
-    generated = _generate(
-        grounding,
-        request,
-        writer=_GroundedDialogueWriter(line),
-    )
+    generated = _generate(grounding, request)
     return _publish(
         result,
         generated,
-        "narrative_engine_direct_dialogue_v1",
+        "narrative_engine_direct_dialogue_v2",
         grounding,
     )
 
@@ -365,7 +334,7 @@ def canonicalize_scene_turn_result(
     if isinstance(result.get("canonical_narrative_response"), dict):
         return result
     mode = _response_mode(result)
-    speaker_id, _ = _npc_line(result)
+    speaker_id, _ = _npc_identity(result)
     grounding = build_turn_grounding_packet(
         result,
         campaign_id=session_id,
@@ -383,7 +352,7 @@ def canonicalize_scene_turn_result(
         evidence=grounding.evidence,
         grounding_metadata=grounding.metadata,
         changes=changes,
-        profile=PresentationProfile.IMMERSIVE,
+        profile=_profile(result, PresentationProfile.IMMERSIVE),
         significance=(
             NarrativeSignificance.NOTABLE
             if changes
@@ -404,7 +373,7 @@ def _resolved_significance(
     mode: str,
 ) -> NarrativeSignificance:
     resolved = _mapping(result.get("resolved_result") or result.get("result"))
-    if mode in {"major_beat"} or bool(
+    if mode == "major_beat" or bool(
         resolved.get("quest_completed")
         or resolved.get("defeated")
         or resolved.get("death")
@@ -434,22 +403,18 @@ def canonicalize_resolved_turn_result(
             player_input=player_input,
         )
     if mode in _DIALOGUE_MODES:
-        _, line = _npc_line(result)
-        if line:
-            return canonicalize_direct_dialogue_result(
-                result,
-                session_id=session_id,
-                player_input=player_input,
-            )
-        mode = "action"
-    speaker_id, _ = _npc_line(result)
+        return canonicalize_direct_dialogue_result(
+            result,
+            session_id=session_id,
+            player_input=player_input,
+        )
+    speaker_id, _ = _npc_identity(result)
     grounding = build_turn_grounding_packet(
         result,
         campaign_id=session_id,
         player_input=player_input,
         speaker_id=speaker_id if speaker_id != "npc:npc" else None,
     )
-    significance = _resolved_significance(result, mode)
     request = _request(
         result,
         session_id=session_id,
@@ -457,12 +422,13 @@ def canonicalize_resolved_turn_result(
         mode=mode,
         evidence=grounding.evidence,
         grounding_metadata=grounding.metadata,
-        profile=(
-            PresentationProfile.CINEMATIC
-            if significance is NarrativeSignificance.MAJOR
-            else PresentationProfile.IMMERSIVE
+        profile=_profile(result, PresentationProfile.IMMERSIVE),
+        significance=_resolved_significance(result, mode),
+        target_actor_id=(
+            speaker_id
+            if _text(_mapping(result.get("npc")).get("speaker"))
+            else None
         ),
-        significance=significance,
     )
     generated = _generate(grounding, request)
     return _publish(
