@@ -104,8 +104,19 @@ class ReferenceSafeWorldForgeGenerator:
                 if entity_id:
                     known[entity_id] = entity
         additions: dict[str, dict[str, Any]] = {}
+        normalized_npcs: list[dict[str, Any]] = []
+        mobility_normalized: list[str] = []
         for npc in topic.entities:
-            for faction_id in npc.get("faction_ids") or ():
+            row = dict(npc)
+            npc_id = str(row.get("id") or "")
+            location_id = str(row.get("location_id") or "").strip()
+            if not location_id and not str(row.get("mobility_status") or "").strip():
+                row["mobility_status"] = "itinerant"
+                row["reference_normalized"] = True
+                if npc_id:
+                    mobility_normalized.append(npc_id)
+            normalized_npcs.append(row)
+            for faction_id in row.get("faction_ids") or ():
                 faction_id = str(faction_id)
                 if faction_id and faction_id not in known:
                     additions[faction_id] = {
@@ -120,7 +131,6 @@ class ReferenceSafeWorldForgeGenerator:
                         "dossier_status": "complete",
                         "generated_for_reference_completeness": True,
                     }
-            location_id = str(npc.get("location_id") or "")
             if location_id and location_id not in known:
                 additions[location_id] = {
                     "id": location_id,
@@ -143,7 +153,7 @@ class ReferenceSafeWorldForgeGenerator:
                     "dossier_status": "complete",
                     "generated_for_reference_completeness": True,
                 }
-        if not additions:
+        if not additions and not mobility_normalized:
             return topic
         facts = [dict(row) for row in topic.facts]
         for entity_id, entity in sorted(additions.items()):
@@ -161,10 +171,11 @@ class ReferenceSafeWorldForgeGenerator:
             )
         return replace(
             topic,
-            entities=tuple([*topic.entities, *additions.values()]),
+            entities=tuple([*normalized_npcs, *additions.values()]),
             facts=tuple(facts),
             provenance={
                 **dict(topic.provenance),
                 "reference_completeness_entities": sorted(additions),
+                "mobility_normalized_npc_ids": sorted(mobility_normalized),
             },
         )
