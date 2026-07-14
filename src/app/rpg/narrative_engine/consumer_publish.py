@@ -1,0 +1,89 @@
+"""Publish all downstream consumer views from one canonical response."""
+from __future__ import annotations
+
+from typing import Any, Mapping
+
+from .projections import canonical_consumer_bundle
+from .serialization import canonical_response_from_dict
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _patch_latest_interaction(
+    session: dict[str, Any],
+    *,
+    response_id: str,
+    turn_id: str,
+    bundle: Mapping[str, Any],
+    canonical: Mapping[str, Any],
+) -> bool:
+    runtime = _mapping(session.get("runtime_state"))
+    interactions = runtime.get("recent_interactions")
+    if not isinstance(interactions, list) or not interactions:
+        return False
+    selected: dict[str, Any] | None = None
+    for value in reversed(interactions):
+        row = value if isinstance(value, dict) else None
+        if row is None:
+            continue
+        row_turn = str(row.get("turn_id") or "")
+        row_response = str(row.get("narrative_response_id") or "")
+        if row_turn == turn_id or row_response == response_id:
+            selected = row
+            break
+    if selected is None:
+        selected = interactions[-1] if isinstance(interactions[-1], dict) else None
+    if selected is None:
+        return False
+    selected["narrative_response_id"] = response_id
+    selected["narrative_content_hash"] = str(bundle.get("content_hash") or "")
+    selected["canonical_narrative_response"] = dict(canonical)
+    selected["narrative_projections"] = dict(bundle)
+    selected["visible_response"] = dict(bundle.get("visible_response") or {})
+    selected["narration"] = str(_mapping(bundle.get("visible_response")).get("narration") or "")
+    runtime["recent_interactions"] = interactions
+    session["runtime_state"] = runtime
+    return True
+
+
+def attach_canonical_consumer_bundle(result: dict[str, Any]) -> dict[str, Any]:
+    """Attach and persist-ready patch canonical projections without regenerating prose."""
+    if not isinstance(result, dict):
+        return result
+    canonical_raw = result.get("canonical_narrative_response")
+    if not isinstance(canonical_raw, Mapping):
+        return result
+    response = canonical_response_from_dict(canonical_raw)
+    canonical = response.as_dict()
+    bundle = canonical_consumer_bundle(response)
+    visible = dict(bundle["visible_response"])
+    result["canonical_narrative_response"] = canonical
+    result["narrative_projections"] = bundle
+    result["visible_response"] = visible
+    result["narration"] = str(visible.get("narration") or "")
+    result["final_narration"] = result["narration"]
+    result["summary"] = str(visible.get("plain_text") or "")
+    result["narrative_consumer_bundle_attached"] = True
+
+    nested = _mapping(result.get("result"))
+    if nested:
+        nested["canonical_narrative_response"] = canonical
+        nested["narrative_projections"] = bundle
+        nested["visible_response"] = visible
+        nested["narration"] = result["narration"]
+        nested["summary"] = result["summary"]
+        result["result"] = nested
+
+    session = result.get("session")
+    if isinstance(session, dict):
+        patched = _patch_latest_interaction(
+            session,
+            response_id=response.response_id,
+            turn_id=response.turn_id,
+            bundle=bundle,
+            canonical=canonical,
+        )
+        result["narrative_session_projection_patched"] = patched
+    return result
