@@ -62,6 +62,16 @@ async def execute_foreground_rpg_turn(
             status_code = 404 if isinstance(result, dict) and result.get("error") == "session_not_found" else 400
             raise HTTPException(status_code=status_code, detail=result)
 
+        with rpg_pipeline_span("turn.narrative_shadow") as span:
+            from app.rpg.narrative_engine.shadow import attach_shadow_report
+
+            result = attach_shadow_report(result, session_id=session_id, player_input=command)
+            shadow = result.get("narrative_engine_shadow") if isinstance(result.get("narrative_engine_shadow"), dict) else {}
+            span["selected"] = shadow.get("selected") is True
+            span["ok"] = shadow.get("ok") is True
+            span["latency_ms"] = shadow.get("latency_ms")
+            span["beat_count"] = len(shadow.get("beat_purposes") or [])
+
         with rpg_pipeline_span("turn.session_persist") as span:
             session = _persisted_turn_session(result, session_id)
             span["interaction_persisted"] = result.get("interaction_persisted") is True
@@ -78,6 +88,7 @@ async def execute_foreground_rpg_turn(
                 session=session,
                 trace_id=trace.trace_id,
             )
+            payload["narrative_engine_shadow"] = dict(result.get("narrative_engine_shadow") or {})
             payload_timing = payload.get("timing") if isinstance(payload.get("timing"), dict) else {}
             payload_timing["pipeline_before_encode_ms"] = trace.elapsed_ms
             payload["timing"] = payload_timing
