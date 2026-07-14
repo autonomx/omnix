@@ -105,6 +105,10 @@ class CreateJobRequest(BaseModel):
         defaulted_modules = {"storyteller", "podcast", "voice", "voice-cloning", "stt", "image-generation"}
         if module not in defaulted_modules and resource_class != ResourceClass.GPU_LLM.value:
             return value
+        if module == "voice-cloning":
+            from app.platform.voice_cloning_defaults import apply_voice_cloning_defaults
+
+            return apply_voice_cloning_defaults(value)
 
         from app.platform.effective_defaults import apply_job_defaults
 
