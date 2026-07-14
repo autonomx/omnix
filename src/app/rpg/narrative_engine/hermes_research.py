@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Mapping, Protocol
 
 from .authority import AuthorityClass, EvidenceLifetime, VisibilityClass
 from .contracts import EvidenceRecord, stable_hash
@@ -14,6 +14,10 @@ _ALLOWED_AUTHORITIES = {
     AuthorityClass.RUMOR,
     AuthorityClass.DISPUTED_CLAIM,
     AuthorityClass.GENERATED_PROPOSAL,
+    AuthorityClass.OBJECTIVE_CANON,
+    AuthorityClass.NPC_BELIEF,
+    AuthorityClass.FACTION_DOCTRINE,
+    AuthorityClass.SECRET_CANON,
 }
 
 
@@ -84,6 +88,8 @@ class HermesResearchFinding:
     entity_refs: tuple[str, ...] = ()
     confidence: float = 0.5
     disputed: bool = False
+    visibility: VisibilityClass = VisibilityClass.PLAYER_KNOWN
+    known_by: tuple[str, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -95,6 +101,8 @@ class HermesResearchFinding:
             "entity_refs": list(self.entity_refs),
             "confidence": self.confidence,
             "disputed": self.disputed,
+            "visibility": self.visibility.value,
+            "known_by": list(self.known_by),
             "metadata": dict(self.metadata),
         }
 
@@ -139,9 +147,12 @@ class HermesResearchResult:
                 evidence_id=f"hermes:{self.research_id}:{finding.finding_id}",
                 content=finding.content,
                 authority=finding.authority,
-                visibility=VisibilityClass.PLAYER_KNOWN,
+                visibility=finding.visibility,
+                known_by=finding.known_by,
                 entity_refs=finding.entity_refs,
-                source_revision=0,
+                source_revision=int(
+                    finding.metadata.get("canon_revision") or 0
+                ),
                 confidence=finding.confidence,
                 lifetime=EvidenceLifetime.CAMPAIGN,
                 metadata={
@@ -158,7 +169,11 @@ class HermesResearchResult:
 
 
 class HermesNarrativeResearcher(Protocol):
-    def research(self, request: HermesResearchRequest, policy: HermesResearchPolicy) -> Mapping[str, Any]: ...
+    def research(
+        self,
+        request: HermesResearchRequest,
+        policy: HermesResearchPolicy,
+    ) -> Mapping[str, Any]: ...
 
 
 def _text(value: Any, limit: int) -> str:
@@ -168,17 +183,40 @@ def _text(value: Any, limit: int) -> str:
 def _strings(value: Any, limit: int = 16) -> tuple[str, ...]:
     if not isinstance(value, list | tuple | set):
         return ()
-    return tuple(str(item).strip() for item in list(value)[:limit] if str(item).strip())
+    return tuple(
+        str(item).strip()
+        for item in list(value)[:limit]
+        if str(item).strip()
+    )
 
 
 def _authority(value: Any, disputed: bool) -> AuthorityClass | None:
     if disputed:
         return AuthorityClass.DISPUTED_CLAIM
     try:
-        selected = AuthorityClass(str(value or AuthorityClass.PUBLIC_KNOWLEDGE.value))
+        selected = AuthorityClass(
+            str(value or AuthorityClass.PUBLIC_KNOWLEDGE.value)
+        )
     except ValueError:
         return None
     return selected if selected in _ALLOWED_AUTHORITIES else None
+
+
+def _visibility(value: Any) -> VisibilityClass | None:
+    aliases = {
+        "public": VisibilityClass.PUBLIC,
+        "player_known": VisibilityClass.PLAYER_KNOWN,
+        "learned": VisibilityClass.PLAYER_KNOWN,
+        "partially_known": VisibilityClass.PLAYER_KNOWN,
+        "disputed": VisibilityClass.PLAYER_KNOWN,
+        "npc_private": VisibilityClass.NPC_PRIVATE,
+        "faction_private": VisibilityClass.FACTION_PRIVATE,
+        "narrator_only": VisibilityClass.NARRATOR_ONLY,
+        "hidden_from_player": VisibilityClass.GAME_MASTER_ONLY,
+        "game_master_canon": VisibilityClass.GAME_MASTER_ONLY,
+        "game_master_only": VisibilityClass.GAME_MASTER_ONLY,
+    }
+    return aliases.get(str(value or "player_known").strip().casefold())
 
 
 def normalize_hermes_research(
@@ -189,20 +227,42 @@ def normalize_hermes_research(
 ) -> HermesResearchResult:
     bounded = (policy or HermesResearchPolicy()).bounded()
     query = _text(request.query, bounded.max_query_chars)
-    source_rows = raw.get("sources") if isinstance(raw.get("sources"), list | tuple) else ()
-    finding_rows = raw.get("findings") if isinstance(raw.get("findings"), list | tuple) else ()
+    source_rows = (
+        raw.get("sources")
+        if isinstance(raw.get("sources"), list | tuple)
+        else ()
+    )
+    finding_rows = (
+        raw.get("findings")
+        if isinstance(raw.get("findings"), list | tuple)
+        else ()
+    )
     sources: list[HermesResearchSource] = []
     source_ids: set[str] = set()
     char_count = 0
-    truncated = len(source_rows) > bounded.max_sources or len(finding_rows) > bounded.max_findings
+    truncated = (
+        len(source_rows) > bounded.max_sources
+        or len(finding_rows) > bounded.max_findings
+    )
 
     for index, row in enumerate(source_rows[: bounded.max_sources], start=1):
         if not isinstance(row, Mapping):
             continue
-        source_id = _text(row.get("source_id") or row.get("id") or f"source:{index}", 160)
+        source_id = _text(
+            row.get("source_id") or row.get("id") or f"source:{index}",
+            160,
+        )
         title = _text(row.get("title"), 300)
-        citation = _text(row.get("citation") or row.get("url") or row.get("reference"), 1_000)
-        excerpt = _text(row.get("excerpt") or row.get("summary"), bounded.max_excerpt_chars)
+        citation = _text(
+            row.get("citation")
+            or row.get("url")
+            or row.get("reference"),
+            1_000,
+        )
+        excerpt = _text(
+            row.get("excerpt") or row.get("summary"),
+            bounded.max_excerpt_chars,
+        )
         if not source_id or not title or not citation:
             continue
         projected = len(title) + len(citation) + len(excerpt)
@@ -217,7 +277,10 @@ def normalize_hermes_research(
                 title=title,
                 citation=citation,
                 excerpt=excerpt,
-                published_at=_text(row.get("published_at") or row.get("date"), 80),
+                published_at=_text(
+                    row.get("published_at") or row.get("date"),
+                    80,
+                ),
                 metadata=dict(row.get("metadata") or {}),
             )
         )
@@ -225,15 +288,29 @@ def normalize_hermes_research(
     findings: list[HermesResearchFinding] = []
     rejected: list[Mapping[str, Any]] = []
     seen_findings: set[str] = set()
-    for index, row in enumerate(finding_rows[: bounded.max_findings], start=1):
+    for index, row in enumerate(
+        finding_rows[: bounded.max_findings],
+        start=1,
+    ):
         if not isinstance(row, Mapping):
             rejected.append({"index": index, "reason": "not_mapping"})
             continue
-        finding_id = _text(row.get("finding_id") or row.get("id") or f"finding:{index}", 160)
-        content = _text(row.get("content") or row.get("statement") or row.get("summary"), 2_000)
-        source_refs = _strings(row.get("source_refs") or row.get("sources"))
+        finding_id = _text(
+            row.get("finding_id") or row.get("id") or f"finding:{index}",
+            160,
+        )
+        content = _text(
+            row.get("content")
+            or row.get("statement")
+            or row.get("summary"),
+            2_000,
+        )
+        source_refs = _strings(
+            row.get("source_refs") or row.get("sources")
+        )
         disputed = bool(row.get("disputed"))
         authority = _authority(row.get("authority"), disputed)
+        visibility = _visibility(row.get("visibility"))
         reason = ""
         if not finding_id or finding_id in seen_findings:
             reason = "missing_or_duplicate_id"
@@ -243,11 +320,15 @@ def normalize_hermes_research(
             reason = "missing_or_unknown_source"
         elif authority is None:
             reason = "forbidden_authority"
+        elif visibility is None:
+            reason = "forbidden_visibility"
         elif char_count + len(content) > bounded.max_total_chars:
             truncated = True
             reason = "character_budget"
         if reason:
-            rejected.append({"finding_id": finding_id, "reason": reason})
+            rejected.append(
+                {"finding_id": finding_id, "reason": reason}
+            )
             continue
         char_count += len(content)
         seen_findings.add(finding_id)
@@ -257,9 +338,16 @@ def normalize_hermes_research(
                 content=content,
                 source_refs=source_refs,
                 authority=authority,
-                entity_refs=_strings(row.get("entity_refs") or row.get("entities")),
-                confidence=max(0.0, min(float(row.get("confidence") or 0.5), 1.0)),
+                entity_refs=_strings(
+                    row.get("entity_refs") or row.get("entities")
+                ),
+                confidence=max(
+                    0.0,
+                    min(float(row.get("confidence") or 0.5), 1.0),
+                ),
                 disputed=disputed,
+                visibility=visibility,
+                known_by=_strings(row.get("known_by")),
                 metadata=dict(row.get("metadata") or {}),
             )
         )
@@ -301,7 +389,17 @@ def run_bounded_hermes_research(
         purpose=_text(request.purpose, 120) or "narrative_grounding",
         metadata=dict(request.metadata),
     )
-    if not safe_request.research_id or not safe_request.campaign_id or not safe_request.query:
-        raise ValueError("Hermes narrative research requires research_id, campaign_id, and query")
+    if (
+        not safe_request.research_id
+        or not safe_request.campaign_id
+        or not safe_request.query
+    ):
+        raise ValueError(
+            "Hermes narrative research requires research_id, campaign_id, and query"
+        )
     raw = researcher.research(safe_request, bounded)
-    return normalize_hermes_research(safe_request, raw, policy=bounded)
+    return normalize_hermes_research(
+        safe_request,
+        raw,
+        policy=bounded,
+    )
