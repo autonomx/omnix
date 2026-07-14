@@ -1,4 +1,4 @@
-"""Reference-safe deterministic World Forge generator."""
+"""Reference-safe adapter shared by deterministic and live World Forge generation."""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -6,11 +6,17 @@ from typing import Any, Mapping
 
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_deterministic import DeterministicWorldForgeGenerator
-from .world_forge_generation import GeneratedTopic
+from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 
 
-class ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator):
+class ReferenceSafeWorldForgeGenerator:
     """Ensure generated dossier references resolve at every depth profile."""
+
+    def __init__(
+        self,
+        generator: WorldForgeTopicGenerator | None = None,
+    ) -> None:
+        self.generator = generator or DeterministicWorldForgeGenerator()
 
     def generate(
         self,
@@ -20,7 +26,7 @@ class ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator):
         campaign_context: Mapping[str, Any],
         dependency_topics: Mapping[str, GeneratedTopic],
     ) -> GeneratedTopic:
-        topic = super().generate(
+        topic = self.generator.generate(
             node,
             seed=seed,
             campaign_context=campaign_context,
@@ -45,7 +51,11 @@ class ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator):
         }
         if not valid_regions:
             return topic
-        preferred = "region:aertos" if "region:aertos" in valid_regions else sorted(valid_regions)[0]
+        preferred = (
+            "region:aertos"
+            if "region:aertos" in valid_regions
+            else sorted(valid_regions)[0]
+        )
         replacements: dict[str, str] = {}
         entities: list[dict[str, Any]] = []
         for entity in topic.entities:
@@ -100,7 +110,9 @@ class ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator):
                 if faction_id and faction_id not in known:
                     additions[faction_id] = {
                         "id": faction_id,
-                        "name": faction_id.split(":", 1)[-1].replace("_", " ").title(),
+                        "name": faction_id.split(":", 1)[-1]
+                        .replace("_", " ")
+                        .title(),
                         "kind": "faction",
                         "values": ["institutional continuity"],
                         "goals": ["maintain influence over exceptional heroes"],
@@ -112,7 +124,9 @@ class ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator):
             if location_id and location_id not in known:
                 additions[location_id] = {
                     "id": location_id,
-                    "name": location_id.split(":", 1)[-1].replace("_", " ").title(),
+                    "name": location_id.split(":", 1)[-1]
+                    .replace("_", " ")
+                    .title(),
                     "kind": "location",
                     "region_id": next(
                         (
@@ -122,7 +136,9 @@ class ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator):
                         ),
                         "",
                     ),
-                    "sensory_profile": "A campaign location compiled to support an opening actor dossier.",
+                    "sensory_profile": (
+                        "A campaign location compiled to support an opening actor dossier."
+                    ),
                     "visibility": "partially_known",
                     "dossier_status": "complete",
                     "generated_for_reference_completeness": True,
@@ -137,7 +153,9 @@ class ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator):
                     "content": f"{entity['name']} is established campaign canon.",
                     "authority": "generated_proposal",
                     "approved_authority": "objective_canon",
-                    "visibility": str(entity.get("visibility") or "game_master_canon"),
+                    "visibility": str(
+                        entity.get("visibility") or "game_master_canon"
+                    ),
                     "entity_refs": [entity_id],
                 }
             )
