@@ -14,6 +14,7 @@ from .contracts import (
     ValidationReport,
 )
 from .planner import NarrativePlan
+from .renderer import duplicate_block_pairs
 from .writer import DeterministicNarrativeWriter, NarrativeWriter, WriterResult
 
 _TRUNCATION_MARKERS = ("...[truncated]", "[truncated]", "<truncated>")
@@ -106,8 +107,22 @@ class NarrativeValidator:
             scripts = _scripts(text)
             if "latin" in scripts and len(scripts) > 1 and not block.metadata.get("allow_multiscript"):
                 issues.append(ValidationIssue("mixed_script_corruption", f"Unexpected mixed scripts: {sorted(scripts)}", block.block_id))
-            if block.kind is BeatKind.DIALOGUE and text.count("\"") % 2 == 1:
+            if block.kind is BeatKind.DIALOGUE and text.count('"') % 2 == 1:
                 issues.append(ValidationIssue("unbalanced_quote", "Dialogue contains an unbalanced quote.", block.block_id))
+
+        for left_id, right_id in duplicate_block_pairs(blocks):
+            if any(
+                issue.code == "duplicate_text" and issue.block_id == right_id
+                for issue in issues
+            ):
+                continue
+            issues.append(
+                ValidationIssue(
+                    "duplicate_event",
+                    f"Blocks {left_id} and {right_id} appear to repeat the same visible event.",
+                    right_id,
+                )
+            )
 
         required_beats = {beat.beat_id for beat in plan.beats if beat.required}
         missing = required_beats.difference(seen_beats)
