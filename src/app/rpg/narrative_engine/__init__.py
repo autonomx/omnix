@@ -47,6 +47,7 @@ from .evidence import (
     EvidenceBroker,
     EvidenceGrantSet,
     EvidenceQuery,
+    EvidenceRecord,
     EvidenceRetrievalResult,
     InMemoryEvidenceSource,
     RetrievalTrace,
@@ -62,6 +63,7 @@ from .hermes_research import (
     normalize_hermes_research,
     run_bounded_hermes_research,
 )
+from .idempotent_service import NarrativeEngineService, NarrativeTurnIdentityConflict
 from .planner import DeterministicBeatPlanner, NarrativePlan
 from .production_path import (
     NarrativeProductionCertification,
@@ -98,7 +100,7 @@ from .repository import (
 )
 from .scene_change import SceneChangeReport, detect_scene_changes
 from .serialization import canonical_response_from_dict
-from .service import NarrativeEngineResult, NarrativeEngineService
+from .service import NarrativeEngineResult
 from .validation import NarrativeRepairer, NarrativeValidator, ValidatedWriterResult, write_validate_repair
 from .world_forge import (
     WorldForgeAudit,
@@ -163,6 +165,7 @@ __all__ = [
     "NarrativeResponseConflict",
     "NarrativeResponseRepository",
     "NarrativeSignificance",
+    "NarrativeTurnIdentityConflict",
     "NarrativeValidator",
     "NarrativeWriter",
     "PresentationProfile",
