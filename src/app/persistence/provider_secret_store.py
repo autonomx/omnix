@@ -118,11 +118,33 @@ def load_provider_secrets() -> dict[str, Any]:
     return {"api_keys": {provider: api_keys.get(provider, "") for provider in _PROVIDERS}}
 
 
+def _environment_owns_all_requested_keys(incoming: dict[str, Any]) -> bool:
+    requested = [
+        provider
+        for provider in _PROVIDERS
+        if str(incoming.get(provider) or "").strip()
+    ]
+    return bool(requested) and all(
+        os.environ.get(_ENVIRONMENT_KEYS[provider], "").strip()
+        for provider in requested
+    )
+
+
+def _write_environment_owned_marker() -> None:
+    path = provider_secret_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_bytes(b"")
+
+
 def save_provider_secrets(payload: dict[str, Any]) -> None:
-    if sys.platform != "win32":
-        raise LegacyPersistenceRetired("provider-key editing requires an operating-system credential store")
     incoming = payload.get("api_keys") if isinstance(payload, dict) else None
     incoming = incoming if isinstance(incoming, dict) else {}
+    if sys.platform != "win32":
+        if _environment_owns_all_requested_keys(incoming):
+            _write_environment_owned_marker()
+            return
+        raise LegacyPersistenceRetired("provider-key editing requires an operating-system credential store")
     api_keys = _stored_api_keys()
     for provider, environment_key in _ENVIRONMENT_KEYS.items():
         if os.environ.get(environment_key, "").strip():
