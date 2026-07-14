@@ -20,8 +20,8 @@ _LEGACY_PODCAST_DEFAULTS: dict[str, Any] = {
     "generation_style": "automatic",
 }
 _PERSONALITY_PROMPTS = {
-    "omnix-default": _LEGACY_CHAT_DEFAULT_PROMPT,
-    "default": _LEGACY_CHAT_DEFAULT_PROMPT,
+    "omnix-default": "",
+    "default": "",
     "concise": "You are Omnix Assistant. Be direct, concise, and action-oriented. Prefer short answers unless detail is requested.",
     "coach": "You are Omnix Assistant. Be warm, encouraging, and practical. Ask at most one clarifying question when needed.",
     "technical": "You are Omnix Assistant. Be precise, technical, and implementation-focused. Include concrete steps and caveats.",
@@ -85,8 +85,8 @@ def effective_llm_route(profile: SettingsProfile, module: str, task: str) -> tup
 def assistant_default_prompt(profile: SettingsProfile) -> str:
     assistant = profile.assistant
     if assistant.personality_id == "custom":
-        return assistant.custom_personality.strip() or _LEGACY_CHAT_DEFAULT_PROMPT
-    return _PERSONALITY_PROMPTS.get(assistant.personality_id, _LEGACY_CHAT_DEFAULT_PROMPT)
+        return assistant.custom_personality.strip()
+    return _PERSONALITY_PROMPTS.get(assistant.personality_id, "")
 
 
 def apply_chat_session_defaults(value: Any) -> Any:
@@ -100,8 +100,9 @@ def apply_chat_session_defaults(value: Any) -> Any:
 
     if request.get("interaction_mode", "system") == "system":
         current_prompt = _text(request.get("system_prompt"))
-        if not current_prompt or current_prompt == _LEGACY_CHAT_DEFAULT_PROMPT:
-            request["system_prompt"] = assistant_default_prompt(profile)
+        prompt = assistant_default_prompt(profile)
+        if prompt and (not current_prompt or current_prompt == _LEGACY_CHAT_DEFAULT_PROMPT):
+            request["system_prompt"] = prompt
         _set_if_missing(request, "voice_asset_id", profile.assistant.voice_id)
     return request
 
