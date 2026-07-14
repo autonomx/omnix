@@ -14,6 +14,11 @@ from .authority import (
     PresentationProfile,
     VisibilityClass,
 )
+from .campaign_bible import (
+    CampaignBibleEvidenceSource,
+    CampaignBibleSnapshot,
+    campaign_bible_evidence,
+)
 from .contracts import (
     CanonicalNarrativeResponse,
     DeliveryMetadata,
@@ -64,6 +69,8 @@ __all__ = [
     "AuthorityClass",
     "BeatKind",
     "BeatPurpose",
+    "CampaignBibleEvidenceSource",
+    "CampaignBibleSnapshot",
     "CanonicalNarrativeRenderer",
     "CanonicalNarrativeResponse",
     "DeliveryMetadata",
@@ -106,6 +113,7 @@ __all__ = [
     "WriterResult",
     "adaptive_profile",
     "bran_fixture_evidence",
+    "campaign_bible_evidence",
     "canonical_json",
     "deduplicate_blocks",
     "detect_scene_changes",
