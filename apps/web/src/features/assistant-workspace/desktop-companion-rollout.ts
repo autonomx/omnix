@@ -9,6 +9,15 @@ export type DesktopCompanionRolloutStatus = {
   evidence_evaluation_ids: string[];
 };
 
+export type DesktopCompanionRolloutEvidenceIdentity = {
+  exactCommitSha: string;
+  observationSchemaVersion?: number;
+  attentionPolicyVersion?: number;
+  visionProvider?: string | null;
+  visionModelHash?: string | null;
+  remoteProvider?: boolean;
+};
+
 export type EffectiveDesktopCompanionSettings = {
   requestedStage: DesktopCompanionRolloutStage;
   enabled: boolean;
@@ -48,9 +57,18 @@ export function effectiveDesktopCompanionSettings(value: AssistantSettings): Eff
 
 export async function fetchDesktopCompanionRolloutStatus(
   stage: DesktopCompanionRolloutStage,
+  identity?: DesktopCompanionRolloutEvidenceIdentity,
   signal?: AbortSignal,
 ): Promise<DesktopCompanionRolloutStatus> {
   const params = new URLSearchParams({ requested_stage: stage });
+  if (identity) {
+    params.set('exact_commit_sha', identity.exactCommitSha);
+    params.set('observation_schema_version', String(identity.observationSchemaVersion ?? 1));
+    params.set('attention_policy_version', String(identity.attentionPolicyVersion ?? 1));
+    if (identity.visionProvider) params.set('vision_provider', identity.visionProvider);
+    if (identity.visionModelHash) params.set('vision_model_hash', identity.visionModelHash);
+    params.set('remote_provider', String(identity.remoteProvider === true));
+  }
   const response = await fetch(`/api/desktop-companion/rollout-status?${params}`, { signal });
   if (!response.ok) throw new Error(`Desktop Companion rollout status failed with status ${response.status}.`);
   return response.json() as Promise<DesktopCompanionRolloutStatus>;
