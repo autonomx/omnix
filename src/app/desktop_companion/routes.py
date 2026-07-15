@@ -14,7 +14,6 @@ from .evaluation import (
     DesktopCompanionReleaseGateReport,
     DesktopCompanionRolloutStatus,
     RolloutStage,
-    build_desktop_companion_release_gate,
     default_desktop_companion_evaluation_store,
     resolve_desktop_companion_rollout,
 )
@@ -23,6 +22,10 @@ from .preflight import (
     DesktopCompanionPreflightResult,
     DesktopCompanionPreflightService,
     default_desktop_companion_preflight_service,
+)
+from .release_gate import (
+    DesktopCompanionEvidencePartition,
+    build_partitioned_desktop_companion_release_gate,
 )
 from .runtime import (
     DesktopCompanionObserveRequest,
@@ -136,10 +139,27 @@ def register_desktop_companion_routes(
         include_in_schema=False,
     )
     async def desktop_companion_release_gate(
+        exact_commit_sha: str | None = Query(default=None, min_length=7, max_length=64),
+        observation_schema_version: int = Query(default=1, ge=1),
+        attention_policy_version: int = Query(default=1, ge=1),
+        vision_provider: str | None = Query(default=None, max_length=80),
+        vision_model_hash: str | None = Query(default=None, max_length=128),
+        remote_provider: bool | None = Query(default=None),
         limit: int = Query(default=1_000, ge=1, le=5_000),
     ) -> DesktopCompanionReleaseGateReport:
-        records = evaluation_store_factory().list(limit=limit)
-        return build_desktop_companion_release_gate(records)
+        identity = build_identity_factory()
+        partition = DesktopCompanionEvidencePartition(
+            exact_commit_sha=exact_commit_sha or identity.exact_commit_sha,
+            observation_schema_version=observation_schema_version,
+            attention_policy_version=attention_policy_version,
+            vision_provider=vision_provider,
+            vision_model_hash=vision_model_hash,
+            remote_provider=remote_provider,
+        )
+        return build_partitioned_desktop_companion_release_gate(
+            evaluation_store_factory().list(limit=limit),
+            partition,
+        )
 
     @app.get(
         "/api/desktop-companion/rollout-status",
@@ -149,10 +169,27 @@ def register_desktop_companion_routes(
     )
     async def desktop_companion_rollout_status(
         requested_stage: RolloutStage = Query(default="disabled"),
+        exact_commit_sha: str | None = Query(default=None, min_length=7, max_length=64),
+        observation_schema_version: int = Query(default=1, ge=1),
+        attention_policy_version: int = Query(default=1, ge=1),
+        vision_provider: str | None = Query(default=None, max_length=80),
+        vision_model_hash: str | None = Query(default=None, max_length=128),
+        remote_provider: bool | None = Query(default=None),
         limit: int = Query(default=1_000, ge=1, le=5_000),
     ) -> DesktopCompanionRolloutStatus:
-        records = evaluation_store_factory().list(limit=limit)
-        report = build_desktop_companion_release_gate(records)
+        identity = build_identity_factory()
+        partition = DesktopCompanionEvidencePartition(
+            exact_commit_sha=exact_commit_sha or identity.exact_commit_sha,
+            observation_schema_version=observation_schema_version,
+            attention_policy_version=attention_policy_version,
+            vision_provider=vision_provider,
+            vision_model_hash=vision_model_hash,
+            remote_provider=remote_provider,
+        )
+        report = build_partitioned_desktop_companion_release_gate(
+            evaluation_store_factory().list(limit=limit),
+            partition,
+        )
         return resolve_desktop_companion_rollout(requested_stage, report)
 
 
