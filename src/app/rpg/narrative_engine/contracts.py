@@ -121,6 +121,24 @@ class NarrativeBeat:
 
 
 @dataclass(frozen=True)
+class ClaimAssertion:
+    """One normalized factual assertion made by a canonical block."""
+
+    claim_id: str
+    text: str
+    authority: AuthorityClass
+    evidence_refs: tuple[str, ...]
+    scope: str = "player"
+    subject_id: str | None = None
+    predicate: str = ""
+    value: Any = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return _jsonable(self)
+
+
+@dataclass(frozen=True)
 class NarrativeBlock:
     block_id: str
     beat_id: str
@@ -131,6 +149,7 @@ class NarrativeBlock:
     speaker_id: str | None = None
     evidence_refs: tuple[str, ...] = ()
     claim_refs: tuple[str, ...] = ()
+    claims: tuple[ClaimAssertion, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -194,7 +213,9 @@ class CanonicalNarrativeResponse:
     schema_version: str = NARRATIVE_RESPONSE_VERSION
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
-    def content_payload(self) -> dict[str, Any]:
+    def semantic_content_payload(self) -> dict[str, Any]:
+        """Return meaning-bearing response content used for stable identity."""
+
         return {
             "schema_version": self.schema_version,
             "response_id": self.response_id,
@@ -202,21 +223,29 @@ class CanonicalNarrativeResponse:
             "turn_id": self.turn_id,
             "campaign_id": self.campaign_id,
             "revision": self.revision,
-            "blocks": [block.as_dict() for block in self.blocks],
+            "blocks": [block.as_dict() for block in ordered_blocks(self.blocks)],
             "evidence_used": list(self.evidence_used),
-            "validation": self.validation.as_dict(),
-            "generation": _jsonable(self.generation),
         }
 
+    def content_payload(self) -> dict[str, Any]:
+        return self.semantic_content_payload()
+
+    @property
+    def semantic_hash(self) -> str:
+        return stable_hash(self.semantic_content_payload())
+
     def as_dict(self) -> dict[str, Any]:
-        payload = self.content_payload()
+        payload = self.semantic_content_payload()
+        payload["validation"] = self.validation.as_dict()
+        payload["generation"] = _jsonable(self.generation)
         payload["delivery"] = _jsonable(self.delivery)
-        payload["content_hash"] = self.content_hash or stable_hash(self.content_payload())
+        payload["content_hash"] = self.semantic_hash
         payload["metadata"] = _jsonable(self.metadata)
         return payload
 
     def with_content_hash(self) -> "CanonicalNarrativeResponse":
-        if self.content_hash:
+        semantic_hash = self.semantic_hash
+        if self.content_hash == semantic_hash:
             return self
         return CanonicalNarrativeResponse(
             response_id=self.response_id,
@@ -224,12 +253,12 @@ class CanonicalNarrativeResponse:
             turn_id=self.turn_id,
             campaign_id=self.campaign_id,
             revision=self.revision,
-            blocks=self.blocks,
+            blocks=ordered_blocks(self.blocks),
             evidence_used=self.evidence_used,
             validation=self.validation,
             generation=self.generation,
             delivery=self.delivery,
-            content_hash=stable_hash(self.content_payload()),
+            content_hash=semantic_hash,
             schema_version=self.schema_version,
             metadata=self.metadata,
         )

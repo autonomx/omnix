@@ -46,7 +46,14 @@ def retire_legacy_presentation_ownership(result: dict[str, Any]) -> dict[str, An
     response = canonical_response_from_dict(canonical_raw)
     legacy = legacy_response_projection(response)
     bundle = canonical_consumer_bundle(response)
-    for key in ("narration", "final_narration", "summary", "npc", "dialogue_blocks", "visible_response"):
+    for key in (
+        "narration",
+        "final_narration",
+        "summary",
+        "npc",
+        "dialogue_blocks",
+        "visible_response",
+    ):
         result[key] = legacy[key]
     result["narrative_projections"] = bundle
     result["legacy_presentation_ownership_retired"] = True
@@ -55,7 +62,14 @@ def retire_legacy_presentation_ownership(result: dict[str, Any]) -> dict[str, An
 
     nested = _mapping(result.get("result"))
     if nested:
-        for key in ("narration", "final_narration", "summary", "npc", "dialogue_blocks", "visible_response"):
+        for key in (
+            "narration",
+            "final_narration",
+            "summary",
+            "npc",
+            "dialogue_blocks",
+            "visible_response",
+        ):
             nested[key] = legacy[key]
         nested["narrative_projections"] = bundle
         nested["legacy_presentation_ownership_retired"] = True
@@ -71,7 +85,10 @@ def _latest_interaction(result: Mapping[str, Any]) -> dict[str, Any]:
     interactions = runtime.get("recent_interactions")
     if not isinstance(interactions, list):
         return {}
-    response_id = str(_mapping(result.get("canonical_narrative_response")).get("response_id") or "")
+    response_id = str(
+        _mapping(result.get("canonical_narrative_response")).get("response_id")
+        or ""
+    )
     for value in reversed(interactions):
         row = _mapping(value)
         if str(row.get("narrative_response_id") or "") == response_id:
@@ -103,27 +120,53 @@ def certify_production_narrative_result(
     persistence = certify_narrative_persistence_and_delivery(response)
     checks = {
         "canonical_response_present": True,
-        "canonical_source_owned": str(result.get("canonical_narrative_source") or "") == CANONICAL_PUBLISHER,
-        "publisher_guard_owned": str(result.get("narrative_publisher") or "") == CANONICAL_PUBLISHER,
-        "zero_alternate_publishers": telemetry.get("zero_alternate_publishers") is True
-        and int(telemetry.get("alternate_publish_count") or 0) == 0,
-        "bundle_response_id_matches": bundle.get("response_id") == response.response_id,
-        "bundle_hash_matches": bundle.get("content_hash") == response.content_hash,
-        "visible_projection_matches": visible == expected_bundle["visible_response"],
-        "narration_projection_matches": str(result.get("narration") or "") == expected_legacy["narration"],
-        "summary_projection_matches": str(result.get("summary") or "") == expected_legacy["summary"],
-        "npc_projection_matches": _mapping(result.get("npc")) == expected_legacy["npc"],
-        "compatibility_source_is_projection_only": result.get("legacy_compatibility_fields_source")
-        == "canonical_projection_only",
-        "legacy_ownership_retired": result.get("legacy_presentation_ownership_retired") is True,
+        "canonical_source_owned": (
+            str(result.get("canonical_narrative_source") or "")
+            == CANONICAL_PUBLISHER
+        ),
+        "publisher_guard_owned": (
+            str(result.get("narrative_publisher") or "") == CANONICAL_PUBLISHER
+        ),
+        "zero_alternate_publishers": (
+            telemetry.get("zero_alternate_publishers") is True
+            and int(telemetry.get("alternate_publish_count") or 0) == 0
+        ),
+        "bundle_response_id_matches": (
+            bundle.get("response_id") == response.response_id
+        ),
+        "bundle_hash_matches": (
+            bundle.get("content_hash") == response.content_hash
+        ),
+        "visible_projection_matches": (
+            visible == expected_bundle["visible_response"]
+        ),
+        "narration_projection_matches": (
+            str(result.get("narration") or "") == expected_legacy["narration"]
+        ),
+        "summary_projection_matches": (
+            str(result.get("summary") or "") == expected_legacy["summary"]
+        ),
+        "npc_projection_matches": (
+            _mapping(result.get("npc")) == expected_legacy["npc"]
+        ),
+        "compatibility_source_is_projection_only": (
+            result.get("legacy_compatibility_fields_source")
+            == "canonical_projection_only"
+        ),
+        "legacy_ownership_retired": (
+            result.get("legacy_presentation_ownership_retired") is True
+        ),
         "roundtrip_and_delivery_certified": persistence.get("passed") is True,
-        "no_legacy_publisher_marker": not bool(result.get("legacy_publisher") or result.get("visible_publisher")),
+        "no_legacy_publisher_marker": not bool(
+            result.get("legacy_publisher") or result.get("visible_publisher")
+        ),
         "session_projection_matches": (
             not latest
             or (
                 latest.get("narrative_response_id") == response.response_id
                 and latest.get("narrative_content_hash") == response.content_hash
-                and _mapping(latest.get("visible_response")) == expected_bundle["visible_response"]
+                and _mapping(latest.get("visible_response"))
+                == expected_bundle["visible_response"]
             )
         ),
     }
@@ -152,4 +195,11 @@ def enforce_production_narrative_result(result: dict[str, Any]) -> dict[str, Any
             "canonical RPG narrative production certification failed: "
             + ", ".join(certification.violations)
         )
-    return retired
+    from app.rpg.narrative_retirement import record_narrative_retirement
+
+    try:
+        return record_narrative_retirement(retired)
+    except Exception as exc:
+        raise NarrativeProductionPathError(
+            f"canonical RPG narrative retirement proof failed: {exc}"
+        ) from exc

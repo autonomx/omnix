@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Iterable, Protocol, Sequence
+from typing import Iterable, Mapping, Protocol, Sequence
 
 from .authority import VisibilityClass
 from .contracts import EvidenceRecord
@@ -40,6 +40,40 @@ class RetrievalTrace:
 class EvidenceRetrievalResult:
     evidence: tuple[EvidenceRecord, ...]
     trace: RetrievalTrace
+
+
+@dataclass(frozen=True)
+class EvidenceGrantSet:
+    """Pre-filtered grants for player-visible, narrator, and speaker beats."""
+
+    player: tuple[EvidenceRecord, ...] = ()
+    narrator: tuple[EvidenceRecord, ...] = ()
+    speakers: Mapping[str, tuple[EvidenceRecord, ...]] = field(default_factory=dict)
+    traces: Mapping[str, RetrievalTrace] = field(default_factory=dict)
+
+    def for_speaker(self, speaker_id: str | None) -> tuple[EvidenceRecord, ...]:
+        if not speaker_id:
+            return self.player
+        return tuple(self.speakers.get(speaker_id, ()))
+
+    def all_records(self) -> tuple[EvidenceRecord, ...]:
+        by_id: dict[str, EvidenceRecord] = {}
+        groups = [self.player, self.narrator, *self.speakers.values()]
+        for group in groups:
+            for record in group:
+                previous = by_id.get(record.evidence_id)
+                if previous is None or record.source_revision >= previous.source_revision:
+                    by_id[record.evidence_id] = record
+        return tuple(by_id[key] for key in sorted(by_id))
+
+    def allowed_ids(self, scope: str, speaker_id: str | None = None) -> frozenset[str]:
+        if scope == "narrator":
+            records = self.narrator
+        elif scope == "speaker":
+            records = self.for_speaker(speaker_id)
+        else:
+            records = self.player
+        return frozenset(record.evidence_id for record in records)
 
 
 class EvidenceSource(Protocol):

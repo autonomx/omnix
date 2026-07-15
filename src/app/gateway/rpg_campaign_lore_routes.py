@@ -37,6 +37,16 @@ def _session_or_404(session_id: str) -> dict[str, Any]:
     return session
 
 
+def _kick_genesis_recovery() -> None:
+    from app.rpg.session.genesis.async_coordinator import (
+        campaign_genesis_async_enabled,
+        kick_campaign_genesis_worker,
+    )
+
+    if campaign_genesis_async_enabled():
+        kick_campaign_genesis_worker()
+
+
 def _lore_error(exc: Exception, session_id: str) -> HTTPException:
     if isinstance(exc, LoreDocumentNotFound):
         return HTTPException(
@@ -68,12 +78,17 @@ def _lore_error(exc: Exception, session_id: str) -> HTTPException:
 
 
 def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
+    @app.on_event("startup")
+    async def recover_rpg_campaign_genesis_jobs() -> None:
+        _kick_genesis_recovery()
+
     @app.get(
         "/api/rpg/sessions/{session_id}/campaign-genesis",
         tags=["rpg-session"],
         include_in_schema=False,
     )
     def rpg_campaign_genesis(session_id: str) -> dict[str, Any]:
+        _kick_genesis_recovery()
         session = _session_or_404(session_id)
         return {
             "ok": True,

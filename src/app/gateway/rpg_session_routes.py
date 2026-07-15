@@ -9,6 +9,9 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import ValidationError
 
 from app.gateway.rpg_campaign_lore_routes import register_rpg_campaign_lore_routes
+from app.gateway.rpg_narrative_delivery_routes import (
+    register_rpg_narrative_delivery_routes,
+)
 from app.gateway.rpg_turn_pipeline import execute_foreground_rpg_turn
 from app.rpg.session.ability_coverage import summarize_ability_coverage
 from app.rpg.session.environment_narration import build_environment_narration_contract
@@ -219,6 +222,7 @@ def register_rpg_session_routes(app: FastAPI) -> None:
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
     register_rpg_campaign_lore_routes(app)
+    register_rpg_narrative_delivery_routes(app)
 
     @app.get("/api/rpg/presets", tags=["rpg-session"])
     def rpg_presets() -> dict[str, Any]:

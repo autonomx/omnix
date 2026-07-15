@@ -3,15 +3,51 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .authority import BeatKind, BeatPurpose, DeliveryMode
+from .authority import AuthorityClass, BeatKind, BeatPurpose, DeliveryMode
 from .contracts import (
     CanonicalNarrativeResponse,
+    ClaimAssertion,
     DeliveryMetadata,
     GenerationMetadata,
     NarrativeBlock,
     ValidationIssue,
     ValidationReport,
 )
+
+
+def _claims(row: Mapping[str, Any]) -> tuple[ClaimAssertion, ...]:
+    return tuple(
+        ClaimAssertion(
+            claim_id=str(claim.get("claim_id") or ""),
+            text=str(claim.get("text") or ""),
+            authority=AuthorityClass(
+                str(claim.get("authority") or AuthorityClass.PUBLIC_KNOWLEDGE.value)
+            ),
+            evidence_refs=tuple(
+                str(item) for item in claim.get("evidence_refs") or ()
+            ),
+            scope=str(claim.get("scope") or "player"),
+            subject_id=(
+                str(claim.get("subject_id"))
+                if claim.get("subject_id") is not None
+                else None
+            ),
+            predicate=str(claim.get("predicate") or ""),
+            value=claim.get("value"),
+            metadata=dict(claim.get("metadata") or {}),
+        )
+        for claim in row.get("claims") or ()
+        if isinstance(claim, Mapping)
+    )
+
+
+def _integer(
+    value: Mapping[str, Any],
+    key: str,
+    default: int,
+) -> int:
+    raw = value.get(key)
+    return default if raw is None else int(raw)
 
 
 def canonical_response_from_dict(value: Mapping[str, Any]) -> CanonicalNarrativeResponse:
@@ -26,6 +62,7 @@ def canonical_response_from_dict(value: Mapping[str, Any]) -> CanonicalNarrative
             speaker_id=str(row.get("speaker_id")) if row.get("speaker_id") is not None else None,
             evidence_refs=tuple(str(item) for item in row.get("evidence_refs") or ()),
             claim_refs=tuple(str(item) for item in row.get("claim_refs") or ()),
+            claims=_claims(row),
             metadata=dict(row.get("metadata") or {}),
         )
         for row in value.get("blocks") or ()
@@ -63,9 +100,9 @@ def canonical_response_from_dict(value: Mapping[str, Any]) -> CanonicalNarrative
             provider=str(generation_raw.get("provider") or ""),
             model=str(generation_raw.get("model") or ""),
             latency_ms=float(generation_raw.get("latency_ms") or 0.0),
-            attempt_count=int(generation_raw.get("attempt_count") or 1),
-            evidence_count=int(generation_raw.get("evidence_count") or 0),
-            beat_count=int(generation_raw.get("beat_count") or len(blocks)),
+            attempt_count=_integer(generation_raw, "attempt_count", 1),
+            evidence_count=_integer(generation_raw, "evidence_count", 0),
+            beat_count=_integer(generation_raw, "beat_count", len(blocks)),
             hermes_used=bool(generation_raw.get("hermes_used")),
             metadata=dict(generation_raw.get("metadata") or {}),
         ),

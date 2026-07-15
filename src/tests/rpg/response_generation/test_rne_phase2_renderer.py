@@ -66,14 +66,14 @@ def test_renderer_preserves_vexira_style_alternating_sequence() -> None:
     assert rendered.text.index("mirrorstone") < rendered.text.index("Choose")
 
 
-def test_duplicate_bran_line_is_rendered_once() -> None:
+def test_renderer_never_silently_removes_approved_duplicate_blocks() -> None:
     response = _response(
         _block("narration-copy", 1, BeatKind.NARRATION, BeatPurpose.DIRECT_ANSWER, "Bran says the road is muddy but passable."),
         _block("dialogue", 2, BeatKind.DIALOGUE, BeatPurpose.DIRECT_ANSWER, "Bran says the road is muddy but passable.", "npc:bran"),
     )
     rendered = CanonicalNarrativeRenderer().render(response)
-    assert rendered.text.count("muddy but passable") == 1
-    assert len(rendered.blocks) == 1
+    assert rendered.text.count("muddy but passable") == 2
+    assert rendered.block_ids == ("narration-copy", "dialogue")
 
 
 def test_legacy_fields_are_projections_of_canonical_blocks() -> None:

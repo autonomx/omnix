@@ -11,53 +11,21 @@ _STATEFUL_ACTION_TYPES = {
     "cast_spell", "sneak", "hack", "travel", "move", "flee", "threat", "intimidate",
     "persuade", "deceive", "quest_accept", "quest_complete", "buy", "sell",
 }
-
 _PLAYER_SPEAKER_ALIASES = {"player", "you", "the player", "adventurer", "traveler"}
 _NON_NPC_SPEAKER_ALIASES = {
-    "scene",
-    "narrator",
-    "narration",
-    "gm",
-    "game master",
-    "omnix",
-    "system",
+    "scene", "narrator", "narration", "gm", "game master", "omnix", "system",
 }
 _INTERPRETIVE_DIALOGUE_ACTION_TYPES = {
-    "ask",
-    "conversation",
-    "dialogue",
-    "observe",
-    "social_activity",
-    "talk",
+    "ask", "conversation", "dialogue", "observe", "social_activity", "talk",
 }
-_SAFE_DIRECT_RISK_DOMAINS = {
-    "",
-    "none",
-}
+_SAFE_DIRECT_RISK_DOMAINS = {"", "none"}
 _RUNTIME_RISK_DOMAINS = {
-    "combat",
-    "commerce",
-    "inventory",
-    "item",
-    "persuasion_outcome",
-    "quest",
-    "relationship_change",
-    "reward",
-    "service",
-    "threat",
-    "travel",
-    "unknown",
+    "combat", "commerce", "inventory", "item", "persuasion_outcome", "quest",
+    "relationship_change", "reward", "service", "threat", "travel", "unknown",
 }
 _SAFE_UTTERANCE_MODES = {
-    "",
-    "casual_conversation",
-    "clarification",
-    "emotional_expression",
-    "greeting",
-    "identity_inquiry",
-    "local_knowledge",
-    "lore_question",
-    "opinion_question",
+    "", "casual_conversation", "clarification", "emotional_expression", "greeting",
+    "identity_inquiry", "local_knowledge", "lore_question", "opinion_question",
     "wellbeing_inquiry",
 }
 
@@ -100,20 +68,16 @@ def _visible_response_text(visible_response: Dict[str, Any]) -> str:
     narration = _s(visible_response.get("narration")).strip()
     if speaker and line:
         return f"{speaker}: {line}"
-    if line:
-        return line
-    return narration
+    return line or narration
 
 
 def _looks_stateful(advisory: Dict[str, Any]) -> bool:
     advisory = _d(advisory)
     action_type = _s(advisory.get("action_type")).strip().lower()
     semantic_family = _s(advisory.get("semantic_family")).strip().lower()
-    if action_type in _STATEFUL_ACTION_TYPES:
-        return True
-    if semantic_family in {"combat", "trade", "item", "travel", "threat"}:
-        return True
-    return False
+    return action_type in _STATEFUL_ACTION_TYPES or semantic_family in {
+        "combat", "trade", "item", "travel", "threat",
+    }
 
 
 def _grounding_packet(advisory: Dict[str, Any]) -> Dict[str, Any]:
@@ -121,14 +85,11 @@ def _grounding_packet(advisory: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _addressed_profiles(advisory: Dict[str, Any]) -> List[Dict[str, Any]]:
-    packet = _grounding_packet(advisory)
-    npc_context = _d(packet.get("npc_context"))
-    return [_d(row) for row in _l(npc_context.get("addressed_npcs"))]
+    return [_d(row) for row in _l(_d(_grounding_packet(advisory).get("npc_context")).get("addressed_npcs"))]
 
 
 def _addressed_ids(advisory: Dict[str, Any]) -> List[str]:
-    packet = _grounding_packet(advisory)
-    priority = _d(packet.get("priority_context"))
+    priority = _d(_grounding_packet(advisory).get("priority_context"))
     return [_s(x) for x in _l(priority.get("addressed_npc_ids")) if _s(x)]
 
 
@@ -167,25 +128,22 @@ def _is_direct_npc_dialogue(advisory: Dict[str, Any]) -> bool:
 
 def _is_interpretive_dialogue_candidate(advisory: Dict[str, Any]) -> bool:
     advisory = _d(advisory)
-    if not _is_direct_npc_dialogue(advisory):
-        return False
-    if _looks_stateful(advisory):
+    if not _is_direct_npc_dialogue(advisory) or _looks_stateful(advisory):
         return False
     action_type = _s(advisory.get("action_type")).strip().lower()
     semantic_family = _s(advisory.get("semantic_family")).strip().lower()
-    if action_type in _INTERPRETIVE_DIALOGUE_ACTION_TYPES:
-        return True
-    return semantic_family == "social" and action_type in {"", "observe"}
+    return action_type in _INTERPRETIVE_DIALOGUE_ACTION_TYPES or (
+        semantic_family == "social" and action_type in {"", "observe"}
+    )
 
 
 def _direct_response_gate_allows(advisory: Dict[str, Any]) -> bool:
-    advisory = _d(advisory)
-    gate = _d(advisory.get("direct_response_gate"))
+    gate = _d(_d(advisory).get("direct_response_gate"))
     if gate:
         return _b(gate.get("safe_to_display_now"), False)
     return not (
-        _b(advisory.get("stateful"), True)
-        or _b(advisory.get("needs_runtime_resolution"), True)
+        _b(_d(advisory).get("stateful"), True)
+        or _b(_d(advisory).get("needs_runtime_resolution"), True)
     )
 
 
@@ -193,7 +151,6 @@ def _semantic_risk_rejection(advisory: Dict[str, Any]) -> str:
     advisory = _d(advisory)
     risk_domain = _s(advisory.get("risk_domain")).strip().lower()
     utterance_mode = _s(advisory.get("utterance_mode")).strip().lower()
-
     if _b(advisory.get("state_mutation_requested"), False):
         return "semantic_state_mutation_requested"
     if risk_domain in _RUNTIME_RISK_DOMAINS:
@@ -209,16 +166,10 @@ def _semantic_risk_rejection(advisory: Dict[str, Any]) -> str:
 
 def _speaker_matches_expected_npc(speaker: str, advisory: Dict[str, Any]) -> bool:
     speaker_norm = _norm(speaker)
-    if (
-        not speaker_norm
-        or speaker_norm in _PLAYER_SPEAKER_ALIASES
-        or speaker_norm in _NON_NPC_SPEAKER_ALIASES
-    ):
+    if not speaker_norm or speaker_norm in _PLAYER_SPEAKER_ALIASES or speaker_norm in _NON_NPC_SPEAKER_ALIASES:
         return False
     names = _expected_npc_names(advisory)
-    if not names:
-        return True
-    return any(_norm(name) == speaker_norm for name in names if _norm(name))
+    return not names or any(_norm(name) == speaker_norm for name in names if _norm(name))
 
 
 def _line_restates_player_input(line: str, player_input: str) -> bool:
@@ -226,11 +177,9 @@ def _line_restates_player_input(line: str, player_input: str) -> bool:
     input_norm = _norm(player_input)
     if not line_norm or not input_norm:
         return False
-    if line_norm == input_norm:
-        return True
-    if input_norm in line_norm and len(line_norm) <= len(input_norm) + 30:
-        return True
-    return False
+    return line_norm == input_norm or (
+        input_norm in line_norm and len(line_norm) <= len(input_norm) + 30
+    )
 
 
 def _visible_response_rejection(advisory: Dict[str, Any], visible_response: Dict[str, Any]) -> str:
@@ -240,7 +189,6 @@ def _visible_response_rejection(advisory: Dict[str, Any], visible_response: Dict
     line = _s(npc.get("line")).strip()
     narration = _s(visible_response.get("narration")).strip()
     player_input = _s(_grounding_packet(advisory).get("player_input"))
-
     if _is_direct_npc_dialogue(advisory):
         if not speaker:
             return "missing_npc_speaker_for_direct_npc_dialogue"
@@ -252,14 +200,21 @@ def _visible_response_rejection(advisory: Dict[str, Any], visible_response: Dict
             return "npc_line_restates_player_input"
         if narration and _line_restates_player_input(narration, player_input) and not line:
             return "narration_restates_player_input"
-    else:
-        text = _visible_response_text(visible_response)
-        if not text:
-            return "missing_visible_response_text"
-        if _line_restates_player_input(text, player_input):
-            return "visible_response_restates_player_input"
-
     return ""
+
+
+def _safe_direct_intent(advisory: Dict[str, Any]) -> bool:
+    advisory = _d(advisory)
+    return bool(
+        advisory
+        and _is_direct_npc_dialogue(advisory)
+        and not _looks_stateful(advisory)
+        and not _semantic_risk_rejection(advisory)
+        and (
+            _is_interpretive_dialogue_candidate(advisory)
+            or not _b(advisory.get("stateful"), False)
+        )
+    )
 
 
 def choose_first_call_visible_response(
@@ -268,63 +223,27 @@ def choose_first_call_visible_response(
     semantic_advisory: Dict[str, Any] | None = None,
     service_matched: bool = False,
 ) -> Dict[str, Any]:
-    """Return the safe first-call visible response, if runtime may consume it.
-
-    CE.1.3 rule:
-    - deterministic service/commerce/runtime matches win first;
-    - stateful or needs_runtime_resolution=true LLM output is never consumed;
-    - direct NPC dialogue requires matching npc.speaker and non-empty npc.line;
-    - player/restatement-only narration is not consumed as an NPC answer.
-    """
+    """Classify whether a first-call result is safe for canonical dialogue routing."""
 
     if service_matched:
-        return {
-            "consumable": False,
-            "reason": "service_or_commerce_runtime_wins",
-            "source": "first_call_dialogue_v1",
-        }
-
+        return {"consumable": False, "reason": "service_or_commerce_runtime_wins", "source": "first_call_dialogue_v2"}
     rejection_reasons: List[str] = []
-    candidates = [
-        ("semantic_advisory", _d(semantic_advisory)),
-        ("action_advisory", _d(action_advisory)),
-    ]
-    for source, advisory in candidates:
+    for source, advisory in (("semantic_advisory", _d(semantic_advisory)), ("action_advisory", _d(action_advisory))):
         if not advisory:
             continue
-        if _looks_stateful(advisory):
-            rejection_reasons.append(f"{source}:stateful_action_type")
+        if not _safe_direct_intent(advisory):
+            rejection_reasons.append(f"{source}:not_safe_direct_dialogue")
             continue
         visible_response = _d(advisory.get("visible_response"))
-        text = _visible_response_text(visible_response)
-        if not text:
-            rejection_reasons.append(f"{source}:missing_visible_response_text")
-            continue
-        if not _direct_response_gate_allows(advisory):
-            rejection_reasons.append(f"{source}:direct_response_gate_blocked")
-            continue
-        semantic_rejection = _semantic_risk_rejection(advisory)
-        if semantic_rejection:
-            rejection_reasons.append(f"{source}:{semantic_rejection}")
-            continue
-        if (
-            (_b(advisory.get("stateful"), True) or _b(advisory.get("needs_runtime_resolution"), True))
-            and not _is_interpretive_dialogue_candidate(advisory)
-        ):
-            rejection_reasons.append(f"{source}:stateful")
-            continue
-        rejection = _visible_response_rejection(advisory, visible_response)
+        rejection = _visible_response_rejection(advisory, visible_response) if visible_response else ""
         if rejection:
             rejection_reasons.append(f"{source}:{rejection}")
-            continue
         return {
             "consumable": True,
-            "reason": "non_stateful_interpretive_dialogue",
+            "reason": "canonical_non_stateful_dialogue_intent",
             "source": source,
-            "visible_response": deepcopy(visible_response),
-            "narration": _s(visible_response.get("narration")).strip() or text,
-            "npc": deepcopy(_d(visible_response.get("npc"))),
-            "text": text,
+            "legacy_visible_response_ignored": bool(visible_response),
+            "legacy_visible_response_rejection": rejection,
             "direct_response_gate": deepcopy(_d(advisory.get("direct_response_gate"))),
             "semantic_intent_gate": {
                 "utterance_mode": _s(advisory.get("utterance_mode")).strip(),
@@ -334,37 +253,21 @@ def choose_first_call_visible_response(
                 "intent_summary": _s(advisory.get("intent_summary")).strip(),
                 "evidence_spans": deepcopy(_l(advisory.get("evidence_spans"))),
             },
-            "first_call_grounding_diagnostics": deepcopy(
-                _d(advisory.get("first_call_grounding_diagnostics"))
-            ),
+            "first_call_grounding_diagnostics": deepcopy(_d(advisory.get("first_call_grounding_diagnostics"))),
             "advisory": deepcopy(advisory),
-            "format_version": "first_call_visible_response_v1",
+            "format_version": "canonical_dialogue_intent_v1",
         }
-
     return {
         "consumable": False,
-        "reason": "no_safe_non_stateful_visible_response",
+        "reason": "no_safe_non_stateful_dialogue_intent",
         "rejection_reasons": rejection_reasons,
-        "source": "first_call_dialogue_v1",
+        "source": "first_call_dialogue_v2",
     }
 
 
-def _first_call_grounding_validation(selected: Dict[str, Any]) -> Dict[str, Any]:
-    diagnostics = _d(selected.get("first_call_grounding_diagnostics"))
-    packet = _d(diagnostics.get("turn_grounding_packet"))
-    addressed = _l(_d(packet.get("priority_context")).get("addressed_npc_ids"))
-    return {
-        "selected_candidate": "first_call_visible_response",
-        "fallback_used": False,
-        "fallback_source": "",
-        "violations": [],
-        "primary_violations": [],
-        "first_call_grounding_packet_version": _s(packet.get("format_version")),
-        "first_call_addressed_npc_ids": addressed,
-        "first_call_grounding_diagnostics": deepcopy(diagnostics),
-        "turn_grounding_packet": deepcopy(packet),
-        "source": "first_call_dialogue_v1",
-    }
+def _session_id(session: Dict[str, Any]) -> str:
+    manifest = _d(session.get("manifest"))
+    return _s(manifest.get("session_id") or manifest.get("id") or session.get("session_id") or session.get("id") or "runtime")
 
 
 def build_non_stateful_dialogue_result(
@@ -377,75 +280,45 @@ def build_non_stateful_dialogue_result(
     semantic_advisory: Dict[str, Any] | None = None,
     service_matched: bool = False,
 ) -> Dict[str, Any]:
+    """Route safe dialogue intent directly into the canonical narrative writer."""
+
     selected = choose_first_call_visible_response(
         action_advisory=action_advisory,
         semantic_advisory=semantic_advisory,
         service_matched=service_matched,
     )
     if not selected.get("consumable"):
+        for source, advisory in (("semantic_advisory", _d(semantic_advisory)), ("action_advisory", _d(action_advisory))):
+            if _safe_direct_intent(advisory):
+                selected = {
+                    "consumable": True,
+                    "reason": "canonical_direct_dialogue_forced",
+                    "source": source,
+                    "legacy_visible_response_ignored": bool(_d(advisory.get("visible_response"))),
+                    "first_call_grounding_diagnostics": deepcopy(_d(advisory.get("first_call_grounding_diagnostics"))),
+                    "advisory": deepcopy(advisory),
+                    "format_version": "canonical_dialogue_intent_v1",
+                }
+                break
+    if not selected.get("consumable"):
         return {"consumed": False, "selection": selected}
 
-    visible_response = _d(selected.get("visible_response"))
-    npc = _d(selected.get("npc"))
-    narration = _s(selected.get("narration") or selected.get("text")).strip()
-    grounding_validation = _first_call_grounding_validation(selected)
-    resolved_result = {
-        "ok": True,
-        "action_type": "npc_interpretive_dialogue",
-        "semantic_action_type": "npc_interpretive_dialogue",
-        "semantic_family": "social",
-        "stateful": False,
-        "needs_runtime_resolution": False,
-        "visible_interaction_reason": "first_call_non_stateful_dialogue",
-        "outcome": "non_stateful_visible_response",
-        "summary": narration,
-        "npc": deepcopy(npc),
-        "visible_response": deepcopy(visible_response),
-        "conversation_result": {
-            "triggered": True,
-            "reason": "first_call_non_stateful_interpretive_dialogue",
-            "source": "first_call_dialogue_v1",
-        },
-        "first_call_visible_response": deepcopy(selected),
-        "first_call_grounding_diagnostics": deepcopy(
-            _d(selected.get("first_call_grounding_diagnostics"))
-        ),
-        "grounding_validation": deepcopy(grounding_validation),
-        "source": "first_call_dialogue_v1",
-    }
-    return {
-        "consumed": True,
-        "ok": True,
-        "result": deepcopy(resolved_result),
-        "resolved_result": deepcopy(resolved_result),
-        "narration": narration,
-        "final_narration": narration,
-        "summary": narration,
-        "npc": deepcopy(npc),
-        "visible_response": deepcopy(visible_response),
-        "llm_called": True,
-        "llm_purpose": "first_call_interpretive_dialogue",
-        "stateful": False,
-        "needs_runtime_resolution": False,
-        "simulation_state": deepcopy(_d(simulation_state)),
-        "runtime_state": deepcopy(_d(runtime_state)),
-        "session": deepcopy(_d(session)),
-        "player_input": _s(player_input),
-        "first_call_visible_response": deepcopy(selected),
-        "first_call_grounding_diagnostics": deepcopy(
-            _d(selected.get("first_call_grounding_diagnostics"))
-        ),
-        "grounding_validation": deepcopy(grounding_validation),
-        "narration_context": {
-            "player_input": _s(player_input),
-            "action_type": "npc_interpretive_dialogue",
-            "resolved_result": deepcopy(resolved_result),
-            "simulation_state": deepcopy(_d(simulation_state)),
-            "runtime_state": deepcopy(_d(runtime_state)),
-            "first_call_grounding_diagnostics": deepcopy(
-                _d(selected.get("first_call_grounding_diagnostics"))
-            ),
-            "grounding_validation": deepcopy(grounding_validation),
-        },
-        "source": "first_call_dialogue_v1",
-    }
+    from .canonical_direct_dialogue import build_canonical_direct_dialogue_intent
+    from .narrative_engine_bridge import canonicalize_direct_dialogue_result
+
+    intent = build_canonical_direct_dialogue_intent(
+        session=session,
+        simulation_state=simulation_state,
+        runtime_state=runtime_state,
+        player_input=player_input,
+        action_advisory=_d(action_advisory),
+        semantic_advisory=_d(semantic_advisory),
+    )
+    intent["selection"] = deepcopy(selected)
+    intent["first_call_visible_response_selection"] = deepcopy(selected)
+    intent["turn_id"] = _s(intent.get("turn_id")) or _s(runtime_state.get("turn_id"))
+    return canonicalize_direct_dialogue_result(
+        intent,
+        session_id=_session_id(session),
+        player_input=_s(player_input),
+    )

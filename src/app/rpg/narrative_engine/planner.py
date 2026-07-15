@@ -12,6 +12,7 @@ from .authority import (
     PresentationProfile,
 )
 from .contracts import EvidenceRecord, NarrativeBeat, TurnPresentationRequest
+from .evidence import EvidenceGrantSet
 from .profiles import NarrativeProfilePolicy, adaptive_profile, profile_policy
 
 
@@ -91,6 +92,7 @@ def _beat(
     evidence_refs: tuple[str, ...] = (),
     claim_refs: tuple[str, ...] = (),
     instructions: str,
+    evidence_scope: str = "player",
     required: bool = True,
 ) -> NarrativeBeat:
     return NarrativeBeat(
@@ -103,34 +105,41 @@ def _beat(
         required_claim_refs=claim_refs,
         instructions=instructions,
         required=required,
+        metadata={"evidence_scope": evidence_scope},
     )
 
 
 def _append_scene_beats(
     beats: list[NarrativeBeat],
     request: TurnPresentationRequest,
-    evidence: Sequence[EvidenceRecord],
+    narrator_evidence: Sequence[EvidenceRecord],
 ) -> None:
     purposes: list[BeatPurpose] = []
     for change in request.scene_changes:
         if change.kind in {"new_game", "location_changed", "region_changed", "changed_return_visit"}:
             purposes.append(BeatPurpose.SCENE_ESTABLISHMENT)
         purposes.append(BeatPurpose.ENVIRONMENTAL_CHANGE)
+    narrator_ids = {record.evidence_id for record in narrator_evidence}
     for purpose in dict.fromkeys(purposes):
+        explicit = tuple(
+            ref
+            for ref in dict.fromkeys(
+                ref for change in request.scene_changes for ref in change.evidence_refs
+            )
+            if ref in narrator_ids
+        )
         beats.append(
             _beat(
                 len(beats) + 1,
                 BeatKind.NARRATION,
                 purpose,
-                evidence_refs=tuple(
-                    dict.fromkeys(ref for change in request.scene_changes for ref in change.evidence_refs)
-                )
-                or _evidence_ids(evidence, *request.actor_ids),
+                evidence_refs=explicit or _evidence_ids(narrator_evidence, *request.actor_ids),
                 instructions=(
                     "Establish the changed scene using concrete spatial and sensory evidence."
                     if purpose is BeatPurpose.SCENE_ESTABLISHMENT
                     else "Describe only the meaningful environmental change relevant to the current turn."
                 ),
+                evidence_scope="narrator",
             )
         )
 
@@ -138,18 +147,21 @@ def _append_scene_beats(
 def _dialogue_beats(
     beats: list[NarrativeBeat],
     request: TurnPresentationRequest,
-    evidence: Sequence[EvidenceRecord],
+    narrator_evidence: Sequence[EvidenceRecord],
+    speaker_evidence: Sequence[EvidenceRecord],
     policy: NarrativeProfilePolicy,
 ) -> None:
     speaker = request.target_actor_id or str(request.metadata.get("speaker_id") or "") or None
-    speaker_evidence = _evidence_ids(evidence, speaker or "")
+    narrator_refs = _evidence_ids(narrator_evidence, speaker or "")
+    spoken_refs = _evidence_ids(speaker_evidence, speaker or "")
     beats.append(
         _beat(
             len(beats) + 1,
             BeatKind.NARRATION,
             BeatPurpose.PHYSICAL_REACTION,
-            evidence_refs=speaker_evidence,
+            evidence_refs=narrator_refs,
             instructions="Show one brief, character-specific physical or environmental reaction before the reply.",
+            evidence_scope="narrator",
         )
     )
     beats.append(
@@ -158,14 +170,17 @@ def _dialogue_beats(
             BeatKind.DIALOGUE,
             BeatPurpose.DIRECT_ANSWER,
             speaker_id=speaker,
-            evidence_refs=speaker_evidence,
+            evidence_refs=spoken_refs,
             claim_refs=_claim_refs(request),
             instructions="Answer the player's latest statement or question directly in the speaker's established voice.",
+            evidence_scope="speaker",
         )
     )
     if policy.allow_lore_expansion and len(beats) < policy.maximum_beats:
         lore_ids = tuple(
-            record.evidence_id for record in evidence if record.evidence_id not in speaker_evidence
+            record.evidence_id
+            for record in narrator_evidence
+            if record.evidence_id not in narrator_refs
         )[:4]
         if lore_ids:
             beats.append(
@@ -175,6 +190,7 @@ def _dialogue_beats(
                     BeatPurpose.LORE_REVEAL,
                     evidence_refs=lore_ids,
                     instructions="Connect one relevant memory, relationship, or lore detail without turning the reply into an exposition dump.",
+                    evidence_scope="narrator",
                     required=False,
                 )
             )
@@ -184,8 +200,9 @@ def _dialogue_beats(
                 len(beats) + 1,
                 BeatKind.NARRATION,
                 BeatPurpose.EMOTIONAL_ESCALATION,
-                evidence_refs=speaker_evidence,
+                evidence_refs=narrator_refs,
                 instructions="Escalate through a concrete movement, gesture, or use of the environment.",
+                evidence_scope="narrator",
             )
         )
         beats.append(
@@ -194,8 +211,9 @@ def _dialogue_beats(
                 BeatKind.DIALOGUE,
                 BeatPurpose.ULTIMATUM,
                 speaker_id=speaker,
-                evidence_refs=tuple(record.evidence_id for record in evidence[:5]),
+                evidence_refs=tuple(record.evidence_id for record in speaker_evidence[:5]),
                 instructions="End with a consequential demand, boundary, or question that follows from the character's goals.",
+                evidence_scope="speaker",
                 required=False,
             )
         )
@@ -206,8 +224,9 @@ def _dialogue_beats(
                 BeatKind.DIALOGUE,
                 BeatPurpose.CONTINUATION,
                 speaker_id=speaker,
-                evidence_refs=speaker_evidence,
+                evidence_refs=spoken_refs,
                 instructions="Add a natural continuation only when it follows from the answer; do not choose for the player.",
+                evidence_scope="speaker",
                 required=False,
             )
         )
@@ -216,12 +235,12 @@ def _dialogue_beats(
 def _action_beats(
     beats: list[NarrativeBeat],
     request: TurnPresentationRequest,
-    evidence: Sequence[EvidenceRecord],
+    player_evidence: Sequence[EvidenceRecord],
     mode: str,
     policy: NarrativeProfilePolicy,
 ) -> None:
     claims = _claim_refs(request)
-    authoritative_refs = _authoritative_evidence_ids(evidence)
+    authoritative_refs = _authoritative_evidence_ids(player_evidence)
     action_kind = BeatKind.ACTION if mode not in {"transaction", "failure"} else BeatKind.RESULT
     beats.append(
         _beat(
@@ -231,6 +250,7 @@ def _action_beats(
             evidence_refs=authoritative_refs,
             claim_refs=claims,
             instructions="Describe the authoritative resolved action without changing or extending its outcome.",
+            evidence_scope="player",
         )
     )
     if mode in {"combat", "transaction", "failure", "travel"} or request.significance is not NarrativeSignificance.ROUTINE:
@@ -242,6 +262,7 @@ def _action_beats(
                 evidence_refs=authoritative_refs,
                 claim_refs=claims,
                 instructions="Present the immediate consequence and current actionable situation using only resolved facts.",
+                evidence_scope="player",
             )
         )
     if policy.allow_forward_hook and len(beats) < policy.maximum_beats:
@@ -252,6 +273,7 @@ def _action_beats(
                 BeatPurpose.OFFERED_CHOICE,
                 evidence_refs=authoritative_refs,
                 instructions="Offer a grounded next option only when useful; preserve player agency.",
+                evidence_scope="player",
                 required=False,
             )
         )
@@ -264,27 +286,48 @@ class DeterministicBeatPlanner:
         self,
         request: TurnPresentationRequest,
         evidence: Sequence[EvidenceRecord],
+        *,
+        grants: EvidenceGrantSet | None = None,
     ) -> NarrativePlan:
         mode = _response_mode(request)
         resolved_profile = adaptive_profile(request.presentation_profile, request.significance)
         policy = profile_policy(resolved_profile)
+        speaker = request.target_actor_id or str(request.metadata.get("speaker_id") or "") or None
+        if grants is None:
+            all_evidence = tuple(evidence)
+            grants = EvidenceGrantSet(
+                player=all_evidence,
+                narrator=all_evidence,
+                speakers={speaker: all_evidence} if speaker else {},
+            )
+        player_evidence = grants.player
+        narrator_evidence = grants.narrator
+        speaker_evidence = grants.for_speaker(speaker)
+
         beats: list[NarrativeBeat] = []
-        _append_scene_beats(beats, request, evidence)
+        _append_scene_beats(beats, request, narrator_evidence)
         if mode == "dialogue" or request.target_actor_id:
-            _dialogue_beats(beats, request, evidence, policy)
+            _dialogue_beats(
+                beats,
+                request,
+                narrator_evidence,
+                speaker_evidence,
+                policy,
+            )
         elif mode in {"observation", "investigation"}:
             beats.append(
                 _beat(
                     len(beats) + 1,
                     BeatKind.NARRATION,
                     BeatPurpose.DIRECT_ANSWER,
-                    evidence_refs=tuple(record.evidence_id for record in evidence[:5]),
+                    evidence_refs=tuple(record.evidence_id for record in player_evidence[:5]),
                     claim_refs=_claim_refs(request),
                     instructions="Answer what the player can presently observe or infer, distinguishing certainty from uncertainty.",
+                    evidence_scope="player",
                 )
             )
         else:
-            _action_beats(beats, request, evidence, mode, policy)
+            _action_beats(beats, request, player_evidence, mode, policy)
 
         beats = beats[: policy.maximum_beats]
         must_answer = str(request.metadata.get("must_answer") or request.player_input).strip()
@@ -299,5 +342,9 @@ class DeterministicBeatPlanner:
                 "significance": request.significance.value,
                 "scene_change_count": len(request.scene_changes),
                 "evidence_count": len(evidence),
+                "player_evidence_count": len(player_evidence),
+                "narrator_evidence_count": len(narrator_evidence),
+                "speaker_evidence_count": len(speaker_evidence),
+                "speaker_id": speaker or "",
             },
         )
