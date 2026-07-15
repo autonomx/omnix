@@ -1,10 +1,8 @@
 # Desktop Companion — Wallie Adoption Roadmap
 
-Status: Implemented through SC-8; rollout remains disabled by default
+Status: Implemented through SC-9; text and speech rollout remain disabled by default
 
 Source of truth: `autonomx/omnix` `main`
-
-Implementation branch: `agent/screen-companion-sc0-sc8`
 
 ## Objective
 
@@ -124,12 +122,41 @@ Reused existing Live Conversation floor ownership, unified audio controller, TTS
 
 ### SC-8 — Evaluation and controlled rollout — Complete
 
-Added centralized default-off settings, redacted browser evaluation accumulation, content-free durable evidence, internal evaluation APIs, deterministic release gates, and rollout degradation:
+Added centralized default-off settings, redacted browser evaluation accumulation, content-free durable evidence, internal evaluation APIs, deterministic release gates, and rollout degradation.
 
-- `disabled` remains disabled;
-- `shadow` is the first permitted stage;
-- requested `text` degrades to `shadow` until the release gate passes;
-- requested `speech` degrades to `text` until passing evidence includes speech-stage evaluation.
+### SC-9 — End-to-end shadow orchestration — Complete
+
+Connected the production browser capture buffer, conservative activity classifier, behaviour tracker, serialized gateway vision execution, structured observation parser, revisable scene memory, and deterministic attention policy. The composition root remains shadow-only, default-off, generation-safe, and incapable of dispatching commentary.
+
+Acceptance evidence includes:
+
+- browser capture binding and source fingerprints without persisting source labels;
+- one bounded sample path from the temporal capture buffer;
+- strict browser-to-gateway request normalization;
+- provider serialization and rate-budget enforcement;
+- stale generation rejection and stop/reset handling;
+- redacted status events containing identifiers and policy rationale only;
+- unit coverage for disabled, low-value, and successful shadow paths.
+
+### SC-10 — Preflight and in-session controls — Pending
+
+Add real provider capability testing, Watch/pause/mute/stop controls, persistent indicators, and actionable errors.
+
+### SC-11 — Automatic shadow evaluation — Pending
+
+Wire the evaluation accumulator into capture, vision, attention, and delivery lifecycle events and submit bounded evidence automatically.
+
+### SC-12 — Gate enforcement and text rollout — Pending
+
+Use backend-resolved effective rollout stages and add a true text-only delivery surface with bounded pending-candidate handling.
+
+### SC-13 — Speech rollout validation — Pending
+
+Validate unified TTS/avatar delivery, interruption, collisions, stale speech, and extended-call behavior independently from text rollout.
+
+### SC-14 — Compatibility, privacy, and endurance — Pending
+
+Add browser/provider matrices, remote-provider disclosure, kill switch, long-session soak tests, GPU-contention tests, troubleshooting, and rollback documentation.
 
 ## Initial limits
 
@@ -183,4 +210,4 @@ minimum evaluation records    5
 
 ## Definition of done
 
-SC-0 through SC-8 are implemented when Omnix can observe a user-approved screen in shadow mode, classify meaningful activity conservatively, schedule bounded factual vision work, maintain revisable scene state, explain attention decisions, generate grounded non-repetitive commentary through the existing proactive runtime, respect floor and interruption state, expose explicit central controls, and produce redacted versioned evaluation evidence with the feature disabled by default.
+SC-9 is complete when the default-off production runtime can observe a user-approved screen in shadow mode, classify meaningful activity conservatively, schedule bounded factual vision work, maintain revisable scene state, explain attention decisions, reject stale generations, and expose redacted lifecycle status without generating or delivering commentary. Product rollout is complete only after SC-10 through SC-14 pass their separate acceptance gates.

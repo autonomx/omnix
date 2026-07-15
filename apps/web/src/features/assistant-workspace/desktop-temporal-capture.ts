@@ -66,6 +66,17 @@ export class DesktopTemporalCapture {
     return this.frames.length;
   }
 
+  latestActivitySample(): { sample: Uint8Array; capturedAtMs: number; width: number; height: number } | null {
+    const frame = this.frames.at(-1);
+    if (!frame) return null;
+    return {
+      sample: frame.sample.slice(),
+      capturedAtMs: frame.capturedAtMs,
+      width: frame.width,
+      height: frame.height,
+    };
+  }
+
   async buildPayload(nowMs = performance.now()): Promise<TemporalDesktopPayload> {
     const current = captureVideoFrame(this.video, this.options.currentMaxWidth, 0.88, nowMs);
     const selected = selectTemporalFrames(this.frames, nowMs, 4, current.sample);

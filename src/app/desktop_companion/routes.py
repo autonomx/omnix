@@ -1,9 +1,10 @@
-"""Internal Desktop Companion evaluation and rollout endpoints."""
+"""Internal Desktop Companion observation, evaluation, and rollout endpoints."""
 from __future__ import annotations
 
 from collections.abc import Callable
 
 from fastapi import FastAPI, Query
+from pydantic import BaseModel, ConfigDict, Field
 
 from .evaluation import (
     DesktopCompanionEvaluationCreate,
@@ -16,13 +17,57 @@ from .evaluation import (
     default_desktop_companion_evaluation_store,
     resolve_desktop_companion_rollout,
 )
+from .runtime import (
+    DesktopCompanionObserveRequest,
+    DesktopCompanionObserveResponse,
+    DesktopCompanionOrchestrator,
+    default_desktop_companion_orchestrator,
+)
+
+
+class DesktopCompanionResetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str = Field(min_length=1, max_length=160)
+    capture_generation: str | None = Field(default=None, max_length=160)
+
+
+class DesktopCompanionResetResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    reset: bool = True
+    session_id: str
 
 
 def register_desktop_companion_routes(
     app: FastAPI,
     *,
     evaluation_store_factory: Callable[[], DesktopCompanionEvaluationStore] = default_desktop_companion_evaluation_store,
+    orchestrator_factory: Callable[[], DesktopCompanionOrchestrator] = default_desktop_companion_orchestrator,
 ) -> None:
+    @app.post(
+        "/api/desktop-companion/observe",
+        response_model=DesktopCompanionObserveResponse,
+        tags=["desktop-companion"],
+        include_in_schema=False,
+    )
+    def observe_desktop_companion(
+        request: DesktopCompanionObserveRequest,
+    ) -> DesktopCompanionObserveResponse:
+        return orchestrator_factory().observe(request)
+
+    @app.post(
+        "/api/desktop-companion/reset",
+        response_model=DesktopCompanionResetResponse,
+        tags=["desktop-companion"],
+        include_in_schema=False,
+    )
+    def reset_desktop_companion(
+        request: DesktopCompanionResetRequest,
+    ) -> DesktopCompanionResetResponse:
+        orchestrator_factory().reset(request.session_id, request.capture_generation)
+        return DesktopCompanionResetResponse(session_id=request.session_id)
+
     @app.post(
         "/api/desktop-companion/evaluations",
         response_model=DesktopCompanionEvaluationRecord,

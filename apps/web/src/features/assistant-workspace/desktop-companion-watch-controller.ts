@@ -1,0 +1,317 @@
+import { classifyDesktopActivity, DesktopBehaviorTracker, type DesktopActivitySignal } from './desktop-companion-activity';
+import { DesktopCompanionRuntime } from './desktop-companion-runtime';
+import { currentDesktopCompanionCapture } from './assistant-context-controller';
+import { liveConversationStore } from './live-conversation-store';
+
+export const DESKTOP_COMPANION_STATUS_EVENT = 'omnix:desktop-companion-status';
+
+export type ShadowWatchSettings = {
+  enabled: boolean;
+  visionModelId: string;
+  backgroundCallsPerMinute: number;
+  minimumObservationIntervalMs: number;
+  observationTimeoutMs: number;
+  observationTtlMs: number;
+  commentaryCooldownMs: number;
+  minimumChangeConfidence: number;
+};
+
+type ObserveResponse = {
+  status: 'completed' | 'deferred' | 'suppressed' | 'error';
+  reason: string;
+  observation?: { observation_id?: string } | null;
+  attention?: { reaction?: string; rationale?: string; should_generate?: boolean } | null;
+  coordinator?: Record<string, unknown>;
+};
+
+type ControllerWindow = Window & typeof globalThis & {
+  __omnixDesktopCompanionWatchInstalled?: boolean;
+};
+
+const runtime = new DesktopCompanionRuntime();
+const behaviorTracker = new DesktopBehaviorTracker();
+let previousSample: Uint8Array | null = null;
+let previousSampleAtMs = -1;
+let requestController: AbortController | null = null;
+let timerId: number | null = null;
+let settings: ShadowWatchSettings = disabledSettings();
+let settingsLoadedAtMs = 0;
+let lastObservationStartedMs: number | null = null;
+let lastBindingKey = '';
+let resetBinding: { sessionId: string; captureGeneration: string } | null = null;
+
+export function initializeDesktopCompanionWatchController(): () => void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
+  const target = window as ControllerWindow;
+  if (target.__omnixDesktopCompanionWatchInstalled) return () => undefined;
+  target.__omnixDesktopCompanionWatchInstalled = true;
+  timerId = window.setInterval(() => void tick(), 500);
+  const handleVisibility = () => runtime.handleVisibility(document.visibilityState === 'visible');
+  const handleShareChange = () => void tick();
+  document.addEventListener('visibilitychange', handleVisibility);
+  window.addEventListener('omnix:desktop-share-changed', handleShareChange);
+  void tick();
+  return () => {
+    if (timerId !== null) window.clearInterval(timerId);
+    timerId = null;
+    requestController?.abort('controller_disposed');
+    requestController = null;
+    document.removeEventListener('visibilitychange', handleVisibility);
+    window.removeEventListener('omnix:desktop-share-changed', handleShareChange);
+    void stopAndReset('controller_disposed');
+    target.__omnixDesktopCompanionWatchInstalled = false;
+  };
+}
+
+export function parseShadowWatchSettings(payload: unknown): ShadowWatchSettings {
+  const root = record(payload);
+  const settingsRoot = record(root.settings);
+  const profile = record(settingsRoot.settings_control_center);
+  const assistant = record(profile.assistant);
+  const stage = stringValue(assistant.desktopCompanionRolloutStage, 'disabled');
+  return {
+    enabled: assistant.desktopCompanionEnabled === true && stage === 'shadow',
+    visionModelId: stringValue(assistant.desktopCompanionVisionModelId, ''),
+    backgroundCallsPerMinute: boundedInt(assistant.desktopCompanionBackgroundCallsPerMinute, 6, 1, 30),
+    minimumObservationIntervalMs: boundedInt(assistant.desktopCompanionMinimumObservationIntervalMs, 8_000, 2_000, 120_000),
+    observationTimeoutMs: boundedInt(assistant.desktopCompanionObservationTimeoutMs, 10_000, 1_000, 60_000),
+    observationTtlMs: boundedInt(assistant.desktopCompanionObservationTtlMs, 12_000, 2_000, 120_000),
+    commentaryCooldownMs: boundedInt(assistant.desktopCompanionCommentaryCooldownMs, 25_000, 5_000, 300_000),
+    minimumChangeConfidence: boundedNumber(assistant.desktopCompanionMinimumChangeConfidence, 0.55, 0, 1),
+  };
+}
+
+export function activityPayload(signal: DesktopActivitySignal, sourceWidth: number, sourceHeight: number) {
+  return {
+    activity: signal.activity,
+    hypothesis: signal.hypothesis,
+    confidence: signal.confidence,
+    changed_ratio: signal.changedRatio,
+    mean_difference: signal.meanDifference,
+    horizontal_shift: signal.horizontalShift,
+    vertical_shift: signal.verticalShift,
+    focus: signal.focus,
+    source_width: Math.max(1, Math.round(sourceWidth)),
+    source_height: Math.max(1, Math.round(sourceHeight)),
+    details: {},
+  };
+}
+
+async function tick(): Promise<void> {
+  const nowMs = Date.now();
+  if (nowMs - settingsLoadedAtMs >= 10_000) await refreshSettings(nowMs);
+  const capture = currentDesktopCompanionCapture();
+  if (!settings.enabled || !capture?.sessionId) {
+    if (runtime.getSnapshot().binding) await stopAndReset(settings.enabled ? 'session_unbound' : 'desktop_companion_disabled');
+    return;
+  }
+
+  const bindingKey = `${capture.sessionId}:${capture.sourceFingerprint}`;
+  if (bindingKey !== lastBindingKey) {
+    await stopAndReset('capture_rebound');
+    const binding = runtime.beginSharing({
+      sessionId: capture.sessionId,
+      characterId: capture.characterId,
+      sourceFingerprint: capture.sourceFingerprint,
+    });
+    resetBinding = { sessionId: binding.sessionId, captureGeneration: binding.captureGeneration };
+    runtime.setPreflight({
+      ready: true,
+      modelId: settings.visionModelId || null,
+      endpoint: null,
+      remote: false,
+      reason: 'shadow_runtime_available',
+    });
+    runtime.enableWatch({ shadowMode: true, speechMuted: true });
+    behaviorTracker.reset();
+    previousSample = null;
+    previousSampleAtMs = -1;
+    lastObservationStartedMs = null;
+    lastBindingKey = bindingKey;
+    publishStatus('watching_idle', 'shadow_watch_bound');
+  }
+  if (requestController || !runtime.getSnapshot().watchEnabled) return;
+
+  const sample = capture.capture.latestActivitySample();
+  if (!sample || sample.capturedAtMs === previousSampleAtMs) return;
+  const activity = classifyDesktopActivity(previousSample, sample.sample, performance.now());
+  previousSample = sample.sample;
+  previousSampleAtMs = sample.capturedAtMs;
+  const behavior = behaviorTracker.record(activity);
+  if (activity.activity === 'unknown' || activity.activity === 'static' || activity.activity === 'micro_change') return;
+  if (activity.confidence < settings.minimumChangeConfidence) return;
+  if (behavior.likelyTyping || behavior.rapidBrowsing) return;
+  if (lastObservationStartedMs !== null && nowMs - lastObservationStartedMs < settings.minimumObservationIntervalMs) return;
+
+  const sequence = runtime.nextSequence();
+  const controller = new AbortController();
+  requestController = controller;
+  lastObservationStartedMs = nowMs;
+  runtime.markPhase('analyzing');
+  publishStatus('analyzing', 'meaningful_change_available');
+  const timeoutId = window.setTimeout(() => controller.abort('observation_timeout'), settings.observationTimeoutMs);
+  try {
+    const payload = await capture.capture.buildPayload();
+    const conversation = liveConversationStore.getState().conversation;
+    const response = await fetch('/api/desktop-companion/observe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        session_id: sequence.binding.sessionId,
+        character_id: sequence.binding.characterId,
+        capture_generation: sequence.binding.captureGeneration,
+        source_fingerprint: sequence.binding.sourceFingerprint,
+        client_sequence: sequence.clientSequence,
+        captured_at: new Date().toISOString(),
+        current_image_data_url: payload.currentImageDataUrl,
+        history_image_data_url: payload.historyImageDataUrl,
+        combined_image_data_url: payload.combinedImageDataUrl,
+        history_timestamps: payload.historyTimestamps,
+        capture_mode: payload.captureMode,
+        vision_model_id: settings.visionModelId || null,
+        activity: activityPayload(activity, sample.width, sample.height),
+        behavior: {
+          current_pattern: behavior.currentPattern,
+          settled_seconds: behavior.settledSeconds,
+          browsing_pace: behavior.browsingPace,
+          rapid_browsing: behavior.rapidBrowsing,
+          likely_typing: behavior.likelyTyping,
+          likely_media: behavior.likelyMedia,
+          transition: behavior.transition,
+          sample_count: behavior.sampleCount,
+        },
+        policy: {
+          enabled: true,
+          shadow_mode: true,
+          speech_enabled: false,
+          visible_comments: false,
+          background_calls_per_minute: settings.backgroundCallsPerMinute,
+          minimum_observation_interval_ms: settings.minimumObservationIntervalMs,
+          observation_timeout_ms: settings.observationTimeoutMs,
+          observation_ttl_ms: settings.observationTtlMs,
+          commentary_cooldown_ms: settings.commentaryCooldownMs,
+          minimum_change_confidence: settings.minimumChangeConfidence,
+        },
+        user_floor_active: conversation.floorOwner === 'user' || conversation.userTurn === 'speaking',
+        assistant_busy: conversation.floorOwner === 'assistant' || conversation.assistantTurn !== 'idle',
+        request_in_flight: false,
+      }),
+    });
+    if (!response.ok) throw new Error(`Desktop observation failed with status ${response.status}.`);
+    const result = await response.json() as ObserveResponse;
+    if (!runtime.acceptsResult({
+      captureGeneration: sequence.binding.captureGeneration,
+      clientSequence: sequence.clientSequence,
+    })) return;
+    if (result.status === 'completed') {
+      runtime.markPhase('observation_ready');
+      publishStatus('observation_ready', result.reason, result);
+    } else if (result.status === 'deferred') {
+      runtime.markPhase('backing_off', result.reason);
+      publishStatus('backing_off', result.reason, result);
+    } else if (result.status === 'error') {
+      runtime.markPhase('error', result.reason);
+      publishStatus('error', result.reason, result);
+    } else {
+      runtime.markPhase('watching_idle');
+      publishStatus('watching_idle', result.reason, result);
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      const reason = error instanceof Error ? error.message : String(error);
+      runtime.markPhase('backing_off', reason);
+      publishStatus('backing_off', reason);
+    }
+  } finally {
+    window.clearTimeout(timeoutId);
+    if (requestController === controller) requestController = null;
+    if (runtime.getSnapshot().watchEnabled && runtime.getSnapshot().phase !== 'error') {
+      runtime.markPhase('watching_idle');
+    }
+  }
+}
+
+async function refreshSettings(nowMs: number): Promise<void> {
+  settingsLoadedAtMs = nowMs;
+  try {
+    const response = await fetch('/api/settings');
+    if (!response.ok) return;
+    settings = parseShadowWatchSettings(await response.json());
+  } catch {
+    // Existing chat and manual Desktop Ask remain available when settings cannot load.
+  }
+}
+
+async function stopAndReset(reason: string): Promise<void> {
+  requestController?.abort(reason);
+  requestController = null;
+  const previous = resetBinding;
+  runtime.stopAndForget();
+  behaviorTracker.reset();
+  previousSample = null;
+  previousSampleAtMs = -1;
+  lastObservationStartedMs = null;
+  lastBindingKey = '';
+  resetBinding = null;
+  if (previous) {
+    try {
+      await fetch('/api/desktop-companion/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: previous.sessionId,
+          capture_generation: previous.captureGeneration,
+        }),
+      });
+    } catch {
+      // Reset is best effort; generation IDs still reject stale browser results.
+    }
+  }
+  publishStatus('off', reason);
+}
+
+function publishStatus(phase: string, reason: string, result?: ObserveResponse): void {
+  window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_STATUS_EVENT, {
+    detail: {
+      phase,
+      reason,
+      observationId: result?.observation?.observation_id ?? null,
+      reaction: result?.attention?.reaction ?? null,
+      rationale: result?.attention?.rationale ?? null,
+      shouldGenerate: result?.attention?.should_generate ?? false,
+      coordinator: result?.coordinator ?? {},
+    },
+  }));
+}
+
+function disabledSettings(): ShadowWatchSettings {
+  return {
+    enabled: false,
+    visionModelId: '',
+    backgroundCallsPerMinute: 6,
+    minimumObservationIntervalMs: 8_000,
+    observationTimeoutMs: 10_000,
+    observationTtlMs: 12_000,
+    commentaryCooldownMs: 25_000,
+    minimumChangeConfidence: 0.55,
+  };
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value.trim() : fallback;
+}
+
+function boundedInt(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  return Math.max(minimum, Math.min(maximum, Math.round(numeric)));
+}
+
+function boundedNumber(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  return Math.max(minimum, Math.min(maximum, numeric));
+}

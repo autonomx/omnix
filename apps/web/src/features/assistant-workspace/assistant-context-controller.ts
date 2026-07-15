@@ -6,6 +6,14 @@ type DesktopShareSession = {
   stream: MediaStream;
   video: HTMLVideoElement;
   capture: DesktopTemporalCapture;
+  sourceFingerprint: string;
+};
+
+export type DesktopCompanionCaptureSnapshot = {
+  sessionId: string | null;
+  characterId: string | null;
+  sourceFingerprint: string;
+  capture: DesktopTemporalCapture;
 };
 
 type AssistantContextWindow = Window & typeof globalThis & {
@@ -88,6 +96,16 @@ export function normalizeResearchMode(value: unknown): ResearchMode {
 
 export function desktopStatusLabel(isSharing: boolean, status: string): string {
   return isSharing || status !== 'Off' ? status : 'Off';
+}
+
+export function currentDesktopCompanionCapture(): DesktopCompanionCaptureSnapshot | null {
+  if (!desktopShare) return null;
+  return {
+    sessionId: activeSessionId,
+    characterId: null,
+    sourceFingerprint: desktopShare.sourceFingerprint,
+    capture: desktopShare.capture,
+  };
 }
 
 function installFetchInterceptor(): void {
@@ -324,8 +342,14 @@ async function toggleDesktopShare(): Promise<void> {
     await waitForVideoDimensions(video);
     const capture = new DesktopTemporalCapture(video);
     capture.start();
-    desktopShare = { stream, video, capture };
+    desktopShare = {
+      stream,
+      video,
+      capture,
+      sourceFingerprint: desktopSourceFingerprint(stream),
+    };
     desktopStatus = 'Buffering recent frames';
+    window.dispatchEvent(new CustomEvent('omnix:desktop-share-changed', { detail: { sharing: true } }));
     stream.getVideoTracks()[0]?.addEventListener('ended', () => {
       stopDesktopShare();
       renderControls();
@@ -346,6 +370,19 @@ function stopDesktopShare(options: { resetStatus?: boolean } = {}): void {
   current?.stream.getTracks().forEach((track) => track.stop());
   if (current) current.video.srcObject = null;
   if (options.resetStatus !== false) desktopStatus = 'Off';
+  if (current) window.dispatchEvent(new CustomEvent('omnix:desktop-share-changed', { detail: { sharing: false } }));
+}
+
+function desktopSourceFingerprint(stream: MediaStream): string {
+  const track = stream.getVideoTracks()[0];
+  const settings = track?.getSettings() as MediaTrackSettings & { displaySurface?: string };
+  const source = `${settings.displaySurface ?? 'unknown'}:${track?.label ?? 'desktop'}`;
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `desktop-source:${(hash >>> 0).toString(16).padStart(8, '0')}`;
 }
 
 function waitForVideoDimensions(video: HTMLVideoElement): Promise<void> {
