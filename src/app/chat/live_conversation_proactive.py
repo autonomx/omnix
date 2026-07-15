@@ -37,6 +37,7 @@ class ProactiveDeliveryResponse(BaseModel):
     session: ChatSession
     message_id: str
     duplicate: bool = False
+    persisted: bool = True
 
 
 def _utcnow() -> str:
@@ -96,6 +97,15 @@ def _listener_backchannel(reason: str) -> str | None:
     return token if token in LISTENER_BACKCHANNELS else "mhm"
 
 
+def _provider_session(session: ChatSession) -> ChatSession:
+    """Exclude transient assistant turns from proactive provider context."""
+
+    messages = [message for message in session.messages if not message.metadata.get("transient")]
+    if len(messages) == len(session.messages):
+        return session
+    return session.model_copy(update={"messages": messages, "message_count": len(messages)})
+
+
 def stream_proactive_turn_chunks(
     store: Any,
     session: ChatSession,
@@ -141,7 +151,7 @@ def stream_proactive_turn_chunks(
         created_at=_utcnow(),
         metadata={"source": purpose, "purpose": purpose, "transient": True},
     )
-    provider_messages = store._provider_messages(session, synthetic_message, [])
+    provider_messages = store._provider_messages(_provider_session(session), synthetic_message, [])
     messages = [ProviderMessage(role=message.role, content=message.content) for message in provider_messages]
     model_name = _model_key(resolved_model_id)
     response = provider.chat_completion(messages=messages, model=model_name, stream=True)
@@ -203,6 +213,16 @@ def commit_proactive_delivery(store: Any, session_id: str, request: ProactiveDel
     current = store.get_session(session_id)
     if current is None:
         return None
+    if request.purpose.startswith("desktop_"):
+        # Desktop comments have a separate bounded commentary ledger. Keeping
+        # them transient prevents unsolicited screen reactions from filling the
+        # durable chat transcript or future provider context.
+        return ProactiveDeliveryResponse(
+            session=current,
+            message_id=request.turn_id,
+            duplicate=False,
+            persisted=False,
+        )
     for message in current.messages:
         if message.role == "assistant" and message.metadata.get("turn_id") == request.turn_id:
             return ProactiveDeliveryResponse(session=current, message_id=message.id, duplicate=True)
