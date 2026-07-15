@@ -23,6 +23,7 @@ _ENVIRONMENT_KEYS = {
 }
 _DESCRIPTION = "Omnix provider API keys"
 _CRYPTPROTECT_UI_FORBIDDEN = 0x01
+_ENVIRONMENT_OWNED_MARKER = b"OMNIX_ENVIRONMENT_OWNED_PROVIDER_KEYS\n"
 
 
 class _DataBlob(ctypes.Structure):
@@ -95,7 +96,7 @@ def _unprotect(value: bytes) -> bytes:
 
 def _stored_api_keys() -> dict[str, str]:
     path = provider_secret_path()
-    if not path.exists():
+    if not path.exists() or path.read_bytes() == _ENVIRONMENT_OWNED_MARKER:
         return {}
     try:
         payload = json.loads(_unprotect(path.read_bytes()).decode("utf-8"))
@@ -118,11 +119,27 @@ def load_provider_secrets() -> dict[str, Any]:
     return {"api_keys": {provider: api_keys.get(provider, "") for provider in _PROVIDERS}}
 
 
+def _save_environment_owned_marker(incoming: dict[str, Any]) -> None:
+    for provider, environment_key in _ENVIRONMENT_KEYS.items():
+        requested = str(incoming.get(provider) or "").strip()
+        if requested and not os.environ.get(environment_key, "").strip():
+            raise LegacyPersistenceRetired(
+                "provider-key editing requires an operating-system credential store"
+            )
+    path = provider_secret_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_bytes(_ENVIRONMENT_OWNED_MARKER)
+    os.replace(temporary, path)
+
+
 def save_provider_secrets(payload: dict[str, Any]) -> None:
-    if sys.platform != "win32":
-        raise LegacyPersistenceRetired("provider-key editing requires an operating-system credential store")
     incoming = payload.get("api_keys") if isinstance(payload, dict) else None
     incoming = incoming if isinstance(incoming, dict) else {}
+    if sys.platform != "win32":
+        _save_environment_owned_marker(incoming)
+        return
+
     api_keys = _stored_api_keys()
     for provider, environment_key in _ENVIRONMENT_KEYS.items():
         if os.environ.get(environment_key, "").strip():

@@ -66,3 +66,58 @@ class AssistantSettingsProfile(BaseModel):
         default=False,
         alias="researchHermesPlannerEnabled",
     )
+
+    desktop_companion_enabled: bool = Field(default=False, alias="desktopCompanionEnabled")
+    desktop_companion_rollout_stage: Literal["disabled", "shadow", "text", "speech"] = Field(
+        default="disabled",
+        alias="desktopCompanionRolloutStage",
+    )
+    desktop_companion_vision_model_id: str = Field(
+        default="",
+        max_length=240,
+        alias="desktopCompanionVisionModelId",
+    )
+    desktop_companion_remote_vision_allowed: bool = Field(
+        default=False,
+        alias="desktopCompanionRemoteVisionAllowed",
+    )
+    desktop_companion_show_diagnostics: bool = Field(
+        default=False,
+        alias="desktopCompanionShowDiagnostics",
+    )
+    desktop_companion_background_calls_per_minute: int = Field(
+        default=6,
+        ge=1,
+        le=30,
+        alias="desktopCompanionBackgroundCallsPerMinute",
+    )
+    desktop_companion_minimum_observation_interval_ms: int = Field(
+        default=8_000,
+        ge=2_000,
+        le=120_000,
+        alias="desktopCompanionMinimumObservationIntervalMs",
+    )
+    desktop_companion_observation_timeout_ms: int = Field(
+        default=10_000,
+        ge=1_000,
+        le=60_000,
+        alias="desktopCompanionObservationTimeoutMs",
+    )
+    desktop_companion_observation_ttl_ms: int = Field(
+        default=12_000,
+        ge=2_000,
+        le=120_000,
+        alias="desktopCompanionObservationTtlMs",
+    )
+    desktop_companion_commentary_cooldown_ms: int = Field(
+        default=25_000,
+        ge=5_000,
+        le=300_000,
+        alias="desktopCompanionCommentaryCooldownMs",
+    )
+    desktop_companion_minimum_change_confidence: float = Field(
+        default=0.55,
+        ge=0,
+        le=1,
+        alias="desktopCompanionMinimumChangeConfidence",
+    )

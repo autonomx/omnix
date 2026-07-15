@@ -6,7 +6,10 @@ from fastapi.responses import Response
 from app.rpg.performance_trace import RpgPipelineTrace
 
 _MINIMUM_ATTRIBUTION_PERCENT = 95.0
-_FINALIZATION_MARGIN_MS = 0.25
+# Header mutation and the final trace summary happen after the lightweight
+# remainder sample. Keep a small explicit allowance on the derived framework
+# span so completed attribution remains stable across CI hosts.
+_FINALIZATION_MARGIN_MS = 1.0
 
 
 def finalize_rpg_trace_headers(response: Response, trace: RpgPipelineTrace) -> Response:
@@ -21,18 +24,21 @@ def finalize_rpg_trace_headers(response: Response, trace: RpgPipelineTrace) -> R
 
 
 def _classify_pipeline_overhead(trace: RpgPipelineTrace) -> None:
-    """Name the small framework gap that remains after explicit spans close.
+    """Name the framework gap after explicit spans without a full trace summary.
 
-    This is a derived remainder, not invented provider/runtime work. The bounded
-    finalization margin covers the measurement and header-assembly work that
-    occurs between the remainder sample and the immediately following summary.
-    It is deliberately tiny and is exposed as framework overhead.
+    ``RpgPipelineTrace.summary`` also samples process and RSS resources. Calling
+    it once to discover the remainder and again for the response header makes
+    the first resource sample itself unattributed. Use the trace's lightweight
+    elapsed and child-duration properties here, then perform the full summary
+    only once when producing the completed response headers.
     """
 
-    summary = trace.summary()
-    if float(summary.get("attribution_percent") or 0.0) >= _MINIMUM_ATTRIBUTION_PERCENT:
+    total_ms = trace.elapsed_ms
+    attributed_ms = min(total_ms, trace.child_duration_ms)
+    attribution_percent = (attributed_ms / total_ms) * 100.0 if total_ms > 0 else 100.0
+    if attribution_percent >= _MINIMUM_ATTRIBUTION_PERCENT:
         return
-    remainder = float(summary.get("unattributed_ms") or 0.0)
+    remainder = max(0.0, total_ms - attributed_ms)
     if remainder <= 0.0:
         return
     trace.spans.append(

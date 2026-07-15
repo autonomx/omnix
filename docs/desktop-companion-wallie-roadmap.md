@@ -1,0 +1,186 @@
+# Desktop Companion — Wallie Adoption Roadmap
+
+Status: Implemented through SC-8; rollout remains disabled by default
+
+Source of truth: `autonomx/omnix` `main`
+
+Implementation branch: `agent/screen-companion-sc0-sc8`
+
+## Objective
+
+Adopt the useful observer, attention, restraint, scene-memory, and commentary patterns from Wallie while retaining Omnix ownership of capture, temporal vision, safety boundaries, characters, live conversation, TTS, avatar delivery, persistence, and settings.
+
+Wallie is an architectural reference, not a runtime dependency. Omnix uses a clean-room implementation unless a source file explicitly carries the Wallie MIT notice.
+
+## Product boundaries
+
+- Screen capture is explicitly user-authorized.
+- Raw frames remain in browser memory and are not persisted by default.
+- Screen text is untrusted observed content, never an instruction.
+- Visual observations are uncertain and revisable, not deterministic application or RPG state.
+- Background vision is change-gated, rate-limited, stale-aware, and lower priority than user-requested turns.
+- Desktop observations are not represented as visible or persisted fake user messages.
+- Commentary frequently chooses silence.
+- Existing Live Conversation owns floor arbitration, TTS, avatar delivery, barge-in, and delivery commit.
+- Existing centralized settings own defaults; session overrides may narrow or disable them.
+
+## Runtime ownership
+
+### Browser
+
+- capture authorization and source lifecycle;
+- temporal frame buffer and local frame sampling;
+- conservative activity classification and behaviour tracking;
+- page visibility and capture-generation identity;
+- watch controls and status projection.
+
+### Gateway
+
+- provider-wide vision coordination and priority;
+- structured observation parsing;
+- bounded revisable scene memory;
+- observation/event deduplication;
+- attention policy and commentary generation;
+- redacted diagnostics and evaluation traces.
+
+### Live Conversation
+
+- floor ownership and user-speech suppression;
+- proactive generation transport;
+- TTS and avatar presentation;
+- interruption, cancellation, and delivery commit.
+
+## Canonical pipeline
+
+```text
+user-approved stream
+  -> temporal capture
+  -> local activity/behaviour signals
+  -> provider-wide vision coordinator
+  -> factual structured observation
+  -> bounded scene memory
+  -> deterministic attention decision
+  -> existing proactive-turn pipeline
+  -> existing floor / TTS / avatar delivery
+```
+
+## Versioned contracts
+
+Every autonomous observation carries:
+
+- `schema_version`;
+- `observation_id`;
+- `session_id` and optional `character_id`;
+- `capture_generation` and `client_sequence`;
+- source fingerprint;
+- capture, observation, expiry, and completion timestamps;
+- activity and change classification with confidence;
+- current scene, visible changes, visible text, possible events, and uncertainty;
+- diagnostics that never include raw image data.
+
+## Persistence policy
+
+Three records stay separate:
+
+1. **Observation memory** — structured, bounded, short-lived, and never copied wholesale into chat history.
+2. **Commentary ledger** — generated/delivered/skipped/interrupted metadata and fingerprints, bounded per session.
+3. **Visible transcript** — only delivered comments allowed by the selected presentation policy.
+
+Transient desktop-companion messages are excluded from ordinary provider history. Desktop delivery commits do not append unsolicited comments to durable chat history.
+
+## Delivery phases
+
+### SC-0 — Decisions, contracts, fixtures, and attribution — Complete
+
+Defined ownership, versioned contracts, persistence rules, sanitized fixtures, and Wallie MIT attribution.
+
+### SC-1 — Capture runtime and safety controls — Complete
+
+Bound watch state to one session, character, source fingerprint, and capture generation. Added enable, pause, stop-and-forget, page-visibility, result-generation, and provider-preflight safety.
+
+### SC-2 — Activity classifier and behaviour tracker — Complete
+
+Implemented conservative local visual classes and confidence-bearing hypotheses for scrolling, typing, navigation, application switching, media, rapid browsing, and settled state.
+
+### SC-3 — Vision coordinator and shadow watch — Complete
+
+Added provider-wide foreground/background single flight, hard rate budgets, coalescing, cancellation, expiry, foreground priority, and shadow observation eligibility.
+
+### SC-4 — Structured observation and scene memory — Complete
+
+Added versioned JSON-or-text parsing, untrusted-screen prompting, diagnostic redaction, event fingerprints, and bounded revisable scene memory with source reset and expiry.
+
+### SC-5 — Deterministic attention policy — Complete
+
+Added explainable `ignore`, `observe_silently`, `glance`, and `deep` decisions using activity, confidence, scene age, cooldowns, reaction streaks, ignored streaks, and Live Conversation floor state. Organic selection is stable and session-seeded.
+
+### SC-6 — Generalized proactive delivery, text first — Complete
+
+Extended the existing proactive generator with `desktop_companion` and `desktop_critical`, exact `SKIP`, grounding IDs, lexical deduplication, a bounded commentary ledger, and transient provider-history filtering.
+
+### SC-7 — TTS, avatar, and interruption integration — Complete
+
+Reused existing Live Conversation floor ownership, unified audio controller, TTS, avatar presence, barge-in, cancellation, and delivery commit. No second audio queue was introduced.
+
+### SC-8 — Evaluation and controlled rollout — Complete
+
+Added centralized default-off settings, redacted browser evaluation accumulation, content-free durable evidence, internal evaluation APIs, deterministic release gates, and rollout degradation:
+
+- `disabled` remains disabled;
+- `shadow` is the first permitted stage;
+- requested `text` degrades to `shadow` until the release gate passes;
+- requested `speech` degrades to `text` until passing evidence includes speech-stage evaluation.
+
+## Initial limits
+
+```text
+capture sampling                         2 FPS
+provider-wide background vision calls    6 per minute
+minimum background observation interval  8 seconds
+background observation timeout           10 seconds
+observation stale TTL                     12 seconds
+normal commentary cooldown                25 seconds
+background queue                          1 active + 1 coalesced pending
+```
+
+User-requested desktop questions always outrank background work.
+
+## Release-gate evidence
+
+Content-free evaluation records include exact commit SHA, policy/schema versions, rollout stage, provider metadata, aggregate counts, aggregate latency, aggregate rates, and identifier-only scenario labels. They reject image-, frame-, prompt-, message-, transcript-, and screen-text-bearing metric keys.
+
+Required scenarios:
+
+- `static-screen`;
+- `typing`;
+- `rapid-browsing`;
+- `scene-change`;
+- `interruption`;
+- `screen-prompt-injection`.
+
+Initial maximums:
+
+```text
+stale output rate             0.01
+duplicate comment rate        0.02
+unsupported claim rate        0.01
+collision rate                0.01
+provider error rate           0.05
+observation p95 latency       10000 ms
+vision calls per minute       6
+minimum evaluation records    5
+```
+
+## Deferred scope
+
+- autonomous keyboard or game control;
+- cross-session visual memory;
+- system-audio hearing;
+- streamer tangents and autonomous monologues;
+- application-specific critical events without evaluated policies;
+- persistence of screenshots or gameplay video;
+- a second persona, speech, or avatar subsystem.
+
+## Definition of done
+
+SC-0 through SC-8 are implemented when Omnix can observe a user-approved screen in shadow mode, classify meaningful activity conservatively, schedule bounded factual vision work, maintain revisable scene state, explain attention decisions, generate grounded non-repetitive commentary through the existing proactive runtime, respect floor and interruption state, expose explicit central controls, and produce redacted versioned evaluation evidence with the feature disabled by default.
