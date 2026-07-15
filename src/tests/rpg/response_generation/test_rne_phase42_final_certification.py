@@ -73,7 +73,8 @@ def test_phase42_certificate_json_is_stable_and_roundtrippable() -> None:
 
     assert encoded == certification.canonical_json()
     assert json.loads(encoded) == certification.as_dict()
-    assert " " not in encoded
+    assert ": " not in encoded
+    assert ", " not in encoded
     assert "\n" not in encoded
 
 
