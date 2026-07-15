@@ -1,7 +1,12 @@
+import type { DesktopCompanionRolloutStage } from '../settings/settingsDocumentTypes';
 import {
   DesktopCompanionEvaluationAccumulator,
   type DesktopCompanionEvaluationPayload,
 } from './desktop-companion-evaluation';
+import {
+  hashDesktopCompanionModelId,
+  loadDesktopCompanionBuildIdentity,
+} from './desktop-companion-build-identity';
 import {
   DESKTOP_COMPANION_EVALUATION_EVENT,
   type DesktopCompanionEvaluationEvent,
@@ -9,17 +14,12 @@ import {
 
 const FLUSH_INTERVAL_MS = 60_000;
 
-type BuildIdentity = {
-  exact_commit_sha: string;
-  app_version: string;
-  source: string;
-};
-
 type EvaluationIdentity = {
   sessionId: string | null;
   characterId: string;
   modelId: string | null;
   remoteProvider: boolean;
+  rolloutStage: DesktopCompanionRolloutStage;
   exactCommitSha: string;
   appVersion: string;
   visionModelHash: string | null;
@@ -34,7 +34,6 @@ let identity: EvaluationIdentity | null = null;
 let recordedEvents = 0;
 let startedAt = new Date();
 let flushTimer: number | null = null;
-let buildIdentityPromise: Promise<BuildIdentity> | null = null;
 let eventQueue: Promise<void> = Promise.resolve();
 
 export function initializeDesktopCompanionShadowEvaluationController(): () => void {
@@ -73,12 +72,16 @@ export function normalizeEvaluationEvent(value: unknown): DesktopCompanionEvalua
   const kind = input.kind;
   if (!['watch_started', 'capture', 'vision_result', 'watch_stopped'].includes(String(kind))) return null;
   const sessionId = typeof input.sessionId === 'string' && input.sessionId.trim() ? input.sessionId.trim() : null;
+  const rolloutStage = ['shadow', 'text', 'speech'].includes(String(input.rolloutStage))
+    ? input.rolloutStage as DesktopCompanionRolloutStage
+    : undefined;
   return {
     kind: kind as DesktopCompanionEvaluationEvent['kind'],
     sessionId,
     characterId: typeof input.characterId === 'string' ? input.characterId.trim() || null : null,
     modelId: typeof input.modelId === 'string' ? input.modelId.trim() || null : null,
     remoteProvider: input.remoteProvider === true,
+    rolloutStage,
     scenario: typeof input.scenario === 'string' ? input.scenario.trim() || null : null,
     meaningful: input.meaningful === true,
     latencyMs: finiteNumber(input.latencyMs),
@@ -119,13 +122,14 @@ async function handleEvaluationEvent(event: DesktopCompanionEvaluationEvent): Pr
 
 async function startAccumulator(event: DesktopCompanionEvaluationEvent): Promise<void> {
   if (!event.sessionId) return;
-  const build = await loadBuildIdentity();
-  const modelHash = event.modelId ? await sha256(event.modelId) : null;
+  const build = await loadDesktopCompanionBuildIdentity();
+  const modelHash = event.modelId ? await hashDesktopCompanionModelId(event.modelId) : null;
   identity = {
     sessionId: event.sessionId,
     characterId: event.characterId || 'system-assistant',
     modelId: event.modelId ?? null,
     remoteProvider: event.remoteProvider === true,
+    rolloutStage: event.rolloutStage ?? 'shadow',
     exactCommitSha: build.exact_commit_sha,
     appVersion: build.app_version,
     visionModelHash: modelHash,
@@ -163,7 +167,7 @@ function finalizeCurrent(): DesktopCompanionEvaluationPayload | null {
 
 function createAccumulator(value: EvaluationIdentity, start: Date): DesktopCompanionEvaluationAccumulator {
   return new DesktopCompanionEvaluationAccumulator({
-    runId: `desktop-shadow:${crypto.randomUUID()}`,
+    runId: `desktop-${value.rolloutStage}:${crypto.randomUUID()}`,
     sessionId: value.sessionId,
     exactCommitSha: value.exactCommitSha,
     appVersion: value.appVersion,
@@ -171,24 +175,12 @@ function createAccumulator(value: EvaluationIdentity, start: Date): DesktopCompa
     profileVersion: null,
     observationSchemaVersion: 1,
     attentionPolicyVersion: 1,
-    rolloutStage: 'shadow',
+    rolloutStage: value.rolloutStage,
     visionProvider: value.remoteProvider ? 'openai-compatible-remote' : 'openai-compatible-local',
     visionModelHash: value.visionModelHash,
     remoteProvider: value.remoteProvider,
     startedAt: start,
   });
-}
-
-async function loadBuildIdentity(): Promise<BuildIdentity> {
-  if (!buildIdentityPromise) {
-    buildIdentityPromise = fetch('/api/desktop-companion/build-identity')
-      .then((response) => {
-        if (!response.ok) throw new Error(`Build identity failed with status ${response.status}.`);
-        return response.json() as Promise<BuildIdentity>;
-      })
-      .catch(() => ({ exact_commit_sha: 'unknown-local-build', app_version: '1.0.0', source: 'browser-fallback' }));
-  }
-  return buildIdentityPromise;
 }
 
 async function submitEvaluation(payload: DesktopCompanionEvaluationPayload): Promise<void> {
@@ -214,13 +206,6 @@ function submitEvaluationKeepalive(payload: DesktopCompanionEvaluationPayload): 
   } catch {
     // Browser teardown remains best effort.
   }
-}
-
-async function sha256(value: string): Promise<string | null> {
-  if (!crypto.subtle) return null;
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)].map((item) => item.toString(16).padStart(2, '0')).join('');
 }
 
 function finiteNumber(value: unknown): number | undefined {
