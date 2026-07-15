@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.desktop_companion.build_identity import DesktopCompanionBuildIdentity
 from app.desktop_companion.preflight import DesktopCompanionPreflightResult
 from app.desktop_companion.routes import register_desktop_companion_routes
 from app.desktop_companion.runtime import DesktopCompanionObserveResponse
@@ -67,8 +68,26 @@ def client_and_runtime() -> tuple[TestClient, FakeOrchestrator]:
         app,
         orchestrator_factory=lambda: runtime,
         preflight_service_factory=FakePreflightService,
+        build_identity_factory=lambda: DesktopCompanionBuildIdentity(
+            exact_commit_sha="abcdef0123456789",
+            app_version="2.3.4",
+            source="test",
+        ),
     )
     return TestClient(app), runtime
+
+
+def test_build_identity_route_uses_injected_resolver() -> None:
+    client, _ = client_and_runtime()
+
+    result = client.get("/api/desktop-companion/build-identity")
+
+    assert result.status_code == 200
+    assert result.json() == {
+        "exact_commit_sha": "abcdef0123456789",
+        "app_version": "2.3.4",
+        "source": "test",
+    }
 
 
 def test_preflight_route_uses_injected_capability_service() -> None:

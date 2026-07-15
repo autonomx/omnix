@@ -97,8 +97,10 @@ window.setTimeout(() => {
     .then(async () => {
       const companion = await import('./features/assistant-workspace/desktop-companion-watch-controller');
       const controls = await import('./features/assistant-workspace/desktop-companion-controls');
+      const evaluation = await import('./features/assistant-workspace/desktop-companion-shadow-evaluation-controller');
       companion.initializeDesktopCompanionWatchController();
       controls.initializeDesktopCompanionControls();
+      evaluation.initializeDesktopCompanionShadowEvaluationController();
       return import('./features/assistant-workspace/research-release-controller');
     })
     .catch((error: unknown) => {

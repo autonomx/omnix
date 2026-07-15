@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from app.assistant_context.models import AssistantContextItem
 from app.desktop_companion.models import (
     DesktopActivitySignal,
@@ -52,6 +54,26 @@ def request(*, enabled: bool = True, shadow_mode: bool = True) -> DesktopCompani
             minimum_change_confidence=0.5,
         ),
     )
+
+
+def test_temporal_timestamp_alias_is_bounded_and_normalized() -> None:
+    value = request().model_dump(mode="json")
+    value.pop("history_timestamps", None)
+    value["desktop_history_timestamps"] = [-1.5, -0.5]
+
+    parsed = DesktopCompanionObserveRequest.model_validate(value)
+
+    assert parsed.history_timestamps == [-1.5, -0.5]
+    assert "desktop_history_timestamps" not in parsed.model_dump(mode="json")
+
+
+def test_disagreeing_timestamp_aliases_are_rejected() -> None:
+    value = request().model_dump(mode="json")
+    value["history_timestamps"] = [-1.0]
+    value["desktop_history_timestamps"] = [-2.0]
+
+    with pytest.raises(ValueError, match="aliases disagree"):
+        DesktopCompanionObserveRequest.model_validate(value)
 
 
 def test_shadow_observation_composes_vision_memory_and_attention() -> None:

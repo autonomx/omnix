@@ -1,6 +1,6 @@
 # Desktop Companion — Wallie Adoption Roadmap
 
-Status: Implemented through SC-10; text and speech rollout remain disabled by default
+Status: Implemented through SC-11; text and speech rollout remain disabled by default
 
 Source of truth: `autonomx/omnix` `main`
 
@@ -132,19 +132,20 @@ Connected the production browser capture buffer, conservative activity classifie
 
 Added explicit Start, pause/resume, mute/unmute, and stop-and-forget controls in the active Chat workspace. Watch does not start merely because the global setting is enabled. Start performs a harmless image-capability preflight against the selected provider and model, exposes redacted model/endpoint status, blocks remote providers without explicit consent, and preserves manual Desktop Ask when Watch is unavailable.
 
+### SC-11 — Automatic shadow evaluation — Complete
+
+Connected content-free evaluation to the production Watch lifecycle. A separate browser controller starts an accumulator after successful preflight, records captures, meaningful changes, provider calls, observation outcomes, stale results, provider errors, latency, rate maxima, and identifier-only scenarios, then submits bounded evidence on stop, rebind, unload, or a sixty-second interval.
+
 Acceptance evidence includes:
 
-- loopback-versus-remote endpoint classification;
-- remote-provider denial before any image request;
-- image-capability verification with bounded latency reporting;
-- binding-aware preflight invalidation when model or provider consent changes;
-- explicit user control state independent from capture permission;
-- pause and mute state separated from stop-and-forget;
-- persistent status labels for preflight, watching, analyzing, pause, backoff, and errors.
-
-### SC-11 — Automatic shadow evaluation — Pending
-
-Wire the evaluation accumulator into capture, vision, attention, and delivery lifecycle events and submit bounded evidence automatically.
+- exact build identity resolved from deployment metadata or the checked-out Git commit;
+- SHA-256 model identity rather than a stored model name;
+- local-versus-remote provider class without endpoint persistence;
+- scenario identifiers for static screens, typing, rapid browsing, and scene changes;
+- lifecycle event normalization that discards content-bearing extras;
+- best-effort evidence submission that never blocks capture or inference;
+- bounded temporal timestamp compatibility with strict disagreement rejection;
+- no frames, prompts, screen text, transcripts, or commentary text in evidence.
 
 ### SC-12 — Gate enforcement and text rollout — Pending
 
@@ -168,6 +169,7 @@ background observation timeout           10 seconds
 observation stale TTL                     12 seconds
 normal commentary cooldown                25 seconds
 background queue                          1 active + 1 coalesced pending
+shadow evidence flush interval            60 seconds
 ```
 
 User-requested desktop questions always outrank background work.
@@ -210,4 +212,4 @@ minimum evaluation records    5
 
 ## Definition of done
 
-SC-10 is complete when continuous observation requires explicit in-session Start, the configured provider passes a privacy-aware image-capability preflight, remote use requires consent, and the user can pause, resume, mute, and stop while seeing actionable status. Product rollout is complete only after SC-11 through SC-14 pass their separate acceptance gates.
+SC-11 is complete when a normal shadow Watch session automatically produces bounded, exact-build, content-free evaluation evidence without affecting observation availability or retaining visual content. Product rollout is complete only after SC-12 through SC-14 pass their separate acceptance gates.

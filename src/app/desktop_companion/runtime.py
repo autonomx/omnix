@@ -8,7 +8,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.assistant_context.vision import DesktopVisionClient
 
@@ -44,6 +44,7 @@ class DesktopCompanionObserveRequest(BaseModel):
     history_image_data_url: str | None = Field(default=None, max_length=8_000_000)
     combined_image_data_url: str | None = Field(default=None, max_length=8_000_000)
     history_timestamps: list[float] = Field(default_factory=list, max_length=8)
+    desktop_history_timestamps: list[float] = Field(default_factory=list, max_length=8, exclude=True)
     capture_mode: Literal["single", "temporal"] = "single"
     vision_model_id: str | None = Field(default=None, max_length=240)
     activity: DesktopActivitySignal = Field(default_factory=DesktopActivitySignal)
@@ -55,6 +56,18 @@ class DesktopCompanionObserveRequest(BaseModel):
     seconds_since_comment: float | None = Field(default=None, ge=0)
     visual_reaction_streak: int = Field(default=0, ge=0)
     ignored_streak: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def normalize_history_timestamp_alias(self) -> "DesktopCompanionObserveRequest":
+        if not self.history_timestamps and self.desktop_history_timestamps:
+            self.history_timestamps = list(self.desktop_history_timestamps)
+        if (
+            self.history_timestamps
+            and self.desktop_history_timestamps
+            and self.history_timestamps != self.desktop_history_timestamps
+        ):
+            raise ValueError("desktop history timestamp aliases disagree")
+        return self
 
 
 class DesktopCompanionObserveResponse(BaseModel):

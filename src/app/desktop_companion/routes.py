@@ -6,6 +6,7 @@ from collections.abc import Callable
 from fastapi import FastAPI, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from .build_identity import DesktopCompanionBuildIdentity, resolve_desktop_companion_build_identity
 from .evaluation import (
     DesktopCompanionEvaluationCreate,
     DesktopCompanionEvaluationRecord,
@@ -51,7 +52,17 @@ def register_desktop_companion_routes(
     evaluation_store_factory: Callable[[], DesktopCompanionEvaluationStore] = default_desktop_companion_evaluation_store,
     orchestrator_factory: Callable[[], DesktopCompanionOrchestrator] = default_desktop_companion_orchestrator,
     preflight_service_factory: Callable[[], DesktopCompanionPreflightService] = default_desktop_companion_preflight_service,
+    build_identity_factory: Callable[[], DesktopCompanionBuildIdentity] = resolve_desktop_companion_build_identity,
 ) -> None:
+    @app.get(
+        "/api/desktop-companion/build-identity",
+        response_model=DesktopCompanionBuildIdentity,
+        tags=["desktop-companion"],
+        include_in_schema=False,
+    )
+    def desktop_companion_build_identity() -> DesktopCompanionBuildIdentity:
+        return build_identity_factory()
+
     @app.post(
         "/api/desktop-companion/preflight",
         response_model=DesktopCompanionPreflightResult,
