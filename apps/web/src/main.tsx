@@ -19,9 +19,12 @@ import './features/chatbot/ChatbotWorkspaceTools.css';
 import './features/chatbot/ChatbotWorkspaceSidePanelFix.css';
 import './features/chatbot/ChatbotWorkspaceUtilityToggle.css';
 import './features/assistant-workspace/assistant-context-controller.css';
+import './features/assistant-workspace/desktop-companion-controls.css';
+import './features/assistant-workspace/desktop-companion-text-surface.css';
 import './features/assistant-workspace/research-release-controller.css';
 import { initializeChatMessageAudioControllerV2 } from './features/assistant-workspace/chat-message-audio-controller-v2';
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
+import { initializeDesktopCompanionDeliveryController } from './features/assistant-workspace/desktop-companion-delivery';
 import { initializeLiveAvatarPresenceController } from './features/assistant-workspace/live-avatar-presence';
 import { initializeLiveConversationDurableEvaluationController } from './features/assistant-workspace/live-conversation-durable-evaluation-controller';
 import { initializeLiveConversationEvaluationController } from './features/assistant-workspace/live-conversation-evaluation-controller';
@@ -65,6 +68,7 @@ initializeLiveVoiceAudioDuckBridge();
 initializeLiveVoiceUnifiedAudioController();
 initializeLiveAvatarPresenceController();
 initializeLiveConversationInitiativeController();
+initializeDesktopCompanionDeliveryController();
 initializeLiveConversationRepairController();
 initializeLiveConversationEvaluationController();
 initializeLiveConversationDurableEvaluationController();
@@ -91,7 +95,19 @@ window.setTimeout(() => {
   initializeChatMessageAudioControllerV2();
   initializeChatMessageStreamAudioController();
   void import('./features/assistant-workspace/assistant-context-controller')
-    .then(() => import('./features/assistant-workspace/research-release-controller'))
+    .then(async () => {
+      const companion = await import('./features/assistant-workspace/desktop-companion-watch-controller');
+      const controls = await import('./features/assistant-workspace/desktop-companion-controls');
+      const evaluation = await import('./features/assistant-workspace/desktop-companion-shadow-evaluation-controller');
+      const textSurface = await import('./features/assistant-workspace/desktop-companion-text-surface');
+      const operations = await import('./features/assistant-workspace/desktop-companion-operational-guard');
+      companion.initializeDesktopCompanionWatchController();
+      controls.initializeDesktopCompanionControls();
+      evaluation.initializeDesktopCompanionShadowEvaluationController();
+      textSurface.initializeDesktopCompanionTextSurface();
+      operations.initializeDesktopCompanionOperationalGuard();
+      return import('./features/assistant-workspace/research-release-controller');
+    })
     .catch((error: unknown) => {
       console.error('Assistant context controls failed to initialize', error);
     });

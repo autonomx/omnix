@@ -11,7 +11,7 @@ export function AssistantChatSettings() {
   return (
     <div className="settings-category-panel">
       <h2>Assistant & Chat</h2>
-      <p>Defaults for new conversations, research, and voice responses.</p>
+      <p>Defaults for new conversations, research, screen observation, and voice responses.</p>
       <SettingsSection title="Assistant defaults" scope="module">
         <div className="settings-form-grid">
           <SettingsField label="Personality">
@@ -46,6 +46,74 @@ export function AssistantChatSettings() {
         </div>
       </SettingsSection>
       <ResearchSettingsSection />
+      <SettingsSection title="Desktop Companion (experimental)" scope="module">
+        <p>Continuous observation is opt-in. Shadow mode records redacted decisions without generating or delivering comments.</p>
+        <div className="settings-form-grid">
+          <SettingsField label="Rollout stage">
+            <select
+              aria-label="Desktop Companion rollout stage"
+              value={value.desktopCompanionRolloutStage}
+              onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionRolloutStage', value: event.currentTarget.value })}
+            >
+              <option value="disabled">Disabled</option>
+              <option value="shadow">Shadow observation</option>
+              <option value="text">Text comments after gate</option>
+              <option value="speech">Spoken comments after gate</option>
+            </select>
+          </SettingsField>
+          <SettingsField label="Vision model">
+            <input
+              value={value.desktopCompanionVisionModelId}
+              placeholder="Use configured vision model"
+              onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionVisionModelId', value: event.currentTarget.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Background calls per minute">
+            <input
+              type="number"
+              min={1}
+              max={30}
+              value={value.desktopCompanionBackgroundCallsPerMinute}
+              onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionBackgroundCallsPerMinute', value: Number(event.currentTarget.value) })}
+            />
+          </SettingsField>
+          <SettingsField label="Minimum observation interval (ms)">
+            <input
+              type="number"
+              min={2000}
+              max={120000}
+              step={500}
+              value={value.desktopCompanionMinimumObservationIntervalMs}
+              onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionMinimumObservationIntervalMs', value: Number(event.currentTarget.value) })}
+            />
+          </SettingsField>
+          <SettingsField label="Observation timeout (ms)">
+            <input
+              type="number"
+              min={1000}
+              max={60000}
+              step={500}
+              value={value.desktopCompanionObservationTimeoutMs}
+              onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionObservationTimeoutMs', value: Number(event.currentTarget.value) })}
+            />
+          </SettingsField>
+          <SettingsField label="Commentary cooldown (ms)">
+            <input
+              type="number"
+              min={5000}
+              max={300000}
+              step={1000}
+              value={value.desktopCompanionCommentaryCooldownMs}
+              onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionCommentaryCooldownMs', value: Number(event.currentTarget.value) })}
+            />
+          </SettingsField>
+        </div>
+        <div className="settings-toggle-list">
+          <label><input type="checkbox" checked={value.desktopCompanionEnabled} onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionEnabled', value: event.currentTarget.checked })} /><span>Enable Desktop Companion</span></label>
+          <label><input type="checkbox" checked={value.desktopCompanionRemoteVisionAllowed} onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionRemoteVisionAllowed', value: event.currentTarget.checked })} /><span>Allow remote vision provider</span></label>
+          <label><input type="checkbox" checked={value.desktopCompanionShowDiagnostics} onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionShowDiagnostics', value: event.currentTarget.checked })} /><span>Show redacted companion diagnostics</span></label>
+        </div>
+      </SettingsSection>
       <SettingsSection title="Voice responses" scope="module">
         <div className="settings-form-grid">
           <SettingsField label="Speech language">

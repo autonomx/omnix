@@ -4,6 +4,7 @@ export const SETTINGS_SCHEMA_VERSION = 1 as const;
 
 export type ResearchMode = 'disabled' | 'quick' | 'deep';
 export type ResearchProvider = 'duckduckgo' | 'brave' | 'tavily' | 'playwright';
+export type DesktopCompanionRolloutStage = 'disabled' | 'shadow' | 'text' | 'speech';
 export type ProviderDefaults = { llm: string; tts: string; stt: string; image: string; voiceCloning: string };
 export type ModelDefaults = { chat: string; fast: string; quality: string; background: string; embedding: string; imagePrompt: string };
 export type RoutingDefaults = { fallbackBehavior: 'next-available' | 'fail'; taskOverrides: Record<string, { providerId: string; modelId: string }> };
@@ -38,6 +39,17 @@ export type AssistantSettings = {
   researchShowDiagnostics: boolean;
   researchDeepEnabled: boolean;
   researchHermesPlannerEnabled: boolean;
+  desktopCompanionEnabled: boolean;
+  desktopCompanionRolloutStage: DesktopCompanionRolloutStage;
+  desktopCompanionVisionModelId: string;
+  desktopCompanionRemoteVisionAllowed: boolean;
+  desktopCompanionShowDiagnostics: boolean;
+  desktopCompanionBackgroundCallsPerMinute: number;
+  desktopCompanionMinimumObservationIntervalMs: number;
+  desktopCompanionObservationTimeoutMs: number;
+  desktopCompanionObservationTtlMs: number;
+  desktopCompanionCommentaryCooldownMs: number;
+  desktopCompanionMinimumChangeConfidence: number;
 };
 
 export type SettingsDocument = {
