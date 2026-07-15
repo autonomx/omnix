@@ -1,6 +1,6 @@
 # Unified RPG Narrative Engine — Milestones G-L Completion
 
-Status: implementation complete; release evidence is certified against the exact pull-request head.
+Status: implementation complete; exact-head workflow evidence is intentionally external and must be re-established after every commit.
 
 ## Scope
 
