@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.rpg.narrative_engine import CanonicalNarrativeResponse
+from app.rpg.narrative_engine.serialization import canonical_response_from_dict
+
 from .database import PostgresDatabase, default_database
 from .identity_service import bootstrap_local_tenant
 from .rpg_repository import canonical_json
@@ -20,7 +23,7 @@ def persist_foreground_turn(
     submission_id: str,
     database: PostgresDatabase | None = None,
 ) -> dict[str, Any]:
-    """Commit campaign, turn, interaction, job, submission, and outbox atomically."""
+    """Commit campaign, turn, interaction, canon, job, and submission atomically."""
 
     if not submission_id:
         submission_id = f"submission:{event.get('interaction_id') or event.get('sequence')}"
@@ -33,6 +36,7 @@ def persist_foreground_turn(
     expected_revision = state_revision - 1
     turn_id = _campaign_record_id("turn", session_id, state_revision)
     interaction_record_id = _campaign_record_id("interaction", session_id, state_revision)
+    canonical_narrative = _canonical_narrative_response(result, session_id=session_id)
 
     from app.gateway.rpg_foreground_turn_record import build_foreground_turn_record
 
@@ -103,6 +107,13 @@ def persist_foreground_turn(
         if campaign is None:
             raise RuntimeError(
                 f"RPG campaign {session_id} was not initialized in PostgreSQL before the turn"
+            )
+
+        stored_narrative = None
+        if canonical_narrative is not None:
+            stored_narrative = work.narrative_responses.save(
+                context,
+                canonical_narrative,
             )
 
         persisted = work.rpg.commit_turn(
@@ -199,6 +210,13 @@ def persist_foreground_turn(
                 "interaction_id": interaction_id,
                 "interaction_record_id": interaction_record_id,
                 "resulting_revision": state_revision,
+                "narrative_response_id": (
+                    stored_narrative.response_id if stored_narrative is not None else ""
+                ),
+                "narrative_content_hash": (
+                    stored_narrative.content_hash if stored_narrative is not None else ""
+                ),
+                "narrative_atomic_with_turn": stored_narrative is not None,
             },
         )
         work.commit()
@@ -213,8 +231,35 @@ def persist_foreground_turn(
         "submission_id": submission_id,
         "interaction_id": interaction_id,
         "interaction_record_id": interaction_record_id,
+        "narrative_response_id": (
+            stored_narrative.response_id if stored_narrative is not None else None
+        ),
+        "narrative_content_hash": (
+            stored_narrative.content_hash if stored_narrative is not None else None
+        ),
+        "narrative_atomic_with_turn": stored_narrative is not None,
         "transaction": "postgresql_unit_of_work",
     }
+
+
+def _canonical_narrative_response(
+    result: dict[str, Any],
+    *,
+    session_id: str,
+) -> CanonicalNarrativeResponse | None:
+    raw = result.get("canonical_narrative_response")
+    if not isinstance(raw, dict):
+        return None
+    expected_hash = str(raw.get("content_hash") or "").strip()
+    response = canonical_response_from_dict(raw)
+    if response.campaign_id != session_id:
+        raise ValueError(
+            "canonical narrative campaign does not match foreground session: "
+            f"{response.campaign_id}/{session_id}"
+        )
+    if expected_hash and expected_hash != response.content_hash:
+        raise ValueError("canonical narrative content hash does not match semantic content")
+    return response
 
 
 def _campaign_record_id(kind: str, session_id: str, state_revision: int) -> str:
