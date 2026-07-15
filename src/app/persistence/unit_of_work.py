@@ -43,6 +43,9 @@ from .repositories import (
 from .rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
 from .rpg_campaign_genesis_repository import PostgresRpgCampaignGenesisRepository
 from .rpg_hermes_research_repository import PostgresRpgHermesResearchRepository
+from .rpg_narrative_delivery_repository import (
+    PostgresRpgNarrativeDeliveryRepository,
+)
 from .rpg_narrative_response_repository import PostgresRpgNarrativeResponseRepository
 from .rpg_repository import PostgresRpgRepository
 from .rpg_world_forge_repository import PostgresRpgWorldForgeRepository
@@ -85,6 +88,7 @@ class PostgresUnitOfWork:
         self.world_forge: PostgresRpgWorldForgeRepository
         self.hermes_research: PostgresRpgHermesResearchRepository
         self.narrative_responses: PostgresRpgNarrativeResponseRepository
+        self.narrative_deliveries: PostgresRpgNarrativeDeliveryRepository
         self.module_records: PostgresModuleRecordRepository
         self.projections: PostgresProjectionRepository
         self.providers: PostgresProviderRepository
@@ -143,6 +147,9 @@ class PostgresUnitOfWork:
         self.world_forge = PostgresRpgWorldForgeRepository(self.connection)
         self.hermes_research = PostgresRpgHermesResearchRepository(self.connection)
         self.narrative_responses = PostgresRpgNarrativeResponseRepository(self.connection)
+        self.narrative_deliveries = PostgresRpgNarrativeDeliveryRepository(
+            self.connection
+        )
         self.module_records = PostgresModuleRecordRepository(self.connection)
         self.projections = PostgresProjectionRepository(self.connection)
         self.providers = PostgresProviderRepository(self.connection)
