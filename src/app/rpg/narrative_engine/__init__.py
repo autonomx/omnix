@@ -41,7 +41,15 @@ from .contracts import (
     ordered_blocks,
     stable_hash,
 )
-from .delivery import NarrativeDeliveryCoordinator
+from .delivery import (
+    InMemoryNarrativeDeliveryRepository,
+    NarrativeDeliveryAdvance,
+    NarrativeDeliveryConflict,
+    NarrativeDeliveryCoordinator,
+    NarrativeDeliveryEvent,
+    NarrativeDeliveryRecord,
+    NarrativeDeliveryRepository,
+)
 from .evidence import (
     EvidenceAccessContext,
     EvidenceBroker,
@@ -146,12 +154,18 @@ __all__ = [
     "HermesResearchResult",
     "HermesResearchSource",
     "InMemoryEvidenceSource",
+    "InMemoryNarrativeDeliveryRepository",
     "InMemoryNarrativeResponseRepository",
     "LegacyNarrativePublisherError",
     "NarrativeBeat",
     "NarrativeBlock",
     "NarrativeCertificationReport",
+    "NarrativeDeliveryAdvance",
+    "NarrativeDeliveryConflict",
     "NarrativeDeliveryCoordinator",
+    "NarrativeDeliveryEvent",
+    "NarrativeDeliveryRecord",
+    "NarrativeDeliveryRepository",
     "NarrativeEngineResult",
     "NarrativeEngineService",
     "NarrativePlan",
