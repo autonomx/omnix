@@ -23,7 +23,7 @@ from app.rpg.narrative_engine import (
 from app.rpg.narrative_engine.consumer_publish import attach_canonical_consumer_bundle
 from app.rpg.narrative_engine.production_path import enforce_production_narrative_result
 from app.rpg.narrative_engine.publisher_guard import publisher_guard
-from app.rpg.narrative_engine.release_certification import (
+from app.rpg.narrative_release_certification import (
     certify_unified_narrative_release,
 )
 from app.rpg.narrative_retirement import (
@@ -134,7 +134,9 @@ def _runtime_evidence() -> tuple[dict[str, bool], dict[str, Any]]:
     )
     certified = enforce_production_narrative_result(result)
     production_passed = (
-        dict(certified.get("narrative_production_certification") or {}).get("passed")
+        dict(certified.get("narrative_production_certification") or {}).get(
+            "passed"
+        )
         is True
     )
     retirement_record = dict(certified.get("narrative_retirement_record") or {})
