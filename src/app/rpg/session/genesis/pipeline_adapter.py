@@ -175,23 +175,41 @@ def _attach_world_forge_progress(
     return {**result, "creation_job": job, "creation_progress": progress}
 
 
-def create_new_game_session_from_compiled_genesis(
+def prepare_new_game_session_from_compiled_genesis(
     *,
     bootstrap: dict[str, Any],
     compiled: dict[str, Any],
     contract: CampaignGenesisContract,
     legacy: dict[str, Any],
 ) -> dict[str, Any]:
+    """Build the deterministic blocked shell shared by sync and async launch paths."""
+
     from app.rpg.session.new_game import RpgNewGameRequest, _build_new_game_session
 
     legacy_request = _preserve_seed_zero(RpgNewGameRequest.model_validate(legacy))
     result = _result_from_unsaved_session(_build_new_game_session(legacy_request))
     result = attach_genesis_to_created_session(result, contract, persist=False)
-    result = attach_compiled_genesis_to_session(
+    return attach_compiled_genesis_to_session(
         result,
         compiled,
         bootstrap,
         persist=False,
+    )
+
+
+def create_new_game_session_from_compiled_genesis(
+    *,
+    bootstrap: dict[str, Any],
+    compiled: dict[str, Any],
+    contract: CampaignGenesisContract,
+    legacy: dict[str, Any],
+    prepared_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    result = prepared_result or prepare_new_game_session_from_compiled_genesis(
+        bootstrap=bootstrap,
+        compiled=compiled,
+        contract=contract,
+        legacy=legacy,
     )
     session = result.get("session") if isinstance(result.get("session"), dict) else None
     if session is None or not contract.world_forge.enabled:
@@ -270,9 +288,30 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
     )
     compiled = compile_campaign_genesis(contract)
     bootstrap = bootstrap_session_from_compiled_genesis(compiled)
+    prepared = prepare_new_game_session_from_compiled_genesis(
+        bootstrap=bootstrap,
+        compiled=compiled,
+        contract=contract,
+        legacy=legacy,
+    )
+    if contract.world_forge.enabled:
+        from .async_coordinator import (
+            campaign_genesis_async_enabled,
+            enqueue_campaign_genesis,
+        )
+
+        if campaign_genesis_async_enabled():
+            return enqueue_campaign_genesis(
+                prepared,
+                contract=contract,
+                compiled=compiled,
+                bootstrap=bootstrap,
+                legacy=legacy,
+            )
     return create_new_game_session_from_compiled_genesis(
         bootstrap=bootstrap,
         compiled=compiled,
         contract=contract,
         legacy=legacy,
+        prepared_result=prepared,
     )
