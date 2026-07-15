@@ -13,6 +13,7 @@ const request: DesktopCompanionDeliveryRequest = {
   groundingIds: ['obs-1'],
   stateSummary: 'Current scene: inventory',
   priority: 'normal',
+  presentation: 'text',
   expiresAtMs: 20_000,
 };
 
@@ -25,17 +26,15 @@ function runtime(patch: Partial<LiveConversationRuntimeState> = {}): LiveConvers
 }
 
 describe('desktop companion delivery arbitration', () => {
-  it('delivers only fresh candidates while auto-speak is enabled', () => {
+  it('delivers fresh text candidates without requiring auto-speech', () => {
     expect(decideDesktopCompanionDelivery(request, runtime(), {
       nowMs: 10_000,
       requestInFlight: false,
-      autoSpeak: true,
     })).toEqual({ action: 'deliver', reason: 'desktop_candidate_eligible' });
 
     expect(decideDesktopCompanionDelivery(request, runtime(), {
       nowMs: 20_000,
       requestInFlight: false,
-      autoSpeak: true,
     })).toEqual({ action: 'suppress', reason: 'candidate_stale' });
   });
 
@@ -57,10 +56,10 @@ describe('desktop companion delivery arbitration', () => {
     });
 
     expect(decideDesktopCompanionDelivery(request, user, {
-      nowMs: 10_000, requestInFlight: false, autoSpeak: true,
+      nowMs: 10_000, requestInFlight: false,
     }).reason).toBe('user_floor_active');
     expect(decideDesktopCompanionDelivery(request, assistant, {
-      nowMs: 10_000, requestInFlight: false, autoSpeak: true,
+      nowMs: 10_000, requestInFlight: false,
     }).reason).toBe('assistant_busy');
   });
 
@@ -79,10 +78,10 @@ describe('desktop companion delivery arbitration', () => {
     });
 
     expect(decideDesktopCompanionDelivery(request, initiative, {
-      nowMs: 10_000, requestInFlight: false, autoSpeak: true,
+      nowMs: 10_000, requestInFlight: false,
     }).reason).toBe('social_initiative_active');
     expect(decideDesktopCompanionDelivery(request, bargeIn, {
-      nowMs: 10_000, requestInFlight: false, autoSpeak: true,
+      nowMs: 10_000, requestInFlight: false,
     }).reason).toBe('barge_in_active');
   });
 });
