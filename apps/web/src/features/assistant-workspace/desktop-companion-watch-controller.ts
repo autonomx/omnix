@@ -117,6 +117,15 @@ export function shouldRecordPausedAnalysisInterruption(
   return snapshot.phase === 'analyzing' && !requestInFlight && !alreadyRecorded;
 }
 
+export function abortDesktopCompanionObservationForPause(
+  paused: boolean,
+  controller: AbortController | null,
+): boolean {
+  if (!paused || !controller || controller.signal.aborted) return false;
+  controller.abort('paused_by_user');
+  return true;
+}
+
 const tick = createDesktopCompanionTickScheduler(tickOnce);
 
 export function initializeDesktopCompanionWatchController(): () => void {
@@ -127,7 +136,13 @@ export function initializeDesktopCompanionWatchController(): () => void {
   timerId = window.setInterval(() => void tick(), 500);
   const handleVisibility = () => runtime.handleVisibility(document.visibilityState === 'visible');
   const handleShareChange = () => void tick();
-  const unsubscribeControls = desktopCompanionControlStore.subscribe(() => void tick());
+  const unsubscribeControls = desktopCompanionControlStore.subscribe(() => {
+    abortDesktopCompanionObservationForPause(
+      desktopCompanionControlStore.getState().paused,
+      requestController,
+    );
+    void tick();
+  });
   document.addEventListener('visibilitychange', handleVisibility);
   window.addEventListener('omnix:desktop-share-changed', handleShareChange);
   void tick();

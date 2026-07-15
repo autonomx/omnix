@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  abortDesktopCompanionObservationForPause,
   activityPayload,
   createDesktopCompanionTickScheduler,
   parseShadowWatchSettings,
@@ -44,6 +45,17 @@ describe('desktop companion watch scheduling', () => {
     expect(shouldRecordPausedAnalysisInterruption({ phase: 'analyzing' }, true, false)).toBe(false);
     expect(shouldRecordPausedAnalysisInterruption({ phase: 'analyzing' }, false, true)).toBe(false);
     expect(shouldRecordPausedAnalysisInterruption({ phase: 'paused' }, false, false)).toBe(false);
+  });
+
+  it('aborts an active observation synchronously when Pause is requested', () => {
+    const controller = new AbortController();
+
+    expect(abortDesktopCompanionObservationForPause(true, controller)).toBe(true);
+    expect(controller.signal.aborted).toBe(true);
+    expect(controller.signal.reason).toBe('paused_by_user');
+    expect(abortDesktopCompanionObservationForPause(true, controller)).toBe(false);
+    expect(abortDesktopCompanionObservationForPause(false, new AbortController())).toBe(false);
+    expect(abortDesktopCompanionObservationForPause(true, null)).toBe(false);
   });
 });
 
