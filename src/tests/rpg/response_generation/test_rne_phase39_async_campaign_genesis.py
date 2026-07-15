@@ -115,7 +115,9 @@ def _prepared_result() -> dict:
 
 
 def test_async_mode_is_production_default_but_deterministic_ci_is_explicit() -> None:
-    assert campaign_genesis_async_enabled({}) is True
+    assert campaign_genesis_async_enabled(
+        {"OMNIX_RPG_CAMPAIGN_GENESIS_MODE": "async"}
+    ) is True
     assert campaign_genesis_async_enabled({"RPG_TEST_MODE": "deterministic"}) is False
     assert campaign_genesis_async_enabled(
         {
