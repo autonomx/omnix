@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { activityPayload, parseShadowWatchSettings } from './desktop-companion-watch-controller';
+import {
+  activityPayload,
+  parseShadowWatchSettings,
+  scenarioForActivity,
+} from './desktop-companion-watch-controller';
 
 describe('desktop companion shadow watch settings', () => {
   it('only enables the watch loop for explicit shadow rollout', () => {
@@ -70,5 +74,37 @@ describe('desktop companion activity request', () => {
       source_width: 1920,
       source_height: 1080,
     });
+  });
+
+  it('maps activity to identifier-only evaluation scenarios', () => {
+    const base = {
+      confidence: 0.9,
+      changedRatio: 0.8,
+      meanDifference: 0.7,
+      horizontalShift: 0,
+      verticalShift: 0,
+      focus: 0.3,
+      capturedAtMs: 1000,
+    };
+    const behavior = {
+      currentPattern: 'settled' as const,
+      settledSeconds: 1,
+      browsingPace: 0,
+      rapidBrowsing: false,
+      likelyTyping: false,
+      likelyMedia: false,
+      transition: null,
+      sampleCount: 4,
+    };
+    expect(scenarioForActivity({ ...base, activity: 'static', hypothesis: 'none' }, behavior)).toBe('static-screen');
+    expect(scenarioForActivity({ ...base, activity: 'full_scene_change', hypothesis: 'likely_app_switch' }, behavior)).toBe('scene-change');
+    expect(scenarioForActivity(
+      { ...base, activity: 'localized_change', hypothesis: 'likely_typing' },
+      { ...behavior, likelyTyping: true },
+    )).toBe('typing');
+    expect(scenarioForActivity(
+      { ...base, activity: 'localized_change', hypothesis: 'likely_navigation' },
+      { ...behavior, rapidBrowsing: true },
+    )).toBe('rapid-browsing');
   });
 });
