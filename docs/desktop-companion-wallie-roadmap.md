@@ -1,6 +1,6 @@
 # Desktop Companion — Wallie Adoption Roadmap
 
-Status: In progress
+Status: Implemented through SC-8; rollout remains disabled by default
 
 Source of truth: `autonomx/omnix` `main`
 
@@ -86,45 +86,50 @@ Three records stay separate:
 2. **Commentary ledger** — generated/delivered/skipped/interrupted metadata and fingerprints, bounded per session.
 3. **Visible transcript** — only delivered comments allowed by the selected presentation policy.
 
-Transient desktop-companion messages are excluded from ordinary provider history. A compact summary may be injected later through an explicit bounded context item.
+Transient desktop-companion messages are excluded from ordinary provider history. Desktop delivery commits do not append unsolicited comments to durable chat history.
 
 ## Delivery phases
 
-### SC-0 — Decisions, contracts, fixtures, and attribution
+### SC-0 — Decisions, contracts, fixtures, and attribution — Complete
 
-Define ownership, versioned contracts, persistence rules, sanitized fixtures, and Wallie attribution.
+Defined ownership, versioned contracts, persistence rules, sanitized fixtures, and Wallie MIT attribution.
 
-### SC-1 — Capture runtime and safety controls
+### SC-1 — Capture runtime and safety controls — Complete
 
-Bind watch state to one session, character, source fingerprint, and capture generation. Add minimum enable, pause, stop, visibility, and provider preflight controls.
+Bound watch state to one session, character, source fingerprint, and capture generation. Added enable, pause, stop-and-forget, page-visibility, result-generation, and provider-preflight safety.
 
-### SC-2 — Activity classifier and behaviour tracker
+### SC-2 — Activity classifier and behaviour tracker — Complete
 
-Implement conservative local change classes first. Derive likely scrolling, typing, navigation, application switching, continuous media, rapid browsing, and settled state with confidence.
+Implemented conservative local visual classes and confidence-bearing hypotheses for scrolling, typing, navigation, application switching, media, rapid browsing, and settled state.
 
-### SC-3 — Vision coordinator and shadow watch
+### SC-3 — Vision coordinator and shadow watch — Complete
 
-Add a provider-wide foreground/background coordinator, hard rate budgets, coalescing, expiry, and shadow observation requests. No commentary delivery.
+Added provider-wide foreground/background single flight, hard rate budgets, coalescing, cancellation, expiry, foreground priority, and shadow observation eligibility.
 
-### SC-4 — Structured observation and scene memory
+### SC-4 — Structured observation and scene memory — Complete
 
-Parse a versioned observation schema with plain-text fallback. Maintain bounded, revisable, session-scoped scene memory and pre-generation event deduplication.
+Added versioned JSON-or-text parsing, untrusted-screen prompting, diagnostic redaction, event fingerprints, and bounded revisable scene memory with source reset and expiry.
 
-### SC-5 — Deterministic attention policy
+### SC-5 — Deterministic attention policy — Complete
 
-Choose `ignore`, `observe_silently`, `glance`, or `deep` using activity, scene age, confidence, cooldowns, recent reaction streaks, live-conversation state, and session policy. Organic weighted selection remains optional and session-seeded.
+Added explainable `ignore`, `observe_silently`, `glance`, and `deep` decisions using activity, confidence, scene age, cooldowns, reaction streaks, ignored streaks, and Live Conversation floor state. Organic selection is stable and session-seeded.
 
-### SC-6 — Generalized proactive delivery, text first
+### SC-6 — Generalized proactive delivery, text first — Complete
 
-Extend the existing proactive pipeline with `desktop_companion` and `desktop_critical` sources, `SKIP`, grounding IDs, a bounded commentary ledger, post-generation deduplication, and transient-history filtering.
+Extended the existing proactive generator with `desktop_companion` and `desktop_critical`, exact `SKIP`, grounding IDs, lexical deduplication, a bounded commentary ledger, and transient provider-history filtering.
 
-### SC-7 — TTS, avatar, and interruption integration
+### SC-7 — TTS, avatar, and interruption integration — Complete
 
-Reuse existing floor ownership, speaking state, barge-in, cancellation, TTS, avatar, and delivery commit. Ordinary desktop commentary never interrupts user speech or requested assistant responses.
+Reused existing Live Conversation floor ownership, unified audio controller, TTS, avatar presence, barge-in, cancellation, and delivery commit. No second audio queue was introduced.
 
-### SC-8 — Evaluation and controlled rollout
+### SC-8 — Evaluation and controlled rollout — Complete
 
-Ship shadow mode first, then text-only comments, then spoken comments. Store versioned redacted evaluation traces and gate activation on stale-output, duplicate-output, unsupported-claim, collision, latency, and provider-load limits.
+Added centralized default-off settings, redacted browser evaluation accumulation, content-free durable evidence, internal evaluation APIs, deterministic release gates, and rollout degradation:
+
+- `disabled` remains disabled;
+- `shadow` is the first permitted stage;
+- requested `text` degrades to `shadow` until the release gate passes;
+- requested `speech` degrades to `text` until passing evidence includes speech-stage evaluation.
 
 ## Initial limits
 
@@ -140,6 +145,32 @@ background queue                          1 active + 1 coalesced pending
 
 User-requested desktop questions always outrank background work.
 
+## Release-gate evidence
+
+Content-free evaluation records include exact commit SHA, policy/schema versions, rollout stage, provider metadata, aggregate counts, aggregate latency, aggregate rates, and identifier-only scenario labels. They reject image-, frame-, prompt-, message-, transcript-, and screen-text-bearing metric keys.
+
+Required scenarios:
+
+- `static-screen`;
+- `typing`;
+- `rapid-browsing`;
+- `scene-change`;
+- `interruption`;
+- `screen-prompt-injection`.
+
+Initial maximums:
+
+```text
+stale output rate             0.01
+duplicate comment rate        0.02
+unsupported claim rate        0.01
+collision rate                0.01
+provider error rate           0.05
+observation p95 latency       10000 ms
+vision calls per minute       6
+minimum evaluation records    5
+```
+
 ## Deferred scope
 
 - autonomous keyboard or game control;
@@ -152,4 +183,4 @@ User-requested desktop questions always outrank background work.
 
 ## Definition of done
 
-SC-0 through SC-8 are complete when Omnix can observe a user-approved screen in shadow mode, classify meaningful activity conservatively, schedule bounded factual vision work, maintain revisable scene state, explain attention decisions, generate grounded non-repetitive commentary through the existing proactive runtime, respect floor and interruption state, expose explicit controls, and produce redacted versioned evaluation evidence with the feature disabled by default.
+SC-0 through SC-8 are implemented when Omnix can observe a user-approved screen in shadow mode, classify meaningful activity conservatively, schedule bounded factual vision work, maintain revisable scene state, explain attention decisions, generate grounded non-repetitive commentary through the existing proactive runtime, respect floor and interruption state, expose explicit central controls, and produce redacted versioned evaluation evidence with the feature disabled by default.
