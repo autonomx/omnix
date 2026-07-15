@@ -144,3 +144,12 @@ def test_phase42_source_guard_keeps_final_certification_inside_engine_boundary()
     assert "_deferred_delivery_certified" in source
     assert "live_provider_execution_claimed" in source
     assert "response_generation" not in source
+
+
+def test_phase42_completion_record_requires_external_exact_head_evidence() -> None:
+    completion = (
+        ROOT / "docs" / "RPG_NARRATIVE_ENGINE_MILESTONES_G_L_COMPLETION.md"
+    ).read_text(encoding="utf-8")
+
+    assert "exact-head workflow evidence is intentionally external" in completion
+    assert "release evidence is certified against the exact pull-request head" not in completion
