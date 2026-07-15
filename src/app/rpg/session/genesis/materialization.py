@@ -86,6 +86,8 @@ def materialize_world_forge_into_session(
     state["faction_dossiers"] = faction_dossiers
     state["opening_story_threads"] = list(bible.get("story_threads") or ())
     runtime["campaign_generation"] = _progress_payload(world_forge)
+    runtime["active_job_id"] = None
+    runtime["last_error"] = None
     runtime["campaign_bible_revision"] = bible.get("canon_revision")
     runtime["campaign_bible_content_hash"] = certification.content_hash
     runtime["campaign_bible_commit_certification"] = certification.as_dict()
@@ -110,6 +112,7 @@ def materialize_world_forge_into_session(
     manifest["campaign_bible_revision"] = bible.get("canon_revision")
     manifest["campaign_bible_content_hash"] = certification.content_hash
     manifest["campaign_generation_status"] = "ready"
+    manifest["creation_status"] = "completed"
     manifest["campaign_bible_commit_certified"] = True
     session["state"] = state
     session["runtime_state"] = runtime
@@ -139,8 +142,14 @@ def persist_campaign_genesis(
     *,
     database: Any | None = None,
     required: bool | None = None,
+    genesis_run_started: bool = False,
 ) -> dict[str, Any]:
-    """Commit only certified Campaign Bible canon in one PostgreSQL transaction."""
+    """Commit certified canon idempotently in one PostgreSQL transaction.
+
+    ``genesis_run_started`` is used by the asynchronous coordinator after it has
+    already persisted the queued/running lifecycle. Replaying the same completed
+    job reuses an identical Campaign Bible revision; different canon is rejected.
+    """
 
     required = (
         os.environ.get("OMNIX_REQUIRE_POSTGRESQL_GENESIS", "").strip().casefold()
@@ -157,13 +166,18 @@ def persist_campaign_genesis(
     certification = require_world_forge_commit_ready(world_forge)
     try:
         from app.persistence.identity_service import bootstrap_local_tenant
+        from app.persistence.rpg_campaign_bible_repository import (
+            CampaignBibleRevisionConflict,
+            campaign_bible_hash,
+        )
+        from app.persistence.rpg_repository import canonical_json, state_hash
         from app.persistence.unit_of_work import unit_of_work
 
         context = bootstrap_local_tenant(database)
         with unit_of_work(database) as work:
             campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
             if campaign is None:
-                work.rpg.create_campaign(
+                campaign = work.rpg.create_campaign(
                     context,
                     campaign_id=campaign_id,
                     title=str(state.get("title") or manifest.get("title") or campaign_id),
@@ -180,35 +194,91 @@ def persist_campaign_genesis(
                         "campaign_bible_commit_certified": True,
                     },
                 )
+            else:
+                digest = state_hash(state)
+                updated = work.connection.execute(
+                    """
+                    UPDATE omnix_rpg_campaigns
+                       SET state_jsonb = %s::jsonb,
+                           state_hash = %s,
+                           engine_version = %s,
+                           metadata = metadata || %s::jsonb,
+                           updated_at = CURRENT_TIMESTAMP
+                     WHERE id = %s AND workspace_id = %s AND revision = %s
+                    RETURNING id
+                    """,
+                    (
+                        canonical_json(state),
+                        digest,
+                        "rne-campaign-genesis-v1",
+                        canonical_json(
+                            {
+                                "campaign_bible_content_hash": certification.content_hash,
+                                "campaign_bible_commit_certified": True,
+                            }
+                        ),
+                        campaign_id,
+                        context.workspace_id,
+                        campaign["revision"],
+                    ),
+                ).fetchone()
+                if updated is None:
+                    raise RuntimeError(
+                        f"campaign changed while materializing genesis: {campaign_id}"
+                    )
             progress = _progress_payload(world_forge)
-            work.campaign_genesis.start(
+            materializing_progress = {
+                **progress,
+                "status": "materializing",
+                "stage": "materializing",
+                "commit_certification": certification.as_dict(),
+            }
+            if genesis_run_started:
+                work.campaign_genesis.update(
+                    context,
+                    campaign_id=campaign_id,
+                    status="running",
+                    progress=materializing_progress,
+                    audit=world_forge.audit.as_dict(),
+                    error={},
+                )
+            else:
+                work.campaign_genesis.start(
+                    context,
+                    genesis_run_id=f"genesis:{campaign_id}:1",
+                    campaign_id=campaign_id,
+                    depth=contract.world_forge.depth,
+                    topic_graph=world_forge.graph.as_dict(),
+                    progress=materializing_progress,
+                )
+            candidate_hash = campaign_bible_hash(bible)
+            stored_bible = work.campaign_bibles.get(
                 context,
-                genesis_run_id=f"genesis:{campaign_id}:1",
-                campaign_id=campaign_id,
-                depth=contract.world_forge.depth,
-                topic_graph=world_forge.graph.as_dict(),
-                progress={
-                    **progress,
-                    "status": "materializing",
-                    "stage": "materializing",
-                    "commit_certification": certification.as_dict(),
-                },
+                campaign_id,
+                for_update=True,
             )
-            stored_bible = work.campaign_bibles.put(
-                context,
-                campaign_id=campaign_id,
-                document=bible,
-                expected_revision=0,
-                provenance={
-                    "source": "campaign_genesis_world_forge",
-                    "contract_version": contract.contract_version,
-                    "depth": contract.world_forge.depth,
-                    "compiled_content_hash": certification.content_hash,
-                    "commit_certification": certification.as_dict(),
-                },
-                consistency_report=world_forge.audit.as_dict(),
-                completeness=world_forge.compilation.completeness,
-            )
+            if stored_bible is not None:
+                if str(stored_bible["content_hash"]) != candidate_hash:
+                    raise CampaignBibleRevisionConflict(
+                        "campaign genesis retry produced different canon for "
+                        f"{campaign_id}"
+                    )
+            else:
+                stored_bible = work.campaign_bibles.put(
+                    context,
+                    campaign_id=campaign_id,
+                    document=bible,
+                    expected_revision=0,
+                    provenance={
+                        "source": "campaign_genesis_world_forge",
+                        "contract_version": contract.contract_version,
+                        "depth": contract.world_forge.depth,
+                        "compiled_content_hash": certification.content_hash,
+                        "commit_certification": certification.as_dict(),
+                    },
+                    consistency_report=world_forge.audit.as_dict(),
+                    completeness=world_forge.compilation.completeness,
+                )
             genesis = work.campaign_genesis.update(
                 context,
                 campaign_id=campaign_id,
