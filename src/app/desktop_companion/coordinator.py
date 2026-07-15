@@ -55,9 +55,8 @@ class DesktopVisionCoordinator:
     """Single-flight priority queue shared by every desktop companion session.
 
     Foreground work always outranks background work. Background work is bounded by
-    a global calls-per-minute budget and minimum start interval. Pending background
-    work is coalesced by session and capture generation, so rapidly changing frames
-    cannot create an unbounded queue.
+    a global calls-per-minute budget, minimum start interval, and maximum pending
+    queue. Work is coalesced by session and capture generation.
     """
 
     def __init__(
@@ -66,14 +65,18 @@ class DesktopVisionCoordinator:
         clock: Clock,
         background_calls_per_minute: int = 6,
         minimum_background_interval_seconds: float = 8.0,
+        maximum_background_pending: int = 64,
     ) -> None:
         if background_calls_per_minute < 1:
             raise ValueError("background_calls_per_minute must be positive")
         if minimum_background_interval_seconds < 0:
             raise ValueError("minimum_background_interval_seconds cannot be negative")
+        if maximum_background_pending < 1:
+            raise ValueError("maximum_background_pending must be positive")
         self._clock = clock
         self._background_calls_per_minute = background_calls_per_minute
         self._minimum_background_interval = minimum_background_interval_seconds
+        self._maximum_background_pending = maximum_background_pending
         self._lock = threading.RLock()
         self._foreground: deque[DesktopVisionWork] = deque()
         self._background: dict[tuple[str, str], DesktopVisionWork] = {}
@@ -129,6 +132,10 @@ class DesktopVisionCoordinator:
                 self._background[key] = work
                 self._coalesced += 1
             else:
+                while len(self._background) >= self._maximum_background_pending:
+                    oldest = self._background_order.popleft()
+                    if self._background.pop(oldest, None) is not None:
+                        self._dropped += 1
                 self._background[key] = work
                 self._background_order.append(key)
             return work
