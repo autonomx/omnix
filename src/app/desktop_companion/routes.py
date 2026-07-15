@@ -1,4 +1,4 @@
-"""Internal Desktop Companion observation, evaluation, and rollout endpoints."""
+"""Internal Desktop Companion observation, preflight, evaluation, and rollout endpoints."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -16,6 +16,12 @@ from .evaluation import (
     build_desktop_companion_release_gate,
     default_desktop_companion_evaluation_store,
     resolve_desktop_companion_rollout,
+)
+from .preflight import (
+    DesktopCompanionPreflightRequest,
+    DesktopCompanionPreflightResult,
+    DesktopCompanionPreflightService,
+    default_desktop_companion_preflight_service,
 )
 from .runtime import (
     DesktopCompanionObserveRequest,
@@ -44,7 +50,19 @@ def register_desktop_companion_routes(
     *,
     evaluation_store_factory: Callable[[], DesktopCompanionEvaluationStore] = default_desktop_companion_evaluation_store,
     orchestrator_factory: Callable[[], DesktopCompanionOrchestrator] = default_desktop_companion_orchestrator,
+    preflight_service_factory: Callable[[], DesktopCompanionPreflightService] = default_desktop_companion_preflight_service,
 ) -> None:
+    @app.post(
+        "/api/desktop-companion/preflight",
+        response_model=DesktopCompanionPreflightResult,
+        tags=["desktop-companion"],
+        include_in_schema=False,
+    )
+    def preflight_desktop_companion(
+        request: DesktopCompanionPreflightRequest,
+    ) -> DesktopCompanionPreflightResult:
+        return preflight_service_factory().check(request)
+
     @app.post(
         "/api/desktop-companion/observe",
         response_model=DesktopCompanionObserveResponse,

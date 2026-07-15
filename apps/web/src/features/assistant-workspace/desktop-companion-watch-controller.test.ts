@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { activityPayload, parseShadowWatchSettings } from './desktop-companion-watch-controller';
 
 describe('desktop companion shadow watch settings', () => {
-  it('only enables the SC-9 loop for explicit shadow rollout', () => {
+  it('only enables the watch loop for explicit shadow rollout', () => {
     const payload = {
       settings: {
         settings_control_center: {
@@ -11,6 +11,7 @@ describe('desktop companion shadow watch settings', () => {
             desktopCompanionEnabled: true,
             desktopCompanionRolloutStage: 'shadow',
             desktopCompanionVisionModelId: 'qwen-vl',
+            desktopCompanionRemoteVisionAllowed: true,
             desktopCompanionBackgroundCallsPerMinute: 8,
             desktopCompanionMinimumObservationIntervalMs: 9000,
             desktopCompanionObservationTimeoutMs: 11000,
@@ -25,6 +26,7 @@ describe('desktop companion shadow watch settings', () => {
     expect(parseShadowWatchSettings(payload)).toEqual({
       enabled: true,
       visionModelId: 'qwen-vl',
+      remoteVisionAllowed: true,
       backgroundCallsPerMinute: 8,
       minimumObservationIntervalMs: 9000,
       observationTimeoutMs: 11000,
@@ -43,6 +45,7 @@ describe('desktop companion shadow watch settings', () => {
         } } },
       });
       expect(result.enabled).toBe(false);
+      expect(result.remoteVisionAllowed).toBe(false);
     }
   });
 });

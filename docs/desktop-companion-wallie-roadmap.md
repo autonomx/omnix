@@ -1,6 +1,6 @@
 # Desktop Companion — Wallie Adoption Roadmap
 
-Status: Implemented through SC-9; text and speech rollout remain disabled by default
+Status: Implemented through SC-10; text and speech rollout remain disabled by default
 
 Source of truth: `autonomx/omnix` `main`
 
@@ -128,19 +128,19 @@ Added centralized default-off settings, redacted browser evaluation accumulation
 
 Connected the production browser capture buffer, conservative activity classifier, behaviour tracker, serialized gateway vision execution, structured observation parser, revisable scene memory, and deterministic attention policy. The composition root remains shadow-only, default-off, generation-safe, and incapable of dispatching commentary.
 
+### SC-10 — Preflight and in-session controls — Complete
+
+Added explicit Start, pause/resume, mute/unmute, and stop-and-forget controls in the active Chat workspace. Watch does not start merely because the global setting is enabled. Start performs a harmless image-capability preflight against the selected provider and model, exposes redacted model/endpoint status, blocks remote providers without explicit consent, and preserves manual Desktop Ask when Watch is unavailable.
+
 Acceptance evidence includes:
 
-- browser capture binding and source fingerprints without persisting source labels;
-- one bounded sample path from the temporal capture buffer;
-- strict browser-to-gateway request normalization;
-- provider serialization and rate-budget enforcement;
-- stale generation rejection and stop/reset handling;
-- redacted status events containing identifiers and policy rationale only;
-- unit coverage for disabled, low-value, and successful shadow paths.
-
-### SC-10 — Preflight and in-session controls — Pending
-
-Add real provider capability testing, Watch/pause/mute/stop controls, persistent indicators, and actionable errors.
+- loopback-versus-remote endpoint classification;
+- remote-provider denial before any image request;
+- image-capability verification with bounded latency reporting;
+- binding-aware preflight invalidation when model or provider consent changes;
+- explicit user control state independent from capture permission;
+- pause and mute state separated from stop-and-forget;
+- persistent status labels for preflight, watching, analyzing, pause, backoff, and errors.
 
 ### SC-11 — Automatic shadow evaluation — Pending
 
@@ -210,4 +210,4 @@ minimum evaluation records    5
 
 ## Definition of done
 
-SC-9 is complete when the default-off production runtime can observe a user-approved screen in shadow mode, classify meaningful activity conservatively, schedule bounded factual vision work, maintain revisable scene state, explain attention decisions, reject stale generations, and expose redacted lifecycle status without generating or delivering commentary. Product rollout is complete only after SC-10 through SC-14 pass their separate acceptance gates.
+SC-10 is complete when continuous observation requires explicit in-session Start, the configured provider passes a privacy-aware image-capability preflight, remote use requires consent, and the user can pause, resume, mute, and stop while seeing actionable status. Product rollout is complete only after SC-11 through SC-14 pass their separate acceptance gates.

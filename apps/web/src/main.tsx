@@ -19,6 +19,7 @@ import './features/chatbot/ChatbotWorkspaceTools.css';
 import './features/chatbot/ChatbotWorkspaceSidePanelFix.css';
 import './features/chatbot/ChatbotWorkspaceUtilityToggle.css';
 import './features/assistant-workspace/assistant-context-controller.css';
+import './features/assistant-workspace/desktop-companion-controls.css';
 import './features/assistant-workspace/research-release-controller.css';
 import { initializeChatMessageAudioControllerV2 } from './features/assistant-workspace/chat-message-audio-controller-v2';
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
@@ -95,7 +96,9 @@ window.setTimeout(() => {
   void import('./features/assistant-workspace/assistant-context-controller')
     .then(async () => {
       const companion = await import('./features/assistant-workspace/desktop-companion-watch-controller');
+      const controls = await import('./features/assistant-workspace/desktop-companion-controls');
       companion.initializeDesktopCompanionWatchController();
+      controls.initializeDesktopCompanionControls();
       return import('./features/assistant-workspace/research-release-controller');
     })
     .catch((error: unknown) => {

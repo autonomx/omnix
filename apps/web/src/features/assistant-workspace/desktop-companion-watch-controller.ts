@@ -1,4 +1,5 @@
 import { classifyDesktopActivity, DesktopBehaviorTracker, type DesktopActivitySignal } from './desktop-companion-activity';
+import { desktopCompanionControlStore } from './desktop-companion-control-store';
 import { DesktopCompanionRuntime } from './desktop-companion-runtime';
 import { currentDesktopCompanionCapture } from './assistant-context-controller';
 import { liveConversationStore } from './live-conversation-store';
@@ -8,6 +9,7 @@ export const DESKTOP_COMPANION_STATUS_EVENT = 'omnix:desktop-companion-status';
 export type ShadowWatchSettings = {
   enabled: boolean;
   visionModelId: string;
+  remoteVisionAllowed: boolean;
   backgroundCallsPerMinute: number;
   minimumObservationIntervalMs: number;
   observationTimeoutMs: number;
@@ -22,6 +24,15 @@ type ObserveResponse = {
   observation?: { observation_id?: string } | null;
   attention?: { reaction?: string; rationale?: string; should_generate?: boolean } | null;
   coordinator?: Record<string, unknown>;
+};
+
+type PreflightResponse = {
+  ready: boolean;
+  model_id: string | null;
+  endpoint: string | null;
+  remote: boolean;
+  latency_ms: number | null;
+  reason: string;
 };
 
 type ControllerWindow = Window & typeof globalThis & {
@@ -39,6 +50,8 @@ let settingsLoadedAtMs = 0;
 let lastObservationStartedMs: number | null = null;
 let lastBindingKey = '';
 let resetBinding: { sessionId: string; captureGeneration: string } | null = null;
+let preflightKey = '';
+let preflight: PreflightResponse | null = null;
 
 export function initializeDesktopCompanionWatchController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
@@ -48,6 +61,7 @@ export function initializeDesktopCompanionWatchController(): () => void {
   timerId = window.setInterval(() => void tick(), 500);
   const handleVisibility = () => runtime.handleVisibility(document.visibilityState === 'visible');
   const handleShareChange = () => void tick();
+  const unsubscribeControls = desktopCompanionControlStore.subscribe(() => void tick());
   document.addEventListener('visibilitychange', handleVisibility);
   window.addEventListener('omnix:desktop-share-changed', handleShareChange);
   void tick();
@@ -56,6 +70,7 @@ export function initializeDesktopCompanionWatchController(): () => void {
     timerId = null;
     requestController?.abort('controller_disposed');
     requestController = null;
+    unsubscribeControls();
     document.removeEventListener('visibilitychange', handleVisibility);
     window.removeEventListener('omnix:desktop-share-changed', handleShareChange);
     void stopAndReset('controller_disposed');
@@ -72,6 +87,7 @@ export function parseShadowWatchSettings(payload: unknown): ShadowWatchSettings 
   return {
     enabled: assistant.desktopCompanionEnabled === true && stage === 'shadow',
     visionModelId: stringValue(assistant.desktopCompanionVisionModelId, ''),
+    remoteVisionAllowed: assistant.desktopCompanionRemoteVisionAllowed === true,
     backgroundCallsPerMinute: boundedInt(assistant.desktopCompanionBackgroundCallsPerMinute, 6, 1, 30),
     minimumObservationIntervalMs: boundedInt(assistant.desktopCompanionMinimumObservationIntervalMs, 8_000, 2_000, 120_000),
     observationTimeoutMs: boundedInt(assistant.desktopCompanionObservationTimeoutMs, 10_000, 1_000, 60_000),
@@ -100,9 +116,20 @@ export function activityPayload(signal: DesktopActivitySignal, sourceWidth: numb
 async function tick(): Promise<void> {
   const nowMs = Date.now();
   if (nowMs - settingsLoadedAtMs >= 10_000) await refreshSettings(nowMs);
+  const controls = desktopCompanionControlStore.getState();
   const capture = currentDesktopCompanionCapture();
-  if (!settings.enabled || !capture?.sessionId) {
-    if (runtime.getSnapshot().binding) await stopAndReset(settings.enabled ? 'session_unbound' : 'desktop_companion_disabled');
+  if (!settings.enabled || !capture?.sessionId || !controls.requested) {
+    if (runtime.getSnapshot().binding) {
+      await stopAndReset(!settings.enabled ? 'desktop_companion_disabled' : !capture?.sessionId ? 'session_unbound' : 'stopped_by_user');
+    }
+    return;
+  }
+
+  if (controls.paused) {
+    requestController?.abort('paused_by_user');
+    requestController = null;
+    runtime.pause('paused_by_user');
+    publishStatus('paused', 'paused_by_user');
     return;
   }
 
@@ -115,21 +142,37 @@ async function tick(): Promise<void> {
       sourceFingerprint: capture.sourceFingerprint,
     });
     resetBinding = { sessionId: binding.sessionId, captureGeneration: binding.captureGeneration };
-    runtime.setPreflight({
-      ready: true,
-      modelId: settings.visionModelId || null,
-      endpoint: null,
-      remote: false,
-      reason: 'shadow_runtime_available',
-    });
-    runtime.enableWatch({ shadowMode: true, speechMuted: true });
     behaviorTracker.reset();
     previousSample = null;
     previousSampleAtMs = -1;
     lastObservationStartedMs = null;
     lastBindingKey = bindingKey;
-    publishStatus('watching_idle', 'shadow_watch_bound');
   }
+
+  const expectedPreflightKey = `${bindingKey}:${settings.visionModelId}:${settings.remoteVisionAllowed}`;
+  if (preflightKey !== expectedPreflightKey) {
+    publishStatus('sharing', 'preflight_running');
+    preflight = await runPreflight();
+    preflightKey = expectedPreflightKey;
+    runtime.setPreflight({
+      ready: preflight.ready,
+      modelId: preflight.model_id,
+      endpoint: preflight.endpoint,
+      remote: preflight.remote,
+      reason: preflight.reason,
+    });
+    if (!preflight.ready) {
+      runtime.markPhase('error', preflight.reason);
+      publishStatus('error', preflight.reason);
+      desktopCompanionControlStore.dispatch('stop');
+      return;
+    }
+    runtime.enableWatch({ shadowMode: true, speechMuted: controls.muted });
+    publishStatus('watching_idle', 'preflight_passed');
+  } else if (!runtime.getSnapshot().watchEnabled) {
+    runtime.resume();
+  }
+  runtime.setSpeechMuted(controls.muted);
   if (requestController || !runtime.getSnapshot().watchEnabled) return;
 
   const sample = capture.capture.latestActivitySample();
@@ -232,12 +275,41 @@ async function tick(): Promise<void> {
   }
 }
 
+async function runPreflight(): Promise<PreflightResponse> {
+  try {
+    const response = await fetch('/api/desktop-companion/preflight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vision_model_id: settings.visionModelId || null,
+        remote_vision_allowed: settings.remoteVisionAllowed,
+      }),
+    });
+    if (!response.ok) throw new Error(`Vision preflight failed with status ${response.status}.`);
+    return response.json() as Promise<PreflightResponse>;
+  } catch (error) {
+    return {
+      ready: false,
+      model_id: settings.visionModelId || null,
+      endpoint: null,
+      remote: false,
+      latency_ms: null,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function refreshSettings(nowMs: number): Promise<void> {
   settingsLoadedAtMs = nowMs;
   try {
     const response = await fetch('/api/settings');
     if (!response.ok) return;
-    settings = parseShadowWatchSettings(await response.json());
+    const next = parseShadowWatchSettings(await response.json());
+    if (
+      next.visionModelId !== settings.visionModelId
+      || next.remoteVisionAllowed !== settings.remoteVisionAllowed
+    ) preflightKey = '';
+    settings = next;
   } catch {
     // Existing chat and manual Desktop Ask remain available when settings cannot load.
   }
@@ -254,6 +326,8 @@ async function stopAndReset(reason: string): Promise<void> {
   lastObservationStartedMs = null;
   lastBindingKey = '';
   resetBinding = null;
+  preflightKey = '';
+  preflight = null;
   if (previous) {
     try {
       await fetch('/api/desktop-companion/reset', {
@@ -281,6 +355,13 @@ function publishStatus(phase: string, reason: string, result?: ObserveResponse):
       rationale: result?.attention?.rationale ?? null,
       shouldGenerate: result?.attention?.should_generate ?? false,
       coordinator: result?.coordinator ?? {},
+      preflight: preflight ? {
+        ready: preflight.ready,
+        modelId: preflight.model_id,
+        endpoint: preflight.endpoint,
+        remote: preflight.remote,
+        latencyMs: preflight.latency_ms,
+      } : null,
     },
   }));
 }
@@ -289,6 +370,7 @@ function disabledSettings(): ShadowWatchSettings {
   return {
     enabled: false,
     visionModelId: '',
+    remoteVisionAllowed: false,
     backgroundCallsPerMinute: 6,
     minimumObservationIntervalMs: 8_000,
     observationTimeoutMs: 10_000,
