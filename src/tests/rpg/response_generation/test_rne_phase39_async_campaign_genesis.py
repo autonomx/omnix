@@ -29,7 +29,7 @@ def _contract() -> CampaignGenesisContract:
                 "difficulty": "normal",
                 "world_activity": "living_world",
                 "economy_pressure": "normal",
-                "combat_lethality": "standard",
+                "combat_lethality": "normal",
                 "seed": 39,
             },
             "world_forge": {
