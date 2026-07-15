@@ -14,6 +14,16 @@ from .coordinator import (
     DesktopVisionLease,
     DesktopVisionWork,
 )
+from .evaluation import (
+    DesktopCompanionEvaluationCreate,
+    DesktopCompanionEvaluationRecord,
+    DesktopCompanionEvaluationStore,
+    DesktopCompanionReleaseGateReport,
+    DesktopCompanionRolloutStatus,
+    build_desktop_companion_release_gate,
+    hash_vision_model_id,
+    resolve_desktop_companion_rollout,
+)
 from .memory import DesktopSceneMemory, DesktopSceneMemorySnapshot
 from .models import (
     CompanionAttentionDecision,
@@ -44,7 +54,12 @@ __all__ = [
     "DesktopActivitySignal",
     "DesktopAttentionContext",
     "DesktopBehaviorState",
+    "DesktopCompanionEvaluationCreate",
+    "DesktopCompanionEvaluationRecord",
+    "DesktopCompanionEvaluationStore",
     "DesktopCompanionPolicy",
+    "DesktopCompanionReleaseGateReport",
+    "DesktopCompanionRolloutStatus",
     "DesktopObservation",
     "DesktopObservedChange",
     "DesktopObservedValue",
@@ -56,13 +71,16 @@ __all__ = [
     "DesktopVisionWork",
     "ShadowWatchDecision",
     "build_commentary_candidate",
+    "build_desktop_companion_release_gate",
     "commentary_similarity",
     "decide_desktop_attention",
     "decide_shadow_watch",
     "desktop_commentary_prompt",
+    "hash_vision_model_id",
     "normalize_commentary",
     "observation_fingerprint",
     "parse_desktop_observation",
     "redact_observation_diagnostics",
+    "resolve_desktop_companion_rollout",
     "structured_observation_prompt",
 ]
