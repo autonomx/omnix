@@ -48,7 +48,7 @@ type PendingDesktopTurn = ParsedDesktopTurn & {
 let requestController: AbortController | null = null;
 let pending: PendingDesktopTurn | null = null;
 let queued: DesktopCompanionDeliveryRequest | null = null;
-let retryTimer: number | null = null;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let assistantSpeaking = false;
 
 export function decideDesktopCompanionDelivery(
@@ -151,7 +151,7 @@ function chooseQueuedCandidate(
 
 function scheduleRetry(): void {
   if (retryTimer !== null || !queued) return;
-  retryTimer = window.setTimeout(() => {
+  retryTimer = setTimeout(() => {
     retryTimer = null;
     retryQueued();
   }, 250);
@@ -276,7 +276,7 @@ function handleAuthoritativeStateChange(): void {
 function cancelActive(reason: string, interrupted: boolean, clearQueued: boolean): void {
   requestController?.abort(reason);
   requestController = null;
-  if (retryTimer !== null) window.clearTimeout(retryTimer);
+  if (retryTimer !== null) clearTimeout(retryTimer);
   retryTimer = null;
   if (clearQueued) queued = null;
   if (pending?.presentation === 'speech' && pending.audioStarted && interrupted) void commitPending('interrupted');
