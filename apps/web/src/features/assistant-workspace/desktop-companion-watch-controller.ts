@@ -1,10 +1,16 @@
-import { classifyDesktopActivity, DesktopBehaviorTracker, type DesktopActivitySignal } from './desktop-companion-activity';
+import {
+  classifyDesktopActivity,
+  DesktopBehaviorTracker,
+  type DesktopActivitySignal,
+  type DesktopBehaviorState,
+} from './desktop-companion-activity';
 import { desktopCompanionControlStore } from './desktop-companion-control-store';
 import { DesktopCompanionRuntime } from './desktop-companion-runtime';
 import { currentDesktopCompanionCapture } from './assistant-context-controller';
 import { liveConversationStore } from './live-conversation-store';
 
 export const DESKTOP_COMPANION_STATUS_EVENT = 'omnix:desktop-companion-status';
+export const DESKTOP_COMPANION_EVALUATION_EVENT = 'omnix:desktop-companion-evaluation';
 
 export type ShadowWatchSettings = {
   enabled: boolean;
@@ -16,6 +22,22 @@ export type ShadowWatchSettings = {
   observationTtlMs: number;
   commentaryCooldownMs: number;
   minimumChangeConfidence: number;
+};
+
+export type DesktopCompanionEvaluationEvent = {
+  kind: 'watch_started' | 'capture' | 'vision_result' | 'watch_stopped';
+  sessionId: string | null;
+  characterId?: string | null;
+  modelId?: string | null;
+  remoteProvider?: boolean;
+  scenario?: string | null;
+  meaningful?: boolean;
+  latencyMs?: number;
+  callsThisMinute?: number;
+  providerError?: boolean;
+  stale?: boolean;
+  observed?: boolean;
+  reason?: string;
 };
 
 type ObserveResponse = {
@@ -113,6 +135,17 @@ export function activityPayload(signal: DesktopActivitySignal, sourceWidth: numb
   };
 }
 
+export function scenarioForActivity(
+  activity: DesktopActivitySignal,
+  behavior: DesktopBehaviorState,
+): string | null {
+  if (behavior.likelyTyping || activity.hypothesis === 'likely_typing') return 'typing';
+  if (behavior.rapidBrowsing) return 'rapid-browsing';
+  if (activity.activity === 'full_scene_change' || activity.hypothesis === 'likely_app_switch') return 'scene-change';
+  if (activity.activity === 'static' || activity.activity === 'micro_change') return 'static-screen';
+  return null;
+}
+
 async function tick(): Promise<void> {
   const nowMs = Date.now();
   if (nowMs - settingsLoadedAtMs >= 10_000) await refreshSettings(nowMs);
@@ -168,6 +201,14 @@ async function tick(): Promise<void> {
       return;
     }
     runtime.enableWatch({ shadowMode: true, speechMuted: controls.muted });
+    dispatchEvaluation({
+      kind: 'watch_started',
+      sessionId: capture.sessionId,
+      characterId: capture.characterId,
+      modelId: preflight.model_id,
+      remoteProvider: preflight.remote,
+      reason: 'preflight_passed',
+    });
     publishStatus('watching_idle', 'preflight_passed');
   } else if (!runtime.getSnapshot().watchEnabled) {
     runtime.resume();
@@ -181,8 +222,16 @@ async function tick(): Promise<void> {
   previousSample = sample.sample;
   previousSampleAtMs = sample.capturedAtMs;
   const behavior = behaviorTracker.record(activity);
-  if (activity.activity === 'unknown' || activity.activity === 'static' || activity.activity === 'micro_change') return;
-  if (activity.confidence < settings.minimumChangeConfidence) return;
+  const scenario = scenarioForActivity(activity, behavior);
+  const meaningful = !['unknown', 'static', 'micro_change'].includes(activity.activity)
+    && activity.confidence >= settings.minimumChangeConfidence;
+  dispatchEvaluation({
+    kind: 'capture',
+    sessionId: capture.sessionId,
+    scenario,
+    meaningful,
+  });
+  if (!meaningful) return;
   if (behavior.likelyTyping || behavior.rapidBrowsing) return;
   if (lastObservationStartedMs !== null && nowMs - lastObservationStartedMs < settings.minimumObservationIntervalMs) return;
 
@@ -193,6 +242,7 @@ async function tick(): Promise<void> {
   runtime.markPhase('analyzing');
   publishStatus('analyzing', 'meaningful_change_available');
   const timeoutId = window.setTimeout(() => controller.abort('observation_timeout'), settings.observationTimeoutMs);
+  const observationStarted = performance.now();
   try {
     const payload = await capture.capture.buildPayload();
     const conversation = liveConversationStore.getState().conversation;
@@ -210,6 +260,7 @@ async function tick(): Promise<void> {
         current_image_data_url: payload.currentImageDataUrl,
         history_image_data_url: payload.historyImageDataUrl,
         combined_image_data_url: payload.combinedImageDataUrl,
+        desktop_history_timestamps: payload.historyTimestamps,
         history_timestamps: payload.historyTimestamps,
         capture_mode: payload.captureMode,
         vision_model_id: settings.visionModelId || null,
@@ -243,6 +294,18 @@ async function tick(): Promise<void> {
     });
     if (!response.ok) throw new Error(`Desktop observation failed with status ${response.status}.`);
     const result = await response.json() as ObserveResponse;
+    const callsThisMinute = numberValue(result.coordinator?.background_calls_in_window);
+    dispatchEvaluation({
+      kind: 'vision_result',
+      sessionId: capture.sessionId,
+      scenario,
+      latencyMs: Math.max(0, performance.now() - observationStarted),
+      callsThisMinute,
+      providerError: result.status === 'error',
+      stale: result.reason.includes('stale') || result.reason.includes('expired'),
+      observed: result.status === 'completed' && Boolean(result.observation?.observation_id),
+      reason: result.reason,
+    });
     if (!runtime.acceptsResult({
       captureGeneration: sequence.binding.captureGeneration,
       clientSequence: sequence.clientSequence,
@@ -261,8 +324,20 @@ async function tick(): Promise<void> {
       publishStatus('watching_idle', result.reason, result);
     }
   } catch (error) {
+    const reason = controller.signal.aborted
+      ? String(controller.signal.reason || 'observation_aborted')
+      : error instanceof Error ? error.message : String(error);
+    dispatchEvaluation({
+      kind: 'vision_result',
+      sessionId: capture.sessionId,
+      scenario,
+      latencyMs: Math.max(0, performance.now() - observationStarted),
+      providerError: !controller.signal.aborted,
+      stale: controller.signal.reason === 'observation_timeout',
+      observed: false,
+      reason,
+    });
     if (!controller.signal.aborted) {
-      const reason = error instanceof Error ? error.message : String(error);
       runtime.markPhase('backing_off', reason);
       publishStatus('backing_off', reason);
     }
@@ -329,6 +404,11 @@ async function stopAndReset(reason: string): Promise<void> {
   preflightKey = '';
   preflight = null;
   if (previous) {
+    dispatchEvaluation({
+      kind: 'watch_stopped',
+      sessionId: previous.sessionId,
+      reason,
+    });
     try {
       await fetch('/api/desktop-companion/reset', {
         method: 'POST',
@@ -366,6 +446,10 @@ function publishStatus(phase: string, reason: string, result?: ObserveResponse):
   }));
 }
 
+function dispatchEvaluation(detail: DesktopCompanionEvaluationEvent): void {
+  window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_EVALUATION_EVENT, { detail }));
+}
+
 function disabledSettings(): ShadowWatchSettings {
   return {
     enabled: false,
@@ -396,4 +480,8 @@ function boundedInt(value: unknown, fallback: number, minimum: number, maximum: 
 function boundedNumber(value: unknown, fallback: number, minimum: number, maximum: number): number {
   const numeric = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
   return Math.max(minimum, Math.min(maximum, numeric));
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
