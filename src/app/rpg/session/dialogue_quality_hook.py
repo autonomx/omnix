@@ -44,11 +44,13 @@ def install_dialogue_quality_hook() -> None:
                 session = load_session(session_id)
             except Exception:
                 session = {}
-        return enforce_dialogue_quality(
+        enforced = enforce_dialogue_quality(
             result,
             session=session if isinstance(session, dict) else {},
             player_input=player_input,
         )
+        enforced["dialogue_quality_hook_applied"] = True
+        return enforced
 
     interactive_first_call_runtime.apply_turn = apply_turn_with_dialogue_quality
     setattr(interactive_first_call_runtime, _RUNTIME_SENTINEL, True)

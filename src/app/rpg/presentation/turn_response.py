@@ -32,6 +32,7 @@ def build_turn_response_v2(
     submission_id = _first_text(sources, "submission_id")
     interaction_id = _first_text(sources, "interaction_id") or turn_id
     timing = _compact_timing(sources)
+    dialogue_quality = _first_dict(sources, "dialogue_quality")
     job_id = _job_id(root)
     stateful = _first_bool(sources, "stateful")
     changed_domains = _changed_domains(sources, stateful=stateful)
@@ -52,6 +53,19 @@ def build_turn_response_v2(
         "llm_called": _first_bool(sources, "llm_called"),
         "llm_purpose": _first_text(sources, "llm_purpose") or None,
         "source": _first_text(sources, "source") or None,
+        "dialogue_quality_hook_applied": _first_bool(
+            sources,
+            "dialogue_quality_hook_applied",
+        ),
+        "dialogue_quality": _drop_none(
+            {
+                "acceptable": dialogue_quality.get("acceptable"),
+                "repaired": dialogue_quality.get("repaired"),
+                "repair_source": dialogue_quality.get("repair_source"),
+                "violations": dialogue_quality.get("violations"),
+                "warnings": dialogue_quality.get("warnings"),
+            }
+        ),
         "visible_response": visible,
         "timing": timing,
     }

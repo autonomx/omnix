@@ -14,6 +14,8 @@ from app.rpg.dialogue_quality_benchmark import (
 from app.rpg.dialogue_quality_release_matrix import (
     run_release_dialogue_quality_benchmark,
 )
+from app.rpg.presentation.dialogue_quality import enforce_dialogue_quality
+from app.rpg.presentation.visible_response import build_visible_response
 
 
 def test_dialogue_quality_matrix_covers_required_categories() -> None:
@@ -84,3 +86,103 @@ def test_absent_npc_case_requires_narration_without_fabricated_speaker() -> None
     row = report["observations"][0]
     assert row["speakers"] == ()
     assert "not here" in row["visible_text"].casefold()
+
+
+def test_quality_policy_repairs_authoritatively_absent_speaker() -> None:
+    session = {
+        "state": {"location": "Rusty Flagon Tavern"},
+        "simulation_state": {
+            "npc_index": {
+                "npc:bran": {"id": "npc:bran", "name": "Bran"},
+                "npc:mira": {"id": "npc:mira", "name": "Mira"},
+            },
+            "scene": {"present_npc_ids": ["npc:mira"]},
+            "player_state": {"nearby_npc_ids": ["npc:mira"]},
+        },
+    }
+    result = {
+        "ok": True,
+        "stateful": False,
+        "action_type": "npc_interpretive_dialogue",
+        "semantic_family": "social",
+        "visible_response": {
+            "narration": "Bran answers.",
+            "npc": {"speaker": "Bran", "line": "I am not here."},
+        },
+    }
+
+    repaired = enforce_dialogue_quality(
+        result,
+        session=session,
+        player_input="I ask for Bran while he is away.",
+    )
+
+    visible = repaired["canonical_visible_response"]
+    assert visible["messages"] == []
+    assert "Bran is not here" in visible["plain_text"]
+    assert "Rusty Flagon Tavern" in visible["plain_text"]
+    assert repaired["dialogue_quality"]["repair_source"] == "authoritative_absent_npc_repair_v1"
+    assert build_visible_response(repaired)["messages"] == []
+    assert "Bran is not here" in build_visible_response(repaired)["plain_text"]
+    replay_surface = dict(repaired)
+    replay_surface.pop("canonical_visible_response")
+    assert build_visible_response(replay_surface)["messages"] == []
+    assert "Bran is not here" in build_visible_response(replay_surface)["plain_text"]
+
+
+def test_quality_policy_splits_combined_multi_speaker_response() -> None:
+    profiles = [
+        {
+            "id": "npc:bran",
+            "name": "Bran",
+            "biography": {"public": "Bran guarded caravans on the old road."},
+        },
+        {
+            "id": "npc:mira",
+            "name": "Mira",
+            "biography": {"public": "Mira found fresh wagon tracks on the old road."},
+        },
+    ]
+    result = {
+        "ok": True,
+        "stateful": False,
+        "action_type": "npc_interpretive_dialogue",
+        "semantic_family": "social",
+        "visible_response": {
+            "narration": "They compare notes.",
+            "npc": {
+                "speaker": "bran,npc:mira",
+                "line": (
+                    'Bran says, "The old road is quiet." '
+                    'Mira adds, "Fresh wagon tracks lead toward the quarry."'
+                ),
+            },
+        },
+    }
+    session = {
+        "simulation_state": {
+            "npc_index": {profile["id"]: profile for profile in profiles},
+            "scene": {"present_npc_ids": ["npc:bran", "npc:mira"]},
+            "player_state": {"nearby_npc_ids": ["npc:bran", "npc:mira"]},
+        }
+    }
+
+    repaired = enforce_dialogue_quality(
+        result,
+        session=session,
+        player_input="I ask Bran and Mira what they saw.",
+    )
+
+    messages = repaired["canonical_visible_response"]["messages"]
+    assert [message["speaker"] for message in messages] == ["Bran", "Mira"]
+    assert "old road" in messages[0]["text"]
+    assert "wagon tracks" in messages[1]["text"]
+    assert repaired["dialogue_quality"]["repair_source"] == "multi_speaker_structure_repair_v1"
+    assert [
+        message["speaker"] for message in build_visible_response(repaired)["messages"]
+    ] == ["Bran", "Mira"]
+    replay_surface = dict(repaired)
+    replay_surface.pop("canonical_visible_response")
+    assert [
+        message["speaker"] for message in build_visible_response(replay_surface)["messages"]
+    ] == ["Bran", "Mira"]

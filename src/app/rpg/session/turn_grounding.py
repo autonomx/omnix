@@ -172,7 +172,7 @@ def _rich_profile(npc_id: str, npc: Dict[str, Any], sim: Dict[str, Any], rt: Dic
     }
 
 
-def _addressed(player_input: str, npcs: List[Dict[str, Any]], present: List[str]) -> List[str]:
+def _referenced_npcs(player_input: str, npcs: List[Dict[str, Any]]) -> List[str]:
     text = _norm(player_input)
     out = []
     for npc in npcs:
@@ -180,9 +180,16 @@ def _addressed(player_input: str, npcs: List[Dict[str, Any]], present: List[str]
         tokens = [_norm(_npc_name(npc_id, npc)), _norm(npc_id.replace("npc:", ""))]
         if any(t and t in text for t in tokens):
             out.append(npc_id)
-    if not out and len(present) == 1:
-        out.append(present[0])
     return _dedupe(out, 3)
+
+
+def _addressed(referenced: List[str], present: List[str]) -> List[str]:
+    if referenced:
+        return _dedupe(
+            [npc_id for npc_id in referenced if not present or npc_id in present],
+            3,
+        )
+    return list(present) if len(present) == 1 else []
 
 
 def _recent(rt: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -195,7 +202,9 @@ def build_turn_grounding_packet(*, player_input: str, simulation_state: Dict[str
     scene = _scene(sim, rt)
     all_npcs = _npcs(sim, rt)
     present = _present_ids(sim, rt, scene)
-    addressed = _addressed(player_input, all_npcs, present)
+    referenced = _referenced_npcs(player_input, all_npcs)
+    addressed = _addressed(referenced, present)
+    referenced_absent = [npc_id for npc_id in referenced if present and npc_id not in present]
     by_id = {_npc_id("", npc): npc for npc in all_npcs}
     addressed_profiles = [_rich_profile(npc_id, by_id.get(npc_id, {}), sim, rt, profile_loader) for npc_id in addressed if npc_id]
     nearby = []
@@ -223,6 +232,7 @@ def build_turn_grounding_packet(*, player_input: str, simulation_state: Dict[str
             "current_scene": {"scene_id": _s(scene.get("scene_id")), "location_id": _s(scene.get("location_id")), "location_name": _clip(scene.get("location_name") or scene.get("title"), 120), "summary": _clip(scene.get("summary") or scene.get("scene"), 500), "present_npc_ids": present},
             "active_modes": {"combat_active": bool(combat.get("active")), "commerce_available": bool(_l(rt.get("transaction_menus")) or _l(rt.get("active_transaction_menus"))), "active_interaction_count": len(_l(sim.get("active_interactions"))), "narration_mode": _s(rt.get("narration_mode") or _d(rt.get("settings")).get("narration_mode"))},
             "addressed_npc_ids": addressed,
+            "referenced_absent_npc_ids": referenced_absent,
             "recent_turns": _recent(rt),
         },
         "authoritative_state": {"player": {"location_id": _s(player.get("location_id")), "stats": _d(player.get("stats")), "skills": _d(player.get("skills")), "currency": _d(inv.get("currency")), "inventory_items": _l(inv.get("items"))[:20]}, "combat": combat, "active_interactions": _l(sim.get("active_interactions"))[:8], "quests": _d(sim.get("quest_state") or rt.get("quest_state"))},

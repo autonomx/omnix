@@ -42,7 +42,57 @@ def enforce_dialogue_quality(
     if not _is_nonstateful_direct_dialogue(result):
         return result
     session = session if isinstance(session, dict) else {}
+    absent = _referenced_absent_visible_response(result, session, player_input)
+    if absent:
+        output = deepcopy(result)
+        _apply_absent_visible_response(output, absent)
+        output["dialogue_quality"] = {
+            "acceptable": True,
+            "violations": [],
+            "warnings": [],
+            "format_version": DIALOGUE_QUALITY_VERSION,
+            "repaired": True,
+            "repair_source": "authoritative_absent_npc_repair_v1",
+            "target_word_range": [TARGET_MIN_WORDS, TARGET_MAX_WORDS],
+        }
+        return output
     visible = build_visible_response(result, player_input)
+    visible = _repair_multi_speaker_visible_response(
+        result,
+        visible,
+        session=session,
+        player_input=player_input,
+    )
+    structured_messages = [
+        item for item in visible.get("messages", []) if isinstance(item, dict)
+    ]
+    if len(structured_messages) > 1:
+        profiles = _addressed_profiles(result)
+        combined = _text(visible.get("plain_text"))
+        leaked_terms = sorted(
+            {
+                term
+                for profile in profiles
+                for term in _private_leak_terms(profile, combined)
+            }
+        )
+        if leaked_terms:
+            for message in structured_messages:
+                message["text"] = "I can answer only from what is known here and now."
+            visible["plain_text"] = _compose_visible_plain_text(visible)
+        output = deepcopy(result)
+        _apply_visible_response(output, visible)
+        output["dialogue_quality"] = {
+            "acceptable": not leaked_terms,
+            "violations": ["private_profile_leak"] if leaked_terms else [],
+            "warnings": [],
+            "format_version": DIALOGUE_QUALITY_VERSION,
+            "repaired": True,
+            "repair_source": "multi_speaker_structure_repair_v1",
+            "private_leak_terms": leaked_terms,
+            "target_word_range": [TARGET_MIN_WORDS, TARGET_MAX_WORDS],
+        }
+        return output
     profile = _addressed_profile(result, session, visible)
     recent = _recent_interactions(session)
     assessment = assess_dialogue_quality(
@@ -256,6 +306,10 @@ def _apply_visible_response(result: dict[str, Any], visible: dict[str, Any]) -> 
     result["summary"] = narration
     result["npc"] = deepcopy(npc)
     result["canonical_visible_response"] = deepcopy(visible)
+    result["first_call_visible_response"] = {
+        "canonical_visible_response": deepcopy(visible),
+        "visible_response": deepcopy(visible),
+    }
     for key in ("result", "resolved_result"):
         nested = result.get(key)
         if isinstance(nested, dict):
@@ -266,8 +320,233 @@ def _apply_visible_response(result: dict[str, Any], visible: dict[str, Any]) -> 
                     "narration": narration,
                     "summary": narration,
                     "npc": deepcopy(npc),
+                    "canonical_visible_response": deepcopy(visible),
+                    "first_call_visible_response": deepcopy(
+                        result["first_call_visible_response"]
+                    ),
                 }
             )
+
+
+def _apply_absent_visible_response(result: dict[str, Any], visible: dict[str, Any]) -> None:
+    narration = _text(visible.get("narration"))
+    result["visible_response"] = {"narration": narration, "npc": {}}
+    result["final_narration"] = narration
+    result["narration"] = narration
+    result["summary"] = narration
+    result["npc"] = {}
+    result["canonical_visible_response"] = deepcopy(visible)
+    result["first_call_visible_response"] = {
+        "canonical_visible_response": deepcopy(visible),
+        "visible_response": deepcopy(visible),
+    }
+    for key in ("result", "resolved_result"):
+        nested = result.get(key)
+        if isinstance(nested, dict):
+            nested.update(
+                {
+                    "visible_response": deepcopy(result["visible_response"]),
+                    "final_narration": narration,
+                    "narration": narration,
+                    "summary": narration,
+                    "npc": {},
+                    "canonical_visible_response": deepcopy(visible),
+                    "first_call_visible_response": deepcopy(
+                        result["first_call_visible_response"]
+                    ),
+                }
+            )
+
+
+def _referenced_absent_visible_response(
+    result: dict[str, Any],
+    session: dict[str, Any],
+    player_input: str,
+) -> dict[str, Any]:
+    priority = _dict(_grounding_packet(result).get("priority_context"))
+    absent_ids = [
+        _text(value)
+        for value in priority.get("referenced_absent_npc_ids", [])
+        if _text(value)
+    ]
+    if not absent_ids:
+        target = _target_name(player_input)
+        profile = _npc_profile_by_name(session, target)
+        npc_id = _text(profile.get("npc_id") or profile.get("id"))
+        present_ids = _present_npc_ids(session)
+        if npc_id and present_ids and npc_id not in present_ids:
+            absent_ids = [npc_id]
+    if not absent_ids:
+        return {}
+    npc_id = absent_ids[0]
+    profile = _npc_profile_by_id(session, npc_id)
+    name = _text(profile.get("name")) or npc_id.replace("npc:", "").replace("_", " ").title()
+    location = _location_name(session) or "the current location"
+    narration = f"{name} is not here; there is no sign of them in {location} at the moment."
+    return {
+        "format_version": "rpg_visible_response_v1",
+        "narration": narration,
+        "messages": [],
+        "plain_text": narration,
+    }
+
+
+def _repair_multi_speaker_visible_response(
+    result: dict[str, Any],
+    visible: dict[str, Any],
+    *,
+    session: dict[str, Any],
+    player_input: str,
+) -> dict[str, Any]:
+    profiles = _addressed_profiles(result)
+    if len(profiles) < 2:
+        profiles = _referenced_profiles_from_session(session, player_input)
+    messages = [item for item in visible.get("messages", []) if isinstance(item, dict)]
+    if len(profiles) < 2 or len(messages) != 1:
+        return visible
+    names = [_text(profile.get("name")) for profile in profiles]
+    segments = [
+        _text(
+            _npc_message(
+                build_profile_aware_dialogue_fallback(
+                    player_input=player_input,
+                    profile=profile,
+                    session=session,
+                    recent_interactions=_recent_interactions(session),
+                )
+            ).get("text")
+        )
+        for profile in profiles
+    ]
+    if any(not segment for segment in segments):
+        return visible
+    repaired = deepcopy(visible)
+    repaired["messages"] = [
+        {
+            "kind": "npc_dialogue",
+            "speaker_id": profile.get("id") or profile.get("npc_id"),
+            "speaker": name,
+            "text": segment,
+        }
+        for profile, name, segment in zip(profiles, names, segments)
+    ]
+    repaired["plain_text"] = _compose_visible_plain_text(repaired)
+    return repaired
+
+
+def _addressed_profiles(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        item
+        for item in _dict(_grounding_packet(result).get("npc_context")).get("addressed_npcs", [])
+        if isinstance(item, dict) and _text(item.get("name"))
+    ]
+
+
+def _compose_visible_plain_text(visible: dict[str, Any]) -> str:
+    narration = _text(visible.get("narration"))
+    paragraphs = [narration] if narration else []
+    paragraphs.extend(
+        f'{_text(item.get("speaker"))}: "{_text(item.get("text"))}"'
+        for item in visible.get("messages", [])
+        if isinstance(item, dict)
+    )
+    return "\n\n".join(paragraphs)
+
+
+def _grounding_packet(result: dict[str, Any]) -> dict[str, Any]:
+    diagnostics = _dict(result.get("first_call_grounding_diagnostics"))
+    if not diagnostics:
+        diagnostics = _dict(_dict(result.get("result")).get("first_call_grounding_diagnostics"))
+    return _dict(diagnostics.get("turn_grounding_packet"))
+
+
+def _npc_profile_by_id(session: dict[str, Any], npc_id: str) -> dict[str, Any]:
+    simulation = _dict(session.get("simulation_state"))
+    runtime = _dict(session.get("runtime_state"))
+    for container in (
+        _dict(simulation.get("npc_index")),
+        _dict(runtime.get("npc_index")),
+        _dict(_dict(simulation.get("social_state")).get("profiles")),
+        _dict(_dict(runtime.get("social_state")).get("profiles")),
+    ):
+        profile = container.get(npc_id)
+        if isinstance(profile, dict):
+            return deepcopy(profile)
+    return {}
+
+
+def _npc_profile_by_name(session: dict[str, Any], name: str) -> dict[str, Any]:
+    normalized = _normalize(name)
+    if not normalized:
+        return {}
+    for profile in _all_npc_profiles(session):
+        if normalized in {
+            _normalize(profile.get("name")),
+            _normalize(profile.get("npc_id")),
+            _normalize(profile.get("id")),
+        }:
+            return profile
+    return {}
+
+
+def _referenced_profiles_from_session(
+    session: dict[str, Any],
+    player_input: str,
+) -> list[dict[str, Any]]:
+    normalized_input = _normalize(player_input)
+    present_ids = _present_npc_ids(session)
+    profiles = []
+    for profile in _all_npc_profiles(session):
+        npc_id = _text(profile.get("npc_id") or profile.get("id"))
+        name = _text(profile.get("name"))
+        if (
+            npc_id in present_ids
+            and name
+            and re.search(rf"\b{re.escape(_normalize(name))}\b", normalized_input)
+        ):
+            profiles.append(profile)
+    return profiles[:3]
+
+
+def _all_npc_profiles(session: dict[str, Any]) -> list[dict[str, Any]]:
+    simulation = _dict(session.get("simulation_state"))
+    runtime = _dict(session.get("runtime_state"))
+    profiles: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for container in (
+        _dict(simulation.get("npc_index")),
+        _dict(runtime.get("npc_index")),
+        _dict(_dict(simulation.get("social_state")).get("profiles")),
+        _dict(_dict(runtime.get("social_state")).get("profiles")),
+    ):
+        for key, value in container.items():
+            if not isinstance(value, dict):
+                continue
+            profile = {"id": key, **value}
+            npc_id = _text(profile.get("npc_id") or profile.get("id"))
+            if npc_id and npc_id not in seen:
+                seen.add(npc_id)
+                profiles.append(profile)
+    return profiles
+
+
+def _present_npc_ids(session: dict[str, Any]) -> set[str]:
+    simulation = _dict(session.get("simulation_state"))
+    runtime = _dict(session.get("runtime_state"))
+    scene = _dict(runtime.get("current_scene")) or _dict(runtime.get("scene")) or _dict(simulation.get("scene"))
+    player = _dict(simulation.get("player_state"))
+    values = [
+        *list(scene.get("present_npc_ids") or []),
+        *list(player.get("nearby_npc_ids") or []),
+        *list(runtime.get("present_npc_ids") or []),
+        *list(runtime.get("nearby_npc_ids") or []),
+    ]
+    for row in list(scene.get("nearby_npcs") or []) + list(scene.get("npcs") or []):
+        if isinstance(row, dict):
+            values.append(row.get("npc_id") or row.get("id"))
+        elif isinstance(row, str):
+            values.append(row)
+    return {_text(value) for value in values if _text(value)}
 
 
 def _is_nonstateful_direct_dialogue(result: dict[str, Any]) -> bool:
@@ -302,7 +581,7 @@ def _addressed_profile(
         for key, value in container.items():
             if isinstance(value, dict):
                 candidates.append({"id": key, **value})
-    packet = _dict(_dict(result.get("first_call_grounding_diagnostics")).get("turn_grounding_packet"))
+    packet = _grounding_packet(result)
     addressed = _dict(packet.get("npc_context")).get("addressed_npcs", [])
     candidates.extend(item for item in addressed if isinstance(item, dict))
     target_ids = {_normalize(speaker_id), _normalize(speaker)}
@@ -422,7 +701,10 @@ def _speech_style_hint(profile: dict[str, Any]) -> str:
 
 
 def _target_name(player_input: str) -> str:
-    match = re.search(r"\b(?:ask|tell|speak to|talk to)\s+([A-Z][\w'-]+|[a-z][\w'-]+)", player_input)
+    match = re.search(
+        r"\b(?:ask(?:\s+for)?|tell|speak to|talk to)\s+([A-Z][\w'-]+|[a-z][\w'-]+)",
+        player_input,
+    )
     if not match:
         return ""
     value = match.group(1)

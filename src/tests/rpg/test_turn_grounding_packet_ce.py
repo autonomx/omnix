@@ -89,6 +89,22 @@ def test_grounding_packet_includes_rich_bran_profile_and_boundaries():
     assert packet["rules"]["first_llm_must_not_resolve_stateful_outcomes"] is True
 
 
+def test_grounding_packet_separates_referenced_absent_npc() -> None:
+    simulation_state, runtime_state = _sample_states()
+    simulation_state["player_state"]["nearby_npc_ids"] = ["npc:mira"]
+    runtime_state["current_scene"]["present_npc_ids"] = ["npc:mira"]
+
+    packet = build_turn_grounding_packet(
+        player_input="I ask for Bran while he is away.",
+        simulation_state=simulation_state,
+        runtime_state=runtime_state,
+    )
+
+    assert packet["priority_context"]["addressed_npc_ids"] == []
+    assert packet["priority_context"]["referenced_absent_npc_ids"] == ["npc:bran"]
+    assert packet["npc_context"]["addressed_npcs"] == []
+
+
 def test_action_prompt_embeds_grounding_packet_for_first_llm_call():
     simulation_state, runtime_state = _sample_states()
     prompt = build_action_intelligence_prompt(

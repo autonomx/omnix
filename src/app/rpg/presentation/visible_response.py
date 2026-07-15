@@ -25,6 +25,9 @@ def build_visible_response(result: Any, fallback_command: str = "") -> dict[str,
 
     sources = list(_iter_sources(result))
     player_input = _player_input(sources) or _text(fallback_command)
+    canonical = _canonical_visible_response(sources, player_input)
+    if canonical:
+        return canonical
     narration, npc = _select_structured_response(sources, player_input)
     speaker = _display_speaker(_text(npc.get("speaker") or npc.get("name")))
     line = _text(npc.get("line") or npc.get("text") or npc.get("content"))
@@ -95,6 +98,70 @@ def build_visible_response(result: Any, fallback_command: str = "") -> dict[str,
         "plain_text": plain_text,
         "npc": deepcopy(npc) if line else {},
     }
+
+
+def _canonical_visible_response(
+    sources: list[dict[str, Any]],
+    player_input: str,
+) -> dict[str, Any]:
+    for source in sources:
+        canonical = _dict(source.get("canonical_visible_response"))
+        if not canonical:
+            continue
+        narration = _text(canonical.get("narration"))
+        if narration and _is_player_restatement(narration, player_input):
+            narration = ""
+        messages: list[dict[str, Any]] = []
+        for item in canonical.get("messages", []):
+            if not isinstance(item, dict):
+                continue
+            speaker = _display_speaker(
+                _text(item.get("speaker") or item.get("speaker_id"))
+            )
+            line = _dialogue_only(
+                _text(item.get("text") or item.get("line")),
+                speaker,
+            )
+            if _normalize(speaker) in _NON_NPC_SPEAKERS:
+                continue
+            if line and _is_player_restatement(line, player_input):
+                continue
+            if not line:
+                continue
+            messages.append(
+                {
+                    "kind": "npc_dialogue",
+                    "speaker_id": _text(
+                        item.get("speaker_id") or item.get("npc_id") or item.get("id")
+                    )
+                    or None,
+                    "speaker": speaker or "NPC",
+                    "text": _normalize_dialogue_quotes(line),
+                }
+            )
+        paragraphs = [narration] if narration else []
+        paragraphs.extend(
+            f'{message["speaker"]}: "{message["text"]}"'
+            for message in messages
+        )
+        if not paragraphs:
+            continue
+        npc = {}
+        if messages:
+            first = messages[0]
+            npc = {
+                "speaker_id": first.get("speaker_id"),
+                "speaker": first["speaker"],
+                "line": first["text"],
+            }
+        return {
+            "format_version": _FORMAT_VERSION,
+            "narration": narration,
+            "messages": messages,
+            "plain_text": _dedupe_paragraphs(paragraphs),
+            "npc": npc,
+        }
+    return {}
 
 
 def visible_response_text(result: Any, fallback_command: str = "") -> str | None:
