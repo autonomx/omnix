@@ -58,6 +58,19 @@ def _normalize(text: str) -> str:
     return compact
 
 
+def _effective_purpose(purpose: ProactivePurpose, reason: str) -> ProactivePurpose:
+    """Allow the existing greeting/proactive route to carry desktop turns safely."""
+
+    if purpose != "proactive_reengagement":
+        return purpose
+    normalized = reason.strip().lower()
+    if normalized.startswith("desktop_critical:"):
+        return "desktop_critical"
+    if normalized.startswith("desktop_companion:"):
+        return "desktop_companion"
+    return purpose
+
+
 def _prompt(
     reason: str,
     state_summary: str | None,
@@ -118,6 +131,7 @@ def stream_proactive_turn_chunks(
     observation_id: str | None = None,
     grounding_ids: list[str] | None = None,
 ) -> Iterator[dict[str, Any]]:
+    purpose = _effective_purpose(purpose, initiative_reason)
     prefix = "desktop" if purpose.startswith("desktop_") else "proactive"
     turn_id = f"{prefix}:{uuid.uuid4().hex}"
     backchannel = _listener_backchannel(initiative_reason) if purpose == "proactive_reengagement" else None
