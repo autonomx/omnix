@@ -1,5 +1,6 @@
 """Desktop companion domain package."""
 
+from .attention import DesktopAttentionContext, decide_desktop_attention
 from .coordinator import (
     DesktopVisionCoordinator,
     DesktopVisionCoordinatorSnapshot,
@@ -33,6 +34,7 @@ __all__ = [
     "CompanionLedgerEntry",
     "CompanionRuntimeStatus",
     "DesktopActivitySignal",
+    "DesktopAttentionContext",
     "DesktopBehaviorState",
     "DesktopCompanionPolicy",
     "DesktopObservation",
@@ -45,6 +47,7 @@ __all__ = [
     "DesktopVisionLease",
     "DesktopVisionWork",
     "ShadowWatchDecision",
+    "decide_desktop_attention",
     "decide_shadow_watch",
     "observation_fingerprint",
     "parse_desktop_observation",
