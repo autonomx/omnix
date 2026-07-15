@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -11,10 +11,12 @@ from pydantic import BaseModel
 from app.rpg.narrative_delivery import (
     build_production_narrative_delivery_repository,
 )
+from app.rpg.narrative_engine.contracts import CanonicalNarrativeResponse
 from app.rpg.narrative_engine.delivery import (
     NarrativeDeliveryConflict,
     NarrativeDeliveryCoordinator,
     NarrativeDeliveryEvent,
+    NarrativeDeliveryRepository,
 )
 from app.rpg.narrative_repository import build_production_narrative_repository
 
@@ -35,7 +37,10 @@ def _http_error(exc: Exception) -> HTTPException:
     )
 
 
-def _response(response_id: str, semantic_hash: str):
+def _response(
+    response_id: str,
+    semantic_hash: str,
+) -> CanonicalNarrativeResponse:
     response = build_production_narrative_repository().get(response_id)
     if response is None:
         raise HTTPException(
@@ -79,35 +84,50 @@ def _status_payload(response_id: str, semantic_hash: str, status: str) -> str:
     )
 
 
+def _error_payload(response_id: str, semantic_hash: str, message: str) -> str:
+    data = {
+        "response_id": response_id,
+        "semantic_hash": semantic_hash,
+        "status": "conflict",
+        "error": "canonical_narrative_delivery_conflict",
+        "message": message,
+    }
+    return (
+        "event: delivery_error\n"
+        f"data: {json.dumps(data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+    )
+
+
 def _stream(
-    response_id: str,
-    semantic_hash: str,
+    response: CanonicalNarrativeResponse,
+    repository: NarrativeDeliveryRepository,
+    coordinator: NarrativeDeliveryCoordinator,
+    replayed: Sequence[NarrativeDeliveryEvent],
     after_index: int,
 ) -> Iterator[str]:
-    response = _response(response_id, semantic_hash)
-    repository = build_production_narrative_delivery_repository()
-    coordinator = NarrativeDeliveryCoordinator()
-    replayed = coordinator.resume(
-        response,
-        repository,
-        expected_semantic_hash=semantic_hash,
-        after_index=after_index,
-    )
     last_index = after_index
     for event in replayed:
         last_index = event.index
         yield _event_payload(event)
 
     while True:
-        projected, event = coordinator.publish_next(
-            response,
-            repository,
-            expected_semantic_hash=semantic_hash,
-        )
+        try:
+            projected, event = coordinator.publish_next(
+                response,
+                repository,
+                expected_semantic_hash=response.semantic_hash,
+            )
+        except NarrativeDeliveryConflict as exc:
+            yield _error_payload(
+                response.response_id,
+                response.semantic_hash,
+                str(exc),
+            )
+            return
         if event is None:
             yield _status_payload(
-                response_id,
-                semantic_hash,
+                response.response_id,
+                response.semantic_hash,
                 projected.delivery.status,
             )
             return
@@ -163,11 +183,35 @@ def register_rpg_narrative_delivery_routes(app: FastAPI) -> None:
                 if header_cursor is not None and header_cursor.strip()
                 else int(after_index if after_index is not None else -1)
             )
-            iterator = _stream(response_id, semantic_hash, cursor)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "ok": False,
+                    "error": "invalid_narrative_delivery_cursor",
+                    "value": header_cursor,
+                },
+            ) from exc
+        response = _response(response_id, semantic_hash)
+        repository = build_production_narrative_delivery_repository()
+        coordinator = NarrativeDeliveryCoordinator()
+        try:
+            replayed = coordinator.resume(
+                response,
+                repository,
+                expected_semantic_hash=semantic_hash,
+                after_index=cursor,
+            )
         except NarrativeDeliveryConflict as exc:
             raise _http_error(exc) from exc
         return StreamingResponse(
-            iterator,
+            _stream(
+                response,
+                repository,
+                coordinator,
+                replayed,
+                cursor,
+            ),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -202,5 +246,9 @@ def register_rpg_narrative_delivery_routes(app: FastAPI) -> None:
             "ok": True,
             "response_id": response_id,
             "semantic_hash": response.semantic_hash,
-            "delivery": record.as_dict() if record is not None else projected.delivery.metadata,
+            "delivery": (
+                record.as_dict()
+                if record is not None
+                else projected.delivery.metadata
+            ),
         }
