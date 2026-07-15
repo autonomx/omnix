@@ -100,10 +100,12 @@ window.setTimeout(() => {
       const controls = await import('./features/assistant-workspace/desktop-companion-controls');
       const evaluation = await import('./features/assistant-workspace/desktop-companion-shadow-evaluation-controller');
       const textSurface = await import('./features/assistant-workspace/desktop-companion-text-surface');
+      const operations = await import('./features/assistant-workspace/desktop-companion-operational-guard');
       companion.initializeDesktopCompanionWatchController();
       controls.initializeDesktopCompanionControls();
       evaluation.initializeDesktopCompanionShadowEvaluationController();
       textSurface.initializeDesktopCompanionTextSurface();
+      operations.initializeDesktopCompanionOperationalGuard();
       return import('./features/assistant-workspace/research-release-controller');
     })
     .catch((error: unknown) => {

@@ -17,6 +17,7 @@ from .evaluation import (
     default_desktop_companion_evaluation_store,
     resolve_desktop_companion_rollout,
 )
+from .operations import DesktopCompanionOperationalStatus, desktop_companion_operational_status
 from .preflight import (
     DesktopCompanionPreflightRequest,
     DesktopCompanionPreflightResult,
@@ -59,7 +60,17 @@ def register_desktop_companion_routes(
     preflight_service_factory: Callable[[], DesktopCompanionPreflightService] = default_desktop_companion_preflight_service,
     build_identity_factory: Callable[[], DesktopCompanionBuildIdentity] = resolve_desktop_companion_build_identity,
     speech_canary_factory: Callable[[], bool] = desktop_companion_speech_canary_enabled,
+    operational_status_factory: Callable[[], DesktopCompanionOperationalStatus] = desktop_companion_operational_status,
 ) -> None:
+    @app.get(
+        "/api/desktop-companion/operational-status",
+        response_model=DesktopCompanionOperationalStatus,
+        tags=["desktop-companion"],
+        include_in_schema=False,
+    )
+    def desktop_companion_operations() -> DesktopCompanionOperationalStatus:
+        return operational_status_factory()
+
     @app.get(
         "/api/desktop-companion/build-identity",
         response_model=DesktopCompanionBuildIdentity,
@@ -78,6 +89,13 @@ def register_desktop_companion_routes(
     def preflight_desktop_companion(
         request: DesktopCompanionPreflightRequest,
     ) -> DesktopCompanionPreflightResult:
+        operations = operational_status_factory()
+        if not operations.available:
+            return DesktopCompanionPreflightResult(
+                ready=False,
+                model_id=request.vision_model_id,
+                reason=operations.reason,
+            )
         return preflight_service_factory().check(request)
 
     @app.post(
@@ -89,6 +107,9 @@ def register_desktop_companion_routes(
     def observe_desktop_companion(
         request: DesktopCompanionObserveRequest,
     ) -> DesktopCompanionObserveResponse:
+        operations = operational_status_factory()
+        if not operations.available:
+            return DesktopCompanionObserveResponse(status="suppressed", reason=operations.reason)
         return orchestrator_factory().observe(request)
 
     @app.post(
@@ -199,6 +220,16 @@ def register_desktop_companion_routes(
         remote_provider: bool | None = Query(default=None),
         limit: int = Query(default=1_000, ge=1, le=5_000),
     ) -> DesktopCompanionRolloutStatus:
+        operations = operational_status_factory()
+        if not operations.available:
+            return DesktopCompanionRolloutStatus(
+                requested_stage=requested_stage,
+                effective_stage="disabled",
+                enabled=False,
+                reason=operations.reason,
+                release_gate_status="insufficient",
+                evidence_evaluation_ids=(),
+            )
         partition = evidence_partition(
             exact_commit_sha=exact_commit_sha,
             observation_schema_version=observation_schema_version,
