@@ -6,6 +6,7 @@ from .coordinator import (
     DesktopVisionLease,
     DesktopVisionWork,
 )
+from .memory import DesktopSceneMemory, DesktopSceneMemorySnapshot
 from .models import (
     CompanionAttentionDecision,
     CompanionCommentaryCandidate,
@@ -17,6 +18,12 @@ from .models import (
     DesktopObservation,
     DesktopObservedChange,
     DesktopObservedValue,
+)
+from .observation import (
+    observation_fingerprint,
+    parse_desktop_observation,
+    redact_observation_diagnostics,
+    structured_observation_prompt,
 )
 from .shadow_watch import ShadowWatchDecision, decide_shadow_watch
 
@@ -31,10 +38,16 @@ __all__ = [
     "DesktopObservation",
     "DesktopObservedChange",
     "DesktopObservedValue",
+    "DesktopSceneMemory",
+    "DesktopSceneMemorySnapshot",
     "DesktopVisionCoordinator",
     "DesktopVisionCoordinatorSnapshot",
     "DesktopVisionLease",
     "DesktopVisionWork",
     "ShadowWatchDecision",
     "decide_shadow_watch",
+    "observation_fingerprint",
+    "parse_desktop_observation",
+    "redact_observation_diagnostics",
+    "structured_observation_prompt",
 ]
