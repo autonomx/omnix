@@ -69,13 +69,14 @@ $env:OMNIX_RPG_LIVE_SMOKE = "1"
 python scripts/rpg_interactive_live_smoke.py --session-id "<session-id>"
 ```
 
-Run the category-complete dialogue matrix separately:
+Run the category-complete dialogue matrix separately. It creates one disposable
+session, resets it to the known state required by each case, and archives it when
+the run finishes:
 
 ```powershell
 $env:PYTHONPATH = "src"
 $env:OMNIX_RPG_LIVE_SMOKE = "1"
 python -m app.rpg.local_dialogue_quality_smoke `
-  --session-id "<session-id>" `
   --output "resources/data/reports/rpg-dialogue-quality-local.json"
 ```
 
@@ -90,7 +91,7 @@ python scripts/rpg_interactive_live_smoke.py `
   --timeout-seconds 120
 ```
 
-The latency harness sends stable `X-Omnix-Rpg-Submission-Id` values, repeats the first submission to verify idempotency, validates the compact response gates, records response bytes, and reports mean, median, p95, and maximum latency. The dialogue harness reports direct-answer, correct-speaker, grounded-specificity, continuity, repetition, private-leak, and empty-line rates. Both exit unsuccessfully when their acceptance targets are missed, remain local-only, and do not upload provider content.
+The latency harness sends stable `X-Omnix-Rpg-Submission-Id` values, repeats the first submission to verify idempotency, validates the compact response gates, records response bytes, and reports mean, median, p95, and maximum latency. The dialogue harness reports direct-answer, correct-speaker, grounded-specificity, continuity, repetition, private-leak, and empty-line rates. It provisions only the checked-in benchmark cases through a loopback-only opt-in route; it does not accept arbitrary state payloads. Both exit unsuccessfully when their acceptance targets are missed, remain local-only, and do not upload provider content.
 
 ## Operator acceptance criteria
 

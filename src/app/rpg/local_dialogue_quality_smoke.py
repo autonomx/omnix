@@ -25,12 +25,12 @@ from app.rpg.local_live_smoke import assert_live_smoke_allowed
 def run_local_dialogue_quality_smoke(
     *,
     base_url: str,
-    session_id: str,
     cases: Iterable[DialogueBenchmarkCase] | None = None,
     timeout_seconds: float = 120.0,
+    keep_fixture: bool = False,
     env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Execute the quality matrix through the public turn endpoint.
+    """Execute fixture-aware quality cases through the public turn endpoint.
 
     This function is intentionally guarded by the same explicit local opt-in as the
     live latency smoke. It must never run inside GitHub Actions.
@@ -42,34 +42,107 @@ def run_local_dialogue_quality_smoke(
     observations = []
     timings = []
     raw_results = []
-    for index, case in enumerate(resolved_cases, start=1):
-        payload, elapsed_seconds, response_bytes = _post_case(
-            base_url=base_url,
-            session_id=session_id,
-            case=case,
-            submission_id=f"quality-smoke:{run_id}:{index}",
-            timeout_seconds=timeout_seconds,
-        )
-        observation = evaluate_dialogue_benchmark_case(case, payload)
-        observations.append(observation)
-        timings.append(elapsed_seconds)
-        raw_results.append(
-            {
-                "case": asdict(case),
-                "elapsed_seconds": round(elapsed_seconds, 3),
-                "response_bytes": response_bytes,
-                "interaction_id": payload.get("interaction_id"),
-                "trace_id": payload.get("trace_id"),
-                "observation": asdict(observation),
-            }
-        )
+    fixture_session_id: str | None = None
+    fixture_archived = False
+    try:
+        for index, case in enumerate(resolved_cases, start=1):
+            fixture = _provision_case(
+                base_url=base_url,
+                session_id=fixture_session_id,
+                case=case,
+                run_id=run_id,
+                timeout_seconds=timeout_seconds,
+            )
+            fixture_session_id = str(fixture.get("session_id") or "").strip()
+            if not fixture_session_id:
+                raise RuntimeError("dialogue quality fixture response omitted session_id")
+            payload, elapsed_seconds, response_bytes = _post_case(
+                base_url=base_url,
+                session_id=fixture_session_id,
+                case=case,
+                submission_id=f"quality-smoke:{run_id}:{index}",
+                timeout_seconds=timeout_seconds,
+            )
+            observation = evaluate_dialogue_benchmark_case(case, payload)
+            observations.append(observation)
+            timings.append(elapsed_seconds)
+            raw_results.append(
+                {
+                    "case": asdict(case),
+                    "fixture": fixture,
+                    "elapsed_seconds": round(elapsed_seconds, 3),
+                    "response_bytes": response_bytes,
+                    "interaction_id": payload.get("interaction_id"),
+                    "trace_id": payload.get("trace_id"),
+                    "observation": asdict(observation),
+                }
+            )
+    finally:
+        if fixture_session_id and not keep_fixture:
+            fixture_archived = _archive_fixture(
+                base_url=base_url,
+                session_id=fixture_session_id,
+                timeout_seconds=timeout_seconds,
+            )
     aggregate = aggregate_dialogue_benchmark_observations(observations)
     aggregate["local_only"] = True
     aggregate["base_url"] = base_url.rstrip("/")
-    aggregate["session_id"] = session_id
+    aggregate["fixture_mode"] = "known_case_state_reset"
+    aggregate["fixture_session_id"] = fixture_session_id
+    aggregate["fixture_archived"] = fixture_archived
     aggregate["latency_seconds"] = _latency_summary(timings)
     aggregate["results"] = raw_results
     return aggregate
+
+
+def _provision_case(
+    *,
+    base_url: str,
+    session_id: str | None,
+    case: DialogueBenchmarkCase,
+    run_id: str,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    url = f"{base_url.rstrip('/')}/api/rpg/local-qualification/dialogue-fixture"
+    body = json.dumps(
+        {
+            "case_id": case.case_id,
+            "run_id": run_id,
+            "session_id": session_id,
+        }
+    ).encode("utf-8")
+    return _request_json(
+        urllib.request.Request(
+            url,
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-Omnix-Rpg-Live-Smoke": "1",
+            },
+        ),
+        timeout_seconds=timeout_seconds,
+        context="dialogue quality fixture",
+    )
+
+
+def _archive_fixture(
+    *,
+    base_url: str,
+    session_id: str,
+    timeout_seconds: float,
+) -> bool:
+    url = f"{base_url.rstrip('/')}/api/rpg/sessions/{session_id}/delete"
+    try:
+        payload = _request_json(
+            urllib.request.Request(url, data=b"{}", method="POST"),
+            timeout_seconds=timeout_seconds,
+            context="dialogue quality fixture cleanup",
+        )
+    except RuntimeError:
+        return False
+    return payload.get("ok") is True
 
 
 def _post_case(
@@ -114,6 +187,32 @@ def _post_case(
     return payload, elapsed, len(raw)
 
 
+def _request_json(
+    request: urllib.request.Request,
+    *,
+    timeout_seconds: float,
+    context: str,
+) -> dict[str, Any]:
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        raw = exc.read()
+        raise RuntimeError(
+            f"{context} request failed with HTTP {exc.code}: "
+            f"{raw.decode('utf-8', errors='replace')}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"{context} request failed: {exc}") from exc
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{context} response was not valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"{context} response must be a JSON object")
+    return payload
+
+
 def _latency_summary(values: list[float]) -> dict[str, Any]:
     ordered = sorted(max(0.0, float(value)) for value in values)
     if not ordered:
@@ -138,8 +237,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Run the local-only provider-backed RPG dialogue quality matrix.",
     )
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
-    parser.add_argument("--session-id", required=True)
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
+    parser.add_argument(
+        "--keep-fixture",
+        action="store_true",
+        help="Leave the disposable fixture session active for debugging.",
+    )
     parser.add_argument("--output", type=Path)
     return parser
 
@@ -149,8 +252,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         report = run_local_dialogue_quality_smoke(
             base_url=args.base_url,
-            session_id=args.session_id,
             timeout_seconds=args.timeout_seconds,
+            keep_fixture=args.keep_fixture,
             env=os.environ,
         )
     except Exception as exc:

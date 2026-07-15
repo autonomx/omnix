@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from functools import wraps
 from typing import Any, Callable
 
@@ -34,6 +35,7 @@ from app.rpg.session.world_ability_integration import ensure_world_scale_abiliti
 _ROUTE_SENTINEL = "_omnix_rpg_session_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_session_route_hook_installed"
 _GENESIS_CONTRACT_VERSION = "rpg_genesis_v2"
+_LOCAL_DIALOGUE_FIXTURE_HEADER = "x-omnix-rpg-live-smoke"
 
 
 class _TruthyZero(int):
@@ -216,6 +218,20 @@ def _foreground_turn_command(payload: Any) -> str:
     )
 
 
+def _require_local_dialogue_fixture_request(request: Request) -> None:
+    client_host = str(request.client.host if request.client else "").strip().casefold()
+    loopback_hosts = {"127.0.0.1", "::1", "localhost", "testclient"}
+    if client_host not in loopback_hosts:
+        raise HTTPException(status_code=404, detail={"error": "not_found"})
+    if str(os.environ.get("CI") or "").strip().casefold() in {"1", "true", "yes", "on"}:
+        raise HTTPException(status_code=404, detail={"error": "not_found"})
+    if request.headers.get(_LOCAL_DIALOGUE_FIXTURE_HEADER) != "1":
+        raise HTTPException(
+            status_code=403,
+            detail={"ok": False, "error": "local_dialogue_fixture_opt_in_required"},
+        )
+
+
 def register_rpg_session_routes(app: FastAPI) -> None:
     """Attach the typed RPG session API once."""
     if getattr(app.state, _ROUTE_SENTINEL, False):
@@ -335,6 +351,34 @@ def register_rpg_session_routes(app: FastAPI) -> None:
             command=command,
             request=http_request,
         )
+
+    @app.post(
+        "/api/rpg/local-qualification/dialogue-fixture",
+        tags=["rpg-session"],
+        include_in_schema=False,
+    )
+    async def rpg_local_dialogue_fixture(http_request: Request) -> dict[str, Any]:
+        _require_local_dialogue_fixture_request(http_request)
+        payload = await http_request.json()
+        from app.rpg.local_dialogue_quality_fixtures import (
+            dialogue_benchmark_case,
+            provision_local_dialogue_fixture,
+        )
+
+        try:
+            case = dialogue_benchmark_case(str(payload.get("case_id") or ""))
+            return await asyncio.to_thread(
+                lambda: provision_local_dialogue_fixture(
+                    case=case,
+                    run_id=str(payload.get("run_id") or ""),
+                    session_id=str(payload.get("session_id") or "").strip() or None,
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": str(exc)},
+            ) from exc
 
     @app.post(
         "/api/rpg/sessions/{session_id}/rename",

@@ -16,7 +16,7 @@ The aggregate report is local operational evidence. Do not commit prompts, provi
 
 - PostgreSQL and the Omnix gateway are running.
 - The intended local LLM provider is configured and healthy.
-- A disposable or backed-up RPG session is available.
+- A disposable or backed-up RPG session is available for the latency smoke. The dialogue matrix creates and archives its own fixture session.
 - Browser timing samples have been exported as JSON under either a `samples` or `reports` array.
 
 ## Generate evidence
@@ -32,7 +32,6 @@ python scripts/rpg_interactive_live_smoke.py `
   > resources/data/reports/rpg-live-smoke-local.json
 
 python -m app.rpg.local_dialogue_quality_smoke `
-  --session-id "<session-id>" `
   --output resources/data/reports/rpg-dialogue-quality-local.json
 ```
 
