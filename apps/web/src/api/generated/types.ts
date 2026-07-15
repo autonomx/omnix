@@ -2045,7 +2045,7 @@ export interface components {
          * ResourceClass
          * @enum {string}
          */
-        ResourceClass: "cpu" | "gpu:llm" | "gpu:tts" | "gpu:stt" | "gpu:image" | "network";
+        ResourceClass: "cpu" | "gpu:llm" | "gpu:tts" | "gpu:stt" | "gpu:image" | "network" | "rpg_campaign_genesis";
         /** RetryState */
         RetryState: {
             /**

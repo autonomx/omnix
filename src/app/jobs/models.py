@@ -27,6 +27,7 @@ class ResourceClass(str, Enum):
     GPU_STT = "gpu:stt"
     GPU_IMAGE = "gpu:image"
     NETWORK = "network"
+    RPG_CAMPAIGN_GENESIS = "rpg_campaign_genesis"
 
 
 TERMINAL_STATUSES = {

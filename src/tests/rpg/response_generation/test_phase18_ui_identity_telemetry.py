@@ -65,3 +65,11 @@ def test_client_records_request_headers_body_parse_store_commit_and_visible() ->
         assert field in source
     assert "X-Omnix-Rpg-Attribution-Pct" in source
     assert "Server-Timing" in source
+
+
+def test_rpg_turn_ui_fetch_interceptor_is_installed_at_web_startup() -> None:
+    source = (_REPO_ROOT / "apps" / "web" / "src" / "main.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "installRpgTurnUiFetchInterceptor();" in source

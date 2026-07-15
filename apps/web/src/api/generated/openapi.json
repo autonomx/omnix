@@ -3798,7 +3798,8 @@
           "gpu:tts",
           "gpu:stt",
           "gpu:image",
-          "network"
+          "network",
+          "rpg_campaign_genesis"
         ],
         "title": "ResourceClass",
         "type": "string"

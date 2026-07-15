@@ -157,6 +157,20 @@ def list_sessions_from_postgres() -> list[dict[str, Any]]:
     return [dict(record["state"]) for record in campaigns + archived]
 
 
+def list_session_summaries_from_postgres(
+    *,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Project the authoritative campaign list into the bounded UI summary contract."""
+
+    from app.rpg.session.list_summaries import session_list_summary
+
+    sessions = list_sessions_from_postgres()
+    if limit is not None:
+        sessions = sessions[: max(0, int(limit))]
+    return [session_list_summary(session) for session in sessions]
+
+
 def archive_session_in_postgres(session_id: str) -> dict[str, Any]:
     database = _database()
     context = _context(database)

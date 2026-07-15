@@ -23,6 +23,7 @@ from .rpg_compat import (
     list_sessions_from_postgres,
     load_interaction_events_postgres,
     load_session_from_postgres,
+    list_session_summaries_from_postgres,
     save_session_to_postgres,
 )
 from .runtime import LegacyPersistenceRetired, ensure_postgresql_runtime_ready
@@ -386,6 +387,9 @@ def _install_rpg_runtime() -> None:
     session_service_module.save_session_to_disk = save_session_to_postgres
     session_service_module.load_session_from_disk = load_session_from_postgres
     session_service_module.list_sessions_from_disk = list_sessions_from_postgres
+    session_service_module.list_session_summaries_from_disk = (
+        list_session_summaries_from_postgres
+    )
     session_service_module.archive_session_on_disk = archive_session_in_postgres
 
     session_package.save_session_to_disk = save_session_to_postgres

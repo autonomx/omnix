@@ -11,6 +11,7 @@ import './features/chatbot/researchProgressController.css';
 import { bootstrapCentralAssistantSettings } from './features/chatbot/assistantSettingsBootstrap';
 import { initializeLiveChatWorkspace } from './features/chatbot/live-chat-workspace';
 import { initializeVoiceSessionEvaluationWorkspace } from './features/chatbot/voice-session-evaluation-workspace';
+import { installRpgTurnUiFetchInterceptor } from './features/rpg/rpgTurnUiStore';
 import './features/podcast/podcastSessionGuard';
 import './features/voice/voiceJobListGuard';
 import './styles.css';
@@ -60,6 +61,7 @@ const queryClient = new QueryClient({
   },
 });
 
+installRpgTurnUiFetchInterceptor();
 initializeLiveConversationStoreBridge();
 initializeLivePresencePolicyController();
 initializeLiveVoiceDuplexGate();

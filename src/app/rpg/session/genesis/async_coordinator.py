@@ -11,6 +11,8 @@ import os
 import threading
 from typing import Any, Mapping
 
+from app.jobs.models import ResourceClass
+
 from .contract import CampaignGenesisContract
 from .materialization import materialize_world_forge_into_session, persist_campaign_genesis
 from .world_forge_commit import require_world_forge_commit_ready
@@ -18,7 +20,7 @@ from .world_forge_generation import WorldForgeTopicGenerator
 from .world_forge_pipeline import run_campaign_world_forge
 
 CAMPAIGN_GENESIS_JOB_TYPE = "rpg.campaign_genesis.generate"
-CAMPAIGN_GENESIS_RESOURCE_CLASS = "rpg_campaign_genesis"
+CAMPAIGN_GENESIS_RESOURCE_CLASS = ResourceClass.RPG_CAMPAIGN_GENESIS.value
 CAMPAIGN_GENESIS_ASYNC_CONTRACT = "rpg_campaign_genesis_async_v1"
 _DEFAULT_LEASE_SECONDS = 3600
 
@@ -297,7 +299,7 @@ def run_campaign_genesis_worker_once(
         work.campaign_genesis.update(
             context,
             campaign_id=campaign_id,
-            status="running",
+            status="generating",
             progress=_progress(
                 status="running",
                 stage="world_forge",
@@ -382,7 +384,7 @@ def run_campaign_genesis_worker_once(
             work.campaign_genesis.update(
                 context,
                 campaign_id=campaign_id,
-                status="retrying" if retrying else "failed",
+                status="generating" if retrying else "failed",
                 progress=_progress(
                     status="retrying" if retrying else "failed",
                     stage="retry_wait" if retrying else "failed",

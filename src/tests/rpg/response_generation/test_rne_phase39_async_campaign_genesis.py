@@ -4,6 +4,7 @@ import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
+from app.jobs.models import ResourceClass
 from app.rpg.session.genesis.async_coordinator import (
     CAMPAIGN_GENESIS_ASYNC_CONTRACT,
     CAMPAIGN_GENESIS_JOB_TYPE,
@@ -131,6 +132,12 @@ def test_async_mode_is_production_default_but_deterministic_ci_is_explicit() -> 
     ) is False
 
 
+def test_campaign_genesis_resource_class_is_part_of_the_shared_job_contract() -> None:
+    assert ResourceClass(CAMPAIGN_GENESIS_RESOURCE_CLASS) is (
+        ResourceClass.RPG_CAMPAIGN_GENESIS
+    )
+
+
 def test_enqueue_persists_blocked_shell_and_one_durable_job(monkeypatch) -> None:
     work = _Work()
     saved: list[dict] = []
@@ -227,6 +234,7 @@ def test_phase39_source_guards_cover_leases_recovery_and_restart_safe_commit() -
     assert "lease_seconds=_DEFAULT_LEASE_SECONDS" in coordinator
     assert "work.jobs.fail(" in coordinator
     assert "retry_delay_seconds=1" in coordinator
+    assert 'status="generating" if retrying else "failed"' in coordinator
     assert "genesis_run_started=True" in coordinator
     assert "required=True" in coordinator
     assert "campaign_genesis_async_enabled()" in pipeline
