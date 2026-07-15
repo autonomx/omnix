@@ -20,6 +20,7 @@ import './features/chatbot/ChatbotWorkspaceSidePanelFix.css';
 import './features/chatbot/ChatbotWorkspaceUtilityToggle.css';
 import './features/assistant-workspace/assistant-context-controller.css';
 import './features/assistant-workspace/desktop-companion-controls.css';
+import './features/assistant-workspace/desktop-companion-text-surface.css';
 import './features/assistant-workspace/research-release-controller.css';
 import { initializeChatMessageAudioControllerV2 } from './features/assistant-workspace/chat-message-audio-controller-v2';
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
@@ -98,9 +99,11 @@ window.setTimeout(() => {
       const companion = await import('./features/assistant-workspace/desktop-companion-watch-controller');
       const controls = await import('./features/assistant-workspace/desktop-companion-controls');
       const evaluation = await import('./features/assistant-workspace/desktop-companion-shadow-evaluation-controller');
+      const textSurface = await import('./features/assistant-workspace/desktop-companion-text-surface');
       companion.initializeDesktopCompanionWatchController();
       controls.initializeDesktopCompanionControls();
       evaluation.initializeDesktopCompanionShadowEvaluationController();
+      textSurface.initializeDesktopCompanionTextSurface();
       return import('./features/assistant-workspace/research-release-controller');
     })
     .catch((error: unknown) => {

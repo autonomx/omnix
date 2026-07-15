@@ -1,6 +1,6 @@
 # Desktop Companion — Wallie Adoption Roadmap
 
-Status: Implemented through SC-11; text and speech rollout remain disabled by default
+Status: Implemented through SC-12; speech rollout remains gated and disabled by default
 
 Source of truth: `autonomx/omnix` `main`
 
@@ -30,7 +30,7 @@ Wallie is an architectural reference, not a runtime dependency. Omnix uses a cle
 - temporal frame buffer and local frame sampling;
 - conservative activity classification and behaviour tracking;
 - page visibility and capture-generation identity;
-- watch controls and status projection.
+- watch controls, effective rollout, transient text, and status projection.
 
 ### Gateway
 
@@ -39,7 +39,7 @@ Wallie is an architectural reference, not a runtime dependency. Omnix uses a cle
 - bounded revisable scene memory;
 - observation/event deduplication;
 - attention policy and commentary generation;
-- redacted diagnostics and evaluation traces.
+- partitioned release gates, redacted diagnostics, and evaluation traces.
 
 ### Live Conversation
 
@@ -58,8 +58,9 @@ user-approved stream
   -> factual structured observation
   -> bounded scene memory
   -> deterministic attention decision
+  -> backend-resolved effective rollout
   -> existing proactive-turn pipeline
-  -> existing floor / TTS / avatar delivery
+  -> transient text or existing speech/avatar delivery
 ```
 
 ## Versioned contracts
@@ -126,30 +127,29 @@ Added centralized default-off settings, redacted browser evaluation accumulation
 
 ### SC-9 — End-to-end shadow orchestration — Complete
 
-Connected the production browser capture buffer, conservative activity classifier, behaviour tracker, serialized gateway vision execution, structured observation parser, revisable scene memory, and deterministic attention policy. The composition root remains shadow-only, default-off, generation-safe, and incapable of dispatching commentary.
+Connected the production browser capture buffer, conservative activity classifier, behaviour tracker, serialized gateway vision execution, structured observation parser, revisable scene memory, and deterministic attention policy. The composition root remains default-off and generation-safe.
 
 ### SC-10 — Preflight and in-session controls — Complete
 
-Added explicit Start, pause/resume, mute/unmute, and stop-and-forget controls in the active Chat workspace. Watch does not start merely because the global setting is enabled. Start performs a harmless image-capability preflight against the selected provider and model, exposes redacted model/endpoint status, blocks remote providers without explicit consent, and preserves manual Desktop Ask when Watch is unavailable.
+Added explicit Start, pause/resume, mute/unmute, and stop-and-forget controls. Start performs a harmless image-capability preflight and blocks remote providers without explicit consent.
 
 ### SC-11 — Automatic shadow evaluation — Complete
 
-Connected content-free evaluation to the production Watch lifecycle. A separate browser controller starts an accumulator after successful preflight, records captures, meaningful changes, provider calls, observation outcomes, stale results, provider errors, latency, rate maxima, and identifier-only scenarios, then submits bounded evidence on stop, rebind, unload, or a sixty-second interval.
+Connected content-free evaluation to the production Watch lifecycle with exact build identity, hashed model identity, bounded aggregation, and automatic best-effort submission.
 
-Acceptance evidence includes:
+### SC-12 — Gate enforcement and text rollout — Complete
 
-- exact build identity resolved from deployment metadata or the checked-out Git commit;
-- SHA-256 model identity rather than a stored model name;
-- local-versus-remote provider class without endpoint persistence;
-- scenario identifiers for static screens, typing, rapid browsing, and scene changes;
-- lifecycle event normalization that discards content-bearing extras;
-- best-effort evidence submission that never blocks capture or inference;
-- bounded temporal timestamp compatibility with strict disagreement rejection;
-- no frames, prompts, screen text, transcripts, or commentary text in evidence.
+Made the backend rollout result authoritative. Configured stages are resolved against evidence isolated by exact commit SHA, observation schema, attention policy, provider class, model hash, and remote/local status. Text requires at least twelve records in one partition with complete required scenarios and safe metrics.
 
-### SC-12 — Gate enforcement and text rollout — Pending
+Added a true text presentation path that:
 
-Use backend-resolved effective rollout stages and add a true text-only delivery surface with bounded pending-candidate handling.
+- does not depend on auto-speech;
+- uses the existing grounded proactive generator and exact `SKIP` contract;
+- retains one coalesced, expiring candidate while the user, assistant, barge-in, or social initiative owns the floor;
+- replaces stale or lower-priority candidates rather than growing a queue;
+- displays one dismissible transient companion comment outside durable chat history;
+- commits delivery metadata through the existing transient desktop ledger;
+- degrades configured speech to text until the separate speech gate passes.
 
 ### SC-13 — Speech rollout validation — Pending
 
@@ -170,6 +170,7 @@ observation stale TTL                     12 seconds
 normal commentary cooldown                25 seconds
 background queue                          1 active + 1 coalesced pending
 shadow evidence flush interval            60 seconds
+text delivery queue                        1 coalesced candidate
 ```
 
 User-requested desktop questions always outrank background work.
@@ -177,6 +178,15 @@ User-requested desktop questions always outrank background work.
 ## Release-gate evidence
 
 Content-free evaluation records include exact commit SHA, policy/schema versions, rollout stage, provider metadata, aggregate counts, aggregate latency, aggregate rates, and identifier-only scenario labels. They reject image-, frame-, prompt-, message-, transcript-, and screen-text-bearing metric keys.
+
+Evidence never crosses these partition boundaries:
+
+- exact commit SHA;
+- observation schema version;
+- attention policy version;
+- provider class;
+- vision model hash;
+- remote/local provider status.
 
 Required scenarios:
 
@@ -197,7 +207,7 @@ collision rate                0.01
 provider error rate           0.05
 observation p95 latency       10000 ms
 vision calls per minute       6
-minimum evaluation records    5
+minimum partition records     12
 ```
 
 ## Deferred scope
@@ -212,4 +222,4 @@ minimum evaluation records    5
 
 ## Definition of done
 
-SC-11 is complete when a normal shadow Watch session automatically produces bounded, exact-build, content-free evaluation evidence without affecting observation availability or retaining visual content. Product rollout is complete only after SC-12 through SC-14 pass their separate acceptance gates.
+SC-12 is complete when configured text or speech cannot bypass an exact evidence partition, insufficient speech safely degrades to text, text comments do not require auto-speech, floor conflicts retain at most one expiring candidate, and delivered comments remain transient. Product rollout is complete only after SC-13 and SC-14 pass their separate acceptance gates.

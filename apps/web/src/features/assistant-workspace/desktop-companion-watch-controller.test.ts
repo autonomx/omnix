@@ -6,14 +6,14 @@ import {
   scenarioForActivity,
 } from './desktop-companion-watch-controller';
 
-describe('desktop companion shadow watch settings', () => {
-  it('only enables the watch loop for explicit shadow rollout', () => {
+describe('desktop companion watch settings', () => {
+  it('parses the configured rollout request without treating it as effective', () => {
     const payload = {
       settings: {
         settings_control_center: {
           assistant: {
             desktopCompanionEnabled: true,
-            desktopCompanionRolloutStage: 'shadow',
+            desktopCompanionRolloutStage: 'text',
             desktopCompanionVisionModelId: 'qwen-vl',
             desktopCompanionRemoteVisionAllowed: true,
             desktopCompanionBackgroundCallsPerMinute: 8,
@@ -29,6 +29,7 @@ describe('desktop companion shadow watch settings', () => {
 
     expect(parseShadowWatchSettings(payload)).toEqual({
       enabled: true,
+      requestedStage: 'text',
       visionModelId: 'qwen-vl',
       remoteVisionAllowed: true,
       backgroundCallsPerMinute: 8,
@@ -40,15 +41,23 @@ describe('desktop companion shadow watch settings', () => {
     });
   });
 
-  it('does not accidentally enable text or speech before rollout wiring', () => {
-    for (const stage of ['disabled', 'text', 'speech']) {
+  it('keeps disabled settings off but allows text and speech to reach the backend gate', () => {
+    const disabled = parseShadowWatchSettings({
+      settings: { settings_control_center: { assistant: {
+        desktopCompanionEnabled: true,
+        desktopCompanionRolloutStage: 'disabled',
+      } } },
+    });
+    expect(disabled).toMatchObject({ enabled: false, requestedStage: 'disabled' });
+
+    for (const stage of ['shadow', 'text', 'speech'] as const) {
       const result = parseShadowWatchSettings({
         settings: { settings_control_center: { assistant: {
           desktopCompanionEnabled: true,
           desktopCompanionRolloutStage: stage,
         } } },
       });
-      expect(result.enabled).toBe(false);
+      expect(result).toMatchObject({ enabled: true, requestedStage: stage });
       expect(result.remoteVisionAllowed).toBe(false);
     }
   });

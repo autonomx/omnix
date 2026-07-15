@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { normalizeEvaluationEvent } from './desktop-companion-shadow-evaluation-controller';
 
-describe('desktop companion shadow evaluation events', () => {
-  it('accepts bounded content-free lifecycle facts', () => {
+describe('desktop companion evaluation events', () => {
+  it('accepts bounded content-free lifecycle facts and effective stage', () => {
     expect(normalizeEvaluationEvent({
       kind: 'vision_result',
       sessionId: 'chat:1',
+      rolloutStage: 'text',
       scenario: 'scene-change',
       latencyMs: 1234.5,
       callsThisMinute: 3,
@@ -20,6 +21,7 @@ describe('desktop companion shadow evaluation events', () => {
       characterId: null,
       modelId: null,
       remoteProvider: false,
+      rolloutStage: 'text',
       scenario: 'scene-change',
       meaningful: false,
       latencyMs: 1234.5,
@@ -47,6 +49,7 @@ describe('desktop companion shadow evaluation events', () => {
       characterId: null,
       modelId: null,
       remoteProvider: false,
+      rolloutStage: undefined,
       scenario: 'typing',
       meaningful: true,
       latencyMs: undefined,
