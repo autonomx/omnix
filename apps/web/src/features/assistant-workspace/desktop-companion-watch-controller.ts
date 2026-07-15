@@ -92,10 +92,20 @@ let pauseInterruptionRecorded = false;
 
 export function createDesktopCompanionTickScheduler(run: () => Promise<void>): () => Promise<void> {
   let inFlight: Promise<void> | null = null;
+  let pending = false;
   return () => {
-    if (inFlight) return inFlight;
+    if (inFlight) {
+      pending = true;
+      return inFlight;
+    }
     inFlight = Promise.resolve()
-      .then(run)
+      .then(async () => {
+        await run();
+        while (pending) {
+          pending = false;
+          await run();
+        }
+      })
       .finally(() => {
         inFlight = null;
       });

@@ -12,7 +12,7 @@ import {
 } from './desktop-companion-watch-controller';
 
 describe('desktop companion watch scheduling', () => {
-  it('coalesces overlapping ticks so startup cannot reset an in-flight binding', async () => {
+  it('serializes overlapping ticks and reruns once for pending state changes', async () => {
     let release!: () => void;
     const blocked = new Promise<void>((resolve) => { release = resolve; });
     let calls = 0;
@@ -23,15 +23,18 @@ describe('desktop companion watch scheduling', () => {
 
     const first = schedule();
     const second = schedule();
+    const third = schedule();
     await Promise.resolve();
 
     expect(calls).toBe(1);
     expect(second).toBe(first);
+    expect(third).toBe(first);
 
     release();
     await first;
-    await schedule();
     expect(calls).toBe(2);
+    await schedule();
+    expect(calls).toBe(3);
   });
 
   it('resumes a paused runtime even though Watch remains enabled', () => {
