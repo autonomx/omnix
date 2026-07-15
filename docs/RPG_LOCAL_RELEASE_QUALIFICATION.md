@@ -16,7 +16,7 @@ The aggregate report is local operational evidence. Do not commit prompts, provi
 
 - PostgreSQL and the Omnix gateway are running.
 - The intended local LLM provider is configured and healthy.
-- A disposable or backed-up RPG session is available for the latency smoke. The dialogue matrix creates and archives its own fixture session.
+- A disposable or backed-up RPG session is available for the latency smoke. The dialogue matrix creates and archives an isolated fixture session for each known case.
 - Browser timing samples have been exported as JSON under either a `samples` or `reports` array.
 
 ## Generate evidence

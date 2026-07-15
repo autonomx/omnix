@@ -69,9 +69,9 @@ $env:OMNIX_RPG_LIVE_SMOKE = "1"
 python scripts/rpg_interactive_live_smoke.py --session-id "<session-id>"
 ```
 
-Run the category-complete dialogue matrix separately. It creates one disposable
-session, resets it to the known state required by each case, and archives it when
-the run finishes:
+Run the category-complete dialogue matrix separately. It creates one isolated
+disposable session for each known case and archives every fixture when the run
+finishes:
 
 ```powershell
 $env:PYTHONPATH = "src"

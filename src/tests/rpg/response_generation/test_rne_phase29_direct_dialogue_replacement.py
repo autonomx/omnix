@@ -135,6 +135,96 @@ def test_fast_immersive_and_cinematic_profiles_use_the_same_canonical_engine(
         assert generated["canonical_narrative_source"] == "unified_narrative_engine_v1"
 
 
+def test_canonical_writer_persists_content_quality_repair_before_delivery(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.rpg.narrative_provider.build_production_narrative_writer",
+        lambda: DeterministicNarrativeWriter(),
+    )
+    session = _session()
+    session["manifest"]["session_id"] = "campaign:phase29:quality"
+    session["simulation_state"]["npc_index"] = {
+        "npc:bran": {
+            "id": "npc:bran",
+            "npc_id": "npc:bran",
+            "name": "Bran",
+            "biography": {
+                "public": "Bran owns the Rusty Flagon near the old road.",
+            },
+        }
+    }
+
+    result = build_non_stateful_dialogue_result(
+        session=session,
+        simulation_state=session["simulation_state"],
+        runtime_state=session["runtime_state"],
+        player_input="I ask Bran how business is doing.",
+        semantic_advisory=_advisory(),
+    )
+
+    canonical = result["canonical_narrative_response"]
+    text = " ".join(block["text"] for block in canonical["blocks"]).casefold()
+    assert "regulars" in text
+    assert "old road" in text
+    assert canonical["metadata"]["dialogue_quality_repair"] is True
+    assert canonical["validation"]["repair_history"] == [
+        "dialogue_quality:business"
+    ]
+    assert "regulars" in result["visible_response"]["plain_text"].casefold()
+
+
+def test_canonical_writer_removes_fabricated_dialogue_for_absent_npc(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.rpg.narrative_provider.build_production_narrative_writer",
+        lambda: DeterministicNarrativeWriter(),
+    )
+    session = _session()
+    session["manifest"]["session_id"] = "campaign:phase29:absent"
+    session["state"] = {"location": "Rusty Flagon Tavern"}
+    session["simulation_state"].update(
+        {
+            "npc_index": {
+                "npc:base_innkeeper": {
+                    "id": "npc:base_innkeeper",
+                    "name": "Base Innkeeper",
+                },
+            },
+            "npcs": {
+                "npc:bran": {
+                    "id": "npc:bran",
+                    "npc_id": "npc:bran",
+                    "name": "Bran",
+                    "location_id": "location:offstage",
+                },
+                "npc:mira": {
+                    "id": "npc:mira",
+                    "npc_id": "npc:mira",
+                    "name": "Mira",
+                    "location_id": "location:tavern",
+                },
+            },
+            "scene": {"present_npc_ids": ["npc:mira"]},
+            "player_state": {"nearby_npc_ids": ["npc:mira"]},
+        }
+    )
+
+    result = build_non_stateful_dialogue_result(
+        session=session,
+        simulation_state=session["simulation_state"],
+        runtime_state=session["runtime_state"],
+        player_input="I ask for Bran while he is away from the Rusty Flagon.",
+        semantic_advisory=_advisory(),
+    )
+
+    canonical = result["canonical_narrative_response"]
+    assert [block["kind"] for block in canonical["blocks"]] == ["narration"]
+    assert "Bran is not here" in result["visible_response"]["plain_text"]
+    assert result["visible_response"]["messages"] == []
+
+
 def test_production_sources_no_longer_use_dialogue_monkey_patch_or_legacy_line_writer() -> None:
     gateway = (
         ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py"

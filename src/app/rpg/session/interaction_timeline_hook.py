@@ -81,6 +81,25 @@ def install_interaction_timeline_hook() -> None:
                     interaction_span["sequence"] = event.get("sequence")
                     interaction_span["stateful"] = event.get("stateful")
                 result["session"] = session
+                from .narrative_engine_bridge import canonicalize_resolved_turn_result
+
+                with rpg_pipeline_span("turn.canonical_after_interaction") as narrative_span:
+                    result = canonicalize_resolved_turn_result(
+                        result,
+                        session_id=session_id,
+                        player_input=player_input,
+                    )
+                    canonical = result.get("canonical_narrative_response")
+                    narrative_span["response_id"] = (
+                        canonical.get("response_id")
+                        if isinstance(canonical, dict)
+                        else None
+                    )
+                    narrative_span["content_hash"] = (
+                        canonical.get("content_hash")
+                        if isinstance(canonical, dict)
+                        else None
+                    )
                 if isinstance(session_override, dict):
                     session_override.clear()
                     session_override.update(session)
@@ -94,27 +113,6 @@ def install_interaction_timeline_hook() -> None:
 
                 if postgres_active:
                     from app.persistence.rpg_turn_service import persist_foreground_turn
-                    from app.rpg.session.narrative_engine_bridge import (
-                        canonicalize_resolved_turn_result,
-                    )
-
-                    with rpg_pipeline_span("turn.canonical_before_commit") as narrative_span:
-                        result = canonicalize_resolved_turn_result(
-                            result,
-                            session_id=session_id,
-                            player_input=player_input,
-                        )
-                        canonical = result.get("canonical_narrative_response")
-                        narrative_span["response_id"] = (
-                            canonical.get("response_id")
-                            if isinstance(canonical, dict)
-                            else None
-                        )
-                        narrative_span["content_hash"] = (
-                            canonical.get("content_hash")
-                            if isinstance(canonical, dict)
-                            else None
-                        )
                     result["session"] = session
                     with rpg_pipeline_span("turn.postgresql_commit") as transaction_span:
                         transaction = persist_foreground_turn(

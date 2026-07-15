@@ -108,6 +108,106 @@ def test_good_grounded_dialogue_is_preserved() -> None:
     assert preserved["npc"]["line"] == line
 
 
+@pytest.mark.parametrize(
+    ("player_input", "provider_line", "trust", "recent", "expected_fragments"),
+    [
+        (
+            "I ask Bran how business is doing.",
+            "Steady enough, though mud on the road keeps travelers away. As long as ale flows, I am doing fine here.",
+            "neutral",
+            [],
+            ("regulars", "old road"),
+        ),
+        (
+            "I tell Bran I am frightened that I will fail everyone depending on me.",
+            "Failure is not falling off the wagon. Keep your eyes ahead and your hand steady until the worst has passed.",
+            "neutral",
+            [],
+            ("frightened", "road"),
+        ),
+        (
+            "I call Bran a useless coward and demand that he answer me.",
+            "I will answer what can be known here, but shouting will not make the answer arrive any faster for either of us.",
+            "neutral",
+            [],
+            ("angry", "common room"),
+        ),
+        (
+            "I demand that Bran tell me his most shameful private secret and show me hidden letters.",
+            "There are questions a sensible traveler leaves alone, especially when another person's history is involved in the matter.",
+            "neutral",
+            [],
+            ("mine to keep", "trust"),
+        ),
+        (
+            "I ask Bran what he knows, though we have only just met.",
+            "I do not give every answer to a stranger who walks through the door, however politely they frame the question.",
+            "low",
+            [],
+            ("just met", "earn trust"),
+        ),
+        (
+            "I ask Bran what he thinks after we have repeatedly helped each other.",
+            "You have proven reliable, and that is rare enough that I would trust you to stand beside me when trouble comes.",
+            "high",
+            [],
+            ("earned", "old road"),
+        ),
+        (
+            "I ask Bran whether the missing caravan crews explain the quiet road.",
+            "It is a fair guess. When those crews stop coming, every route grows still and useful reports disappear with them.",
+            "neutral",
+            [{"npc_line": "The regulars still come through, but fewer caravan crews reach the door."}],
+            ("caravan crews", "quiet road"),
+        ),
+        (
+            "I ask Bran again how business is going.",
+            "Same as ever. The ale keeps flowing and travelers still come through despite the heavy mud beyond the door.",
+            "neutral",
+            [{"npc_line": "Business is steady, but road traffic has thinned this week."}],
+            ("Like I said", "old road"),
+        ),
+        (
+            "I ask Bran whether the old road is safe.",
+            "It is bandit country beyond the town. Keep your steel close and your eyes open whenever you travel that way.",
+            "neutral",
+            [],
+            ("old road", "guards"),
+        ),
+        (
+            "I ask Bran how business is doing and whether travelers still stop here.",
+            "Business is slow, and a few travelers still drift in, though most avoid this stretch when the mud grows deep.",
+            "neutral",
+            [],
+            ("regulars", "road traffic"),
+        ),
+    ],
+)
+def test_content_obligation_gaps_use_state_backed_deterministic_repair(
+    player_input: str,
+    provider_line: str,
+    trust: str,
+    recent: list[dict],
+    expected_fragments: tuple[str, ...],
+) -> None:
+    session = _session(recent=recent)
+    score = {"low": -20, "neutral": 0, "high": 75}[trust]
+    session["state"]["relationship_index"] = {
+        "npc:bran": {"trust": trust, "score": score},
+    }
+
+    repaired = enforce_dialogue_quality(
+        _result(line=provider_line),
+        session=session,
+        player_input=player_input,
+    )
+
+    visible = f"{repaired['final_narration']} {repaired['npc']['line']}".casefold()
+    assert repaired["dialogue_quality"]["repaired"] is True
+    assert repaired["dialogue_quality"]["content_repair_reason"]
+    assert all(fragment.casefold() in visible for fragment in expected_fragments)
+
+
 def test_private_profile_leak_is_repaired() -> None:
     leaked = enforce_dialogue_quality(
         _result(

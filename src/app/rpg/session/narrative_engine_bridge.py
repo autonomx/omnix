@@ -242,6 +242,10 @@ def _request(
     significance: NarrativeSignificance = NarrativeSignificance.ROUTINE,
     target_actor_id: str | None = None,
 ) -> TurnPresentationRequest:
+    from app.rpg.presentation.dialogue_quality import (
+        build_canonical_dialogue_quality_context,
+    )
+
     speaker_id, _ = _npc_identity(result)
     has_speaker = bool(target_actor_id or _text(_mapping(result.get("npc")).get("speaker")))
     interaction_token = _text(result.get("interaction_id"))
@@ -277,6 +281,10 @@ def _request(
             "response_mode": mode,
             "response_id": f"narrative:{session_id}:{turn_token}:1",
             "evidence_limit": max(12, min(len(evidence), 50)),
+            "dialogue_quality_context": build_canonical_dialogue_quality_context(
+                dict(result),
+                player_input=player_input,
+            ),
             **dict(grounding_metadata),
         },
     )

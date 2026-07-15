@@ -168,6 +168,14 @@ class NarrativeEngineService(_NarrativeEngineService):
             evidence,
             validated,
         )
+        from app.rpg.presentation.dialogue_quality import (
+            repair_canonical_dialogue_response,
+        )
+
+        response = repair_canonical_dialogue_response(
+            response,
+            _metadata(request.metadata.get("dialogue_quality_context")),
+        )
         return replace(
             response,
             metadata={

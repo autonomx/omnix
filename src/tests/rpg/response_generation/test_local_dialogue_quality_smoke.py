@@ -123,10 +123,12 @@ def test_local_smoke_resets_fixture_before_every_case_and_archives(monkeypatch) 
     )
 
     assert report["ok"] is True
-    assert provisioned == [(cases[0].case_id, None), (cases[1].case_id, "fixture-session")]
+    assert provisioned == [(cases[0].case_id, None), (cases[1].case_id, None)]
     assert posted == [(cases[0].case_id, "fixture-session"), (cases[1].case_id, "fixture-session")]
     assert archived == ["fixture-session"]
     assert report["fixture_archived"] is True
+    assert report["fixture_mode"] == "known_case_isolated_sessions"
+    assert report["fixture_session_ids"] == ["fixture-session"]
     assert [row["fixture"]["case_id"] for row in report["results"]] == [
         cases[0].case_id,
         cases[1].case_id,

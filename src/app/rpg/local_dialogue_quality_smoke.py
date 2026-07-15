@@ -42,13 +42,13 @@ def run_local_dialogue_quality_smoke(
     observations = []
     timings = []
     raw_results = []
-    fixture_session_id: str | None = None
+    fixture_session_ids: list[str] = []
     fixture_archived = False
     try:
         for index, case in enumerate(resolved_cases, start=1):
             fixture = _provision_case(
                 base_url=base_url,
-                session_id=fixture_session_id,
+                session_id=None,
                 case=case,
                 run_id=run_id,
                 timeout_seconds=timeout_seconds,
@@ -56,6 +56,8 @@ def run_local_dialogue_quality_smoke(
             fixture_session_id = str(fixture.get("session_id") or "").strip()
             if not fixture_session_id:
                 raise RuntimeError("dialogue quality fixture response omitted session_id")
+            if fixture_session_id not in fixture_session_ids:
+                fixture_session_ids.append(fixture_session_id)
             payload, elapsed_seconds, response_bytes = _post_case(
                 base_url=base_url,
                 session_id=fixture_session_id,
@@ -78,17 +80,24 @@ def run_local_dialogue_quality_smoke(
                 }
             )
     finally:
-        if fixture_session_id and not keep_fixture:
-            fixture_archived = _archive_fixture(
-                base_url=base_url,
-                session_id=fixture_session_id,
-                timeout_seconds=timeout_seconds,
-            )
+        if fixture_session_ids and not keep_fixture:
+            archive_results = [
+                _archive_fixture(
+                    base_url=base_url,
+                    session_id=session_id,
+                    timeout_seconds=timeout_seconds,
+                )
+                for session_id in fixture_session_ids
+            ]
+            fixture_archived = all(archive_results)
     aggregate = aggregate_dialogue_benchmark_observations(observations)
     aggregate["local_only"] = True
     aggregate["base_url"] = base_url.rstrip("/")
-    aggregate["fixture_mode"] = "known_case_state_reset"
-    aggregate["fixture_session_id"] = fixture_session_id
+    aggregate["fixture_mode"] = "known_case_isolated_sessions"
+    aggregate["fixture_session_id"] = (
+        fixture_session_ids[0] if len(fixture_session_ids) == 1 else None
+    )
+    aggregate["fixture_session_ids"] = fixture_session_ids
     aggregate["fixture_archived"] = fixture_archived
     aggregate["latency_seconds"] = _latency_summary(timings)
     aggregate["results"] = raw_results

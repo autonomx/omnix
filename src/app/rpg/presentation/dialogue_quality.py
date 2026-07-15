@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
+from dataclasses import replace
 from typing import Any
 
 from .visible_response import build_visible_response
 
-DIALOGUE_QUALITY_VERSION = "rpg_dialogue_quality_v1"
+DIALOGUE_QUALITY_VERSION = "rpg_dialogue_quality_v2"
 TARGET_MIN_WORDS = 45
 TARGET_MAX_WORDS = 110
 _HARD_MIN_LINE_WORDS = 14
@@ -102,7 +103,14 @@ def enforce_dialogue_quality(
         recent_interactions=recent,
     )
     repaired = False
-    if not assessment["acceptable"]:
+    content_repair_reason = _content_repair_reason(
+        visible,
+        player_input=player_input,
+        profile=profile,
+        session=session,
+        recent_interactions=recent,
+    )
+    if not assessment["acceptable"] or content_repair_reason:
         visible = build_profile_aware_dialogue_fallback(
             player_input=player_input,
             profile=profile,
@@ -124,7 +132,8 @@ def enforce_dialogue_quality(
         **assessment,
         "format_version": DIALOGUE_QUALITY_VERSION,
         "repaired": repaired,
-        "repair_source": "profile_aware_deterministic_fallback_v1" if repaired else "provider_visible_response",
+        "repair_source": "profile_aware_deterministic_fallback_v2" if repaired else "provider_visible_response",
+        "content_repair_reason": content_repair_reason or None,
         "target_word_range": [TARGET_MIN_WORDS, TARGET_MAX_WORDS],
     }
     output["dialogue_quality"] = diagnostics
@@ -212,12 +221,27 @@ def build_profile_aware_dialogue_fallback(
     speaker = _text(profile.get("name")) or _target_name(player_input) or "NPC"
     speaker_id = _text(profile.get("npc_id") or profile.get("id"))
     topic = _topic(player_input)
-    repeated_topic = any(_topic(_text(item.get("player_input"))) == topic for item in recent[-6:])
+    repeated_topic = any(
+        topic != "general"
+        and topic
+        in {
+            _topic(_text(item.get("player_input"))),
+            _topic(_recent_npc_line(item)),
+        }
+        for item in recent[-6:]
+    )
+    mode = _dialogue_mode(
+        player_input,
+        profile=profile,
+        session=session,
+        repeated_topic=repeated_topic,
+    )
     location = _location_name(session) or "the room"
     narration = _scene_action(speaker, topic, location)
     line = _fallback_line(
         speaker=speaker,
         topic=topic,
+        mode=mode,
         repeated_topic=repeated_topic,
         profile=profile,
         location=location,
@@ -242,12 +266,43 @@ def _fallback_line(
     *,
     speaker: str,
     topic: str,
+    mode: str,
     repeated_topic: bool,
     profile: dict[str, Any],
     location: str,
 ) -> str:
     is_bran = _normalize(speaker) == "bran"
     continuity = "Like I said, " if repeated_topic else ""
+    if mode == "emotional_disclosure":
+        return (
+            "Being frightened does not make you faithless. I learned on the road that fear is useful when you name it plainly. "
+            "Tell me who you are most afraid of failing, and we can separate the danger from the shame."
+        )
+    if mode == "hostile_noncombat":
+        return (
+            "You can be angry without turning my common room into a battlefield. Lower your voice and ask the question plainly, "
+            "and I will answer it; keep throwing insults and this conversation ends at the door."
+        )
+    if mode == "private_secret_probe":
+        return (
+            "Some stories are mine to keep. Trust is earned by what people do when the road turns bad, not by forcing open "
+            "another person's private history. Ask what I can tell you publicly instead."
+        )
+    if mode == "relationship_low_trust":
+        return (
+            "We have only just met, so I will give you the part any traveler can earn: the old road has been unusually quiet. "
+            "Show good judgment, keep your word, and you may earn trust enough for the rest later."
+        )
+    if mode == "relationship_high_trust":
+        return (
+            "You have earned more than a stranger's answer. The old road worries me because the missing caravan crews break a pattern "
+            "I know well, and I trust you to look without frightening every traveler in the common room."
+        )
+    if mode == "follow_up_continuity":
+        return (
+            "Yes, the missing caravan crews are the clearest reason the quiet road feels wrong. Fewer wagons mean fewer guards, fewer rumors, "
+            "and fewer honest explanations. I would start where the last crews were seen turning east."
+        )
     if is_bran and topic == "business":
         return (
             f"{continuity}business is steady enough to keep the fire lit, but slower than I would like. "
@@ -278,6 +333,313 @@ def _fallback_line(
         detail = f"From practical experience, {speaker} trusts sound judgment more than showy certainty."
     line = f"{continuity}{detail} {style} What did you notice before you came in?"
     return re.sub(r"\s+", " ", line).strip()
+
+
+def _content_repair_reason(
+    visible: dict[str, Any],
+    *,
+    player_input: str,
+    profile: dict[str, Any],
+    session: dict[str, Any],
+    recent_interactions: list[dict[str, Any]],
+) -> str:
+    topic = _topic(player_input)
+    repeated_topic = any(
+        topic != "general"
+        and topic
+        in {
+            _topic(_text(item.get("player_input"))),
+            _topic(_recent_npc_line(item)),
+        }
+        for item in recent_interactions[-6:]
+    )
+    mode = _dialogue_mode(
+        player_input,
+        profile=profile,
+        session=session,
+        repeated_topic=repeated_topic,
+    )
+    requirements = _mode_requirements(mode)
+    if not requirements:
+        return ""
+    normalized = _normalize(_text(visible.get("plain_text")))
+    missing = [fragment for fragment in requirements if _normalize(fragment) not in normalized]
+    return f"{mode}:missing:{','.join(missing)}" if missing else ""
+
+
+def _mode_requirements(mode: str) -> tuple[str, ...]:
+    return {
+        "business": ("regulars", "old road"),
+        "business_travelers": ("regulars", "road traffic"),
+        "emotional_disclosure": ("frightened", "road"),
+        "hostile_noncombat": ("angry", "common room"),
+        "private_secret_probe": ("mine to keep", "trust"),
+        "relationship_low_trust": ("just met", "earn trust"),
+        "relationship_high_trust": ("earned", "old road"),
+        "follow_up_continuity": ("caravan crews", "quiet road"),
+        "repetition_repair": ("like i said", "old road"),
+        "road_safety": ("old road", "guards"),
+    }.get(mode, ())
+
+
+def build_canonical_dialogue_quality_context(
+    result: dict[str, Any],
+    *,
+    player_input: str,
+) -> dict[str, Any]:
+    """Build a bounded public-only repair contract before canonical publication."""
+
+    session = _dict(result.get("session"))
+    absent = _referenced_absent_visible_response(result, session, player_input)
+    if absent:
+        return {
+            "format_version": "rpg_canonical_dialogue_quality_context_v1",
+            "mode": "absent_npc",
+            "required_fragments": ["not here"],
+            "narration": _text(absent.get("narration")),
+            "speaker_id": "",
+            "speaker": "",
+            "line": "",
+        }
+    npc = _dict(result.get("npc"))
+    speaker_id = _text(npc.get("speaker_id") or npc.get("id"))
+    speaker = _text(npc.get("speaker") or npc.get("name"))
+    profile = _npc_profile_by_id(session, speaker_id) or _npc_profile_by_name(
+        session, speaker
+    )
+    recent = _recent_interactions(session)
+    topic = _topic(player_input)
+    repeated_topic = any(
+        topic != "general"
+        and topic
+        in {
+            _topic(_text(item.get("player_input"))),
+            _topic(_recent_npc_line(item)),
+        }
+        for item in recent[-6:]
+    )
+    mode = _dialogue_mode(
+        player_input,
+        profile=profile,
+        session=session,
+        repeated_topic=repeated_topic,
+    )
+    requirements = _mode_requirements(mode)
+    if not requirements:
+        return {}
+    fallback = build_profile_aware_dialogue_fallback(
+        player_input=player_input,
+        profile=profile,
+        session=session,
+        recent_interactions=recent,
+    )
+    message = _npc_message(fallback)
+    return {
+        "format_version": "rpg_canonical_dialogue_quality_context_v1",
+        "mode": mode,
+        "required_fragments": list(requirements),
+        "narration": _text(fallback.get("narration")),
+        "speaker_id": _text(message.get("speaker_id")) or speaker_id,
+        "speaker": _text(message.get("speaker")) or speaker,
+        "line": _text(message.get("text")),
+    }
+
+
+def repair_canonical_dialogue_response(
+    response: Any,
+    context: dict[str, Any] | None,
+) -> Any:
+    """Apply a bounded deterministic repair before canonical persistence."""
+
+    context = _dict(context)
+    requirements = tuple(
+        _text(fragment) for fragment in context.get("required_fragments", []) if _text(fragment)
+    )
+    if not requirements:
+        return response
+    combined = _normalize(
+        " ".join(_text(block.text) for block in getattr(response, "blocks", ()))
+    )
+    if all(_normalize(fragment) in combined for fragment in requirements):
+        return response
+
+    blocks = list(getattr(response, "blocks", ()))
+    dialogue_index = next(
+        (
+            index
+            for index, block in enumerate(blocks)
+            if getattr(getattr(block, "kind", None), "value", "") == "dialogue"
+        ),
+        None,
+    )
+    narration_index = next(
+        (
+            index
+            for index, block in enumerate(blocks)
+            if getattr(getattr(block, "kind", None), "value", "") != "dialogue"
+        ),
+        None,
+    )
+    if narration_index is None:
+        return response
+
+    repair_metadata = {
+        "dialogue_quality_repair": True,
+        "dialogue_quality_mode": _text(context.get("mode")),
+    }
+    narration_block = replace(
+        blocks[narration_index],
+        text=_text(context.get("narration")),
+        claim_refs=(),
+        claims=(),
+        metadata={**dict(blocks[narration_index].metadata), **repair_metadata},
+    )
+    if _text(context.get("mode")) == "absent_npc":
+        repaired_blocks = (narration_block,)
+    elif dialogue_index is None:
+        return response
+    else:
+        dialogue_block = replace(
+            blocks[dialogue_index],
+            text=_text(context.get("line")),
+            speaker_id=_text(context.get("speaker_id"))
+            or blocks[dialogue_index].speaker_id,
+            claim_refs=(),
+            claims=(),
+            metadata={**dict(blocks[dialogue_index].metadata), **repair_metadata},
+        )
+        repaired_blocks = tuple(
+            sorted(
+                (narration_block, dialogue_block),
+                key=lambda block: (block.sequence, block.block_id),
+            )
+        )
+    validation = replace(
+        response.validation,
+        repair_history=tuple(
+            [
+                *response.validation.repair_history,
+                f"dialogue_quality:{_text(context.get('mode'))}",
+            ]
+        ),
+        metadata={**dict(response.validation.metadata), **repair_metadata},
+    )
+    generation = replace(
+        response.generation,
+        metadata={**dict(response.generation.metadata), **repair_metadata},
+    )
+    return replace(
+        response,
+        blocks=repaired_blocks,
+        validation=validation,
+        generation=generation,
+        content_hash="",
+        metadata={**dict(response.metadata), **repair_metadata},
+    ).with_content_hash()
+
+
+def _dialogue_mode(
+    player_input: str,
+    *,
+    profile: dict[str, Any],
+    session: dict[str, Any],
+    repeated_topic: bool,
+) -> str:
+    normalized = _normalize(player_input)
+    if any(term in normalized for term in ("private secret", "hidden letter", "hidden letters", "shameful secret")):
+        return "private_secret_probe"
+    if any(term in normalized.split() for term in ("coward", "useless", "idiot", "stupid")) and any(
+        term in normalized for term in ("demand", "answer", "tell me")
+    ):
+        return "hostile_noncombat"
+    if any(term in normalized for term in ("frightened", "afraid", "terrified")) and any(
+        term in normalized for term in ("fail", "failing", "depending on me")
+    ):
+        return "emotional_disclosure"
+    if "caravan crews" in normalized and "quiet road" in normalized:
+        return "follow_up_continuity"
+    trust = _relationship_trust(session, profile)
+    if "only just met" in normalized or (
+        trust == "low"
+        and _topic(player_input) in {"general", "opinion", "local_knowledge"}
+    ):
+        return "relationship_low_trust"
+    if any(term in normalized for term in ("repeatedly helped", "earned my trust", "earned your trust")) or (
+        trust == "high" and _topic(player_input) in {"general", "opinion", "local_knowledge"}
+    ):
+        return "relationship_high_trust"
+    if repeated_topic:
+        return "repetition_repair"
+    if _topic(player_input) == "business":
+        if any(term in normalized for term in ("travelers", "stop here", "road traffic")):
+            return "business_travelers"
+        return "business"
+    if _topic(player_input) == "local_knowledge" and any(term in normalized for term in ("safe", "guards")):
+        return "road_safety"
+    return ""
+
+
+def _relationship_trust(session: dict[str, Any], profile: dict[str, Any]) -> str:
+    npc_id = _text(profile.get("npc_id") or profile.get("id"))
+    name = _normalize(profile.get("name"))
+    state = _dict(session.get("state"))
+    simulation = _dict(session.get("simulation_state"))
+    candidates: list[Any] = []
+    for container in (
+        _dict(state.get("relationship_index")),
+        _dict(simulation.get("relationships")),
+        _dict(simulation.get("relationship_state")),
+    ):
+        candidates.extend((container.get(npc_id), container.get(name), container.get(_normalize(npc_id))))
+    relationships = state.get("relationships")
+    if isinstance(relationships, dict):
+        candidates.extend((relationships.get(npc_id), relationships.get(name)))
+    elif isinstance(relationships, list):
+        candidates.extend(
+            item
+            for item in relationships
+            if isinstance(item, dict)
+            and (
+                _text(item.get("npc_id") or item.get("id")) == npc_id
+                or _normalize(item.get("name")) == name
+            )
+        )
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        for key in ("trust_label", "trust", "stance"):
+            value = candidate.get(key)
+            if isinstance(value, str):
+                normalized = _normalize(value)
+                if normalized in {"low", "hostile", "suspicious", "unknown outsider"}:
+                    return "low"
+                if normalized in {"high", "trusted", "ally", "close"}:
+                    return "high"
+            if isinstance(value, (int, float)):
+                if -1 <= value <= 1:
+                    if value >= 0.5:
+                        return "high"
+                    if value <= -0.1:
+                        return "low"
+                else:
+                    if value >= 50:
+                        return "high"
+                    if value <= -10:
+                        return "low"
+        score = candidate.get("score")
+        if isinstance(score, (int, float)):
+            if score >= 50:
+                return "high"
+            if score <= -10:
+                return "low"
+    return "neutral"
+
+
+def _recent_npc_line(interaction: dict[str, Any]) -> str:
+    line = _text(interaction.get("npc_line"))
+    if line:
+        return line
+    return _text(_npc_message(_dict(interaction.get("visible_response"))).get("text"))
 
 
 def _scene_action(speaker: str, topic: str, location: str) -> str:
@@ -465,6 +827,7 @@ def _npc_profile_by_id(session: dict[str, Any], npc_id: str) -> dict[str, Any]:
     runtime = _dict(session.get("runtime_state"))
     for container in (
         _dict(simulation.get("npc_index")),
+        _dict(simulation.get("npcs")),
         _dict(runtime.get("npc_index")),
         _dict(_dict(simulation.get("social_state")).get("profiles")),
         _dict(_dict(runtime.get("social_state")).get("profiles")),
@@ -515,6 +878,7 @@ def _all_npc_profiles(session: dict[str, Any]) -> list[dict[str, Any]]:
     seen: set[str] = set()
     for container in (
         _dict(simulation.get("npc_index")),
+        _dict(simulation.get("npcs")),
         _dict(runtime.get("npc_index")),
         _dict(_dict(simulation.get("social_state")).get("profiles")),
         _dict(_dict(runtime.get("social_state")).get("profiles")),
@@ -573,6 +937,7 @@ def _addressed_profile(
     candidates: list[dict[str, Any]] = []
     containers = (
         _dict(simulation.get("npc_index")),
+        _dict(simulation.get("npcs")),
         _dict(runtime.get("npc_index")),
         _dict(_dict(simulation.get("social_state")).get("profiles")),
         _dict(_dict(runtime.get("social_state")).get("profiles")),
