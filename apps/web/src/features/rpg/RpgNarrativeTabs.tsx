@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { RpgLorePanel } from './RpgLorePanel';
 import type { RpgJournalDetailPreview, RpgJournalEntryPreview } from './rpgUiState';
 
-type RpgNarrativeTab = 'journal' | 'dialogue' | 'turns';
+type RpgNarrativeTab = 'journal' | 'lore' | 'dialogue' | 'turns';
 
 interface RpgNarrativeTabsProps {
   journalEntries: RpgJournalEntryPreview[];
@@ -12,6 +13,7 @@ interface RpgNarrativeTabsProps {
 
 const tabs: Array<{ id: RpgNarrativeTab; label: string }> = [
   { id: 'journal', label: 'Journal' },
+  { id: 'lore', label: 'Lore' },
   { id: 'dialogue', label: 'Dialogue log' },
   { id: 'turns', label: 'Turn history' },
 ];
@@ -40,7 +42,7 @@ export function RpgNarrativeTabs({ journalEntries, logEntries, journalDetail, re
 
   return (
     <section className="rpg-card rpg-journal-card">
-      <div className="rpg-tabs" role="tablist" aria-label="RPG logs">
+      <div className="rpg-tabs" role="tablist" aria-label="RPG logs and lore">
         {tabs.map((tab) => (
           <button
             aria-controls={`rpg-${tab.id}-panel`}
@@ -64,6 +66,7 @@ export function RpgNarrativeTabs({ journalEntries, logEntries, journalDetail, re
           selectedIndex={selectedJournalIndex}
         />
       ) : null}
+      {activeTab === 'lore' ? <RpgLorePanel /> : null}
       {activeTab === 'dialogue' ? <DialoguePanel dialogueRows={dialogueRows} /> : null}
       {activeTab === 'turns' ? <TurnHistoryPanel turnRows={turnRows} /> : null}
     </section>
@@ -114,14 +117,10 @@ function JournalPanel({
         <h3>{detailTitle}</h3>
         <p>{detailText}</p>
         <ul>
-          {journalDetail.bullets.map((bullet) => (
-            <li key={bullet}>{bullet}</li>
-          ))}
+          {journalDetail.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
         </ul>
         <div className="rpg-chip-row">
-          {journalDetail.tags.map((tag) => (
-            <span key={tag}>{tag}</span>
-          ))}
+          {journalDetail.tags.map((tag) => <span key={tag}>{tag}</span>)}
         </div>
       </article>
     </div>
@@ -135,26 +134,15 @@ function DialoguePanel({ dialogueRows }: { dialogueRows: RpgJournalEntryPreview[
         {dialogueRows.map((row, index) => (
           <article className={index === 0 ? 'active' : undefined} key={`${row.time}:${row.title}`}>
             <span aria-hidden="true" />
-            <div>
-              <strong>{row.time}</strong>
-              <p>{row.title}</p>
-            </div>
+            <div><strong>{row.time}</strong><p>{row.title}</p></div>
           </article>
         ))}
       </div>
       <article className="rpg-journal-detail">
         <h3>Dialogue log</h3>
         <p>Conversation-facing messages from the selected RPG session. Setup notes and ambient world events stay in the Journal tab.</p>
-        <ul>
-          {dialogueRows.map((row) => (
-            <li key={`${row.time}:${row.detail}`}>{row.detail}</li>
-          ))}
-        </ul>
-        <div className="rpg-chip-row">
-          <span>Conversation</span>
-          <span>Messages only</span>
-          <span>Replay-safe</span>
-        </div>
+        <ul>{dialogueRows.map((row) => <li key={`${row.time}:${row.detail}`}>{row.detail}</li>)}</ul>
+        <div className="rpg-chip-row"><span>Conversation</span><span>Messages only</span><span>Replay-safe</span></div>
       </article>
     </div>
   );
@@ -167,26 +155,15 @@ function TurnHistoryPanel({ turnRows }: { turnRows: RpgJournalEntryPreview[] }) 
         {turnRows.map((row, index) => (
           <article className={index === 0 ? 'active' : undefined} key={`${row.time}:${row.title}`}>
             <span aria-hidden="true" />
-            <div>
-              <strong>{row.time}</strong>
-              <p>{row.title}</p>
-            </div>
+            <div><strong>{row.time}</strong><p>{row.title}</p></div>
           </article>
         ))}
       </div>
       <article className="rpg-journal-detail">
         <h3>Turn history</h3>
         <p>Replay-safe player commands and queued turn requests for the selected RPG session.</p>
-        <ul>
-          {turnRows.map((row) => (
-            <li key={`${row.time}:${row.detail}`}>{row.detail}</li>
-          ))}
-        </ul>
-        <div className="rpg-chip-row">
-          <span>Deterministic</span>
-          <span>Commands only</span>
-          <span>Checkpoint aware</span>
-        </div>
+        <ul>{turnRows.map((row) => <li key={`${row.time}:${row.detail}`}>{row.detail}</li>)}</ul>
+        <div className="rpg-chip-row"><span>Deterministic</span><span>Commands only</span><span>Checkpoint aware</span></div>
       </article>
     </div>
   );
@@ -194,27 +171,16 @@ function TurnHistoryPanel({ turnRows }: { turnRows: RpgJournalEntryPreview[] }) 
 
 function buildDialogueRows(journalEntries: RpgJournalEntryPreview[], recentEvents: string[]): RpgJournalEntryPreview[] {
   const dialogueLikeEntries = journalEntries.filter((entry) => isDialogueEntry(entry));
-  if (dialogueLikeEntries.length) {
-    return dialogueLikeEntries;
-  }
-
+  if (dialogueLikeEntries.length) return dialogueLikeEntries;
   const dialogueLikeEvents = recentEvents
-    .map((event, index) => ({
-      time: `Event ${index + 1}`,
-      title: speakerFromEvent(event) ?? 'Narration',
-      detail: event,
-    }))
+    .map((event, index) => ({ time: `Event ${index + 1}`, title: speakerFromEvent(event) ?? 'Narration', detail: event }))
     .filter((entry) => isDialogueEntry(entry));
-
   return dialogueLikeEvents.length ? dialogueLikeEvents.slice(0, 6) : [emptyDialogueRow];
 }
 
 function buildTurnRows(journalEntries: RpgJournalEntryPreview[]): RpgJournalEntryPreview[] {
   const turnLikeEntries = journalEntries.filter((entry) => isTurnHistoryEntry(entry));
-  if (!turnLikeEntries.length) {
-    return [emptyTurnRow];
-  }
-
+  if (!turnLikeEntries.length) return [emptyTurnRow];
   return turnLikeEntries.slice(0, 6).map((entry, index) => ({
     time: entry.time || `Turn ${index + 1}`,
     title: normalizeTurnTitle(entry.title, index),

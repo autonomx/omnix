@@ -19,7 +19,9 @@ def register_hermes_routes(app: FastAPI) -> None:
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
     app.include_router(hermes_router)
-    app.include_router(hermes_rpg_approved_bp)
+    # Approved workflow endpoints are internal orchestration surfaces. Keep them
+    # callable without expanding the public generated client contract.
+    app.include_router(hermes_rpg_approved_bp, include_in_schema=False)
 
 
 def install_hermes_route_hook() -> None:

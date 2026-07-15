@@ -40,6 +40,7 @@ interface LooseRequest extends RpgNewGameRequest {
   system_options?: Record<string, unknown>;
   talents?: GenesisTalentInput[];
   values?: string[];
+  world_forge?: Record<string, unknown>;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -144,18 +145,10 @@ function fallbackGearTags(request: LooseRequest): string[] {
   const buildKey = asString(player.build, '').replace('-', '_');
   const tags = new Set<string>(BUILD_STARTER_TAGS[buildKey] ?? ['travel_supplies']);
   const capabilities = [request.primary_capability, ...(request.secondary_capabilities ?? [])];
-  if (capabilities.includes('combat')) {
-    addTag(tags, 'close_weapon');
-  }
-  if (capabilities.includes('recon')) {
-    addTag(tags, 'ranged_weapon');
-  }
-  if (capabilities.includes('survival')) {
-    addTag(tags, 'survival_tool');
-  }
-  if (capabilities.includes('knowledge') || capabilities.includes('technical')) {
-    addTag(tags, 'field_notes');
-  }
+  if (capabilities.includes('combat')) addTag(tags, 'close_weapon');
+  if (capabilities.includes('recon')) addTag(tags, 'ranged_weapon');
+  if (capabilities.includes('survival')) addTag(tags, 'survival_tool');
+  if (capabilities.includes('knowledge') || capabilities.includes('technical')) addTag(tags, 'field_notes');
   return Array.from(tags);
 }
 
@@ -174,6 +167,21 @@ function normalizeMotivation(request: LooseRequest, storyOptions: Record<string,
     target: target || null,
     intensity: Math.max(1, Math.min(100, asInteger(provided.intensity, 100))),
     fulfilled: asBoolean(provided.fulfilled, false),
+  };
+}
+
+function normalizeWorldForge(request: LooseRequest): Record<string, unknown> {
+  const provided = asRecord(request.world_forge);
+  const depth = asString(provided.depth, 'standard');
+  return {
+    enabled: asBoolean(provided.enabled, true),
+    depth: ['quick', 'standard', 'epic'].includes(depth) ? depth : 'standard',
+    background_expansion: asBoolean(provided.background_expansion, false),
+    use_hermes: asBoolean(provided.use_hermes, true),
+    require_consistency_audit: asBoolean(provided.require_consistency_audit, true),
+    require_opening_dossiers: asBoolean(provided.require_opening_dossiers, true),
+    max_parallel_jobs: provided.max_parallel_jobs == null ? null : Math.max(1, asInteger(provided.max_parallel_jobs, 6)),
+    custom_directives: stringList(provided.custom_directives),
   };
 }
 
@@ -222,6 +230,7 @@ export function withRpgGenesisContract(request: RpgNewGameRequest = {}): RpgNewG
       combat_lethality: request.combat_lethality ?? 'normal',
       seed,
     },
+    world_forge: normalizeWorldForge(loose),
     system_options: {
       autosave: asBoolean(systemOptions.autosave ?? features.autosave, true),
       companions: asBoolean(systemOptions.companions ?? request.companions_enabled, true),

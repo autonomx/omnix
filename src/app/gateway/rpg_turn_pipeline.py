@@ -39,7 +39,42 @@ async def execute_foreground_rpg_turn(
             span["submission_id"] = request.headers.get("x-omnix-rpg-submission-id")
             span["client_request_started"] = request.headers.get("x-omnix-rpg-client-started")
 
+        with rpg_pipeline_span("turn.campaign_genesis_gate") as span:
+            from app.rpg.session.genesis.launch_readiness import (
+                CampaignLaunchBlockedError,
+                require_campaign_launch_ready,
+            )
+            from app.rpg.session.service import load_session
+
+            launch_session = load_session(session_id)
+            if not launch_session:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"ok": False, "error": "session_not_found", "session_id": session_id},
+                )
+            try:
+                gate = require_campaign_launch_ready(launch_session)
+            except CampaignLaunchBlockedError as exc:
+                span["ready"] = False
+                span["error"] = str(exc)
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "ok": False,
+                        "error": "campaign_genesis_incomplete",
+                        "session_id": session_id,
+                        "message": str(exc),
+                    },
+                ) from exc
+            span["enabled"] = gate.get("enabled")
+            span["ready"] = gate.get("ready")
+
         from app.rpg.session import interactive_first_call_runtime
+        from app.rpg.session.narrative_engine_direct_dialogue_hook import (
+            install_interactive_direct_dialogue_cutover,
+        )
+
+        install_interactive_direct_dialogue_cutover(interactive_first_call_runtime)
 
         with rpg_pipeline_span("turn.apply") as span:
             result = await asyncio.to_thread(
@@ -62,6 +97,82 @@ async def execute_foreground_rpg_turn(
             status_code = 404 if isinstance(result, dict) and result.get("error") == "session_not_found" else 400
             raise HTTPException(status_code=status_code, detail=result)
 
+        from app.rpg.session.narrative_engine_bridge import (
+            canonicalize_resolved_turn_result,
+            canonicalize_scene_turn_result,
+        )
+
+        with rpg_pipeline_span("turn.narrative_scene_cutover") as span:
+            result = canonicalize_scene_turn_result(
+                result,
+                session_id=session_id,
+                player_input=command,
+            )
+            canonical = result.get("canonical_narrative_response") if isinstance(result.get("canonical_narrative_response"), dict) else {}
+            span["published"] = bool(canonical)
+            span["response_id"] = canonical.get("response_id")
+            span["block_count"] = len(canonical.get("blocks") or [])
+
+        with rpg_pipeline_span("turn.narrative_resolved_cutover") as span:
+            result = canonicalize_resolved_turn_result(
+                result,
+                session_id=session_id,
+                player_input=command,
+            )
+            canonical = result.get("canonical_narrative_response") if isinstance(result.get("canonical_narrative_response"), dict) else {}
+            span["published"] = bool(canonical)
+            span["response_id"] = canonical.get("response_id")
+            span["block_count"] = len(canonical.get("blocks") or [])
+            span["source"] = result.get("canonical_narrative_source")
+
+        with rpg_pipeline_span("turn.narrative_consumer_projection") as span:
+            from app.rpg.narrative_engine.consumer_publish import attach_canonical_consumer_bundle
+
+            result = attach_canonical_consumer_bundle(result)
+            bundle = result.get("narrative_projections") if isinstance(result.get("narrative_projections"), dict) else {}
+            publisher = result.get("narrative_publisher_telemetry") if isinstance(result.get("narrative_publisher_telemetry"), dict) else {}
+            span["attached"] = bool(bundle)
+            span["response_id"] = bundle.get("response_id")
+            span["content_hash"] = bundle.get("content_hash")
+            span["session_patched"] = result.get("narrative_session_projection_patched") is True
+            span["publisher"] = result.get("narrative_publisher")
+            span["alternate_publish_count"] = publisher.get("alternate_publish_count")
+            span["zero_alternate_publishers"] = publisher.get("zero_alternate_publishers")
+
+        with rpg_pipeline_span("turn.narrative_production_certification") as span:
+            from app.rpg.narrative_engine.production_path import (
+                NarrativeProductionPathError,
+                enforce_production_narrative_result,
+            )
+
+            try:
+                result = enforce_production_narrative_result(result)
+            except NarrativeProductionPathError as exc:
+                span["passed"] = False
+                span["error"] = str(exc)
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "error": "rpg_narrative_production_certification_failed",
+                        "message": str(exc),
+                    },
+                ) from exc
+            certification = result.get("narrative_production_certification") if isinstance(result.get("narrative_production_certification"), dict) else {}
+            span["passed"] = certification.get("passed") is True
+            span["response_id"] = certification.get("response_id")
+            span["content_hash"] = certification.get("content_hash")
+            span["legacy_ownership_retired"] = result.get("legacy_presentation_ownership_retired") is True
+
+        with rpg_pipeline_span("turn.narrative_shadow") as span:
+            from app.rpg.narrative_engine.shadow import attach_shadow_report
+
+            result = attach_shadow_report(result, session_id=session_id, player_input=command)
+            shadow = result.get("narrative_engine_shadow") if isinstance(result.get("narrative_engine_shadow"), dict) else {}
+            span["selected"] = shadow.get("selected") is True
+            span["ok"] = shadow.get("ok") is True
+            span["latency_ms"] = shadow.get("latency_ms")
+            span["beat_count"] = len(shadow.get("beat_purposes") or [])
+
         with rpg_pipeline_span("turn.session_persist") as span:
             session = _persisted_turn_session(result, session_id)
             span["interaction_persisted"] = result.get("interaction_persisted") is True
@@ -69,6 +180,7 @@ async def execute_foreground_rpg_turn(
             persistence = result.get("interaction_persistence") if isinstance(result.get("interaction_persistence"), dict) else {}
             span["persistence_mode"] = persistence.get("mode")
             span["snapshot_written"] = persistence.get("snapshot_written") is True
+            span["canonical_projection_saved"] = result.get("narrative_session_projection_patched") is True
 
         with rpg_pipeline_span("turn.response_contract_build") as span:
             payload = build_turn_response_v2(
@@ -78,6 +190,18 @@ async def execute_foreground_rpg_turn(
                 session=session,
                 trace_id=trace.trace_id,
             )
+            payload["narrative_engine_shadow"] = dict(result.get("narrative_engine_shadow") or {})
+            if isinstance(result.get("canonical_narrative_response"), dict):
+                payload["canonical_narrative_response"] = dict(result["canonical_narrative_response"])
+            if isinstance(result.get("narrative_projections"), dict):
+                payload["narrative_projections"] = dict(result["narrative_projections"])
+            if isinstance(result.get("narrative_publisher_telemetry"), dict):
+                payload["narrative_publisher"] = result.get("narrative_publisher")
+                payload["narrative_publisher_telemetry"] = dict(result["narrative_publisher_telemetry"])
+            if isinstance(result.get("narrative_production_certification"), dict):
+                payload["narrative_production_certification"] = dict(result["narrative_production_certification"])
+                payload["legacy_presentation_ownership_retired"] = True
+                payload["legacy_compatibility_fields_source"] = "canonical_projection_only"
             payload_timing = payload.get("timing") if isinstance(payload.get("timing"), dict) else {}
             payload_timing["pipeline_before_encode_ms"] = trace.elapsed_ms
             payload["timing"] = payload_timing
@@ -92,12 +216,15 @@ async def execute_foreground_rpg_turn(
 
 def _persisted_turn_session(result: dict[str, Any], session_id: str) -> dict[str, Any] | None:
     result_session = result.get("session")
-    if result.get("interaction_persisted") is True and isinstance(result_session, dict):
-        return result_session
-    if isinstance(result_session, dict):
+    canonical_patch = result.get("narrative_session_projection_patched") is True
+    if isinstance(result_session, dict) and (
+        canonical_patch or result.get("interaction_persisted") is not True
+    ):
         from app.rpg.session.service import save_session
 
         return save_session(result_session, compact=True)
+    if result.get("interaction_persisted") is True and isinstance(result_session, dict):
+        return result_session
     from app.rpg.session.service import load_session
 
     return load_session(session_id)

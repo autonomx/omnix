@@ -1,5 +1,4 @@
-"""Genesis compiler/bootstrap pipeline adapter for v2 launches."""
-
+"""Genesis compiler/bootstrap and World Forge launch pipeline adapter."""
 from __future__ import annotations
 
 from typing import Any
@@ -11,6 +10,8 @@ from .legacy_adapter import (
     adapt_genesis_payload_to_new_game_payload,
     attach_genesis_to_created_session,
 )
+from .materialization import materialize_world_forge_into_session, persist_campaign_genesis
+from .world_forge_pipeline import CampaignWorldForgeResult, run_campaign_world_forge
 
 
 class _TruthyZero(int):
@@ -58,7 +59,6 @@ def attach_compiled_genesis_to_session(
     runtime_state = _safe_dict(session.get("runtime_state"))
     setup_payload = _safe_dict(session.get("setup_payload"))
     manifest = _safe_dict(session.get("manifest"))
-
     state["compiled_genesis_snapshot"] = dict(compiled)
     state["bootstrap_snapshot"] = dict(bootstrap)
     state["active_goals"] = list(bootstrap.get("active_goals") or [])
@@ -98,7 +98,7 @@ def _result_from_unsaved_session(session: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": True,
         "session_id": session_id,
-        "status": "ready",
+        "status": "generating_world",
         "session": session,
         "game": session.get("state", {}),
     }
@@ -114,23 +114,52 @@ def _save_prepared_result(result: dict[str, Any]) -> dict[str, Any]:
     return {**result, **saved_result}
 
 
-def _attach_completed_creation_progress(result: dict[str, Any]) -> dict[str, Any]:
+def _attach_world_forge_progress(
+    result: dict[str, Any],
+    world_forge: CampaignWorldForgeResult | None,
+    *,
+    error: str = "",
+) -> dict[str, Any]:
     session_id = str(result.get("session_id") or "")
-    error = "" if result.get("ok") is True else str(result.get("error") or "new_game_creation_failed")
     from app.rpg.session.new_game_creation_progress import (
-        CreationJobStatus,
         attach_creation_metadata,
         build_creation_job,
         build_creation_progress_snapshot,
     )
 
-    status: CreationJobStatus = "completed" if result.get("ok") is True else "failed"
+    status = "completed" if not error and result.get("ok") is True else "failed"
     job = build_creation_job(session_id=session_id, status=status, error=error)
     progress = build_creation_progress_snapshot(session_id=session_id, status=status, error=error)
+    if world_forge is not None:
+        jobs = [row.as_dict() for row in world_forge.generation.jobs]
+        completed = sum(1 for row in jobs if row.get("status") == "completed")
+        progress.update(
+            {
+                "stage": "launch_ready" if world_forge.launch_ready else "consistency_failed",
+                "launch_ready": world_forge.launch_ready,
+                "completed_jobs": completed,
+                "total_jobs": len(jobs),
+                "world_forge_jobs": jobs,
+                "topic_graph": world_forge.graph.as_dict(),
+                "audit": world_forge.audit.as_dict(),
+                "completeness": dict(world_forge.compilation.completeness),
+            }
+        )
+        job.update(
+            {
+                "kind": "campaign_world_forge",
+                "depth": world_forge.graph.depth,
+                "launch_ready": world_forge.launch_ready,
+            }
+        )
     session = result.get("session")
     if isinstance(session, dict):
         session = attach_creation_metadata(session, job, progress)
-        result = {**result, "session": session, "game": session.get("state", result.get("game", {}))}
+        result = {
+            **result,
+            "session": session,
+            "game": session.get("state", result.get("game", {})),
+        }
     return {**result, "creation_job": job, "creation_progress": progress}
 
 
@@ -147,8 +176,48 @@ def create_new_game_session_from_compiled_genesis(
     result = _result_from_unsaved_session(_build_new_game_session(legacy_request))
     result = attach_genesis_to_created_session(result, contract, persist=False)
     result = attach_compiled_genesis_to_session(result, compiled, bootstrap, persist=False)
-    result = _attach_completed_creation_progress(result)
-    return _save_prepared_result(result)
+    session = result.get("session") if isinstance(result.get("session"), dict) else None
+    if session is None or not contract.world_forge.enabled:
+        result["status"] = "ready"
+        return _save_prepared_result(_attach_world_forge_progress(result, None))
+    session_id = str(result.get("session_id") or "")
+    try:
+        world_forge = run_campaign_world_forge(
+            contract,
+            campaign_id=session_id,
+            compiled_genesis=compiled,
+        )
+        session = materialize_world_forge_into_session(session, contract, world_forge)
+        result.update(
+            {
+                "session": session,
+                "game": session.get("state", {}),
+                "world_forge": world_forge.as_dict(),
+                "status": "ready" if world_forge.launch_ready else "blocked",
+                "ok": world_forge.launch_ready,
+            }
+        )
+        persistence = persist_campaign_genesis(session, contract, world_forge)
+        result["campaign_genesis_persistence"] = persistence
+        if not world_forge.launch_ready:
+            result["error"] = "campaign_genesis_launch_gate_failed"
+            return _attach_world_forge_progress(
+                result,
+                world_forge,
+                error=result["error"],
+            )
+        result = _attach_world_forge_progress(result, world_forge)
+        return _save_prepared_result(result)
+    except Exception as exc:
+        result.update(
+            {
+                "ok": False,
+                "status": "failed",
+                "error": "campaign_world_forge_failed",
+                "detail": str(exc),
+            }
+        )
+        return _attach_world_forge_progress(result, None, error=result["error"])
 
 
 def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -159,7 +228,6 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
     )
     compiled = compile_campaign_genesis(contract)
     bootstrap = bootstrap_session_from_compiled_genesis(compiled)
-
     return create_new_game_session_from_compiled_genesis(
         bootstrap=bootstrap,
         compiled=compiled,

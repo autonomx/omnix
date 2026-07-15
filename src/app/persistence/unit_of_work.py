@@ -40,7 +40,12 @@ from .repositories import (
     PostgresIdempotencyRepository,
     PostgresIdentityRepository,
 )
+from .rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
+from .rpg_campaign_genesis_repository import PostgresRpgCampaignGenesisRepository
+from .rpg_hermes_research_repository import PostgresRpgHermesResearchRepository
+from .rpg_narrative_response_repository import PostgresRpgNarrativeResponseRepository
 from .rpg_repository import PostgresRpgRepository
+from .rpg_world_forge_repository import PostgresRpgWorldForgeRepository
 from .transaction_policy import transaction_scope
 
 
@@ -75,6 +80,11 @@ class PostgresUnitOfWork:
         self.side_effects: PostgresSideEffectRepository
         self.foreground_submissions: PostgresForegroundSubmissionRepository
         self.rpg: PostgresRpgRepository
+        self.campaign_bibles: PostgresRpgCampaignBibleRepository
+        self.campaign_genesis: PostgresRpgCampaignGenesisRepository
+        self.world_forge: PostgresRpgWorldForgeRepository
+        self.hermes_research: PostgresRpgHermesResearchRepository
+        self.narrative_responses: PostgresRpgNarrativeResponseRepository
         self.module_records: PostgresModuleRecordRepository
         self.projections: PostgresProjectionRepository
         self.providers: PostgresProviderRepository
@@ -128,6 +138,11 @@ class PostgresUnitOfWork:
         self.side_effects = PostgresSideEffectRepository(self.connection)
         self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
         self.rpg = PostgresRpgRepository(self.connection)
+        self.campaign_bibles = PostgresRpgCampaignBibleRepository(self.connection)
+        self.campaign_genesis = PostgresRpgCampaignGenesisRepository(self.connection)
+        self.world_forge = PostgresRpgWorldForgeRepository(self.connection)
+        self.hermes_research = PostgresRpgHermesResearchRepository(self.connection)
+        self.narrative_responses = PostgresRpgNarrativeResponseRepository(self.connection)
         self.module_records = PostgresModuleRecordRepository(self.connection)
         self.projections = PostgresProjectionRepository(self.connection)
         self.providers = PostgresProviderRepository(self.connection)

@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from .contract import CampaignGenesisContract, genesis_contract_hash
+from .world_forge_contract import build_campaign_topic_graph, world_forge_depth_profile
 
-GENESIS_COMPILER_VERSION = "rpg_genesis_compiler_v1"
+GENESIS_COMPILER_VERSION = "rpg_genesis_compiler_v2"
 _WORLD_PROFILE_TRAITS = {
     "harsh_frontier": ["scarce_resources", "remote_start", "active_factions"],
     "quiet_start": ["low_pressure", "local_rumors"],
@@ -124,6 +125,17 @@ def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any
     """Compile declarative genesis into deterministic pre-bootstrap state."""
 
     intents = _gear_intents(contract)
+    profile = world_forge_depth_profile(contract.world_forge.depth)
+    graph = build_campaign_topic_graph(
+        campaign_template=contract.campaign_template,
+        genre=contract.genre,
+        tone=contract.tone,
+        depth=contract.world_forge.depth,
+        starting_location=contract.world_options.starting_location,
+        background_expansion=contract.world_forge.background_expansion,
+    )
+    max_parallel_jobs = contract.world_forge.max_parallel_jobs or profile.max_parallel_jobs
+    max_parallel_jobs = max(1, min(int(max_parallel_jobs), profile.max_parallel_jobs))
     return {
         "compiler_version": GENESIS_COMPILER_VERSION,
         "compiled_stats": contract.initial_stats.model_dump(mode="json"),
@@ -143,6 +155,17 @@ def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any
         "compiled_starter_loadout": _starter_loadout(intents),
         "compiled_story_state": contract.story_options.model_dump(mode="json", exclude_none=True),
         "compiled_feature_flags": contract.system_options.model_dump(mode="json"),
+        "compiled_world_forge": {
+            "enabled": contract.world_forge.enabled,
+            "use_hermes": contract.world_forge.use_hermes,
+            "require_consistency_audit": contract.world_forge.require_consistency_audit,
+            "require_opening_dossiers": contract.world_forge.require_opening_dossiers,
+            "background_expansion": contract.world_forge.background_expansion,
+            "custom_directives": list(contract.world_forge.custom_directives),
+            "depth_profile": profile.as_dict(),
+            "max_parallel_jobs": max_parallel_jobs,
+            "topic_graph": graph.as_dict(),
+        },
         "compiled_provenance": {
             "contract_version": contract.contract_version,
             "compiler_version": GENESIS_COMPILER_VERSION,

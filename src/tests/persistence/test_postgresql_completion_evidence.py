@@ -8,7 +8,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 def test_corrective_migrations_are_complete_and_ordered() -> None:
     migration_root = _REPOSITORY_ROOT / "src" / "app" / "persistence" / "migrations"
-    expected = [
+    corrective = [
         "0011_outbox_delivery_contract.sql",
         "0012_tenant_integrity_security.sql",
         "0013_coordinated_recovery.sql",
@@ -16,7 +16,13 @@ def test_corrective_migrations_are_complete_and_ordered() -> None:
         "0015_cutover_state_machine.sql",
         "0016_data_lifecycle_capacity.sql",
     ]
-    assert [path.name for path in sorted(migration_root.glob("001*.sql")) if path.name >= "0011"] == expected
+    discovered = [
+        path.name
+        for path in sorted(migration_root.glob("001*.sql"))
+        if path.name >= "0011"
+    ]
+    assert discovered[: len(corrective)] == corrective
+    assert discovered == sorted(set(discovered))
 
 
 def test_corrective_contract_documents_exist() -> None:
