@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from typing import Any
 
 from .database import PostgresDatabase, default_database
 from .errors import RevisionConflict
 from .identity_service import bootstrap_local_tenant
 from .rpg_repository import canonical_json, state_hash
+from .rpg_session_save_policy import session_save_deferred
 from .runtime import ensure_postgresql_runtime_ready
 from .unit_of_work import unit_of_work
 
@@ -42,6 +42,8 @@ def save_session_to_postgres(
     compact: bool = False,
 ) -> dict[str, Any]:
     del compact
+    if session_save_deferred():
+        return session
     database = _database()
     context = _context(database)
     campaign_id = _campaign_id(session)

@@ -106,6 +106,35 @@ def _select_structured_response(
     player_input: str,
 ) -> tuple[str, dict[str, Any]]:
     for source in sources:
+        raw_messages = source.get("messages")
+        if isinstance(raw_messages, list):
+            for message in raw_messages:
+                if not isinstance(message, dict):
+                    continue
+                kind = _normalize(message.get("kind"))
+                if kind not in {"npc", "npc dialogue"}:
+                    continue
+                speaker_id = _text(message.get("speaker_id"))
+                speaker = _display_speaker(
+                    _text(message.get("speaker") or speaker_id)
+                )
+                line = _dialogue_only(
+                    _text(message.get("text") or message.get("line")),
+                    speaker,
+                )
+                narration = _text(source.get("narration"))
+                if _normalize(speaker) in _NON_NPC_SPEAKERS:
+                    continue
+                if line and _is_player_restatement(line, player_input):
+                    line = ""
+                if narration and _is_player_restatement(narration, player_input):
+                    narration = ""
+                if narration or line:
+                    return narration, {
+                        "speaker": speaker or "NPC",
+                        "speaker_id": speaker_id or None,
+                        "line": line,
+                    }
         npc = _dict(source.get("npc"))
         speaker = _text(npc.get("speaker") or npc.get("name"))
         line = _text(npc.get("line") or npc.get("text") or npc.get("content"))

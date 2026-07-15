@@ -165,6 +165,12 @@ def rpg_pipeline_trace(
         trace_id=trace.trace_id,
         fields=trace.fields,
     )
+    # Startup logging is instrumentation overhead, not pipeline work. Start the
+    # attribution window after emitting that lifecycle event so top-level spans
+    # are compared against the operation they actually cover.
+    trace.started_at = perf_counter()
+    trace.cpu_started_ms = process_time() * 1000.0
+    trace.rss_started_bytes = _rss_bytes()
     try:
         yield trace
     except Exception as exc:

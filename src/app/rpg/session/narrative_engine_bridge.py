@@ -1,6 +1,7 @@
 """One-way migration bridges from authoritative turns into the Narrative Engine."""
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
 from app.rpg.narrative_engine import (
@@ -15,6 +16,7 @@ from app.rpg.narrative_engine import (
     TurnPresentationRequest,
     legacy_response_projection,
 )
+from app.rpg.narrative_engine.serialization import canonical_response_from_dict
 from app.rpg.session.genesis.turn_grounding import (
     TurnGroundingPacket,
     build_turn_grounding_packet,
@@ -242,11 +244,23 @@ def _request(
 ) -> TurnPresentationRequest:
     speaker_id, _ = _npc_identity(result)
     has_speaker = bool(target_actor_id or _text(_mapping(result.get("npc")).get("speaker")))
-    turn_token = result.get("turn_id") or result.get("tick") or 0
+    interaction_token = _text(result.get("interaction_id"))
+    turn_token = (
+        interaction_token
+        or result.get("turn_id")
+        or result.get("interaction_seq")
+        or result.get("sequence")
+        or result.get("tick")
+        or 0
+    )
     actor_ids = (speaker_id,) if has_speaker else ()
     return TurnPresentationRequest(
         request_id=f"{mode}:{session_id}:{turn_token}",
-        turn_id=_text(result.get("turn_id")) or f"turn:{result.get('tick') or 0}",
+        turn_id=(
+            interaction_token
+            or _text(result.get("turn_id"))
+            or f"turn:{result.get('interaction_seq') or result.get('sequence') or result.get('tick') or 0}"
+        ),
         campaign_id=session_id,
         player_input=player_input,
         authoritative_outcome=_mapping(
@@ -394,6 +408,29 @@ def canonicalize_resolved_turn_result(
     if not isinstance(result, dict) or result.get("ok") is not True:
         return result
     if isinstance(result.get("canonical_narrative_response"), dict):
+        interaction_id = _text(result.get("interaction_id"))
+        if not interaction_id:
+            return result
+        response = canonical_response_from_dict(
+            result["canonical_narrative_response"]
+        )
+        if response.turn_id == interaction_id:
+            return result
+        request_kind = _text(response.request_id).split(":", 1)[0] or _response_mode(result)
+        rebound = replace(
+            response,
+            response_id=(
+                f"narrative:{session_id}:{interaction_id}:{response.revision}"
+            ),
+            request_id=f"{request_kind}:{session_id}:{interaction_id}",
+            turn_id=interaction_id,
+            content_hash="",
+        ).with_content_hash()
+        canonical = rebound.as_dict()
+        result["canonical_narrative_response"] = canonical
+        nested = result.get("result")
+        if isinstance(nested, dict):
+            nested["canonical_narrative_response"] = canonical
         return result
     mode = _response_mode(result)
     if mode in _SCENE_MODES:

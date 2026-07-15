@@ -21,6 +21,67 @@ from app.rpg.narrative_engine.writer import (
 
 _JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
+_NARRATIVE_RESPONSE_SCHEMA: Mapping[str, Any] = {
+    "type": "object",
+    "properties": {
+        "blocks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "beat_id": {"type": "string"},
+                    "block_id": {"type": "string"},
+                    "sequence": {"type": "integer"},
+                    "kind": {"type": "string"},
+                    "purpose": {"type": "string"},
+                    "speaker_id": {"type": ["string", "null"]},
+                    "text": {"type": "string"},
+                    "claims": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "claim_id": {"type": "string"},
+                                "text": {"type": "string"},
+                                "authority": {"type": "string"},
+                                "evidence_refs": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "scope": {"type": "string"},
+                                "subject_id": {"type": ["string", "null"]},
+                                "predicate": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+                "required": [
+                    "beat_id",
+                    "sequence",
+                    "kind",
+                    "purpose",
+                    "text",
+                    "claims",
+                ],
+            },
+        },
+    },
+    "required": ["blocks"],
+}
+
+
+def _response_format(provider: str) -> dict[str, Any]:
+    if str(provider or "").strip().casefold() == "lmstudio":
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "rpg_narrative_blocks",
+                "strict": False,
+                "schema": _NARRATIVE_RESPONSE_SCHEMA,
+            },
+        }
+    return {"type": "json_object"}
+
 
 @dataclass(frozen=True)
 class NarrativeProviderConfig:
@@ -115,7 +176,7 @@ class ProviderNarrativeGenerator:
                     model=self.config.model or None,
                     stream=False,
                     temperature=self.config.temperature,
-                    response_format={"type": "json_object"},
+                    response_format=_response_format(self.config.provider),
                 )
                 if not isinstance(response, ChatResponse):
                     raise ValueError("narrative provider returned a streaming or invalid response")

@@ -3,7 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.rpg.narrative_engine import DeterministicNarrativeWriter
-from app.rpg.session.narrative_engine_bridge import canonicalize_direct_dialogue_result
+from app.rpg.session.narrative_engine_bridge import (
+    canonicalize_direct_dialogue_result,
+    canonicalize_resolved_turn_result,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -89,6 +92,63 @@ def test_corrupted_direct_line_is_ignored_before_canonical_generation(monkeypatc
     assert canonical["validation"]["passed"] is True
     assert "مرحبا" not in result["summary"]
     assert canonical["generation"]["source"] == "deterministic_writer"
+
+
+def test_committed_interaction_identity_wins_over_stale_runtime_turn_id(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.rpg.narrative_provider.build_production_narrative_writer",
+        lambda: DeterministicNarrativeWriter(),
+    )
+    legacy = _legacy_result()
+    legacy["interaction_id"] = "interaction:2"
+    legacy["interaction_seq"] = 2
+    legacy["turn_id"] = "turn:0"
+
+    result = canonicalize_direct_dialogue_result(
+        legacy,
+        session_id="campaign:direct",
+        player_input="How is the road?",
+    )
+
+    canonical = result["canonical_narrative_response"]
+    assert canonical["turn_id"] == "interaction:2"
+    assert canonical["request_id"] == "dialogue:campaign:direct:interaction:2"
+    assert canonical["response_id"] == (
+        "narrative:campaign:direct:interaction:2:1"
+    )
+
+
+def test_existing_canonical_identity_is_rebound_after_interaction_commit(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.rpg.narrative_provider.build_production_narrative_writer",
+        lambda: DeterministicNarrativeWriter(),
+    )
+    result = canonicalize_direct_dialogue_result(
+        _legacy_result(),
+        session_id="campaign:direct",
+        player_input="How is the road?",
+    )
+    stale_hash = result["canonical_narrative_response"]["content_hash"]
+    result["result"] = {
+        "canonical_narrative_response": dict(result["canonical_narrative_response"])
+    }
+    result["interaction_id"] = "interaction:2"
+    result["interaction_seq"] = 2
+
+    rebound = canonicalize_resolved_turn_result(
+        result,
+        session_id="campaign:direct",
+        player_input="How is the road?",
+    )
+
+    canonical = rebound["canonical_narrative_response"]
+    assert canonical["turn_id"] == "interaction:2"
+    assert canonical["request_id"] == "dialogue:campaign:direct:interaction:2"
+    assert canonical["response_id"] == (
+        "narrative:campaign:direct:interaction:2:1"
+    )
+    assert canonical["content_hash"] != stale_hash
+    assert rebound["result"]["canonical_narrative_response"] == canonical
 
 
 def test_runtime_uses_direct_canonical_entry_without_monkey_patch() -> None:

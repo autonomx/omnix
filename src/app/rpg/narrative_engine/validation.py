@@ -20,6 +20,12 @@ from .writer import DeterministicNarrativeWriter, NarrativeWriter, WriterResult
 _TRUNCATION_MARKERS = ("...[truncated]", "[truncated]", "<truncated>")
 _LABEL_PREFIX = re.compile(r"^(?:narrator|action|npc|result|reward)\s*:\s*", re.IGNORECASE)
 _WHITESPACE = re.compile(r"\s+")
+_REPAIRABLE_PROVIDER_CLAIM_ISSUES = {
+    "claim_unplanned_evidence",
+    "claim_scope_mismatch",
+    "claim_authority_unsupported",
+    "unsupported_claim_text",
+}
 
 
 def _scripts(text: str) -> set[str]:
@@ -181,6 +187,51 @@ class ValidatedWriterResult:
     fallback_used: bool
 
 
+def _fallback_diagnostics(
+    result: ValidatedWriterResult,
+    *,
+    reason: str,
+    issues: Sequence[ValidationIssue] = (),
+) -> ValidatedWriterResult:
+    metadata = dict(result.writer_result.raw_metadata or {})
+    metadata["provider_fallback_reason"] = reason
+    if issues:
+        metadata["provider_validation_issues"] = sorted(
+            {str(issue.code) for issue in issues if str(issue.code).strip()}
+        )
+    return replace(
+        result,
+        writer_result=replace(result.writer_result, raw_metadata=metadata),
+    )
+
+
+def _repair_provider_claims(
+    request: TurnPresentationRequest,
+    plan: NarrativePlan,
+    evidence: Sequence[EvidenceRecord],
+    blocks: Sequence[NarrativeBlock],
+    report: ValidationReport,
+    validator: NarrativeValidator,
+) -> tuple[tuple[NarrativeBlock, ...], ValidationReport] | None:
+    issue_codes = {issue.code for issue in report.issues}
+    if not issue_codes or not issue_codes.issubset(_REPAIRABLE_PROVIDER_CLAIM_ISSUES):
+        return None
+    stripped = tuple(
+        replace(
+            block,
+            claims=(),
+            metadata={
+                **dict(block.metadata),
+                "provider_claim_repair": True,
+            },
+        )
+        for block in blocks
+    )
+    repaired = infer_claims(request, plan, evidence, stripped)
+    repaired_report = validator.validate(request, plan, evidence, repaired)
+    return repaired, repaired_report
+
+
 def _prepare(
     request: TurnPresentationRequest,
     plan: NarrativePlan,
@@ -240,8 +291,19 @@ def write_validate_repair(
             evidence,
             writer.write(request, plan, evidence),
         )
-    except Exception:
-        return _validated_fallback(request, plan, evidence, fallback_writer, validator, repairer)
+    except Exception as exc:
+        fallback = _validated_fallback(
+            request,
+            plan,
+            evidence,
+            fallback_writer,
+            validator,
+            repairer,
+        )
+        return _fallback_diagnostics(
+            fallback,
+            reason=f"writer_exception:{type(exc).__name__}",
+        )
 
     report = validator.validate(request, plan, evidence, result.blocks)
     if report.passed:
@@ -255,4 +317,35 @@ def write_validate_repair(
             replace(repaired_report, repair_history=history),
             False,
         )
-    return _validated_fallback(request, plan, evidence, fallback_writer, validator, repairer)
+    claim_repair = _repair_provider_claims(
+        request,
+        plan,
+        evidence,
+        repaired,
+        repaired_report,
+        validator,
+    )
+    if claim_repair is not None:
+        claim_repaired, claim_report = claim_repair
+        if claim_report.passed:
+            return ValidatedWriterResult(
+                replace(result, blocks=claim_repaired),
+                replace(
+                    claim_report,
+                    repair_history=(*history, "repaired_provider_claims"),
+                ),
+                False,
+            )
+    fallback = _validated_fallback(
+        request,
+        plan,
+        evidence,
+        fallback_writer,
+        validator,
+        repairer,
+    )
+    return _fallback_diagnostics(
+        fallback,
+        reason="provider_validation_failed_after_repair",
+        issues=repaired_report.issues,
+    )

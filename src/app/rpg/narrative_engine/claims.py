@@ -98,6 +98,8 @@ def infer_claims(
         claim_ids = tuple(block.claim_refs) or (
             (f"claim:{block.block_id}",) if block.evidence_refs else ()
         )
+        repaired_provider_claims = block.metadata.get("provider_claim_repair") is True
+        claim_source = "provider_repaired" if repaired_provider_claims else "inferred"
         claims: list[ClaimAssertion] = []
         for claim_id in claim_ids:
             expected = ledger.get(claim_id, {})
@@ -124,7 +126,7 @@ def infer_claims(
                     ),
                     predicate=str(expected.get("predicate") or ""),
                     value=expected.get("value"),
-                    metadata={"claim_source": "inferred", "ledger_backed": bool(expected)},
+                    metadata={"claim_source": claim_source, "ledger_backed": bool(expected)},
                 )
             )
         inferred.append(
@@ -133,7 +135,7 @@ def infer_claims(
                 claims=tuple(claims),
                 metadata={
                     **dict(block.metadata),
-                    "claim_source": "inferred" if claims else "none",
+                    "claim_source": claim_source if claims else "none",
                 },
             )
         )
@@ -209,7 +211,9 @@ def validate_claims(
         claim_source = str(block.metadata.get("claim_source") or "")
         for claim in block.claims:
             claim_count += 1
-            explicit = claim_source == "provider" or claim.metadata.get("claim_source") == "provider"
+            explicit = claim_source in {"provider", "provider_repaired"} or claim.metadata.get(
+                "claim_source"
+            ) in {"provider", "provider_repaired"}
             explicit_count += int(explicit)
             unknown = set(claim.evidence_refs).difference(evidence_by_id)
             if unknown:

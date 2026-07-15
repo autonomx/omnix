@@ -8,6 +8,7 @@ from typing import Any, Callable
 from app.rpg.narrative_engine.persistence_policy import (
     narrative_repository_save_policy,
 )
+from app.persistence.rpg_session_save_policy import rpg_session_save_policy
 from app.rpg.performance_trace import rpg_pipeline_span
 
 from .interaction_event_store import (
@@ -44,7 +45,10 @@ def install_interaction_timeline_hook() -> None:
             lock.acquire()
         try:
             postgres_active = _postgresql_runtime_active()
-            with narrative_repository_save_policy(defer=postgres_active):
+            with (
+                narrative_repository_save_policy(defer=postgres_active),
+                rpg_session_save_policy(defer=postgres_active),
+            ):
                 with rpg_pipeline_span("turn.runtime_resolution") as runtime_span:
                     result = original_apply_turn(session_id, player_input, action, *args, **kwargs)
                     runtime_span["ok"] = result.get("ok") is True if isinstance(result, dict) else False

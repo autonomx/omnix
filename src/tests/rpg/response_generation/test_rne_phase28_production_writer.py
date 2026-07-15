@@ -224,6 +224,36 @@ def test_live_provider_retries_then_returns_native_structured_blocks() -> None:
     assert "claims array" in system
 
 
+def test_lmstudio_uses_supported_json_schema_response_format() -> None:
+    provider = _Provider([_structured_payload()])
+    writer = ProductionStructuredNarrativeWriter(
+        ProviderNarrativeGenerator(
+            provider,
+            NarrativeProviderConfig(
+                mode="live",
+                provider="lmstudio",
+                model="phase28-model",
+            ),
+        )
+    )
+
+    result = writer.write(_request(), _plan(), _evidence())
+
+    assert result.source == "structured_provider"
+    response_format = provider.calls[-1]["kwargs"]["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "rpg_narrative_blocks"
+    schema = response_format["json_schema"]["schema"]
+    assert schema["required"] == ["blocks"]
+    assert schema["properties"]["blocks"]["type"] == "array"
+
+
+def _misgrounded_claim_payload() -> str:
+    payload = json.loads(_structured_payload())
+    payload["blocks"][0]["claims"][0]["text"] = "The moon is made of cheese."
+    return json.dumps(payload)
+
+
 def test_configured_provider_failure_uses_one_validated_canonical_fallback() -> None:
     provider = _Provider([RuntimeError("down"), RuntimeError("still down")])
     writer = build_production_narrative_writer(
@@ -244,7 +274,41 @@ def test_configured_provider_failure_uses_one_validated_canonical_fallback() -> 
     assert validated.validation.passed is True
     assert validated.fallback_used is True
     assert validated.writer_result.source == "deterministic_writer"
+    assert validated.writer_result.raw_metadata == {
+        "provider_fallback_reason": "writer_exception:RuntimeError"
+    }
     assert len(provider.calls) == 2
+
+
+def test_provider_claim_metadata_is_rebuilt_without_accepting_unsupported_prose() -> None:
+    provider = _Provider([_misgrounded_claim_payload()])
+    writer = ProductionStructuredNarrativeWriter(
+        ProviderNarrativeGenerator(
+            provider,
+            NarrativeProviderConfig(
+                mode="live",
+                provider="phase28",
+                model="phase28-model",
+            ),
+        )
+    )
+
+    validated = write_validate_repair(
+        _request(),
+        _plan(),
+        _evidence(),
+        writer,
+    )
+
+    assert validated.validation.passed is True
+    assert validated.fallback_used is False
+    assert validated.validation.repair_history == ("repaired_provider_claims",)
+    assert validated.writer_result.blocks[0].claims[0].text == (
+        "The east road is muddy but passable."
+    )
+    assert validated.writer_result.blocks[0].claims[0].metadata["claim_source"] == (
+        "provider_repaired"
+    )
 
 
 def test_offline_mode_deliberately_uses_deterministic_writer() -> None:

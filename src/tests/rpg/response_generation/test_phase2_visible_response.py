@@ -47,6 +47,39 @@ def test_canonical_visible_response_reads_first_call_nested_contract() -> None:
     )
 
 
+def test_canonical_consumer_messages_survive_compact_response_projection() -> None:
+    result = {
+        "visible_response": {
+            "format_version": "rpg_visible_response_v2",
+            "narration": "Bran rests the polishing rag on the counter.",
+            "messages": [
+                {
+                    "kind": "npc",
+                    "speaker": "npc:bran",
+                    "speaker_id": "npc:bran",
+                    "text": "Steady enough, though the old road has been quiet.",
+                }
+            ],
+            "plain_text": "canonical text",
+        }
+    }
+
+    visible = build_visible_response(result)
+
+    assert visible["messages"] == [
+        {
+            "kind": "npc_dialogue",
+            "speaker_id": "npc:bran",
+            "speaker": "bran",
+            "text": "Steady enough, though the old road has been quiet.",
+        }
+    ]
+    assert visible["plain_text"] == (
+        "Bran rests the polishing rag on the counter.\n\n"
+        'bran: "Steady enough, though the old road has been quiet."'
+    )
+
+
 def test_canonical_visible_response_deduplicates_narration_equal_to_dialogue() -> None:
     result = {
         "narration": "Steady enough.",
