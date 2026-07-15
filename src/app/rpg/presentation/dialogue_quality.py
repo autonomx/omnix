@@ -379,6 +379,11 @@ def _mode_requirements(mode: str) -> tuple[str, ...]:
         "follow_up_continuity": ("caravan crews", "quiet road"),
         "repetition_repair": ("like i said", "old road"),
         "road_safety": ("old road", "guards"),
+        "wellbeing": ("caravan road",),
+        "combat": ("footing",),
+        "local_knowledge": ("old road",),
+        "opinion": ("judgment",),
+        "identity": ("old road",),
     }.get(mode, ())
 
 
@@ -400,6 +405,10 @@ def build_canonical_dialogue_quality_context(
             "speaker_id": "",
             "speaker": "",
             "line": "",
+            "fast_path": _text(
+                _dict(result.get("first_call_grounding_diagnostics")).get("source")
+            )
+            == "fast_visible_dialogue_v1",
         }
     npc = _dict(result.get("npc"))
     speaker_id = _text(npc.get("speaker_id") or npc.get("id"))
@@ -442,6 +451,10 @@ def build_canonical_dialogue_quality_context(
         "speaker_id": _text(message.get("speaker_id")) or speaker_id,
         "speaker": _text(message.get("speaker")) or speaker,
         "line": _text(message.get("text")),
+        "fast_path": _text(
+            _dict(result.get("first_call_grounding_diagnostics")).get("source")
+        )
+        == "fast_visible_dialogue_v1",
     }
 
 
@@ -576,6 +589,14 @@ def _dialogue_mode(
         return "business"
     if _topic(player_input) == "local_knowledge" and any(term in normalized for term in ("safe", "guards")):
         return "road_safety"
+    if _topic(player_input) in {
+        "wellbeing",
+        "combat",
+        "local_knowledge",
+        "opinion",
+        "identity",
+    }:
+        return _topic(player_input)
     return ""
 
 

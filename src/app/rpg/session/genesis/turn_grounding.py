@@ -82,30 +82,39 @@ def build_turn_grounding_packet(
     speaker_id: str | None = None,
     actor_ids: tuple[str, ...] = (),
     max_topics: int = 5,
+    runtime_only: bool = False,
 ) -> TurnGroundingPacket:
     """Assemble evidence without mutating simulation or Campaign Bible state."""
 
     runtime = tuple(runtime_evidence(result))
     session = _session(result, campaign_id)
-    snapshot = load_campaign_bible_snapshot(
-        campaign_id,
-        session=session,
+    snapshot = (
+        None
+        if runtime_only
+        else load_campaign_bible_snapshot(
+            campaign_id,
+            session=session,
+        )
     )
     bible_evidence = (
         campaign_bible_evidence(snapshot) if snapshot is not None else ()
     )
     entity_ids = _entity_ids(result, session, speaker_id, actor_ids)
     factions = _faction_ids(session, speaker_id)
-    research = research_campaign_turn(
-        campaign_id=campaign_id,
-        query=player_input,
-        session=session,
-        speaker_id=speaker_id,
-        actor_ids=actor_ids,
-        faction_ids=factions,
-        entity_ids=entity_ids,
-        research_id=f"research:{campaign_id}:{result.get('turn_id') or result.get('tick') or 0}",
-        max_topics=max_topics,
+    research = (
+        None
+        if runtime_only
+        else research_campaign_turn(
+            campaign_id=campaign_id,
+            query=player_input,
+            session=session,
+            speaker_id=speaker_id,
+            actor_ids=actor_ids,
+            faction_ids=factions,
+            entity_ids=entity_ids,
+            research_id=f"research:{campaign_id}:{result.get('turn_id') or result.get('tick') or 0}",
+            max_topics=max_topics,
+        )
     )
     hermes_evidence = research.result.evidence() if research else ()
     by_id: dict[str, EvidenceRecord] = {}
@@ -114,7 +123,7 @@ def build_turn_grounding_packet(
         if previous is None or record.source_revision >= previous.source_revision:
             by_id[record.evidence_id] = record
     topic_titles = list(research.topic_titles) if research else []
-    metadata = {
+    metadata: dict[str, Any] = {
         "hermes_used": research is not None and bool(research.result.sources),
         "hermes_research_id": research.result.research_id if research else "",
         "canon_topic_count": len(topic_titles),
@@ -141,6 +150,8 @@ def build_turn_grounding_packet(
         "grounding_passed": True,
         "research_read_only": True,
     }
+    if runtime_only:
+        metadata["runtime_only"] = True
     return TurnGroundingPacket(
         evidence=tuple(by_id.values()),
         metadata=metadata,

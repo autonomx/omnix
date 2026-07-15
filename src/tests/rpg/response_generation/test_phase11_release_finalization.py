@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from app.rpg.local_live_smoke import (
     build_smoke_plan,
     evaluate_latency_targets,
     evaluate_live_smoke_payload,
+    main as live_smoke_main,
 )
 from app.rpg.release_finalization import (
     INTERACTIVE_RELEASE_VERSION,
@@ -142,6 +144,27 @@ def test_local_latency_evaluator_accepts_original_targets() -> None:
     assert report["failures"] == []
     assert report["median"] == 1.2
     assert report["p95"] == 2.0
+
+
+def test_live_smoke_cli_writes_utf8_report(monkeypatch, tmp_path: Path) -> None:
+    report = {
+        "format_version": "rpg_interactive_live_smoke_v1",
+        "ok": True,
+        "visible_text": "old road — clear",
+    }
+    monkeypatch.setattr(
+        "app.rpg.local_live_smoke.run_live_smoke",
+        lambda **kwargs: report,
+    )
+    output = tmp_path / "live-smoke.json"
+
+    exit_code = live_smoke_main(
+        ["--session-id", "session:test", "--output", str(output)]
+    )
+
+    assert exit_code == 0
+    assert not output.read_bytes().startswith(b"\xef\xbb\xbf")
+    assert json.loads(output.read_text(encoding="utf-8")) == report
 
 
 def test_release_runbook_keeps_live_provider_validation_out_of_actions() -> None:

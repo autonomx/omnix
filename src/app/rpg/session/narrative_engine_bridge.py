@@ -229,6 +229,21 @@ def _publish(
     return result
 
 
+def _dialogue_quality_context(
+    result: Mapping[str, Any],
+    *,
+    player_input: str,
+) -> dict[str, Any]:
+    from app.rpg.presentation.dialogue_quality import (
+        build_canonical_dialogue_quality_context,
+    )
+
+    return build_canonical_dialogue_quality_context(
+        dict(result),
+        player_input=player_input,
+    )
+
+
 def _request(
     result: Mapping[str, Any],
     *,
@@ -242,10 +257,6 @@ def _request(
     significance: NarrativeSignificance = NarrativeSignificance.ROUTINE,
     target_actor_id: str | None = None,
 ) -> TurnPresentationRequest:
-    from app.rpg.presentation.dialogue_quality import (
-        build_canonical_dialogue_quality_context,
-    )
-
     speaker_id, _ = _npc_identity(result)
     has_speaker = bool(target_actor_id or _text(_mapping(result.get("npc")).get("speaker")))
     interaction_token = _text(result.get("interaction_id"))
@@ -281,8 +292,8 @@ def _request(
             "response_mode": mode,
             "response_id": f"narrative:{session_id}:{turn_token}:1",
             "evidence_limit": max(12, min(len(evidence), 50)),
-            "dialogue_quality_context": build_canonical_dialogue_quality_context(
-                dict(result),
+            "dialogue_quality_context": _dialogue_quality_context(
+                result,
                 player_input=player_input,
             ),
             **dict(grounding_metadata),
@@ -294,6 +305,12 @@ def _generate(
     grounding: TurnGroundingPacket,
     request: TurnPresentationRequest,
 ) -> Any:
+    quality_context = _mapping(request.metadata.get("dialogue_quality_context"))
+    writer = None
+    if quality_context.get("fast_path") is True:
+        from app.rpg.narrative_engine import DeterministicNarrativeWriter
+
+        writer = DeterministicNarrativeWriter()
     return NarrativeEngineService(
         evidence_broker=EvidenceBroker(
             [
@@ -302,7 +319,8 @@ def _generate(
                     source_id="turn_grounding",
                 )
             ]
-        )
+        ),
+        writer=writer,
     ).generate(request)
 
 
@@ -319,12 +337,17 @@ def canonicalize_direct_dialogue_result(
     if isinstance(result.get("canonical_narrative_response"), dict):
         return result
     speaker_id, _ = _npc_identity(result)
+    quality_context = _dialogue_quality_context(
+        result,
+        player_input=player_input,
+    )
     grounding = build_turn_grounding_packet(
         result,
         campaign_id=session_id,
         player_input=player_input,
         speaker_id=speaker_id,
         actor_ids=(speaker_id,),
+        runtime_only=quality_context.get("fast_path") is True,
     )
     request = _request(
         result,

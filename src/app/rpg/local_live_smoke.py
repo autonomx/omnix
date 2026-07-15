@@ -11,6 +11,7 @@ import urllib.error
 import urllib.request
 import uuid
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from app.rpg.release_finalization import (
@@ -261,6 +262,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--command", action="append", dest="commands")
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
+    parser.add_argument("--output", type=Path)
     return parser
 
 
@@ -276,7 +278,11 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, indent=2), file=sys.stderr)
         return 2
-    print(json.dumps(report, indent=2, ensure_ascii=False))
+    rendered = json.dumps(report, indent=2, ensure_ascii=False)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(rendered + "\n", encoding="utf-8")
+    print(rendered)
     return 0 if report.get("ok") is True else 1
 
 

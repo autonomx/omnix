@@ -110,6 +110,7 @@ async def execute_foreground_rpg_turn(
                     performance_override={
                         "enable_live_narration_llm": True,
                         "narration_mode": "blocking",
+                        "fast_visible_dialogue": True,
                     },
                 )
             )

@@ -128,7 +128,10 @@ def _try_fast_visible_dialogue(
         runtime_state=runtime_state,
         candidate_action=candidate_action,
     )
-    profile = _first_addressed_profile(packet)
+    profiles = _addressed_profiles(packet)
+    if len(profiles) != 1:
+        return {}
+    profile = profiles[0]
     target_name = _s(profile.get("name") or candidate_action.get("target_name")).strip()
     target_id = _s(profile.get("id") or candidate_action.get("target_id")).strip()
     if not target_name and not target_id:
@@ -211,18 +214,20 @@ def _looks_like_fast_dialogue(player_input: str, action: dict[str, Any]) -> bool
     return "?" in text or any(term in text for term in _DIALOGUE_TERMS)
 
 
-def _first_addressed_profile(packet: dict[str, Any]) -> dict[str, Any]:
+def _addressed_profiles(packet: dict[str, Any]) -> list[dict[str, Any]]:
     npc_context = _d(packet.get("npc_context"))
     addressed = npc_context.get("addressed_npcs")
     if isinstance(addressed, list) and addressed:
-        return _d(addressed[0])
+        return [_d(profile) for profile in addressed if _d(profile)]
     by_id = _d(npc_context.get("addressed_npcs_by_id"))
     if by_id:
-        npc_id, profile = next(iter(by_id.items()))
-        profile = _d(profile)
-        profile.setdefault("id", npc_id)
-        return profile
-    return {}
+        profiles = []
+        for npc_id, value in by_id.items():
+            profile = _d(value)
+            profile.setdefault("id", npc_id)
+            profiles.append(profile)
+        return profiles
+    return []
 
 
 def _d(value: Any) -> dict[str, Any]:

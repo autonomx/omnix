@@ -225,6 +225,59 @@ def test_canonical_writer_removes_fabricated_dialogue_for_absent_npc(
     assert result["visible_response"]["messages"] == []
 
 
+def test_fast_visible_dialogue_uses_deterministic_canonical_writer(
+    monkeypatch,
+) -> None:
+    def fail_if_provider_writer_is_built():
+        raise AssertionError("fast visible dialogue must not build a provider writer")
+
+    monkeypatch.setattr(
+        "app.rpg.narrative_provider.build_production_narrative_writer",
+        fail_if_provider_writer_is_built,
+    )
+    monkeypatch.setattr(
+        "app.rpg.session.genesis.turn_grounding.load_campaign_bible_snapshot",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("fast visible dialogue must reuse runtime grounding")
+        ),
+    )
+    monkeypatch.setattr(
+        "app.rpg.session.genesis.turn_grounding.research_campaign_turn",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("fast visible dialogue must not perform Hermes research")
+        ),
+    )
+    session = _session()
+    session["manifest"]["session_id"] = "campaign:phase29:fast"
+    session["simulation_state"]["npc_index"] = {
+        "npc:bran": {
+            "id": "npc:bran",
+            "npc_id": "npc:bran",
+            "name": "Bran",
+            "biography": {
+                "public": "Bran owns the Rusty Flagon near the old road.",
+            },
+        }
+    }
+    advisory = _advisory()
+    advisory["first_call_grounding_diagnostics"]["source"] = (
+        "fast_visible_dialogue_v1"
+    )
+
+    result = build_non_stateful_dialogue_result(
+        session=session,
+        simulation_state=session["simulation_state"],
+        runtime_state=session["runtime_state"],
+        player_input="I ask Bran how business is doing.",
+        semantic_advisory=advisory,
+    )
+
+    canonical = result["canonical_narrative_response"]
+    assert canonical["generation"]["source"] == "deterministic_writer"
+    assert result["narrative_grounding"]["runtime_only"] is True
+    assert "regulars" in result["visible_response"]["plain_text"].casefold()
+
+
 def test_production_sources_no_longer_use_dialogue_monkey_patch_or_legacy_line_writer() -> None:
     gateway = (
         ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py"

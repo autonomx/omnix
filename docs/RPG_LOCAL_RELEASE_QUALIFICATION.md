@@ -29,7 +29,7 @@ $env:OMNIX_RPG_LIVE_SMOKE = "1"
 
 python scripts/rpg_interactive_live_smoke.py `
   --session-id "<session-id>" `
-  > resources/data/reports/rpg-live-smoke-local.json
+  --output resources/data/reports/rpg-live-smoke-local.json
 
 python -m app.rpg.local_dialogue_quality_smoke `
   --output resources/data/reports/rpg-dialogue-quality-local.json
