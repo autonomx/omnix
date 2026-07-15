@@ -1,5 +1,11 @@
 """Desktop companion domain package."""
 
+from .coordinator import (
+    DesktopVisionCoordinator,
+    DesktopVisionCoordinatorSnapshot,
+    DesktopVisionLease,
+    DesktopVisionWork,
+)
 from .models import (
     CompanionAttentionDecision,
     CompanionCommentaryCandidate,
@@ -12,6 +18,7 @@ from .models import (
     DesktopObservedChange,
     DesktopObservedValue,
 )
+from .shadow_watch import ShadowWatchDecision, decide_shadow_watch
 
 __all__ = [
     "CompanionAttentionDecision",
@@ -24,4 +31,10 @@ __all__ = [
     "DesktopObservation",
     "DesktopObservedChange",
     "DesktopObservedValue",
+    "DesktopVisionCoordinator",
+    "DesktopVisionCoordinatorSnapshot",
+    "DesktopVisionLease",
+    "DesktopVisionWork",
+    "ShadowWatchDecision",
+    "decide_shadow_watch",
 ]
