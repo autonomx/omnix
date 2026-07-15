@@ -6,6 +6,7 @@ import {
   parseShadowWatchSettings,
   scenarioForActivity,
   scenarioForObservationOutcome,
+  shouldResumeDesktopCompanion,
 } from './desktop-companion-watch-controller';
 
 describe('desktop companion watch scheduling', () => {
@@ -29,6 +30,12 @@ describe('desktop companion watch scheduling', () => {
     await first;
     await schedule();
     expect(calls).toBe(2);
+  });
+
+  it('resumes a paused runtime even though Watch remains enabled', () => {
+    expect(shouldResumeDesktopCompanion({ phase: 'paused', watchEnabled: true })).toBe(true);
+    expect(shouldResumeDesktopCompanion({ phase: 'watching_idle', watchEnabled: true })).toBe(false);
+    expect(shouldResumeDesktopCompanion({ phase: 'sharing', watchEnabled: false })).toBe(true);
   });
 });
 

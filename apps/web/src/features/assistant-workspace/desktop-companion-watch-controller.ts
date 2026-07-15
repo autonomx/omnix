@@ -12,7 +12,7 @@ import {
   fetchDesktopCompanionRolloutStatus,
   type DesktopCompanionRolloutStatus,
 } from './desktop-companion-rollout';
-import { DesktopCompanionRuntime } from './desktop-companion-runtime';
+import { DesktopCompanionRuntime, type DesktopCompanionSnapshot } from './desktop-companion-runtime';
 import { currentDesktopCompanionCapture } from './assistant-context-controller';
 import { liveConversationStore } from './live-conversation-store';
 
@@ -100,6 +100,12 @@ export function createDesktopCompanionTickScheduler(run: () => Promise<void>): (
       });
     return inFlight;
   };
+}
+
+export function shouldResumeDesktopCompanion(
+  snapshot: Pick<DesktopCompanionSnapshot, 'phase' | 'watchEnabled'>,
+): boolean {
+  return !snapshot.watchEnabled || snapshot.phase === 'paused';
 }
 
 const tick = createDesktopCompanionTickScheduler(tickOnce);
@@ -258,7 +264,7 @@ async function tickOnce(): Promise<void> {
       reason: rollout.reason,
     });
     publishStatus('watching_idle', rollout.reason);
-  } else if (!runtime.getSnapshot().watchEnabled) {
+  } else if (shouldResumeDesktopCompanion(runtime.getSnapshot())) {
     runtime.resume();
   }
   if (nowMs - rolloutCheckedAtMs >= 30_000) await refreshRollout(false);
