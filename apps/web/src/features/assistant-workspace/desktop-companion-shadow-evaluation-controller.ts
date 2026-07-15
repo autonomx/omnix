@@ -7,6 +7,7 @@ import {
   hashDesktopCompanionModelId,
   loadDesktopCompanionBuildIdentity,
 } from './desktop-companion-build-identity';
+import { DESKTOP_COMPANION_DELIVERY_EVENT } from './desktop-companion-delivery';
 import {
   DESKTOP_COMPANION_EVALUATION_EVENT,
   type DesktopCompanionEvaluationEvent,
@@ -25,6 +26,13 @@ type EvaluationIdentity = {
   visionModelHash: string | null;
 };
 
+export type DesktopCompanionDeliveryEvidence = {
+  sessionId: string;
+  status: string;
+  presentation: 'text' | 'speech';
+  reason: string | null;
+};
+
 type EvaluationWindow = Window & typeof globalThis & {
   __omnixDesktopCompanionShadowEvaluationInstalled?: boolean;
 };
@@ -33,7 +41,7 @@ let accumulator: DesktopCompanionEvaluationAccumulator | null = null;
 let identity: EvaluationIdentity | null = null;
 let recordedEvents = 0;
 let startedAt = new Date();
-let flushTimer: number | null = null;
+let flushTimer: ReturnType<typeof setInterval> | null = null;
 let eventQueue: Promise<void> = Promise.resolve();
 
 export function initializeDesktopCompanionShadowEvaluationController(): () => void {
@@ -46,19 +54,26 @@ export function initializeDesktopCompanionShadowEvaluationController(): () => vo
     if (!detail) return;
     eventQueue = eventQueue.then(() => handleEvaluationEvent(detail)).catch(() => undefined);
   };
+  const handleDelivery = (event: Event) => {
+    const detail = normalizeDeliveryEvaluationEvent((event as CustomEvent<unknown>).detail);
+    if (!detail) return;
+    eventQueue = eventQueue.then(() => handleDeliveryEvidence(detail)).catch(() => undefined);
+  };
   const handleUnload = () => {
     const payload = finalizeCurrent();
     if (payload) submitEvaluationKeepalive(payload);
   };
   window.addEventListener(DESKTOP_COMPANION_EVALUATION_EVENT, handleEvent);
+  window.addEventListener(DESKTOP_COMPANION_DELIVERY_EVENT, handleDelivery);
   window.addEventListener('beforeunload', handleUnload);
-  flushTimer = window.setInterval(() => {
+  flushTimer = setInterval(() => {
     eventQueue = eventQueue.then(() => flushAndRestart('interval')).catch(() => undefined);
   }, FLUSH_INTERVAL_MS);
   return () => {
     window.removeEventListener(DESKTOP_COMPANION_EVALUATION_EVENT, handleEvent);
+    window.removeEventListener(DESKTOP_COMPANION_DELIVERY_EVENT, handleDelivery);
     window.removeEventListener('beforeunload', handleUnload);
-    if (flushTimer !== null) window.clearInterval(flushTimer);
+    if (flushTimer !== null) clearInterval(flushTimer);
     flushTimer = null;
     const payload = finalizeCurrent();
     if (payload) void submitEvaluation(payload);
@@ -93,6 +108,20 @@ export function normalizeEvaluationEvent(value: unknown): DesktopCompanionEvalua
   };
 }
 
+export function normalizeDeliveryEvaluationEvent(value: unknown): DesktopCompanionDeliveryEvidence | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const sessionId = typeof input.sessionId === 'string' ? input.sessionId.trim() : '';
+  const status = typeof input.status === 'string' ? input.status.trim().slice(0, 80) : '';
+  if (!sessionId || !status) return null;
+  return {
+    sessionId,
+    status,
+    presentation: input.presentation === 'speech' ? 'speech' : 'text',
+    reason: typeof input.reason === 'string' ? input.reason.trim().slice(0, 120) || null : null,
+  };
+}
+
 async function handleEvaluationEvent(event: DesktopCompanionEvaluationEvent): Promise<void> {
   if (event.kind === 'watch_started') {
     if (identity?.sessionId !== event.sessionId || accumulator) await flushAndRestart('rebind', false);
@@ -118,6 +147,39 @@ async function handleEvaluationEvent(event: DesktopCompanionEvaluationEvent): Pr
     stale: event.stale,
   });
   if (event.observed) accumulator.recordObservation();
+}
+
+async function handleDeliveryEvidence(event: DesktopCompanionDeliveryEvidence): Promise<void> {
+  if (!accumulator || !identity || identity.sessionId !== event.sessionId) return;
+  recordedEvents += 1;
+  const speech = event.presentation === 'speech';
+  if (event.status === 'generated') {
+    accumulator.recordCommentary({ skipped: false });
+    return;
+  }
+  if (event.status === 'suppress') {
+    accumulator.recordCommentary({ skipped: true });
+    if (speech && event.reason === 'candidate_stale') accumulator.addScenario('speech-stale');
+    return;
+  }
+  if (event.status === 'completed') {
+    accumulator.recordDelivery({ collision: false, interrupted: false });
+    if (speech) accumulator.addScenario('speech-completed');
+    return;
+  }
+  if (event.status === 'interrupted') {
+    accumulator.recordDelivery({ collision: false, interrupted: true });
+    if (speech) accumulator.addScenario('interruption');
+    return;
+  }
+  if (event.status === 'discarded') {
+    accumulator.recordCommentary({ skipped: true });
+    const collision = event.reason === 'user_speech' || event.reason === 'interrupted';
+    if (collision) accumulator.recordDelivery({ collision: true, interrupted: true });
+    if (speech && collision) accumulator.addScenario('interruption');
+    return;
+  }
+  if (event.status === 'error') accumulator.recordCommentary({ skipped: true });
 }
 
 async function startAccumulator(event: DesktopCompanionEvaluationEvent): Promise<void> {

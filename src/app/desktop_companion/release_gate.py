@@ -1,7 +1,9 @@
 """Evidence partitioning and stricter release gates for Desktop Companion rollout."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from typing import Mapping
 
 from .evaluation import (
     DesktopCompanionEvaluationRecord,
@@ -11,6 +13,9 @@ from .evaluation import (
 )
 
 _MINIMUM_PARTITION_RECORDS = 12
+_MINIMUM_SPEECH_RECORDS = 12
+_MINIMUM_SPEECH_DELIVERIES = 12
+_SPEECH_SCENARIOS = {"speech-completed", "interruption", "speech-stale"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,14 +56,57 @@ def build_partitioned_desktop_companion_release_gate(
 ) -> DesktopCompanionReleaseGateReport:
     selected = select_desktop_companion_evidence(records, partition)
     report = build_desktop_companion_release_gate(selected)
-    insufficient = list(report.insufficient)
-    legacy_minimum = next((item for item in insufficient if item.startswith("minimum_records:")), None)
-    if legacy_minimum:
-        insufficient.remove(legacy_minimum)
+    insufficient = _without_legacy_minimum(report.insufficient)
     if len(selected) < _MINIMUM_PARTITION_RECORDS:
         insufficient.append(f"minimum_partition_records:{len(selected)}/{_MINIMUM_PARTITION_RECORDS}")
     if not partition.exact_commit_sha or partition.exact_commit_sha == "unknown-local-build":
         insufficient.append("exact_build_identity_required")
+    return _with_status(report, insufficient)
+
+
+def build_partitioned_desktop_companion_speech_gate(
+    records: list[DesktopCompanionEvaluationRecord],
+    partition: DesktopCompanionEvidencePartition,
+) -> DesktopCompanionReleaseGateReport:
+    selected = [
+        record
+        for record in select_desktop_companion_evidence(records, partition)
+        if record.rollout_stage == "speech"
+    ]
+    report = build_desktop_companion_release_gate(selected)
+    insufficient = _without_legacy_minimum(report.insufficient)
+    if len(selected) < _MINIMUM_SPEECH_RECORDS:
+        insufficient.append(f"minimum_speech_records:{len(selected)}/{_MINIMUM_SPEECH_RECORDS}")
+    deliveries = sum(int(record.counts.get("deliveries", 0)) for record in selected)
+    if deliveries < _MINIMUM_SPEECH_DELIVERIES:
+        insufficient.append(f"minimum_speech_deliveries:{deliveries}/{_MINIMUM_SPEECH_DELIVERIES}")
+    scenarios = {scenario for record in selected for scenario in record.scenario_labels}
+    missing = sorted(_SPEECH_SCENARIOS - scenarios)
+    if missing:
+        insufficient.append("missing_speech_scenarios:" + ",".join(missing))
+    if not partition.exact_commit_sha or partition.exact_commit_sha == "unknown-local-build":
+        insufficient.append("exact_build_identity_required")
+    return _with_status(report, insufficient)
+
+
+def desktop_companion_speech_canary_enabled(environ: Mapping[str, str] | None = None) -> bool:
+    values = environ if environ is not None else os.environ
+    return str(values.get("OMNIX_DESKTOP_COMPANION_SPEECH_CANARY") or "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _without_legacy_minimum(values: tuple[str, ...]) -> list[str]:
+    return [item for item in values if not item.startswith("minimum_records:")]
+
+
+def _with_status(
+    report: DesktopCompanionReleaseGateReport,
+    insufficient: list[str],
+) -> DesktopCompanionReleaseGateReport:
     status: GateStatus = "fail" if report.failures else "insufficient" if insufficient else "pass"
     return report.model_copy(
         update={
@@ -71,5 +119,7 @@ def build_partitioned_desktop_companion_release_gate(
 __all__ = [
     "DesktopCompanionEvidencePartition",
     "build_partitioned_desktop_companion_release_gate",
+    "build_partitioned_desktop_companion_speech_gate",
+    "desktop_companion_speech_canary_enabled",
     "select_desktop_companion_evidence",
 ]

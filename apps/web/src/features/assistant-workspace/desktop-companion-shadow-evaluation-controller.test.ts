@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeEvaluationEvent } from './desktop-companion-shadow-evaluation-controller';
+import {
+  normalizeDeliveryEvaluationEvent,
+  normalizeEvaluationEvent,
+} from './desktop-companion-shadow-evaluation-controller';
 
 describe('desktop companion evaluation events', () => {
   it('accepts bounded content-free lifecycle facts and effective stage', () => {
@@ -60,5 +63,24 @@ describe('desktop companion evaluation events', () => {
       reason: undefined,
     });
     expect(JSON.stringify(result)).not.toContain('secret');
+  });
+
+  it('normalizes speech outcomes without retaining generated content', () => {
+    const result = normalizeDeliveryEvaluationEvent({
+      status: 'interrupted',
+      sessionId: 'chat:1',
+      presentation: 'speech',
+      reason: 'user_speech',
+      content: 'private generated response',
+      turnId: 'desktop:1',
+    });
+
+    expect(result).toEqual({
+      status: 'interrupted',
+      sessionId: 'chat:1',
+      presentation: 'speech',
+      reason: 'user_speech',
+    });
+    expect(JSON.stringify(result)).not.toContain('private generated response');
   });
 });

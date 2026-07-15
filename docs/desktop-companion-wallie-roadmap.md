@@ -1,6 +1,6 @@
 # Desktop Companion — Wallie Adoption Roadmap
 
-Status: Implemented through SC-12; speech rollout remains gated and disabled by default
+Status: Implemented through SC-13; compatibility, privacy, and endurance finalization remain pending
 
 Source of truth: `autonomx/omnix` `main`
 
@@ -30,7 +30,7 @@ Wallie is an architectural reference, not a runtime dependency. Omnix uses a cle
 - temporal frame buffer and local frame sampling;
 - conservative activity classification and behaviour tracking;
 - page visibility and capture-generation identity;
-- watch controls, effective rollout, transient text, and status projection.
+- watch controls, effective rollout, transient text, speech evidence, and status projection.
 
 ### Gateway
 
@@ -39,13 +39,13 @@ Wallie is an architectural reference, not a runtime dependency. Omnix uses a cle
 - bounded revisable scene memory;
 - observation/event deduplication;
 - attention policy and commentary generation;
-- partitioned release gates, redacted diagnostics, and evaluation traces.
+- partitioned text and speech release gates, redacted diagnostics, and evaluation traces.
 
 ### Live Conversation
 
 - floor ownership and user-speech suppression;
 - proactive generation transport;
-- TTS and avatar presentation;
+- unified TTS and avatar presentation;
 - interruption, cancellation, and delivery commit.
 
 ## Canonical pipeline
@@ -61,21 +61,8 @@ user-approved stream
   -> backend-resolved effective rollout
   -> existing proactive-turn pipeline
   -> transient text or existing speech/avatar delivery
+  -> content-free delivery evidence
 ```
-
-## Versioned contracts
-
-Every autonomous observation carries:
-
-- `schema_version`;
-- `observation_id`;
-- `session_id` and optional `character_id`;
-- `capture_generation` and `client_sequence`;
-- source fingerprint;
-- capture, observation, expiry, and completion timestamps;
-- activity and change classification with confidence;
-- current scene, visible changes, visible text, possible events, and uncertainty;
-- diagnostics that never include raw image data.
 
 ## Persistence policy
 
@@ -89,49 +76,17 @@ Transient desktop-companion messages are excluded from ordinary provider history
 
 ## Delivery phases
 
-### SC-0 — Decisions, contracts, fixtures, and attribution — Complete
+### SC-0 through SC-8 — Foundation — Complete
 
-Defined ownership, versioned contracts, persistence rules, sanitized fixtures, and Wallie MIT attribution.
-
-### SC-1 — Capture runtime and safety controls — Complete
-
-Bound watch state to one session, character, source fingerprint, and capture generation. Added enable, pause, stop-and-forget, page-visibility, result-generation, and provider-preflight safety.
-
-### SC-2 — Activity classifier and behaviour tracker — Complete
-
-Implemented conservative local visual classes and confidence-bearing hypotheses for scrolling, typing, navigation, application switching, media, rapid browsing, and settled state.
-
-### SC-3 — Vision coordinator and shadow watch — Complete
-
-Added provider-wide foreground/background single flight, hard rate budgets, coalescing, cancellation, expiry, foreground priority, and shadow observation eligibility.
-
-### SC-4 — Structured observation and scene memory — Complete
-
-Added versioned JSON-or-text parsing, untrusted-screen prompting, diagnostic redaction, event fingerprints, and bounded revisable scene memory with source reset and expiry.
-
-### SC-5 — Deterministic attention policy — Complete
-
-Added explainable `ignore`, `observe_silently`, `glance`, and `deep` decisions using activity, confidence, scene age, cooldowns, reaction streaks, ignored streaks, and Live Conversation floor state. Organic selection is stable and session-seeded.
-
-### SC-6 — Generalized proactive delivery, text first — Complete
-
-Extended the existing proactive generator with `desktop_companion` and `desktop_critical`, exact `SKIP`, grounding IDs, lexical deduplication, a bounded commentary ledger, and transient provider-history filtering.
-
-### SC-7 — TTS, avatar, and interruption integration — Complete
-
-Reused existing Live Conversation floor ownership, unified audio controller, TTS, avatar presence, barge-in, cancellation, and delivery commit. No second audio queue was introduced.
-
-### SC-8 — Evaluation and controlled rollout — Complete
-
-Added centralized default-off settings, redacted browser evaluation accumulation, content-free durable evidence, internal evaluation APIs, deterministic release gates, and rollout degradation.
+Defined ownership, versioned contracts, temporal capture, conservative activity classification, provider-wide coordination, structured observations, revisable scene memory, explainable attention, grounded proactive generation, existing TTS/avatar integration, centralized settings, and redacted evaluation contracts.
 
 ### SC-9 — End-to-end shadow orchestration — Complete
 
-Connected the production browser capture buffer, conservative activity classifier, behaviour tracker, serialized gateway vision execution, structured observation parser, revisable scene memory, and deterministic attention policy. The composition root remains default-off and generation-safe.
+Connected the production capture buffer, classifier, coordinator, vision client, observation parser, scene memory, and attention policy in a default-off generation-safe loop.
 
 ### SC-10 — Preflight and in-session controls — Complete
 
-Added explicit Start, pause/resume, mute/unmute, and stop-and-forget controls. Start performs a harmless image-capability preflight and blocks remote providers without explicit consent.
+Added explicit Start, pause/resume, mute/unmute, stop-and-forget, image-capability preflight, remote-provider consent enforcement, and actionable status.
 
 ### SC-11 — Automatic shadow evaluation — Complete
 
@@ -139,21 +94,27 @@ Connected content-free evaluation to the production Watch lifecycle with exact b
 
 ### SC-12 — Gate enforcement and text rollout — Complete
 
-Made the backend rollout result authoritative. Configured stages are resolved against evidence isolated by exact commit SHA, observation schema, attention policy, provider class, model hash, and remote/local status. Text requires at least twelve records in one partition with complete required scenarios and safe metrics.
+Made backend rollout resolution authoritative, partitioned evidence by build and provider identity, required twelve records per partition, added one coalesced expiring delivery candidate, and implemented transient text independently from auto-speech.
 
-Added a true text presentation path that:
+### SC-13 — Speech rollout validation — Complete
 
-- does not depend on auto-speech;
-- uses the existing grounded proactive generator and exact `SKIP` contract;
-- retains one coalesced, expiring candidate while the user, assistant, barge-in, or social initiative owns the floor;
-- replaces stale or lower-priority candidates rather than growing a queue;
-- displays one dismissible transient companion comment outside durable chat history;
-- commits delivery metadata through the existing transient desktop ledger;
-- degrades configured speech to text until the separate speech gate passes.
+Added a speech-specific release gate isolated from text evidence. Normal requested speech continues to degrade to text until one exact evidence partition includes:
 
-### SC-13 — Speech rollout validation — Pending
+- at least twelve speech-stage evaluation records;
+- at least twelve completed or interrupted delivery outcomes;
+- the normal observation and safety scenarios;
+- `speech-completed`, `interruption`, and `speech-stale` scenarios;
+- acceptable stale-output, duplicate, unsupported-claim, collision, provider-error, latency, and call-rate metrics.
 
-Validate unified TTS/avatar delivery, interruption, collisions, stale speech, and extended-call behavior independently from text rollout.
+The existing delivery controller now emits content-free presentation outcomes. Evaluation records generated, skipped, completed, interrupted, stale, discarded, and error states without retaining generated text. Speech continues to use the existing Live Conversation floor, unified TTS, avatar, barge-in, cancellation, and delivery-commit path.
+
+A controlled speech validation canary is available only when the deployment explicitly sets:
+
+```text
+OMNIX_DESKTOP_COMPANION_SPEECH_CANARY=1
+```
+
+The canary remains off by default, requires the user to request speech and start Watch, and exists only to collect the evidence needed for the normal speech gate. It does not bypass capture consent, provider preflight, remote-provider consent, floor ownership, mute state, or stale-candidate checks.
 
 ### SC-14 — Compatibility, privacy, and endurance — Pending
 
@@ -170,14 +131,15 @@ observation stale TTL                     12 seconds
 normal commentary cooldown                25 seconds
 background queue                          1 active + 1 coalesced pending
 shadow evidence flush interval            60 seconds
-text delivery queue                        1 coalesced candidate
+text/speech delivery queue                 1 coalesced candidate
+minimum text partition records            12
+minimum speech partition records          12
+minimum speech deliveries                 12
 ```
 
 User-requested desktop questions always outrank background work.
 
-## Release-gate evidence
-
-Content-free evaluation records include exact commit SHA, policy/schema versions, rollout stage, provider metadata, aggregate counts, aggregate latency, aggregate rates, and identifier-only scenario labels. They reject image-, frame-, prompt-, message-, transcript-, and screen-text-bearing metric keys.
+## Evidence boundaries
 
 Evidence never crosses these partition boundaries:
 
@@ -188,27 +150,7 @@ Evidence never crosses these partition boundaries:
 - vision model hash;
 - remote/local provider status.
 
-Required scenarios:
-
-- `static-screen`;
-- `typing`;
-- `rapid-browsing`;
-- `scene-change`;
-- `interruption`;
-- `screen-prompt-injection`.
-
-Initial maximums:
-
-```text
-stale output rate             0.01
-duplicate comment rate        0.02
-unsupported claim rate        0.01
-collision rate                0.01
-provider error rate           0.05
-observation p95 latency       10000 ms
-vision calls per minute       6
-minimum partition records     12
-```
+Evidence includes only aggregate counters, rates, latency, rollout stage, and identifier-only scenarios. It excludes images, frame data, source labels, prompts, visible screen text, generated commentary, transcripts, credentials, and endpoint secrets.
 
 ## Deferred scope
 
@@ -222,4 +164,4 @@ minimum partition records     12
 
 ## Definition of done
 
-SC-12 is complete when configured text or speech cannot bypass an exact evidence partition, insufficient speech safely degrades to text, text comments do not require auto-speech, floor conflicts retain at most one expiring candidate, and delivered comments remain transient. Product rollout is complete only after SC-13 and SC-14 pass their separate acceptance gates.
+SC-13 is complete when speech is independently gated, default-off canary collection is explicit, delivery outcomes are evaluated without retaining content, interruption and stale speech are represented in evidence, and normal speech cannot activate until its own partition passes. Product rollout is complete only after SC-14 passes its compatibility, privacy, endurance, and rollback gates.

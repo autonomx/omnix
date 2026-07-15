@@ -4,6 +4,8 @@ from app.desktop_companion.evaluation import DesktopCompanionEvaluationRecord, h
 from app.desktop_companion.release_gate import (
     DesktopCompanionEvidencePartition,
     build_partitioned_desktop_companion_release_gate,
+    build_partitioned_desktop_companion_speech_gate,
+    desktop_companion_speech_canary_enabled,
     select_desktop_companion_evidence,
 )
 
@@ -15,11 +17,20 @@ SCENARIOS = (
     "interruption",
     "screen-prompt-injection",
 )
+SPEECH_SCENARIOS = (*SCENARIOS, "speech-completed", "speech-stale")
 
 
-def record(index: int, *, commit: str = "abcdef0123456789", model: str = "model-a") -> DesktopCompanionEvaluationRecord:
+def record(
+    index: int,
+    *,
+    commit: str = "abcdef0123456789",
+    model: str = "model-a",
+    stage: str = "shadow",
+    speech: bool = False,
+) -> DesktopCompanionEvaluationRecord:
+    scenarios = SPEECH_SCENARIOS if speech else SCENARIOS
     return DesktopCompanionEvaluationRecord(
-        run_id=f"run:{commit}:{index}",
+        run_id=f"run:{commit}:{stage}:{index}",
         session_id=f"chat:{index}",
         started_at="2026-07-15T00:00:00Z",
         ended_at="2026-07-15T00:01:00Z",
@@ -30,11 +41,15 @@ def record(index: int, *, commit: str = "abcdef0123456789", model: str = "model-
         character_id="system-assistant",
         observation_schema_version=1,
         attention_policy_version=1,
-        rollout_stage="shadow",
+        rollout_stage=stage,
         vision_provider="openai-compatible-local",
         vision_model_hash=hash_vision_model_id(model),
         remote_provider=False,
-        counts={"max_vision_calls_per_minute": 6, "observations": 20},
+        counts={
+            "max_vision_calls_per_minute": 6,
+            "observations": 20,
+            "deliveries": 1 if speech else 0,
+        },
         latency_ms={"observation_p95": 4_000},
         rates={
             "stale_output_rate": 0.0,
@@ -43,8 +58,8 @@ def record(index: int, *, commit: str = "abcdef0123456789", model: str = "model-
             "collision_rate": 0.0,
             "provider_error_rate": 0.0,
         },
-        scenario_labels=[SCENARIOS[index % len(SCENARIOS)]],
-        evaluation_id=f"eval:{commit}:{index}",
+        scenario_labels=[scenarios[index % len(scenarios)]],
+        evaluation_id=f"eval:{commit}:{stage}:{index}",
         created_at="2026-07-15T00:01:00Z",
         updated_at="2026-07-15T00:01:00Z",
     )
@@ -91,3 +106,24 @@ def test_partition_gate_requires_twelve_records_and_exact_build() -> None:
     assert "minimum_partition_records:6/12" in insufficient.insufficient
     assert unknown.status == "insufficient"
     assert "exact_build_identity_required" in unknown.insufficient
+
+
+def test_speech_gate_requires_speech_records_deliveries_and_scenarios() -> None:
+    passing = [record(index, stage="speech", speech=True) for index in range(24)]
+    report = build_partitioned_desktop_companion_speech_gate(passing, partition())
+    insufficient = build_partitioned_desktop_companion_speech_gate(
+        [record(index, stage="speech", speech=True) for index in range(6)],
+        partition(),
+    )
+
+    assert report.status == "pass"
+    assert report.rollout_stages == ("speech",)
+    assert insufficient.status == "insufficient"
+    assert "minimum_speech_records:6/12" in insufficient.insufficient
+    assert "minimum_speech_deliveries:6/12" in insufficient.insufficient
+
+
+def test_speech_canary_is_explicit_and_default_off() -> None:
+    assert desktop_companion_speech_canary_enabled({}) is False
+    assert desktop_companion_speech_canary_enabled({"OMNIX_DESKTOP_COMPANION_SPEECH_CANARY": "true"}) is True
+    assert desktop_companion_speech_canary_enabled({"OMNIX_DESKTOP_COMPANION_SPEECH_CANARY": "0"}) is False

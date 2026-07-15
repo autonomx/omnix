@@ -26,6 +26,8 @@ from .preflight import (
 from .release_gate import (
     DesktopCompanionEvidencePartition,
     build_partitioned_desktop_companion_release_gate,
+    build_partitioned_desktop_companion_speech_gate,
+    desktop_companion_speech_canary_enabled,
 )
 from .runtime import (
     DesktopCompanionObserveRequest,
@@ -56,6 +58,7 @@ def register_desktop_companion_routes(
     orchestrator_factory: Callable[[], DesktopCompanionOrchestrator] = default_desktop_companion_orchestrator,
     preflight_service_factory: Callable[[], DesktopCompanionPreflightService] = default_desktop_companion_preflight_service,
     build_identity_factory: Callable[[], DesktopCompanionBuildIdentity] = resolve_desktop_companion_build_identity,
+    speech_canary_factory: Callable[[], bool] = desktop_companion_speech_canary_enabled,
 ) -> None:
     @app.get(
         "/api/desktop-companion/build-identity",
@@ -132,6 +135,25 @@ def register_desktop_companion_routes(
     async def export_desktop_companion_evaluations() -> dict:
         return evaluation_store_factory().export()
 
+    def evidence_partition(
+        *,
+        exact_commit_sha: str | None,
+        observation_schema_version: int,
+        attention_policy_version: int,
+        vision_provider: str | None,
+        vision_model_hash: str | None,
+        remote_provider: bool | None,
+    ) -> DesktopCompanionEvidencePartition:
+        identity = build_identity_factory()
+        return DesktopCompanionEvidencePartition(
+            exact_commit_sha=exact_commit_sha or identity.exact_commit_sha,
+            observation_schema_version=observation_schema_version,
+            attention_policy_version=attention_policy_version,
+            vision_provider=vision_provider,
+            vision_model_hash=vision_model_hash,
+            remote_provider=remote_provider,
+        )
+
     @app.get(
         "/api/desktop-companion/release-gate",
         response_model=DesktopCompanionReleaseGateReport,
@@ -139,6 +161,7 @@ def register_desktop_companion_routes(
         include_in_schema=False,
     )
     async def desktop_companion_release_gate(
+        stage: RolloutStage = Query(default="text"),
         exact_commit_sha: str | None = Query(default=None, min_length=7, max_length=64),
         observation_schema_version: int = Query(default=1, ge=1),
         attention_policy_version: int = Query(default=1, ge=1),
@@ -147,19 +170,18 @@ def register_desktop_companion_routes(
         remote_provider: bool | None = Query(default=None),
         limit: int = Query(default=1_000, ge=1, le=5_000),
     ) -> DesktopCompanionReleaseGateReport:
-        identity = build_identity_factory()
-        partition = DesktopCompanionEvidencePartition(
-            exact_commit_sha=exact_commit_sha or identity.exact_commit_sha,
+        partition = evidence_partition(
+            exact_commit_sha=exact_commit_sha,
             observation_schema_version=observation_schema_version,
             attention_policy_version=attention_policy_version,
             vision_provider=vision_provider,
             vision_model_hash=vision_model_hash,
             remote_provider=remote_provider,
         )
-        return build_partitioned_desktop_companion_release_gate(
-            evaluation_store_factory().list(limit=limit),
-            partition,
-        )
+        records = evaluation_store_factory().list(limit=limit)
+        if stage == "speech":
+            return build_partitioned_desktop_companion_speech_gate(records, partition)
+        return build_partitioned_desktop_companion_release_gate(records, partition)
 
     @app.get(
         "/api/desktop-companion/rollout-status",
@@ -177,20 +199,47 @@ def register_desktop_companion_routes(
         remote_provider: bool | None = Query(default=None),
         limit: int = Query(default=1_000, ge=1, le=5_000),
     ) -> DesktopCompanionRolloutStatus:
-        identity = build_identity_factory()
-        partition = DesktopCompanionEvidencePartition(
-            exact_commit_sha=exact_commit_sha or identity.exact_commit_sha,
+        partition = evidence_partition(
+            exact_commit_sha=exact_commit_sha,
             observation_schema_version=observation_schema_version,
             attention_policy_version=attention_policy_version,
             vision_provider=vision_provider,
             vision_model_hash=vision_model_hash,
             remote_provider=remote_provider,
         )
-        report = build_partitioned_desktop_companion_release_gate(
-            evaluation_store_factory().list(limit=limit),
-            partition,
+        records = evaluation_store_factory().list(limit=limit)
+        text_report = build_partitioned_desktop_companion_release_gate(records, partition)
+        if requested_stage != "speech":
+            return resolve_desktop_companion_rollout(requested_stage, text_report)
+        if text_report.status != "pass":
+            return resolve_desktop_companion_rollout(requested_stage, text_report)
+        speech_report = build_partitioned_desktop_companion_speech_gate(records, partition)
+        if speech_report.status == "pass":
+            return DesktopCompanionRolloutStatus(
+                requested_stage="speech",
+                effective_stage="speech",
+                enabled=True,
+                reason="speech_rollout_gate_passed",
+                release_gate_status="pass",
+                evidence_evaluation_ids=speech_report.evidence_evaluation_ids,
+            )
+        if speech_canary_factory():
+            return DesktopCompanionRolloutStatus(
+                requested_stage="speech",
+                effective_stage="speech",
+                enabled=True,
+                reason="speech_validation_canary",
+                release_gate_status=speech_report.status,
+                evidence_evaluation_ids=speech_report.evidence_evaluation_ids,
+            )
+        return DesktopCompanionRolloutStatus(
+            requested_stage="speech",
+            effective_stage="text",
+            enabled=True,
+            reason="speech_evidence_missing",
+            release_gate_status=speech_report.status,
+            evidence_evaluation_ids=text_report.evidence_evaluation_ids,
         )
-        return resolve_desktop_companion_rollout(requested_stage, report)
 
 
 __all__ = ["register_desktop_companion_routes"]
