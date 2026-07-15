@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from typing import Any
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -12,7 +11,9 @@ from app.assistant_context.vision import DesktopVisionClient
 
 _TINY_PNG = (
     "data:image/png;base64,"
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII="
+    "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUA"
+    "AAAJcEhZcwAADsMAAA7DAcdvqGQAAAAtSURBVFhH7c6hAQAACMOw/f80+B0AJpVVyTyXHtcBAAAAAAAAAAAAAAAA"
+    "AAAsl/rw4k5bXakAAAAASUVORK5CYII="
 )
 
 

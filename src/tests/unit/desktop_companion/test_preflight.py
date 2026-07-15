@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import struct
+
 from app.assistant_context.models import AssistantContextItem
 from app.desktop_companion.preflight import (
     DesktopCompanionPreflightRequest,
@@ -39,6 +42,26 @@ def test_local_preflight_verifies_image_capability() -> None:
     assert result.endpoint == "http://127.0.0.1:1234/v1"
     assert result.remote is False
     assert result.latency_ms == 125.0
+
+
+def test_local_preflight_uses_provider_compatible_probe_dimensions() -> None:
+    client = FakeClient()
+    captured: list[str] = []
+    original_describe = client.describe
+
+    def describe(image_data_url: str, *args, **kwargs) -> AssistantContextItem:
+        captured.append(image_data_url)
+        return original_describe(image_data_url, *args, **kwargs)
+
+    client.describe = describe  # type: ignore[method-assign]
+    result = DesktopCompanionPreflightService(client_factory=lambda: client).check(
+        DesktopCompanionPreflightRequest()
+    )
+
+    assert result.ready is True
+    image = base64.b64decode(captured[0].split(",", 1)[1])
+    assert image.startswith(b"\x89PNG\r\n\x1a\n")
+    assert struct.unpack(">II", image[16:24]) == (32, 32)
 
 
 def test_remote_provider_requires_explicit_consent_before_image_call() -> None:
