@@ -5,6 +5,7 @@ import json
 from typing import Any, Iterable
 
 from app.rpg.presentation.turn_response import TURN_RESPONSE_MAX_BYTES
+from app.rpg.release_finalization import MAX_BROWSER_COMMIT_VISIBLE_MS
 from app.rpg.session.interaction_lifecycle import INTERACTION_LIFECYCLE_STATUSES
 
 RELEASE_GATE_VERSION = "rpg_interactive_release_gates_v1"
@@ -85,6 +86,41 @@ def evaluate_session_release_gates(session: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def evaluate_ui_timing_release_gates(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Validate browser commit-to-visible evidence for one RPG interaction."""
+
+    client = snapshot.get("client") if isinstance(snapshot.get("client"), dict) else snapshot
+    failures: list[str] = []
+    interaction_id = str(
+        snapshot.get("interactionId") or snapshot.get("interaction_id") or ""
+    ).strip()
+    commit_to_visible = _optional_float(
+        _first_present(client, "commitToVisibleMs", "commit_to_visible_ms")
+    )
+    request_to_visible = _optional_float(
+        _first_present(client, "requestToVisibleMs", "request_to_visible_ms")
+    )
+
+    if not interaction_id:
+        failures.append("missing_ui_interaction_identity")
+    if commit_to_visible is None:
+        failures.append("missing_commit_to_visible_timing")
+    elif commit_to_visible > MAX_BROWSER_COMMIT_VISIBLE_MS:
+        failures.append("react_commit_to_visible_above_50ms")
+    if request_to_visible is not None and request_to_visible < 0:
+        failures.append("negative_request_to_visible_timing")
+
+    return {
+        "format_version": RELEASE_GATE_VERSION,
+        "ok": not failures,
+        "failures": failures,
+        "interaction_id": interaction_id or None,
+        "commit_to_visible_ms": commit_to_visible,
+        "maximum_commit_to_visible_ms": MAX_BROWSER_COMMIT_VISIBLE_MS,
+        "request_to_visible_ms": request_to_visible,
+    }
+
+
 def evaluate_job_transition_release_gates(transitions: Iterable[str]) -> dict[str, Any]:
     values = [str(value) for value in transitions]
     failures: list[str] = []
@@ -110,3 +146,19 @@ def evaluate_job_transition_release_gates(transitions: Iterable[str]) -> dict[st
 def assert_release_gate(report: dict[str, Any]) -> None:
     if report.get("ok") is not True:
         raise AssertionError(";".join(str(value) for value in report.get("failures") or ["release_gate_failed"]))
+
+
+def _first_present(value: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in value:
+            return value[key]
+    return None
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
