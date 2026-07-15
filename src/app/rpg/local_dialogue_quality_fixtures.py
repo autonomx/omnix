@@ -206,6 +206,16 @@ def apply_local_dialogue_fixture(
         runtime.pop(key, None)
     runtime["tick"] = 0
     runtime["recent_interactions"] = recent
+    runtime["current_scene"] = {
+        "scene_id": str(scene.get("scene_id") or location_id),
+        "location_id": location_id,
+        "location_name": "Rusty Flagon Tavern",
+        "present_npc_ids": list(present_ids),
+        "nearby_npcs": [
+            _presence_row(npc_id, npc_index) for npc_id in present_ids
+        ],
+    }
+    runtime.pop("scene", None)
     runtime["local_dialogue_quality_fixture"] = {
         "fixture_version": LOCAL_DIALOGUE_FIXTURE_VERSION,
         "run_id": run_id,

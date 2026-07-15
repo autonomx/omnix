@@ -26,7 +26,14 @@ def _template_session() -> dict:
             "player_state": {"location_id": "location:tavern"},
             "scene": {"nearby_npcs": [{"npc_id": "npc:old", "name": "Old"}]},
         },
-        "runtime_state": {"turn_history": [{"turn": 9}], "state_revision": 4},
+        "runtime_state": {
+            "turn_history": [{"turn": 9}],
+            "state_revision": 4,
+            "current_scene": {
+                "location_id": "location:tavern",
+                "present_npc_ids": ["npc:bran"],
+            },
+        },
     }
 
 
@@ -76,6 +83,7 @@ def test_fixture_models_absent_group_and_continuity_state() -> None:
 
     assert absent["simulation_state"]["scene"]["present_npc_ids"] == ["npc:mira"]
     assert absent["simulation_state"]["npc_index"]["npc:bran"]["location_id"] == "location:offstage"
+    assert absent["runtime_state"]["current_scene"]["present_npc_ids"] == ["npc:mira"]
     assert group["simulation_state"]["scene"]["present_npc_ids"] == ["npc:bran", "npc:mira"]
     assert len(continuity["runtime_state"]["recent_interactions"]) == 1
 
