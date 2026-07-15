@@ -113,6 +113,7 @@ def test_temporal_vision_sends_history_before_high_detail_current_frame():
 
     content = payloads[0]["messages"][1]["content"]
     images = [part["image_url"] for part in content if part["type"] == "image_url"]
+    assert payloads[0]["max_tokens"] == 900
     assert images == [
         {"url": image_data("HISTORY"), "detail": "low"},
         {"url": image_data("CURRENT"), "detail": "high"},

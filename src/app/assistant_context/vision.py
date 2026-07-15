@@ -195,7 +195,7 @@ class DesktopVisionClient:
         payload = {
             "model": model,
             "temperature": 0.1,
-            "max_tokens": 420,
+            "max_tokens": 900,
             "messages": [
                 {
                     "role": "system",
