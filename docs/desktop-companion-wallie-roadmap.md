@@ -1,6 +1,6 @@
 # Desktop Companion — Wallie Adoption Roadmap
 
-Status: Implemented through SC-13; compatibility, privacy, and endurance finalization remain pending
+Status: SC-0 through SC-15 tooling implemented; production text and speech remain evidence-gated and disabled by default
 
 Source of truth: `autonomx/omnix` `main`
 
@@ -62,6 +62,7 @@ user-approved stream
   -> existing proactive-turn pipeline
   -> transient text or existing speech/avatar delivery
   -> content-free delivery evidence
+  -> exact-partition qualification report
 ```
 
 ## Persistence policy
@@ -98,27 +99,31 @@ Made backend rollout resolution authoritative, partitioned evidence by build and
 
 ### SC-13 — Speech rollout validation — Complete
 
-Added a speech-specific release gate isolated from text evidence. Normal requested speech continues to degrade to text until one exact evidence partition includes:
+Added an independent speech gate requiring speech-stage records, delivery outcomes, safety scenarios, and speech-completed, interruption, and stale-speech coverage. Normal requested speech degrades to text until this gate passes. The default-off deployment canary exists only to collect speech evidence.
 
-- at least twelve speech-stage evaluation records;
-- at least twelve completed or interrupted delivery outcomes;
-- the normal observation and safety scenarios;
-- `speech-completed`, `interruption`, and `speech-stale` scenarios;
-- acceptable stale-output, duplicate, unsupported-claim, collision, provider-error, latency, and call-rate metrics.
+### SC-14 — Compatibility, privacy, and endurance — Complete
 
-The existing delivery controller now emits content-free presentation outcomes. Evaluation records generated, skipped, completed, interrupted, stale, discarded, and error states without retaining generated text. Speech continues to use the existing Live Conversation floor, unified TTS, avatar, barge-in, cancellation, and delivery-commit path.
+Added:
 
-A controlled speech validation canary is available only when the deployment explicitly sets:
+- a deployment kill switch that blocks preflight, observation, and rollout;
+- a browser provider-failure circuit with bounded backoff and stop behavior;
+- a globally bounded background queue and ten-thousand-request queue endurance coverage;
+- browser/provider compatibility guidance;
+- privacy, remote-provider disclosure, troubleshooting, evidence deletion, and rollback procedures;
+- full required GitHub Actions validation, including continuous 1000-turn endurance.
 
-```text
-OMNIX_DESKTOP_COMPANION_SPEECH_CANARY=1
-```
+### SC-15 — Production qualification tooling — Complete
 
-The canary remains off by default, requires the user to request speech and start Watch, and exists only to collect the evidence needed for the normal speech gate. It does not bypass capture consent, provider preflight, remote-provider consent, floor ownership, mute state, or stale-candidate checks.
+Added a deterministic, content-free qualification command and runbook for real evidence collected from one exact runtime partition. The report:
 
-### SC-14 — Compatibility, privacy, and endurance — Pending
+- requires exact commit SHA, provider class, model hash, schema/policy versions, and remote/local status;
+- never combines incompatible partitions;
+- evaluates text and speech gates independently;
+- renders JSON or Markdown without frames, screen text, prompts, transcripts, or generated commentary;
+- returns stable exit codes: `0` pass, `2` insufficient, and `3` fail;
+- does not mutate rollout settings or manufacture evidence.
 
-Add browser/provider matrices, remote-provider disclosure, kill switch, long-session soak tests, GPU-contention tests, troubleshooting, and rollback documentation.
+Actual production promotion remains pending until real runtime evidence passes for the deployed exact partition.
 
 ## Initial limits
 
@@ -129,7 +134,7 @@ minimum background observation interval  8 seconds
 background observation timeout           10 seconds
 observation stale TTL                     12 seconds
 normal commentary cooldown                25 seconds
-background queue                          1 active + 1 coalesced pending
+background queue                          1 active + bounded coalesced pending
 shadow evidence flush interval            60 seconds
 text/speech delivery queue                 1 coalesced candidate
 minimum text partition records            12
@@ -152,6 +157,18 @@ Evidence never crosses these partition boundaries:
 
 Evidence includes only aggregate counters, rates, latency, rollout stage, and identifier-only scenarios. It excludes images, frame data, source labels, prompts, visible screen text, generated commentary, transcripts, credentials, and endpoint secrets.
 
+## Production qualification sequence
+
+1. Deploy one exact `main` commit with rollout set to shadow.
+2. Collect at least twelve records covering all required text scenarios in one exact partition.
+3. Run the SC-15 text qualification report.
+4. Promote to text only after a `pass` report and explicit operator approval.
+5. Enable the speech canary only for controlled evidence collection.
+6. Collect the required speech records, deliveries, and scenarios in the same exact partition.
+7. Run the SC-15 speech qualification report.
+8. Disable the canary and promote to normal speech only after a `pass` report.
+9. Requalify after any commit, provider, model, schema, policy, or remote/local change.
+
 ## Deferred scope
 
 - autonomous keyboard or game control;
@@ -164,4 +181,4 @@ Evidence includes only aggregate counters, rates, latency, rollout stage, and id
 
 ## Definition of done
 
-SC-13 is complete when speech is independently gated, default-off canary collection is explicit, delivery outcomes are evaluated without retaining content, interruption and stale speech are represented in evidence, and normal speech cannot activate until its own partition passes. Product rollout is complete only after SC-14 passes its compatibility, privacy, endurance, and rollback gates.
+Implementation is complete through SC-15 when qualification reports are reproducible, exact-partition only, content-free, and incapable of changing rollout state. Product rollout is complete only when real deployed evidence passes the relevant text and speech qualification gates and an operator explicitly promotes each stage.
