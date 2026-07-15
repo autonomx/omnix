@@ -18,6 +18,16 @@ from .models import (
 _CODE_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _WHITESPACE = re.compile(r"\s+")
 _SENSITIVE_DIAGNOSTIC_TOKENS = ("image", "data_url", "base64", "payload", "frame")
+_PROMPT_INJECTION_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\b(?:ignore|disregard|forget|override)\b.{0,80}"
+        r"\b(?:instruction|prompt|policy|rule)s?\b",
+        r"\b(?:reveal|repeat|print|show|expose)\b.{0,80}"
+        r"\b(?:system|developer)\s+(?:message|prompt|instruction)s?\b",
+        r"\b(?:you are|act as)\b.{0,80}\b(?:assistant|chatbot|ai|model)\b",
+    )
+)
 
 
 def parse_desktop_observation(
@@ -118,6 +128,15 @@ def structured_observation_prompt(question: str = "") -> str:
     )
 
 
+def screen_prompt_injection_observed(visible_text: list[str]) -> bool:
+    """Classify untrusted visible text without returning or persisting its content."""
+    for value in visible_text:
+        bounded = value[:500]
+        if any(pattern.search(bounded) for pattern in _PROMPT_INJECTION_PATTERNS):
+            return True
+    return False
+
+
 def _json_object(text: str) -> dict[str, Any] | None:
     candidate = _CODE_FENCE.sub("", text).strip()
     try:
@@ -214,5 +233,6 @@ __all__ = [
     "observation_fingerprint",
     "parse_desktop_observation",
     "redact_observation_diagnostics",
+    "screen_prompt_injection_observed",
     "structured_observation_prompt",
 ]

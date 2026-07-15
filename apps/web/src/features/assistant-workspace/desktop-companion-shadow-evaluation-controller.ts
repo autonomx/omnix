@@ -122,6 +122,18 @@ export function normalizeDeliveryEvaluationEvent(value: unknown): DesktopCompani
   };
 }
 
+export function scenarioForDeliveryEvidence(event: DesktopCompanionDeliveryEvidence): string | null {
+  if (event.status === 'interrupted') return 'interruption';
+  if (
+    event.status === 'discarded'
+    && (event.reason === 'user_speech' || event.reason === 'interrupted')
+  ) return 'interruption';
+  if (event.presentation !== 'speech') return null;
+  if (event.status === 'completed') return 'speech-completed';
+  if (event.status === 'suppress' && event.reason === 'candidate_stale') return 'speech-stale';
+  return null;
+}
+
 async function handleEvaluationEvent(event: DesktopCompanionEvaluationEvent): Promise<void> {
   if (event.kind === 'watch_started') {
     if (identity?.sessionId !== event.sessionId || accumulator) await flushAndRestart('rebind', false);
@@ -152,31 +164,28 @@ async function handleEvaluationEvent(event: DesktopCompanionEvaluationEvent): Pr
 async function handleDeliveryEvidence(event: DesktopCompanionDeliveryEvidence): Promise<void> {
   if (!accumulator || !identity || identity.sessionId !== event.sessionId) return;
   recordedEvents += 1;
-  const speech = event.presentation === 'speech';
+  const scenario = scenarioForDeliveryEvidence(event);
+  if (scenario) accumulator.addScenario(scenario);
   if (event.status === 'generated') {
     accumulator.recordCommentary({ skipped: false });
     return;
   }
   if (event.status === 'suppress') {
     accumulator.recordCommentary({ skipped: true });
-    if (speech && event.reason === 'candidate_stale') accumulator.addScenario('speech-stale');
     return;
   }
   if (event.status === 'completed') {
     accumulator.recordDelivery({ collision: false, interrupted: false });
-    if (speech) accumulator.addScenario('speech-completed');
     return;
   }
   if (event.status === 'interrupted') {
     accumulator.recordDelivery({ collision: false, interrupted: true });
-    if (speech) accumulator.addScenario('interruption');
     return;
   }
   if (event.status === 'discarded') {
     accumulator.recordCommentary({ skipped: true });
     const collision = event.reason === 'user_speech' || event.reason === 'interrupted';
     if (collision) accumulator.recordDelivery({ collision: true, interrupted: true });
-    if (speech && collision) accumulator.addScenario('interruption');
     return;
   }
   if (event.status === 'error') accumulator.recordCommentary({ skipped: true });

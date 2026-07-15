@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeDeliveryEvaluationEvent,
   normalizeEvaluationEvent,
+  scenarioForDeliveryEvidence,
 } from './desktop-companion-shadow-evaluation-controller';
 
 describe('desktop companion evaluation events', () => {
@@ -82,5 +83,17 @@ describe('desktop companion evaluation events', () => {
       reason: 'user_speech',
     });
     expect(JSON.stringify(result)).not.toContain('private generated response');
+  });
+
+  it('maps text and speech delivery outcomes to identifier-only scenarios', () => {
+    expect(scenarioForDeliveryEvidence({
+      status: 'interrupted', sessionId: 'chat:1', presentation: 'text', reason: 'interrupted',
+    })).toBe('interruption');
+    expect(scenarioForDeliveryEvidence({
+      status: 'completed', sessionId: 'chat:1', presentation: 'speech', reason: null,
+    })).toBe('speech-completed');
+    expect(scenarioForDeliveryEvidence({
+      status: 'suppress', sessionId: 'chat:1', presentation: 'speech', reason: 'candidate_stale',
+    })).toBe('speech-stale');
   });
 });

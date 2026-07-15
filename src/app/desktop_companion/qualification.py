@@ -128,7 +128,7 @@ def render_desktop_companion_qualification_markdown(
             "",
             (
                 "This report contains identifiers and aggregate metrics only; it does not include frames, "
-                "screen text, prompts, transcripts, or generated commentary."
+                "captured content, prompts, transcripts, or generated commentary."
             ),
         ]
     )

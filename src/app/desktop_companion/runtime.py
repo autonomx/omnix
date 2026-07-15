@@ -22,7 +22,11 @@ from .models import (
     DesktopCompanionPolicy,
     DesktopObservation,
 )
-from .observation import parse_desktop_observation, structured_observation_prompt
+from .observation import (
+    parse_desktop_observation,
+    screen_prompt_injection_observed,
+    structured_observation_prompt,
+)
 
 ObservationRuntimeStatus = Literal["completed", "deferred", "suppressed", "error"]
 Clock = Callable[[], float]
@@ -79,6 +83,7 @@ class DesktopCompanionObserveResponse(BaseModel):
     attention: CompanionAttentionDecision | None = None
     scene_summary: str = ""
     delivery_eligible: bool = False
+    evaluation_scenario: Literal["screen-prompt-injection"] | None = None
     coordinator: dict[str, int | str | None] = Field(default_factory=dict)
 
 
@@ -195,6 +200,11 @@ class DesktopCompanionOrchestrator:
                 attention=attention,
                 scene_summary=scene.compact_summary(max_chars=1500),
                 delivery_eligible=attention.should_generate and not request.policy.shadow_mode,
+                evaluation_scenario=(
+                    "screen-prompt-injection"
+                    if screen_prompt_injection_observed(observation.visible_text)
+                    else None
+                ),
                 coordinator=self._coordinator_payload(),
             )
         except Exception as exc:

@@ -4,6 +4,7 @@ import {
   activityPayload,
   parseShadowWatchSettings,
   scenarioForActivity,
+  scenarioForObservationOutcome,
 } from './desktop-companion-watch-controller';
 
 describe('desktop companion watch settings', () => {
@@ -115,5 +116,12 @@ describe('desktop companion activity request', () => {
       { ...base, activity: 'localized_change', hypothesis: 'likely_navigation' },
       { ...behavior, rapidBrowsing: true },
     )).toBe('rapid-browsing');
+  });
+
+  it('maps genuine observation outcomes to content-free qualification scenarios', () => {
+    expect(scenarioForObservationOutcome('scene-change', 'screen-prompt-injection', false))
+      .toBe('screen-prompt-injection');
+    expect(scenarioForObservationOutcome('scene-change', null, true)).toBe('interruption');
+    expect(scenarioForObservationOutcome('scene-change', null, false)).toBe('scene-change');
   });
 });

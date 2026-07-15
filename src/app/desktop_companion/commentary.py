@@ -128,7 +128,7 @@ def commentary_similarity(left: str, right: str) -> float:
     right_tokens = _WORD.findall(right.casefold())
     if not left_tokens or not right_tokens:
         return 0.0
-    scores = [_jaccard(_ngrams(left_tokens, size), _ngrams(right_tokens, size)) for size in (1, 2, 3)]
+    scores = [_dice(_ngrams(left_tokens, size), _ngrams(right_tokens, size)) for size in (1, 2, 3)]
     return max(scores)
 
 
@@ -138,9 +138,9 @@ def _ngrams(tokens: list[str], size: int) -> set[tuple[str, ...]]:
     return {tuple(tokens[index : index + size]) for index in range(len(tokens) - size + 1)}
 
 
-def _jaccard(left: set[tuple[str, ...]], right: set[tuple[str, ...]]) -> float:
-    union = left | right
-    return len(left & right) / len(union) if union else 0.0
+def _dice(left: set[tuple[str, ...]], right: set[tuple[str, ...]]) -> float:
+    total = len(left) + len(right)
+    return (2 * len(left & right)) / total if total else 0.0
 
 
 class CompanionCommentaryLedger:

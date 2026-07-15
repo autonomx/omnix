@@ -56,6 +56,7 @@ type ObserveResponse = {
   attention?: { reaction?: string; rationale?: string; should_generate?: boolean } | null;
   scene_summary?: string;
   delivery_eligible?: boolean;
+  evaluation_scenario?: 'screen-prompt-injection' | null;
   coordinator?: Record<string, unknown>;
 };
 
@@ -161,6 +162,16 @@ export function scenarioForActivity(
   if (activity.activity === 'full_scene_change' || activity.hypothesis === 'likely_app_switch') return 'scene-change';
   if (activity.activity === 'static' || activity.activity === 'micro_change') return 'static-screen';
   return null;
+}
+
+export function scenarioForObservationOutcome(
+  activityScenario: string | null,
+  evaluationScenario: ObserveResponse['evaluation_scenario'],
+  interrupted: boolean,
+): string | null {
+  if (interrupted) return 'interruption';
+  if (evaluationScenario === 'screen-prompt-injection') return evaluationScenario;
+  return activityScenario;
 }
 
 async function tick(): Promise<void> {
@@ -321,7 +332,7 @@ async function tick(): Promise<void> {
     dispatchEvaluation({
       kind: 'vision_result',
       sessionId: capture.sessionId,
-      scenario,
+      scenario: scenarioForObservationOutcome(scenario, result.evaluation_scenario, false),
       latencyMs: Math.max(0, performance.now() - observationStarted),
       callsThisMinute,
       providerError: result.status === 'error',
@@ -372,7 +383,7 @@ async function tick(): Promise<void> {
     dispatchEvaluation({
       kind: 'vision_result',
       sessionId: capture.sessionId,
-      scenario,
+      scenario: scenarioForObservationOutcome(scenario, null, controller.signal.aborted),
       latencyMs: Math.max(0, performance.now() - observationStarted),
       providerError: !controller.signal.aborted,
       stale: controller.signal.reason === 'observation_timeout',
