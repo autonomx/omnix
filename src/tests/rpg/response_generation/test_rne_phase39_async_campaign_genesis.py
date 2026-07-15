@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -143,10 +144,8 @@ def test_enqueue_persists_blocked_shell_and_one_durable_job(monkeypatch) -> None
         "app.persistence.identity_service.bootstrap_local_tenant",
         lambda database: SimpleNamespace(workspace_id="workspace", user_id="user"),
     )
-    monkeypatch.setattr(
-        "app.persistence.unit_of_work.unit_of_work",
-        lambda database: work,
-    )
+    unit_of_work_module = importlib.import_module("app.persistence.unit_of_work")
+    monkeypatch.setattr(unit_of_work_module, "unit_of_work", lambda database: work)
 
     contract = _contract()
     compiled = {
