@@ -38,6 +38,10 @@ Phases 25 through 42 complete the production cutover from overlapping RPG prose 
 
 The certificate is intentionally generated from external exact-head evidence rather than committing a self-invalidating SHA into the repository.
 
+## Branch reconciliation
+
+The completed G-L branch is a direct descendant of the merged A-F foundation and the current production `main` history. Current `main` hardening for provider-secret handling, hidden Hermes compatibility routes, and lightweight trace sampling is retained; G-L adds bounded narrative research, atomic canonical-response persistence, and the stricter narrative attribution target on top.
+
 ## Validation boundary
 
 GitHub Actions provide deterministic, provider-free architecture, persistence, regression, and endurance evidence. Live-provider prose quality and local latency remain operator-run evidence and are not fabricated by hosted CI.
