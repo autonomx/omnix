@@ -93,7 +93,11 @@ window.setTimeout(() => {
   initializeChatMessageAudioControllerV2();
   initializeChatMessageStreamAudioController();
   void import('./features/assistant-workspace/assistant-context-controller')
-    .then(() => import('./features/assistant-workspace/research-release-controller'))
+    .then(async () => {
+      const companion = await import('./features/assistant-workspace/desktop-companion-watch-controller');
+      companion.initializeDesktopCompanionWatchController();
+      return import('./features/assistant-workspace/research-release-controller');
+    })
     .catch((error: unknown) => {
       console.error('Assistant context controls failed to initialize', error);
     });
