@@ -1,10 +1,11 @@
 # Unified RPG Narrative Engine Completion Evidence
 
-Status: Milestones A–F implementation complete; pull request remains draft for review  
+Status: Milestones A–L implementation complete and merged to `main`  
 ADR: `docs/architecture/ADR-0002-unified-rpg-narrative-engine.md`  
 Roadmap: `docs/plans/rpg_unified_narrative_engine_roadmap.md`  
-Pull request: #1366  
-Branch: `agent/rne-milestones-a-d`
+Milestones G–L completion: `docs/RPG_NARRATIVE_ENGINE_MILESTONES_G_L_COMPLETION.md`  
+Merged pull requests: #1366 and #1367  
+Program merge SHA: `dd1483894d1ea9fb22e2f37cf3b5b7c00ebdbf72`
 
 ## Delivered milestones
 
@@ -16,6 +17,7 @@ Branch: `agent/rne-milestones-a-d`
 | D | 13–15 | revisioned PostgreSQL Campaign Bible, World Forge approval/audit pipeline, and bounded cited Hermes research |
 | E | 16–19 | canonical consumer convergence, save/load and delivery certification, single-publisher enforcement, and fail-closed production certification |
 | F | 20–24 | pre-launch Campaign Genesis graph, parallel World Forge generation, audited canon compilation, complete opening dossiers, first-turn readiness enforcement, bounded turn research, and player-safe Lore UX |
+| G–L | 25–42 | typed semantic claims, production structured generation, durable PostgreSQL response authority, atomic persistence, provider-backed World Forge proposals, asynchronous Genesis, resumable delivery, retirement telemetry, legacy deletion audits, and final release certification |
 
 ## PostgreSQL migrations
 
@@ -24,6 +26,7 @@ Branch: `agent/rne-milestones-a-d`
 - `0019_rpg_hermes_narrative_research.sql`
 - `0020_rpg_narrative_responses.sql`
 - `0021_rpg_campaign_genesis.sql`
+- later Milestones G–L persistence migrations required by canonical responses, Genesis delivery, telemetry, and release certification
 
 ## Production ownership
 
@@ -33,28 +36,31 @@ The foreground RPG gateway now performs the following sequence:
 2. execute the authoritative simulation turn;
 3. retrieve at most five permitted Campaign Bible topics for the active scene, speaker, and entities without mutating campaign truth;
 4. create or adopt one canonical narrative response;
-5. derive UI, transcript, TTS, journal, recap, report, and replay views from the canonical blocks;
-6. publish through `unified_narrative_engine_v1` only;
-7. reject alternate visible publishers;
-8. replace compatibility fields from canonical projections only;
-9. certify response identity, content hash, block order, save/load, replay, and blocking/deferred equivalence before persistence and response construction.
+5. validate typed semantic claims, knowledge grants, visibility, and ordered blocks;
+6. persist the authoritative turn and canonical narrative response atomically;
+7. derive UI, transcript, TTS, journal, recap, report, replay, and resumed-delivery views from the canonical blocks;
+8. publish through `unified_narrative_engine_v1` only;
+9. reject alternate visible publishers;
+10. replace compatibility fields from canonical projections only;
+11. certify response identity, semantic hash, block order, save/load, replay, blocking/deferred equivalence, delivery resume, persistence, and retirement evidence before release.
 
 Legacy compatibility fields remain temporarily available to existing consumers, but they no longer own or generate visible prose.
 
 ## Campaign Genesis and World Forge evidence
 
-Milestone F adds a deterministic pre-generation control plane before any generated prose is accepted:
+Milestones F, J, and K provide a deterministic control plane before generated prose becomes canon:
 
 - Campaign Genesis compiles a validated topic dependency graph and clamps World Forge concurrency;
 - quick, standard, and epic depth profiles define bounded targets for lore pages, major NPCs, locations, and factions;
 - dependency-ready topics may generate in parallel while launch-required ordering remains deterministic;
+- provider-backed World Forge output remains a proposal until deterministic validation and commit gates accept it;
 - cross-domain relationships are compiled from approved dossiers rather than invented by the narrator;
 - contradiction audit emits structured repair patches for date, visibility, knowledge-owner, and relationship defects;
 - canon compilation produces revisioned lore documents, atomic facts, relationships, retrieval cards, lexical indexes, and a stable content hash;
 - opening NPC and location dossiers are materialized into session state with explicit completeness status;
+- asynchronous Genesis supports durable progress, cancellation, retry, recovery, and launch readiness;
 - the first turn fails closed while launch-required canon, retrieval indexes, opening materialization, or required dossiers are incomplete;
-- imported legacy sessions remain compatible, but any explicit dossier is validated and cannot bypass completeness checks;
-- Campaign Genesis plans, jobs, audit artifacts, compilation records, and materialization receipts persist through the PostgreSQL `0021` schema when PostgreSQL authority is available.
+- imported legacy sessions remain compatible, but any explicit dossier is validated and cannot bypass completeness checks.
 
 ## Campaign Bible research and Lore evidence
 
@@ -70,41 +76,54 @@ Turn-time research and player-facing Lore use the same revisioned Campaign Bible
 - the RPG workspace exposes a Lore tab with category browsing, page status, full visible document text, canon revision, known/hidden counts, and World Forge generation evidence;
 - new-campaign UI exposes quick, standard, and epic World Forge depth selection while preserving settings-derived defaults.
 
-## Deterministic evidence
+## Exact-head deterministic evidence
 
-The final Milestone F implementation head `d1c91bd347bcc35438b2cf1777f5845b0638ffec` passed all four associated GitHub Actions workflows:
+The final Milestone F implementation head `d1c91bd347bcc35438b2cf1777f5845b0638ffec` passed the four associated provider-free GitHub Actions workflows before PR #1366 was reconciled and merged.
+
+The final Milestones G–L implementation head `534ca58ef4abf3f25bdb29e5d72f930c3711357b` passed:
 
 - RPG Phase 0 architecture compliance;
 - PostgreSQL persistence gates;
 - Live Chat hardening gates;
-- RPG deterministic PR gates, including web typecheck, web unit tests, 324 provider-free response-generation tests, representative deterministic smoke coverage, and the 1,000-turn public apply-turn endurance job.
+- RPG deterministic PR gates, including web typecheck, web unit tests, the Phase 25–42 response-generation suite, representative deterministic smoke coverage, and continuous 1,000-turn public apply-turn endurance.
+
+PR #1366 merged as `2a1a4830efc3b4294702df9d960a0aaf42a96b92`. PR #1367 merged as `dd1483894d1ea9fb22e2f37cf3b5b7c00ebdbf72` after the exact validated head above passed all required workflows.
 
 A Phase 22 regression initially exposed that explicit incomplete dossiers in legacy-shaped sessions were being treated as not required. The readiness policy was corrected so legacy sessions without dossiers remain compatible while any explicit dossier must satisfy its required completeness contract.
 
-A later exact-head run exposed a short-request timing flake at 94.95% attribution. The response-header finalizer now recalculates the measured framework remainder through bounded passes rather than relying on one fixed margin. The exact patched head above passed every workflow, including the previously flaky full-path instrumentation assertion.
+A later exact-head run exposed a short-request timing flake at 94.95% attribution. The response-header finalizer now recalculates the measured framework remainder through bounded passes rather than relying on one fixed margin. The patched head passed every workflow, including the previously flaky full-path instrumentation assertion.
+
+The final G–L deterministic run also exposed an over-broad source guard that rejected legitimate test-path references containing `response_generation`. The guard was narrowed to reject actual legacy production imports rather than documentation and certification paths, then all required workflows passed on the exact final head.
 
 ## Release invariants certified
 
 - one visible publication owner;
-- one response ID and content hash per interaction;
+- one response ID and semantic hash per interaction;
 - deterministic ordered blocks;
-- evidence-backed factual claims;
+- typed evidence-backed factual and knowledge claims;
 - pre-generation visibility and knowledge filtering;
 - no simulation mutation by narrative code;
 - scene changes create required beats;
 - blocking and deferred delivery preserve canonical meaning and hash;
 - save/load and replay preserve response identity, block order, text, and recomputed hash;
+- reconnect resumes persisted delivery state without regenerating prose;
 - all downstream presentation views derive from canonical blocks;
 - alternate publisher attempts fail closed;
 - compatibility fields are projection-only;
 - production certification runs before session persistence and response construction;
 - World Forge generation follows a validated deterministic dependency graph;
+- provider output remains proposal-only until deterministic acceptance;
 - launch-required canon and opening dossiers are complete before the first turn;
 - explicit incomplete dossiers fail readiness checks;
 - Campaign Bible research is bounded, cited, visibility-filtered, and read-only;
 - player Lore APIs do not expose hidden or game-master canon;
-- discovery state changes are explicit and persisted separately from objective canon.
+- discovery state changes are explicit and persisted separately from objective canon;
+- production-owner paths contain no legacy publisher imports or visible hooks;
+- retirement telemetry records zero alternate publishers and zero deletion violations;
+- final certification is bound to external exact-head workflow evidence.
 
 ## Live-provider boundary
 
-GitHub Actions intentionally remain provider-free. Live-provider prose quality and latency must be evaluated locally against the same canonical request, evidence, Campaign Bible research, validation, and publication contracts; no hosted CI result claims live-provider execution.
+GitHub Actions intentionally remain provider-free. Live-provider prose quality, browser visibility, and local latency must be evaluated against the same canonical request, evidence, Campaign Bible research, validation, persistence, and publication contracts; no hosted CI result claims live-provider execution.
+
+The operator procedure and aggregate report command are documented in `docs/RPG_LOCAL_RELEASE_QUALIFICATION.md`.

@@ -1,9 +1,11 @@
 # Unified RPG Narrative Engine Implementation Roadmap
 
-Status: Milestones A–F implementation complete; awaiting pull-request review  
+Status: Milestones A–L implementation complete and merged to `main`  
 ADR: `docs/architecture/ADR-0002-unified-rpg-narrative-engine.md`  
-Completion evidence: `docs/architecture/RPG_NARRATIVE_ENGINE_COMPLETION_EVIDENCE.md`  
-Branch: `agent/rne-milestones-a-d`
+Milestones A–F evidence: `docs/architecture/RPG_NARRATIVE_ENGINE_COMPLETION_EVIDENCE.md`  
+Milestones G–L evidence: `docs/RPG_NARRATIVE_ENGINE_MILESTONES_G_L_COMPLETION.md`  
+Merged pull requests: #1366 and #1367  
+Current program merge SHA: `dd1483894d1ea9fb22e2f37cf3b5b7c00ebdbf72`
 
 ## Program objective
 
@@ -54,6 +56,12 @@ Replace fragmented RPG presentation orchestration with one isolated engine that 
 - Phase 23: bounded read-only Campaign Bible research for live turns with at most five cited topics and player-safe knowledge filtering
 - Phase 24: live generation progress routes, player-safe Lore browser, full-page retrieval, and explicit discovery-state transitions
 
+### Milestones G–L — Production authority and final retirement
+
+Phases 25 through 42 completed typed semantic claims, production structured generation, PostgreSQL canonical-response authority, atomic turn persistence, provider-backed World Forge proposals with deterministic acceptance, resumable asynchronous Campaign Genesis, persisted ordered delivery, retirement telemetry, legacy-publisher deletion audits, and fail-closed final release certification.
+
+Detailed phase and invariant evidence is maintained in `docs/RPG_NARRATIVE_ENGINE_MILESTONES_G_L_COMPLETION.md`.
+
 ## Required release invariants
 
 - one presentation request per interaction;
@@ -77,7 +85,11 @@ Replace fragmented RPG presentation orchestration with one isolated engine that 
 - an explicit NPC or location dossier is never treated as ready while required fields are incomplete;
 - turn-time Campaign Bible research is bounded, cited, read-only, and filtered by visibility and character knowledge;
 - player Lore APIs never expose hidden, private, narrator-only, or game-master canon;
-- Lore discovery transitions are explicit, validated, and persisted without rewriting objective canon.
+- Lore discovery transitions are explicit, validated, and persisted without rewriting objective canon;
+- one canonical narrative response owns every player-visible RPG response;
+- blocking, deferred, replayed, and resumed delivery preserve response identity and semantic hash;
+- production-owner paths contain no legacy publisher imports or visible publication hooks;
+- final certification is bound to successful exact-head external workflow evidence.
 
 ## Phase progress
 
@@ -108,12 +120,15 @@ Replace fragmented RPG presentation orchestration with one isolated engine that 
 | 22 | complete | genesis persistence, session materialization, dossier readiness, and first-turn launch gate |
 | 23 | complete | bounded cited Campaign Bible research integrated into canonical turn generation |
 | 24 | complete | generation progress API, player-safe Lore browser, document retrieval, and discovery transitions |
+| 25–42 | complete | Milestones G–L completion record and exact-head release certification |
 
 ## Validation policy
 
 Each phase was committed independently. After every phase, GitHub Actions completed; failures caused by the phase were fixed on the same branch before work continued.
 
-Hosted CI remains provider-free. Live-provider prose and latency evaluation is local operational evidence and must not be fabricated in GitHub Actions.
+The final Milestones G–L implementation head `534ca58ef4abf3f25bdb29e5d72f930c3711357b` passed all four required workflows before PR #1367 merged.
+
+Hosted CI remains provider-free. Live-provider prose, browser timing, and latency evaluation are local operational evidence and must not be fabricated in GitHub Actions. The operator procedure is documented in `docs/RPG_LOCAL_RELEASE_QUALIFICATION.md`.
 
 ## Legacy retirement policy
 
