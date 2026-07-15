@@ -235,15 +235,22 @@ def build_desktop_companion_release_gate(
 ) -> DesktopCompanionReleaseGateReport:
     scenarios = sorted({scenario for record in records for scenario in record.scenario_labels})
     missing = sorted(_REQUIRED_SCENARIOS - set(scenarios))
-    metrics = (
+    shadow_metrics = (
         _rate_metric(records, "stale_output_rate", maximum=0.01),
-        _rate_metric(records, "duplicate_comment_rate", maximum=0.02),
-        _rate_metric(records, "unsupported_claim_rate", maximum=0.01),
-        _rate_metric(records, "collision_rate", maximum=0.01),
         _rate_metric(records, "provider_error_rate", maximum=0.05),
         _latency_metric(records, "observation_p95", maximum=10_000),
         _count_metric(records, "max_vision_calls_per_minute", maximum=6),
     )
+    delivery_metrics = (
+        _rate_metric(records, "duplicate_comment_rate", maximum=0.02),
+        _rate_metric(records, "unsupported_claim_rate", maximum=0.01),
+        _rate_metric(records, "collision_rate", maximum=0.01),
+    )
+    # Shadow mode deliberately generates no commentary or delivery events. Treat
+    # those rates as not applicable until the partition contains real delivery
+    # telemetry; once any appears, require the complete delivery-safety set.
+    has_delivery_telemetry = any(metric.samples > 0 for metric in delivery_metrics)
+    metrics = shadow_metrics + (delivery_metrics if has_delivery_telemetry else ())
     failures = tuple(metric.name for metric in metrics if metric.status == "fail")
     insufficient: list[str] = []
     if len(records) < _MINIMUM_RECORDS:

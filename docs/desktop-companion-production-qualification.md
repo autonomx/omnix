@@ -50,6 +50,12 @@ Exit codes:
 - `2` — evidence is insufficient; continue shadow collection without promotion;
 - `3` — a safety or performance metric fails; keep rollout disabled and investigate.
 
+Shadow evidence is evaluated only against metrics that shadow mode can genuinely
+observe. Commentary duplication, unsupported-claim, and delivery-collision rates
+are not applicable while shadow mode intentionally emits no commentary or
+deliveries. As soon as a partition contains any real commentary or delivery
+telemetry, the complete delivery-safety metric set is required.
+
 A passing report is necessary but does not mutate settings. Promotion remains an explicit operator action.
 
 ## Text canary

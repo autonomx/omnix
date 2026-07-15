@@ -81,6 +81,62 @@ def test_release_gate_passes_complete_bounded_evidence(tmp_path: Path):
     assert len(report.evidence_evaluation_ids) == len(SCENARIOS)
 
 
+def test_release_gate_does_not_require_delivery_metrics_from_shadow_only_evidence(tmp_path: Path):
+    records = [
+        record.model_copy(
+            update={
+                "rates": {
+                    **record.rates,
+                    "duplicate_comment_rate": None,
+                    "unsupported_claim_rate": None,
+                    "collision_rate": None,
+                }
+            }
+        )
+        for record in records_for_scenarios(tmp_path, "shadow-only")
+    ]
+
+    report = build_desktop_companion_release_gate(records)
+
+    assert report.status == "pass"
+    assert {metric.name for metric in report.metrics} == {
+        "stale_output_rate",
+        "provider_error_rate",
+        "observation_p95",
+        "max_vision_calls_per_minute",
+    }
+
+
+def test_release_gate_requires_complete_delivery_metrics_once_telemetry_exists(tmp_path: Path):
+    records = records_for_scenarios(tmp_path, "partial-delivery")
+    records[0] = records[0].model_copy(
+        update={
+            "rates": {
+                **records[0].rates,
+                "unsupported_claim_rate": None,
+                "collision_rate": None,
+            }
+        }
+    )
+    for index in range(1, len(records)):
+        records[index] = records[index].model_copy(
+            update={
+                "rates": {
+                    **records[index].rates,
+                    "duplicate_comment_rate": None,
+                    "unsupported_claim_rate": None,
+                    "collision_rate": None,
+                }
+            }
+        )
+
+    report = build_desktop_companion_release_gate(records)
+
+    assert report.status == "insufficient"
+    assert "unsupported_claim_rate" in report.insufficient
+    assert "collision_rate" in report.insufficient
+
+
 def test_release_gate_fails_unsafe_rates_and_limits(tmp_path: Path):
     records = records_for_scenarios(tmp_path, "unsafe")
     unsafe = records[0].model_copy(
