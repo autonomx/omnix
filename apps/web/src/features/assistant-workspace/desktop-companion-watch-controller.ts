@@ -89,6 +89,21 @@ let preflight: PreflightResponse | null = null;
 let rollout: DesktopCompanionRolloutStatus = disabledRollout();
 let rolloutCheckedAtMs = 0;
 
+export function createDesktopCompanionTickScheduler(run: () => Promise<void>): () => Promise<void> {
+  let inFlight: Promise<void> | null = null;
+  return () => {
+    if (inFlight) return inFlight;
+    inFlight = Promise.resolve()
+      .then(run)
+      .finally(() => {
+        inFlight = null;
+      });
+    return inFlight;
+  };
+}
+
+const tick = createDesktopCompanionTickScheduler(tickOnce);
+
 export function initializeDesktopCompanionWatchController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   const target = window as ControllerWindow;
@@ -174,7 +189,7 @@ export function scenarioForObservationOutcome(
   return activityScenario;
 }
 
-async function tick(): Promise<void> {
+async function tickOnce(): Promise<void> {
   const nowMs = Date.now();
   if (nowMs - settingsLoadedAtMs >= 10_000) await refreshSettings(nowMs);
   const controls = desktopCompanionControlStore.getState();
