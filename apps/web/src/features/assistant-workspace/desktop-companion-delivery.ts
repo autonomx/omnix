@@ -2,11 +2,14 @@ import { liveConversationStore, type LiveConversationRuntimeState } from './live
 
 export const DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT = 'omnix:desktop-companion-delivery-request';
 export const DESKTOP_COMPANION_DELIVERY_EVENT = 'omnix:desktop-companion-delivery';
+export const DESKTOP_COMPANION_TEXT_EVENT = 'omnix:desktop-companion-text';
 
 const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
 const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
+
+export type DesktopCompanionPresentation = 'text' | 'speech';
 
 type DesktopCompanionWindow = Window & typeof globalThis & {
   __omnixDesktopCompanionDeliveryInstalled?: boolean;
@@ -18,6 +21,7 @@ export type DesktopCompanionDeliveryRequest = {
   groundingIds: string[];
   stateSummary: string;
   priority: 'normal' | 'critical';
+  presentation: DesktopCompanionPresentation;
   expiresAtMs: number;
 };
 
@@ -36,23 +40,25 @@ type PendingDesktopTurn = ParsedDesktopTurn & {
   sessionId: string;
   observationId: string;
   groundingIds: string[];
+  presentation: DesktopCompanionPresentation;
   audioStarted: boolean;
   committing: boolean;
 };
 
 let requestController: AbortController | null = null;
 let pending: PendingDesktopTurn | null = null;
+let queued: DesktopCompanionDeliveryRequest | null = null;
+let retryTimer: number | null = null;
 let assistantSpeaking = false;
 
 export function decideDesktopCompanionDelivery(
   request: DesktopCompanionDeliveryRequest,
   runtime: LiveConversationRuntimeState,
-  options: { nowMs: number; requestInFlight: boolean; autoSpeak: boolean },
+  options: { nowMs: number; requestInFlight: boolean },
 ): DesktopCompanionDeliveryDecision {
   if (!request.sessionId || !request.observationId) return suppress('invalid_request');
   if (options.nowMs >= request.expiresAtMs) return suppress('candidate_stale');
   if (runtime.sessionId && runtime.sessionId !== request.sessionId) return suppress('session_mismatch');
-  if (!options.autoSpeak) return suppress('auto_speak_disabled');
   if (options.requestInFlight) return wait('delivery_request_active');
   const conversation = runtime.conversation;
   if (
@@ -81,25 +87,16 @@ export function initializeDesktopCompanionDeliveryController(): () => void {
   assistantSpeaking = isAssistantSpeaking(liveConversationStore.getState());
 
   const handleRequest = (event: Event) => {
-    const request = normalizeRequest((event as CustomEvent<unknown>).detail);
-    if (!request) return;
-    const decision = decideDesktopCompanionDelivery(request, liveConversationStore.getState(), {
-      nowMs: Date.now(),
-      requestInFlight: Boolean(requestController || pending),
-      autoSpeak: isAutoSpeakEnabled(),
-    });
-    dispatchPerf('desktop_companion_delivery_decision', {
-      action: decision.action,
-      reason: decision.reason,
-      observation_id: request.observationId,
-      priority: request.priority,
-    });
-    if (decision.action === 'deliver') void startDesktopTurn(request);
-    else dispatchDelivery(decision.action, request, { reason: decision.reason });
+    const normalized = normalizeRequest((event as CustomEvent<unknown>).detail);
+    if (!normalized) return;
+    const request = normalized.presentation === 'speech' && !isAutoSpeakEnabled()
+      ? { ...normalized, presentation: 'text' as const }
+      : normalized;
+    considerRequest(request);
   };
-  const handleUserSpeech = () => cancelActive('user_speech', true);
-  const handleInterrupt = () => cancelActive('interrupted', true);
-  const handleStop = () => cancelActive('live_voice_stopped', false);
+  const handleUserSpeech = () => cancelActive('user_speech', true, true);
+  const handleInterrupt = () => cancelActive('interrupted', true, true);
+  const handleStop = () => cancelActive('live_voice_stopped', false, true);
 
   window.addEventListener(DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, handleRequest);
   window.addEventListener(USER_SPEECH_EVENT, handleUserSpeech);
@@ -113,9 +110,66 @@ export function initializeDesktopCompanionDeliveryController(): () => void {
     window.removeEventListener(INTERRUPT_EVENT, handleInterrupt);
     window.removeEventListener(STOP_EVENT, handleStop);
     unsubscribe();
-    cancelActive('controller_disposed', false);
+    cancelActive('controller_disposed', false, true);
     target.__omnixDesktopCompanionDeliveryInstalled = false;
   };
+}
+
+function considerRequest(request: DesktopCompanionDeliveryRequest): void {
+  const decision = decideDesktopCompanionDelivery(request, liveConversationStore.getState(), {
+    nowMs: Date.now(),
+    requestInFlight: Boolean(requestController || pending),
+  });
+  dispatchPerf('desktop_companion_delivery_decision', {
+    action: decision.action,
+    reason: decision.reason,
+    observation_id: request.observationId,
+    priority: request.priority,
+    presentation: request.presentation,
+  });
+  if (decision.action === 'deliver') {
+    if (queued?.observationId === request.observationId) queued = null;
+    void startDesktopTurn(request);
+    return;
+  }
+  if (decision.action === 'wait') {
+    queued = chooseQueuedCandidate(queued, request);
+    scheduleRetry();
+  }
+  dispatchDelivery(decision.action, request, { reason: decision.reason, presentation: request.presentation });
+}
+
+function chooseQueuedCandidate(
+  current: DesktopCompanionDeliveryRequest | null,
+  incoming: DesktopCompanionDeliveryRequest,
+): DesktopCompanionDeliveryRequest {
+  if (!current || current.expiresAtMs <= Date.now()) return incoming;
+  if (current.sessionId !== incoming.sessionId) return incoming;
+  if (incoming.priority === 'critical' && current.priority !== 'critical') return incoming;
+  return incoming.expiresAtMs >= current.expiresAtMs ? incoming : current;
+}
+
+function scheduleRetry(): void {
+  if (retryTimer !== null || !queued) return;
+  retryTimer = window.setTimeout(() => {
+    retryTimer = null;
+    retryQueued();
+  }, 250);
+}
+
+function retryQueued(): void {
+  const candidate = queued;
+  if (!candidate) return;
+  if (Date.now() >= candidate.expiresAtMs) {
+    queued = null;
+    dispatchDelivery('suppress', candidate, { reason: 'candidate_stale', presentation: candidate.presentation });
+    return;
+  }
+  if (requestController || pending) {
+    scheduleRetry();
+    return;
+  }
+  considerRequest(candidate);
 }
 
 async function startDesktopTurn(request: DesktopCompanionDeliveryRequest): Promise<void> {
@@ -132,6 +186,7 @@ async function startDesktopTurn(request: DesktopCompanionDeliveryRequest): Promi
     session_id: request.sessionId,
     observation_id: request.observationId,
     purpose,
+    presentation: request.presentation,
   });
   try {
     const response = await fetch(
@@ -142,7 +197,7 @@ async function startDesktopTurn(request: DesktopCompanionDeliveryRequest): Promi
     const parsed = parseDesktopCompanionSse(await response.text());
     if (!parsed || controller.signal.aborted) return;
     if (parsed.content.trim().toUpperCase().replace(/[.!]+$/, '') === 'SKIP') {
-      dispatchDelivery('suppress', request, { reason: 'model_skip', turnId: parsed.turnId });
+      dispatchDelivery('suppress', request, { reason: 'model_skip', turnId: parsed.turnId, presentation: request.presentation });
       return;
     }
     const turn: PendingDesktopTurn = {
@@ -150,22 +205,39 @@ async function startDesktopTurn(request: DesktopCompanionDeliveryRequest): Promi
       sessionId: request.sessionId,
       observationId: request.observationId,
       groundingIds: request.groundingIds.slice(0, 16),
-      audioStarted: isAssistantSpeaking(liveConversationStore.getState()),
+      presentation: request.presentation,
+      audioStarted: request.presentation === 'speech' && isAssistantSpeaking(liveConversationStore.getState()),
       committing: false,
     };
     pending = turn;
-    dispatchDelivery('generated', request, { turnId: turn.turnId, content: turn.content });
-    handleAuthoritativeStateChange();
+    dispatchDelivery('generated', request, { turnId: turn.turnId, content: turn.content, presentation: turn.presentation });
+    if (turn.presentation === 'text') {
+      window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_TEXT_EVENT, {
+        detail: {
+          sessionId: turn.sessionId,
+          observationId: turn.observationId,
+          turnId: turn.turnId,
+          content: turn.content,
+          priority: request.priority,
+          expiresAtMs: request.expiresAtMs,
+        },
+      }));
+      await commitPending('completed');
+    } else {
+      handleAuthoritativeStateChange();
+    }
   } catch (error) {
     if (!controller.signal.aborted) {
-      dispatchDelivery('error', request, { reason: error instanceof Error ? error.message : String(error) });
+      dispatchDelivery('error', request, { reason: error instanceof Error ? error.message : String(error), presentation: request.presentation });
       dispatchPerf('desktop_companion_generation_failed', {
         observation_id: request.observationId,
         error: error instanceof Error ? error.message : String(error),
+        presentation: request.presentation,
       });
     }
   } finally {
     if (requestController === controller) requestController = null;
+    retryQueued();
   }
 }
 
@@ -194,19 +266,22 @@ export function parseDesktopCompanionSse(text: string): ParsedDesktopTurn | null
 
 function handleAuthoritativeStateChange(): void {
   const speaking = isAssistantSpeaking(liveConversationStore.getState());
-  if (speaking === assistantSpeaking) return;
   const wasSpeaking = assistantSpeaking;
   assistantSpeaking = speaking;
-  if (pending && speaking) pending.audioStarted = true;
-  if (pending?.audioStarted && wasSpeaking && !speaking) void commitPending('completed');
+  if (pending?.presentation === 'speech' && speaking) pending.audioStarted = true;
+  if (pending?.presentation === 'speech' && pending.audioStarted && wasSpeaking && !speaking) void commitPending('completed');
+  retryQueued();
 }
 
-function cancelActive(reason: string, interrupted: boolean): void {
+function cancelActive(reason: string, interrupted: boolean, clearQueued: boolean): void {
   requestController?.abort(reason);
   requestController = null;
-  if (pending?.audioStarted && interrupted) void commitPending('interrupted');
+  if (retryTimer !== null) window.clearTimeout(retryTimer);
+  retryTimer = null;
+  if (clearQueued) queued = null;
+  if (pending?.presentation === 'speech' && pending.audioStarted && interrupted) void commitPending('interrupted');
   else if (pending) {
-    dispatchDelivery('discarded', pendingRequest(pending), { reason, turnId: pending.turnId });
+    dispatchDelivery('discarded', pendingRequest(pending), { reason, turnId: pending.turnId, presentation: pending.presentation });
     pending = null;
   }
 }
@@ -230,16 +305,18 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
       }),
     });
     if (!response.ok) throw new Error(`Desktop delivery commit failed with status ${response.status}.`);
-    dispatchDelivery(status, pendingRequest(turn), { turnId: turn.turnId, content: turn.content });
+    dispatchDelivery(status, pendingRequest(turn), { turnId: turn.turnId, content: turn.content, presentation: turn.presentation });
     dispatchPerf('desktop_companion_delivery_committed', {
       turn_id: turn.turnId,
       observation_id: turn.observationId,
       delivery_status: status,
+      presentation: turn.presentation,
     });
   } catch (error) {
-    dispatchDelivery('error', pendingRequest(turn), { reason: error instanceof Error ? error.message : String(error) });
+    dispatchDelivery('error', pendingRequest(turn), { reason: error instanceof Error ? error.message : String(error), presentation: turn.presentation });
   } finally {
     if (pending === turn) pending = null;
+    retryQueued();
   }
 }
 
@@ -257,6 +334,7 @@ function normalizeRequest(value: unknown): DesktopCompanionDeliveryRequest | nul
     stateSummary: stateSummary.slice(0, 500),
     expiresAtMs,
     priority: input.priority === 'critical' ? 'critical' : 'normal',
+    presentation: input.presentation === 'text' ? 'text' : 'speech',
     groundingIds: Array.isArray(input.groundingIds)
       ? input.groundingIds.filter((item): item is string => typeof item === 'string').slice(0, 16)
       : [observationId],
@@ -270,6 +348,7 @@ function pendingRequest(turn: PendingDesktopTurn): DesktopCompanionDeliveryReque
     groundingIds: turn.groundingIds,
     stateSummary: '',
     priority: turn.purpose === 'desktop_critical' ? 'critical' : 'normal',
+    presentation: turn.presentation,
     expiresAtMs: Number.POSITIVE_INFINITY,
   };
 }
