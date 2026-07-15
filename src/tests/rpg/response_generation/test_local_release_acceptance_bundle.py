@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.rpg.dialogue_quality_benchmark import run_dialogue_quality_benchmark
 from app.rpg.local_acceptance import evaluate_local_acceptance_bundle
 from app.rpg.release_finalization import local_live_acceptance_criteria
 from app.rpg.release_gates import evaluate_ui_timing_release_gates
@@ -13,6 +12,26 @@ def _live_smoke_report() -> dict:
         "failures": [],
         "distinct_interaction_count": 3,
         "latency_seconds": {"median": 1.2, "p95": 2.1},
+    }
+
+
+def _dialogue_quality_report() -> dict:
+    return {
+        "format_version": "rpg_dialogue_quality_benchmark_v1",
+        "ok": True,
+        "failures": [],
+        "failed_cases": [],
+        "scenario_count": 12,
+        "category_count": 12,
+        "metrics": {
+            "direct_answer_rate": 1.0,
+            "correct_speaker_rate": 1.0,
+            "grounded_specificity_rate": 1.0,
+            "continuity_rate": 1.0,
+            "near_duplicate_rate": 0.0,
+            "private_leak_rate": 0.0,
+            "empty_line_rate": 0.0,
+        },
     }
 
 
@@ -32,7 +51,7 @@ def _browser_samples() -> list[dict]:
 def test_local_acceptance_bundle_requires_all_three_evidence_surfaces() -> None:
     report = evaluate_local_acceptance_bundle(
         live_smoke_report=_live_smoke_report(),
-        dialogue_quality_report=run_dialogue_quality_benchmark(),
+        dialogue_quality_report=_dialogue_quality_report(),
         browser_timing_samples=_browser_samples(),
     )
 
@@ -45,7 +64,7 @@ def test_local_acceptance_bundle_requires_all_three_evidence_surfaces() -> None:
 def test_local_acceptance_bundle_rejects_missing_or_slow_browser_evidence() -> None:
     report = evaluate_local_acceptance_bundle(
         live_smoke_report=_live_smoke_report(),
-        dialogue_quality_report=run_dialogue_quality_benchmark(),
+        dialogue_quality_report=_dialogue_quality_report(),
         browser_timing_samples=[
             {"interactionId": "interaction:1", "client": {"commitToVisibleMs": 55.0}},
         ],
@@ -55,6 +74,27 @@ def test_local_acceptance_bundle_rejects_missing_or_slow_browser_evidence() -> N
     assert "insufficient_browser_timing_samples" in report["failures"]
     assert "browser_visibility_timing_failed" in report["failures"]
     assert "browser:0:react_commit_to_visible_above_50ms" in report["failures"]
+
+
+def test_local_acceptance_bundle_preserves_dialogue_failure_details() -> None:
+    dialogue = _dialogue_quality_report()
+    dialogue.update(
+        {
+            "ok": False,
+            "failures": ["continuity_rate_below_target"],
+            "failed_cases": ["follow_up_continuity"],
+        }
+    )
+    report = evaluate_local_acceptance_bundle(
+        live_smoke_report=_live_smoke_report(),
+        dialogue_quality_report=dialogue,
+        browser_timing_samples=_browser_samples(),
+    )
+
+    assert report["ok"] is False
+    assert "live_dialogue_quality_failed" in report["failures"]
+    assert "dialogue:continuity_rate_below_target" in report["failures"]
+    assert "dialogue_case:follow_up_continuity" in report["failures"]
 
 
 def test_ui_timing_gate_accepts_snake_case_export_shape() -> None:
