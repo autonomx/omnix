@@ -42,8 +42,8 @@ describe('desktop companion activity classifier', () => {
   it('keeps small focused changes as a low-confidence typing hypothesis', () => {
     const previous = filled(80);
     const current = previous.slice();
-    for (let y = 20; y < 23; y += 1) {
-      for (let x = 18; x < 28; x += 1) current[y * WIDTH + x] = 130;
+    for (let y = 18; y < 24; y += 1) {
+      for (let x = 14; x < 34; x += 1) current[y * WIDTH + x] = 140;
     }
     const result = classifyDesktopActivity(previous, current, 3000);
     expect(['localized_change', 'micro_change']).toContain(result.activity);
