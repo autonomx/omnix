@@ -1,10 +1,17 @@
+import type { DesktopCompanionRolloutStage } from '../settings/settingsDocumentTypes';
 import {
   classifyDesktopActivity,
   DesktopBehaviorTracker,
   type DesktopActivitySignal,
   type DesktopBehaviorState,
 } from './desktop-companion-activity';
+import { desktopCompanionRolloutEvidenceIdentity } from './desktop-companion-build-identity';
 import { desktopCompanionControlStore } from './desktop-companion-control-store';
+import { DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT } from './desktop-companion-delivery';
+import {
+  fetchDesktopCompanionRolloutStatus,
+  type DesktopCompanionRolloutStatus,
+} from './desktop-companion-rollout';
 import { DesktopCompanionRuntime } from './desktop-companion-runtime';
 import { currentDesktopCompanionCapture } from './assistant-context-controller';
 import { liveConversationStore } from './live-conversation-store';
@@ -14,6 +21,7 @@ export const DESKTOP_COMPANION_EVALUATION_EVENT = 'omnix:desktop-companion-evalu
 
 export type ShadowWatchSettings = {
   enabled: boolean;
+  requestedStage: DesktopCompanionRolloutStage;
   visionModelId: string;
   remoteVisionAllowed: boolean;
   backgroundCallsPerMinute: number;
@@ -30,6 +38,7 @@ export type DesktopCompanionEvaluationEvent = {
   characterId?: string | null;
   modelId?: string | null;
   remoteProvider?: boolean;
+  rolloutStage?: DesktopCompanionRolloutStage;
   scenario?: string | null;
   meaningful?: boolean;
   latencyMs?: number;
@@ -45,6 +54,8 @@ type ObserveResponse = {
   reason: string;
   observation?: { observation_id?: string } | null;
   attention?: { reaction?: string; rationale?: string; should_generate?: boolean } | null;
+  scene_summary?: string;
+  delivery_eligible?: boolean;
   coordinator?: Record<string, unknown>;
 };
 
@@ -74,6 +85,8 @@ let lastBindingKey = '';
 let resetBinding: { sessionId: string; captureGeneration: string } | null = null;
 let preflightKey = '';
 let preflight: PreflightResponse | null = null;
+let rollout: DesktopCompanionRolloutStatus = disabledRollout();
+let rolloutCheckedAtMs = 0;
 
 export function initializeDesktopCompanionWatchController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
@@ -105,9 +118,13 @@ export function parseShadowWatchSettings(payload: unknown): ShadowWatchSettings 
   const settingsRoot = record(root.settings);
   const profile = record(settingsRoot.settings_control_center);
   const assistant = record(profile.assistant);
-  const stage = stringValue(assistant.desktopCompanionRolloutStage, 'disabled');
+  const configuredStage = stringValue(assistant.desktopCompanionRolloutStage, 'disabled');
+  const requestedStage: DesktopCompanionRolloutStage = ['shadow', 'text', 'speech'].includes(configuredStage)
+    ? configuredStage as DesktopCompanionRolloutStage
+    : 'disabled';
   return {
-    enabled: assistant.desktopCompanionEnabled === true && stage === 'shadow',
+    enabled: assistant.desktopCompanionEnabled === true && requestedStage !== 'disabled',
+    requestedStage,
     visionModelId: stringValue(assistant.desktopCompanionVisionModelId, ''),
     remoteVisionAllowed: assistant.desktopCompanionRemoteVisionAllowed === true,
     backgroundCallsPerMinute: boundedInt(assistant.desktopCompanionBackgroundCallsPerMinute, 6, 1, 30),
@@ -200,19 +217,25 @@ async function tick(): Promise<void> {
       desktopCompanionControlStore.dispatch('stop');
       return;
     }
-    runtime.enableWatch({ shadowMode: true, speechMuted: controls.muted });
+    await refreshRollout(true);
+    runtime.enableWatch({
+      shadowMode: rollout.effective_stage === 'shadow',
+      speechMuted: controls.muted,
+    });
     dispatchEvaluation({
       kind: 'watch_started',
       sessionId: capture.sessionId,
       characterId: capture.characterId,
       modelId: preflight.model_id,
       remoteProvider: preflight.remote,
-      reason: 'preflight_passed',
+      rolloutStage: rollout.effective_stage,
+      reason: rollout.reason,
     });
-    publishStatus('watching_idle', 'preflight_passed');
+    publishStatus('watching_idle', rollout.reason);
   } else if (!runtime.getSnapshot().watchEnabled) {
     runtime.resume();
   }
+  if (nowMs - rolloutCheckedAtMs >= 30_000) await refreshRollout(false);
   runtime.setSpeechMuted(controls.muted);
   if (requestController || !runtime.getSnapshot().watchEnabled) return;
 
@@ -246,6 +269,7 @@ async function tick(): Promise<void> {
   try {
     const payload = await capture.capture.buildPayload();
     const conversation = liveConversationStore.getState().conversation;
+    const effectiveStage = rollout.effective_stage;
     const response = await fetch('/api/desktop-companion/observe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -260,7 +284,6 @@ async function tick(): Promise<void> {
         current_image_data_url: payload.currentImageDataUrl,
         history_image_data_url: payload.historyImageDataUrl,
         combined_image_data_url: payload.combinedImageDataUrl,
-        desktop_history_timestamps: payload.historyTimestamps,
         history_timestamps: payload.historyTimestamps,
         capture_mode: payload.captureMode,
         vision_model_id: settings.visionModelId || null,
@@ -276,10 +299,10 @@ async function tick(): Promise<void> {
           sample_count: behavior.sampleCount,
         },
         policy: {
-          enabled: true,
-          shadow_mode: true,
-          speech_enabled: false,
-          visible_comments: false,
+          enabled: effectiveStage !== 'disabled',
+          shadow_mode: effectiveStage === 'shadow',
+          speech_enabled: effectiveStage === 'speech' && !controls.muted,
+          visible_comments: effectiveStage === 'text' || effectiveStage === 'speech',
           background_calls_per_minute: settings.backgroundCallsPerMinute,
           minimum_observation_interval_ms: settings.minimumObservationIntervalMs,
           observation_timeout_ms: settings.observationTimeoutMs,
@@ -313,6 +336,25 @@ async function tick(): Promise<void> {
     if (result.status === 'completed') {
       runtime.markPhase('observation_ready');
       publishStatus('observation_ready', result.reason, result);
+      const observationId = result.observation?.observation_id;
+      if (
+        result.delivery_eligible
+        && observationId
+        && result.scene_summary
+        && (effectiveStage === 'text' || effectiveStage === 'speech')
+      ) {
+        window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, {
+          detail: {
+            sessionId: capture.sessionId,
+            observationId,
+            groundingIds: [observationId],
+            stateSummary: result.scene_summary,
+            priority: 'normal',
+            presentation: effectiveStage === 'speech' && !controls.muted ? 'speech' : 'text',
+            expiresAtMs: Date.now() + settings.observationTtlMs,
+          },
+        }));
+      }
     } else if (result.status === 'deferred') {
       runtime.markPhase('backing_off', result.reason);
       publishStatus('backing_off', result.reason, result);
@@ -374,6 +416,38 @@ async function runPreflight(): Promise<PreflightResponse> {
   }
 }
 
+async function refreshRollout(force: boolean): Promise<void> {
+  if (!preflight?.ready) return;
+  const nowMs = Date.now();
+  if (!force && nowMs - rolloutCheckedAtMs < 30_000) return;
+  rolloutCheckedAtMs = nowMs;
+  try {
+    const identity = await desktopCompanionRolloutEvidenceIdentity({
+      modelId: preflight.model_id,
+      remoteProvider: preflight.remote,
+    });
+    const next = await fetchDesktopCompanionRolloutStatus(settings.requestedStage, identity);
+    const changed = next.effective_stage !== rollout.effective_stage;
+    rollout = next;
+    if (changed && runtime.getSnapshot().binding) {
+      runtime.enableWatch({
+        shadowMode: rollout.effective_stage === 'shadow',
+        speechMuted: desktopCompanionControlStore.getState().muted,
+      });
+      publishStatus('watching_idle', rollout.reason);
+    }
+  } catch {
+    rollout = {
+      requested_stage: settings.requestedStage,
+      effective_stage: settings.requestedStage === 'disabled' ? 'disabled' : 'shadow',
+      enabled: settings.requestedStage !== 'disabled',
+      reason: 'rollout_status_unavailable',
+      release_gate_status: 'insufficient',
+      evidence_evaluation_ids: [],
+    };
+  }
+}
+
 async function refreshSettings(nowMs: number): Promise<void> {
   settingsLoadedAtMs = nowMs;
   try {
@@ -383,7 +457,11 @@ async function refreshSettings(nowMs: number): Promise<void> {
     if (
       next.visionModelId !== settings.visionModelId
       || next.remoteVisionAllowed !== settings.remoteVisionAllowed
-    ) preflightKey = '';
+      || next.requestedStage !== settings.requestedStage
+    ) {
+      preflightKey = '';
+      rolloutCheckedAtMs = 0;
+    }
     settings = next;
   } catch {
     // Existing chat and manual Desktop Ask remain available when settings cannot load.
@@ -403,6 +481,8 @@ async function stopAndReset(reason: string): Promise<void> {
   resetBinding = null;
   preflightKey = '';
   preflight = null;
+  rollout = disabledRollout();
+  rolloutCheckedAtMs = 0;
   if (previous) {
     dispatchEvaluation({
       kind: 'watch_stopped',
@@ -430,6 +510,9 @@ function publishStatus(phase: string, reason: string, result?: ObserveResponse):
     detail: {
       phase,
       reason,
+      requestedStage: rollout.requested_stage,
+      effectiveStage: rollout.effective_stage,
+      releaseGateStatus: rollout.release_gate_status,
       observationId: result?.observation?.observation_id ?? null,
       reaction: result?.attention?.reaction ?? null,
       rationale: result?.attention?.rationale ?? null,
@@ -453,6 +536,7 @@ function dispatchEvaluation(detail: DesktopCompanionEvaluationEvent): void {
 function disabledSettings(): ShadowWatchSettings {
   return {
     enabled: false,
+    requestedStage: 'disabled',
     visionModelId: '',
     remoteVisionAllowed: false,
     backgroundCallsPerMinute: 6,
@@ -461,6 +545,17 @@ function disabledSettings(): ShadowWatchSettings {
     observationTtlMs: 12_000,
     commentaryCooldownMs: 25_000,
     minimumChangeConfidence: 0.55,
+  };
+}
+
+function disabledRollout(): DesktopCompanionRolloutStatus {
+  return {
+    requested_stage: 'disabled',
+    effective_stage: 'disabled',
+    enabled: false,
+    reason: 'disabled_by_setting',
+    release_gate_status: 'insufficient',
+    evidence_evaluation_ids: [],
   };
 }
 
