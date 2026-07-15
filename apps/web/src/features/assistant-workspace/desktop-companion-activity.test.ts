@@ -43,7 +43,7 @@ describe('desktop companion activity classifier', () => {
     const previous = filled(80);
     const current = previous.slice();
     for (let y = 18; y < 24; y += 1) {
-      for (let x = 14; x < 34; x += 1) current[y * WIDTH + x] = 140;
+      for (let x = 14; x < 34; x += 1) current[y * WIDTH + x] = 190;
     }
     const result = classifyDesktopActivity(previous, current, 3000);
     expect(['localized_change', 'micro_change']).toContain(result.activity);
