@@ -88,6 +88,7 @@ let preflightKey = '';
 let preflight: PreflightResponse | null = null;
 let rollout: DesktopCompanionRolloutStatus = disabledRollout();
 let rolloutCheckedAtMs = 0;
+let pauseInterruptionRecorded = false;
 
 export function createDesktopCompanionTickScheduler(run: () => Promise<void>): () => Promise<void> {
   let inFlight: Promise<void> | null = null;
@@ -106,6 +107,14 @@ export function shouldResumeDesktopCompanion(
   snapshot: Pick<DesktopCompanionSnapshot, 'phase' | 'watchEnabled'>,
 ): boolean {
   return !snapshot.watchEnabled || snapshot.phase === 'paused';
+}
+
+export function shouldRecordPausedAnalysisInterruption(
+  snapshot: Pick<DesktopCompanionSnapshot, 'phase'>,
+  requestInFlight: boolean,
+  alreadyRecorded: boolean,
+): boolean {
+  return snapshot.phase === 'analyzing' && !requestInFlight && !alreadyRecorded;
 }
 
 const tick = createDesktopCompanionTickScheduler(tickOnce);
@@ -208,12 +217,30 @@ async function tickOnce(): Promise<void> {
   }
 
   if (controls.paused) {
+    const snapshot = runtime.getSnapshot();
+    if (shouldRecordPausedAnalysisInterruption(
+      snapshot,
+      requestController !== null,
+      pauseInterruptionRecorded,
+    )) {
+      dispatchEvaluation({
+        kind: 'vision_result',
+        sessionId: capture.sessionId,
+        scenario: 'interruption',
+        providerError: false,
+        stale: false,
+        observed: false,
+        reason: 'paused_during_analysis',
+      });
+    }
+    if (snapshot.phase === 'analyzing') pauseInterruptionRecorded = true;
     requestController?.abort('paused_by_user');
     requestController = null;
     runtime.pause('paused_by_user');
     publishStatus('paused', 'paused_by_user');
     return;
   }
+  pauseInterruptionRecorded = false;
 
   const bindingKey = `${capture.sessionId}:${capture.sourceFingerprint}`;
   if (bindingKey !== lastBindingKey) {
@@ -515,6 +542,7 @@ async function stopAndReset(reason: string): Promise<void> {
   preflight = null;
   rollout = disabledRollout();
   rolloutCheckedAtMs = 0;
+  pauseInterruptionRecorded = false;
   if (previous) {
     dispatchEvaluation({
       kind: 'watch_stopped',

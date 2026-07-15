@@ -6,6 +6,7 @@ import {
   parseShadowWatchSettings,
   scenarioForActivity,
   scenarioForObservationOutcome,
+  shouldRecordPausedAnalysisInterruption,
   shouldResumeDesktopCompanion,
 } from './desktop-companion-watch-controller';
 
@@ -36,6 +37,13 @@ describe('desktop companion watch scheduling', () => {
     expect(shouldResumeDesktopCompanion({ phase: 'paused', watchEnabled: true })).toBe(true);
     expect(shouldResumeDesktopCompanion({ phase: 'watching_idle', watchEnabled: true })).toBe(false);
     expect(shouldResumeDesktopCompanion({ phase: 'sharing', watchEnabled: false })).toBe(true);
+  });
+
+  it('records one fallback interruption when a completed request leaves the UI analyzing', () => {
+    expect(shouldRecordPausedAnalysisInterruption({ phase: 'analyzing' }, false, false)).toBe(true);
+    expect(shouldRecordPausedAnalysisInterruption({ phase: 'analyzing' }, true, false)).toBe(false);
+    expect(shouldRecordPausedAnalysisInterruption({ phase: 'analyzing' }, false, true)).toBe(false);
+    expect(shouldRecordPausedAnalysisInterruption({ phase: 'paused' }, false, false)).toBe(false);
   });
 });
 
