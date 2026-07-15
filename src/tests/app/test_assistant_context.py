@@ -147,6 +147,29 @@ def test_temporal_vision_falls_back_to_combined_sheet_when_multiple_images_are_r
     assert len(observation.metadata["fallback_errors"]) == 1
 
 
+def test_vision_client_retries_one_image_without_optional_detail_hint():
+    payloads = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payloads.append(json.loads(request.read()))
+        if len(payloads) == 1:
+            return httpx.Response(400, json={"error": "invalid image"})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "Image resolved."}}]})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    observation = DesktopVisionClient(client=client, default_model="vision-model").describe(
+        image_data("CURRENT"),
+        "What is visible?",
+    )
+    client.close()
+
+    first_image = payloads[0]["messages"][1]["content"][1]["image_url"]
+    second_image = payloads[1]["messages"][1]["content"][1]["image_url"]
+    assert first_image == {"url": image_data("CURRENT"), "detail": "high"}
+    assert second_image == {"url": image_data("CURRENT")}
+    assert observation.content == "Image resolved."
+
+
 def test_vision_client_auto_selects_available_vision_model_when_unconfigured():
     payloads = []
 

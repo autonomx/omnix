@@ -209,6 +209,12 @@ class DesktopVisionClient:
             ],
         }
         response = client.post(f"{self.base_url}/chat/completions", json=payload, headers=headers)
+        if response.status_code in {400, 422} and len(images) == 1:
+            content[-1] = {
+                "type": "image_url",
+                "image_url": {"url": images[0][0]},
+            }
+            response = client.post(f"{self.base_url}/chat/completions", json=payload, headers=headers)
         response.raise_for_status()
         resolved = self._extract_content(response.json())
         if not resolved:
