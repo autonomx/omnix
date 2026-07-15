@@ -234,15 +234,16 @@ def deferred_public_turn_payload(payload: dict[str, Any]) -> dict[str, Any]:
         compact["narration_status"] = "deferred"
     payload["canonical_narrative_response"] = envelope
     payload.pop("narrative_projections", None)
+    delivery_metadata = (
+        delivery.get("metadata")
+        if isinstance(delivery.get("metadata"), Mapping)
+        else {}
+    )
     payload["deferred_narrative_delivery"] = {
         "response_id": response_id,
         "semantic_hash": semantic_hash,
         "status": str(delivery.get("status") or "pending"),
-        "next_index": int(
-            (delivery.get("metadata") or {}).get("next_index")
-            if isinstance(delivery.get("metadata"), Mapping)
-            else 0
-        ),
+        "next_index": int(delivery_metadata.get("next_index") or 0),
         "stream_path": f"/api/rpg/narrative-responses/{response_id}/stream",
         "status_path": f"/api/rpg/narrative-responses/{response_id}/delivery",
         "cancel_path": f"/api/rpg/narrative-responses/{response_id}/cancel",
