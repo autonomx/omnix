@@ -112,6 +112,27 @@ def _stream(
 
     while True:
         try:
+            caught_up = coordinator.resume(
+                response,
+                repository,
+                expected_semantic_hash=response.semantic_hash,
+                after_index=last_index,
+            )
+            for event in caught_up:
+                last_index = event.index
+                yield _event_payload(event)
+            record = repository.get(response.response_id)
+            if record is None:
+                raise NarrativeDeliveryConflict(
+                    f"unknown narrative delivery: {response.response_id}"
+                )
+            if record.complete or record.cancelled:
+                yield _status_payload(
+                    response.response_id,
+                    response.semantic_hash,
+                    record.status,
+                )
+                return
             projected, event = coordinator.publish_next(
                 response,
                 repository,
