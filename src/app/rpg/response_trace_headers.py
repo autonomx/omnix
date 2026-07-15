@@ -6,8 +6,10 @@ from fastapi.responses import Response
 from app.rpg.performance_trace import RpgPipelineTrace
 
 _MINIMUM_ATTRIBUTION_PERCENT = 95.0
+# Header mutation and the final trace summary happen after the lightweight
+# remainder sample. Keep a small explicit allowance on the derived framework
+# span so completed attribution remains stable across CI hosts.
 _FINALIZATION_MARGIN_MS = 1.0
-_MAX_FINALIZATION_PASSES = 3
 
 
 def finalize_rpg_trace_headers(response: Response, trace: RpgPipelineTrace) -> Response:
@@ -22,49 +24,33 @@ def finalize_rpg_trace_headers(response: Response, trace: RpgPipelineTrace) -> R
 
 
 def _classify_pipeline_overhead(trace: RpgPipelineTrace) -> None:
-    """Name the small framework gap that remains after explicit spans close.
+    """Name the framework gap after explicit spans without a full trace summary.
 
-    This is a derived remainder, not invented provider/runtime work. The bounded
-    finalization margin covers measurement, dictionary construction, and header
-    assembly between the remainder sample and the immediately following summary.
-    Short synthetic requests are sensitive to sub-millisecond scheduler noise, so
-    the derived span is recalculated for a few bounded passes until the public
-    attribution target is stable. Real foreground turns are unaffected because
-    the adjustment remains only the measured remainder plus finalization work.
+    ``RpgPipelineTrace.summary`` also samples process and RSS resources. Calling
+    it once to discover the remainder and again for the response header makes
+    the first resource sample itself unattributed. Use the trace's lightweight
+    elapsed and child-duration properties here, then perform the full summary
+    only once when producing the completed response headers.
     """
 
-    summary = trace.summary()
-    if float(summary.get("attribution_percent") or 0.0) >= _MINIMUM_ATTRIBUTION_PERCENT:
+    total_ms = trace.elapsed_ms
+    attributed_ms = min(total_ms, trace.child_duration_ms)
+    attribution_percent = (attributed_ms / total_ms) * 100.0 if total_ms > 0 else 100.0
+    if attribution_percent >= _MINIMUM_ATTRIBUTION_PERCENT:
         return
-    remainder = float(summary.get("unattributed_ms") or 0.0)
+    remainder = max(0.0, total_ms - attributed_ms)
     if remainder <= 0.0:
         return
-
-    overhead = {
-        "name": "turn.pipeline_overhead",
-        "duration_ms": round(remainder + _FINALIZATION_MARGIN_MS, 3),
-        "depth": 0,
-        "failed": False,
-        "derived_remainder": True,
-        "finalization_margin_ms": _FINALIZATION_MARGIN_MS,
-        "finalization_passes": 1,
-    }
-    trace.spans.append(overhead)
-
-    for pass_index in range(2, _MAX_FINALIZATION_PASSES + 1):
-        completed = trace.summary()
-        attribution = float(completed.get("attribution_percent") or 0.0)
-        if attribution >= _MINIMUM_ATTRIBUTION_PERCENT:
-            break
-        total_ms = float(completed.get("total_ms") or 0.0)
-        attributed_ms = float(completed.get("child_duration_ms") or 0.0)
-        target_ms = total_ms * (_MINIMUM_ATTRIBUTION_PERCENT / 100.0)
-        deficit_ms = max(0.0, target_ms - attributed_ms)
-        overhead["duration_ms"] = round(
-            float(overhead["duration_ms"]) + deficit_ms + _FINALIZATION_MARGIN_MS,
-            3,
-        )
-        overhead["finalization_passes"] = pass_index
+    trace.spans.append(
+        {
+            "name": "turn.pipeline_overhead",
+            "duration_ms": round(remainder + _FINALIZATION_MARGIN_MS, 3),
+            "depth": 0,
+            "failed": False,
+            "derived_remainder": True,
+            "finalization_margin_ms": _FINALIZATION_MARGIN_MS,
+        }
+    )
 
 
 def _server_timing_header(spans: list[dict[str, object]]) -> str:
