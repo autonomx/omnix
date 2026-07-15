@@ -49,6 +49,11 @@ def create(index: int, *, stage: str = "shadow", scenario: str | None = None, **
     return DesktopCompanionEvaluationCreate(**values)
 
 
+def records_for_scenarios(tmp_path: Path, name: str = "records"):
+    store = DesktopCompanionEvaluationStore(tmp_path / f"{name}.json")
+    return [store.upsert(create(index, scenario=scenario)) for index, scenario in enumerate(SCENARIOS)]
+
+
 def test_evaluation_store_upserts_content_free_records(tmp_path: Path):
     store = DesktopCompanionEvaluationStore(tmp_path / "desktop-evaluations.json")
     first = store.upsert(create(0))
@@ -67,12 +72,8 @@ def test_evaluation_rejects_content_bearing_metric_keys():
         create(0, counts={"raw_image_count": 1})
 
 
-def test_release_gate_passes_complete_bounded_evidence():
-    records = [
-        DesktopCompanionEvaluationStore(Path("unused")).upsert(create(index, scenario=scenario))
-        for index, scenario in enumerate(SCENARIOS)
-    ]
-    report = build_desktop_companion_release_gate(records)
+def test_release_gate_passes_complete_bounded_evidence(tmp_path: Path):
+    report = build_desktop_companion_release_gate(records_for_scenarios(tmp_path))
 
     assert report.status == "pass"
     assert report.missing_scenarios == ()
@@ -80,9 +81,8 @@ def test_release_gate_passes_complete_bounded_evidence():
     assert len(report.evidence_evaluation_ids) == len(SCENARIOS)
 
 
-def test_release_gate_fails_unsafe_rates_and_limits():
-    store = DesktopCompanionEvaluationStore(Path("unused-fail"))
-    records = [store.upsert(create(index, scenario=scenario)) for index, scenario in enumerate(SCENARIOS)]
+def test_release_gate_fails_unsafe_rates_and_limits(tmp_path: Path):
+    records = records_for_scenarios(tmp_path, "unsafe")
     unsafe = records[0].model_copy(
         update={
             "rates": {**records[0].rates, "unsupported_claim_rate": 0.2},
@@ -96,7 +96,7 @@ def test_release_gate_fails_unsafe_rates_and_limits():
     assert "max_vision_calls_per_minute" in report.failures
 
 
-def test_rollout_degrades_text_and_speech_until_evidence_passes():
+def test_rollout_degrades_text_and_speech_until_evidence_passes(tmp_path: Path):
     insufficient = build_desktop_companion_release_gate([])
     text = resolve_desktop_companion_rollout("text", insufficient)
     speech = resolve_desktop_companion_rollout("speech", insufficient)
@@ -105,8 +105,7 @@ def test_rollout_degrades_text_and_speech_until_evidence_passes():
     assert text.reason == "release_gate_requires_shadow"
     assert speech.effective_stage == "shadow"
 
-    store = DesktopCompanionEvaluationStore(Path("unused-speech"))
-    records = [store.upsert(create(index, scenario=scenario)) for index, scenario in enumerate(SCENARIOS)]
+    records = records_for_scenarios(tmp_path, "rollout")
     passed = build_desktop_companion_release_gate(records)
     assert resolve_desktop_companion_rollout("text", passed).effective_stage == "text"
     assert resolve_desktop_companion_rollout("speech", passed).effective_stage == "text"
