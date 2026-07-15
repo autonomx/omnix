@@ -262,20 +262,69 @@ jobs:
             rpg-response-runtime-endurance-1000.json
           if-no-files-found: warn
 
+  narrative-exact-head-release:
+    name: Unified narrative exact-head release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: src
+      RPG_TEST_MODE: deterministic
+    steps:
+      - name: Check out exact pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install release certificate dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart
+
+      - name: Certify exact-head unified narrative release
+        run: |
+          set -o pipefail
+          EXPECTED_HEAD="${{ github.event.pull_request.head.sha || github.sha }}"
+          OBSERVED_HEAD="$(git rev-parse HEAD)"
+          python scripts/certify_rpg_narrative_engine_release.py \
+            --expected-head "$EXPECTED_HEAD" \
+            --observed-head "$OBSERVED_HEAD" \
+            --output rpg-narrative-release-certificate.json \
+            2>&1 | tee rpg-narrative-release-certificate-output.txt
+
+      - name: Upload exact-head narrative release certificate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpg-narrative-release-certificate
+          path: |
+            rpg-narrative-release-certificate-output.txt
+            rpg-narrative-release-certificate.json
+          if-no-files-found: error
+
   deterministic-rpg-gates:
     name: Deterministic RPG gates
     if: always()
     needs:
       - deterministic-rpg-fast
       - runtime-endurance
+      - narrative-exact-head-release
     runs-on: ubuntu-latest
     steps:
       - name: Require deterministic provider-free evidence jobs
         env:
           FAST_RESULT: ${{ needs.deterministic-rpg-fast.result }}
           ENDURANCE_RESULT: ${{ needs.runtime-endurance.result }}
+          EXACT_HEAD_RESULT: ${{ needs.narrative-exact-head-release.result }}
         run: |
-          printf 'fast=%s\nendurance=%s\n' \
-            "$FAST_RESULT" "$ENDURANCE_RESULT"
+          printf 'fast=%s\nendurance=%s\nexact_head=%s\n' \
+            "$FAST_RESULT" "$ENDURANCE_RESULT" "$EXACT_HEAD_RESULT"
           test "$FAST_RESULT" = "success"
           test "$ENDURANCE_RESULT" = "success"
+          test "$EXACT_HEAD_RESULT" = "success"
