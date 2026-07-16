@@ -125,6 +125,19 @@ export interface RpgPublishedLaunchResponse {
   error?: string;
 }
 
+export interface RpgStarterBubbleResponse {
+  ok: boolean;
+  starter_bubble: Record<string, unknown>;
+  predictive_materialization: Record<string, unknown>[];
+}
+
+export interface RpgStarterBubblePromotionResponse {
+  ok: boolean;
+  status: string;
+  reused: boolean;
+  promotion: Record<string, unknown>;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   const text = await response.text();
@@ -185,6 +198,32 @@ export const rpgWorldLibraryClient = {
     runId: string,
   ): Promise<{ ok: boolean; status: string; run: RpgWorldGenerationRun; publication: Record<string, unknown> }> {
     return request(`/api/rpg/world-generation/${encodeURIComponent(runId)}/publish`, jsonInit({}));
+  },
+
+  previewStarterBubble(
+    worldId: string,
+    sourceWorldRevision: number,
+    startingLocationId: string,
+    neighboringLocationId?: string,
+  ): Promise<RpgStarterBubbleResponse> {
+    const query = new URLSearchParams({
+      source_world_revision: String(sourceWorldRevision),
+      starting_location_id: startingLocationId,
+    });
+    if (neighboringLocationId) query.set('neighboring_location_id', neighboringLocationId);
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/starter-bubble/preview?${query.toString()}`,
+    );
+  },
+
+  promoteStarterBubble(
+    worldId: string,
+    body: Record<string, unknown>,
+  ): Promise<RpgStarterBubblePromotionResponse> {
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/starter-bubble/promote`,
+      jsonInit(body),
+    );
   },
 
   createScenario(body: Record<string, unknown>): Promise<{ ok: boolean; scenario: RpgScenarioSummary }> {
