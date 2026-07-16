@@ -138,6 +138,13 @@ export interface RpgStarterBubblePromotionResponse {
   promotion: Record<string, unknown>;
 }
 
+export interface RpgDeferredMaterializationResponse {
+  ok: boolean;
+  status: string;
+  reused: boolean;
+  materialization: Record<string, unknown>;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   const text = await response.text();
@@ -223,6 +230,17 @@ export const rpgWorldLibraryClient = {
     return request(
       `/api/rpg/worlds/${encodeURIComponent(worldId)}/starter-bubble/promote`,
       jsonInit(body),
+    );
+  },
+
+  materializeDeferredLocation(
+    worldId: string,
+    locationId: string,
+    sourceWorldRevision: number,
+  ): Promise<RpgDeferredMaterializationResponse> {
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/deferred-locations/${encodeURIComponent(locationId)}/materialize`,
+      jsonInit({ source_world_revision: sourceWorldRevision }),
     );
   },
 
