@@ -1,11 +1,12 @@
 """Transactional services for reusable RPG world and scenario resources."""
 from __future__ import annotations
 
-from typing import Any, Mapping, TypeVar
+from typing import Any, TypeVar
+
+from pydantic import BaseModel
 
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
-from pydantic import BaseModel
 
 from .contracts import (
     CampaignWorldBinding,
