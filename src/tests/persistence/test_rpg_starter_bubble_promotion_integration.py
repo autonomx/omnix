@@ -218,6 +218,6 @@ def test_promotion_creates_future_revision_without_rebinding_existing_campaign()
         assert campaign_binding is not None
         assert campaign_binding["world_revision"] == 1
         assert campaign_binding["world_release"] == 1
-        assert campaign_binding["binding"]["map_definition_pins"] == {}
+        assert campaign_binding["map_definition_pins"] == {}
     finally:
         database.close()
