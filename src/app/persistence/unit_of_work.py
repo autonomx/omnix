@@ -43,6 +43,7 @@ from .repositories import (
 from .rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
 from .rpg_campaign_genesis_repository import PostgresRpgCampaignGenesisRepository
 from .rpg_hermes_research_repository import PostgresRpgHermesResearchRepository
+from .rpg_map_instance_repository import PostgresRpgMapInstanceRepository
 from .rpg_narrative_delivery_repository import (
     PostgresRpgNarrativeDeliveryRepository,
 )
@@ -91,6 +92,7 @@ class PostgresUnitOfWork:
         self.campaign_genesis: PostgresRpgCampaignGenesisRepository
         self.world_forge: PostgresRpgWorldForgeRepository
         self.world_scenarios: PostgresRpgWorldScenarioRepository
+        self.map_instances: PostgresRpgMapInstanceRepository
         self.hermes_research: PostgresRpgHermesResearchRepository
         self.narrative_responses: PostgresRpgNarrativeResponseRepository
         self.narrative_deliveries: PostgresRpgNarrativeDeliveryRepository
@@ -152,6 +154,7 @@ class PostgresUnitOfWork:
         self.campaign_genesis = PostgresRpgCampaignGenesisRepository(self.connection)
         self.world_forge = PostgresRpgWorldForgeRepository(self.connection)
         self.world_scenarios = PostgresRpgWorldScenarioRepository(self.connection)
+        self.map_instances = PostgresRpgMapInstanceRepository(self.connection)
         self.hermes_research = PostgresRpgHermesResearchRepository(self.connection)
         self.narrative_responses = PostgresRpgNarrativeResponseRepository(self.connection)
         self.narrative_deliveries = PostgresRpgNarrativeDeliveryRepository(
