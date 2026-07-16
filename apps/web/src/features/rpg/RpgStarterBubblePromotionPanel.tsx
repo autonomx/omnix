@@ -20,10 +20,15 @@ function valueText(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function valueNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 export function RpgStarterBubblePromotionPanel() {
   const queryClient = useQueryClient();
   const [worldId, setWorldId] = useState('');
   const [sourceRevision, setSourceRevision] = useState(1);
+  const [promotedSourceRevision, setPromotedSourceRevision] = useState<number>();
   const [startingLocation, setStartingLocation] = useState('rusty_flagon_tavern');
   const [neighboringLocation, setNeighboringLocation] = useState('northern_road');
   const [preview, setPreview] = useState<RpgStarterBubbleResponse>();
@@ -47,8 +52,23 @@ export function RpgStarterBubblePromotionPanel() {
 
   useEffect(() => {
     const latestRevision = detailQuery.data?.revisions[0]?.revision;
-    if (latestRevision) setSourceRevision(latestRevision);
-  }, [detailQuery.data]);
+    if (latestRevision && promotedSourceRevision === undefined) {
+      setSourceRevision(latestRevision);
+    }
+  }, [detailQuery.data, promotedSourceRevision]);
+
+  useEffect(() => {
+    setPromotedSourceRevision(undefined);
+    setPreview(undefined);
+  }, [worldId]);
+
+  const selectedRelease = detailQuery.data?.releases.find(
+    (release) => release.world_revision === sourceRevision,
+  );
+  const selectedReleaseIndexes = record(record(selectedRelease?.document).indexes);
+  const selectedRevisionHasStarterBubble = Boolean(selectedReleaseIndexes.starter_bubble);
+  const materializationRevision = promotedSourceRevision
+    ?? (selectedRevisionHasStarterBubble ? sourceRevision : undefined);
 
   const refreshWorldLibrary = async () => {
     await queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-library'] });
@@ -80,6 +100,11 @@ export function RpgStarterBubblePromotionPanel() {
     }),
     onSuccess: async (result) => {
       const promotion = record(result.promotion);
+      const revision = valueNumber(promotion.world_revision);
+      if (revision) {
+        setPromotedSourceRevision(revision);
+        setSourceRevision(revision);
+      }
       setFeedback(
         `Promoted to world revision ${String(promotion.world_revision ?? '?')} / release ${String(promotion.world_release ?? '?')}.`,
       );
@@ -93,13 +118,23 @@ export function RpgStarterBubblePromotionPanel() {
   });
 
   const materializeMutation = useMutation({
-    mutationFn: (locationId: string) => rpgWorldLibraryClient.materializeDeferredLocation(
-      worldId,
-      locationId,
-      sourceRevision,
-    ),
+    mutationFn: (locationId: string) => {
+      if (!materializationRevision) {
+        throw new Error('Promote the starter bubble before materializing deferred maps.');
+      }
+      return rpgWorldLibraryClient.materializeDeferredLocation(
+        worldId,
+        locationId,
+        materializationRevision,
+      );
+    },
     onSuccess: async (result) => {
       const materialization = record(result.materialization);
+      const revision = valueNumber(materialization.world_revision);
+      if (revision) {
+        setPromotedSourceRevision(revision);
+        setSourceRevision(revision);
+      }
       setFeedback(
         `Materialized ${String(materialization.location_id ?? 'deferred location')} in world revision ${String(materialization.world_revision ?? '?')}.`,
       );
@@ -137,10 +172,19 @@ export function RpgStarterBubblePromotionPanel() {
           </label>
           <label>
             <span>Source revision</span>
-            <select value={sourceRevision} onChange={(event) => setSourceRevision(Number(event.currentTarget.value))}>
+            <select
+              value={sourceRevision}
+              onChange={(event) => {
+                setSourceRevision(Number(event.currentTarget.value));
+                setPromotedSourceRevision(undefined);
+              }}
+            >
               {(detailQuery.data?.revisions ?? []).map((revision) => (
                 <option value={revision.revision} key={revision.revision}>Revision {revision.revision}</option>
               ))}
+              {promotedSourceRevision && !(detailQuery.data?.revisions ?? []).some(
+                (revision) => revision.revision === promotedSourceRevision,
+              ) ? <option value={promotedSourceRevision}>Revision {promotedSourceRevision}</option> : null}
             </select>
           </label>
           <label>
@@ -188,7 +232,8 @@ export function RpgStarterBubblePromotionPanel() {
                     <button
                       type="button"
                       key={locationId}
-                      disabled={!locationId || materializeMutation.isPending}
+                      title={materializationRevision ? undefined : 'Promote the starter bubble first'}
+                      disabled={!locationId || !materializationRevision || materializeMutation.isPending}
                       onClick={() => locationId && materializeMutation.mutate(locationId)}
                     >
                       Materialize {locationId || 'deferred location'}
