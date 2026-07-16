@@ -48,13 +48,21 @@ def register_rpg_world_routes(app: FastAPI) -> None:
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
 
-    @app.get("/api/rpg/worlds", tags=["rpg-world"])
+    @app.get(
+        "/api/rpg/worlds",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
     def rpg_list_worlds(
         limit: int = Query(default=100, ge=1, le=500),
     ) -> dict[str, Any]:
         return {"ok": True, "worlds": list_world_projects(limit=limit)}
 
-    @app.post("/api/rpg/worlds", tags=["rpg-world"])
+    @app.post(
+        "/api/rpg/worlds",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
     async def rpg_create_world(request: Request) -> dict[str, Any]:
         try:
             contract = WorldProjectCreate.model_validate(_body(await request.json()))
@@ -62,7 +70,11 @@ def register_rpg_world_routes(app: FastAPI) -> None:
         except ValidationError as exc:
             raise _validation_error(exc) from exc
 
-    @app.post("/api/rpg/worlds/{world_id}/revisions", tags=["rpg-world"])
+    @app.post(
+        "/api/rpg/worlds/{world_id}/revisions",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
     async def rpg_publish_world_revision(
         world_id: str,
         request: Request,
@@ -83,6 +95,7 @@ def register_rpg_world_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/worlds/{world_id}/revisions/{world_revision}/releases",
         tags=["rpg-world"],
+        include_in_schema=False,
     )
     async def rpg_publish_world_release(
         world_id: str,
@@ -99,7 +112,11 @@ def register_rpg_world_routes(app: FastAPI) -> None:
         except ValidationError as exc:
             raise _validation_error(exc) from exc
 
-    @app.post("/api/rpg/scenarios", tags=["rpg-world"])
+    @app.post(
+        "/api/rpg/scenarios",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
     async def rpg_create_scenario(request: Request) -> dict[str, Any]:
         try:
             contract = ScenarioProjectCreate.model_validate(_body(await request.json()))
@@ -110,6 +127,7 @@ def register_rpg_world_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/scenarios/{scenario_id}/revisions",
         tags=["rpg-world"],
+        include_in_schema=False,
     )
     async def rpg_publish_scenario_revision(
         scenario_id: str,
@@ -127,6 +145,7 @@ def register_rpg_world_routes(app: FastAPI) -> None:
     @app.get(
         "/api/rpg/campaigns/{campaign_id}/world-binding",
         tags=["rpg-world"],
+        include_in_schema=False,
     )
     def rpg_read_campaign_world_binding(campaign_id: str) -> dict[str, Any]:
         binding = read_campaign_world_binding(campaign_id)
@@ -144,6 +163,7 @@ def register_rpg_world_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/campaigns/{campaign_id}/world-binding",
         tags=["rpg-world"],
+        include_in_schema=False,
     )
     async def rpg_bind_campaign_world(
         campaign_id: str,
