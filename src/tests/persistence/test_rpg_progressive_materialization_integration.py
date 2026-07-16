@@ -24,6 +24,9 @@ pytestmark = pytest.mark.skipif(
     reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
 )
 
+_NEIGHBOR_MAP_ID = "map:location:old-road:neighbor"
+_FRONTIER_MAP_ID = "map:location:old-road:frontier:frontier"
+
 
 def _database() -> PostgresDatabase:
     return PostgresDatabase(
@@ -146,6 +149,7 @@ def test_deferred_materialization_creates_future_release_without_upgrading_campa
             world_release=starter_release,
             scenario_revision=scenario,
         )
+        pinned_neighbor_hash = binding.map_definition_pins[_NEIGHBOR_MAP_ID]
         with unit_of_work(database) as work:
             work.world_scenarios.create_scenario(
                 context,
@@ -206,6 +210,14 @@ def test_deferred_materialization_creates_future_release_without_upgrading_campa
         assert result["location_id"] == "location:old-road:frontier"
         assert result["map_binding"]["simulation_readiness"] == "navigable"
         assert result["map_binding"]["presentation_readiness"] == "assets_pending"
+        assert {row["map_id"] for row in result["map_bindings"]} == {
+            _NEIGHBOR_MAP_ID,
+            _FRONTIER_MAP_ID,
+        }
+        assert len(result["map_definitions"]) == 2
+        assert result["certification"]["progressive_materialization"][
+            "affected_map_ids"
+        ] == [_NEIGHBOR_MAP_ID, _FRONTIER_MAP_ID]
         assert result["certification"]["optional_art_blocks_gameplay"] is False
         assert repeated["reused"] is True
         assert repeated["materialization"]["world_revision"] == 3
@@ -229,11 +241,18 @@ def test_deferred_materialization_creates_future_release_without_upgrading_campa
             work.rollback()
 
         assert future_release is not None
-        assert len(future_release["document"]["map_bindings"]) == 4
-        assert map_count == 4
+        future_bindings = {
+            row["map_id"]: row
+            for row in future_release["document"]["map_bindings"]
+        }
+        assert len(future_bindings) == 4
+        assert future_bindings[_NEIGHBOR_MAP_ID]["definition_hash"] != pinned_neighbor_hash
+        assert future_bindings[_FRONTIER_MAP_ID]["simulation_readiness"] == "navigable"
+        assert map_count == 5
         assert pinned is not None
         assert pinned["world_revision"] == 2
         assert pinned["world_release"] == 1
         assert len(pinned["binding"]["map_definition_pins"]) == 3
+        assert pinned["binding"]["map_definition_pins"][_NEIGHBOR_MAP_ID] == pinned_neighbor_hash
     finally:
         database.close()
