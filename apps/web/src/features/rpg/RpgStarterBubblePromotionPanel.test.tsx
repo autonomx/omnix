@@ -4,9 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RpgStarterBubblePromotionPanel } from './RpgStarterBubblePromotionPanel';
 
 function requestPath(input: RequestInfo | URL): string {
-  return typeof input === 'string'
+  const pathname = typeof input === 'string'
     ? new URL(input, 'http://localhost').pathname
     : new URL(input.toString(), 'http://localhost').pathname;
+  return decodeURIComponent(pathname);
 }
 
 function renderPanel() {
@@ -53,7 +54,7 @@ describe('RpgStarterBubblePromotionPanel', () => {
           generation_runs: [],
         });
       }
-      if (path === '/api/rpg/worlds/world%3Astarter/library') {
+      if (path === '/api/rpg/worlds/world:starter/library') {
         return Response.json({
           ok: true,
           world: { id: 'world:starter' },
@@ -70,7 +71,7 @@ describe('RpgStarterBubblePromotionPanel', () => {
           generation_runs: [],
         });
       }
-      if (path === '/api/rpg/worlds/world%3Astarter/starter-bubble/preview') {
+      if (path === '/api/rpg/worlds/world:starter/starter-bubble/preview') {
         return Response.json({
           ok: true,
           starter_bubble: {
@@ -89,7 +90,7 @@ describe('RpgStarterBubblePromotionPanel', () => {
         });
       }
       if (
-        path === '/api/rpg/worlds/world%3Astarter/deferred-locations/northern_road%3Afrontier/materialize'
+        path === '/api/rpg/worlds/world:starter/deferred-locations/northern_road:frontier/materialize'
         && init?.method === 'POST'
       ) {
         return Response.json({
@@ -104,7 +105,7 @@ describe('RpgStarterBubblePromotionPanel', () => {
         });
       }
       if (
-        path === '/api/rpg/worlds/world%3Astarter/starter-bubble/promote'
+        path === '/api/rpg/worlds/world:starter/starter-bubble/promote'
         && init?.method === 'POST'
       ) {
         return Response.json({
