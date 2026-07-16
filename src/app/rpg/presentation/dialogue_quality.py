@@ -58,6 +58,29 @@ def enforce_dialogue_quality(
         }
         return output
     visible = build_visible_response(result, player_input)
+    canonical = _dict(result.get("canonical_narrative_response"))
+    generation = _dict(canonical.get("generation"))
+    if _text(generation.get("source")) == "structured_provider":
+        profiles = _addressed_profiles(result)
+        leaked_terms = sorted(
+            {
+                term
+                for profile in profiles
+                for term in _private_leak_terms(profile, _text(visible.get("plain_text")))
+            }
+        )
+        output = deepcopy(result)
+        output["dialogue_quality"] = {
+            "acceptable": not leaked_terms and bool(_text(visible.get("plain_text"))),
+            "violations": ["private_profile_leak"] if leaked_terms else [],
+            "warnings": [],
+            "format_version": DIALOGUE_QUALITY_VERSION,
+            "repaired": False,
+            "repair_source": "structured_provider_owned_prose_v1",
+            "private_leak_terms": leaked_terms,
+            "target_word_range": [TARGET_MIN_WORDS, TARGET_MAX_WORDS],
+        }
+        return output
     visible = _repair_multi_speaker_visible_response(
         result,
         visible,
@@ -384,6 +407,7 @@ def _mode_requirements(mode: str) -> tuple[str, ...]:
         "local_knowledge": ("old road",),
         "opinion": ("judgment",),
         "identity": ("old road",),
+        "group_conversation": ("old road", "wagon tracks"),
     }.get(mode, ())
 
 
@@ -395,6 +419,31 @@ def build_canonical_dialogue_quality_context(
     """Build a bounded public-only repair contract before canonical publication."""
 
     session = _dict(result.get("session"))
+    fast_path = _text(
+        _dict(result.get("first_call_grounding_diagnostics")).get("source")
+    ) == "fast_visible_dialogue_v1"
+    nested = _dict(result.get("result"))
+    runtime_state = _dict(session.get("runtime_state")) or _dict(
+        result.get("runtime_state")
+    )
+    performance = _dict(runtime_state.get("performance"))
+    llm_prose_required = bool(
+        fast_path
+        or result.get("require_llm_dialogue_prose") is True
+        or nested.get("require_llm_dialogue_prose") is True
+        or performance.get("enable_live_narration_llm") is True
+    )
+    addressed_profiles = _addressed_profiles(dict(result)) or _referenced_profiles_from_session(
+        session,
+        player_input,
+    )
+    addressed_speaker_ids = [
+        _text(profile.get("id") or profile.get("npc_id"))
+        for profile in addressed_profiles
+        if _text(profile.get("id") or profile.get("npc_id"))
+    ]
+    if len(addressed_speaker_ids) > 1:
+        llm_prose_required = True
     absent = _referenced_absent_visible_response(result, session, player_input)
     if absent:
         return {
@@ -404,11 +453,10 @@ def build_canonical_dialogue_quality_context(
             "narration": _text(absent.get("narration")),
             "speaker_id": "",
             "speaker": "",
+            "speaker_ids": [],
             "line": "",
-            "fast_path": _text(
-                _dict(result.get("first_call_grounding_diagnostics")).get("source")
-            )
-            == "fast_visible_dialogue_v1",
+            "fast_path": fast_path,
+            "llm_prose_required": False,
         }
     npc = _dict(result.get("npc"))
     speaker_id = _text(npc.get("speaker_id") or npc.get("id"))
@@ -433,9 +481,20 @@ def build_canonical_dialogue_quality_context(
         session=session,
         repeated_topic=repeated_topic,
     )
+    if len(addressed_speaker_ids) > 1:
+        mode = "group_conversation"
     requirements = _mode_requirements(mode)
     if not requirements:
-        return {}
+        return {
+            "format_version": "rpg_canonical_dialogue_quality_context_v1",
+            "mode": mode,
+            "required_fragments": [],
+            "speaker_id": speaker_id,
+            "speaker": speaker,
+            "speaker_ids": addressed_speaker_ids or ([speaker_id] if speaker_id else []),
+            "fast_path": fast_path,
+            "llm_prose_required": llm_prose_required,
+        }
     fallback = build_profile_aware_dialogue_fallback(
         player_input=player_input,
         profile=profile,
@@ -450,11 +509,10 @@ def build_canonical_dialogue_quality_context(
         "narration": _text(fallback.get("narration")),
         "speaker_id": _text(message.get("speaker_id")) or speaker_id,
         "speaker": _text(message.get("speaker")) or speaker,
+        "speaker_ids": addressed_speaker_ids or ([speaker_id] if speaker_id else []),
         "line": _text(message.get("text")),
-        "fast_path": _text(
-            _dict(result.get("first_call_grounding_diagnostics")).get("source")
-        )
-        == "fast_visible_dialogue_v1",
+        "fast_path": fast_path,
+        "llm_prose_required": llm_prose_required,
     }
 
 
@@ -473,8 +531,29 @@ def repair_canonical_dialogue_response(
     combined = _normalize(
         " ".join(_text(block.text) for block in getattr(response, "blocks", ()))
     )
-    if all(_normalize(fragment) in combined for fragment in requirements):
+    missing = tuple(
+        fragment
+        for fragment in requirements
+        if _normalize(fragment) not in combined
+    )
+    if not missing:
         return response
+
+    generation = getattr(response, "generation", None)
+    if _text(getattr(generation, "source", "")) == "structured_provider":
+        diagnostics = {
+            "dialogue_quality_contract_met": False,
+            "dialogue_quality_mode": _text(context.get("mode")),
+            "dialogue_quality_missing_fragments": list(missing),
+        }
+        return replace(
+            response,
+            generation=replace(
+                response.generation,
+                metadata={**dict(response.generation.metadata), **diagnostics},
+            ),
+            metadata={**dict(response.metadata), **diagnostics},
+        )
 
     blocks = list(getattr(response, "blocks", ()))
     dialogue_index = next(

@@ -115,11 +115,45 @@ def runtime_evidence(result: Mapping[str, Any]) -> tuple[EvidenceRecord, ...]:
     packet = _mapping(diagnostics.get("turn_grounding_packet"))
     npc_context = _mapping(packet.get("npc_context"))
     addressed = npc_context.get("addressed_npcs") if isinstance(npc_context.get("addressed_npcs"), list) else []
-    profile = next((item for item in addressed if isinstance(item, Mapping)), {})
-    if speaker_id:
+    profiles = [item for item in addressed if isinstance(item, Mapping)]
+    if not profiles:
+        session = _mapping(result.get("session"))
+        simulation = _mapping(
+            result.get("simulation_state") or session.get("simulation_state")
+        )
+        profile_containers = (
+            _mapping(simulation.get("npc_index")),
+            _mapping(simulation.get("npcs")),
+        )
+        for candidate_id in result.get("dialogue_speaker_ids") or ():
+            candidate = next(
+                (
+                    _mapping(container.get(str(candidate_id)))
+                    for container in profile_containers
+                    if isinstance(container.get(str(candidate_id)), Mapping)
+                ),
+                {},
+            )
+            if candidate:
+                profiles.append(candidate)
+    if not profiles and speaker_id:
+        profiles = [{"id": speaker_id, "name": speaker_name}]
+    for profile in profiles:
+        profile_id = _first_text(profile.get("id"), profile.get("npc_id"))
+        if profile_id and not profile_id.startswith("npc:"):
+            profile_id = f"npc:{profile_id.casefold().replace(' ', '_')}"
+        if not profile_id:
+            continue
+        profile_name = _first_text(profile.get("name"), profile_id)
+        biography = profile.get("biography")
+        public_biography = (
+            _first_text(_mapping(biography).get("public"))
+            if isinstance(biography, Mapping)
+            else _first_text(biography, profile.get("description"))
+        )
         profile_parts = [
-            speaker_name,
-            _first_text(profile.get("biography"), profile.get("description")),
+            profile_name,
+            public_biography,
             _first_text(_mapping(profile.get("personality_profile")).get("summary"), profile.get("personality")),
             _first_text(profile.get("speech_style")),
         ]
@@ -127,12 +161,12 @@ def runtime_evidence(result: Mapping[str, Any]) -> tuple[EvidenceRecord, ...]:
         if content:
             records.append(
                 EvidenceRecord(
-                    evidence_id=f"runtime:{speaker_id}:profile",
+                    evidence_id=f"runtime:{profile_id}:profile",
                     content=content,
                     authority=AuthorityClass.OBJECTIVE_CANON,
                     visibility=VisibilityClass.NARRATOR_ONLY,
-                    known_by=(speaker_id,),
-                    entity_refs=(speaker_id,),
+                    known_by=(profile_id,),
+                    entity_refs=(profile_id,),
                     source_revision=int(result.get("state_revision") or 0),
                 )
             )

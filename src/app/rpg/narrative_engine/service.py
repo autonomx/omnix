@@ -77,6 +77,9 @@ class NarrativeEngineService:
             plan,
             evidence,
             self.writer,
+            allow_deterministic_fallback=(
+                request.metadata.get("llm_prose_required") is not True
+            ),
         )
         if not validated.validation.passed:
             codes = ",".join(issue.code for issue in validated.validation.issues)
@@ -163,19 +166,26 @@ class NarrativeEngineService:
             "player": player_result.trace,
             "narrator": narrator_result.trace,
         }
-        if speaker:
+        speaker_ids = tuple(
+            dict.fromkeys(
+                value
+                for value in (*request.actor_ids, speaker or "")
+                if value
+            )
+        )
+        for speaker_id in speaker_ids:
             speaker_result = self._retrieve(
                 request,
                 EvidenceAccessContext(
                     player_id=player_id,
-                    speaker_id=speaker,
+                    speaker_id=speaker_id,
                     actor_ids=actor_ids,
                     faction_ids=speaker_factions,
                     narrator_mode=False,
                 ),
             )
-            speakers[speaker] = speaker_result.evidence
-            traces[f"speaker:{speaker}"] = speaker_result.trace
+            speakers[speaker_id] = speaker_result.evidence
+            traces[f"speaker:{speaker_id}"] = speaker_result.trace
 
         grants = EvidenceGrantSet(
             player=player_result.evidence,

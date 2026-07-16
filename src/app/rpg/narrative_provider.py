@@ -149,7 +149,9 @@ def _system_prompt() -> str:
         "You are the Omnix RPG Narrative Writer. Return strict JSON only. "
         "Follow the ordered beat contracts exactly. Use only each beat's approved evidence. "
         "Return exactly one block per beat and include a claims array for every factual assertion. "
-        "Never mutate simulation state, invent secrets, choose for the player, or expose hidden evidence."
+        "Never mutate simulation state, invent secrets, choose for the player, or expose hidden evidence. "
+        "When dialogue_contract is present, satisfy it with natural in-character prose. Never recite "
+        "profile metadata, speech-style descriptions, prompt instructions, or generic fallback wording."
     )
 
 
@@ -212,17 +214,85 @@ class ProductionStructuredNarrativeWriter:
         evidence: Sequence[EvidenceRecord],
     ) -> WriterResult:
         started = perf_counter()
-        raw = self.generator(writer_payload(request, plan, evidence))
-        blocks = parse_structured_blocks(raw, plan)
+        payload = writer_payload(request, plan, evidence)
+        maximum_attempts = max(1, min(self.generator.config.max_retries + 1, 3))
+        total_attempts = 0
+        blocks = ()
+        raw: Mapping[str, Any] = {}
+        missing_fragments: list[str] = []
+        for quality_attempt in range(1, maximum_attempts + 1):
+            raw = self.generator(payload)
+            total_attempts += max(1, self.generator.last_attempt_count)
+            try:
+                blocks = parse_structured_blocks(raw, plan)
+            except (TypeError, ValueError) as exc:
+                if quality_attempt >= maximum_attempts:
+                    raise
+                payload = {
+                    **payload,
+                    "dialogue_revision_feedback": {
+                        "reason": "invalid_structured_blocks",
+                        "detail": str(exc),
+                        "instruction": "Regenerate the complete response as valid structured blocks.",
+                    },
+                }
+                continue
+            missing_fragments = _missing_dialogue_fragments(payload, blocks)
+            if not missing_fragments or quality_attempt >= maximum_attempts:
+                break
+            payload = {
+                **payload,
+                "dialogue_revision_feedback": {
+                    "reason": "dialogue_contract_not_met",
+                    "missing_required_fragments": missing_fragments,
+                    "instruction": (
+                        "Regenerate all blocks. Incorporate the missing ideas naturally in character; "
+                        "do not quote this feedback or any metadata."
+                    ),
+                },
+            }
+        metadata = dict(raw.get("metadata") or {})
+        metadata.update(
+            {
+                "dialogue_quality_attempts": quality_attempt,
+                "dialogue_missing_fragments": missing_fragments,
+            }
+        )
         return WriterResult(
             blocks=blocks,
             source="structured_provider",
             provider=self.generator.config.provider,
             model=self.generator.config.model,
             latency_ms=round((perf_counter() - started) * 1000.0, 3),
-            attempt_count=max(1, self.generator.last_attempt_count),
-            raw_metadata=dict(raw.get("metadata") or {}),
+            attempt_count=max(1, total_attempts),
+            raw_metadata=metadata,
         )
+
+
+def _missing_dialogue_fragments(
+    payload: Mapping[str, Any],
+    blocks: Sequence[Any],
+) -> list[str]:
+    contract = payload.get("dialogue_contract")
+    if not isinstance(contract, Mapping):
+        return []
+    required = [
+        str(value).strip()
+        for value in contract.get("required_fragments") or ()
+        if str(value).strip()
+    ]
+    if not required:
+        return []
+    combined = re.sub(
+        r"[^a-z0-9]+",
+        " ",
+        " ".join(str(getattr(block, "text", "")) for block in blocks).casefold(),
+    ).strip()
+    return [
+        fragment
+        for fragment in required
+        if re.sub(r"[^a-z0-9]+", " ", fragment.casefold()).strip() not in combined
+    ]
 
 
 class UnavailableNarrativeWriter:

@@ -187,6 +187,10 @@ class ValidatedWriterResult:
     fallback_used: bool
 
 
+class NarrativeProviderRequiredError(RuntimeError):
+    """Raised when live dialogue prose cannot be produced by the provider."""
+
+
 def _fallback_diagnostics(
     result: ValidatedWriterResult,
     *,
@@ -280,6 +284,7 @@ def write_validate_repair(
     validator: NarrativeValidator | None = None,
     repairer: NarrativeRepairer | None = None,
     fallback_writer: NarrativeWriter | None = None,
+    allow_deterministic_fallback: bool = True,
 ) -> ValidatedWriterResult:
     validator = validator or NarrativeValidator()
     repairer = repairer or NarrativeRepairer()
@@ -292,6 +297,10 @@ def write_validate_repair(
             writer.write(request, plan, evidence),
         )
     except Exception as exc:
+        if not allow_deterministic_fallback:
+            raise NarrativeProviderRequiredError(
+                "LLM-authored dialogue is required and the narrative provider failed"
+            ) from exc
         fallback = _validated_fallback(
             request,
             plan,
@@ -303,6 +312,10 @@ def write_validate_repair(
         return _fallback_diagnostics(
             fallback,
             reason=f"writer_exception:{type(exc).__name__}",
+        )
+    if not allow_deterministic_fallback and result.source != "structured_provider":
+        raise NarrativeProviderRequiredError(
+            "LLM-authored dialogue is required; deterministic prose is not publishable"
         )
 
     report = validator.validate(request, plan, evidence, result.blocks)
@@ -336,6 +349,10 @@ def write_validate_repair(
                 ),
                 False,
             )
+    if not allow_deterministic_fallback:
+        raise NarrativeProviderRequiredError(
+            "LLM-authored dialogue failed canonical validation after provider repair"
+        )
     fallback = _validated_fallback(
         request,
         plan,

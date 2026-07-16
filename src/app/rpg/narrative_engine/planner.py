@@ -148,12 +148,18 @@ def _dialogue_beats(
     beats: list[NarrativeBeat],
     request: TurnPresentationRequest,
     narrator_evidence: Sequence[EvidenceRecord],
-    speaker_evidence: Sequence[EvidenceRecord],
+    grants: EvidenceGrantSet,
     policy: NarrativeProfilePolicy,
 ) -> None:
     speaker = request.target_actor_id or str(request.metadata.get("speaker_id") or "") or None
-    narrator_refs = _evidence_ids(narrator_evidence, speaker or "")
-    spoken_refs = _evidence_ids(speaker_evidence, speaker or "")
+    speakers = tuple(
+        dict.fromkeys(
+            str(value).strip()
+            for value in request.metadata.get("dialogue_speaker_ids") or (speaker,)
+            if str(value or "").strip()
+        )
+    )
+    narrator_refs = _evidence_ids(narrator_evidence, *speakers)
     beats.append(
         _beat(
             len(beats) + 1,
@@ -164,18 +170,26 @@ def _dialogue_beats(
             evidence_scope="narrator",
         )
     )
-    beats.append(
-        _beat(
-            len(beats) + 1,
-            BeatKind.DIALOGUE,
-            BeatPurpose.DIRECT_ANSWER,
-            speaker_id=speaker,
-            evidence_refs=spoken_refs,
-            claim_refs=_claim_refs(request),
-            instructions="Answer the player's latest statement or question directly in the speaker's established voice.",
-            evidence_scope="speaker",
+    for dialogue_speaker in speakers or (speaker,):
+        speaker_evidence = grants.for_speaker(dialogue_speaker)
+        spoken_refs = _evidence_ids(speaker_evidence, dialogue_speaker or "")
+        beats.append(
+            _beat(
+                len(beats) + 1,
+                BeatKind.DIALOGUE,
+                BeatPurpose.DIRECT_ANSWER,
+                speaker_id=dialogue_speaker,
+                evidence_refs=spoken_refs,
+                claim_refs=_claim_refs(request),
+                instructions=(
+                    "Answer the player's latest statement or question directly in this "
+                    "speaker's established voice and perspective."
+                ),
+                evidence_scope="speaker",
+            )
         )
-    )
+    speaker_evidence = grants.for_speaker(speaker)
+    spoken_refs = _evidence_ids(speaker_evidence, speaker or "")
     if policy.allow_lore_expansion and len(beats) < policy.maximum_beats:
         lore_ids = tuple(
             record.evidence_id
@@ -217,7 +231,7 @@ def _dialogue_beats(
                 required=False,
             )
         )
-    elif policy.allow_forward_hook and len(beats) < policy.maximum_beats:
+    elif len(speakers) <= 1 and policy.allow_forward_hook and len(beats) < policy.maximum_beats:
         beats.append(
             _beat(
                 len(beats) + 1,
@@ -302,7 +316,6 @@ class DeterministicBeatPlanner:
             )
         player_evidence = grants.player
         narrator_evidence = grants.narrator
-        speaker_evidence = grants.for_speaker(speaker)
 
         beats: list[NarrativeBeat] = []
         _append_scene_beats(beats, request, narrator_evidence)
@@ -311,7 +324,7 @@ class DeterministicBeatPlanner:
                 beats,
                 request,
                 narrator_evidence,
-                speaker_evidence,
+                grants,
                 policy,
             )
         elif mode in {"observation", "investigation"}:
@@ -329,7 +342,14 @@ class DeterministicBeatPlanner:
         else:
             _action_beats(beats, request, player_evidence, mode, policy)
 
-        beats = beats[: policy.maximum_beats]
+        dialogue_speaker_count = len(
+            tuple(request.metadata.get("dialogue_speaker_ids") or ())
+        )
+        maximum_beats = max(
+            policy.maximum_beats,
+            1 + dialogue_speaker_count if dialogue_speaker_count else 0,
+        )
+        beats = beats[:maximum_beats]
         must_answer = str(request.metadata.get("must_answer") or request.player_input).strip()
         return NarrativePlan(
             request_id=request.request_id,
@@ -344,7 +364,7 @@ class DeterministicBeatPlanner:
                 "evidence_count": len(evidence),
                 "player_evidence_count": len(player_evidence),
                 "narrator_evidence_count": len(narrator_evidence),
-                "speaker_evidence_count": len(speaker_evidence),
+                "speaker_evidence_count": len(grants.for_speaker(speaker)),
                 "speaker_id": speaker or "",
             },
         )

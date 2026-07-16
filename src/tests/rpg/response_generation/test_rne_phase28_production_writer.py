@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 from app.providers.base import (
     BaseProvider,
@@ -24,6 +25,7 @@ from app.rpg.narrative_engine import (
     VisibilityClass,
 )
 from app.rpg.narrative_engine.validation import write_validate_repair
+from app.rpg.narrative_engine.writer import writer_payload
 from app.rpg.narrative_provider import (
     NarrativeProviderConfig,
     ProductionStructuredNarrativeWriter,
@@ -222,6 +224,88 @@ def test_live_provider_retries_then_returns_native_structured_blocks() -> None:
     system = provider.calls[-1]["messages"][0].content
     assert "strict JSON only" in system
     assert "claims array" in system
+
+
+def test_dialogue_contract_retries_provider_prose_instead_of_using_canned_repair() -> None:
+    revised = json.loads(_structured_payload())
+    revised["blocks"][0]["text"] = (
+        "The old road is muddy, and the guards say it remains passable."
+    )
+    provider = _Provider([_structured_payload(), json.dumps(revised)])
+    writer = ProductionStructuredNarrativeWriter(
+        ProviderNarrativeGenerator(
+            provider,
+            NarrativeProviderConfig(
+                mode="live",
+                provider="phase28",
+                model="phase28-model",
+                max_retries=1,
+            ),
+        )
+    )
+    request = replace(
+        _request(),
+        metadata={
+            "response_mode": "dialogue",
+            "dialogue_quality_context": {
+                "llm_prose_required": True,
+                "mode": "road_safety",
+                "speaker_id": "npc:bran",
+                "required_fragments": ["old road", "guards"],
+            },
+        },
+    )
+
+    result = writer.write(request, _plan(), _evidence())
+
+    assert len(provider.calls) == 2
+    assert result.source == "structured_provider"
+    assert result.raw_metadata["dialogue_quality_attempts"] == 2
+    assert result.raw_metadata["dialogue_missing_fragments"] == []
+    assert "old road" in result.blocks[0].text.casefold()
+    second_payload = json.loads(provider.calls[1]["messages"][1].content)
+    assert second_payload["dialogue_contract"]["required_fragments"] == [
+        "old road",
+        "guards",
+    ]
+    assert second_payload["dialogue_revision_feedback"]["reason"] == (
+        "dialogue_contract_not_met"
+    )
+    assert "Speaking plainly" in second_payload["dialogue_contract"]["requirements"][-1]
+    assert "generic fallback wording" in provider.calls[1]["messages"][0].content
+
+
+def test_dialogue_writer_payload_excludes_precomputed_fallback_prose() -> None:
+    request = replace(
+        _request(),
+        authoritative_outcome={
+            "stateful": False,
+            "visible_response": {
+                "npc": {"line": "Speaking plainly, repeat this canned response."},
+            },
+            "result": {
+                "summary": "Speaking plainly, nested canned response.",
+                "changed_domains": ["conversation"],
+            },
+        },
+        metadata={
+            "response_mode": "dialogue",
+            "dialogue_quality_context": {
+                "llm_prose_required": True,
+                "mode": "business",
+                "required_fragments": ["regulars"],
+            },
+        },
+    )
+
+    payload = writer_payload(request, _plan(), _evidence())
+    rendered = json.dumps(payload)
+
+    assert "repeat this canned response" not in rendered
+    assert "nested canned response" not in rendered
+    assert payload["authoritative_outcome"] == {
+        "stateful": False,
+    }
 
 
 def test_lmstudio_uses_supported_json_schema_response_format() -> None:

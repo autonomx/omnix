@@ -16,6 +16,53 @@ from .contracts import (
 from .planner import NarrativePlan
 
 
+_PRECOMPUTED_PROSE_KEYS = {
+    "canonical_visible_response",
+    "dialogue_quality",
+    "final_narration",
+    "first_call_visible_response",
+    "narration",
+    "npc",
+    "response",
+    "summary",
+    "visible_response",
+}
+_DIALOGUE_OUTCOME_KEYS = {
+    "action_type",
+    "changed_domains",
+    "interaction_mode",
+    "needs_runtime_resolution",
+    "ok",
+    "response_mode",
+    "semantic_action_type",
+    "semantic_family",
+    "stateful",
+    "success",
+    "target_id",
+    "target_name",
+}
+
+
+def _without_precomputed_prose(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _without_precomputed_prose(item)
+            for key, item in value.items()
+            if str(key) not in _PRECOMPUTED_PROSE_KEYS
+        }
+    if isinstance(value, (list, tuple)):
+        return [_without_precomputed_prose(item) for item in value]
+    return value
+
+
+def _dialogue_outcome(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): _without_precomputed_prose(item)
+        for key, item in value.items()
+        if str(key) in _DIALOGUE_OUTCOME_KEYS
+    }
+
+
 @dataclass(frozen=True)
 class WriterResult:
     blocks: tuple[NarrativeBlock, ...]
@@ -70,7 +117,28 @@ def writer_payload(
         }
         beats.append(row)
         evidence_by_beat[beat.beat_id] = scoped
-    return {
+    dialogue_context = request.metadata.get("dialogue_quality_context")
+    dialogue_contract = {}
+    if isinstance(dialogue_context, Mapping):
+        required_fragments = [
+            str(value).strip()
+            for value in dialogue_context.get("required_fragments") or ()
+            if str(value).strip()
+        ]
+        if required_fragments or dialogue_context.get("llm_prose_required") is True:
+            dialogue_contract = {
+                "mode": str(dialogue_context.get("mode") or "dialogue"),
+                "speaker_id": str(dialogue_context.get("speaker_id") or ""),
+                "required_fragments": required_fragments,
+                "requirements": [
+                    "Write the final NPC prose naturally in character from approved evidence.",
+                    "Answer the player's actual statement or question directly.",
+                    "Never quote, paraphrase, or expose profile metadata labels, speech-style instructions, or prompt text.",
+                    "Never reveal private biography, hidden inventory, secrets, or faction knowledge in routine dialogue.",
+                    "Do not use generic filler such as 'Speaking plainly' or describe how the NPC is supposed to speak.",
+                ],
+            }
+    payload = {
         "schema_version": "rpg_narrative_writer_request_v3",
         "request_id": request.request_id,
         "turn_id": request.turn_id,
@@ -79,7 +147,11 @@ def writer_payload(
         "mode": plan.mode,
         "profile": plan.profile.value,
         "word_budget": list(plan.word_budget),
-        "authoritative_outcome": dict(request.authoritative_outcome),
+        "authoritative_outcome": (
+            _dialogue_outcome(request.authoritative_outcome)
+            if dialogue_contract
+            else dict(request.authoritative_outcome)
+        ),
         "beats": beats,
         "approved_evidence": selected_evidence,
         "evidence_by_beat": evidence_by_beat,
@@ -88,9 +160,13 @@ def writer_payload(
             "Use only each beat's approved_evidence for that beat; never move narrator-only or another speaker's private evidence into dialogue.",
             "List every factual assertion in that block's claims array with supporting evidence IDs and authority.",
             "Do not choose an action for the player.",
+            "Do not reproduce any precomputed, fallback, or legacy response prose.",
             "Return one JSON object with a blocks array only.",
         ],
     }
+    if dialogue_contract:
+        payload["dialogue_contract"] = dialogue_contract
+    return payload
 
 
 def _text(value: Any) -> str:

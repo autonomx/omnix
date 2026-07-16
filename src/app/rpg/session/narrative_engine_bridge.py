@@ -198,15 +198,24 @@ def _publish(
     grounding: TurnGroundingPacket,
 ) -> dict[str, Any]:
     projection = legacy_response_projection(generated.response)
+    provider_authored = generated.response.generation.source == "structured_provider"
     footer = narrative_grounding_footer(
         grounding.metadata,
         block_count=len(generated.response.blocks),
     )
     result.update(projection)
+    result["canonical_visible_response"] = dict(projection["visible_response"])
+    result["first_call_visible_response"] = {
+        "canonical_visible_response": dict(projection["visible_response"]),
+        "visible_response": dict(projection["visible_response"]),
+    }
     result["canonical_narrative_response"] = generated.response.as_dict()
     result["canonical_narrative_source"] = "unified_narrative_engine_v1"
     result["source"] = source
     result["legacy_visible_prose_consumed"] = False
+    if provider_authored:
+        result["llm_called"] = True
+        result["llm_purpose"] = "canonical_dialogue_generation"
     result["narrative_grounding"] = {
         **dict(grounding.metadata),
         "footer": footer,
@@ -220,9 +229,17 @@ def _publish(
     nested = _mapping(result.get("result"))
     if nested:
         nested.update(projection)
+        nested["canonical_visible_response"] = dict(projection["visible_response"])
+        nested["first_call_visible_response"] = {
+            "canonical_visible_response": dict(projection["visible_response"]),
+            "visible_response": dict(projection["visible_response"]),
+        }
         nested["canonical_narrative_response"] = generated.response.as_dict()
         nested["canonical_narrative_source"] = "unified_narrative_engine_v1"
         nested["legacy_visible_prose_consumed"] = False
+        if provider_authored:
+            nested["llm_called"] = True
+            nested["llm_purpose"] = "canonical_dialogue_generation"
         nested["narrative_grounding"] = result["narrative_grounding"]
         nested["narrative_grounding_footer"] = footer
         result["result"] = nested
@@ -256,6 +273,7 @@ def _request(
     profile: PresentationProfile = PresentationProfile.IMMERSIVE,
     significance: NarrativeSignificance = NarrativeSignificance.ROUTINE,
     target_actor_id: str | None = None,
+    dialogue_quality_context: Mapping[str, Any] | None = None,
 ) -> TurnPresentationRequest:
     speaker_id, _ = _npc_identity(result)
     has_speaker = bool(target_actor_id or _text(_mapping(result.get("npc")).get("speaker")))
@@ -268,7 +286,19 @@ def _request(
         or result.get("tick")
         or 0
     )
-    actor_ids = (speaker_id,) if has_speaker else ()
+    quality_context = (
+        dict(dialogue_quality_context)
+        if dialogue_quality_context is not None
+        else _dialogue_quality_context(result, player_input=player_input)
+    )
+    dialogue_speaker_ids = tuple(
+        dict.fromkeys(
+            _text(value)
+            for value in quality_context.get("speaker_ids") or ()
+            if _text(value)
+        )
+    )
+    actor_ids = dialogue_speaker_ids or ((speaker_id,) if has_speaker else ())
     return TurnPresentationRequest(
         request_id=f"{mode}:{session_id}:{turn_token}",
         turn_id=(
@@ -292,10 +322,9 @@ def _request(
             "response_mode": mode,
             "response_id": f"narrative:{session_id}:{turn_token}:1",
             "evidence_limit": max(12, min(len(evidence), 50)),
-            "dialogue_quality_context": _dialogue_quality_context(
-                result,
-                player_input=player_input,
-            ),
+            "dialogue_quality_context": quality_context,
+            "llm_prose_required": quality_context.get("llm_prose_required") is True,
+            "dialogue_speaker_ids": list(dialogue_speaker_ids),
             **dict(grounding_metadata),
         },
     )
@@ -305,12 +334,6 @@ def _generate(
     grounding: TurnGroundingPacket,
     request: TurnPresentationRequest,
 ) -> Any:
-    quality_context = _mapping(request.metadata.get("dialogue_quality_context"))
-    writer = None
-    if quality_context.get("fast_path") is True:
-        from app.rpg.narrative_engine import DeterministicNarrativeWriter
-
-        writer = DeterministicNarrativeWriter()
     return NarrativeEngineService(
         evidence_broker=EvidenceBroker(
             [
@@ -320,7 +343,6 @@ def _generate(
                 )
             ]
         ),
-        writer=writer,
     ).generate(request)
 
 
@@ -341,8 +363,17 @@ def canonicalize_direct_dialogue_result(
         result,
         player_input=player_input,
     )
+    quality_speaker_ids = tuple(
+        _text(value)
+        for value in quality_context.get("speaker_ids") or ()
+        if _text(value)
+    )
+    if quality_speaker_ids:
+        speaker_id = quality_speaker_ids[0]
+    grounding_result = dict(result)
+    grounding_result["dialogue_speaker_ids"] = list(quality_speaker_ids)
     grounding = build_turn_grounding_packet(
-        result,
+        grounding_result,
         campaign_id=session_id,
         player_input=player_input,
         speaker_id=speaker_id,
@@ -358,6 +389,7 @@ def canonicalize_direct_dialogue_result(
         grounding_metadata=grounding.metadata,
         profile=_profile(result, PresentationProfile.FAST),
         target_actor_id=speaker_id,
+        dialogue_quality_context=quality_context,
     )
     generated = _generate(grounding, request)
     return _publish(

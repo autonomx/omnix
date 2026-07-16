@@ -17,7 +17,7 @@ from .persistence_policy import repository_save_deferred
 from .planner import NarrativePlan
 from .repository import NarrativeResponseConflict
 from .service import NarrativeEngineResult, NarrativeEngineService as _NarrativeEngineService
-from .validation import ValidatedWriterResult
+from .validation import NarrativeProviderRequiredError, ValidatedWriterResult
 from .writer import WriterResult
 
 
@@ -104,6 +104,13 @@ def _replay_result(
         raise NarrativeTurnIdentityConflict(
             "turn already belongs to a different presentation request: "
             f"{request.campaign_id}/{request.turn_id}"
+        )
+    if (
+        request.metadata.get("llm_prose_required") is True
+        and response.generation.source != "structured_provider"
+    ):
+        raise NarrativeProviderRequiredError(
+            "LLM-authored dialogue is required; stored deterministic prose is not publishable"
         )
 
     trace = RetrievalTrace(

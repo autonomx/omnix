@@ -147,7 +147,7 @@ def _try_fast_visible_dialogue(
         "needs_runtime_resolution": False,
         "direct_response_gate": {
             "safe_to_display_now": False,
-            "reason": "fast deterministic safe fallback handles visible dialogue",
+            "reason": "canonical narrative provider handles visible dialogue",
             "risk_flags": [],
         },
         "first_call_grounding_diagnostics": {
@@ -164,7 +164,7 @@ def _try_fast_visible_dialogue(
     }
     selection = {
         "consumable": False,
-        "reason": "fast_visible_dialogue_safe_fallback",
+        "reason": "fast_visible_dialogue_intent_skip",
         "source": _SOURCE,
     }
     result = runtime._safe_dialogue_fallback_result(
@@ -179,13 +179,15 @@ def _try_fast_visible_dialogue(
     result["turn_id"] = runtime.canonical_runtime._build_turn_id(runtime_state)
     result["tick"] = int(runtime_state.get("tick", 0) or 0)
     result["llm_called"] = False
-    result["llm_purpose"] = "fast_visible_dialogue_safe_fallback"
+    result["llm_purpose"] = "fast_visible_dialogue_intent_skip"
+    result["require_llm_dialogue_prose"] = True
     result["fast_visible_dialogue"] = True
     result["source"] = _SOURCE
     nested = _d(result.get("result"))
     if nested:
         nested["llm_called"] = False
-        nested["llm_purpose"] = "fast_visible_dialogue_safe_fallback"
+        nested["llm_purpose"] = "fast_visible_dialogue_intent_skip"
+        nested["require_llm_dialogue_prose"] = True
         nested["fast_visible_dialogue"] = True
         nested["source"] = _SOURCE
         result["result"] = nested
