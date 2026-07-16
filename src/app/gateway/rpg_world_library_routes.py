@@ -14,6 +14,11 @@ from app.rpg.worlds.library_service import (
     start_world_library_generation,
 )
 from app.rpg.worlds.published_launch import launch_published_scenario
+from app.rpg.worlds.starter_bubble import (
+    build_starter_bubble,
+    predictive_materialization_queue,
+)
+from app.rpg.worlds.starter_bubble_service import promote_starter_bubble
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_library_routes_registered"
 
@@ -144,6 +149,57 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
     def rpg_world_publish_generation(run_id: str) -> dict[str, Any]:
         try:
             return publish_world_library_generation(run_id)
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.get(
+        "/api/rpg/worlds/{world_id}/starter-bubble/preview",
+        include_in_schema=False,
+    )
+    def rpg_world_starter_bubble_preview(
+        world_id: str,
+        source_world_revision: int = Query(ge=1),
+        starting_location_id: str = Query(min_length=1),
+        neighboring_location_id: str | None = Query(default=None),
+    ) -> dict[str, Any]:
+        plan = build_starter_bubble(
+            world_id=world_id,
+            source_world_revision=source_world_revision,
+            starting_location_id=starting_location_id,
+            neighboring_location_id=neighboring_location_id,
+        )
+        return {
+            "ok": True,
+            "starter_bubble": plan.model_dump(mode="json"),
+            "predictive_materialization": list(
+                predictive_materialization_queue(
+                    plan,
+                    current_location_id=starting_location_id,
+                )
+            ),
+        }
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/starter-bubble/promote",
+        include_in_schema=False,
+    )
+    async def rpg_world_starter_bubble_promote(
+        world_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        try:
+            return promote_starter_bubble(
+                world_id=world_id,
+                source_world_revision=int(payload.get("source_world_revision") or 0),
+                starting_location_id=str(payload.get("starting_location_id") or ""),
+                neighboring_location_id=(
+                    str(payload.get("neighboring_location_id"))
+                    if payload.get("neighboring_location_id")
+                    else None
+                ),
+            )
         except Exception as exc:
             _raise_domain_error(exc)
             raise
