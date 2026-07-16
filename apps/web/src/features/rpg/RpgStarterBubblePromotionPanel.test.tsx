@@ -104,7 +104,9 @@ describe('RpgStarterBubblePromotionPanel', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderPanel();
 
-    fireEvent.click(screen.getByText('Starter bubble promotion'));
+    const summary = screen.getByText('Starter bubble promotion').closest('summary');
+    expect(summary).not.toBeNull();
+    fireEvent.click(summary as HTMLElement);
     expect(await screen.findByRole('option', { name: 'Starter World' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Preview starter bubble' }));
