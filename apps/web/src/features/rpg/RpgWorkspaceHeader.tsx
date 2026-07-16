@@ -5,6 +5,7 @@ import { OmnixStatusPill } from '../../design/primitives';
 import { RpgWorldsCampaignsLibrary } from './RpgWorldsCampaignsLibrary';
 import type { RpgSessionSummaryPreview } from './rpgUiState';
 import './RpgPlayFocus.css';
+import './RpgWorldLibraryOverlay.css';
 
 interface RpgWorkspaceHeaderProps {
   isLiveDataExpanded: boolean;
