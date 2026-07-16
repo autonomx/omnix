@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
+import {
+  rpgWorldLibraryClient,
+  type RpgStarterBubbleResponse,
+} from '../../api/rpgWorldLibraryClient';
 import './RpgStarterBubblePromotionPanel.css';
 
 function record(value: unknown): Record<string, unknown> {
@@ -19,7 +22,7 @@ export function RpgStarterBubblePromotionPanel() {
   const [sourceRevision, setSourceRevision] = useState(1);
   const [startingLocation, setStartingLocation] = useState('rusty_flagon_tavern');
   const [neighboringLocation, setNeighboringLocation] = useState('northern_road');
-  const [preview, setPreview] = useState<Record<string, unknown>>();
+  const [preview, setPreview] = useState<RpgStarterBubbleResponse>();
   const [feedback, setFeedback] = useState<string>();
   const [error, setError] = useState<string>();
 
