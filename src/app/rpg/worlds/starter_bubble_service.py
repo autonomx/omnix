@@ -201,7 +201,9 @@ def promote_starter_bubble(
             content_hash=promoted_revision.content_hash,
             expected_revision=current_revision,
         )
-        bindings: list[MapDefinitionBinding] = []
+        binding_by_map = {
+            binding.map_id: binding for binding in source_release.map_bindings
+        }
         stored_definitions: list[dict[str, Any]] = []
         for definition in definitions:
             stored = work.map_instances.put_definition(
@@ -215,20 +217,19 @@ def promote_starter_bubble(
                 semantic_interface_hash=definition.semantic_interface_hash,
             )
             stored_definitions.append(stored)
-            bindings.append(
-                MapDefinitionBinding(
-                    map_id=definition.map_id,
-                    blueprint_revision=target_revision,
-                    definition_revision=definition.definition_revision,
-                    definition_hash=definition.definition_hash,
-                    semantic_interface_hash=definition.semantic_interface_hash,
-                    simulation_readiness="navigable",
-                    presentation_readiness=str(
-                        definition.metadata.get("presentation_readiness")
-                        or "placeholder"
-                    ),
-                )
+            binding_by_map[definition.map_id] = MapDefinitionBinding(
+                map_id=definition.map_id,
+                blueprint_revision=target_revision,
+                definition_revision=definition.definition_revision,
+                definition_hash=definition.definition_hash,
+                semantic_interface_hash=definition.semantic_interface_hash,
+                simulation_readiness="navigable",
+                presentation_readiness=str(
+                    definition.metadata.get("presentation_readiness")
+                    or "placeholder"
+                ),
             )
+        bindings = [binding_by_map[key] for key in sorted(binding_by_map)]
         base_certification = dict(source_release.certification)
         launch_ready = bool(base_certification.get("launch_ready")) and bool(
             bubble_certification["simulation_certified"]
