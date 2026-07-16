@@ -254,7 +254,7 @@ def test_deferred_materialization_creates_future_release_without_upgrading_campa
         assert pinned is not None
         assert pinned["world_revision"] == 2
         assert pinned["world_release"] == 1
-        assert len(pinned["binding"]["map_definition_pins"]) == 3
-        assert pinned["binding"]["map_definition_pins"][_NEIGHBOR_MAP_ID] == pinned_neighbor_hash
+        assert len(pinned["map_definition_pins"]) == 3
+        assert pinned["map_definition_pins"][_NEIGHBOR_MAP_ID] == pinned_neighbor_hash
     finally:
         database.close()
