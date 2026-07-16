@@ -10,6 +10,7 @@ from .contracts import MapDefinitionBinding, WorldReleaseDocument, WorldRevision
 from .service import compile_world_release, compile_world_revision
 from .starter_bubble import (
     StarterBubblePlan,
+    StarterLocationSlot,
     build_starter_map_definitions,
     predictive_materialization_queue,
 )
@@ -115,6 +116,44 @@ def _updated_plan(
     return plan.model_copy(update={"slots": slots, "topology": topology})
 
 
+def _affected_slots(
+    plan: StarterBubblePlan,
+    location_id: str,
+) -> tuple[StarterLocationSlot, ...]:
+    """Return the target and every materialized neighbor whose portals change."""
+
+    target = plan.slot(location_id)
+    affected = []
+    for slot in plan.slots:
+        if not slot.map_id or slot.deferred:
+            continue
+        if (
+            slot.location_id == location_id
+            or slot.location_id in target.connected_location_ids
+            or location_id in slot.connected_location_ids
+        ):
+            affected.append(slot)
+    return tuple(sorted(affected, key=lambda value: value.location_id))
+
+
+def _definition_revisions(
+    work: Any,
+    context: Any,
+    slots: tuple[StarterLocationSlot, ...],
+) -> dict[str, int]:
+    revisions: dict[str, int] = {}
+    for slot in slots:
+        if not slot.map_id:
+            continue
+        row = work.connection.execute(
+            "SELECT COALESCE(MAX(definition_revision), 0) "
+            "FROM omnix_rpg_map_definitions WHERE workspace_id = %s AND map_id = %s",
+            (context.workspace_id, slot.map_id),
+        ).fetchone()
+        revisions[slot.map_id] = int(row[0]) + 1
+    return revisions
+
+
 def _promoted_blueprint_requirements(
     source_revision: WorldRevisionDocument,
     *,
@@ -204,8 +243,8 @@ def materialize_deferred_location(
         source_release = WorldReleaseDocument.model_validate(source_release_row[1])
         plan = _starter_plan(source_revision, source_release)
         promoted_plan = _updated_plan(plan, location_id)
-        slot = promoted_plan.slot(location_id)
-        if not slot.map_id:
+        target_slot = promoted_plan.slot(location_id)
+        if not target_slot.map_id:
             raise ValueError(f"deferred_location_map_missing:{location_id}")
 
         current_row = work.connection.execute(
@@ -215,19 +254,26 @@ def materialize_deferred_location(
         ).fetchone()
         current_revision = int(current_row[0])
         target_revision = current_revision + 1
-        definition_row = work.connection.execute(
-            "SELECT COALESCE(MAX(definition_revision), 0) "
-            "FROM omnix_rpg_map_definitions WHERE workspace_id = %s AND map_id = %s",
-            (context.workspace_id, slot.map_id),
-        ).fetchone()
-        definition_revision = int(definition_row[0]) + 1
-        definitions = build_starter_map_definitions(
+        affected_slots = _affected_slots(promoted_plan, location_id)
+        affected_map_ids = {
+            slot.map_id for slot in affected_slots if slot.map_id is not None
+        }
+        all_definitions = build_starter_map_definitions(
             promoted_plan,
             target_world_revision=target_revision,
-            definition_revisions={slot.map_id: definition_revision},
+            definition_revisions=_definition_revisions(
+                work,
+                context,
+                affected_slots,
+            ),
         )
-        definition = next(
-            value for value in definitions if value.map_id == slot.map_id
+        definitions = tuple(
+            definition
+            for definition in all_definitions
+            if definition.map_id in affected_map_ids
+        )
+        target_definition = next(
+            value for value in definitions if value.map_id == target_slot.map_id
         )
 
         topology = dict(source_revision.topology)
@@ -243,14 +289,15 @@ def materialize_deferred_location(
             blueprint_requirements=_promoted_blueprint_requirements(
                 source_revision,
                 location_id=location_id,
-                map_id=slot.map_id,
+                map_id=target_slot.map_id,
             ),
             provenance={
                 **dict(source_revision.provenance),
                 "progressive_materialization": {
                     "source_world_revision": source_world_revision,
                     "location_id": location_id,
-                    "map_id": slot.map_id,
+                    "map_id": target_slot.map_id,
+                    "affected_map_ids": sorted(affected_map_ids),
                     "promotion_mode": "explicit_future_revision",
                 },
             },
@@ -262,31 +309,35 @@ def materialize_deferred_location(
             content_hash=promoted_revision.content_hash,
             expected_revision=current_revision,
         )
-        stored_definition = work.map_instances.put_definition(
-            context,
-            map_id=definition.map_id,
-            definition_revision=definition.definition_revision,
-            world_id=world_id,
-            world_revision=target_revision,
-            document=definition.model_dump(mode="json"),
-            definition_hash=definition.definition_hash,
-            semantic_interface_hash=definition.semantic_interface_hash,
-        )
+        stored_definitions: list[dict[str, Any]] = []
         binding_by_map = {
             binding.map_id: binding for binding in source_release.map_bindings
         }
-        binding_by_map[definition.map_id] = MapDefinitionBinding(
-            map_id=definition.map_id,
-            blueprint_revision=target_revision,
-            definition_revision=definition.definition_revision,
-            definition_hash=definition.definition_hash,
-            semantic_interface_hash=definition.semantic_interface_hash,
-            simulation_readiness="navigable",
-            presentation_readiness=str(
-                definition.metadata.get("presentation_readiness")
-                or "assets_pending"
-            ),
-        )
+        for definition in definitions:
+            stored_definitions.append(
+                work.map_instances.put_definition(
+                    context,
+                    map_id=definition.map_id,
+                    definition_revision=definition.definition_revision,
+                    world_id=world_id,
+                    world_revision=target_revision,
+                    document=definition.model_dump(mode="json"),
+                    definition_hash=definition.definition_hash,
+                    semantic_interface_hash=definition.semantic_interface_hash,
+                )
+            )
+            binding_by_map[definition.map_id] = MapDefinitionBinding(
+                map_id=definition.map_id,
+                blueprint_revision=target_revision,
+                definition_revision=definition.definition_revision,
+                definition_hash=definition.definition_hash,
+                semantic_interface_hash=definition.semantic_interface_hash,
+                simulation_readiness="navigable",
+                presentation_readiness=str(
+                    definition.metadata.get("presentation_readiness")
+                    or "assets_pending"
+                ),
+            )
         bindings = [binding_by_map[key] for key in sorted(binding_by_map)]
         base_certification = dict(source_release.certification)
         launch_ready = bool(base_certification.get("launch_ready"))
@@ -295,16 +346,23 @@ def materialize_deferred_location(
             "launch_ready": launch_ready,
             "progressive_materialization": {
                 "location_id": location_id,
-                "map_id": definition.map_id,
+                "map_id": target_definition.map_id,
+                "affected_map_ids": sorted(affected_map_ids),
                 "simulation_readiness": "navigable",
                 "presentation_readiness": str(
-                    definition.metadata.get("presentation_readiness")
+                    target_definition.metadata.get("presentation_readiness")
                     or "assets_pending"
                 ),
                 "optional_art_blocks_gameplay": False,
             },
             "optional_art_blocks_gameplay": False,
         }
+        asset_bindings = dict(source_release.asset_bindings)
+        for definition in definitions:
+            asset_bindings[definition.map_id] = {
+                "status": "optional",
+                "fallback": "semantic_grid_placeholder",
+            }
         promoted_release = compile_world_release(
             promoted_revision,
             release=1,
@@ -319,18 +377,13 @@ def materialize_deferred_location(
                     )
                 ),
             },
-            asset_bindings={
-                **dict(source_release.asset_bindings),
-                definition.map_id: {
-                    "status": "optional",
-                    "fallback": "semantic_grid_placeholder",
-                },
-            },
+            asset_bindings=asset_bindings,
             compiler_provenance={
                 **dict(source_release.compiler_provenance),
                 "progressive_map_compiler": "rpg_progressive_map_v1",
                 "source_world_revision": source_world_revision,
                 "location_id": location_id,
+                "affected_map_ids": sorted(affected_map_ids),
             },
             certification=certification,
         )
@@ -351,8 +404,17 @@ def materialize_deferred_location(
         "world_revision_hash": str(stored_revision["content_hash"]),
         "world_release": int(stored_release["release"]),
         "world_release_hash": str(stored_release["release_hash"]),
-        "map_binding": binding_by_map[definition.map_id].model_dump(mode="json"),
-        "map_definition": stored_definition,
+        "map_binding": binding_by_map[target_definition.map_id].model_dump(mode="json"),
+        "map_bindings": [
+            binding_by_map[map_id].model_dump(mode="json")
+            for map_id in sorted(affected_map_ids)
+        ],
+        "map_definition": next(
+            row
+            for row in stored_definitions
+            if row["map_id"] == target_definition.map_id
+        ),
+        "map_definitions": stored_definitions,
         "starter_bubble": promoted_plan.model_dump(mode="json"),
         "certification": certification,
     }
