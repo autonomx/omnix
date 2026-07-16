@@ -1,0 +1,120 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RpgStarterBubblePromotionPanel } from './RpgStarterBubblePromotionPanel';
+
+function requestPath(input: RequestInfo | URL): string {
+  return typeof input === 'string'
+    ? new URL(input, 'http://localhost').pathname
+    : new URL(input.toString(), 'http://localhost').pathname;
+}
+
+function renderPanel() {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <RpgStarterBubblePromotionPanel />
+    </QueryClientProvider>,
+  );
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('RpgStarterBubblePromotionPanel', () => {
+  it('previews progressive readiness and explicitly promotes a future revision', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/rpg/world-library') {
+        return Response.json({
+          ok: true,
+          worlds: [{
+            id: 'world:starter',
+            title: 'Starter World',
+            description: '',
+            status: 'published',
+            source_mode: 'hybrid',
+            genre: 'classic_fantasy',
+            tone: 'heroic adventure',
+            seed: 1,
+            draft_revision: 1,
+            metadata: {},
+            created_at: '2026-07-16T00:00:00Z',
+            updated_at: '2026-07-16T00:00:00Z',
+          }],
+          scenarios: [],
+          campaigns: [],
+          generation_runs: [],
+        });
+      }
+      if (path === '/api/rpg/worlds/world%3Astarter/library') {
+        return Response.json({
+          ok: true,
+          world: { id: 'world:starter' },
+          topics: [],
+          revisions: [{
+            revision: 1,
+            document: {},
+            content_hash: 'sha256:revision',
+            created_at: '2026-07-16T00:00:00Z',
+          }],
+          releases: [],
+          scenarios: [],
+          scenario_revisions: {},
+          generation_runs: [],
+        });
+      }
+      if (path === '/api/rpg/worlds/world%3Astarter/starter-bubble/preview') {
+        return Response.json({
+          ok: true,
+          starter_bubble: {
+            slots: [
+              { role: 'region', simulation_readiness: 'semantic', presentation_readiness: 'placeholder' },
+              { role: 'settlement', simulation_readiness: 'navigable', presentation_readiness: 'placeholder' },
+              { role: 'interior', simulation_readiness: 'navigable', presentation_readiness: 'placeholder' },
+              { role: 'neighbor', simulation_readiness: 'navigable', presentation_readiness: 'assets_pending' },
+              { role: 'frontier', deferred: true, simulation_readiness: 'semantic', presentation_readiness: 'assets_pending' },
+            ],
+          },
+          predictive_materialization: [{
+            location_id: 'northern_road:frontier',
+            fallback: 'navigable_placeholder',
+          }],
+        });
+      }
+      if (
+        path === '/api/rpg/worlds/world%3Astarter/starter-bubble/promote'
+        && init?.method === 'POST'
+      ) {
+        return Response.json({
+          ok: true,
+          status: 'ready',
+          reused: false,
+          promotion: { world_revision: 2, world_release: 1 },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPanel();
+
+    fireEvent.click(screen.getByText('Starter bubble promotion'));
+    expect(await screen.findByRole('option', { name: 'Starter World' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview starter bubble' }));
+    expect(await screen.findByText('5 planned locations')).toBeInTheDocument();
+    expect(screen.getByText('1 predictive jobs')).toBeInTheDocument();
+    expect(screen.getByText(/Optional art remains non-blocking/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Promote to future revision' }));
+    await waitFor(() => {
+      expect(screen.getByText('Promoted to world revision 2 / release 1.')).toBeInTheDocument();
+    });
+  });
+});
