@@ -54,6 +54,7 @@ from .rpg_narrative_retirement_repository import (
 from .rpg_repository import PostgresRpgRepository
 from .rpg_world_forge_repository import PostgresRpgWorldForgeRepository
 from .rpg_world_generation_repository import PostgresRpgWorldGenerationRepository
+from .rpg_world_library_repository import PostgresRpgWorldLibraryRepository
 from .rpg_world_scenario_repository import PostgresRpgWorldScenarioRepository
 from .transaction_policy import transaction_scope
 
@@ -94,6 +95,7 @@ class PostgresUnitOfWork:
         self.world_forge: PostgresRpgWorldForgeRepository
         self.world_scenarios: PostgresRpgWorldScenarioRepository
         self.world_generation: PostgresRpgWorldGenerationRepository
+        self.world_library: PostgresRpgWorldLibraryRepository
         self.map_instances: PostgresRpgMapInstanceRepository
         self.hermes_research: PostgresRpgHermesResearchRepository
         self.narrative_responses: PostgresRpgNarrativeResponseRepository
@@ -157,6 +159,7 @@ class PostgresUnitOfWork:
         self.world_forge = PostgresRpgWorldForgeRepository(self.connection)
         self.world_scenarios = PostgresRpgWorldScenarioRepository(self.connection)
         self.world_generation = PostgresRpgWorldGenerationRepository(self.connection)
+        self.world_library = PostgresRpgWorldLibraryRepository(self.connection)
         self.map_instances = PostgresRpgMapInstanceRepository(self.connection)
         self.hermes_research = PostgresRpgHermesResearchRepository(self.connection)
         self.narrative_responses = PostgresRpgNarrativeResponseRepository(self.connection)
