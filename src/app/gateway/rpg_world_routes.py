@@ -26,6 +26,8 @@ from app.rpg.worlds.postgres_service import (
     read_campaign_world_binding,
 )
 
+from .rpg_world_library_routes import register_rpg_world_library_routes
+
 _ROUTE_SENTINEL = "_omnix_rpg_world_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_route_hook_installed"
 
@@ -176,6 +178,8 @@ def register_rpg_world_routes(app: FastAPI) -> None:
             return {"ok": True, "binding": bind_campaign_world(binding)}
         except ValidationError as exc:
             raise _validation_error(exc) from exc
+
+    register_rpg_world_library_routes(app)
 
 
 def install_rpg_world_route_hook() -> None:
