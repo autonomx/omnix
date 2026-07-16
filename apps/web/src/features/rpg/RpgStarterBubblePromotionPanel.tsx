@@ -16,6 +16,10 @@ function list(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+function valueText(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
 export function RpgStarterBubblePromotionPanel() {
   const queryClient = useQueryClient();
   const [worldId, setWorldId] = useState('');
@@ -45,6 +49,10 @@ export function RpgStarterBubblePromotionPanel() {
     const latestRevision = detailQuery.data?.revisions[0]?.revision;
     if (latestRevision) setSourceRevision(latestRevision);
   }, [detailQuery.data]);
+
+  const refreshWorldLibrary = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-library'] });
+  };
 
   const previewMutation = useMutation({
     mutationFn: () => rpgWorldLibraryClient.previewStarterBubble(
@@ -76,7 +84,7 @@ export function RpgStarterBubblePromotionPanel() {
         `Promoted to world revision ${String(promotion.world_revision ?? '?')} / release ${String(promotion.world_release ?? '?')}.`,
       );
       setError(undefined);
-      await queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-library'] });
+      await refreshWorldLibrary();
     },
     onError: (cause) => {
       setError(cause instanceof Error ? cause.message : 'Starter bubble promotion failed.');
@@ -84,9 +92,29 @@ export function RpgStarterBubblePromotionPanel() {
     },
   });
 
+  const materializeMutation = useMutation({
+    mutationFn: (locationId: string) => rpgWorldLibraryClient.materializeDeferredLocation(
+      worldId,
+      locationId,
+      sourceRevision,
+    ),
+    onSuccess: async (result) => {
+      const materialization = record(result.materialization);
+      setFeedback(
+        `Materialized ${String(materialization.location_id ?? 'deferred location')} in world revision ${String(materialization.world_revision ?? '?')}.`,
+      );
+      setError(undefined);
+      await refreshWorldLibrary();
+    },
+    onError: (cause) => {
+      setError(cause instanceof Error ? cause.message : 'Deferred map materialization failed.');
+      setFeedback(undefined);
+    },
+  });
+
   const previewPlan = record(preview?.starter_bubble);
   const previewSlots = list(previewPlan.slots);
-  const predictiveJobs = list(preview?.predictive_materialization);
+  const predictiveJobs = list(preview?.predictive_materialization).map(record);
 
   return (
     <details className="rpg-starter-bubble-panel">
@@ -152,6 +180,23 @@ export function RpgStarterBubblePromotionPanel() {
               <strong>{predictiveJobs.length} predictive jobs</strong>
               <span>Optional art remains non-blocking; navigable placeholders are authoritative.</span>
             </div>
+            {predictiveJobs.length ? (
+              <div className="rpg-starter-bubble-materialization-list">
+                {predictiveJobs.map((job) => {
+                  const locationId = valueText(job.location_id);
+                  return (
+                    <button
+                      type="button"
+                      key={locationId}
+                      disabled={!locationId || materializeMutation.isPending}
+                      onClick={() => locationId && materializeMutation.mutate(locationId)}
+                    >
+                      Materialize {locationId || 'deferred location'}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             <pre>{JSON.stringify(preview, null, 2)}</pre>
           </div>
         ) : null}
