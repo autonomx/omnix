@@ -14,7 +14,7 @@ from app.rpg.session.genesis.world_forge_contract import (
 )
 
 WORLD_TOPIC_JOB_TYPE = "rpg.world.topic.generate"
-WORLD_TOPIC_RESOURCE_CLASS = ResourceClass.RPG_CAMPAIGN_GENESIS.value
+WORLD_TOPIC_RESOURCE_CLASS = ResourceClass.RPG_WORLD_GENERATION.value
 WORLD_TOPIC_JOB_CONTRACT = "rpg_world_topic_job_v1"
 WORLD_TOPIC_OUTPUT_SCHEMA = "rpg_world_topic_output_v1"
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
