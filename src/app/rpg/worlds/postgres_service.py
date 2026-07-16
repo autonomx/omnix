@@ -1,10 +1,11 @@
 """Transactional services for reusable RPG world and scenario resources."""
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, TypeVar
 
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
+from pydantic import BaseModel
 
 from .contracts import (
     CampaignWorldBinding,
@@ -13,7 +14,20 @@ from .contracts import (
     WorldProjectCreate,
     WorldReleaseDocument,
     WorldRevisionDocument,
+    canonical_content_hash,
 )
+
+_HashedContract = TypeVar("_HashedContract", bound=BaseModel)
+
+
+def _ensure_hash(document: _HashedContract, field: str) -> _HashedContract:
+    current = str(getattr(document, field, "") or "")
+    if current:
+        return document
+    payload = document.model_dump(mode="json")
+    payload[field] = ""
+    payload[field] = canonical_content_hash(payload)
+    return type(document).model_validate(payload)
 
 
 def create_world_project(
@@ -56,6 +70,7 @@ def publish_world_revision(
     expected_revision: int,
     database: Any | None = None,
 ) -> dict[str, Any]:
+    document = _ensure_hash(document, "content_hash")
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         stored = work.world_scenarios.publish_world_revision(
@@ -74,6 +89,7 @@ def publish_world_release(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
+    document = _ensure_hash(document, "release_hash")
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         stored = work.world_scenarios.publish_world_release(
@@ -111,6 +127,7 @@ def publish_scenario_revision(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
+    document = _ensure_hash(document, "content_hash")
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         stored = work.world_scenarios.publish_scenario_revision(
