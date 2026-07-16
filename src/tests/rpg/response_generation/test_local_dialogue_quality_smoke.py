@@ -136,6 +136,7 @@ def test_local_smoke_resets_fixture_before_every_case_and_archives(monkeypatch) 
 
 
 def test_fixture_route_requires_loopback_opt_in(monkeypatch) -> None:
+    monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(
         "app.rpg.local_dialogue_quality_fixtures.provision_local_dialogue_fixture",
         lambda **kwargs: {
