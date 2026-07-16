@@ -276,10 +276,12 @@ def publish_world_generation(
             world_id=world_id,
             draft_revision=int(run.get("draft_revision") or 1),
         )
-        current_revision = work.world_scenarios.latest_world_revision_number(
-            context,
-            world_id,
-        )
+        current_row = work.connection.execute(
+            "SELECT COALESCE(MAX(revision), 0) FROM omnix_rpg_world_revisions "
+            "WHERE workspace_id = %s AND world_id = %s",
+            (context.workspace_id, world_id),
+        ).fetchone()
+        current_revision = int(current_row[0])
         compiled = compile_world_generation_publication(
             run=run,
             world=world,
