@@ -46,13 +46,15 @@
   padding: 0.5rem 0.65rem;
 }
 
-.rpg-starter-bubble-actions {
+.rpg-starter-bubble-actions,
+.rpg-starter-bubble-materialization-list {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
 }
 
-.rpg-starter-bubble-actions button {
+.rpg-starter-bubble-actions button,
+.rpg-starter-bubble-materialization-list button {
   border: 1px solid var(--mantine-color-dark-3, #5c636a);
   border-radius: 0.55rem;
   background: var(--mantine-color-dark-7, #1a1b1e);
@@ -61,7 +63,8 @@
   padding: 0.55rem 0.8rem;
 }
 
-.rpg-starter-bubble-actions button:disabled {
+.rpg-starter-bubble-actions button:disabled,
+.rpg-starter-bubble-materialization-list button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -93,6 +96,11 @@
   border: 1px solid var(--mantine-color-dark-5, #373a40);
   border-radius: 0.55rem;
   padding: 0.65rem;
+}
+
+.rpg-starter-bubble-preview .rpg-starter-bubble-materialization-list {
+  grid-column: 1 / -1;
+  display: flex;
 }
 
 .rpg-starter-bubble-preview pre {
