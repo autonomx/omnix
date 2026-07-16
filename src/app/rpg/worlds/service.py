@@ -65,7 +65,9 @@ def compile_world_release(
         "world_revision": world_revision.revision,
         "release": release,
         "world_revision_hash": revision_hash,
-        "map_bindings": tuple(map_bindings),
+        "map_bindings": tuple(
+            binding.model_dump(mode="json") for binding in map_bindings
+        ),
         "indexes": dict(indexes or {}),
         "asset_bindings": dict(asset_bindings or {}),
         "compiler_provenance": dict(compiler_provenance or {}),
@@ -106,7 +108,9 @@ def compile_scenario_revision(
         "protagonist_options": tuple(dict(row) for row in protagonist_options),
         "starting_resources": dict(starting_resources or {}),
         "opening_seed_ids": tuple(dict.fromkeys(opening_seed_ids)),
-        "map_initialization": tuple(map_initialization),
+        "map_initialization": tuple(
+            operation.model_dump(mode="json") for operation in map_initialization
+        ),
     }
     return ScenarioRevisionDocument.model_validate(
         _hashed_payload(payload, "content_hash")
