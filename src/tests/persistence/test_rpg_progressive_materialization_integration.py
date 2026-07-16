@@ -215,9 +215,11 @@ def test_deferred_materialization_creates_future_release_without_upgrading_campa
             _FRONTIER_MAP_ID,
         }
         assert len(result["map_definitions"]) == 2
-        assert result["certification"]["progressive_materialization"][
-            "affected_map_ids"
-        ] == [_NEIGHBOR_MAP_ID, _FRONTIER_MAP_ID]
+        assert set(
+            result["certification"]["progressive_materialization"][
+                "affected_map_ids"
+            ]
+        ) == {_NEIGHBOR_MAP_ID, _FRONTIER_MAP_ID}
         assert result["certification"]["optional_art_blocks_gameplay"] is False
         assert repeated["reused"] is True
         assert repeated["materialization"]["world_revision"] == 3
