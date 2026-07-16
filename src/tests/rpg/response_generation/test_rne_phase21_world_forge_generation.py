@@ -6,6 +6,12 @@ from app.rpg.session.genesis.compiler import compile_campaign_genesis
 from app.rpg.session.genesis.contract import CampaignGenesisContract
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
+from app.rpg.session.genesis.world_forge_default import (
+    ReferenceSafeWorldForgeGenerator,
+)
+from app.rpg.session.genesis.world_forge_deterministic import (
+    DeterministicWorldForgeGenerator,
+)
 
 
 def _contract() -> CampaignGenesisContract:
@@ -49,6 +55,8 @@ def test_parallel_world_forge_builds_rich_vexira_campaign_bible() -> None:
     assert "Silent Chorus assassin" in vexira["backstory"]
     assert vexira["dossier_status"] == "complete"
     assert "npc:vexira_umbra" in bible["completeness"]["opening_actor_ids"]
+    assert bible["discovery_state"]["entities"]["npc:vexira_umbra"] == "partially_known"
+    assert bible["discovery_state"]["entities"]["location:vanta_gate"] == "partially_known"
     relationships = {row["kind"]: row for row in bible["relationships"] if row["source_id"] == "npc:vexira_umbra"}
     assert relationships["member_of"]["target_id"] == "faction:silent_chorus"
     assert relationships["present_at"]["target_id"] == "location:vanta_gate"
@@ -57,6 +65,54 @@ def test_parallel_world_forge_builds_rich_vexira_campaign_bible() -> None:
     assert bible["indexes"]["lexical"]["vexira"]
     assert bible["indexes"]["embedding_index"]["status"] == "not_built"
     assert bible["content_hash"].startswith("sha256:")
+
+
+def test_launch_canon_resumes_into_full_revision_without_regeneration() -> None:
+    contract = _contract()
+    compiled = compile_campaign_genesis(contract)
+    generator = ReferenceSafeWorldForgeGenerator(
+        DeterministicWorldForgeGenerator()
+    )
+    launch = run_campaign_world_forge(
+        contract,
+        campaign_id="campaign:tiered",
+        compiled_genesis=compiled,
+        generator=generator,
+        launch_only=True,
+    )
+
+    launch_ids = {topic.topic_id for topic in launch.generation.topics}
+    assert launch.launch_ready is True
+    assert launch_ids == {
+        "realm",
+        "regions",
+        "factions",
+        "current_conflicts",
+        "hero_system",
+        "locations",
+        "npcs",
+        "opening_threads",
+    }
+    assert launch.graph.metadata["generation_tier"] == "launch_canon"
+    assert "history" in launch.graph.metadata["deferred_topic_ids"]
+
+    expanded = run_campaign_world_forge(
+        contract,
+        campaign_id="campaign:tiered",
+        compiled_genesis=compiled,
+        generator=generator,
+        existing_topics={topic.topic_id: topic for topic in launch.generation.topics},
+        canon_revision=2,
+    )
+
+    assert expanded.launch_ready is True
+    assert len(expanded.generation.topics) == 15
+    assert expanded.compilation.document["canon_revision"] == 2
+    assert all(
+        expanded.compilation.document["generation_provenance"][topic_id]
+        == launch.compilation.document["generation_provenance"][topic_id]
+        for topic_id in launch_ids
+    )
 
 
 def test_auditor_emits_structured_patches_for_dates_secrets_and_links() -> None:

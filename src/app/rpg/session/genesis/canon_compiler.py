@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
 from .canon_audit import CanonAuditReport
-from .world_forge_generation import GeneratedTopic, WorldForgeGenerationResult
+from .world_forge_generation import WorldForgeGenerationResult
 
 
 @dataclass(frozen=True)
@@ -150,11 +150,13 @@ def _discovery_state(
         }.get(visibility, "hidden_from_player")
         page_status[str(document.get("document_id") or "")] = status
     entity_status = {
-        str(entity.get("id")): (
-            "public_at_campaign_start"
-            if str(entity.get("visibility") or "") == "public"
-            else "hidden_from_player"
-        )
+        str(entity.get("id")): {
+            "public": "public_at_campaign_start",
+            "player_known": "learned",
+            "learned": "learned",
+            "partially_known": "partially_known",
+            "disputed": "disputed",
+        }.get(str(entity.get("visibility") or ""), "hidden_from_player")
         for entity in entities
         if entity.get("id")
     }
@@ -265,6 +267,11 @@ def compile_campaign_bible(
         "missing_requirements": list(missing),
     }
     discovery = _discovery_state(documents, entities)
+    # The opening scene necessarily reveals its location and present actors.
+    # Only their player-safe dossier projection is exposed; GM-only fields remain
+    # private in the canonical entity record.
+    for entity_id in sorted(opening_locations | opening_actors):
+        discovery["entities"][entity_id] = "partially_known"
     retrieval_index = {
         "index_version": "rpg_campaign_retrieval_index_v1",
         "lexical": lexical,

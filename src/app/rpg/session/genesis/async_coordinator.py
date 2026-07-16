@@ -9,17 +9,23 @@ from __future__ import annotations
 
 import os
 import threading
+from copy import deepcopy
 from typing import Any, Mapping
 
 from app.jobs.models import ResourceClass
 
 from .contract import CampaignGenesisContract
-from .materialization import materialize_world_forge_into_session, persist_campaign_genesis
+from .materialization import (
+    materialize_world_forge_into_session,
+    persist_campaign_expansion,
+    persist_campaign_genesis,
+)
 from .world_forge_commit import require_world_forge_commit_ready
-from .world_forge_generation import WorldForgeTopicGenerator
+from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_pipeline import run_campaign_world_forge
 
 CAMPAIGN_GENESIS_JOB_TYPE = "rpg.campaign_genesis.generate"
+CAMPAIGN_EXPANSION_JOB_TYPE = "rpg.campaign_world.expand"
 CAMPAIGN_GENESIS_RESOURCE_CLASS = ResourceClass.RPG_CAMPAIGN_GENESIS.value
 CAMPAIGN_GENESIS_ASYNC_CONTRACT = "rpg_campaign_genesis_async_v1"
 _DEFAULT_LEASE_SECONDS = 3600
@@ -44,8 +50,33 @@ def campaign_genesis_async_enabled(
     return str(env.get("RPG_TEST_MODE") or "").strip().casefold() != "deterministic"
 
 
+def campaign_genesis_sync_fallback_allowed(
+    environ: Mapping[str, str] | None = None,
+) -> bool:
+    """Allow portable generation unless the operator explicitly requires async."""
+
+    env = environ or os.environ
+    configured = str(env.get("OMNIX_RPG_CAMPAIGN_GENESIS_MODE") or "").strip().casefold()
+    return configured not in {"async", "asynchronous", "required", "durable"}
+
+
 def campaign_genesis_job_id(campaign_id: str) -> str:
     return f"rpg-genesis:{campaign_id}"
+
+
+def campaign_expansion_job_id(campaign_id: str) -> str:
+    return f"rpg-world-expansion:{campaign_id}"
+
+
+class _BackgroundPriorityGenerator:
+    def __init__(self, generator: WorldForgeTopicGenerator) -> None:
+        self.generator = generator
+
+    def generate(self, node: Any, **kwargs: Any) -> GeneratedTopic:
+        from app.rpg.llm_priority import background_rpg_llm_priority
+
+        with background_rpg_llm_priority():
+            return self.generator.generate(node, **kwargs)
 
 
 def _progress(
@@ -56,12 +87,14 @@ def _progress(
     job_id: str,
     error: str = "",
 ) -> dict[str, Any]:
+    bounded_percent = max(0, min(int(percent), 100))
     return {
         "contract_version": CAMPAIGN_GENESIS_ASYNC_CONTRACT,
         "job_id": job_id,
         "status": status,
         "stage": stage,
-        "percent": max(0, min(int(percent), 100)),
+        "percent": bounded_percent,
+        "progress": bounded_percent,
         "launch_ready": status == "ready",
         "error": error,
     }
@@ -174,8 +207,8 @@ def enqueue_campaign_genesis(
     from app.rpg.session.service import save_session
 
     saved = save_session(session, compact=True)
-    db = _database(database)
     try:
+        db = _database(database)
         from app.persistence.identity_service import bootstrap_local_tenant
         from app.persistence.unit_of_work import unit_of_work
 
@@ -240,6 +273,17 @@ def enqueue_campaign_genesis(
             job_id=job_id,
             error=str(exc),
         )
+        failed_progress = _mapping(_mapping(failed or saved).get("runtime_state")).get(
+            "campaign_generation"
+        )
+        if not isinstance(failed_progress, Mapping):
+            failed_progress = _progress(
+                status="failed",
+                stage="enqueue_failed",
+                percent=0,
+                job_id=job_id,
+                error=str(exc),
+            )
         return {
             **result,
             "ok": False,
@@ -247,8 +291,8 @@ def enqueue_campaign_genesis(
             "session": failed or saved,
             "error": "campaign_genesis_enqueue_failed",
             "detail": str(exc),
-            "creation_job": queued,
-            "creation_progress": queued,
+            "creation_job": dict(failed_progress),
+            "creation_progress": dict(failed_progress),
         }
 
     response = {
@@ -263,6 +307,252 @@ def enqueue_campaign_genesis(
     if kick_worker:
         kick_campaign_genesis_worker(database=db)
     return response
+
+
+def _enqueue_campaign_expansion(
+    work: Any,
+    context: Any,
+    *,
+    campaign_id: str,
+    contract: CampaignGenesisContract,
+    compiled: Mapping[str, Any],
+    launch_topics: tuple[GeneratedTopic, ...],
+) -> dict[str, Any]:
+    job_id = campaign_expansion_job_id(campaign_id)
+    existing = work.jobs.get_job(context, job_id)
+    return existing or work.jobs.create_job(
+        context,
+        {
+            "id": job_id,
+            "module": "rpg",
+            "job_type": CAMPAIGN_EXPANSION_JOB_TYPE,
+            "resource_class": CAMPAIGN_GENESIS_RESOURCE_CLASS,
+            "priority": -20,
+            "max_attempts": 2,
+            "input_payload": {
+                "campaign_id": campaign_id,
+                "contract": contract.model_dump(mode="json"),
+                "compiled": dict(compiled),
+                "launch_topics": [topic.as_dict() for topic in launch_topics],
+            },
+            "metadata": {
+                "contract_version": CAMPAIGN_GENESIS_ASYNC_CONTRACT,
+                "campaign_id": campaign_id,
+                "execution_tier": "background_expansion",
+                "foreground_preemptible": True,
+            },
+        },
+    )
+
+
+def _write_expansion_progress(
+    campaign_id: str,
+    *,
+    status: str,
+    job_id: str,
+    error: str = "",
+) -> dict[str, Any] | None:
+    from app.rpg.session.service import load_session, save_session
+
+    session = load_session(campaign_id)
+    if not session:
+        return None
+    runtime = _mapping(session.get("runtime_state"))
+    runtime["campaign_expansion"] = {
+        "job_id": job_id,
+        "status": status,
+        "stage": "background_world_forge",
+        "foreground_preemptible": True,
+        "error": error,
+    }
+    session["runtime_state"] = runtime
+    return save_session(session, compact=True)
+
+
+def _preserve_live_progress_during_expansion(
+    before: Mapping[str, Any],
+    materialized: dict[str, Any],
+) -> None:
+    """Keep discoveries and thread progress made while lore was generating."""
+
+    before_projection = _mapping(before.get("campaign_bible_projection"))
+    before_discovery = _mapping(before_projection.get("discovery_state"))
+    projection = _mapping(materialized.get("campaign_bible_projection"))
+    expanded_discovery = _mapping(projection.get("discovery_state"))
+    for key in ("pages", "entities"):
+        expanded_discovery[key] = {
+            **_mapping(expanded_discovery.get(key)),
+            **_mapping(before_discovery.get(key)),
+        }
+    discoveries: list[Any] = []
+    seen_discoveries: set[str] = set()
+    for item in [
+        *(expanded_discovery.get("discoveries") or ()),
+        *(before_discovery.get("discoveries") or ()),
+    ]:
+        marker = repr(item)
+        if marker in seen_discoveries:
+            continue
+        seen_discoveries.add(marker)
+        discoveries.append(item)
+    expanded_discovery["discoveries"] = discoveries
+    projection["discovery_state"] = expanded_discovery
+    materialized["campaign_bible_projection"] = projection
+
+    state = _mapping(materialized.get("state"))
+    bible = _mapping(state.get("campaign_bible"))
+    bible["discovery_state"] = expanded_discovery
+    state["campaign_bible"] = bible
+    before_state = _mapping(before.get("state"))
+    previous_threads = {
+        str(row.get("id") or ""): dict(row)
+        for row in before_state.get("opening_story_threads") or ()
+        if isinstance(row, Mapping) and row.get("id")
+    }
+    merged_threads: list[dict[str, Any]] = []
+    for row in state.get("opening_story_threads") or ():
+        if not isinstance(row, Mapping):
+            continue
+        merged = dict(row)
+        previous = previous_threads.get(str(merged.get("id") or ""), {})
+        for key in ("status", "progress", "resolved", "completed_at"):
+            if key in previous:
+                merged[key] = previous[key]
+        merged_threads.append(merged)
+    state["opening_story_threads"] = merged_threads
+    materialized["state"] = state
+
+
+def _run_campaign_expansion_job(
+    *,
+    db: Any,
+    context: Any,
+    job: Mapping[str, Any],
+    payload: Mapping[str, Any],
+    generator: WorldForgeTopicGenerator | None,
+    worker_id: str,
+) -> dict[str, Any]:
+    campaign_id = str(payload.get("campaign_id") or "")
+    job_id = str(job.get("id") or "")
+    _write_expansion_progress(
+        campaign_id,
+        status="running",
+        job_id=job_id,
+    )
+    try:
+        contract = CampaignGenesisContract.model_validate(payload.get("contract") or {})
+        launch_topics = {
+            topic.topic_id: topic
+            for row in payload.get("launch_topics") or ()
+            if isinstance(row, Mapping)
+            for topic in (GeneratedTopic.from_dict(row),)
+            if topic.topic_id
+        }
+        selected_generator = generator
+        if selected_generator is None:
+            from app.rpg_world_forge_provider import (
+                build_production_world_forge_generator,
+            )
+
+            selected_generator = build_production_world_forge_generator()
+        world_forge = run_campaign_world_forge(
+            contract,
+            campaign_id=campaign_id,
+            compiled_genesis=_mapping(payload.get("compiled")),
+            generator=_BackgroundPriorityGenerator(selected_generator),
+            existing_topics=launch_topics,
+            canon_revision=2,
+        )
+        certification = require_world_forge_commit_ready(world_forge)
+        from app.rpg.llm_priority import background_rpg_llm_priority
+        from app.rpg.session.service import load_session, save_session
+
+        with background_rpg_llm_priority():
+            session = load_session(campaign_id)
+            if not session:
+                raise RuntimeError(f"campaign is missing during expansion: {campaign_id}")
+            live_session = deepcopy(session)
+            materialized = materialize_world_forge_into_session(
+                session,
+                contract,
+                world_forge,
+            )
+            _preserve_live_progress_during_expansion(live_session, materialized)
+            runtime = _mapping(materialized.get("runtime_state"))
+            runtime["campaign_expansion"] = {
+                "job_id": job_id,
+                "status": "completed",
+                "stage": "background_world_forge",
+                "foreground_preemptible": True,
+                "canon_revision": 2,
+                "content_hash": certification.content_hash,
+                "error": "",
+            }
+            materialized["runtime_state"] = runtime
+            persistence = persist_campaign_expansion(
+                materialized,
+                contract,
+                world_forge,
+                database=db,
+            )
+            saved = save_session(materialized, compact=True)
+        from app.persistence.unit_of_work import unit_of_work
+
+        with unit_of_work(db) as work:
+            completed = work.jobs.complete(
+                context,
+                job_id=job_id,
+                worker_id=worker_id,
+                lease_token=str(job["lease_token"]),
+                output_refs=[
+                    {
+                        "campaign_id": campaign_id,
+                        "campaign_bible_content_hash": certification.content_hash,
+                        "canon_revision": 2,
+                    }
+                ],
+                progress={
+                    "status": "completed",
+                    "stage": "background_world_forge",
+                    "percent": 100,
+                },
+            )
+            work.commit()
+        return {
+            "ok": True,
+            "status": "completed",
+            "campaign_id": campaign_id,
+            "job": completed,
+            "session": saved,
+            "persistence": persistence,
+        }
+    except Exception as exc:
+        from app.persistence.unit_of_work import unit_of_work
+
+        with unit_of_work(db) as work:
+            failed = work.jobs.fail(
+                context,
+                job_id=job_id,
+                worker_id=worker_id,
+                lease_token=str(job["lease_token"]),
+                error={"code": "campaign_expansion_failed", "message": str(exc)},
+                retry_delay_seconds=1,
+            )
+            work.commit()
+        _write_expansion_progress(
+            campaign_id,
+            status=str(failed["status"]),
+            job_id=job_id,
+            error=str(exc),
+        )
+        return {
+            "ok": False,
+            "status": failed["status"],
+            "campaign_id": campaign_id,
+            "job": failed,
+            "error": "campaign_expansion_failed",
+            "detail": str(exc),
+        }
 
 
 def run_campaign_genesis_worker_once(
@@ -296,20 +586,34 @@ def run_campaign_genesis_worker_once(
         )
         payload = _mapping(job.get("input_payload"))
         campaign_id = str(payload.get("campaign_id") or "")
-        work.campaign_genesis.update(
-            context,
-            campaign_id=campaign_id,
-            status="generating",
-            progress=_progress(
-                status="running",
-                stage="world_forge",
-                percent=10,
-                job_id=job["id"],
-            ),
-            error={},
+        is_expansion = (
+            str(job.get("job_type") or job.get("type") or "")
+            == CAMPAIGN_EXPANSION_JOB_TYPE
         )
+        if not is_expansion:
+            work.campaign_genesis.update(
+                context,
+                campaign_id=campaign_id,
+                status="generating",
+                progress=_progress(
+                    status="running",
+                    stage="world_forge",
+                    percent=10,
+                    job_id=job["id"],
+                ),
+                error={},
+            )
         work.commit()
 
+    if is_expansion:
+        return _run_campaign_expansion_job(
+            db=db,
+            context=context,
+            job=job,
+            payload=payload,
+            generator=generator,
+            worker_id=worker_id,
+        )
     _write_session_progress(
         campaign_id,
         status="running",
@@ -324,6 +628,7 @@ def run_campaign_genesis_worker_once(
             campaign_id=campaign_id,
             compiled_genesis=_mapping(payload.get("compiled")),
             generator=generator,
+            launch_only=True,
         )
         certification = require_world_forge_commit_ready(world_forge)
         from app.rpg.session.service import load_session, save_session
@@ -340,6 +645,16 @@ def run_campaign_genesis_worker_once(
             required=True,
             genesis_run_started=True,
         )
+        expansion_id = campaign_expansion_job_id(campaign_id)
+        runtime = _mapping(materialized.get("runtime_state"))
+        runtime["campaign_expansion"] = {
+            "job_id": expansion_id,
+            "status": "queued",
+            "stage": "background_world_forge",
+            "foreground_preemptible": True,
+            "error": "",
+        }
+        materialized["runtime_state"] = runtime
         saved = save_session(materialized, compact=True)
         with unit_of_work(db) as work:
             completed = work.jobs.complete(
@@ -361,6 +676,29 @@ def run_campaign_genesis_worker_once(
                 ),
             )
             work.commit()
+        try:
+            with unit_of_work(db) as work:
+                expansion = _enqueue_campaign_expansion(
+                    work,
+                    context,
+                    campaign_id=campaign_id,
+                    contract=contract,
+                    compiled=_mapping(payload.get("compiled")),
+                    launch_topics=world_forge.generation.topics,
+                )
+                work.commit()
+        except Exception as expansion_error:
+            expansion = {
+                "id": expansion_id,
+                "status": "failed",
+                "error": str(expansion_error),
+            }
+            saved = _write_expansion_progress(
+                campaign_id,
+                status="failed",
+                job_id=expansion_id,
+                error=str(expansion_error),
+            ) or saved
         return {
             "ok": True,
             "status": "ready",
@@ -369,6 +707,7 @@ def run_campaign_genesis_worker_once(
             "session": saved,
             "persistence": persistence,
             "commit_certification": certification.as_dict(),
+            "expansion_job": expansion,
         }
     except Exception as exc:
         with unit_of_work(db) as work:
@@ -416,8 +755,15 @@ def run_campaign_genesis_worker_once(
 def _worker_loop(database: Any | None) -> None:
     global _worker_active
     try:
-        while run_campaign_genesis_worker_once(database=database) is not None:
-            pass
+        while True:
+            result = run_campaign_genesis_worker_once(database=database)
+            if result is None:
+                break
+            if result.get("status") == "retrying":
+                # fail() makes the retry eligible one second later. Keep this
+                # process-local recovery worker alive until that durable retry
+                # can be claimed; otherwise polling /api/jobs cannot re-kick it.
+                threading.Event().wait(1.05)
     finally:
         with _worker_lock:
             _worker_active = False

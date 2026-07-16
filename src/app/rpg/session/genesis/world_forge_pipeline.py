@@ -12,8 +12,10 @@ from .world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
     build_campaign_topic_graph,
+    build_launch_topic_graph,
 )
 from .world_forge_generation import (
+    GeneratedTopic,
     WorldForgeGenerationResult,
     WorldForgeTopicGenerator,
     generate_campaign_topics,
@@ -114,6 +116,9 @@ def run_campaign_world_forge(
     campaign_id: str,
     compiled_genesis: Mapping[str, Any] | None = None,
     generator: WorldForgeTopicGenerator | None = None,
+    launch_only: bool = False,
+    existing_topics: Mapping[str, GeneratedTopic] | None = None,
+    canon_revision: int = 1,
 ) -> CampaignWorldForgeResult:
     """Generate, cross-link, audit, and compile one campaign before its first turn."""
 
@@ -132,6 +137,8 @@ def run_campaign_world_forge(
             background_expansion=contract.world_forge.background_expansion,
         )
     graph = _with_story_reference_dependencies(graph)
+    if launch_only:
+        graph = build_launch_topic_graph(graph)
     graph_issues = graph.validate()
     if graph_issues:
         raise ValueError("invalid campaign topic graph: " + ",".join(graph_issues))
@@ -155,6 +162,7 @@ def run_campaign_world_forge(
             "custom_directives": list(contract.world_forge.custom_directives),
         },
         max_parallel_jobs=max_parallel_jobs,
+        existing_topics=existing_topics,
     )
     relationships = compile_cross_domain_relationships(generation.topics)
     audit = audit_generated_canon(
@@ -170,7 +178,7 @@ def run_campaign_world_forge(
         campaign_id=campaign_id,
         campaign_template=contract.campaign_template,
         starting_location=contract.world_options.starting_location,
-        canon_revision=1,
+        canon_revision=canon_revision,
     )
     return CampaignWorldForgeResult(
         graph=graph,

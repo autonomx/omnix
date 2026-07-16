@@ -36,6 +36,26 @@ class GeneratedTopic:
             "provenance": dict(self.provenance),
         }
 
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "GeneratedTopic":
+        def rows(name: str) -> tuple[Mapping[str, Any], ...]:
+            return tuple(
+                dict(row)
+                for row in value.get(name) or ()
+                if isinstance(row, Mapping)
+            )
+
+        return cls(
+            topic_id=str(value.get("topic_id") or ""),
+            documents=rows("documents"),
+            entities=rows("entities"),
+            facts=rows("facts"),
+            relationships=rows("relationships"),
+            knowledge_rules=rows("knowledge_rules"),
+            story_threads=rows("story_threads"),
+            provenance=dict(value.get("provenance") or {}),
+        )
+
 
 @dataclass(frozen=True)
 class WorldForgeJobRecord:
@@ -116,19 +136,31 @@ def generate_campaign_topics(
     seed: int = 0,
     campaign_context: Mapping[str, Any] | None = None,
     max_parallel_jobs: int = 6,
+    existing_topics: Mapping[str, GeneratedTopic] | None = None,
 ) -> WorldForgeGenerationResult:
     """Generate independent ready topics in parallel while preserving dependencies."""
 
     selected_generator = generator or _default_generator()
     context = dict(campaign_context or {})
     node_map = graph.node_map()
+    topics: dict[str, GeneratedTopic] = dict(existing_topics or {})
     pending = {
         node.topic_id: set(node.dependencies)
         for node in graph.nodes
         if node.category not in _NON_GENERATION_CATEGORIES
+        and node.topic_id not in topics
     }
-    topics: dict[str, GeneratedTopic] = {}
-    jobs: dict[str, WorldForgeJobRecord] = {}
+    jobs: dict[str, WorldForgeJobRecord] = {
+        topic_id: WorldForgeJobRecord(
+            topic_id,
+            "completed",
+            node_map[topic_id].dependencies,
+            node_map[topic_id].generator_role,
+            _counts(topic),
+        )
+        for topic_id, topic in topics.items()
+        if topic_id in node_map
+    }
     batches: list[tuple[str, ...]] = []
     workers = max(1, min(int(max_parallel_jobs), 12))
     while pending:

@@ -24,7 +24,10 @@ import {
 import './RpgCreateCampaignWizard.css';
 
 interface RpgCreateCampaignWizardProps {
-  onCreateCampaign?: (request: RpgNewGameRequest) => Promise<RpgLaunchResponse>;
+  onCreateCampaign?: (
+    request: RpgNewGameRequest,
+    onProgress?: (response: RpgLaunchResponse) => void,
+  ) => Promise<RpgLaunchResponse>;
   onEnterWorld?: () => void;
 }
 
@@ -244,7 +247,11 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgC
 
     scheduleProgress(PENDING_PROGRESS_STEPS);
     try {
-      const result = await onCreateCampaign(campaignRequest);
+      const result = await onCreateCampaign(campaignRequest, (nextResponse) => {
+        const progressAwareResponse = nextResponse as LaunchResponseWithProgress;
+        setLaunchResponse(progressAwareResponse);
+        setProgress(getCreationProgressValue(progressAwareResponse, 0));
+      });
       const progressAwareResult = result as LaunchResponseWithProgress;
       const backendStatus = getCreationStatus(progressAwareResult);
       const backendProgressValue = getCreationProgressValue(progressAwareResult, result.ok === false ? 68 : 100);
@@ -262,7 +269,10 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgC
     } catch (error) {
       clearProgressTimers();
       setCreationError(error instanceof Error ? error.message : 'Campaign creation failed before a session was returned.');
-      setProgress(68);
+      // Preserve the last stage the browser actually reached. A transport error
+      // has no authoritative backend progress and must not be mislabeled as the
+      // NPC/services stage by forcing the old 68% fallback.
+      setProgress((current) => current);
       setIsCreated(false);
     }
   };

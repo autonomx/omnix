@@ -46,6 +46,15 @@ def _documents(session: Mapping[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _entities(session: Mapping[str, Any]) -> list[dict[str, Any]]:
+    projection = _mapping(session.get("campaign_bible_projection"))
+    return [
+        {"id": str(entity_id), **dict(row)}
+        for entity_id, row in _mapping(projection.get("entities")).items()
+        if isinstance(row, Mapping)
+    ]
+
+
 def _discovery(session: Mapping[str, Any]) -> dict[str, Any]:
     projection = _mapping(session.get("campaign_bible_projection"))
     state = _mapping(session.get("state"))
@@ -74,6 +83,44 @@ def _status(document: Mapping[str, Any], discovery: Mapping[str, Any]) -> str:
         "partially_known": "partially_known",
         "disputed": "disputed",
     }.get(visibility, "hidden_from_player")
+
+
+def _entity_status(entity: Mapping[str, Any], discovery: Mapping[str, Any]) -> str:
+    entities = _mapping(discovery.get("entities"))
+    entity_id = str(entity.get("id") or "")
+    explicit = str(entities.get(entity_id) or "")
+    if explicit:
+        return explicit
+    return {
+        "public": "public_at_campaign_start",
+        "player_known": "learned",
+        "learned": "learned",
+        "partially_known": "partially_known",
+        "disputed": "disputed",
+    }.get(str(entity.get("visibility") or ""), "hidden_from_player")
+
+
+def _safe_dossier(entity: Mapping[str, Any], *, status: str) -> dict[str, Any]:
+    """Return identity and observable dossier fields, never secrets or GM notes."""
+
+    kind = str(entity.get("kind") or "entity")
+    result: dict[str, Any] = {
+        "id": str(entity.get("id") or ""),
+        "kind": kind,
+        "name": str(entity.get("name") or entity.get("title") or entity.get("id") or "Unknown"),
+        "status": status,
+        "visibility": str(entity.get("visibility") or ""),
+    }
+    safe_fields = {
+        "npc": ("appearance", "personality", "speech_style", "role", "location_id", "faction_ids"),
+        "location": ("region_id", "sensory_profile", "description", "services"),
+        "faction": ("values", "public_goal", "goals", "description"),
+    }.get(kind, ("description",))
+    for field in safe_fields:
+        value = entity.get(field)
+        if value not in (None, "", [], {}):
+            result[field] = value
+    return result
 
 
 def _category(document: Mapping[str, Any]) -> str:
@@ -127,6 +174,7 @@ def campaign_genesis_progress_payload(
     runtime = _mapping(session.get("runtime_state"))
     setup = _mapping(session.get("setup_payload"))
     generation = _mapping(runtime.get("campaign_generation"))
+    expansion = _mapping(runtime.get("campaign_expansion"))
     world_forge = _mapping(setup.get("world_forge"))
     jobs = [
         dict(row)
@@ -160,6 +208,7 @@ def campaign_genesis_progress_payload(
         "campaign_bible_content_hash": str(
             runtime.get("campaign_bible_content_hash") or ""
         ),
+        "background_expansion": expansion,
     }
 
 
@@ -189,6 +238,22 @@ def campaign_lore_payload(session: Mapping[str, Any]) -> dict[str, Any]:
         categories.setdefault(str(document["category"]), []).append(document)
     state = _mapping(session.get("state"))
     bible = _mapping(state.get("campaign_bible"))
+    dossiers: dict[str, list[dict[str, Any]]] = {
+        "characters": [],
+        "locations": [],
+        "factions": [],
+    }
+    dossier_key = {"npc": "characters", "location": "locations", "faction": "factions"}
+    for entity in _entities(session):
+        key = dossier_key.get(str(entity.get("kind") or ""))
+        if key is None:
+            continue
+        status = _entity_status(entity, discovery)
+        if status not in _PLAYER_VISIBLE_STATUSES:
+            continue
+        dossiers[key].append(_safe_dossier(entity, status=status))
+    for rows in dossiers.values():
+        rows.sort(key=lambda row: str(row.get("name") or ""))
     return {
         "ok": True,
         "canon_revision": int(bible.get("canon_revision") or 0),
@@ -200,6 +265,7 @@ def campaign_lore_payload(session: Mapping[str, Any]) -> dict[str, Any]:
         "documents": visible,
         "visible_count": len(visible),
         "hidden_count": hidden_count,
+        "dossiers": dossiers,
         "discoveries": list(discovery.get("discoveries") or ()),
         "generation": campaign_genesis_progress_payload(session),
     }

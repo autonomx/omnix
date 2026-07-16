@@ -2,6 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { omnixApiClient } from '../../api/client';
 import { omnixTheme } from '../../design/theme';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
 
@@ -202,5 +203,79 @@ describe('RpgCreateCampaignWizard', () => {
     expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '68');
     expect(screen.getByText(/Failed at Backend location: invalid point-buy payload/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Enter World' })).toBeDisabled();
+  });
+
+  it('waits for queued World Forge generation before declaring the campaign ready', async () => {
+    vi.useFakeTimers();
+    const getJob = vi.spyOn(omnixApiClient, 'getJob').mockResolvedValue({
+      id: 'rpg-genesis:session-queued',
+      status: 'completed',
+    } as never);
+    const getSession = vi.spyOn(omnixApiClient, 'getRpgSession').mockResolvedValue({
+      ok: true,
+      session_id: 'session-queued',
+      session: {
+        runtime_state: {
+          campaign_generation: {
+            job_id: 'rpg-genesis:session-queued',
+            status: 'ready',
+            stage: 'launch_ready',
+            progress: 100,
+            launch_ready: true,
+          },
+        },
+      },
+    });
+    const onCreateCampaign = vi.fn(async () => ({
+      ok: true,
+      status: 'generating_world',
+      session_id: 'session-queued',
+      creation_job: {
+        id: 'rpg-genesis:session-queued',
+        job_id: 'rpg-genesis:session-queued',
+        status: 'queued',
+        progress: 0,
+      },
+      creation_progress: {
+        job_id: 'rpg-genesis:session-queued',
+        status: 'queued',
+        progress: 0,
+      },
+    }));
+    renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
+    await act(async () => Promise.resolve());
+
+    expect(screen.getByRole('dialog', { name: 'Creating Campaign' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enter World' })).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(getJob).toHaveBeenCalledWith('rpg-genesis:session-queued');
+    expect(getSession).toHaveBeenCalledWith('session-queued');
+    expect(screen.getByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '100');
+    expect(screen.getByRole('button', { name: 'Enter World' })).not.toBeDisabled();
+    vi.useRealTimers();
+  });
+
+  it('does not mislabel a transport failure as NPC seeding at 68 percent', async () => {
+    const onCreateCampaign = vi.fn(async () => {
+      throw new Error('Omnix API request failed with status 500: database unavailable');
+    });
+    renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole('dialog', { name: 'Campaign Creation Failed' })).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '8');
+    expect(screen.getByText(/database unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/Failed at Resolved seed/)).toBeInTheDocument();
   });
 });

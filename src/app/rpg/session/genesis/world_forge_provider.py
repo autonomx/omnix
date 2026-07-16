@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.rpg_world_forge_provider import (
+    FallbackWorldForgeTopicGenerator,
     ProviderWorldForgeTopicGenerator,
     UnavailableWorldForgeTopicGenerator,
     WorldForgeProviderConfig,
@@ -9,6 +10,7 @@ from app.rpg_world_forge_provider import (
 )
 
 __all__ = [
+    "FallbackWorldForgeTopicGenerator",
     "ProviderWorldForgeTopicGenerator",
     "UnavailableWorldForgeTopicGenerator",
     "WorldForgeProviderConfig",

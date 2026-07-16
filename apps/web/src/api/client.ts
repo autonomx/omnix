@@ -145,6 +145,8 @@ export interface RpgLaunchResponse {
   environment_snapshot?: Record<string, unknown>;
   creation_request_trace?: RpgLaunchRequestTrace;
   creation_server_trace?: Record<string, unknown>;
+  creation_job?: Record<string, unknown>;
+  creation_progress?: Record<string, unknown>;
   error?: string;
 }
 
@@ -191,7 +193,19 @@ export class ApiError extends Error {
   readonly body: string;
 
   constructor(status: number, body: string) {
-    super(`Omnix API request failed with status ${status}`);
+    let detail = '';
+    try {
+      const parsed = JSON.parse(body) as { detail?: unknown; error?: unknown };
+      const candidate = parsed.detail ?? parsed.error;
+      detail = typeof candidate === 'string'
+        ? candidate
+        : candidate && typeof candidate === 'object'
+          ? JSON.stringify(candidate)
+          : '';
+    } catch {
+      detail = body.trim();
+    }
+    super(`Omnix API request failed with status ${status}${detail ? `: ${detail}` : ''}`);
     this.name = 'ApiError';
     this.status = status;
     this.body = body;

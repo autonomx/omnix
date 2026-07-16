@@ -63,8 +63,32 @@ def certify_world_forge_commit(result: Any) -> WorldForgeCommitCertification:
 def require_world_forge_commit_ready(result: Any) -> WorldForgeCommitCertification:
     certification = certify_world_forge_commit(result)
     if not certification.passed:
+        generation = getattr(result, "generation", None)
+        failed_jobs = tuple(
+            job
+            for job in (getattr(generation, "jobs", ()) or ())
+            if str(getattr(job, "status", "")) != "completed"
+        )
+        failed_details = tuple(
+            f"{getattr(job, 'topic_id', '<unknown>')}="
+            f"{getattr(job, 'error', '') or getattr(job, 'status', 'failed')}"
+            for job in failed_jobs
+        )
+        compilation = getattr(result, "compilation", None)
+        missing = tuple(
+            str(value)
+            for value in (
+                getattr(compilation, "missing_requirements", ()) or ()
+            )
+        )
+        details: list[str] = []
+        if failed_details:
+            details.append("failed_topics[" + " | ".join(failed_details) + "]")
+        if missing:
+            details.append("missing_requirements[" + ",".join(missing) + "]")
         raise WorldForgeCommitBlockedError(
             "World Forge canon is not commit-ready: "
             + ",".join(certification.errors)
+            + ("; " + "; ".join(details) if details else "")
         )
     return certification

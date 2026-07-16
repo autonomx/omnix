@@ -153,6 +153,68 @@ class CampaignTopicGraph:
 
 
 _GRAPH_VERSION = "rpg_campaign_topic_graph_v1"
+_LAUNCH_GENERATION_TOPIC_IDS = {
+    "realm",
+    "regions",
+    "factions",
+    "current_conflicts",
+    "hero_system",
+    "locations",
+    "npcs",
+    "opening_threads",
+}
+_PIPELINE_TOPIC_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
+
+
+def build_launch_topic_graph(graph: CampaignTopicGraph) -> CampaignTopicGraph:
+    """Project the full graph to the smallest canon needed for a first turn."""
+
+    selected_ids = {
+        node.topic_id
+        for node in graph.nodes
+        if node.topic_id in _LAUNCH_GENERATION_TOPIC_IDS
+        or node.category in _PIPELINE_TOPIC_CATEGORIES
+    }
+    caps = {"factions": 3, "locations": 3, "npcs": 3}
+    nodes = tuple(
+        CampaignTopicNode(
+            topic_id=node.topic_id,
+            title=node.title,
+            category=node.category,
+            dependencies=tuple(
+                dependency
+                for dependency in node.dependencies
+                if dependency in selected_ids
+            ),
+            generator_role=node.generator_role,
+            required_before_launch=True,
+            visibility=node.visibility,
+            target_count=min(node.target_count, caps.get(node.topic_id, node.target_count)),
+            metadata=dict(node.metadata),
+        )
+        for node in graph.nodes
+        if node.topic_id in selected_ids
+    )
+    projected = CampaignTopicGraph(
+        graph_version=graph.graph_version,
+        campaign_template=graph.campaign_template,
+        depth=graph.depth,
+        nodes=nodes,
+        metadata={
+            **dict(graph.metadata),
+            "generation_tier": "launch_canon",
+            "deferred_topic_ids": [
+                node.topic_id
+                for node in graph.topological_order()
+                if node.category not in _PIPELINE_TOPIC_CATEGORIES
+                and node.topic_id not in _LAUNCH_GENERATION_TOPIC_IDS
+            ],
+        },
+    )
+    issues = projected.validate()
+    if issues:
+        raise ValueError("invalid launch campaign topic graph: " + ",".join(issues))
+    return projected
 
 
 def _target(profile: WorldForgeDepthProfile, category: str) -> int:

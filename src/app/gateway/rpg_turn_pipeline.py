@@ -101,18 +101,23 @@ async def execute_foreground_rpg_turn(
             span["ready"] = gate.get("ready")
 
         from app.rpg.session import interactive_first_call_runtime
+        from app.rpg.llm_priority import foreground_rpg_llm_priority
 
         with rpg_pipeline_span("turn.apply") as span:
+            def apply_foreground_turn() -> dict[str, Any]:
+                with foreground_rpg_llm_priority():
+                    return interactive_first_call_runtime.apply_turn(
+                        session_id,
+                        command,
+                        performance_override={
+                            "enable_live_narration_llm": True,
+                            "narration_mode": "blocking",
+                            "fast_visible_dialogue": True,
+                        },
+                    )
+
             result = await asyncio.to_thread(
-                lambda: interactive_first_call_runtime.apply_turn(
-                    session_id,
-                    command,
-                    performance_override={
-                        "enable_live_narration_llm": True,
-                        "narration_mode": "blocking",
-                        "fast_visible_dialogue": True,
-                    },
-                )
+                apply_foreground_turn
             )
             attach_rpg_result_timing(result)
             span["ok"] = (

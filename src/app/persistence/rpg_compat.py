@@ -154,7 +154,29 @@ def list_sessions_from_postgres() -> list[dict[str, Any]]:
         campaigns = work.rpg.list_campaigns(context, limit=500, status="active")
         archived = work.rpg.list_campaigns(context, limit=500, status="archived")
         work.rollback()
-    return [dict(record["state"]) for record in campaigns + archived]
+    return [_campaign_state_for_listing(record) for record in campaigns + archived]
+
+
+def _campaign_state_for_listing(record: dict[str, Any]) -> dict[str, Any]:
+    """Project a stored campaign using the database row id as list identity.
+
+    Imported or partially-created legacy states can carry the placeholder
+    ``session:unknown`` in their manifest.  More than one such row is valid in
+    PostgreSQL because the authoritative campaign ids are distinct, but exposing
+    the placeholder makes the UI produce duplicate options and React keys.
+    """
+
+    state = dict(record["state"])
+    manifest = (
+        dict(state["manifest"])
+        if isinstance(state.get("manifest"), dict)
+        else {}
+    )
+    campaign_id = str(record["id"])
+    manifest["id"] = campaign_id
+    manifest["session_id"] = campaign_id
+    state["manifest"] = manifest
+    return state
 
 
 def list_session_summaries_from_postgres(

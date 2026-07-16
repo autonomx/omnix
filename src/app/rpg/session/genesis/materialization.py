@@ -315,3 +315,77 @@ def persist_campaign_genesis(
             "error": type(exc).__name__,
             "detail": str(exc),
         }
+
+
+def persist_campaign_expansion(
+    session: Mapping[str, Any],
+    contract: CampaignGenesisContract,
+    world_forge: CampaignWorldForgeResult,
+    *,
+    database: Any,
+) -> dict[str, Any]:
+    """Append certified expanded canon without replacing live player state."""
+
+    manifest = _mapping(session.get("manifest"))
+    campaign_id = str(manifest.get("session_id") or manifest.get("id") or "")
+    if not campaign_id:
+        raise ValueError("campaign expansion persistence requires a session id")
+    certification = require_world_forge_commit_ready(world_forge)
+    bible = dict(world_forge.compilation.document)
+
+    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.persistence.rpg_repository import canonical_json
+    from app.persistence.unit_of_work import unit_of_work
+
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
+        if campaign is None:
+            raise RuntimeError(f"campaign is missing during expansion: {campaign_id}")
+        current = work.campaign_bibles.get(context, campaign_id, for_update=True)
+        if current is None:
+            raise RuntimeError(
+                f"launch canon is missing during expansion: {campaign_id}"
+            )
+        stored = work.campaign_bibles.put(
+            context,
+            campaign_id=campaign_id,
+            document=bible,
+            expected_revision=int(current["revision"]),
+            provenance={
+                "source": "campaign_genesis_background_expansion",
+                "contract_version": contract.contract_version,
+                "depth": contract.world_forge.depth,
+                "compiled_content_hash": certification.content_hash,
+                "foreground_preemptible": True,
+            },
+            consistency_report=world_forge.audit.as_dict(),
+            completeness=world_forge.compilation.completeness,
+        )
+        work.connection.execute(
+            """
+            UPDATE omnix_rpg_campaigns
+               SET metadata = metadata || %s::jsonb,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND id = %s
+            """,
+            (
+                canonical_json(
+                    {
+                        "campaign_bible_content_hash": certification.content_hash,
+                        "campaign_bible_revision": int(stored["revision"]),
+                        "campaign_expansion_status": "completed",
+                    }
+                ),
+                context.workspace_id,
+                campaign_id,
+            ),
+        )
+        work.commit()
+    return {
+        "persisted": True,
+        "mode": "postgresql_background_revision",
+        "campaign_id": campaign_id,
+        "revision": int(stored["revision"]),
+        "content_hash": str(stored["content_hash"]),
+    }

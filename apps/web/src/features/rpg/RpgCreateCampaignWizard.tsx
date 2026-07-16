@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { RpgLaunchResponse, RpgNewGameRequest } from '../../api/client';
+import { omnixApiClient, type RpgLaunchResponse, type RpgNewGameRequest } from '../../api/client';
 import { loadSettingsProfile } from '../settings/settingsApi';
 import { RpgCreateCampaignWizard as LegacyRpgCreateCampaignWizard } from './RpgCreateCampaignWizardLegacy';
 import { applyRpgWizardDefaults, rpgWizardDefaultsFromSettings } from './rpgWizardDefaults';
@@ -10,6 +10,118 @@ interface RpgCreateCampaignWizardProps {
 }
 
 type WorldForgeDepth = 'quick' | 'standard' | 'epic';
+
+type CampaignCreationProgress = {
+  error?: string;
+  job_id?: string;
+  launch_ready?: boolean;
+  percent?: number;
+  progress?: number;
+  stage?: string;
+  status?: string;
+};
+
+type CampaignCreationResponse = RpgLaunchResponse & {
+  creation_job?: CampaignCreationProgress & { id?: string };
+  creation_progress?: CampaignCreationProgress;
+};
+
+const CAMPAIGN_CREATION_POLL_MS = 1_000;
+const CAMPAIGN_CREATION_TIMEOUT_MS = 15 * 60_000;
+const ACTIVE_CREATION_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying']);
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function campaignGeneration(response: RpgLaunchResponse): CampaignCreationProgress {
+  const session = record(response.session);
+  const runtime = record(session.runtime_state);
+  return record(runtime.campaign_generation) as CampaignCreationProgress;
+}
+
+function creationJobId(response: CampaignCreationResponse): string {
+  return String(response.creation_job?.id ?? response.creation_job?.job_id ?? response.creation_progress?.job_id ?? '').trim();
+}
+
+function creationStatus(response: CampaignCreationResponse): string {
+  return String(response.creation_progress?.status ?? response.creation_job?.status ?? response.status ?? '').trim().toLowerCase();
+}
+
+function jobErrorMessage(job: Record<string, unknown>): string {
+  const error = record(job.error);
+  return String(error.message ?? error.code ?? 'Campaign World Forge generation failed.');
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function awaitCampaignCreation(
+  initial: RpgLaunchResponse,
+  onProgress?: (response: RpgLaunchResponse) => void,
+): Promise<RpgLaunchResponse> {
+  const queued = initial as CampaignCreationResponse;
+  const jobId = creationJobId(queued);
+  if (!jobId || !ACTIVE_CREATION_STATUSES.has(creationStatus(queued))) {
+    return initial;
+  }
+
+  onProgress?.(initial);
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < CAMPAIGN_CREATION_TIMEOUT_MS) {
+    await delay(CAMPAIGN_CREATION_POLL_MS);
+    const job = await omnixApiClient.getJob(jobId) as unknown as Record<string, unknown>;
+    const status = String(job.status ?? '').toLowerCase();
+    const sessionResponse = initial.session_id
+      ? await omnixApiClient.getRpgSession(initial.session_id)
+      : initial;
+    const generation = campaignGeneration(sessionResponse);
+    const progressResponse: CampaignCreationResponse = {
+      ...initial,
+      ...sessionResponse,
+      status,
+      creation_job: {
+        id: jobId,
+        job_id: jobId,
+        status,
+        progress: generation.progress ?? generation.percent ?? 0,
+        error: generation.error,
+      },
+      creation_progress: {
+        ...generation,
+        job_id: jobId,
+        status,
+        progress: generation.progress ?? generation.percent ?? 0,
+      },
+    };
+    onProgress?.(progressResponse);
+
+    if (status === 'completed') {
+      return {
+        ...progressResponse,
+        ok: true,
+        status: 'ready',
+        creation_job: { ...progressResponse.creation_job, status: 'completed', progress: 100 },
+        creation_progress: {
+          ...progressResponse.creation_progress,
+          status: 'completed',
+          launch_ready: true,
+          progress: 100,
+        },
+      } as RpgLaunchResponse;
+    }
+    if (status === 'failed' || status === 'canceled' || status === 'stale') {
+      return {
+        ...progressResponse,
+        ok: false,
+        error: generation.error || jobErrorMessage(job),
+        creation_progress: { ...progressResponse.creation_progress, status: 'failed' },
+      } as RpgLaunchResponse;
+    }
+  }
+  throw new Error('Campaign World Forge generation did not finish within 15 minutes.');
+}
 
 const depthOptions: Array<{
   value: WorldForgeDepth;
@@ -62,7 +174,10 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
   };
 
   const createCampaign = props.onCreateCampaign
-    ? async (request: RpgNewGameRequest): Promise<RpgLaunchResponse> => {
+    ? async (
+        request: RpgNewGameRequest,
+        onProgress?: (response: RpgLaunchResponse) => void,
+      ): Promise<RpgLaunchResponse> => {
         const enriched = {
           ...request,
           world_forge: {
@@ -74,7 +189,8 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
             require_opening_dossiers: true,
           },
         } as RpgNewGameRequest;
-        return props.onCreateCampaign?.(enriched) as Promise<RpgLaunchResponse>;
+        const initial = await props.onCreateCampaign?.(enriched) as RpgLaunchResponse;
+        return awaitCampaignCreation(initial, onProgress);
       }
     : undefined;
 

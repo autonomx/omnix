@@ -25,6 +25,26 @@ interface GenerationJob {
   error?: string;
 }
 
+interface LoreDossier {
+  id: string;
+  kind: 'npc' | 'location' | 'faction';
+  name: string;
+  status: string;
+  appearance?: string;
+  personality?: string;
+  speech_style?: string;
+  role?: string;
+  location_id?: string;
+  faction_ids?: string[];
+  region_id?: string;
+  sensory_profile?: string;
+  description?: string;
+  services?: string[];
+  values?: string[];
+  public_goal?: string;
+  goals?: string[];
+}
+
 interface LoreResponse {
   ok: boolean;
   session_id: string;
@@ -33,6 +53,11 @@ interface LoreResponse {
   categories: Array<{ label: string; documents: LoreDocumentSummary[] }>;
   visible_count: number;
   hidden_count: number;
+  dossiers?: {
+    characters: LoreDossier[];
+    locations: LoreDossier[];
+    factions: LoreDossier[];
+  };
   generation?: {
     status?: string;
     stage?: string;
@@ -55,6 +80,18 @@ function selectedSessionId(): string {
 
 function statusLabel(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function dossierSummary(dossier: LoreDossier): string {
+  const text = dossier.description
+    || dossier.sensory_profile
+    || dossier.appearance
+    || dossier.personality
+    || dossier.public_goal
+    || dossier.goals?.[0]
+    || dossier.values?.join(', ')
+    || 'Known to the player, with more details discoverable through play.';
+  return String(text);
 }
 
 async function readJson<T>(url: string): Promise<T> {
@@ -110,6 +147,13 @@ export function RpgLorePanel() {
 
   const generation = lore?.generation;
   const jobs = generation?.jobs ?? [];
+  const dossierGroups = lore?.dossiers
+    ? [
+        { label: 'Characters', rows: lore.dossiers.characters },
+        { label: 'Locations', rows: lore.dossiers.locations },
+        { label: 'Factions', rows: lore.dossiers.factions },
+      ]
+    : [];
   const topicSummary = useMemo(() => {
     const completed = jobs.filter((job) => job.status === 'completed').length;
     return jobs.length ? `${completed}/${jobs.length} topics compiled` : 'No generation jobs recorded';
@@ -185,6 +229,25 @@ export function RpgLorePanel() {
             ))}
           </ul>
         </details>
+        {dossierGroups.some((group) => group.rows.length > 0) ? (
+          <section aria-label="Known world dossiers" style={{ marginTop: 18 }}>
+            <h4>Known world dossiers</h4>
+            {dossierGroups.map((group) => group.rows.length ? (
+              <div key={group.label} style={{ marginTop: 12 }}>
+                <strong>{group.label}</strong>
+                <div className="rpg-chip-row" style={{ alignItems: 'stretch', marginTop: 8 }}>
+                  {group.rows.map((dossier) => (
+                    <article key={dossier.id} style={{ minWidth: 180, maxWidth: 300, padding: 10 }}>
+                      <strong>{dossier.name}</strong>
+                      <p>{dossierSummary(dossier)}</p>
+                      <small>{statusLabel(dossier.status)}</small>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : null)}
+          </section>
+        ) : null}
         {error ? <p role="alert">{error}</p> : null}
       </article>
     </div>

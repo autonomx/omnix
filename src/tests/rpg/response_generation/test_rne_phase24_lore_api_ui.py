@@ -54,6 +54,28 @@ def _session() -> dict:
             }
         },
         "campaign_bible_projection": {
+            "entities": {
+                "npc:bran": {
+                    "kind": "npc",
+                    "name": "Bran",
+                    "appearance": "A broad-shouldered innkeeper.",
+                    "personality": "Practical and watchful.",
+                    "secrets": ["Private caravan knowledge"],
+                    "visibility": "game_master_canon",
+                },
+                "location:rusty_flagon": {
+                    "kind": "location",
+                    "name": "Rusty Flagon Tavern",
+                    "sensory_profile": "Rain taps against warm shutters.",
+                    "visibility": "partially_known",
+                },
+                "faction:hidden": {
+                    "kind": "faction",
+                    "name": "The Hidden Hand",
+                    "description": "A secret faction.",
+                    "visibility": "game_master_canon",
+                },
+            },
             "documents": [
                 {
                     "document_id": "lore:realm",
@@ -95,6 +117,22 @@ def _session() -> dict:
             },
         },
     }
+
+
+def test_lore_api_exposes_only_player_safe_known_dossiers() -> None:
+    session = _session()
+    session["campaign_bible_projection"]["discovery_state"]["entities"] = {
+        "npc:bran": "partially_known",
+        "location:rusty_flagon": "partially_known",
+        "faction:hidden": "hidden_from_player",
+    }
+    payload = campaign_lore_payload(session)
+    assert [row["name"] for row in payload["dossiers"]["characters"]] == ["Bran"]
+    assert [row["name"] for row in payload["dossiers"]["locations"]] == [
+        "Rusty Flagon Tavern"
+    ]
+    assert payload["dossiers"]["factions"] == []
+    assert "secrets" not in payload["dossiers"]["characters"][0]
 
 
 def test_lore_api_never_exposes_private_or_game_master_pages() -> None:

@@ -11,7 +11,9 @@ from app.rpg.session.genesis.async_coordinator import (
     CAMPAIGN_GENESIS_RESOURCE_CLASS,
     campaign_genesis_async_enabled,
     campaign_genesis_job_id,
+    campaign_genesis_sync_fallback_allowed,
     enqueue_campaign_genesis,
+    _preserve_live_progress_during_expansion,
 )
 from app.rpg.session.genesis.contract import CampaignGenesisContract
 
@@ -130,6 +132,64 @@ def test_async_mode_is_production_default_but_deterministic_ci_is_explicit() -> 
     assert campaign_genesis_async_enabled(
         {"OMNIX_RPG_CAMPAIGN_GENESIS_MODE": "sync"}
     ) is False
+    assert campaign_genesis_sync_fallback_allowed({}) is True
+    assert campaign_genesis_sync_fallback_allowed(
+        {"OMNIX_RPG_CAMPAIGN_GENESIS_MODE": "async"}
+    ) is False
+
+
+def test_default_async_enqueue_failure_falls_back_to_portable_generation(monkeypatch) -> None:
+    pipeline = importlib.import_module("app.rpg.session.genesis.pipeline_adapter")
+    contract = _contract()
+    prepared_calls: list[dict] = []
+
+    monkeypatch.setattr(pipeline, "compile_campaign_genesis", lambda value: {"compiled": True})
+    monkeypatch.setattr(pipeline, "bootstrap_session_from_compiled_genesis", lambda value: {"bootstrap": True})
+    monkeypatch.setattr(pipeline, "adapt_genesis_payload_to_new_game_payload", lambda value: {"legacy": True})
+
+    def prepare(**kwargs):
+        result = _prepared_result()
+        prepared_calls.append(result)
+        return result
+
+    monkeypatch.setattr(pipeline, "prepare_new_game_session_from_compiled_genesis", prepare)
+    monkeypatch.setattr(
+        "app.rpg.session.genesis.async_coordinator.campaign_genesis_async_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "app.rpg.session.genesis.async_coordinator.campaign_genesis_sync_fallback_allowed",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "app.rpg.session.genesis.async_coordinator.enqueue_campaign_genesis",
+        lambda *args, **kwargs: {
+            "ok": False,
+            "error": "campaign_genesis_enqueue_failed",
+            "detail": "PostgreSQL unavailable",
+        },
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "create_new_game_session_from_compiled_genesis",
+        lambda **kwargs: {
+            "ok": True,
+            "status": "ready",
+            "fallback": kwargs["prepared_result"]["campaign_genesis_async_fallback"],
+        },
+    )
+
+    result = pipeline.create_new_game_from_genesis_payload(
+        {"genesis": contract.model_dump(mode="json")}
+    )
+
+    assert len(prepared_calls) == 2
+    assert result["ok"] is True
+    assert result["status"] == "ready"
+    assert result["fallback"] == {
+        "used": True,
+        "reason": "PostgreSQL unavailable",
+    }
 
 
 def test_campaign_genesis_resource_class_is_part_of_the_shared_job_contract() -> None:
@@ -197,6 +257,41 @@ def test_enqueue_persists_blocked_shell_and_one_durable_job(monkeypatch) -> None
     assert payload["compiled"] == compiled
 
 
+def test_enqueue_normalizes_database_bootstrap_failure(monkeypatch) -> None:
+    saved: dict[str, dict] = {}
+
+    def save_session(session, *, compact=False):
+        campaign_id = session["manifest"]["session_id"]
+        saved[campaign_id] = session
+        return session
+
+    monkeypatch.setattr("app.rpg.session.service.save_session", save_session)
+    monkeypatch.setattr(
+        "app.rpg.session.service.load_session",
+        lambda campaign_id: saved.get(campaign_id),
+    )
+    monkeypatch.setattr(
+        "app.rpg.session.genesis.async_coordinator._database",
+        lambda value: (_ for _ in ()).throw(RuntimeError("PostgreSQL driver unavailable")),
+    )
+
+    result = enqueue_campaign_genesis(
+        _prepared_result(),
+        contract=_contract(),
+        compiled={"compiled_world_forge": {"topic_graph": {}}},
+        bootstrap={},
+        legacy={},
+        kick_worker=False,
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "campaign_genesis_enqueue_failed"
+    assert result["detail"] == "PostgreSQL driver unavailable"
+    assert result["creation_progress"]["status"] == "failed"
+    assert result["creation_progress"]["progress"] == 0
+    assert result["session"]["runtime_state"]["campaign_generation"]["stage"] == "enqueue_failed"
+
+
 def test_phase39_source_guards_cover_leases_recovery_and_restart_safe_commit() -> None:
     coordinator = (
         ROOT
@@ -234,6 +329,8 @@ def test_phase39_source_guards_cover_leases_recovery_and_restart_safe_commit() -
     assert "lease_seconds=_DEFAULT_LEASE_SECONDS" in coordinator
     assert "work.jobs.fail(" in coordinator
     assert "retry_delay_seconds=1" in coordinator
+    assert 'result.get("status") == "retrying"' in coordinator
+    assert "threading.Event().wait(1.05)" in coordinator
     assert 'status="generating" if retrying else "failed"' in coordinator
     assert "genesis_run_started=True" in coordinator
     assert "required=True" in coordinator
@@ -245,3 +342,49 @@ def test_phase39_source_guards_cover_leases_recovery_and_restart_safe_commit() -
     assert 'status="ready"' in materialization
     assert '@app.on_event("startup")' in routes
     assert "kick_campaign_genesis_worker()" in routes
+
+
+def test_background_expansion_preserves_live_discovery_and_thread_progress() -> None:
+    before = {
+        "campaign_bible_projection": {
+            "discovery_state": {
+                "pages": {"lore:rumor": "learned"},
+                "entities": {"npc:bran": "learned"},
+                "discoveries": [{"id": "discovery:bran"}],
+            }
+        },
+        "state": {
+            "opening_story_threads": [
+                {"id": "thread:rumor", "status": "resolved", "progress": 3}
+            ]
+        },
+    }
+    expanded = {
+        "campaign_bible_projection": {
+            "discovery_state": {
+                "pages": {"lore:realm": "public_at_campaign_start"},
+                "entities": {},
+                "discoveries": [],
+            }
+        },
+        "state": {
+            "campaign_bible": {"discovery_state": {}},
+            "opening_story_threads": [
+                {"id": "thread:rumor", "status": "opening", "progress": 0},
+                {"id": "thread:new", "status": "opening"},
+            ],
+        },
+    }
+
+    _preserve_live_progress_during_expansion(before, expanded)
+
+    discovery = expanded["campaign_bible_projection"]["discovery_state"]
+    assert discovery["pages"]["lore:rumor"] == "learned"
+    assert discovery["entities"]["npc:bran"] == "learned"
+    assert discovery["discoveries"] == [{"id": "discovery:bran"}]
+    threads = {
+        row["id"]: row for row in expanded["state"]["opening_story_threads"]
+    }
+    assert threads["thread:rumor"]["status"] == "resolved"
+    assert threads["thread:rumor"]["progress"] == 3
+    assert threads["thread:new"]["status"] == "opening"

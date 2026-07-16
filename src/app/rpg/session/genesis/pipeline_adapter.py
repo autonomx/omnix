@@ -282,7 +282,12 @@ def create_new_game_session_from_compiled_genesis(
 
 def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, Any]:
     raw = _safe_dict(payload.get("request") or payload)
-    contract = CampaignGenesisContract.model_validate(raw.get("genesis") or raw)
+    contract_payload = _safe_dict(raw.get("genesis") or raw)
+    if "world_forge" not in contract_payload:
+        # Older typed Genesis clients predate World Forge. Preserve their fast,
+        # single-save behavior; current wizard clients opt in explicitly.
+        contract_payload["world_forge"] = {"enabled": False}
+    contract = CampaignGenesisContract.model_validate(contract_payload)
     legacy = adapt_genesis_payload_to_new_game_payload(
         {"request": {"genesis": contract.model_dump(mode="json")}}
     )
@@ -297,17 +302,37 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
     if contract.world_forge.enabled:
         from .async_coordinator import (
             campaign_genesis_async_enabled,
+            campaign_genesis_sync_fallback_allowed,
             enqueue_campaign_genesis,
         )
 
         if campaign_genesis_async_enabled():
-            return enqueue_campaign_genesis(
+            enqueued = enqueue_campaign_genesis(
                 prepared,
                 contract=contract,
                 compiled=compiled,
                 bootstrap=bootstrap,
                 legacy=legacy,
             )
+            if (
+                enqueued.get("error") != "campaign_genesis_enqueue_failed"
+                or not campaign_genesis_sync_fallback_allowed()
+            ):
+                return enqueued
+            # Local/portable launches must remain usable when the optional durable
+            # PostgreSQL queue is unavailable. Rebuild a clean in-memory shell so
+            # queued/failed metadata from the attempted enqueue cannot leak into
+            # the synchronous result.
+            prepared = prepare_new_game_session_from_compiled_genesis(
+                bootstrap=bootstrap,
+                compiled=compiled,
+                contract=contract,
+                legacy=legacy,
+            )
+            prepared["campaign_genesis_async_fallback"] = {
+                "used": True,
+                "reason": str(enqueued.get("detail") or enqueued.get("error") or ""),
+            }
     return create_new_game_session_from_compiled_genesis(
         bootstrap=bootstrap,
         compiled=compiled,

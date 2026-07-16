@@ -18,6 +18,7 @@ from app.rpg.session.genesis.world_forge_default import (
 )
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg.session.genesis.world_forge_provider import (
+    FallbackWorldForgeTopicGenerator,
     ProviderWorldForgeTopicGenerator,
     UnavailableWorldForgeTopicGenerator,
     WorldForgeProviderConfig,
@@ -134,12 +135,12 @@ def _payload(topic_id: str = "realm") -> str:
     )
 
 
-def test_provider_config_reuses_narrative_provider_and_bounds_settings() -> None:
+def test_provider_config_uses_dedicated_override_and_bounds_settings() -> None:
     config = WorldForgeProviderConfig.from_environment(
         {
             "OMNIX_RPG_WORLD_FORGE_MODE": "live",
-            "OMNIX_RPG_NARRATIVE_PROVIDER": "lmstudio",
-            "OMNIX_RPG_NARRATIVE_MODEL": "qwen-world",
+            "OMNIX_RPG_WORLD_FORGE_PROVIDER": "lmstudio",
+            "OMNIX_RPG_WORLD_FORGE_MODEL": "qwen-world",
             "OMNIX_RPG_WORLD_FORGE_TIMEOUT_SECONDS": "9999",
             "OMNIX_RPG_WORLD_FORGE_MAX_RETRIES": "99",
             "OMNIX_RPG_WORLD_FORGE_TEMPERATURE": "4",
@@ -151,6 +152,55 @@ def test_provider_config_reuses_narrative_provider_and_bounds_settings() -> None
     assert config.timeout_seconds == 900
     assert config.max_retries == 5
     assert config.temperature == 2.0
+
+
+def test_narrative_environment_does_not_override_world_forge_settings_route() -> None:
+    config = WorldForgeProviderConfig.from_environment(
+        {
+            "OMNIX_RPG_NARRATIVE_PROVIDER": "cerebras",
+            "OMNIX_RPG_NARRATIVE_MODEL": "stale-model",
+            "OMNIX_LLM_PROVIDER": "cerebras",
+        }
+    )
+
+    assert config.provider == ""
+    assert config.model == ""
+
+
+def test_auto_mode_uses_settings_even_with_stale_dedicated_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.platform import effective_defaults
+
+    monkeypatch.setattr(
+        effective_defaults,
+        "load_effective_profile",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        effective_defaults,
+        "effective_llm_route",
+        lambda _profile, _module, _task: ("lmstudio", "local-world"),
+    )
+    captured: dict[str, object] = {}
+
+    def factory(provider: str, provider_config: dict) -> _Provider:
+        captured["provider"] = provider
+        captured["config"] = provider_config
+        return _Provider([_payload()])
+
+    generator = build_production_world_forge_generator(
+        WorldForgeProviderConfig(
+            mode="auto",
+            provider="cerebras",
+            model="stale-model",
+        ),
+        provider_factory=factory,
+    )
+
+    assert isinstance(generator.generator, ProviderWorldForgeTopicGenerator)
+    assert captured["provider"] == "lmstudio"
+    assert captured["config"]["model"] == "local-world"
 
 
 def test_structured_provider_retries_and_returns_one_native_topic() -> None:
@@ -184,6 +234,41 @@ def test_structured_provider_retries_and_returns_one_native_topic() -> None:
     assert "NPC dossiers" in system
 
 
+def test_lmstudio_uses_supported_json_schema_response_format() -> None:
+    provider = _Provider([_payload()])
+    generator = ProviderWorldForgeTopicGenerator(
+        provider,
+        WorldForgeProviderConfig(
+            mode="live",
+            provider="lmstudio",
+            max_retries=0,
+        ),
+    )
+
+    generator.generate(
+        _node(),
+        seed=36,
+        campaign_context={},
+        dependency_topics={},
+    )
+
+    response_format = provider.calls[-1]["kwargs"]["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "rpg_world_forge_topic"
+    schema = response_format["json_schema"]["schema"]
+    assert schema["properties"]["topic_id"] == {"type": "string"}
+    assert set(schema["required"]) == {
+        "topic_id",
+        "documents",
+        "entities",
+        "facts",
+        "relationships",
+        "knowledge_rules",
+        "story_threads",
+        "provenance",
+    }
+
+
 def test_provider_topic_identity_mismatch_fails_closed() -> None:
     provider = _Provider([_payload("wrong")])
     generator = ProviderWorldForgeTopicGenerator(
@@ -194,13 +279,59 @@ def test_provider_topic_identity_mismatch_fails_closed() -> None:
             max_retries=0,
         ),
     )
-    with pytest.raises(RuntimeError, match="failed for realm"):
+    with pytest.raises(
+        RuntimeError,
+        match="failed for realm.*returned wrong for realm",
+    ):
         generator.generate(
             _node(),
             seed=36,
             campaign_context={},
             dependency_topics={},
         )
+
+
+def test_provider_fallback_sticks_to_first_healthy_generator() -> None:
+    failed = _Provider([RuntimeError("quota exhausted")])
+    healthy = _Provider([_payload(), _payload("history")])
+    generator = FallbackWorldForgeTopicGenerator(
+        (
+            ProviderWorldForgeTopicGenerator(
+                failed,
+                WorldForgeProviderConfig(
+                    mode="live",
+                    provider="cerebras",
+                    max_retries=0,
+                ),
+            ),
+            ProviderWorldForgeTopicGenerator(
+                healthy,
+                WorldForgeProviderConfig(
+                    mode="live",
+                    provider="lmstudio",
+                    max_retries=0,
+                ),
+            ),
+        )
+    )
+
+    first = generator.generate(
+        _node(),
+        seed=36,
+        campaign_context={},
+        dependency_topics={},
+    )
+    second = generator.generate(
+        _node("history"),
+        seed=36,
+        campaign_context={},
+        dependency_topics={},
+    )
+
+    assert first.topic_id == "realm"
+    assert second.topic_id == "history"
+    assert len(failed.calls) == 1
+    assert len(healthy.calls) == 2
 
 
 def test_reference_safety_wraps_live_provider_output() -> None:
@@ -258,6 +389,72 @@ def test_offline_mode_deliberately_uses_reference_safe_deterministic_generator()
     )
     assert isinstance(generator, ReferenceSafeWorldForgeGenerator)
     assert called is False
+
+
+def test_auto_mode_reuses_settings_control_center_llm_route(monkeypatch) -> None:
+    from app import shared
+    from app.platform import effective_defaults
+
+    provider = _Provider([_payload()])
+    monkeypatch.setattr(effective_defaults, "load_effective_profile", lambda: object())
+    monkeypatch.setattr(
+        effective_defaults,
+        "effective_llm_route",
+        lambda profile, module, task: (
+            "llm:lmstudio",
+            "llm:lmstudio:qwen-world-settings",
+        ),
+    )
+    monkeypatch.setattr(
+        shared,
+        "get_provider",
+        lambda provider_name=None: provider if provider_name == "lmstudio" else None,
+    )
+
+    generator = build_production_world_forge_generator(
+        WorldForgeProviderConfig(mode="auto")
+    )
+
+    assert isinstance(generator, ReferenceSafeWorldForgeGenerator)
+    assert isinstance(generator.generator, ProviderWorldForgeTopicGenerator)
+    assert generator.generator.provider is provider
+    assert generator.generator.config.provider == "lmstudio"
+    assert generator.generator.config.model == "qwen-world-settings"
+
+
+def test_production_factory_uses_settings_over_inherited_live_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import shared
+    from app.platform import effective_defaults
+
+    provider = _Provider([_payload()])
+    monkeypatch.setenv("OMNIX_RPG_WORLD_FORGE_MODE", "live")
+    monkeypatch.setenv("OMNIX_RPG_WORLD_FORGE_PROVIDER", "cerebras")
+    monkeypatch.setattr(
+        effective_defaults,
+        "load_effective_profile",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        effective_defaults,
+        "effective_llm_route",
+        lambda _profile, _module, _task: ("lmstudio", "local-world"),
+    )
+    monkeypatch.setattr(
+        shared,
+        "get_provider",
+        lambda provider_name=None: (
+            provider if provider_name == "lmstudio" else None
+        ),
+    )
+
+    generator = build_production_world_forge_generator()
+
+    assert isinstance(generator.generator, ProviderWorldForgeTopicGenerator)
+    assert generator.generator.provider is provider
+    assert generator.generator.config.provider == "lmstudio"
+    assert generator.generator.config.model == "local-world"
 
 
 def test_configured_unavailable_provider_never_silently_publishes_placeholder_canon() -> None:

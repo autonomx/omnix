@@ -113,6 +113,19 @@ def test_failed_audit_blocks_authoritative_commit() -> None:
         require_world_forge_commit_ready(world_forge)
 
 
+def test_commit_failure_exposes_topic_and_compiler_diagnostics() -> None:
+    _contract_value, world_forge = _failed_world_forge()
+
+    with pytest.raises(WorldForgeCommitBlockedError) as raised:
+        require_world_forge_commit_ready(world_forge)
+
+    message = str(raised.value)
+    if world_forge.generation.failed_topic_ids:
+        assert "failed_topics[" in message
+    if world_forge.compilation.missing_requirements:
+        assert "missing_requirements[" in message
+
+
 def test_materialization_rejects_failed_canon_without_touching_session() -> None:
     contract, world_forge = _failed_world_forge()
     session = _session()
@@ -177,5 +190,5 @@ def test_pipeline_certifies_before_materialization_or_persistence() -> None:
     certification = pipeline.index("certify_world_forge_commit(world_forge)")
     assert certification < pipeline.index("materialize_world_forge_into_session(")
     assert certification < pipeline.index("persist_campaign_genesis(")
-    assert materialization.count("require_world_forge_commit_ready(world_forge)") == 2
+    assert materialization.count("require_world_forge_commit_ready(world_forge)") == 3
     assert '"mode": "rejected_unapproved_canon"' in pipeline

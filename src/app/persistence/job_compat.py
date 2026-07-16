@@ -400,7 +400,23 @@ class PostgresJobStoreAdapter:
         stages = [JobStage.model_validate(item) for item in contract.get("stages") or []]
         progress = JobProgress.model_validate(value.get("progress") or {})
         error_value = value.get("error")
-        error = JobError.model_validate(error_value) if error_value else None
+        error = None
+        if error_value:
+            error_payload = (
+                dict(error_value)
+                if isinstance(error_value, dict)
+                else {"code": "job_failed", "message": str(error_value)}
+            )
+            error_payload.setdefault("code", "job_failed")
+            error_payload.setdefault(
+                "message",
+                str(
+                    error_payload.get("detail")
+                    or error_payload.get("code")
+                    or "Job failed"
+                ),
+            )
+            error = JobError.model_validate(error_payload)
         lease = None
         if value.get("lease_token"):
             lease = _model(
@@ -410,6 +426,11 @@ class PostgresJobStoreAdapter:
                     "owner_id": value.get("lease_owner"),
                     "lease_token": value.get("lease_token"),
                     "token": value.get("lease_token"),
+                    "claimed_at": (
+                        value.get("started_at")
+                        or value.get("updated_at")
+                        or value.get("created_at")
+                    ),
                     "expires_at": value.get("lease_expires_at"),
                 },
             )
