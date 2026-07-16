@@ -28,6 +28,7 @@ class ResourceClass(str, Enum):
     GPU_IMAGE = "gpu:image"
     NETWORK = "network"
     RPG_CAMPAIGN_GENESIS = "rpg_campaign_genesis"
+    RPG_WORLD_GENERATION = "rpg_world_generation"
 
 
 TERMINAL_STATUSES = {
@@ -180,5 +181,5 @@ class JobEventRecord(BaseModel):
     id: int
     job_id: str
     event_type: str
-    payload: dict[str, Any]
+    payload: dict[str, Any] = Field(default_factory=dict)
     created_at: str
