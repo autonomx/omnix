@@ -52,6 +52,7 @@ from .rpg_narrative_retirement_repository import (
 )
 from .rpg_repository import PostgresRpgRepository
 from .rpg_world_forge_repository import PostgresRpgWorldForgeRepository
+from .rpg_world_scenario_repository import PostgresRpgWorldScenarioRepository
 from .transaction_policy import transaction_scope
 
 
@@ -89,6 +90,7 @@ class PostgresUnitOfWork:
         self.campaign_bibles: PostgresRpgCampaignBibleRepository
         self.campaign_genesis: PostgresRpgCampaignGenesisRepository
         self.world_forge: PostgresRpgWorldForgeRepository
+        self.world_scenarios: PostgresRpgWorldScenarioRepository
         self.hermes_research: PostgresRpgHermesResearchRepository
         self.narrative_responses: PostgresRpgNarrativeResponseRepository
         self.narrative_deliveries: PostgresRpgNarrativeDeliveryRepository
@@ -149,6 +151,7 @@ class PostgresUnitOfWork:
         self.campaign_bibles = PostgresRpgCampaignBibleRepository(self.connection)
         self.campaign_genesis = PostgresRpgCampaignGenesisRepository(self.connection)
         self.world_forge = PostgresRpgWorldForgeRepository(self.connection)
+        self.world_scenarios = PostgresRpgWorldScenarioRepository(self.connection)
         self.hermes_research = PostgresRpgHermesResearchRepository(self.connection)
         self.narrative_responses = PostgresRpgNarrativeResponseRepository(self.connection)
         self.narrative_deliveries = PostgresRpgNarrativeDeliveryRepository(
