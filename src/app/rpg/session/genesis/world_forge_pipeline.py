@@ -1,6 +1,7 @@
 """End-to-end World Forge pipeline used before campaign launch."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
@@ -102,7 +103,21 @@ def _with_story_reference_dependencies(
     )
 
 
+def _deterministic_test_mode() -> bool:
+    return str(os.environ.get("RPG_TEST_MODE") or "").strip().casefold() in {
+        "deterministic",
+        "test",
+        "offline",
+    }
+
+
 def _default_generator() -> WorldForgeTopicGenerator:
+    if _deterministic_test_mode():
+        from .world_forge_default import ReferenceSafeWorldForgeGenerator
+        from .world_forge_deterministic import DeterministicWorldForgeGenerator
+
+        return ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator())
+
     from app.rpg_world_forge_provider import (
         build_production_world_forge_generator,
     )
