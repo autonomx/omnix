@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe('RpgStarterBubblePromotionPanel', () => {
-  it('previews progressive readiness and explicitly promotes a future revision', async () => {
+  it('previews, materializes, and promotes progressive map revisions', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
       if (path === '/api/rpg/world-library') {
@@ -89,6 +89,21 @@ describe('RpgStarterBubblePromotionPanel', () => {
         });
       }
       if (
+        path === '/api/rpg/worlds/world%3Astarter/deferred-locations/northern_road%3Afrontier/materialize'
+        && init?.method === 'POST'
+      ) {
+        return Response.json({
+          ok: true,
+          status: 'ready',
+          reused: false,
+          materialization: {
+            location_id: 'northern_road:frontier',
+            world_revision: 2,
+            world_release: 1,
+          },
+        });
+      }
+      if (
         path === '/api/rpg/worlds/world%3Astarter/starter-bubble/promote'
         && init?.method === 'POST'
       ) {
@@ -113,6 +128,11 @@ describe('RpgStarterBubblePromotionPanel', () => {
     expect(await screen.findByText('5 planned locations')).toBeInTheDocument();
     expect(screen.getByText('1 predictive jobs')).toBeInTheDocument();
     expect(screen.getByText(/Optional art remains non-blocking/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Materialize northern_road:frontier' }));
+    await waitFor(() => {
+      expect(screen.getByText('Materialized northern_road:frontier in world revision 2.')).toBeInTheDocument();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Promote to future revision' }));
     await waitFor(() => {
