@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 export type RpgLiveDataStatusState = 'loading' | 'refreshing' | 'empty' | 'error' | 'ready';
 
@@ -35,6 +35,20 @@ function summarize(cards: RpgLiveDataStatusCard[]) {
   }
 
   return 'All live sources ready';
+}
+
+function renderDetail(detail: string): ReactNode {
+  const match = /^(Omnix API request failed with status \d+)(?::\s*(.*))?$/.exec(detail);
+  if (!match) {
+    return detail;
+  }
+
+  return (
+    <>
+      <span>{match[1]}</span>
+      {match[2] ? <span>: {match[2]}</span> : null}
+    </>
+  );
 }
 
 interface RpgLiveDataStatusProps {
@@ -97,7 +111,7 @@ export function RpgLiveDataStatus({
               <strong>{card.label}</strong>
               <span>{statusLabels[card.state]}</span>
             </div>
-            <p>{card.detail}</p>
+            <p>{renderDetail(card.detail)}</p>
           </article>
         ))}
       </div>
