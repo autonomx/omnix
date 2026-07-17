@@ -57,11 +57,6 @@ export function RpgStarterBubblePromotionPanel() {
     }
   }, [detailQuery.data, promotedSourceRevision]);
 
-  useEffect(() => {
-    setPromotedSourceRevision(undefined);
-    setPreview(undefined);
-  }, [worldId]);
-
   const selectedRelease = detailQuery.data?.releases.find(
     (release) => release.world_revision === sourceRevision,
   );
@@ -163,7 +158,14 @@ export function RpgStarterBubblePromotionPanel() {
         <div className="rpg-starter-bubble-controls">
           <label>
             <span>World</span>
-            <select value={worldId} onChange={(event) => setWorldId(event.currentTarget.value)}>
+            <select
+              value={worldId}
+              onChange={(event) => {
+                setWorldId(event.currentTarget.value);
+                setPromotedSourceRevision(undefined);
+                setPreview(undefined);
+              }}
+            >
               <option value="">Select a world</option>
               {(libraryQuery.data?.worlds ?? []).map((world) => (
                 <option value={world.id} key={world.id}>{world.title}</option>
