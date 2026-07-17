@@ -157,6 +157,7 @@ def restore_scenario_project(
         if scenario["status"] != "archived":
             work.rollback()
             return {"ok": True, "scenario": scenario, "idempotent": True}
+        require_world_writable(work, context, str(scenario["world_id"]))
         published = work.connection.execute(
             "SELECT EXISTS(SELECT 1 FROM omnix_rpg_scenario_revisions "
             "WHERE workspace_id = %s AND scenario_id = %s)",
