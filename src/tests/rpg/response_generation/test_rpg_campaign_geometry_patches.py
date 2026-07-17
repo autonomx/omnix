@@ -161,5 +161,10 @@ def test_geometry_patch_rejects_impassable_occupied_cell_and_route_is_hidden() -
     assert path not in app.openapi()["paths"]
 
     gateway_app = FastAPI(title="Omnix Web Gateway")
-    assert path in {route.path for route in gateway_app.routes}
+    gateway_paths = {
+        route_path
+        for route in gateway_app.routes
+        if (route_path := getattr(route, "path", None)) is not None
+    }
+    assert path in gateway_paths
     assert path not in gateway_app.openapi()["paths"]
