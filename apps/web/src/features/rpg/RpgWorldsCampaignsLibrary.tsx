@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldLibraryClient,
+  type RpgMapBlueprintRevision,
   type RpgScenarioRevision,
+  type RpgScenarioSummary,
   type RpgWorldDetailResponse,
   type RpgWorldGenerationRun,
   type RpgWorldRelease,
@@ -15,6 +17,23 @@ interface RpgWorldsCampaignsLibraryProps {
 }
 
 type LibraryTab = 'worlds' | 'campaigns';
+
+const DEFAULT_BLUEPRINT = {
+  schema_version: 'rpg_map_blueprint_v1',
+  map_id: 'map:rusty_flagon:ground_floor',
+  location_id: 'rusty_flagon_tavern',
+  level: 'interior',
+  navigation_kind: 'square_grid',
+  required_portal_ids: ['portal:front_door'],
+  required_route_ids: [],
+  required_spawn_point_ids: ['spawn:arrival'],
+  required_zone_ids: ['zone:common_room'],
+  required_object_ids: ['object:bar_counter'],
+  required_hazard_ids: [],
+  size_profile: 'medium',
+  directives: {},
+  metadata: {},
+};
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -60,6 +79,13 @@ function generationLabel(run: RpgWorldGenerationRun | null | undefined): string 
   return `${run.status}${percent ? ` • ${percent}%` : ''}`;
 }
 
+function blueprintFindingLabel(value: Record<string, unknown>): string {
+  const code = text(value.code, 'semantic mismatch');
+  const target = text(value.target_id);
+  const scenario = text(value.scenario_id);
+  return [code, target, scenario].filter(Boolean).join(' • ');
+}
+
 export function RpgWorldsCampaignsLibrary({
   onBack,
   onSessionLaunched,
@@ -76,6 +102,9 @@ export function RpgWorldsCampaignsLibrary({
   const [startingLocation, setStartingLocation] = useState('rusty_flagon_tavern');
   const [topicId, setTopicId] = useState('realm');
   const [topicJson, setTopicJson] = useState('{\n  "topic_id": "realm",\n  "documents": [],\n  "entities": [],\n  "facts": []\n}');
+  const [blueprintMapId, setBlueprintMapId] = useState(String(DEFAULT_BLUEPRINT.map_id));
+  const [blueprintJson, setBlueprintJson] = useState(pretty(DEFAULT_BLUEPRINT));
+  const [blueprintExpectedRevision, setBlueprintExpectedRevision] = useState(0);
   const [scenarioId, setScenarioId] = useState('scenario:opening');
   const [scenarioTitle, setScenarioTitle] = useState('Opening Scenario');
   const [scenarioLocation, setScenarioLocation] = useState('rusty_flagon_tavern');
@@ -100,6 +129,12 @@ export function RpgWorldsCampaignsLibrary({
       setSelectedWorldId(libraryQuery.data.worlds[0].id);
     }
   }, [libraryQuery.data, selectedWorldId]);
+
+  useEffect(() => {
+    setBlueprintExpectedRevision(0);
+    setBlueprintMapId(String(DEFAULT_BLUEPRINT.map_id));
+    setBlueprintJson(pretty(DEFAULT_BLUEPRINT));
+  }, [selectedWorldId]);
 
   const refresh = async () => {
     await Promise.all([
@@ -147,6 +182,29 @@ export function RpgWorldsCampaignsLibrary({
     onError: (cause) => setError(cause instanceof Error ? cause.message : 'Topic save failed.'),
   });
 
+  const saveBlueprintMutation = useMutation({
+    mutationFn: () => {
+      const document = JSON.parse(blueprintJson) as Record<string, unknown>;
+      return rpgWorldLibraryClient.saveMapBlueprint(
+        selectedWorldId,
+        blueprintMapId.trim(),
+        { expected_revision: blueprintExpectedRevision, document },
+      );
+    },
+    onSuccess: async (result) => {
+      setBlueprintExpectedRevision(result.map_blueprint.blueprint_revision);
+      setBlueprintJson(pretty(result.map_blueprint.document));
+      setFeedback(
+        result.map_blueprint.status === 'ready'
+          ? `Blueprint ${result.map_blueprint.map_id} r${result.map_blueprint.blueprint_revision} is ready.`
+          : `Blueprint saved with ${result.map_blueprint.findings.length} reconciliation finding(s).`,
+      );
+      setError(undefined);
+      await refresh();
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : 'Blueprint save failed.'),
+  });
+
   const generationMutation = useMutation({
     mutationFn: () => rpgWorldLibraryClient.startGeneration(selectedWorldId, {
       depth: generationDepth,
@@ -171,6 +229,20 @@ export function RpgWorldsCampaignsLibrary({
       await refresh();
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : 'World publication failed.'),
+  });
+
+  const worldLifecycleMutation = useMutation({
+    mutationFn: (status: string) => (
+      status === 'archived'
+        ? rpgWorldLibraryClient.restoreWorld(selectedWorldId)
+        : rpgWorldLibraryClient.archiveWorld(selectedWorldId)
+    ),
+    onSuccess: async (result) => {
+      setFeedback(`World ${result.world.status}: ${result.world.title}`);
+      setError(undefined);
+      await refresh();
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : 'World lifecycle change failed.'),
   });
 
   const createScenarioMutation = useMutation({
@@ -219,6 +291,20 @@ export function RpgWorldsCampaignsLibrary({
     onError: (cause) => setError(cause instanceof Error ? cause.message : 'Scenario publication failed.'),
   });
 
+  const scenarioLifecycleMutation = useMutation({
+    mutationFn: (scenario: RpgScenarioSummary) => (
+      scenario.status === 'archived'
+        ? rpgWorldLibraryClient.restoreScenario(scenario.id)
+        : rpgWorldLibraryClient.archiveScenario(scenario.id)
+    ),
+    onSuccess: async (result) => {
+      setFeedback(`Scenario ${result.scenario.status}: ${result.scenario.title}`);
+      setError(undefined);
+      await refresh();
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : 'Scenario lifecycle change failed.'),
+  });
+
   const launchMutation = useMutation({
     mutationFn: (values: {
       scenarioId: string;
@@ -259,6 +345,7 @@ export function RpgWorldsCampaignsLibrary({
   const blueprintRequirements = array(record(latestRevision?.document).blueprint_requirements);
   const launchReady = Boolean(latestCertification.launch_ready);
   const selectedWorld = libraryQuery.data?.worlds.find((world) => world.id === selectedWorldId);
+  const worldArchived = selectedWorld?.status === 'archived';
   const worldScenarios = detail?.scenarios ?? [];
   const campaignCountByWorld = useMemo(() => {
     const counts = new Map<string, number>();
@@ -267,6 +354,14 @@ export function RpgWorldsCampaignsLibrary({
     }
     return counts;
   }, [libraryQuery.data?.campaigns]);
+
+  const loadBlueprint = (blueprint: RpgMapBlueprintRevision) => {
+    setBlueprintMapId(blueprint.map_id);
+    setBlueprintExpectedRevision(blueprint.blueprint_revision);
+    setBlueprintJson(pretty(blueprint.document));
+    setFeedback(`Loaded ${blueprint.map_id} r${blueprint.blueprint_revision} for editing.`);
+    setError(undefined);
+  };
 
   return (
     <section className="rpg-world-library" aria-label="Worlds and Campaigns library">
@@ -350,11 +445,19 @@ export function RpgWorldsCampaignsLibrary({
                     <p className="eyebrow">{detail.world.status} • {detail.world.source_mode}</p>
                     <h3>{detail.world.title}</h3>
                     <p>{detail.world.description || 'No description yet.'}</p>
+                    <button
+                      type="button"
+                      className="rpg-secondary-button"
+                      disabled={worldLifecycleMutation.isPending}
+                      onClick={() => worldLifecycleMutation.mutate(detail.world.status)}
+                    >
+                      {worldArchived ? 'Restore world' : 'Archive world'}
+                    </button>
                   </div>
                   <dl>
                     <div><dt>Draft</dt><dd>{detail.world.draft_revision}</dd></div>
                     <div><dt>Topics</dt><dd>{detail.topics.length}</dd></div>
-                    <div><dt>Revisions</dt><dd>{detail.revisions.length}</dd></div>
+                    <div><dt>Blueprints</dt><dd>{detail.map_blueprints.length}</dd></div>
                     <div><dt>Releases</dt><dd>{detail.releases.length}</dd></div>
                   </dl>
                 </section>
@@ -370,10 +473,10 @@ export function RpgWorldsCampaignsLibrary({
                       <label><span>Starting location</span><input value={startingLocation} onChange={(event) => setStartingLocation(event.currentTarget.value)} /></label>
                     </div>
                     <div className="rpg-world-library-actions">
-                      <button type="button" disabled={generationMutation.isPending} onClick={() => generationMutation.mutate()}>Generate / resume</button>
-                      <button type="button" disabled={!latestRun || latestRun.status !== 'review' || publishGenerationMutation.isPending} onClick={() => latestRun && publishGenerationMutation.mutate(latestRun.run_id)}>Publish revision &amp; release</button>
+                      <button type="button" disabled={worldArchived || generationMutation.isPending} onClick={() => generationMutation.mutate()}>Generate / resume</button>
+                      <button type="button" disabled={worldArchived || !latestRun || latestRun.status !== 'review' || publishGenerationMutation.isPending} onClick={() => latestRun && publishGenerationMutation.mutate(latestRun.run_id)}>Publish revision &amp; release</button>
                     </div>
-                    {latestRun ? <pre>{pretty(latestRun.progress)}</pre> : <p>No generation run yet.</p>}
+                    {latestRun ? <pre>{pretty({ progress: latestRun.progress, lineage: latestRun.lineage })}</pre> : <p>No generation run yet.</p>}
                   </section>
 
                   <section className="rpg-world-library-panel">
@@ -394,7 +497,7 @@ export function RpgWorldsCampaignsLibrary({
                     <h3>World topic</h3>
                     <label><span>Topic id</span><input value={topicId} onChange={(event) => setTopicId(event.currentTarget.value)} /></label>
                     <label><span>Structured topic JSON</span><textarea rows={12} value={topicJson} onChange={(event) => setTopicJson(event.currentTarget.value)} /></label>
-                    <button type="submit" disabled={saveTopicMutation.isPending}>Save topic draft</button>
+                    <button type="submit" disabled={worldArchived || saveTopicMutation.isPending}>Save topic draft</button>
                   </form>
 
                   <section className="rpg-world-library-panel">
@@ -413,25 +516,49 @@ export function RpgWorldsCampaignsLibrary({
                 </div>
 
                 <div className="rpg-world-library-two-column">
-                  <section className="rpg-world-library-panel">
-                    <p className="eyebrow">Spatial foundation</p>
+                  <form className="rpg-world-library-panel rpg-world-library-form" onSubmit={(event) => { event.preventDefault(); saveBlueprintMutation.mutate(); }}>
+                    <p className="eyebrow">Spatial authoring</p>
                     <h3>Map-blueprint requirements</h3>
-                    {blueprintRequirements.length ? <pre>{pretty(blueprintRequirements)}</pre> : <p>No blueprint requirements have been compiled.</p>}
-                  </section>
+                    <label><span>Map id</span><input value={blueprintMapId} onChange={(event) => setBlueprintMapId(event.currentTarget.value)} /></label>
+                    <label><span>Expected revision</span><input type="number" min={0} value={blueprintExpectedRevision} onChange={(event) => setBlueprintExpectedRevision(Number(event.currentTarget.value))} /></label>
+                    <label><span>Structured blueprint JSON</span><textarea rows={16} value={blueprintJson} onChange={(event) => setBlueprintJson(event.currentTarget.value)} /></label>
+                    <button type="submit" disabled={worldArchived || saveBlueprintMutation.isPending}>Save blueprint revision</button>
+                    {blueprintRequirements.length ? <details><summary>Published requirements</summary><pre>{pretty(blueprintRequirements)}</pre></details> : null}
+                  </form>
+
                   <section className="rpg-world-library-panel">
-                    <p className="eyebrow">Immutable history</p>
-                    <h3>Published releases</h3>
-                    <div className="rpg-world-library-release-list">
-                      {detail.releases.map((release) => (
-                        <article key={`${release.world_revision}:${release.release}`}>
-                          <strong>World r{release.world_revision} • release {release.release}</strong>
-                          <span>{Boolean(certification(release).launch_ready) ? 'Certified' : 'Review required'}</span>
-                          <small>{release.release_hash}</small>
+                    <p className="eyebrow">Semantic reconciliation</p>
+                    <h3>Blueprint revisions</h3>
+                    <div className="rpg-world-library-topic-list">
+                      {detail.map_blueprints.map((blueprint) => (
+                        <article key={`${blueprint.map_id}:${blueprint.blueprint_revision}`}>
+                          <strong>{blueprint.map_id} r{blueprint.blueprint_revision}</strong>
+                          <span>{blueprint.status} • {blueprint.findings.length} finding(s)</span>
+                          <small>{blueprint.semantic_interface_hash}</small>
+                          {blueprint.findings.length ? (
+                            <ul>{blueprint.findings.map((finding, index) => <li key={`${blueprint.map_id}:${index}`}>{blueprintFindingLabel(finding)}</li>)}</ul>
+                          ) : <p>All active scenario semantic references reconcile.</p>}
+                          <button type="button" className="rpg-secondary-button" onClick={() => loadBlueprint(blueprint)}>Edit next revision</button>
                         </article>
                       ))}
+                      {!detail.map_blueprints.length ? <p>No authored blueprint revisions yet.</p> : null}
                     </div>
                   </section>
                 </div>
+
+                <section className="rpg-world-library-panel">
+                  <p className="eyebrow">Immutable history</p>
+                  <h3>Published releases</h3>
+                  <div className="rpg-world-library-release-list">
+                    {detail.releases.map((release) => (
+                      <article key={`${release.world_revision}:${release.release}`}>
+                        <strong>World r{release.world_revision} • release {release.release}</strong>
+                        <span>{Boolean(certification(release).launch_ready) ? 'Certified' : 'Review required'}</span>
+                        <small>{release.release_hash}</small>
+                      </article>
+                    ))}
+                  </div>
+                </section>
 
                 <section className="rpg-world-library-panel">
                   <p className="eyebrow">Scenario editor</p>
@@ -443,10 +570,10 @@ export function RpgWorldsCampaignsLibrary({
                     <label><span>Player name</span><input value={playerName} onChange={(event) => setPlayerName(event.currentTarget.value)} /></label>
                   </div>
                   <div className="rpg-world-library-actions">
-                    <button type="button" disabled={createScenarioMutation.isPending} onClick={() => createScenarioMutation.mutate()}>Create scenario</button>
+                    <button type="button" disabled={worldArchived || createScenarioMutation.isPending} onClick={() => createScenarioMutation.mutate()}>Create scenario</button>
                     <button
                       type="button"
-                      disabled={!latestRevision || !latestRelease || publishScenarioMutation.isPending}
+                      disabled={worldArchived || !latestRevision || !latestRelease || publishScenarioMutation.isPending}
                       onClick={() => latestRevision && latestRelease && publishScenarioMutation.mutate({
                         scenarioId,
                         worldRevision: latestRevision.revision,
@@ -458,31 +585,40 @@ export function RpgWorldsCampaignsLibrary({
                   <div className="rpg-world-library-scenario-list">
                     {worldScenarios.map((scenario) => {
                       const revisions = detail.scenario_revisions[scenario.id] ?? [];
+                      const latestScenarioRevision = revisions[0];
+                      const release = latestScenarioRevision ? matchingRelease(detail, latestScenarioRevision) : undefined;
+                      const releaseReady = Boolean(certification(release).launch_ready);
                       return (
                         <article key={scenario.id}>
-                          <div><strong>{scenario.title}</strong><span>{scenario.status} • {revisions.length} revisions</span></div>
-                          {revisions.map((scenarioRevision) => {
-                            const release = matchingRelease(detail, scenarioRevision);
-                            const ready = Boolean(certification(release).launch_ready);
-                            return (
-                              <div className="rpg-world-library-scenario-revision" key={scenarioRevision.revision}>
-                                <span>r{scenarioRevision.revision} • world r{scenarioRevision.world_revision}</span>
-                                <button
-                                  type="button"
-                                  disabled={!release || !ready || launchMutation.isPending}
-                                  onClick={() => release && launchMutation.mutate({
-                                    scenarioId: scenario.id,
-                                    scenarioRevision: scenarioRevision.revision,
-                                    worldRevision: scenarioRevision.world_revision,
-                                    worldRelease: release.release,
-                                  })}
-                                >{ready ? 'Launch campaign' : 'Not certified'}</button>
-                              </div>
-                            );
-                          })}
+                          <div>
+                            <strong>{scenario.title}</strong>
+                            <span>{scenario.status} • {revisions.length} revision(s)</span>
+                            <small>{latestScenarioRevision ? `World r${latestScenarioRevision.world_revision}` : 'Not published'}</small>
+                          </div>
+                          <div className="rpg-world-library-actions">
+                            <button
+                              type="button"
+                              className="rpg-secondary-button"
+                              disabled={scenarioLifecycleMutation.isPending}
+                              onClick={() => scenarioLifecycleMutation.mutate(scenario)}
+                            >
+                              {scenario.status === 'archived' ? 'Restore scenario' : 'Archive scenario'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={scenario.status === 'archived' || !latestScenarioRevision || !release || !releaseReady || launchMutation.isPending}
+                              onClick={() => latestScenarioRevision && release && launchMutation.mutate({
+                                scenarioId: scenario.id,
+                                scenarioRevision: latestScenarioRevision.revision,
+                                worldRevision: latestScenarioRevision.world_revision,
+                                worldRelease: release.release,
+                              })}
+                            >Launch campaign</button>
+                          </div>
                         </article>
                       );
                     })}
+                    {!worldScenarios.length ? <p>No scenarios yet.</p> : null}
                   </div>
                 </section>
               </>

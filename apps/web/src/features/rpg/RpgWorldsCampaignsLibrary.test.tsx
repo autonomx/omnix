@@ -76,69 +76,139 @@ const scenarioRevision = {
   created_at: '2026-07-16T00:00:00Z',
 };
 
+const invalidBlueprint = {
+  world_id: world.id,
+  map_id: 'map:harbor',
+  blueprint_revision: 1,
+  document: {
+    schema_version: 'rpg_map_blueprint_v1',
+    map_id: 'map:harbor',
+    location_id: 'location:harbor',
+    level: 'settlement',
+    navigation_kind: 'square_grid',
+    required_portal_ids: [],
+    required_route_ids: [],
+    required_spawn_point_ids: [],
+    required_zone_ids: [],
+    required_object_ids: [],
+    required_hazard_ids: [],
+    size_profile: 'medium',
+    directives: {},
+    metadata: {},
+  },
+  content_hash: 'sha256:blueprint-one',
+  semantic_interface_hash: 'sha256:semantic-one',
+  status: 'invalid',
+  findings: [{
+    code: 'scenario_spawn_missing',
+    scenario_id: scenario.id,
+    scenario_revision: 1,
+    operation_id: 'init:captain',
+    target_id: 'spawn:office',
+  }],
+  created_at: '2026-07-16T00:00:00Z',
+};
+
+function libraryPayload() {
+  return {
+    ok: true,
+    worlds: [world],
+    scenarios: [scenario],
+    campaigns: [{
+      campaign_id: 'campaign:one',
+      title: 'Campaign One',
+      status: 'active',
+      revision: 0,
+      updated_at: '2026-07-16T00:00:00Z',
+      world_id: world.id,
+      world_revision: 1,
+      world_release: 1,
+      scenario_id: scenario.id,
+      scenario_revision: 1,
+      binding: {},
+    }],
+    generation_runs: [],
+  };
+}
+
+function detailPayload() {
+  return {
+    ok: true,
+    world,
+    topics: [{
+      topic_id: 'realm',
+      draft_revision: 1,
+      source: 'ai',
+      status: 'ready',
+      content: {},
+      directives: {},
+      dependency_hashes: {},
+      input_hash: 'sha256:input',
+      content_hash: 'sha256:topic',
+      provenance: {},
+      updated_at: '2026-07-16T00:00:00Z',
+    }],
+    map_blueprints: [invalidBlueprint],
+    revisions: [{
+      revision: 1,
+      document: {
+        blueprint_requirements: [{
+          map_id: 'map:harbor',
+          simulation_readiness: 'semantic',
+          presentation_readiness: 'placeholder',
+        }],
+      },
+      content_hash: 'sha256:revision',
+      created_at: '2026-07-16T00:00:00Z',
+    }],
+    releases: [release],
+    scenarios: [scenario],
+    scenario_revisions: { [scenario.id]: [scenarioRevision] },
+    generation_runs: [],
+  };
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe('RpgWorldsCampaignsLibrary', () => {
-  it('surfaces reusable-world authoring, validation, release, and scenario launch views', async () => {
+  it('surfaces reusable-world authoring, blueprint reconciliation, lifecycle, and launch views', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
       if (path === '/api/rpg/world-library') {
-        return Response.json({
-          ok: true,
-          worlds: [world],
-          scenarios: [scenario],
-          campaigns: [{
-            campaign_id: 'campaign:one',
-            title: 'Campaign One',
-            status: 'active',
-            revision: 0,
-            updated_at: '2026-07-16T00:00:00Z',
-            world_id: world.id,
-            world_revision: 1,
-            world_release: 1,
-            scenario_id: scenario.id,
-            scenario_revision: 1,
-            binding: {},
-          }],
-          generation_runs: [],
-        });
+        return Response.json(libraryPayload());
       }
       if (path === `/api/rpg/worlds/${encodeURIComponent(world.id)}/library`) {
+        return Response.json(detailPayload());
+      }
+      if (
+        path === `/api/rpg/worlds/${encodeURIComponent(world.id)}/map-blueprints/${encodeURIComponent('map:harbor')}`
+        && init?.method === 'POST'
+      ) {
         return Response.json({
           ok: true,
-          world,
-          topics: [{
-            topic_id: 'realm',
-            draft_revision: 1,
-            source: 'ai',
+          map_blueprint: {
+            ...invalidBlueprint,
+            blueprint_revision: 2,
             status: 'ready',
-            content: {},
-            directives: {},
-            dependency_hashes: {},
-            input_hash: 'sha256:input',
-            content_hash: 'sha256:topic',
-            provenance: {},
-            updated_at: '2026-07-16T00:00:00Z',
-          }],
-          revisions: [{
-            revision: 1,
-            document: {
-              blueprint_requirements: [{
-                map_id: 'map:harbor',
-                simulation_readiness: 'semantic',
-                presentation_readiness: 'placeholder',
-              }],
-            },
-            content_hash: 'sha256:revision',
-            created_at: '2026-07-16T00:00:00Z',
-          }],
-          releases: [release],
-          scenarios: [scenario],
-          scenario_revisions: { [scenario.id]: [scenarioRevision] },
-          generation_runs: [],
+            findings: [],
+            content_hash: 'sha256:blueprint-two',
+            semantic_interface_hash: 'sha256:semantic-two',
+          },
         });
+      }
+      if (
+        path === `/api/rpg/worlds/${encodeURIComponent(world.id)}/archive`
+        && init?.method === 'POST'
+      ) {
+        return Response.json({ ok: true, world: { ...world, status: 'archived' }, idempotent: false });
+      }
+      if (
+        path === `/api/rpg/scenarios/${encodeURIComponent(scenario.id)}/archive`
+        && init?.method === 'POST'
+      ) {
+        return Response.json({ ok: true, scenario: { ...scenario, status: 'archived' }, idempotent: false });
       }
       if (
         path === `/api/rpg/scenarios/${encodeURIComponent(scenario.id)}/revisions/1/launch`
@@ -161,8 +231,30 @@ describe('RpgWorldsCampaignsLibrary', () => {
     expect(screen.getByRole('heading', { name: 'World generation' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Launch ready' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Map-blueprint requirements' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Blueprint revisions' })).toBeInTheDocument();
+    expect(screen.getByText(/scenario_spawn_missing/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Published releases' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Campaign openings' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit next revision' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save blueprint revision' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      `/api/rpg/worlds/${encodeURIComponent(world.id)}/map-blueprints/${encodeURIComponent('map:harbor')}`,
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    expect(await screen.findByText(/Blueprint map:harbor r2 is ready/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive world' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      `/api/rpg/worlds/${encodeURIComponent(world.id)}/archive`,
+      expect.objectContaining({ method: 'POST' }),
+    ));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive scenario' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      `/api/rpg/scenarios/${encodeURIComponent(scenario.id)}/archive`,
+      expect.objectContaining({ method: 'POST' }),
+    ));
 
     fireEvent.click(screen.getByRole('button', { name: 'Launch campaign' }));
     await waitFor(() => expect(onSessionLaunched).toHaveBeenCalledWith('campaign:launched'));
