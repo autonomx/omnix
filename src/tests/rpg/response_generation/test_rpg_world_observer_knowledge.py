@@ -66,6 +66,7 @@ def _definition() -> GridMapDefinition:
             zones=(
                 GridZone(
                     zone_id="zone:secret",
+                    name="Secret Zone",
                     cells=((2, 4),),
                     secret=True,
                 ),
