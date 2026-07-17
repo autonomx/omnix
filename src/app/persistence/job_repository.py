@@ -4,7 +4,7 @@ import uuid
 from typing import Any
 
 from .execution_repositories import PostgresJobRepository as _BaseJobRepository
-from .execution_repositories import _job
+from .execution_repositories import _job, _json
 from .tenant import TenantContext
 
 
@@ -19,7 +19,50 @@ jobs.completed_at, jobs.created_at, jobs.updated_at, jobs.metadata
 
 
 class PostgresJobRepository(_BaseJobRepository):
-    """Job repository with an explicitly qualified SKIP LOCKED claim query."""
+    """Job repository with explicitly qualified durable queue operations."""
+
+    def create_job_once(
+        self,
+        context: TenantContext,
+        payload: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        """Create one deterministic job identity or return the existing row."""
+
+        row = self.connection.execute(
+            f"""
+            INSERT INTO omnix_jobs AS jobs (
+                id, workspace_id, owner_user_id, module, job_type,
+                resource_class, priority, input_payload, max_attempts,
+                available_at, metadata
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s,
+                COALESCE(%s::timestamptz, CURRENT_TIMESTAMP), %s::jsonb
+            )
+            ON CONFLICT (id) DO NOTHING
+            RETURNING {_QUALIFIED_JOB_COLUMNS}
+            """,
+            (
+                payload["id"],
+                context.workspace_id,
+                payload.get("owner_user_id") or context.user_id,
+                payload["module"],
+                payload["job_type"],
+                payload["resource_class"],
+                int(payload.get("priority", 0)),
+                _json(payload.get("input_payload") or {}),
+                max(1, int(payload.get("max_attempts", 3))),
+                payload.get("available_at"),
+                _json(payload.get("metadata") or {}),
+            ),
+        ).fetchone()
+        if row is not None:
+            result = _job(row)
+            self._event(context, result["id"], "job.created", {"status": "queued"})
+            return result, True
+        existing = self.get_job(context, str(payload["id"]))
+        if existing is None:
+            raise RuntimeError(f"deterministic_job_insert_failed:{payload['id']}")
+        return existing, False
 
     def claim_next(
         self,
