@@ -224,7 +224,7 @@ def launch_published_scenario(
             session_id,
             current_location_id=scenario.starting_location_id,
             database=database,
-            kick_worker=True,
+            kick_worker=database is None,
             allow_missing_plan=True,
         )
     except Exception as exc:
