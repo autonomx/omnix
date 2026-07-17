@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import Field
 
+from .map_actor_footprints import actor_footprint_cells
 from .map_effective_geometry import (
     effective_blocks_sight,
     effective_terrain_rows,
@@ -192,7 +193,8 @@ def observe_map(
     explicitly_revealed_actors = set(snapshot.revealed_actor_ids)
     detected_actors = []
     for actor in snapshot.actors:
-        if actor.cell not in visible_set:
+        visible_actor_cells = set(actor_footprint_cells(actor)) & visible_set
+        if not visible_actor_cells:
             continue
         if not actor.hidden or actor.actor_id == observer_actor_id:
             detected_actors.append(actor.actor_id)
@@ -200,11 +202,14 @@ def observe_map(
         if (
             actor.actor_id in explicitly_revealed_actors
             or actor.actor_id in previous_actors
-            or _detectable(
-                actor.cell,
-                origin=observer.cell,
-                visible=visible_set,
-                detection_radius=perception.detection_radius,
+            or any(
+                _detectable(
+                    cell,
+                    origin=observer.cell,
+                    visible=visible_set,
+                    detection_radius=perception.detection_radius,
+                )
+                for cell in visible_actor_cells
             )
         ):
             detected_actors.append(actor.actor_id)
