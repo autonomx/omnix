@@ -20,6 +20,8 @@ from app.rpg.session.genesis.world_forge_quality import apply_world_forge_qualit
 
 from .contracts import WorldReleaseDocument, WorldRevisionDocument
 from .lifecycle_service import require_world_writable
+from .map_blueprint_authoring import latest_ready_blueprint_requirements
+from .map_blueprint_publication import merge_authored_blueprints
 from .service import compile_world_release, compile_world_revision
 
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
@@ -289,6 +291,17 @@ def publish_world_generation(
             topic_rows=topic_rows,
             revision=current_revision + 1,
         )
+        requirements = latest_ready_blueprint_requirements(work, context, world_id)
+        revision, release = merge_authored_blueprints(
+            compiled.world_revision,
+            compiled.world_release,
+            requirements,
+        )
+        compiled = WorldGenerationPublication(
+            world_revision=revision,
+            world_release=release,
+            certification=dict(release.certification),
+        )
         stored_revision = work.world_scenarios.publish_world_revision(
             context,
             world_id=world_id,
@@ -310,6 +323,7 @@ def publish_world_generation(
             "world_release": int(stored_release["release"]),
             "world_release_hash": str(stored_release["release_hash"]),
             "certification": dict(compiled.certification),
+            "authored_map_blueprint_count": len(requirements),
         }
         plan = {**dict(run.get("plan") or {}), "publication": publication_payload}
         progress = {

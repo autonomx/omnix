@@ -12,6 +12,7 @@ from .generation_jobs import WorldTopicGenerationSettings, canonical_hash
 from .generation_publication import publish_world_generation
 from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_world_writable
+from .map_blueprint_authoring import list_map_blueprints
 
 
 def _database(value: Any | None) -> Any | None:
@@ -86,6 +87,7 @@ def read_world_detail(
         "ok": True,
         "world": world,
         "topics": topics,
+        "map_blueprints": list_map_blueprints(world_id, database=database),
         "revisions": revisions,
         "releases": releases,
         "scenarios": scenarios,

@@ -1,0 +1,330 @@
+"""Revisioned semantic map-blueprint authoring and scenario reconciliation."""
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.unit_of_work import unit_of_work
+
+from .contracts import ScenarioRevisionDocument, canonical_content_hash
+from .lifecycle_service import require_world_writable
+
+MapLevel = Literal["settlement", "dungeon", "interior", "encounter"]
+
+
+class FrozenBlueprintModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class MapBlueprintDocument(FrozenBlueprintModel):
+    schema_version: Literal["rpg_map_blueprint_v1"] = "rpg_map_blueprint_v1"
+    map_id: str = Field(min_length=1)
+    location_id: str = Field(min_length=1)
+    level: MapLevel
+    navigation_kind: Literal["square_grid"] = "square_grid"
+    required_portal_ids: tuple[str, ...] = ()
+    required_route_ids: tuple[str, ...] = ()
+    required_spawn_point_ids: tuple[str, ...] = ()
+    required_zone_ids: tuple[str, ...] = ()
+    required_object_ids: tuple[str, ...] = ()
+    required_hazard_ids: tuple[str, ...] = ()
+    size_profile: str = "medium"
+    directives: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def unique_semantic_ids(self) -> "MapBlueprintDocument":
+        fields = (
+            "required_portal_ids",
+            "required_route_ids",
+            "required_spawn_point_ids",
+            "required_zone_ids",
+            "required_object_ids",
+            "required_hazard_ids",
+        )
+        for field in fields:
+            values = getattr(self, field)
+            if len(values) != len(set(values)):
+                raise ValueError(f"duplicate_map_blueprint_id:{field}")
+            if any(not value.strip() for value in values):
+                raise ValueError(f"blank_map_blueprint_id:{field}")
+        return self
+
+    def semantic_interface(self) -> dict[str, Any]:
+        return {
+            "map_id": self.map_id,
+            "location_id": self.location_id,
+            "level": self.level,
+            "navigation_kind": self.navigation_kind,
+            "portal_ids": sorted(self.required_portal_ids),
+            "route_ids": sorted(self.required_route_ids),
+            "spawn_point_ids": sorted(self.required_spawn_point_ids),
+            "zone_ids": sorted(self.required_zone_ids),
+            "object_ids": sorted(self.required_object_ids),
+            "hazard_ids": sorted(self.required_hazard_ids),
+        }
+
+    def requirement(
+        self,
+        *,
+        blueprint_revision: int,
+        content_hash: str,
+        semantic_interface_hash: str,
+    ) -> dict[str, Any]:
+        return {
+            "map_id": self.map_id,
+            "location_id": self.location_id,
+            "level": self.level,
+            "navigation_kind": self.navigation_kind,
+            "blueprint_revision": int(blueprint_revision),
+            "blueprint_hash": content_hash,
+            "semantic_interface_hash": semantic_interface_hash,
+            "required_portal_ids": list(self.required_portal_ids),
+            "required_route_ids": list(self.required_route_ids),
+            "required_spawn_point_ids": list(self.required_spawn_point_ids),
+            "required_zone_ids": list(self.required_zone_ids),
+            "required_object_ids": list(self.required_object_ids),
+            "required_hazard_ids": list(self.required_hazard_ids),
+            "size_profile": self.size_profile,
+            "directives": dict(self.directives),
+            "metadata": dict(self.metadata),
+            "simulation_readiness": "semantic",
+            "presentation_readiness": "placeholder",
+        }
+
+
+def _row(row: Any) -> dict[str, Any]:
+    return {
+        "world_id": str(row[0]),
+        "map_id": str(row[1]),
+        "blueprint_revision": int(row[2]),
+        "document": dict(row[3]),
+        "content_hash": str(row[4]),
+        "semantic_interface_hash": str(row[5]),
+        "status": str(row[6]),
+        "findings": list(row[7]),
+        "created_at": row[8].isoformat(),
+    }
+
+
+def _latest_scenarios(work: Any, context: Any, world_id: str) -> list[ScenarioRevisionDocument]:
+    rows = work.connection.execute(
+        "SELECT DISTINCT ON (revisions.scenario_id) revisions.document_jsonb "
+        "FROM omnix_rpg_scenario_revisions AS revisions "
+        "JOIN omnix_rpg_scenarios AS scenarios "
+        "ON scenarios.workspace_id = revisions.workspace_id "
+        "AND scenarios.id = revisions.scenario_id "
+        "WHERE revisions.workspace_id = %s AND revisions.world_id = %s "
+        "AND scenarios.status <> 'archived' "
+        "ORDER BY revisions.scenario_id, revisions.revision DESC",
+        (context.workspace_id, world_id),
+    ).fetchall()
+    return [ScenarioRevisionDocument.model_validate(row[0]) for row in rows]
+
+
+def _finding(
+    *,
+    code: str,
+    scenario: ScenarioRevisionDocument,
+    target_id: str,
+    operation_id: str = "",
+) -> dict[str, Any]:
+    return {
+        "code": code,
+        "scenario_id": scenario.scenario_id,
+        "scenario_revision": scenario.revision,
+        "operation_id": operation_id,
+        "target_id": target_id,
+    }
+
+
+def reconcile_blueprint_scenarios(
+    document: MapBlueprintDocument,
+    scenarios: Sequence[ScenarioRevisionDocument],
+) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    spawn_ids = set(document.required_spawn_point_ids)
+    route_ids = set(document.required_route_ids) | set(document.required_portal_ids)
+    object_ids = set(document.required_object_ids)
+    hazard_ids = set(document.required_hazard_ids)
+    for scenario in scenarios:
+        if scenario.starting_location_id == document.location_id and not spawn_ids:
+            findings.append(
+                _finding(
+                    code="starting_location_spawn_required",
+                    scenario=scenario,
+                    target_id=document.location_id,
+                )
+            )
+        for operation in scenario.map_initialization:
+            if operation.map_id != document.map_id:
+                continue
+            if operation.type == "place_actor":
+                spawn_id = str(operation.payload.get("spawn_point_id") or "")
+                if spawn_id and spawn_id not in spawn_ids:
+                    findings.append(
+                        _finding(
+                            code="scenario_spawn_missing",
+                            scenario=scenario,
+                            operation_id=operation.operation_id,
+                            target_id=spawn_id,
+                        )
+                    )
+            elif operation.type == "set_route_state" and operation.target_id not in route_ids:
+                findings.append(
+                    _finding(
+                        code="scenario_route_missing",
+                        scenario=scenario,
+                        operation_id=operation.operation_id,
+                        target_id=operation.target_id,
+                    )
+                )
+            elif operation.type == "set_object_state" and operation.target_id not in object_ids:
+                findings.append(
+                    _finding(
+                        code="scenario_object_missing",
+                        scenario=scenario,
+                        operation_id=operation.operation_id,
+                        target_id=operation.target_id,
+                    )
+                )
+            elif operation.type == "set_hazard_state" and operation.target_id not in hazard_ids:
+                findings.append(
+                    _finding(
+                        code="scenario_hazard_missing",
+                        scenario=scenario,
+                        operation_id=operation.operation_id,
+                        target_id=operation.target_id,
+                    )
+                )
+    return sorted(
+        findings,
+        key=lambda item: (
+            str(item["scenario_id"]),
+            int(item["scenario_revision"]),
+            str(item["operation_id"]),
+            str(item["code"]),
+            str(item["target_id"]),
+        ),
+    )
+
+
+def save_map_blueprint(
+    world_id: str,
+    document: MapBlueprintDocument,
+    *,
+    expected_revision: int,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        require_world_writable(work, context, world_id)
+        current = work.connection.execute(
+            "SELECT COALESCE(MAX(blueprint_revision), 0) "
+            "FROM omnix_rpg_map_blueprint_revisions "
+            "WHERE workspace_id = %s AND world_id = %s AND map_id = %s",
+            (context.workspace_id, world_id, document.map_id),
+        ).fetchone()
+        current_revision = int(current[0])
+        if current_revision != int(expected_revision):
+            raise ValueError(
+                "map_blueprint_revision_conflict:"
+                f"expected={expected_revision}:current={current_revision}"
+            )
+        payload = document.model_dump(mode="json")
+        content_hash = canonical_content_hash(payload)
+        semantic_hash = canonical_content_hash(document.semantic_interface())
+        findings = reconcile_blueprint_scenarios(
+            document,
+            _latest_scenarios(work, context, world_id),
+        )
+        next_revision = current_revision + 1
+        row = work.connection.execute(
+            "INSERT INTO omnix_rpg_map_blueprint_revisions ("
+            "workspace_id, world_id, map_id, blueprint_revision, document_jsonb, "
+            "content_hash, semantic_interface_hash, status, findings_jsonb) "
+            "VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s::jsonb) "
+            "RETURNING world_id, map_id, blueprint_revision, document_jsonb, "
+            "content_hash, semantic_interface_hash, status, findings_jsonb, created_at",
+            (
+                context.workspace_id,
+                world_id,
+                document.map_id,
+                next_revision,
+                _json(payload),
+                content_hash,
+                semantic_hash,
+                "invalid" if findings else "ready",
+                _json(findings),
+            ),
+        ).fetchone()
+        work.commit()
+    return {"ok": True, "map_blueprint": _row(row)}
+
+
+def list_map_blueprints(
+    world_id: str,
+    *,
+    latest_only: bool = True,
+    database: Any | None = None,
+) -> list[dict[str, Any]]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        if work.world_scenarios.get_world(context, world_id) is None:
+            raise KeyError(f"world_not_found:{world_id}")
+        if latest_only:
+            sql = (
+                "SELECT DISTINCT ON (map_id) world_id, map_id, blueprint_revision, "
+                "document_jsonb, content_hash, semantic_interface_hash, status, "
+                "findings_jsonb, created_at FROM omnix_rpg_map_blueprint_revisions "
+                "WHERE workspace_id = %s AND world_id = %s "
+                "ORDER BY map_id, blueprint_revision DESC"
+            )
+        else:
+            sql = (
+                "SELECT world_id, map_id, blueprint_revision, document_jsonb, "
+                "content_hash, semantic_interface_hash, status, findings_jsonb, "
+                "created_at FROM omnix_rpg_map_blueprint_revisions "
+                "WHERE workspace_id = %s AND world_id = %s "
+                "ORDER BY map_id, blueprint_revision DESC"
+            )
+        rows = work.connection.execute(
+            sql,
+            (context.workspace_id, world_id),
+        ).fetchall()
+        work.rollback()
+    return [_row(row) for row in rows]
+
+
+def latest_ready_blueprint_requirements(
+    work: Any,
+    context: Any,
+    world_id: str,
+) -> tuple[dict[str, Any], ...]:
+    rows = work.connection.execute(
+        "SELECT DISTINCT ON (map_id) map_id, blueprint_revision, document_jsonb, "
+        "content_hash, semantic_interface_hash FROM omnix_rpg_map_blueprint_revisions "
+        "WHERE workspace_id = %s AND world_id = %s AND status = 'ready' "
+        "ORDER BY map_id, blueprint_revision DESC",
+        (context.workspace_id, world_id),
+    ).fetchall()
+    requirements = []
+    for row in rows:
+        document = MapBlueprintDocument.model_validate(row[2])
+        requirements.append(
+            document.requirement(
+                blueprint_revision=int(row[1]),
+                content_hash=str(row[3]),
+                semantic_interface_hash=str(row[4]),
+            )
+        )
+    return tuple(sorted(requirements, key=lambda item: str(item["map_id"])))
+
+
+def _json(value: Any) -> str:
+    import json
+
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

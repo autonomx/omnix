@@ -51,6 +51,8 @@ export interface RpgWorldGenerationRun {
   plan: Record<string, unknown>;
   progress: Record<string, unknown>;
   error: Record<string, unknown>;
+  parent_run_id?: string | null;
+  lineage?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   completed_at?: string | null;
@@ -68,6 +70,18 @@ export interface RpgWorldTopic {
   content_hash: string;
   provenance: Record<string, unknown>;
   updated_at: string;
+}
+
+export interface RpgMapBlueprintRevision {
+  world_id: string;
+  map_id: string;
+  blueprint_revision: number;
+  document: Record<string, unknown>;
+  content_hash: string;
+  semantic_interface_hash: string;
+  status: 'ready' | 'invalid';
+  findings: Record<string, unknown>[];
+  created_at: string;
 }
 
 export interface RpgWorldRevision {
@@ -106,6 +120,7 @@ export interface RpgWorldDetailResponse {
   ok: boolean;
   world: RpgWorldSummary;
   topics: RpgWorldTopic[];
+  map_blueprints: RpgMapBlueprintRevision[];
   revisions: RpgWorldRevision[];
   releases: RpgWorldRelease[];
   scenarios: RpgScenarioSummary[];
@@ -188,6 +203,37 @@ export const rpgWorldLibraryClient = {
     body: Record<string, unknown>,
   ): Promise<{ ok: boolean; topic: RpgWorldTopic }> {
     return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/topics`, jsonInit(body));
+  },
+
+  saveMapBlueprint(
+    worldId: string,
+    mapId: string,
+    body: Record<string, unknown>,
+  ): Promise<{ ok: boolean; map_blueprint: RpgMapBlueprintRevision }> {
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/map-blueprints/${encodeURIComponent(mapId)}`,
+      jsonInit(body),
+    );
+  },
+
+  archiveWorld(worldId: string): Promise<{ ok: boolean; world: RpgWorldSummary; idempotent: boolean }> {
+    return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/archive`, jsonInit({}));
+  },
+
+  restoreWorld(worldId: string): Promise<{ ok: boolean; world: RpgWorldSummary; idempotent: boolean }> {
+    return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/restore`, jsonInit({}));
+  },
+
+  archiveScenario(
+    scenarioId: string,
+  ): Promise<{ ok: boolean; scenario: RpgScenarioSummary; idempotent: boolean }> {
+    return request(`/api/rpg/scenarios/${encodeURIComponent(scenarioId)}/archive`, jsonInit({}));
+  },
+
+  restoreScenario(
+    scenarioId: string,
+  ): Promise<{ ok: boolean; scenario: RpgScenarioSummary; idempotent: boolean }> {
+    return request(`/api/rpg/scenarios/${encodeURIComponent(scenarioId)}/restore`, jsonInit({}));
   },
 
   startGeneration(
