@@ -1,6 +1,6 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0-3 complete; Phase 6.1 complete; closure work remains in phases 4, 5, 6, and later phases
+Status: phases 0-4 complete; Phase 6.1 complete; closure work remains in phases 5, 6, and later phases
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
@@ -24,6 +24,9 @@ Implementation evidence:
 - Phase 3 topic history and generation lineage PR: `#1392`;
 - Phase 3 history/lineage merge SHA: `63d939afbbbe58f0f1b01f015f4bb12d9e2e7ea1`;
 - exact PR `#1392` implementation head verified by GitHub Actions: `8326e37d3586d056a3720d984b3fa97ac58913b4`;
+- Phase 4 blueprint authoring and lifecycle UI PR: `#1394`;
+- Phase 4 implementation merge SHA: `97cbba1d132dfebab041544e9218b48406ecde9e`;
+- exact PR `#1394` implementation head verified by GitHub Actions: `2c02c2a4411032e5490d17cef177bd397f412171`;
 - passing workflows for all implementation heads: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
@@ -130,7 +133,7 @@ Exit condition met: process interruption can resume without losing completed top
 
 ## Phase 4 — Worlds & Campaigns UI
 
-Status: in progress
+Status: complete
 
 Delivered:
 
@@ -138,16 +141,19 @@ Delivered:
 - world cards, scenario cards, and campaign cards;
 - world/topic authoring surface;
 - scenario editor;
-- generation progress and validation findings;
-- map-blueprint requirements summary;
-- release history;
-- fast launch from a certified published scenario into an initialized starting map.
+- generation progress, lineage, and validation findings;
+- immutable map-blueprint draft revisions with content and semantic-interface hashes;
+- structured map-blueprint editing with persistent validation;
+- unique stable portal, route, spawn, zone, object, and hazard ID validation;
+- scenario semantic-ID reconciliation with visible structured findings;
+- exclusion of invalid blueprint drafts from immutable World publication;
+- publication of ready authored blueprint requirements with exact revision/hash provenance;
+- release history and certification status;
+- reversible World and Scenario archive/restore controls;
+- fast launch from a certified published scenario into an initialized starting map;
+- PostgreSQL, semantic route, and web UI proof for invalid-to-corrected blueprint authoring and lifecycle controls.
 
-Remaining:
-
-- editable map-blueprint authoring with validation and persistence;
-- visual reconciliation of semantic IDs used by scenarios;
-- lifecycle controls for archive and restore.
+Exit condition met: an author can create, validate, reconcile, and publish semantic map blueprints, review release and generation history, manage project lifecycle, and launch a certified scenario from one persistent Worlds & Campaigns surface.
 
 ## Phase 5 — Starter bubble and progressive maps
 
