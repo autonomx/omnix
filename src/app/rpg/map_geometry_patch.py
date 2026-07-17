@@ -5,7 +5,11 @@ from typing import Iterable, Literal
 
 from pydantic import Field, model_validator
 
-from .map_effective_geometry import geometry_cell_key
+from .map_effective_geometry import (
+    definition_terrain_code,
+    geometry_cell_key,
+    terrain_rule_for_code,
+)
 from .map_grid_contracts import GridMapDefinition, GridPoint
 from .map_instance_runtime import (
     ActorMovedEvent,
@@ -18,7 +22,7 @@ from .map_instance_runtime import (
 
 class GeometryCellPatch(FrozenRuntimeModel):
     cell: GridPoint
-    terrain_code: str | None = None
+    terrain_code: str | None = Field(default=None, min_length=1, max_length=1)
 
 
 class ApplyGeometryPatchCommand(FrozenRuntimeModel):
@@ -73,10 +77,14 @@ def resolve_geometry_patch_command(
     occupied = {actor.cell: actor.actor_id for actor in snapshot.actors}
     for patch in command.cells:
         definition.require_inside(patch.cell)
-        code = patch.terrain_code or definition.terrain_code(patch.cell)
+        code = (
+            patch.terrain_code
+            if patch.terrain_code is not None
+            else definition_terrain_code(definition, patch.cell)
+        )
         try:
-            rule = definition.terrain_lookup[code]
-        except KeyError as exc:
+            rule = terrain_rule_for_code(definition, code)
+        except ValueError as exc:
             raise MapMovementError("geometry_patch_terrain_unknown", code) from exc
         if not rule.walkable and patch.cell in occupied:
             raise MapMovementError(
