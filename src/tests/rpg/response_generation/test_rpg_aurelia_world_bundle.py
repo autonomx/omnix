@@ -53,11 +53,11 @@ def test_aurelia_sample_world_bundle_is_import_ready() -> None:
 
     map_ids = {row["map_id"] for row in payload.map_definitions}
     assert map_ids == {
-        "map:starfall-grove",
-        "map:starfall-village",
-        "map:wayfarers-guild",
-        "map:skybridge-pass",
-        "map:moonroot-ruins",
+        "map:aurelia:arrival-grove",
+        "map:aurelia:starfall-village",
+        "map:aurelia:wayfarer-guild",
+        "map:aurelia:skybridge-pass",
+        "map:aurelia:moonroot-ruins",
     }
     assert all(row["status"] == "ready" for row in payload.map_blueprints)
     assert payload.world_releases[0]["document"]["certification"]["launch_ready"] is True
