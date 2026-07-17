@@ -1,6 +1,6 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0-9 complete; final closure work remains in measured performance profiling and renderer escalation
+Status: complete — phases 0-10 delivered and verified
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
@@ -45,12 +45,15 @@ Implementation evidence:
 - Phase 9.2 tactical movement, cover, and reactions PR: `#1406`;
 - Phase 9.2 implementation merge SHA: `8760df8dca1bffa7891ff353b801fb4b86f3d843`;
 - exact PR `#1406` implementation head verified by GitHub Actions: `98dbd87e9770d4e0ca97cdbe1b24b8116213be0a`;
+- Phase 10 measured grid performance profiling PR: `#1408`;
+- Phase 10 implementation merge SHA: `e81fa7368f52689e41ed555e003cd9c00cc18ccd`;
+- exact PR `#1408` implementation head verified by GitHub Actions: `daa4ca3e3a3f8fb5cd5a9282097ef68b644da5b3`;
 - PR `#1400` passed architecture, PostgreSQL, and Live Chat workflows; its missing deterministic `GridZone.name` test fixture was corrected and the complete observer suite was revalidated on exact PR `#1401` head;
-- exact PR `#1401`, `#1404`, and `#1406` heads passed RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
+- exact PR `#1401`, `#1404`, `#1406`, and `#1408` heads passed RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
 
-Separate reusable world authoring from campaign launch, introduce revisioned scenarios and releases, and extend the deterministic map runtime with campaign-owned instances, grid movement, authoritative events, and observer-safe projections.
+Separate reusable world authoring from campaign launch, introduce revisioned scenarios and releases, and extend the deterministic map runtime with campaign-owned instances, grid movement, authoritative events, observer-safe projections, tactical spatial rules, and measured renderer policy.
 
 ## Phase 0 — ADR and contracts
 
@@ -305,14 +308,34 @@ Delivered:
 
 Exit condition met: initiative, movement costs, cover, and reactions share authoritative map and combat state, commit atomically, remain idempotent, and replay without rerunning pathfinding or damage resolution.
 
-## Final phase — Measured performance and renderer escalation
+## Phase 10 — Measured performance and renderer escalation
 
-Status: pending audit
+Status: complete
 
-- profile spatial runtime and projection costs under representative active, coarse, and tactical workloads;
-- persist or expose actionable latency and workload telemetry;
-- define evidence-based thresholds for renderer escalation;
-- retain the current renderer unless measured limits justify a more complex path.
+Delivered:
+
+- read-only profiling for persisted campaign grid map instances;
+- measured observer-safe or full projection latency and canonical payload bytes;
+- optional measured authoritative pathfinding probes that never commit their generated event;
+- workload metrics for cells, actors, occupied footprint cells, terrain overrides, object and route states, semantic features, visible and known cells, and event-ledger depth;
+- durable observer-knowledge reuse with ephemeral safe observation fallback when no persisted knowledge exists;
+- explicit SVG visual budgets of 4,096 cells, 256 actors, 512 occupied footprint cells, 1,024 terrain overrides, 4,096 visible cells, and 1.5 MB projection payloads;
+- separate runtime-warning budgets of 16 ms projection time, 50 ms pathfinding time, and 10,000 map events;
+- renderer escalation driven only by visual workload or payload evidence;
+- backend projection, pathfinding, and event-depth warnings kept separate so a renderer rewrite cannot mask a server-side bottleneck;
+- hidden performance-profile API with auditable budget overrides;
+- deterministic proof that representative small workloads retain SVG, server latency warnings alone retain SVG, and threshold violations recommend Pixi with exact reasons;
+- PostgreSQL proof that a persisted 12×8 grid with two actors, durable observer knowledge, one recorded map event, and a real path probe retains SVG under default thresholds;
+- forced-threshold proof that the same persisted workload recommends Pixi when visual evidence exceeds the configured budget;
+- proof that profiling does not change campaign revision, map revision, map-event count, observation-event count, observer knowledge, or actor state.
+
+Renderer decision: retain the current SVG renderer for representative campaign-grid workloads. Escalate to Pixi only when a measured profile reports one or more visual workload or projection-payload threshold violations. Treat projection/pathfinding latency as runtime optimization evidence, not renderer evidence.
+
+Exit condition met: grid runtime and projection costs are measurable from persisted campaign state, renderer recommendations are evidence-based and reproducible, and profiling is read-only.
+
+## Roadmap completion
+
+All planned World, Scenario, generation, spatial runtime, observer, geometry, tactical, and measured-performance phases are complete. Future renderer changes require measured Phase 10 evidence rather than roadmap assumption.
 
 ## Release invariants
 
