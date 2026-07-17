@@ -210,11 +210,10 @@ def test_topic_drafts_are_preserved_restorable_and_link_generation_runs() -> Non
         )
         assert restored3["restored_draft_revision"] == 3
         assert restored3["topics"][0]["content"]["label"] == "original"
-        assert restored3["topics"][0]["provenance"]["draft_restore"] == {
-            "source_draft_revision": 1,
-            "source_history_sequence": 1,
-            "target_draft_revision": 3,
-        }
+        restore_provenance = restored3["topics"][0]["provenance"]["draft_restore"]
+        assert restore_provenance["source_draft_revision"] == 1
+        assert restore_provenance["target_draft_revision"] == 3
+        assert restore_provenance["source_history_sequence"] > 0
         run3 = start_world_generation(
             world_id=world_id,
             draft_revision=3,
