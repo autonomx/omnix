@@ -4,7 +4,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, GetJsonSchemaHandler, model_validator
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 
 class JobStatus(str, Enum):
@@ -28,6 +30,24 @@ class ResourceClass(str, Enum):
     GPU_IMAGE = "gpu:image"
     NETWORK = "network"
     RPG_CAMPAIGN_GENESIS = "rpg_campaign_genesis"
+    RPG_WORLD_GENERATION = "rpg_world_generation"
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls,
+        core_schema: CoreSchema,
+        handler: GetJsonSchemaHandler,
+    ) -> JsonSchemaValue:
+        """Keep the repository-only world worker queue out of public job creation docs."""
+
+        schema = handler(core_schema)
+        if isinstance(schema.get("enum"), list):
+            schema["enum"] = [
+                member.value
+                for member in cls
+                if member is not cls.RPG_WORLD_GENERATION
+            ]
+        return schema
 
 
 TERMINAL_STATUSES = {
@@ -180,5 +200,5 @@ class JobEventRecord(BaseModel):
     id: int
     job_id: str
     event_type: str
-    payload: dict[str, Any]
+    payload: dict[str, Any] = Field(default_factory=dict)
     created_at: str

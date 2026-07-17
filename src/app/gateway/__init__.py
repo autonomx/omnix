@@ -15,8 +15,10 @@ from .research_mode_routes import install_research_mode_route_hook
 from .rpg_debug_routes import install_rpg_debug_route_hook
 from .rpg_map_editor_routes import install_rpg_map_editor_route_hook
 from .rpg_map_routes import install_rpg_map_route_hook
+from .rpg_progressive_map_routes import install_rpg_progressive_map_route_hook
 from .rpg_session_routes import install_rpg_session_route_hook
 from .rpg_turn_job_mirror import install_rpg_turn_job_mirror_hook
+from .rpg_world_routes import install_rpg_world_route_hook
 from .tts_live_call_websocket import install_tts_live_call_websocket_hook
 from .tts_pcm_websocket import install_tts_pcm_websocket_hook
 from .tts_runtime_routes import install_tts_runtime_route_hook
@@ -46,11 +48,14 @@ def _install_required_rpg_turn_hooks() -> None:
         raise RuntimeError("RPG interaction lifecycle hook failed to install")
     install_rpg_turn_job_mirror_hook()
 
+
 install_assistant_context_route_hook()
 install_research_mode_route_hook()
 install_rpg_debug_route_hook()
 install_rpg_map_editor_route_hook()
 install_rpg_map_route_hook()
+install_rpg_world_route_hook()
+install_rpg_progressive_map_route_hook()
 install_rpg_session_route_hook()
 install_audiobook_websocket_hook()
 install_hermes_route_hook()

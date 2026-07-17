@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.gateway.rpg_world_routes import register_rpg_world_routes
+
+
+def test_world_library_routes_are_available_without_openapi_drift(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.gateway.rpg_world_library_routes.read_world_library",
+        lambda **_kwargs: {
+            "ok": True,
+            "worlds": [{"id": "world:test", "title": "Test World"}],
+            "scenarios": [],
+            "campaigns": [],
+            "generation_runs": [],
+        },
+    )
+    monkeypatch.setattr(
+        "app.gateway.rpg_world_library_routes.read_world_detail",
+        lambda world_id, **_kwargs: {
+            "ok": True,
+            "world": {"id": world_id, "title": "Test World"},
+            "topics": [],
+            "revisions": [],
+            "releases": [],
+            "scenarios": [],
+            "scenario_revisions": {},
+            "generation_runs": [],
+        },
+    )
+    app = FastAPI()
+    register_rpg_world_routes(app)
+    client = TestClient(app)
+
+    library = client.get("/api/rpg/world-library")
+    detail = client.get("/api/rpg/worlds/world:test/library")
+
+    assert library.status_code == 200
+    assert library.json()["worlds"][0]["id"] == "world:test"
+    assert detail.status_code == 200
+    assert detail.json()["world"]["id"] == "world:test"
+    assert "/api/rpg/world-library" not in app.openapi()["paths"]
+    assert "/api/rpg/worlds/{world_id}/library" not in app.openapi()["paths"]
+
+
+def test_published_scenario_launch_route_preserves_fast_launch_contract(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_launch(**kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "status": "ready",
+            "session_id": "campaign:published",
+            "launch_mode": "published_scenario",
+            "world_forge_invoked": False,
+        }
+
+    monkeypatch.setattr(
+        "app.gateway.rpg_world_library_routes.launch_published_scenario",
+        fake_launch,
+    )
+    app = FastAPI()
+    register_rpg_world_routes(app)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/rpg/scenarios/scenario:opening/revisions/2/launch",
+        json={
+            "world_id": "world:test",
+            "world_revision": 3,
+            "world_release": 1,
+            "player": {"name": "Alyndra"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["session_id"] == "campaign:published"
+    assert response.json()["world_forge_invoked"] is False
+    assert captured["world_id"] == "world:test"
+    assert captured["world_revision"] == 3
+    assert captured["world_release"] == 1
+    assert captured["scenario_id"] == "scenario:opening"
+    assert captured["scenario_revision"] == 2

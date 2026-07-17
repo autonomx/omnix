@@ -1,0 +1,242 @@
+"""Hidden compatibility routes for the RPG Worlds & Campaigns library UI."""
+from __future__ import annotations
+
+from typing import Any, Mapping
+
+from fastapi import FastAPI, HTTPException, Query, Request
+
+from app.rpg.worlds.library_service import (
+    publish_world_library_generation,
+    read_world_detail,
+    read_world_generation,
+    read_world_library,
+    save_world_topic,
+    start_world_library_generation,
+)
+from app.rpg.worlds.published_launch import launch_published_scenario
+from app.rpg.worlds.starter_bubble import (
+    build_starter_bubble,
+    predictive_materialization_queue,
+)
+from app.rpg.worlds.starter_bubble_service import promote_starter_bubble
+
+_ROUTE_SENTINEL = "_omnix_rpg_world_library_routes_registered"
+
+
+def _body(value: object) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise HTTPException(
+            status_code=422,
+            detail={"ok": False, "error": "request_body_must_be_object"},
+        )
+    return value
+
+
+def _raise_domain_error(exc: Exception) -> None:
+    if isinstance(exc, KeyError):
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": str(exc).strip("'")},
+        ) from exc
+    if isinstance(exc, ValueError):
+        raise HTTPException(
+            status_code=409,
+            detail={"ok": False, "error": str(exc)},
+        ) from exc
+    raise exc
+
+
+def register_rpg_world_library_routes(app: FastAPI) -> None:
+    if getattr(app.state, _ROUTE_SENTINEL, False):
+        return
+    setattr(app.state, _ROUTE_SENTINEL, True)
+
+    @app.get("/api/rpg/world-library", include_in_schema=False)
+    def rpg_world_library(
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> dict[str, Any]:
+        return read_world_library(limit=limit)
+
+    @app.get("/api/rpg/worlds/{world_id}/library", include_in_schema=False)
+    def rpg_world_detail(world_id: str) -> dict[str, Any]:
+        try:
+            return read_world_detail(world_id)
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post("/api/rpg/worlds/{world_id}/topics", include_in_schema=False)
+    async def rpg_world_save_topic(
+        world_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        topic_id = str(payload.get("topic_id") or "").strip()
+        content = payload.get("content")
+        if not topic_id or not isinstance(content, Mapping):
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "topic_id_and_content_required"},
+            )
+        status = str(payload.get("status") or "ready")
+        if status not in {"draft", "ready", "stale", "failed"}:
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "invalid_topic_status"},
+            )
+        try:
+            return save_world_topic(
+                world_id,
+                topic_id=topic_id,
+                content=content,
+                directives=(
+                    payload.get("directives")
+                    if isinstance(payload.get("directives"), Mapping)
+                    else {}
+                ),
+                status=status,
+            )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post("/api/rpg/worlds/{world_id}/generation", include_in_schema=False)
+    async def rpg_world_start_generation(
+        world_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        try:
+            return start_world_library_generation(
+                world_id,
+                depth=str(payload.get("depth") or "standard"),
+                starting_location=str(payload.get("starting_location") or ""),
+                background_expansion=bool(payload.get("background_expansion", True)),
+                topic_directives=(
+                    payload.get("topic_directives")
+                    if isinstance(payload.get("topic_directives"), Mapping)
+                    else {}
+                ),
+                entity_manifest=(
+                    payload.get("entity_manifest")
+                    if isinstance(payload.get("entity_manifest"), Mapping)
+                    else {}
+                ),
+                generator_version=str(payload.get("generator_version") or "world-generator-v1"),
+                prompt_version=str(payload.get("prompt_version") or "world-prompt-v1"),
+                provider_route=str(payload.get("provider_route") or "configured"),
+                model=str(payload.get("model") or "configured"),
+            )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.get("/api/rpg/world-generation/{run_id}", include_in_schema=False)
+    def rpg_world_generation_status(
+        run_id: str,
+        reconcile: bool = Query(default=True),
+    ) -> dict[str, Any]:
+        try:
+            return read_world_generation(run_id, reconcile=reconcile)
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post(
+        "/api/rpg/world-generation/{run_id}/publish",
+        include_in_schema=False,
+    )
+    def rpg_world_publish_generation(run_id: str) -> dict[str, Any]:
+        try:
+            return publish_world_library_generation(run_id)
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.get(
+        "/api/rpg/worlds/{world_id}/starter-bubble/preview",
+        include_in_schema=False,
+    )
+    def rpg_world_starter_bubble_preview(
+        world_id: str,
+        source_world_revision: int = Query(ge=1),
+        starting_location_id: str = Query(min_length=1),
+        neighboring_location_id: str | None = Query(default=None),
+    ) -> dict[str, Any]:
+        plan = build_starter_bubble(
+            world_id=world_id,
+            source_world_revision=source_world_revision,
+            starting_location_id=starting_location_id,
+            neighboring_location_id=neighboring_location_id,
+        )
+        return {
+            "ok": True,
+            "starter_bubble": plan.model_dump(mode="json"),
+            "predictive_materialization": list(
+                predictive_materialization_queue(
+                    plan,
+                    current_location_id=starting_location_id,
+                )
+            ),
+        }
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/starter-bubble/promote",
+        include_in_schema=False,
+    )
+    async def rpg_world_starter_bubble_promote(
+        world_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        try:
+            return promote_starter_bubble(
+                world_id=world_id,
+                source_world_revision=int(payload.get("source_world_revision") or 0),
+                starting_location_id=str(payload.get("starting_location_id") or ""),
+                neighboring_location_id=(
+                    str(payload.get("neighboring_location_id"))
+                    if payload.get("neighboring_location_id")
+                    else None
+                ),
+            )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post(
+        "/api/rpg/scenarios/{scenario_id}/revisions/{scenario_revision}/launch",
+        include_in_schema=False,
+    )
+    async def rpg_world_launch_scenario(
+        scenario_id: str,
+        scenario_revision: int,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        try:
+            return launch_published_scenario(
+                world_id=str(payload.get("world_id") or ""),
+                world_revision=int(payload.get("world_revision") or 0),
+                world_release=int(payload.get("world_release") or 0),
+                scenario_id=scenario_id,
+                scenario_revision=scenario_revision,
+                player=(
+                    payload.get("player")
+                    if isinstance(payload.get("player"), Mapping)
+                    else {}
+                ),
+                gameplay=(
+                    payload.get("gameplay")
+                    if isinstance(payload.get("gameplay"), Mapping)
+                    else {}
+                ),
+                features=(
+                    payload.get("features")
+                    if isinstance(payload.get("features"), Mapping)
+                    else {}
+                ),
+            )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise

@@ -12,6 +12,8 @@ from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.compiler import compile_campaign_genesis
 from app.rpg.session.genesis.contract import CampaignGenesisContract
 from app.rpg.session.genesis.materialization import persist_campaign_genesis
+from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
 
 
@@ -62,10 +64,14 @@ def test_campaign_genesis_materializes_bible_and_ready_gate_atomically() -> None
             }
         )
         compiled = compile_campaign_genesis(contract)
+        generator = ReferenceSafeWorldForgeGenerator(
+            DeterministicWorldForgeGenerator()
+        )
         world_forge = run_campaign_world_forge(
             contract,
             campaign_id="campaign:genesis",
             compiled_genesis=compiled,
+            generator=generator,
         )
         assert world_forge.launch_ready is True
         session = {

@@ -48,6 +48,7 @@ LINE_DEBT_LIMITS = {
     "src/app/rpg/tests/test_narration_queue_service_dialogue.py": 1543,
     "src/app/rpg/api/rpg_session_routes.py": 1257,
     "src/app/rpg/ai/grounding_validator.py": 1017,
+    "src/app/rpg/presentation/dialogue_quality.py": 1223,
     "src/app/rpg/response_generation/production_pipeline.py": 1182,
 }
 

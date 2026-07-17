@@ -1,0 +1,213 @@
+"""Application services for the RPG Worlds & Campaigns library."""
+from __future__ import annotations
+
+from typing import Any, Mapping
+
+from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.unit_of_work import unit_of_work
+from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
+
+from .generation_coordinator import reconcile_world_generation, start_world_generation
+from .generation_jobs import WorldTopicGenerationSettings, canonical_hash
+from .generation_publication import publish_world_generation
+from .generation_worker import kick_world_generation_worker
+
+
+def _database(value: Any | None) -> Any | None:
+    return value
+
+
+def read_world_library(
+    *,
+    database: Any | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    context = bootstrap_local_tenant(_database(database))
+    with unit_of_work(database) as work:
+        worlds = work.world_scenarios.list_worlds(context, limit=limit)
+        scenarios = work.world_library.list_scenarios(context, limit=limit * 2)
+        campaigns = work.world_library.list_campaign_bindings(context, limit=limit * 2)
+        runs = work.world_library.list_generation_runs(context, limit=limit * 2)
+        work.rollback()
+
+    scenarios_by_world: dict[str, list[dict[str, Any]]] = {}
+    for scenario in scenarios:
+        scenarios_by_world.setdefault(str(scenario["world_id"]), []).append(scenario)
+    runs_by_world: dict[str, list[dict[str, Any]]] = {}
+    for run in runs:
+        runs_by_world.setdefault(str(run["world_id"]), []).append(run)
+    summaries = []
+    for world in worlds:
+        world_id = str(world["id"])
+        world_runs = runs_by_world.get(world_id, [])
+        latest_run = world_runs[0] if world_runs else None
+        summaries.append(
+            {
+                **world,
+                "scenario_count": len(scenarios_by_world.get(world_id, [])),
+                "generation": latest_run,
+            }
+        )
+    return {
+        "ok": True,
+        "worlds": summaries,
+        "scenarios": scenarios,
+        "campaigns": campaigns,
+        "generation_runs": runs,
+    }
+
+
+def read_world_detail(
+    world_id: str,
+    *,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    context = bootstrap_local_tenant(_database(database))
+    with unit_of_work(database) as work:
+        world = work.world_scenarios.get_world(context, world_id)
+        if world is None:
+            work.rollback()
+            raise KeyError(f"world_not_found:{world_id}")
+        topics = work.world_library.list_topics(context, world_id)
+        revisions = work.world_library.list_world_revisions(context, world_id)
+        releases = work.world_library.list_world_releases(context, world_id)
+        scenarios = work.world_library.list_scenarios(context, world_id=world_id)
+        runs = work.world_library.list_generation_runs(context, world_id=world_id)
+        scenario_revisions = {
+            scenario["id"]: work.world_library.list_scenario_revisions(
+                context,
+                str(scenario["id"]),
+            )
+            for scenario in scenarios
+        }
+        work.rollback()
+    return {
+        "ok": True,
+        "world": world,
+        "topics": topics,
+        "revisions": revisions,
+        "releases": releases,
+        "scenarios": scenarios,
+        "scenario_revisions": scenario_revisions,
+        "generation_runs": runs,
+    }
+
+
+def save_world_topic(
+    world_id: str,
+    *,
+    topic_id: str,
+    content: Mapping[str, Any],
+    directives: Mapping[str, Any] | None = None,
+    status: str = "ready",
+    database: Any | None = None,
+) -> dict[str, Any]:
+    context = bootstrap_local_tenant(_database(database))
+    with unit_of_work(database) as work:
+        world = work.world_scenarios.get_world(context, world_id, for_update=True)
+        if world is None:
+            raise KeyError(f"world_not_found:{world_id}")
+        payload = dict(content)
+        payload.setdefault("topic_id", topic_id)
+        stored = work.world_scenarios.put_topic(
+            context,
+            world_id=world_id,
+            topic_id=topic_id,
+            draft_revision=int(world["draft_revision"]),
+            source="manual",
+            status=status,
+            content=payload,
+            directives=dict(directives or {}),
+            dependency_hashes={},
+            input_hash=canonical_hash(
+                {
+                    "topic_id": topic_id,
+                    "content": payload,
+                    "directives": dict(directives or {}),
+                }
+            ),
+            content_hash=canonical_hash(payload),
+            provenance={"source": "world_library_manual_authoring"},
+        )
+        work.commit()
+    return {"ok": True, "topic": stored}
+
+
+def start_world_library_generation(
+    world_id: str,
+    *,
+    depth: str = "standard",
+    starting_location: str = "",
+    background_expansion: bool = True,
+    topic_directives: Mapping[str, Mapping[str, Any]] | None = None,
+    entity_manifest: Mapping[str, Any] | None = None,
+    generator_version: str = "world-generator-v1",
+    prompt_version: str = "world-prompt-v1",
+    provider_route: str = "configured",
+    model: str = "configured",
+    database: Any | None = None,
+    kick_worker: bool = True,
+) -> dict[str, Any]:
+    context = bootstrap_local_tenant(_database(database))
+    with unit_of_work(database) as work:
+        world = work.world_scenarios.get_world(context, world_id)
+        work.rollback()
+    if world is None:
+        raise KeyError(f"world_not_found:{world_id}")
+    graph = build_campaign_topic_graph(
+        campaign_template=str(world.get("metadata", {}).get("campaign_template") or "classic_fantasy"),
+        genre=str(world.get("genre") or "classic_fantasy"),
+        tone=str(world.get("tone") or "heroic adventure"),
+        depth=depth,
+        starting_location=starting_location,
+        background_expansion=background_expansion,
+    )
+    run = start_world_generation(
+        world_id=world_id,
+        draft_revision=int(world["draft_revision"]),
+        graph=graph,
+        generation_context={
+            "genre": str(world.get("genre") or "classic_fantasy"),
+            "tone": str(world.get("tone") or "heroic adventure"),
+            "starting_location": starting_location,
+            "background_expansion": background_expansion,
+        },
+        topic_directives=dict(topic_directives or {}),
+        entity_manifest_hash=canonical_hash(dict(entity_manifest or {})),
+        settings=WorldTopicGenerationSettings(
+            generator_version=generator_version,
+            prompt_version=prompt_version,
+            provider_route=provider_route,
+            model=model,
+            seed=int(world.get("seed") or 0),
+        ),
+        database=database,
+    )
+    worker_started = kick_world_generation_worker(database=database) if kick_worker else False
+    return {"ok": True, "run": run, "worker_started": worker_started}
+
+
+def read_world_generation(
+    run_id: str,
+    *,
+    database: Any | None = None,
+    reconcile: bool = True,
+) -> dict[str, Any]:
+    if reconcile:
+        run = reconcile_world_generation(run_id, database=database)
+    else:
+        context = bootstrap_local_tenant(_database(database))
+        with unit_of_work(database) as work:
+            run = work.world_generation.get(context, run_id)
+            work.rollback()
+        if run is None:
+            raise KeyError(f"world_generation_run_not_found:{run_id}")
+    return {"ok": True, "run": run}
+
+
+def publish_world_library_generation(
+    run_id: str,
+    *,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    return publish_world_generation(run_id, database=database)

@@ -1,0 +1,121 @@
+.rpg-starter-bubble-panel {
+  border-bottom: 1px solid var(--mantine-color-dark-4, #495057);
+  background: var(--mantine-color-dark-8, #141517);
+  padding: 0.75rem 1rem;
+}
+
+.rpg-starter-bubble-panel summary {
+  cursor: pointer;
+}
+
+.rpg-starter-bubble-panel summary > span {
+  display: inline-grid;
+  gap: 0.15rem;
+  margin-left: 0.4rem;
+}
+
+.rpg-starter-bubble-panel summary small {
+  opacity: 0.75;
+}
+
+.rpg-starter-bubble-panel-body {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem 0 0.25rem;
+}
+
+.rpg-starter-bubble-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.75rem;
+}
+
+.rpg-starter-bubble-controls label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.rpg-starter-bubble-controls input,
+.rpg-starter-bubble-controls select {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--mantine-color-dark-4, #495057);
+  border-radius: 0.5rem;
+  background: var(--mantine-color-dark-7, #1a1b1e);
+  color: inherit;
+  padding: 0.5rem 0.65rem;
+}
+
+.rpg-starter-bubble-actions,
+.rpg-starter-bubble-materialization-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.rpg-starter-bubble-actions button,
+.rpg-starter-bubble-materialization-list button {
+  border: 1px solid var(--mantine-color-dark-3, #5c636a);
+  border-radius: 0.55rem;
+  background: var(--mantine-color-dark-7, #1a1b1e);
+  color: inherit;
+  cursor: pointer;
+  padding: 0.55rem 0.8rem;
+}
+
+.rpg-starter-bubble-actions button:disabled,
+.rpg-starter-bubble-materialization-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.rpg-starter-bubble-feedback,
+.rpg-starter-bubble-error {
+  margin: 0;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.rpg-starter-bubble-feedback {
+  border: 1px solid var(--mantine-color-green-7, #2b8a3e);
+}
+
+.rpg-starter-bubble-error {
+  border: 1px solid var(--mantine-color-red-7, #c92a2a);
+}
+
+.rpg-starter-bubble-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.rpg-starter-bubble-preview > div {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid var(--mantine-color-dark-5, #373a40);
+  border-radius: 0.55rem;
+  padding: 0.65rem;
+}
+
+.rpg-starter-bubble-preview .rpg-starter-bubble-materialization-list {
+  grid-column: 1 / -1;
+  display: flex;
+}
+
+.rpg-starter-bubble-preview pre {
+  grid-column: 1 / -1;
+  max-height: 18rem;
+  overflow: auto;
+  margin: 0;
+  border-radius: 0.55rem;
+  background: var(--mantine-color-dark-9, #101113);
+  padding: 0.75rem;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 48rem) {
+  .rpg-starter-bubble-preview {
+    grid-template-columns: 1fr;
+  }
+}
