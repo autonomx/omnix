@@ -64,16 +64,16 @@ Delivered:
 
 Golden proof completed:
 
-1. Published World Revision 1 and World Release 1.
-2. Published Scenario Revision 1.
-3. Launched Campaign A and Campaign B.
-4. Bound both campaigns to one tavern Map Definition.
-5. Created independent Map Instances.
-6. Moved Xylvanna only in Campaign A.
-7. Confirmed Campaign B was unchanged.
-8. Saved, loaded, and replayed Campaign A.
-9. Published a newer World Revision and corrected Map Definition/Release.
-10. Confirmed existing campaigns remained pinned.
+1. Publish World Revision 1 and World Release 1 — completed.
+2. Publish Scenario Revision 1 — completed.
+3. Launch Campaign A and Campaign B — completed.
+4. Bind both campaigns to one tavern Map Definition — completed.
+5. Create independent Map Instances — completed.
+6. Move Xylvanna only in Campaign A — completed.
+7. Confirm Campaign B is unchanged — completed.
+8. Save, load, and replay Campaign A — completed.
+9. Publish a newer World Revision and corrected Map Definition/Release — completed.
+10. Confirm existing campaigns remain pinned — completed.
 
 ## Phase 3 — Durable World Forge DAG
 
