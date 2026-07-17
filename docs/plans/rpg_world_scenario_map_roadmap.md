@@ -1,6 +1,6 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0-8 complete; closure work remains in tactical spatial systems and measured performance escalation
+Status: phases 0-8 complete; Phase 9.1 complete; closure work remains in tactical movement, cover, reactions, and measured performance escalation
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
@@ -39,8 +39,11 @@ Implementation evidence:
 - Phase 8 campaign geometry patch PR: `#1401`;
 - Phase 8 implementation merge SHA: `6630f947577d962cd18c76ad5b21606538618493`;
 - exact PR `#1401` implementation head verified by GitHub Actions: `55076c46b0178a03f511bde43127a58b26bf1dcb`;
+- Phase 9.1 multi-cell footprint authority PR: `#1404`;
+- Phase 9.1 implementation merge SHA: `06108d526ce6e755de1f97b69b78a874be70b909`;
+- exact PR `#1404` implementation head verified by GitHub Actions: `7905ecff4a7f15af904f109eb20b0a3b4f720606`;
 - PR `#1400` passed architecture, PostgreSQL, and Live Chat workflows; its missing deterministic `GridZone.name` test fixture was corrected and the complete observer suite was revalidated on exact PR `#1401` head;
-- exact PR `#1401` head passed RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
+- exact PR `#1401` and `#1404` heads passed RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
 
@@ -254,9 +257,37 @@ Delivered:
 
 Exit condition met: campaign-specific geometry can change movement and visibility through recorded optimistic events while shared release-owned definitions stay immutable, cross-campaign state remains isolated, and replay never reruns generation or pathfinding.
 
+## Phase 9 — Tactical spatial systems
+
+Status: in progress
+
+### Phase 9.1 — Multi-cell actor footprint authority
+
+Status: complete
+
+Delivered:
+
+- shared rectangular footprint cells using the existing top-left anchor, width, and height actor fields;
+- full-footprint map-instance creation validation for bounds, walkability, and actor overlap;
+- pathfinder version 2 with full-footprint candidate bounds, effective terrain, occupancy, diagonal-clearance, and maximum-under-footprint terrain costs;
+- destination and geometry-patch protection for non-anchor occupied cells;
+- full-footprint cross-map portal entry validation;
+- observer detection through any visible actor footprint cell;
+- unchanged 1x1 actor behavior;
+- deterministic proof for edge bounds, overlap, narrow and wide passages, non-anchor collisions, replay, and partial-footprint visibility;
+- PostgreSQL proof that a persisted 2x2 actor moves through a valid opening, protects non-anchor cells, reloads unchanged, and replays exactly.
+
+Exit condition met: every spatial subsystem agrees on the cells occupied by rectangular multi-cell actors, and resolved movement remains deterministic, persistent, and replayable.
+
+Remaining Phase 9 work:
+
+- initiative-aware tactical movement and action budgets;
+- deterministic cover evaluation over effective campaign geometry;
+- reaction opportunities and resolved reaction attacks tied to movement paths.
+
 ## Later phases
 
-- tactical movement, cover, reactions, and multi-cell actors;
+- complete Phase 9 tactical movement, cover, and reactions;
 - performance profiling and renderer escalation only when measured.
 
 ## Release invariants
