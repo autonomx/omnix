@@ -128,7 +128,7 @@ describe('RpgCreateCampaignWizard', () => {
     expect(screen.queryByText('World Forge depth')).not.toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Choose a World' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Search worlds' })).toBeInTheDocument();
-    expect(screen.getByText(/Create or import one from Worlds & Campaigns/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Create or import one from Worlds & Campaigns/i)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Create Campaign' })).not.toBeInTheDocument();
   });
 
@@ -156,7 +156,7 @@ describe('RpgCreateCampaignWizard', () => {
     renderWizard();
 
     expect(await screen.findByRole('heading', { name: 'Choose a World' })).toBeInTheDocument();
-    expect(screen.getAllByText(world.title).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(world.title)).length).toBeGreaterThan(0);
     expect(screen.getByText('Fantasy Isekai')).toBeInTheDocument();
     expect(screen.getByText('1 published opening')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Create Campaign' })).not.toBeInTheDocument();
