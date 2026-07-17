@@ -31,6 +31,7 @@ class ResourceClass(str, Enum):
     NETWORK = "network"
     RPG_CAMPAIGN_GENESIS = "rpg_campaign_genesis"
     RPG_WORLD_GENERATION = "rpg_world_generation"
+    RPG_MAP_MATERIALIZATION = "rpg_map_materialization"
 
     @classmethod
     def __get_pydantic_json_schema__(
@@ -38,15 +39,15 @@ class ResourceClass(str, Enum):
         core_schema: CoreSchema,
         handler: GetJsonSchemaHandler,
     ) -> JsonSchemaValue:
-        """Keep the repository-only world worker queue out of public job creation docs."""
+        """Keep repository-only RPG worker queues out of public job creation docs."""
 
         schema = handler(core_schema)
         if isinstance(schema.get("enum"), list):
-            schema["enum"] = [
-                member.value
-                for member in cls
-                if member is not cls.RPG_WORLD_GENERATION
-            ]
+            hidden = {
+                cls.RPG_WORLD_GENERATION.value,
+                cls.RPG_MAP_MATERIALIZATION.value,
+            }
+            schema["enum"] = [member.value for member in cls if member.value not in hidden]
         return schema
 
 
@@ -178,27 +179,3 @@ class JobRecord(BaseModel):
     priority: int = 0
     stages: list[JobStage] = Field(default_factory=list)
     progress: JobProgress = Field(default_factory=JobProgress)
-    logs: list[dict[str, Any]] = Field(default_factory=list)
-    input_ref: dict[str, Any] | None = None
-    input_payload: dict[str, Any] | None = None
-    output_refs: list[dict[str, Any]] = Field(default_factory=list)
-    error: JobError | None = None
-    lease: JobLease | None = None
-    created_at: str
-    updated_at: str
-    started_at: str | None = None
-    completed_at: str | None = None
-    cancel: CancelState = Field(default_factory=CancelState)
-    compat: dict[str, Any] = Field(default_factory=dict)
-
-
-class JobListResponse(BaseModel):
-    jobs: list[JobRecord]
-
-
-class JobEventRecord(BaseModel):
-    id: int
-    job_id: str
-    event_type: str
-    payload: dict[str, Any] = Field(default_factory=dict)
-    created_at: str
