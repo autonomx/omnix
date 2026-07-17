@@ -19,6 +19,7 @@ from app.rpg.session.genesis.world_forge_generation import (
 from app.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
 
 from .contracts import WorldReleaseDocument, WorldRevisionDocument
+from .lifecycle_service import require_world_writable
 from .service import compile_world_release, compile_world_revision
 
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
@@ -266,11 +267,11 @@ def publish_world_generation(
                 "reused": True,
             }
         if str(run.get("status") or "") != "review":
-            raise ValueError(f"world_generation_not_publishable:{run_id}:{run.get('status')}")
+            raise ValueError(
+                f"world_generation_not_publishable:{run_id}:{run.get('status')}"
+            )
         world_id = str(run.get("world_id") or "")
-        world = work.world_scenarios.get_world(context, world_id, for_update=True)
-        if world is None:
-            raise KeyError(f"world_not_found:{world_id}")
+        world = require_world_writable(work, context, world_id)
         topic_rows = work.world_generation.list_topics(
             context,
             world_id=world_id,

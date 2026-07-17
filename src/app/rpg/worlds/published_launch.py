@@ -8,6 +8,7 @@ from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
 from app.rpg.session.service import archive_session, save_session
 
+from .lifecycle_service import require_scenario_writable
 from .postgres_service import load_published_resources, load_release_definitions
 from .semantic_validation import (
     initialize_starting_map_snapshot,
@@ -52,11 +53,14 @@ def launch_published_scenario(
     if not bool(certification.get("launch_ready")):
         raise ValueError(
             "world_release_not_launch_ready:"
-            + ",".join(str(item) for item in certification.get("missing_requirements") or ())
+            + ",".join(
+                str(item) for item in certification.get("missing_requirements") or ()
+            )
         )
 
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
+        require_scenario_writable(work, context, scenario_id)
         world = work.world_scenarios.get_world(context, world_id)
         work.rollback()
     if world is None:
@@ -71,17 +75,27 @@ def launch_published_scenario(
     player_payload.setdefault("build", "balanced_adventurer")
     request = RpgNewGameRequest.model_validate(
         {
-            "campaign_template": str(canon.get("campaign_template") or "classic_fantasy"),
+            "campaign_template": str(
+                canon.get("campaign_template") or "classic_fantasy"
+            ),
             "genre": str(world.get("genre") or "classic_fantasy"),
             "tone": str(world.get("tone") or "heroic adventure"),
             "background": str(player_payload.get("background") or "World Traveler"),
             "starting_location": scenario.starting_location_id,
             "player": player_payload,
             "difficulty": str(gameplay_payload.get("difficulty") or "normal"),
-            "world_activity": str(gameplay_payload.get("world_activity") or "standard"),
-            "economy_pressure": str(gameplay_payload.get("economy_pressure") or "normal"),
-            "combat_lethality": str(gameplay_payload.get("combat_lethality") or "normal"),
-            "companions_enabled": bool(gameplay_payload.get("companions_enabled", True)),
+            "world_activity": str(
+                gameplay_payload.get("world_activity") or "standard"
+            ),
+            "economy_pressure": str(
+                gameplay_payload.get("economy_pressure") or "normal"
+            ),
+            "combat_lethality": str(
+                gameplay_payload.get("combat_lethality") or "normal"
+            ),
+            "companions_enabled": bool(
+                gameplay_payload.get("companions_enabled", True)
+            ),
             "permadeath": bool(gameplay_payload.get("permadeath", False)),
             "seed": int(world.get("seed") or 0),
             "features": dict(features or {}),
@@ -163,7 +177,9 @@ def launch_published_scenario(
                     title=str(state.get("title") or revision.title),
                     state=state,
                     engine_version="published-world-launch-v1",
-                    schema_version=str(manifest.get("schema_version") or "rpg-session-v1"),
+                    schema_version=str(
+                        manifest.get("schema_version") or "rpg-session-v1"
+                    ),
                     seed=str(world.get("seed") or 0),
                     metadata={
                         "launch_mode": "published_scenario",

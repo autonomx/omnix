@@ -65,6 +65,20 @@ A campaign pins exact identities and hashes for:
 
 Campaigns never auto-upgrade. A migration or upgrade must be explicit, validated, and auditable.
 
+## Lifecycle, archival, and deletion
+
+World Projects and Scenario Projects use reversible soft archival. Archival changes project availability; it never rewrites or deletes published authority.
+
+- An archived World Project accepts no new topic edits, generation runs, World Revisions, World Releases, scenarios, campaign bindings, or campaign launches.
+- An archived Scenario Project accepts no new Scenario Revisions, campaign bindings, or campaign launches.
+- A World Project cannot be archived while one of its durable generation runs is planned or running.
+- Restoring a project returns it to `published` when retained revisions exist, otherwise to `draft`.
+- Existing campaigns pinned to archived projects remain readable and playable. Their World Revision, World Release, Scenario Revision, Map Definition pins, map instances, events, snapshots, and checkpoints remain authoritative.
+- Published World Revisions, World Releases, Scenario Revisions, Map Definition Revisions, campaign bindings, authoritative events, and checkpoints are never destructively deleted through normal product APIs.
+- Hard deletion is reserved for an explicit workspace-level retention or administrative process that proves no prohibited references remain and records an auditable deletion decision.
+
+Archival and restoration are idempotent and must not change content hashes, revision numbers, release numbers, campaign pins, or reducer state.
+
 ## Map Blueprint and Map Definition
 
 A Map Blueprint declares semantic requirements such as map level, navigation kind, required zones, portals, spawn points, terrain, services, architectural style, size profile, seed, and generation direction.
@@ -152,6 +166,7 @@ Gameplay may enter a `navigable` location even while optional generated artwork 
 13. World and region travel use canonical graphs; local movement may use grids.
 14. Durable topic results are reused only by exact generation fingerprint.
 15. Existing campaigns remain compatible through explicit adapters.
+16. Archival never destructively deletes published authority or changes campaign pins.
 
 ## Mandatory architecture gate
 
@@ -168,4 +183,4 @@ Before AI world generation or the full library UI is considered complete, a manu
 
 ## Consequences
 
-The architecture adds explicit revision and binding layers, but removes campaign/world coupling, prevents cross-campaign mutation, supports resumable generation, preserves deterministic replay, and permits progressive maps without making image generation a gameplay dependency.
+The architecture adds explicit revision and binding layers, but removes campaign/world coupling, prevents cross-campaign mutation, supports resumable generation, preserves deterministic replay, and permits progressive maps without making image generation a gameplay dependency. Soft archival keeps authoring libraries manageable while retaining reproducibility and existing campaign authority.

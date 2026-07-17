@@ -90,6 +90,10 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
         lambda *_args, **_kwargs: {definition.map_id: definition},
     )
     monkeypatch.setattr(
+        "app.rpg.worlds.published_launch.require_scenario_writable",
+        lambda *_args, **_kwargs: {"status": "published"},
+    )
+    monkeypatch.setattr(
         "app.rpg.worlds.published_launch.bootstrap_local_tenant",
         lambda _database: object(),
     )
@@ -177,9 +181,18 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
     assert result["session_id"] == "campaign:published"
     assert result["launch_mode"] == "published_scenario"
     assert result["world_forge_invoked"] is False
-    assert result["session"]["state"]["world_binding"]["world_revision_hash"] == world_revision.content_hash
-    assert result["session"]["state"]["world_binding"]["world_release_hash"] == release.release_hash
-    assert result["session"]["state"]["world_binding"]["scenario_revision_hash"] == scenario.content_hash
+    assert (
+        result["session"]["state"]["world_binding"]["world_revision_hash"]
+        == world_revision.content_hash
+    )
+    assert (
+        result["session"]["state"]["world_binding"]["world_release_hash"]
+        == release.release_hash
+    )
+    assert (
+        result["session"]["state"]["world_binding"]["scenario_revision_hash"]
+        == scenario.content_hash
+    )
     assert result["session"]["state"]["current_map_instance_id"] == (
         "campaign:published:map:map:rusty_flagon:1"
     )
