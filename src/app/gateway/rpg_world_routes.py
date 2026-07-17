@@ -15,6 +15,12 @@ from app.rpg.worlds.contracts import (
     WorldReleaseDocument,
     WorldRevisionDocument,
 )
+from app.rpg.worlds.lifecycle_service import (
+    archive_scenario_project,
+    archive_world_project,
+    restore_scenario_project,
+    restore_world_project,
+)
 from app.rpg.worlds.postgres_service import (
     bind_campaign_world,
     create_scenario_project,
@@ -85,6 +91,28 @@ def register_rpg_world_routes(app: FastAPI) -> None:
             raise _validation_error(exc) from exc
 
     @app.post(
+        "/api/rpg/worlds/{world_id}/archive",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    def rpg_archive_world(world_id: str) -> dict[str, Any]:
+        try:
+            return archive_world_project(world_id)
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/restore",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    def rpg_restore_world(world_id: str) -> dict[str, Any]:
+        try:
+            return restore_world_project(world_id)
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
+
+    @app.post(
         "/api/rpg/worlds/{world_id}/revisions",
         tags=["rpg-world"],
         include_in_schema=False,
@@ -141,6 +169,28 @@ def register_rpg_world_routes(app: FastAPI) -> None:
             return {"ok": True, "scenario": create_scenario_project(contract)}
         except ValidationError as exc:
             raise _validation_error(exc) from exc
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
+
+    @app.post(
+        "/api/rpg/scenarios/{scenario_id}/archive",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    def rpg_archive_scenario(scenario_id: str) -> dict[str, Any]:
+        try:
+            return archive_scenario_project(scenario_id)
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
+
+    @app.post(
+        "/api/rpg/scenarios/{scenario_id}/restore",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    def rpg_restore_scenario(scenario_id: str) -> dict[str, Any]:
+        try:
+            return restore_scenario_project(scenario_id)
         except (KeyError, ValueError) as exc:
             raise _domain_error(exc) from exc
 
