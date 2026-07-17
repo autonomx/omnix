@@ -22,6 +22,25 @@ def parse_geometry_cell_key(value: str) -> GridPoint:
         raise ValueError(f"invalid_geometry_cell_key:{value}") from exc
 
 
+def definition_terrain_code(
+    definition: GridMapDefinition,
+    cell: GridPoint,
+) -> str:
+    definition.require_inside(cell)
+    column, row = cell
+    return definition.terrain_rows[row][column]
+
+
+def terrain_rule_for_code(
+    definition: GridMapDefinition,
+    code: str,
+) -> TerrainRule:
+    try:
+        return next(rule for rule in definition.terrain_palette if rule.code == code)
+    except StopIteration as exc:
+        raise ValueError(f"unknown_effective_terrain_code:{code}") from exc
+
+
 def effective_terrain_code(
     definition: GridMapDefinition,
     snapshot: GeometrySnapshot,
@@ -30,7 +49,7 @@ def effective_terrain_code(
     definition.require_inside(cell)
     return snapshot.terrain_overrides.get(
         geometry_cell_key(cell),
-        definition.terrain_code(cell),
+        definition_terrain_code(definition, cell),
     )
 
 
@@ -40,10 +59,7 @@ def effective_terrain_rule(
     cell: GridPoint,
 ) -> TerrainRule:
     code = effective_terrain_code(definition, snapshot, cell)
-    try:
-        return definition.terrain_lookup[code]
-    except KeyError as exc:
-        raise ValueError(f"unknown_effective_terrain_code:{code}") from exc
+    return terrain_rule_for_code(definition, code)
 
 
 def effective_is_walkable(
