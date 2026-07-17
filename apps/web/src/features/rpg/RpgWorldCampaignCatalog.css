@@ -1,0 +1,181 @@
+.rpg-world-catalog {
+  display: grid;
+  gap: 1rem;
+}
+
+.rpg-world-catalog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rpg-world-catalog-heading h4,
+.rpg-world-card h5,
+.rpg-world-catalog-heading p,
+.rpg-world-card p {
+  margin: 0;
+}
+
+.rpg-world-catalog-heading h4 {
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+}
+
+.rpg-world-catalog-heading > div > p:last-child {
+  margin-top: 0.35rem;
+  color: var(--omnix-muted, #a7a4b8);
+}
+
+.rpg-world-catalog-search {
+  display: grid;
+  gap: 0.35rem;
+  color: rgba(237, 233, 254, 0.9);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.rpg-world-catalog-search input,
+.rpg-world-card-campaign-select select {
+  width: 100%;
+  border: 1px solid rgba(168, 139, 250, 0.24);
+  border-radius: 12px;
+  background: rgba(8, 13, 30, 0.88);
+  color: #f8fafc;
+  padding: 0.7rem 0.8rem;
+}
+
+.rpg-world-catalog-message,
+.rpg-world-catalog-error {
+  padding: 1rem;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.56);
+}
+
+.rpg-world-catalog-error {
+  color: #fca5a5;
+}
+
+.rpg-world-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.rpg-world-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(168, 139, 250, 0.22);
+  border-radius: 18px;
+  background: rgba(7, 12, 28, 0.84);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.22);
+}
+
+.rpg-world-card-cover {
+  position: relative;
+  display: flex;
+  min-height: 190px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1rem;
+  background:
+    radial-gradient(circle at 72% 18%, rgba(129, 140, 248, 0.72), transparent 35%),
+    radial-gradient(circle at 20% 74%, rgba(236, 72, 153, 0.42), transparent 40%),
+    linear-gradient(145deg, #172554, #3b0764 48%, #020617);
+}
+
+.rpg-world-card-cover-image {
+  background-position: center;
+  background-size: cover;
+}
+
+.rpg-world-card-genre {
+  align-self: flex-start;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(30, 14, 60, 0.78);
+  color: #f5f3ff;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.rpg-world-card-cover-copy {
+  display: grid;
+  gap: 0.2rem;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.72);
+}
+
+.rpg-world-card-cover-copy strong {
+  font-size: 1.35rem;
+}
+
+.rpg-world-card-cover-copy span {
+  color: rgba(248, 250, 252, 0.82);
+  font-size: 0.84rem;
+}
+
+.rpg-world-card-body {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.rpg-world-card-body h5 {
+  font-size: 1.15rem;
+}
+
+.rpg-world-card-body p,
+.rpg-world-card-body small {
+  color: var(--omnix-muted, #a7a4b8);
+  line-height: 1.45;
+}
+
+.rpg-world-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.rpg-world-card-facts span {
+  padding: 0.28rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(76, 29, 149, 0.34);
+  color: #ddd6fe;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.rpg-world-card-campaign-select {
+  display: grid;
+  gap: 0.35rem;
+  color: rgba(237, 233, 254, 0.9);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.rpg-world-card-empty {
+  min-height: 2.2rem;
+}
+
+.rpg-world-card-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+@media (max-width: 1100px) {
+  .rpg-world-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .rpg-world-catalog-heading,
+  .rpg-world-card-actions {
+    display: grid;
+  }
+
+  .rpg-world-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
