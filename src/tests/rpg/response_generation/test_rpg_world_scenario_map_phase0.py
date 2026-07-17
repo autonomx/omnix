@@ -18,6 +18,9 @@ def test_world_scenario_map_adr_locks_authority_boundaries() -> None:
         "Observer-safe projection",
         "generation fingerprint",
         "Campaigns never auto-upgrade",
+        "Lifecycle, archival, and deletion",
+        "never destructively deleted through normal product APIs",
+        "Existing campaigns pinned to archived projects remain readable and playable",
     )
     for phrase in required:
         assert phrase in text
