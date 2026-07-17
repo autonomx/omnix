@@ -15,6 +15,7 @@ from app.rpg.worlds.contracts import (
     WorldReleaseDocument,
     WorldRevisionDocument,
 )
+from app.rpg.worlds.legacy_bible_import import import_campaign_bible_as_world
 from app.rpg.worlds.lifecycle_service import (
     archive_scenario_project,
     archive_world_project,
@@ -211,6 +212,25 @@ def register_rpg_world_routes(app: FastAPI) -> None:
             return {"ok": True, "scenario_revision": stored}
         except ValidationError as exc:
             raise _validation_error(exc) from exc
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
+
+    @app.post(
+        "/api/rpg/campaigns/{campaign_id}/legacy-world-import",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    async def rpg_import_legacy_campaign_bible(
+        campaign_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        try:
+            return import_campaign_bible_as_world(
+                campaign_id,
+                world_id=str(payload.get("world_id") or "") or None,
+                scenario_id=str(payload.get("scenario_id") or "") or None,
+            )
         except (KeyError, ValueError) as exc:
             raise _domain_error(exc) from exc
 
