@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import type { OmnixModuleDefinition } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { previewSessionSummary } from './rpgUiState';
@@ -24,16 +25,18 @@ function renderWithTheme(element: ReactElement) {
   );
 }
 
+const rpgModule: OmnixModuleDefinition = {
+  id: 'rpg',
+  label: 'RPG',
+  route: '/rpg',
+  summary: 'Run deterministic RPG campaigns.',
+};
+
 const headerProps = {
   isLiveDataExpanded: false,
   isPlayerRailCollapsed: false,
   isWorldRailCollapsed: false,
-  module: {
-    id: 'rpg',
-    label: 'RPG',
-    route: '/rpg',
-    summary: 'Run deterministic RPG campaigns.',
-  },
+  module: rpgModule,
   onToggleLiveData: () => undefined,
   onTogglePlayerRail: () => undefined,
   onToggleWorldRail: () => undefined,
