@@ -50,9 +50,9 @@ class CampaignNpcSpatialGoal(FrozenCampaignSpatialModel):
     blocked_attempts: int = Field(default=0, ge=0)
     last_decision: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    created_at: str | None = None
-    updated_at: str | None = None
-    completed_at: str | None = None
+    created_at: str | None = Field(default=None, exclude=True)
+    updated_at: str | None = Field(default=None, exclude=True)
+    completed_at: str | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def validate_goal_shape(self) -> "CampaignNpcSpatialGoal":
@@ -134,8 +134,8 @@ class CampaignNpcSpatialRoutine(FrozenCampaignSpatialModel):
     next_due_tick: int = Field(default=0, ge=0)
     last_issued_tick: int | None = Field(default=None, ge=0)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    created_at: str | None = None
-    updated_at: str | None = None
+    created_at: str | None = Field(default=None, exclude=True)
+    updated_at: str | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def validate_next_step(self) -> "CampaignNpcSpatialRoutine":
