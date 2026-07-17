@@ -1,6 +1,6 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0-5 complete; Phase 6.1 complete; closure work remains in Phase 6 and later phases
+Status: phases 0-6 complete; closure work remains in later spatial phases
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
@@ -30,6 +30,9 @@ Implementation evidence:
 - Phase 5 durable progressive materialization PR: `#1396`;
 - Phase 5 implementation merge SHA: `0dc5c2bd9ef2d54d6162e15c54c21a26ffdc977a`;
 - exact PR `#1396` implementation head verified by GitHub Actions: `2cd47ffba2d65250b20598f6bb89480b5755e456`;
+- Phase 6 durable campaign spatial runtime PR: `#1398`;
+- Phase 6 implementation merge SHA: `a660732f4485816b8de0f50defdd3ffbc9ec1ab5`;
+- exact PR `#1398` implementation head verified by GitHub Actions: `97a41239322771022d7d9242f4e868ca6450a9cf`;
 - passing workflows for all implementation heads: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
@@ -184,31 +187,25 @@ Exit condition met: deferred maps are predicted, scheduled, retried, materialize
 
 ## Phase 6 — Living NPC spatial goals and level-of-detail simulation
 
-Status: in progress
-
-### Phase 6.1 — Deterministic scheduling foundation
-
 Status: complete
 
 Delivered:
 
-- immutable move-to-cell NPC spatial goal contracts;
-- stable goal arbitration by actor, priority, issue tick, and goal ID;
-- active, coarse, and dormant map-instance simulation tiers;
-- explicit per-tier cadence and actor budgets;
-- authoritative movement through existing commands and resolved events;
-- typed moved, completed, deferred, dormant, blocked, and already-applied decisions;
-- replay proof using recorded movement events without rerunning the scheduler.
+- immutable move-to-cell NPC spatial goal contracts and stable arbitration;
+- active, coarse, and dormant campaign map-instance simulation tiers;
+- explicit movement, coarse-cadence, portal-transfer, and blocked-attempt policies;
+- PostgreSQL campaign spatial clocks with optimistic serialized ticks;
+- durable campaign-owned current NPC goals with optimistic revisions and recorded outcomes;
+- deterministic authored routines that emit durable goals at campaign ticks;
+- authoritative movement through existing commands and `ActorMovedEvent` records;
+- replayable `actor_exited_map` and `actor_entered_map` portal events;
+- atomic cross-map source-exit/target-entry transfer across campaign-owned map instances;
+- correlated portal transition records without replay-time AI or pathfinding;
+- hidden goal, routine, policy, tick, and spatial-state APIs;
+- per-tick and aggregate decision, tier, event, transition, routine-emission, and budget-utilization metrics;
+- PostgreSQL golden proof for portal approach, atomic transfer, independent replay of both map streams, target-map routine movement, stale-tick rejection, and persisted metrics after reload.
 
-Exit condition met: a simulation tick can deterministically schedule living NPC movement at different levels of detail while preserving the existing event and replay authority boundary.
-
-Remaining Phase 6 work:
-
-- durable campaign ownership and persistence of NPC spatial goals;
-- campaign clock and tick-loop integration;
-- cross-map goals and explicit portal transitions;
-- schedule or routine authoring hooks;
-- operational metrics and measured budget tuning.
+Exit condition met: living NPC spatial intent is campaign-owned, durable, scheduled through a serialized clock, replayable across direct and cross-map movement, authorable as routines, and measurable against explicit level-of-detail budgets.
 
 ## Later phases
 
