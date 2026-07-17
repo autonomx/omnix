@@ -216,6 +216,9 @@ def test_observer_knowledge_is_idempotent_remembered_and_hazard_safe() -> None:
             "player:observer",
         ]
         assert "hazard_states" not in first["projection"]
+        assert any(
+            "?" in row for row in first["projection"]["grid"]["terrain_rows"]
+        )
 
         context = bootstrap_local_tenant(database)
         definition = _definition()
@@ -283,8 +286,12 @@ def test_observer_knowledge_is_idempotent_remembered_and_hazard_safe() -> None:
             1,
         ]
         assert "hazard_states" not in loaded["projection"]
-        assert any(
-            "?" in row for row in loaded["projection"]["grid"]["terrain_rows"]
-        )
+        assert loaded["projection"]["grid"]["terrain_rows"] == [
+            "...#...",
+            "...#...",
+            "...#...",
+            "...#...",
+            ".......",
+        ]
     finally:
         database.close()
