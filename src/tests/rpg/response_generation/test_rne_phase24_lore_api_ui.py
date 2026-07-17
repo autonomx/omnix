@@ -173,6 +173,9 @@ def test_web_ui_selects_published_worlds_and_keeps_lore_browser() -> None:
     wizard = (
         REPO_ROOT / "apps/web/src/features/rpg/RpgCreateCampaignWizard.tsx"
     ).read_text(encoding="utf-8")
+    catalog = (
+        REPO_ROOT / "apps/web/src/features/rpg/RpgWorldCampaignCatalog.tsx"
+    ).read_text(encoding="utf-8")
     lore = (
         REPO_ROOT / "apps/web/src/features/rpg/RpgLorePanel.tsx"
     ).read_text(encoding="utf-8")
@@ -182,12 +185,14 @@ def test_web_ui_selects_published_worlds_and_keeps_lore_browser() -> None:
     routes = (
         REPO_ROOT / "src/app/gateway/rpg_campaign_lore_routes.py"
     ).read_text(encoding="utf-8")
-    assert 'aria-label="Existing world"' in wizard
+    assert 'aria-label="Available campaign worlds"' in catalog
+    assert "Existing campaigns for" in catalog
+    assert "New campaign in" in catalog
+    assert 'aria-label="Selected campaign world"' in wizard
     assert 'aria-label="Published scenario"' in wizard
     assert "rpgWorldLibraryClient.launchScenario" in wizard
     assert "world_revision:" in wizard
     assert "world_release:" in wizard
-    assert "does not create or regenerate a world" in wizard
     assert "World Forge depth" not in wizard
     assert "world_forge: {" not in wizard
     assert "RpgLorePanel" in tabs
