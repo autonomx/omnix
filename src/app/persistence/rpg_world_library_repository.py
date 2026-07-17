@@ -211,8 +211,8 @@ class PostgresRpgWorldLibraryRepository:
         rows = self.connection.execute(
             "SELECT run_id, world_id, draft_revision, status, graph_jsonb, "
             "context_jsonb, settings_jsonb, plan_jsonb, progress_jsonb, "
-            "error_jsonb, created_at, updated_at, completed_at "
-            "FROM omnix_rpg_world_generation_runs WHERE "
+            "error_jsonb, parent_run_id, lineage_jsonb, created_at, updated_at, "
+            "completed_at FROM omnix_rpg_world_generation_runs WHERE "
             + " AND ".join(clauses)
             + " ORDER BY updated_at DESC, run_id LIMIT %s",
             tuple(params),
@@ -229,9 +229,11 @@ class PostgresRpgWorldLibraryRepository:
                 "plan": dict(row[7]),
                 "progress": dict(row[8]),
                 "error": dict(row[9]),
-                "created_at": row[10].isoformat(),
-                "updated_at": row[11].isoformat(),
-                "completed_at": row[12].isoformat() if row[12] is not None else None,
+                "parent_run_id": str(row[10]) if row[10] is not None else None,
+                "lineage": dict(row[11]),
+                "created_at": row[12].isoformat(),
+                "updated_at": row[13].isoformat(),
+                "completed_at": row[14].isoformat() if row[14] is not None else None,
             }
             for row in rows
         ]
