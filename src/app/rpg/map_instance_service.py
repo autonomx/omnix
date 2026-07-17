@@ -12,9 +12,9 @@ from .map_instance_runtime import (
     CampaignMapInstanceSnapshot,
     MoveActorCommand,
     create_map_instance_snapshot,
-    project_observer_map,
     resolve_move_command,
 )
+from .map_observer_projection import project_current_observers
 
 
 def persist_grid_definition(
@@ -135,8 +135,8 @@ def load_map_instance_projection(
         raise KeyError("map_definition_not_found")
     definition = GridMapDefinition.model_validate(stored_definition["document"])
     snapshot = CampaignMapInstanceSnapshot.model_validate(stored_instance["snapshot"])
-    return project_observer_map(
+    return project_current_observers(
         definition,
         snapshot,
-        observer_actor_id=observer_actor_id,
+        (observer_actor_id,),
     )
