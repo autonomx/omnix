@@ -128,11 +128,10 @@ describe('RpgStarterBubblePromotionPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Promote to future revision' }));
     await waitFor(() => {
       expect(screen.getByText('Promoted to world revision 2 / release 1.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Materialize northern_road:frontier' })).toBeEnabled();
     });
 
-    const materializeButton = screen.getByRole('button', { name: 'Materialize northern_road:frontier' });
-    expect(materializeButton).toBeEnabled();
-    fireEvent.click(materializeButton);
+    fireEvent.click(screen.getByRole('button', { name: 'Materialize northern_road:frontier' }));
     await waitFor(() => {
       expect(screen.getByText('Materialized northern_road:frontier in world revision 3.')).toBeInTheDocument();
     });
