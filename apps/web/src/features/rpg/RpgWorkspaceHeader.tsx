@@ -68,16 +68,16 @@ export function RpgWorkspaceHeader({
             <code>{module.route}</code>
           </div>
         )}
+        <button
+          className="rpg-secondary-button rpg-world-library-entry-control"
+          type="button"
+          onClick={() => setIsWorldLibraryOpen(true)}
+        >
+          Worlds &amp; Campaigns
+        </button>
         <div className="rpg-unified-header-controls" aria-label="Workspace layout controls">
           <button className="rpg-secondary-button rpg-header-toggle" type="button" onClick={() => setIsHidden((value) => !value)}>
             {isHidden ? 'Show header' : 'Hide header'}
-          </button>
-          <button
-            className="rpg-secondary-button"
-            type="button"
-            onClick={() => setIsWorldLibraryOpen(true)}
-          >
-            Worlds &amp; Campaigns
           </button>
           <button
             className="rpg-secondary-button"
