@@ -1,281 +1,177 @@
 import { MantineProvider } from '@mantine/core';
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import type { ReactElement } from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { omnixApiClient } from '../../api/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
 
-function renderWithTheme(element: ReactElement) {
+function requestPath(input: RequestInfo | URL): string {
+  return typeof input === 'string'
+    ? new URL(input, 'http://localhost').pathname
+    : new URL(input.toString(), 'http://localhost').pathname;
+}
+
+function renderWizard() {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
   return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      {element}
-    </MantineProvider>,
+    <QueryClientProvider client={client}>
+      <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
+        <RpgCreateCampaignWizard />
+      </MantineProvider>
+    </QueryClientProvider>,
   );
 }
 
-function getSelectByVisibleLabel(label: string): HTMLSelectElement {
-  const labelNode = screen.getByText(label).closest('label');
-  const select = labelNode?.querySelector('select');
-  if (!select) {
-    throw new Error(`Could not find select for ${label}`);
-  }
-  return select;
+const world = {
+  id: 'world:aurelia',
+  title: 'Aurelia: Echoes Beyond the Gate',
+  description: 'A reusable fantasy isekai world.',
+  status: 'published',
+  source_mode: 'imported',
+  genre: 'fantasy_isekai',
+  tone: 'heroic wonder',
+  seed: 482193,
+  draft_revision: 1,
+  metadata: {},
+  scenario_count: 1,
+  generation: null,
+  created_at: '2026-07-17T00:00:00Z',
+  updated_at: '2026-07-17T00:00:00Z',
+};
+
+const scenario = {
+  id: 'scenario:aurelia:arrival',
+  world_id: world.id,
+  title: 'Beyond the Broken Gate',
+  description: 'Arrive in Starfall Grove.',
+  status: 'published',
+  metadata: {},
+  created_at: '2026-07-17T00:00:00Z',
+  updated_at: '2026-07-17T00:00:00Z',
+};
+
+const scenarioRevision = {
+  revision: 1,
+  world_id: world.id,
+  world_revision: 1,
+  document: {
+    compatible_release: 1,
+    starting_location_id: 'location:aurelia:starfall-grove',
+  },
+  content_hash: 'sha256:scenario',
+  created_at: '2026-07-17T00:00:00Z',
+};
+
+const release = {
+  world_revision: 1,
+  release: 1,
+  document: {
+    certification: {
+      launch_ready: true,
+      missing_requirements: [],
+    },
+  },
+  release_hash: 'sha256:release',
+  created_at: '2026-07-17T00:00:00Z',
+};
+
+function libraryPayload() {
+  return {
+    ok: true,
+    worlds: [world],
+    scenarios: [scenario],
+    campaigns: [],
+    generation_runs: [],
+  };
 }
 
-function backendStages(status: 'completed' | 'failed' = 'completed') {
-  const labels = [
-    'Backend validated setup',
-    'Backend resolved seed',
-    'Backend created player',
-    'Backend applied stats',
-    'Backend assigned gear',
-    'Backend location',
-    'Backend seeded NPCs',
-    'Backend opening hook',
-    'Backend saved session',
-    'Backend first turn',
-  ];
-  return labels.map((label, index) => ({
-    detail: index === 9 ? 'Backend context ready' : `Backend stage ${index}`,
-    index,
-    label,
-    progress: [8, 18, 31, 44, 56, 68, 78, 88, 96, 100][index],
-    status: status === 'completed' ? 'done' : index < 5 ? 'done' : index === 5 ? 'failed' : 'pending',
-  }));
+function detailPayload() {
+  return {
+    ok: true,
+    world,
+    topics: [],
+    map_blueprints: [],
+    revisions: [],
+    releases: [release],
+    scenarios: [scenario],
+    scenario_revisions: { [scenario.id]: [scenarioRevision] },
+    generation_runs: [],
+  };
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('RpgCreateCampaignWizard', () => {
-  it('renders deep setup controls, point buy, story hooks, starter gear, and supported systems', () => {
-    renderWithTheme(<RpgCreateCampaignWizard />);
+  it('keeps character setup but requires a reusable world instead of offering World Forge', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (requestPath(input) === '/api/rpg/world-library') {
+        return Response.json({
+          ok: true,
+          worlds: [],
+          scenarios: [],
+          campaigns: [],
+          generation_runs: [],
+        });
+      }
+      return new Response('not found', { status: 404 });
+    }));
+    renderWizard();
 
+    expect(screen.queryByText('World Forge depth')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Create Campaign' })).toBeInTheDocument();
     expect(screen.getByLabelText('Secondary capabilities')).toHaveTextContent('Combat');
-    expect(screen.getByLabelText('Campaign setup summary')).toHaveTextContent('Rusty Flagon Tavern');
-    expect(screen.getByLabelText('Campaign setup summary')).toHaveTextContent('Tavern Rumor');
-    expect(screen.getByLabelText('Campaign setup summary')).toHaveTextContent('Unknown outsider');
     expect(screen.getByText('Opening story')).toBeInTheDocument();
     expect(screen.getByText('Starter gear')).toBeInTheDocument();
-    expect(screen.getByText('Grounding validator')).toBeInTheDocument();
-    expect(screen.getByText('20 points left')).toBeInTheDocument();
+    expect(await screen.findByText(/Create or import a world in Worlds & Campaigns/i)).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Existing world' })).toBeDisabled();
   });
 
-  it('spends stat points and prevents overspending', () => {
-    renderWithTheme(<RpgCreateCampaignWizard />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Increase Strength' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Increase Charisma' }));
-
-    expect(screen.getByText('18 points left')).toBeInTheDocument();
-    expect(screen.getByLabelText('Derived stat preview')).toHaveTextContent('Strength: 10');
-  });
-
-  it('uses backend progress without manufacturing an enter-world command', async () => {
-    vi.useFakeTimers();
-    let resolveLaunch!: (value: {
-      creation_progress: Record<string, unknown>;
-      ok: true;
-      session_id: string;
-    }) => void;
-    const onCreateCampaign = vi.fn(
-      () =>
-        new Promise<{ creation_progress: Record<string, unknown>; ok: true; session_id: string }>((resolve) => {
-          resolveLaunch = resolve;
-        }),
-    );
-    renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} />);
-
-    fireEvent.change(getSelectByVisibleLabel('Opening hook'), { target: { value: 'merchant-job' } });
-    fireEvent.change(getSelectByVisibleLabel('Relationship preset'), { target: { value: 'known-contact' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
-
-    expect(screen.getByRole('dialog', { name: 'Creating Campaign' })).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '8');
-    expect(screen.getByText('Validated setup').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-done');
-    expect(screen.getByText('Resolved seed').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-active');
-    expect(screen.getByRole('button', { name: 'Enter World' })).toBeDisabled();
-    expect(onCreateCampaign).toHaveBeenCalledWith(
-      expect.objectContaining({
-        companions_enabled: true,
-        initial_stats: expect.objectContaining({ strength: 9, perception: 9 }),
-        opening_hook: 'merchant_job',
-        opening_pace: 'balanced',
-        player: expect.objectContaining({ build: 'balanced_adventurer', name: 'Elara', pronouns: 'she/her' }),
-        primary_capability: 'recon',
-        relationship_preset: 'known_contact_nearby',
-        seed: 482193,
-        starter_gear_tags: expect.arrayContaining(['Travel cloak', 'Iron dagger']),
-        starting_location: 'rusty_flagon_tavern',
-        story_options: expect.objectContaining({ opening_hook_label: 'Merchant Job', relationship_label: 'Known contact nearby' }),
-      }),
-    );
-
-    act(() => {
-      vi.advanceTimersByTime(260);
+  it('launches a published scenario from the selected existing world without creating a world', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/rpg/world-library') {
+        return Response.json(libraryPayload());
+      }
+      if (path === `/api/rpg/worlds/${encodeURIComponent(world.id)}/library`) {
+        return Response.json(detailPayload());
+      }
+      if (
+        path === `/api/rpg/scenarios/${encodeURIComponent(scenario.id)}/revisions/1/launch`
+        && init?.method === 'POST'
+      ) {
+        return Response.json({
+          ok: true,
+          status: 'ready',
+          session_id: 'campaign:aurelia:one',
+          world_forge_invoked: false,
+        });
+      }
+      return new Response('not found', { status: 404 });
     });
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '18');
-    expect(screen.getByText('Resolved seed').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-done');
-    expect(screen.getByText('Created player profile').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-active');
+    vi.stubGlobal('fetch', fetchMock);
+    renderWizard();
 
-    act(() => {
-      vi.advanceTimersByTime(360);
-    });
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '31');
-
-    act(() => {
-      vi.advanceTimersByTime(360);
-    });
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '44');
-
-    await act(async () => {
-      resolveLaunch({
-        ok: true,
-        session_id: 'session-new',
-        creation_progress: {
-          current_stage_index: 9,
-          progress: 100,
-          stage: 'prepare_first_turn',
-          stage_label: 'Backend first turn',
-          stages: backendStages('completed'),
-          status: 'completed',
-        },
-      });
-      await Promise.resolve();
-    });
-
-    expect(screen.getByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '100');
-    expect(screen.getByText('Backend first turn: Backend context ready')).toBeInTheDocument();
-    expect(screen.getByText('Session session-new')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Enter World' })).not.toBeDisabled();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
-
-    expect(screen.queryByText(/Enter the newly created/)).not.toBeInTheDocument();
-    vi.useRealTimers();
-  });
-
-  it('advances unresolved pending progress into the save/finalize stage', () => {
-    vi.useFakeTimers();
-    const onCreateCampaign = vi.fn(
-      () =>
-        new Promise<{ ok: true; session_id: string }>(() => {
-          // Keep the request unresolved so only optimistic pending timers run.
-        }),
-    );
-    renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} />);
+    expect(screen.queryByText('World Forge depth')).not.toBeInTheDocument();
+    expect(await screen.findByRole('combobox', { name: 'Existing world' })).toHaveValue(world.id);
+    expect(await screen.findByRole('combobox', { name: 'Published scenario' })).toHaveValue(scenario.id);
+    expect(screen.getByText(/does not create or regenerate a world/i)).toBeInTheDocument();
+    expect(await screen.findByText(`Ready: ${world.title} · ${scenario.title}`)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
 
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
-
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '88');
-    expect(screen.getByText('Saving campaign session: Autosave/checkpoint payload prepared for replay-preserving launch.')).toBeInTheDocument();
-    expect(screen.getByText('Creating opening hook').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-done');
-    expect(screen.getByText('Saving campaign session').closest('.rpg-create-stage-row')).toHaveClass('rpg-create-stage-active');
-    vi.useRealTimers();
-  });
-
-  it('keeps the modal open and reports backend creation progress errors', async () => {
-    const onCreateCampaign = vi.fn(async () => ({
-      ok: false,
-      error: 'invalid point-buy payload',
-      creation_progress: {
-        current_stage_index: 5,
-        error: 'invalid point-buy payload',
-        progress: 68,
-        stage: 'prepare_location',
-        stage_label: 'Backend location',
-        stages: backendStages('failed'),
-        status: 'failed',
-      },
-    }));
-    renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
-      await Promise.resolve();
-    });
-
-    expect(screen.getByRole('dialog', { name: 'Campaign Creation Failed' })).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '68');
-    expect(screen.getByText(/Failed at Backend location: invalid point-buy payload/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Enter World' })).toBeDisabled();
-  });
-
-  it('waits for queued World Forge generation before declaring the campaign ready', async () => {
-    vi.useFakeTimers();
-    const getJob = vi.spyOn(omnixApiClient, 'getJob').mockResolvedValue({
-      id: 'rpg-genesis:session-queued',
-      status: 'completed',
-    } as never);
-    const getSession = vi.spyOn(omnixApiClient, 'getRpgSession').mockResolvedValue({
-      ok: true,
-      session_id: 'session-queued',
-      session: {
-        runtime_state: {
-          campaign_generation: {
-            job_id: 'rpg-genesis:session-queued',
-            status: 'ready',
-            stage: 'launch_ready',
-            progress: 100,
-            launch_ready: true,
-          },
-        },
-      },
-    });
-    const onCreateCampaign = vi.fn(async () => ({
-      ok: true,
-      status: 'generating_world',
-      session_id: 'session-queued',
-      creation_job: {
-        id: 'rpg-genesis:session-queued',
-        job_id: 'rpg-genesis:session-queued',
-        status: 'queued',
-        progress: 0,
-      },
-      creation_progress: {
-        job_id: 'rpg-genesis:session-queued',
-        status: 'queued',
-        progress: 0,
-      },
-    }));
-    renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
-    await act(async () => Promise.resolve());
-
-    expect(screen.getByRole('dialog', { name: 'Creating Campaign' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Enter World' })).toBeDisabled();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-    });
-
-    expect(getJob).toHaveBeenCalledWith('rpg-genesis:session-queued');
-    expect(getSession).toHaveBeenCalledWith('session-queued');
-    expect(screen.getByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '100');
-    expect(screen.getByRole('button', { name: 'Enter World' })).not.toBeDisabled();
-    vi.useRealTimers();
-  });
-
-  it('does not mislabel a transport failure as NPC seeding at 68 percent', async () => {
-    const onCreateCampaign = vi.fn(async () => {
-      throw new Error('Omnix API request failed with status 500: database unavailable');
-    });
-    renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
-      await Promise.resolve();
-    });
-
-    expect(screen.getByRole('dialog', { name: 'Campaign Creation Failed' })).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '8');
-    expect(screen.getByText(/database unavailable/)).toBeInTheDocument();
-    expect(screen.getByText(/Failed at Resolved seed/)).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      `/api/rpg/scenarios/${encodeURIComponent(scenario.id)}/revisions/1/launch`,
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    expect(fetchMock.mock.calls.some(([input]) => requestPath(input) === '/api/rpg/new-game')).toBe(false);
+    expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
+    expect(screen.getByText('Session campaign:aurelia:one')).toBeInTheDocument();
   });
 });
