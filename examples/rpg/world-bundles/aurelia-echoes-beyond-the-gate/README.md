@@ -2,13 +2,21 @@
 
 A ready-to-import fantasy isekai world for the Omnix RPG World Library.
 
-## Import file
+## Build the import file
 
-`../aurelia-echoes-beyond-the-gate.omnix-world.zip`
+The checksummed bundle is stored as eight reviewable Base64-compressed parts so the repository does not depend on Git LFS for this sample binary.
+
+```bash
+python examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate/materialize.py
+```
+
+This writes:
+
+`examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate.omnix-world.zip`
 
 Bundle SHA-256: `9582c2ee7aecfb1d0890210bcd198baedfe4d1ef4ddfbadd6b5086a35f6eb944`
 
-Open **Worlds & Campaigns**, select **World bundle**, choose the ZIP, and import it. Leave the optional world ID empty to use `world:aurelia-echoes-beyond-the-gate`, or enter another ID to create a clone.
+Open **Worlds & Campaigns**, select **World bundle**, choose the generated ZIP, and import it. Leave the optional world ID empty to use `world:aurelia-echoes-beyond-the-gate`, or enter another ID to create a clone.
 
 ## Premise
 
@@ -64,6 +72,6 @@ A level 3–5 opening for an established party entering the ruins to recover sto
 - **Elyra Moonroot** — dryad memory archivist and guardian of the ruins.
 - **Captain Rhea Sunward** — commander of Starfall Village's guard.
 
-## Source payload
+## Verification
 
-`world.json` is the canonical readable payload embedded in the bundle. It is committed beside this guide for review and future editing. The importable ZIP remains the source of truth for the packaged asset checksums.
+The deterministic regression reconstructs the bundle, validates its SHA-256 through the production archive parser, and checks its lore, character, faction, map, scenario, release, and artwork counts.
