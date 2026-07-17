@@ -3,6 +3,7 @@ import type { OmnixModuleDefinition } from '../../app/modules';
 import { createOmnixModePreview } from '../../app/omnixModePreview';
 import { OmnixStatusPill } from '../../design/primitives';
 import { RpgStarterBubblePromotionPanel } from './RpgStarterBubblePromotionPanel';
+import { RpgWorldBundleTransfer } from './RpgWorldBundleTransfer';
 import { RpgWorldsCampaignsLibrary } from './RpgWorldsCampaignsLibrary';
 import type { RpgSessionSummaryPreview } from './rpgUiState';
 import './RpgPlayFocus.css';
@@ -110,6 +111,7 @@ export function RpgWorkspaceHeader({
       {isWorldLibraryOpen ? (
         <div className="rpg-world-library-overlay" role="dialog" aria-modal="true" aria-label="Worlds and Campaigns">
           <RpgStarterBubblePromotionPanel />
+          <RpgWorldBundleTransfer />
           <RpgWorldsCampaignsLibrary
             onBack={() => setIsWorldLibraryOpen(false)}
             onSessionLaunched={selectLaunchedSession}
