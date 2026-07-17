@@ -191,6 +191,7 @@ describe('RpgWorkspace campaign handoff', () => {
     renderRpg();
     fireEvent.click(await screen.findByRole('button', { name: 'Campaign Menu' }));
     fireEvent.click(screen.getByRole('button', { name: /^New Campaign/ }));
+    fireEvent.click(await screen.findByRole('button', { name: `New campaign in ${world.title}` }));
     expect(await screen.findByText(`Ready: ${world.title} · ${scenario.title}`)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
 
@@ -266,6 +267,7 @@ describe('RpgWorkspace campaign handoff', () => {
     const firstView = renderRpg();
     fireEvent.click(await screen.findByRole('button', { name: 'Campaign Menu' }));
     fireEvent.click(screen.getByRole('button', { name: /^New Campaign/ }));
+    fireEvent.click(await screen.findByRole('button', { name: `New campaign in ${world.title}` }));
     expect(await screen.findByText(`Ready: ${world.title} · ${scenario.title}`)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();

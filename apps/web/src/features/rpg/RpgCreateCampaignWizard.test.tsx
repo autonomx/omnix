@@ -37,7 +37,7 @@ const world = {
   tone: 'heroic wonder',
   seed: 482193,
   draft_revision: 1,
-  metadata: {},
+  metadata: { cover_image_url: '/api/assets/aurelia-cover/content' },
   scenario_count: 1,
   generation: null,
   created_at: '2026-07-17T00:00:00Z',
@@ -105,11 +105,12 @@ function detailPayload() {
 }
 
 afterEach(() => {
+  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 
 describe('RpgCreateCampaignWizard', () => {
-  it('keeps character setup but requires a reusable world instead of offering World Forge', async () => {
+  it('opens on the reusable-world card catalog and withholds campaign setup when no world exists', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       if (requestPath(input) === '/api/rpg/world-library') {
         return Response.json({
@@ -125,20 +126,16 @@ describe('RpgCreateCampaignWizard', () => {
     renderWizard();
 
     expect(screen.queryByText('World Forge depth')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Create Campaign' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Secondary capabilities')).toHaveTextContent('Combat');
-    expect(screen.getByText('Opening story')).toBeInTheDocument();
-    expect(screen.getByText('Starter gear')).toBeInTheDocument();
-    expect(await screen.findByText(/Create or import a world in Worlds & Campaigns/i)).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Existing world' })).toBeDisabled();
+    expect(await screen.findByRole('heading', { name: 'Choose a World' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search worlds' })).toBeInTheDocument();
+    expect(await screen.findByText(/Create or import one from Worlds & Campaigns/i)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Create Campaign' })).not.toBeInTheDocument();
   });
 
-  it('launches a published scenario from the selected existing world without creating a world', async () => {
+  it('selects a world card before opening setup and launches its published scenario', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-      if (path === '/api/rpg/world-library') {
-        return Response.json(libraryPayload());
-      }
+      if (path === '/api/rpg/world-library') return Response.json(libraryPayload());
       if (path === `/api/rpg/worlds/${encodeURIComponent(world.id)}/library`) {
         return Response.json(detailPayload());
       }
@@ -158,12 +155,19 @@ describe('RpgCreateCampaignWizard', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderWizard();
 
-    expect(screen.queryByText('World Forge depth')).not.toBeInTheDocument();
-    const worldSelect = await screen.findByRole('combobox', { name: 'Existing world' });
-    await waitFor(() => expect(worldSelect).toHaveValue(world.id));
+    expect(await screen.findByRole('heading', { name: 'Choose a World' })).toBeInTheDocument();
+    expect((await screen.findAllByText(world.title)).length).toBeGreaterThan(0);
+    expect(screen.getByText('Fantasy Isekai')).toBeInTheDocument();
+    expect(screen.getByText('1 published opening')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Create Campaign' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: `New campaign in ${world.title}` }));
+
+    expect(await screen.findByRole('heading', { name: 'Create Campaign' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Selected campaign world')).toHaveTextContent(world.title);
+    expect(screen.getByRole('button', { name: 'Change world' })).toBeInTheDocument();
     const scenarioSelect = screen.getByRole('combobox', { name: 'Published scenario' });
     await waitFor(() => expect(scenarioSelect).toHaveValue(scenario.id));
-    expect(screen.getByText(/does not create or regenerate a world/i)).toBeInTheDocument();
     expect(await screen.findByText(`Ready: ${world.title} · ${scenario.title}`)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
