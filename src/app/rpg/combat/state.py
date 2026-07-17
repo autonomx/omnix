@@ -42,6 +42,7 @@ def build_empty_combat_state() -> Dict[str, Any]:
         "ended_reason": "",
         "last_resolution": {},
         "recent_events": [],
+        "tactical_state": {},
     }
 
 
@@ -84,6 +85,7 @@ def normalize_combat_state(value: Any) -> Dict[str, Any]:
         "ended_reason": str(state.get("ended_reason") or ""),
         "last_resolution": _safe_dict(state.get("last_resolution")),
         "recent_events": _safe_list(state.get("recent_events"))[:24],
+        "tactical_state": _safe_dict(state.get("tactical_state")),
         "force_next_attack_roll": _safe_int(state.get("force_next_attack_roll"), 0) if state.get("force_next_attack_roll") else None,
         "force_next_damage": _safe_int(state.get("force_next_damage"), 0) if state.get("force_next_damage") else None,
     }
