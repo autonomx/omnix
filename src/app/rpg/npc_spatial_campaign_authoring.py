@@ -50,6 +50,8 @@ def _validate_goal(
     work: Any,
     context: Any,
     goal: CampaignNpcSpatialGoal,
+    *,
+    require_actor: bool = True,
 ) -> None:
     snapshot, definition = _instance_and_definition(
         work,
@@ -57,7 +59,8 @@ def _validate_goal(
         campaign_id=goal.campaign_id,
         map_instance_id=goal.map_instance_id,
     )
-    snapshot.actor(goal.actor_id)
+    if require_actor:
+        snapshot.actor(goal.actor_id)
     if goal.goal_type == "move_to_cell":
         assert goal.target_cell is not None
         definition.require_inside(goal.target_cell)
@@ -121,7 +124,12 @@ def save_campaign_spatial_routine(
                 portal_id=step.portal_id,
                 target_map_instance_id=step.target_map_instance_id,
             )
-            _validate_goal(work, context, validation_goal)
+            _validate_goal(
+                work,
+                context,
+                validation_goal,
+                require_actor=False,
+            )
         stored = work.npc_spatial.put_routine(
             context,
             routine,
