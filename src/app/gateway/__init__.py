@@ -13,6 +13,7 @@ from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
 from .realtime_routes import install_realtime_route_hook
 from .research_mode_routes import install_research_mode_route_hook
 from .rpg_debug_routes import install_rpg_debug_route_hook
+from .rpg_geometry_patch_routes import install_rpg_geometry_patch_route_hook
 from .rpg_map_editor_routes import install_rpg_map_editor_route_hook
 from .rpg_map_routes import install_rpg_map_route_hook
 from .rpg_npc_spatial_routes import install_rpg_npc_spatial_route_hook
@@ -54,6 +55,7 @@ def _install_required_rpg_turn_hooks() -> None:
 install_assistant_context_route_hook()
 install_research_mode_route_hook()
 install_rpg_debug_route_hook()
+install_rpg_geometry_patch_route_hook()
 install_rpg_map_editor_route_hook()
 install_rpg_map_route_hook()
 install_rpg_world_route_hook()

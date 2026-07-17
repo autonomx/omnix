@@ -5,6 +5,7 @@ from typing import Iterable, Literal
 
 from pydantic import Field
 
+from .map_effective_geometry import effective_is_walkable
 from .map_grid_contracts import GridActorPlacement, GridMapDefinition, GridPoint
 from .map_instance_runtime import (
     ActorMovedEvent,
@@ -88,7 +89,7 @@ def resolve_portal_transition(
     if actor.cell != portal.source.cell:
         raise MapMovementError("actor_not_at_portal", actor_id)
     target_definition.require_inside(portal.target.cell)
-    if not target_definition.is_walkable(portal.target.cell):
+    if not effective_is_walkable(target_definition, target_snapshot, portal.target.cell):
         raise MapMovementError("portal_target_blocked", portal_id)
     if any(row.cell == portal.target.cell for row in target_snapshot.actors):
         raise MapMovementError("portal_target_occupied", portal_id)

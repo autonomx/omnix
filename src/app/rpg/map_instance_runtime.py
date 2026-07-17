@@ -6,6 +6,12 @@ from typing import Any, Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .map_effective_geometry import (
+    effective_is_walkable,
+    effective_movement_cost,
+    effective_terrain_rows,
+    normalize_terrain_overrides,
+)
 from .map_grid_contracts import GridActorPlacement, GridMapDefinition, GridPoint
 
 MAP_INSTANCE_SCHEMA_VERSION = 1
@@ -32,19 +38,26 @@ class CampaignMapInstanceSnapshot(FrozenRuntimeModel):
     object_states: dict[str, dict[str, Any]] = Field(default_factory=dict)
     route_states: dict[str, dict[str, Any]] = Field(default_factory=dict)
     hazard_states: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    terrain_overrides: dict[str, str] = Field(default_factory=dict)
+    geometry_patch_ids: tuple[str, ...] = ()
     revealed_secret_ids: tuple[str, ...] = ()
     revealed_actor_ids: tuple[str, ...] = ()
     applied_command_ids: tuple[str, ...] = ()
     initialization_operation_ids: tuple[str, ...] = ()
 
     @model_validator(mode="after")
-    def unique_actors(self) -> "CampaignMapInstanceSnapshot":
+    def validate_snapshot(self) -> "CampaignMapInstanceSnapshot":
         actor_ids = [actor.actor_id for actor in self.actors]
         if len(actor_ids) != len(set(actor_ids)):
             raise ValueError("duplicate_map_instance_actor")
         cells = [actor.cell for actor in self.actors]
         if len(cells) != len(set(cells)):
             raise ValueError("duplicate_map_instance_actor_cell")
+        if len(self.geometry_patch_ids) != len(set(self.geometry_patch_ids)):
+            raise ValueError("duplicate_map_geometry_patch_id")
+        normalized = normalize_terrain_overrides(self.terrain_overrides)
+        if normalized != self.terrain_overrides:
+            raise ValueError("noncanonical_map_terrain_overrides")
         return self
 
     def actor(self, actor_id: str) -> GridActorPlacement:
@@ -131,10 +144,11 @@ def resolve_move_command(
     }
     if command.destination in occupied:
         raise MapMovementError("destination_occupied", command.actor_id)
-    if not definition.is_walkable(command.destination):
+    if not effective_is_walkable(definition, snapshot, command.destination):
         raise MapMovementError("destination_blocked", command.actor_id)
     path, movement_cost = _find_path(
         definition,
+        snapshot,
         actor.cell,
         command.destination,
         occupied,
@@ -241,7 +255,7 @@ def project_observer_map(
             "width": definition.width,
             "height": definition.height,
             "transform": definition.transform.model_dump(mode="json"),
-            "terrain_rows": list(definition.terrain_rows),
+            "terrain_rows": effective_terrain_rows(definition, snapshot),
             "terrain_palette": [
                 rule.model_dump(mode="json") for rule in definition.terrain_palette
             ],
@@ -269,6 +283,7 @@ def _validate_definition_binding(
 
 def _find_path(
     definition: GridMapDefinition,
+    snapshot: CampaignMapInstanceSnapshot,
     start: GridPoint,
     destination: GridPoint,
     occupied: set[GridPoint],
@@ -286,7 +301,12 @@ def _find_path(
             break
         if current_cost != cost_so_far[current]:
             continue
-        for neighbor, step_cost in _neighbors(definition, current, occupied):
+        for neighbor, step_cost in _neighbors(
+            definition,
+            snapshot,
+            current,
+            occupied,
+        ):
             new_cost = current_cost + step_cost
             old_cost = cost_so_far.get(neighbor)
             if old_cost is not None and new_cost >= old_cost:
@@ -312,6 +332,7 @@ def _find_path(
 
 def _neighbors(
     definition: GridMapDefinition,
+    snapshot: CampaignMapInstanceSnapshot,
     cell: GridPoint,
     occupied: set[GridPoint],
 ) -> tuple[tuple[GridPoint, int], ...]:
@@ -331,7 +352,7 @@ def _neighbors(
         target = (column + dx, row + dy)
         if not _inside(definition, target):
             continue
-        if target in occupied or not definition.is_walkable(target):
+        if target in occupied or not effective_is_walkable(definition, snapshot, target):
             continue
         diagonal = dx != 0 and dy != 0
         if diagonal:
@@ -340,11 +361,11 @@ def _neighbors(
             if (
                 side_a in occupied
                 or side_b in occupied
-                or not definition.is_walkable(side_a)
-                or not definition.is_walkable(side_b)
+                or not effective_is_walkable(definition, snapshot, side_a)
+                or not effective_is_walkable(definition, snapshot, side_b)
             ):
                 continue
-        terrain_cost = definition.movement_cost(target)
+        terrain_cost = effective_movement_cost(definition, snapshot, target)
         step_cost = (terrain_cost * 14 + 9) // 10 if diagonal else terrain_cost
         rows.append((target, step_cost))
     return tuple(rows)
