@@ -18,6 +18,7 @@ from .contracts import (
     WorldRevisionDocument,
     canonical_content_hash,
 )
+from .lifecycle_service import require_scenario_writable, require_world_writable
 from .semantic_validation import (
     WorldSemanticError,
     certify_world_release,
@@ -111,6 +112,7 @@ def publish_world_revision(
     document = _ensure_hash(document, "content_hash")
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
+        require_world_writable(work, context, document.world_id)
         stored = work.world_scenarios.publish_world_revision(
             context,
             world_id=document.world_id,
@@ -129,6 +131,7 @@ def publish_world_release(
 ) -> dict[str, Any]:
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
+        require_world_writable(work, context, document.world_id)
         world_revision = _world_revision_from_work(
             work,
             context,
@@ -166,6 +169,7 @@ def create_scenario_project(
 ) -> dict[str, Any]:
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
+        require_world_writable(work, context, request.world_id)
         scenario = work.world_scenarios.create_scenario(
             context,
             scenario_id=request.scenario_id,
@@ -186,6 +190,7 @@ def publish_scenario_revision(
     document = _ensure_hash(document, "content_hash")
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
+        require_scenario_writable(work, context, document.scenario_id)
         next_row = work.connection.execute(
             "SELECT COALESCE(MAX(revision), 0) + 1 FROM omnix_rpg_scenario_revisions "
             "WHERE workspace_id = %s AND scenario_id = %s",
@@ -241,6 +246,7 @@ def bind_campaign_world(
 ) -> dict[str, Any]:
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
+        require_scenario_writable(work, context, binding.scenario_id)
         stored = work.world_scenarios.bind_campaign(
             context,
             campaign_id=binding.campaign_id,
