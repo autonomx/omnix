@@ -1,6 +1,6 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0-8 complete; Phase 9.1 complete; closure work remains in tactical movement, cover, reactions, and measured performance escalation
+Status: phases 0-9 complete; final closure work remains in measured performance profiling and renderer escalation
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
@@ -42,8 +42,11 @@ Implementation evidence:
 - Phase 9.1 multi-cell footprint authority PR: `#1404`;
 - Phase 9.1 implementation merge SHA: `06108d526ce6e755de1f97b69b78a874be70b909`;
 - exact PR `#1404` implementation head verified by GitHub Actions: `7905ecff4a7f15af904f109eb20b0a3b4f720606`;
+- Phase 9.2 tactical movement, cover, and reactions PR: `#1406`;
+- Phase 9.2 implementation merge SHA: `8760df8dca1bffa7891ff353b801fb4b86f3d843`;
+- exact PR `#1406` implementation head verified by GitHub Actions: `98dbd87e9770d4e0ca97cdbe1b24b8116213be0a`;
 - PR `#1400` passed architecture, PostgreSQL, and Live Chat workflows; its missing deterministic `GridZone.name` test fixture was corrected and the complete observer suite was revalidated on exact PR `#1401` head;
-- exact PR `#1401` and `#1404` heads passed RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
+- exact PR `#1401`, `#1404`, and `#1406` heads passed RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
 
@@ -259,7 +262,7 @@ Exit condition met: campaign-specific geometry can change movement and visibilit
 
 ## Phase 9 — Tactical spatial systems
 
-Status: in progress
+Status: complete
 
 ### Phase 9.1 — Multi-cell actor footprint authority
 
@@ -277,18 +280,39 @@ Delivered:
 - deterministic proof for edge bounds, overlap, narrow and wide passages, non-anchor collisions, replay, and partial-footprint visibility;
 - PostgreSQL proof that a persisted 2x2 actor moves through a valid opening, protects non-anchor cells, reloads unchanged, and replays exactly.
 
-Exit condition met: every spatial subsystem agrees on the cells occupied by rectangular multi-cell actors, and resolved movement remains deterministic, persistent, and replayable.
+### Phase 9.2 — Tactical budgets, cover, and reactions
 
-Remaining Phase 9 work:
+Status: complete
 
-- initiative-aware tactical movement and action budgets;
-- deterministic cover evaluation over effective campaign geometry;
-- reaction opportunities and resolved reaction attacks tied to movement paths.
+Delivered:
 
-## Later phases
+- normalized per-combat tactical round state preserved inside the existing campaign combat state;
+- deterministic per-round movement, action, and reaction budgets;
+- current-initiative actor enforcement for tactical commands;
+- movement resolution through existing `MoveActorCommand` and `ActorMovedEvent` authority;
+- exact movement-cost budget consumption with over-budget rejection;
+- path-derived hostile reaction opportunities when a moving footprint leaves adjacency;
+- deterministic reaction ordering by path index, initiative, and actor ID;
+- reaction damage resolved through the existing deterministic attack and combat-apply pipeline;
+- one reaction consumption per participant per round;
+- directional half/full cover derived from effective campaign terrain;
+- tactical attack defense modifiers and action-budget consumption;
+- stale campaign and map revision guards;
+- hidden tactical movement and attack APIs;
+- atomic map-event and campaign-turn persistence in one PostgreSQL transaction;
+- idempotent duplicate submissions before movement, damage, or budget consumption can rerun;
+- deterministic and PostgreSQL proof for budgets, cover, reactions, exact revisions, cross-ledger persistence, and duplicate suppression.
 
-- complete Phase 9 tactical movement, cover, and reactions;
-- performance profiling and renderer escalation only when measured.
+Exit condition met: initiative, movement costs, cover, and reactions share authoritative map and combat state, commit atomically, remain idempotent, and replay without rerunning pathfinding or damage resolution.
+
+## Final phase — Measured performance and renderer escalation
+
+Status: pending audit
+
+- profile spatial runtime and projection costs under representative active, coarse, and tactical workloads;
+- persist or expose actionable latency and workload telemetry;
+- define evidence-based thresholds for renderer escalation;
+- retain the current renderer unless measured limits justify a more complex path.
 
 ## Release invariants
 
