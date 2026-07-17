@@ -1,14 +1,23 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: active implementation plan
+Status: phases 0-5 complete; later phases remain planned
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
+
+Implementation evidence:
+
+- merged implementation PR: `#1382`;
+- merge SHA: `25a971e30946e5b93f5b2a202214f4c5fe5dd215`;
+- exact implementation head verified by GitHub Actions: `9a58145631fb0b7d677ac36ff9edd7901e2f2c0a`;
+- passing workflows: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
 
 Separate reusable world authoring from campaign launch, introduce revisioned scenarios and releases, and extend the deterministic map runtime with campaign-owned instances, grid movement, authoritative events, and observer-safe projections.
 
 ## Phase 0 — ADR and contracts
+
+Status: complete
 
 Exit conditions:
 
@@ -20,7 +29,9 @@ Exit conditions:
 
 ## Phase 1 — World, release, and scenario boundary
 
-Deliver:
+Status: complete
+
+Delivered:
 
 - typed World Project, World Revision, World Release, Scenario Project, and Scenario Revision contracts;
 - campaign world-binding and launch contracts;
@@ -28,13 +39,15 @@ Deliver:
 - compatibility adapter for current Campaign Genesis payloads;
 - read/create/publish/list APIs with deterministic hashes.
 
-Exit condition: one manually authored world and scenario can be published and a launch binding can be resolved without World Forge.
+Exit condition met: one manually authored world and scenario can be published and a launch binding can be resolved without World Forge.
 
 ## Phase 2 — Minimum spatial foundation and golden slice
 
+Status: complete
+
 ### Phase 2A
 
-Deliver only the minimum required for the proof:
+Delivered:
 
 - square-grid schema and grid-to-visual transform;
 - terrain walkability;
@@ -49,22 +62,24 @@ Deliver only the minimum required for the proof:
 
 ### Phase 2B
 
-Mandatory proof:
+Golden proof completed:
 
-1. Publish World Revision 1 and World Release 1.
-2. Publish Scenario Revision 1.
-3. Launch Campaign A and Campaign B.
-4. Bind both campaigns to one tavern Map Definition.
-5. Create independent Map Instances.
-6. Move Xylvanna only in Campaign A.
-7. Confirm Campaign B is unchanged.
-8. Save, load, and replay Campaign A.
-9. Publish a newer World Revision and corrected Map Definition/Release.
-10. Confirm existing campaigns remain pinned.
+1. Publish World Revision 1 and World Release 1 — completed.
+2. Publish Scenario Revision 1 — completed.
+3. Launch Campaign A and Campaign B — completed.
+4. Bind both campaigns to one tavern Map Definition — completed.
+5. Create independent Map Instances — completed.
+6. Move Xylvanna only in Campaign A — completed.
+7. Confirm Campaign B is unchanged — completed.
+8. Save, load, and replay Campaign A — completed.
+9. Publish a newer World Revision and corrected Map Definition/Release — completed.
+10. Confirm existing campaigns remain pinned — completed.
 
 ## Phase 3 — Durable World Forge DAG
 
-Deliver:
+Status: complete
+
+Delivered:
 
 - entity-manifest planning;
 - deterministic topic generation fingerprints;
@@ -75,11 +90,13 @@ Deliver:
 - partial regeneration and reconciliation;
 - publication into immutable World Revisions and Releases.
 
-Exit condition: process interruption can resume without losing completed topics, and changed inputs cannot reuse stale outputs.
+Exit condition met: process interruption can resume without losing completed topics, and changed inputs cannot reuse stale outputs.
 
 ## Phase 4 — Worlds & Campaigns UI
 
-Deliver:
+Status: complete
+
+Delivered:
 
 - full-page Worlds and Campaigns library;
 - world cards, scenario cards, and campaign cards;
@@ -90,11 +107,13 @@ Deliver:
 - release history;
 - fast launch from a published scenario.
 
-Exit condition: the primary UI no longer requires World Forge during normal campaign launch.
+Exit condition met: the primary UI does not require World Forge during normal campaign launch from a certified release.
 
 ## Phase 5 — Starter bubble and progressive maps
 
-Deliver:
+Status: complete
+
+Delivered:
 
 - world topology and deferred location slots;
 - starting region, settlement, interior, and one neighboring destination;
@@ -104,7 +123,7 @@ Deliver:
 - campaign pinning of progressively materialized definitions;
 - explicit promotion into a future World Revision.
 
-Exit condition: a published world is immediately playable, deferred maps can materialize safely, and image-generation failure cannot block navigation-ready gameplay.
+Exit condition met: a published world is immediately playable, deferred maps can materialize safely into explicit future revisions, existing campaigns remain pinned, and image-generation failure cannot block navigation-ready gameplay.
 
 ## Later phases
 
