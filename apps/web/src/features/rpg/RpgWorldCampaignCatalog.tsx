@@ -3,6 +3,7 @@ import type {
   RpgWorldCampaignSummary,
   RpgWorldSummary,
 } from '../../api/rpgWorldLibraryClient';
+import './RpgWorldCampaignCatalog.css';
 
 interface RpgWorldCampaignCatalogProps {
   campaigns: RpgWorldCampaignSummary[];
@@ -150,6 +151,7 @@ export function RpgWorldCampaignCatalog({
 
                 <div className="rpg-world-card-actions">
                   <button
+                    aria-label={`Continue campaign in ${world.title}`}
                     className="rpg-secondary-button"
                     type="button"
                     disabled={!selectedCampaignId}
@@ -158,6 +160,7 @@ export function RpgWorldCampaignCatalog({
                     Continue
                   </button>
                   <button
+                    aria-label={`New campaign in ${world.title}`}
                     className="rpg-primary-button"
                     type="button"
                     disabled={openingCount < 1}
