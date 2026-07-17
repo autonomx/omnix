@@ -63,6 +63,6 @@ def test_blueprint_reconciliation_reports_scenario_semantic_ids() -> None:
     )
 
     assert [(row["code"], row["target_id"]) for row in findings] == [
-        ("scenario_object_missing", "gate:eastern"),
         ("scenario_spawn_missing", "spawn:office"),
+        ("scenario_object_missing", "gate:eastern"),
     ]
