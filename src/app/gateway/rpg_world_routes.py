@@ -32,6 +32,10 @@ from app.rpg.worlds.postgres_service import (
     publish_world_revision,
     read_campaign_world_binding,
 )
+from app.rpg.worlds.topic_history import (
+    list_world_topic_history,
+    restore_world_topic_draft,
+)
 
 from .rpg_world_library_routes import register_rpg_world_library_routes
 
@@ -110,6 +114,50 @@ def register_rpg_world_routes(app: FastAPI) -> None:
     def rpg_restore_world(world_id: str) -> dict[str, Any]:
         try:
             return restore_world_project(world_id)
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
+
+    @app.get(
+        "/api/rpg/worlds/{world_id}/topic-history",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    def rpg_world_topic_history(
+        world_id: str,
+        draft_revision: int | None = Query(default=None, ge=1),
+        latest_per_topic: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        try:
+            return {
+                "ok": True,
+                "history": list_world_topic_history(
+                    world_id,
+                    draft_revision=draft_revision,
+                    latest_per_topic=latest_per_topic,
+                ),
+            }
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/drafts/{source_draft_revision}/restore",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    async def rpg_restore_world_topic_draft(
+        world_id: str,
+        source_draft_revision: int,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        try:
+            return restore_world_topic_draft(
+                world_id,
+                source_draft_revision=source_draft_revision,
+                expected_current_draft_revision=int(
+                    payload.get("expected_current_draft_revision") or 0
+                ),
+            )
         except (KeyError, ValueError) as exc:
             raise _domain_error(exc) from exc
 
