@@ -1,6 +1,6 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: Phase 2 and Phase 6.1 complete; closure work remains in phases 0, 1, 3, 4, 5, 6, and later phases
+Status: phases 0 and 2 complete; Phase 6.1 complete; closure work remains in phases 1, 3, 4, 5, 6, and later phases
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
@@ -15,6 +15,9 @@ Implementation evidence:
 - release certification and scenario initialization PR: `#1386`;
 - release certification and scenario initialization merge SHA: `601266fc87114b286d24310a6fadf7e1de77d35c`;
 - exact PR `#1386` implementation head verified by GitHub Actions: `8c1376fa4a28411472bbe2d6614d2fe2785ee29f`;
+- Phase 0 lifecycle implementation PR: `#1388`;
+- Phase 0 lifecycle merge SHA: `62272bcde8fe760b409ec1540aee1a1a09b9216f`;
+- exact PR `#1388` implementation head verified by GitHub Actions: `6eb132f6d527cb7dd65d9d284f9250c5a15fd1d1`;
 - passing workflows for all implementation heads: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
@@ -23,7 +26,7 @@ Separate reusable world authoring from campaign launch, introduce revisioned sce
 
 ## Phase 0 — ADR and contracts
 
-Status: in progress
+Status: complete
 
 Delivered:
 
@@ -31,12 +34,14 @@ Delivered:
 - event and snapshot authority;
 - visibility and secret-data boundaries;
 - generation job fingerprint rules;
-- mandatory two-campaign tavern gate.
+- mandatory two-campaign tavern gate;
+- explicit lifecycle, archival, retention, restoration, and administrative hard-deletion policy;
+- idempotent World and Scenario project archive/restore services and gateway APIs;
+- active-generation archive guard;
+- authoritative write guards for topics, generation, publication, scenarios, bindings, and new campaign launches;
+- PostgreSQL proof that immutable revisions, releases, campaign bindings, and campaigns survive archival unchanged.
 
-Remaining:
-
-- explicit lifecycle policy for draft deletion, published-resource retention, archival, restoration, and campaign-reference restrictions;
-- archive and restore service/API proof for World and Scenario projects.
+Exit condition met: lifecycle behavior is explicit, reversible, auditable, and cannot silently delete or alter published authority or existing campaign pins.
 
 ## Phase 1 — World, release, and scenario boundary
 
