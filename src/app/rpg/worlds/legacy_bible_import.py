@@ -8,7 +8,6 @@ from typing import Any
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
-from .contracts import WorldReleaseDocument
 from .service import (
     compile_scenario_revision,
     compile_world_release,
@@ -48,6 +47,14 @@ def _entities(document: Mapping[str, Any]) -> list[dict[str, Any]]:
     return _rows(document.get("entities"))
 
 
+def _entity_map(document: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(entity["id"]): entity
+        for entity in _entities(document)
+        if entity.get("id")
+    }
+
+
 def _topology(document: Mapping[str, Any]) -> dict[str, Any]:
     entities = _entities(document)
     relationships = _rows(document.get("relationships"))
@@ -80,7 +87,10 @@ def _blueprint_requirements(document: Mapping[str, Any]) -> tuple[dict[str, Any]
             "presentation_readiness": "placeholder",
             "legacy_import": True,
         }
-        for entity in sorted(_entities(document), key=lambda row: str(row.get("id") or ""))
+        for entity in sorted(
+            _entities(document),
+            key=lambda row: str(row.get("id") or ""),
+        )
         if entity.get("id") and str(entity.get("kind") or "") == "location"
     )
 
@@ -90,13 +100,23 @@ def _completeness(bible: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(value, Mapping) and value:
         return dict(value)
     document = bible.get("document")
-    if isinstance(document, Mapping) and isinstance(document.get("completeness"), Mapping):
+    if isinstance(document, Mapping) and isinstance(
+        document.get("completeness"),
+        Mapping,
+    ):
         return dict(document["completeness"])
     return {}
 
 
-def _starting_location(document: Mapping[str, Any], completeness: Mapping[str, Any]) -> str:
-    opening = [str(item) for item in completeness.get("opening_location_ids") or () if item]
+def _starting_location(
+    document: Mapping[str, Any],
+    completeness: Mapping[str, Any],
+) -> str:
+    opening = [
+        str(item)
+        for item in completeness.get("opening_location_ids") or ()
+        if item
+    ]
     if opening:
         return sorted(opening)[0]
     locations = [
@@ -107,9 +127,16 @@ def _starting_location(document: Mapping[str, Any], completeness: Mapping[str, A
     return sorted(locations)[0] if locations else "location:legacy-unresolved"
 
 
-def _opening_npcs(document: Mapping[str, Any], completeness: Mapping[str, Any]) -> tuple[str, ...]:
+def _opening_npcs(
+    document: Mapping[str, Any],
+    completeness: Mapping[str, Any],
+) -> tuple[str, ...]:
     opening = tuple(
-        sorted(str(item) for item in completeness.get("opening_actor_ids") or () if item)
+        sorted(
+            str(item)
+            for item in completeness.get("opening_actor_ids") or ()
+            if item
+        )
     )
     if opening:
         return opening
@@ -130,6 +157,13 @@ def _source_hash(value: str) -> str:
     return value if value.startswith("sha256:") else f"sha256:{value}"
 
 
+def _campaign_seed(campaign: Mapping[str, Any]) -> int:
+    try:
+        return int(str(campaign.get("seed") or "0"))
+    except ValueError:
+        return 0
+
+
 def _existing_import(
     work: Any,
     context: Any,
@@ -144,7 +178,11 @@ def _existing_import(
         return None
     revision = work.world_scenarios.get_world_revision(context, world_id, 1)
     release = work.world_scenarios.get_world_release(context, world_id, 1, 1)
-    scenario_revision = work.world_scenarios.get_scenario_revision(context, scenario_id, 1)
+    scenario_revision = work.world_scenarios.get_scenario_revision(
+        context,
+        scenario_id,
+        1,
+    )
     if revision is None or release is None or scenario_revision is None:
         raise ValueError(f"legacy_bible_import_partial_conflict:{campaign_id}")
     provenance = dict(revision["document"].get("provenance") or {})
@@ -224,7 +262,7 @@ def import_campaign_bible_as_world(
             canon=document,
             entity_manifest={
                 "schema_version": "rpg_world_entity_manifest_v1",
-                "entities": dict(document.get("entities") or {}),
+                "entities": _entity_map(document),
                 "manifest": dict(document.get("manifest") or {}),
             },
             topology=_topology(document),
@@ -260,7 +298,9 @@ def import_campaign_bible_as_world(
             starting_location_id=starting_location_id,
             initial_npc_ids=_opening_npcs(document, completeness),
             opening_seed_ids=tuple(
-                str(row.get("id") or "") for row in story_threads if row.get("id")
+                str(row.get("id") or "")
+                for row in story_threads
+                if row.get("id")
             ),
             starting_resources={
                 "legacy_campaign_id": campaign_id,
@@ -274,9 +314,13 @@ def import_campaign_bible_as_world(
             title=world_revision.title,
             description="Imported from a persisted legacy Campaign Bible.",
             source_mode="imported",
-            genre=str(campaign.get("metadata", {}).get("genre") or "classic_fantasy"),
-            tone=str(campaign.get("metadata", {}).get("tone") or "legacy campaign"),
-            seed=int(str(campaign.get("seed") or "0") or 0),
+            genre=str(
+                campaign.get("metadata", {}).get("genre") or "classic_fantasy"
+            ),
+            tone=str(
+                campaign.get("metadata", {}).get("tone") or "legacy campaign"
+            ),
+            seed=_campaign_seed(campaign),
             metadata={"legacy_campaign_bible_import": import_provenance},
         )
         stored_revision = work.world_scenarios.publish_world_revision(
