@@ -1,6 +1,6 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0-4 complete; Phase 6.1 complete; closure work remains in phases 5, 6, and later phases
+Status: phases 0-5 complete; Phase 6.1 complete; closure work remains in Phase 6 and later phases
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
@@ -27,6 +27,9 @@ Implementation evidence:
 - Phase 4 blueprint authoring and lifecycle UI PR: `#1394`;
 - Phase 4 implementation merge SHA: `97cbba1d132dfebab041544e9218b48406ecde9e`;
 - exact PR `#1394` implementation head verified by GitHub Actions: `2c02c2a4411032e5490d17cef177bd397f412171`;
+- Phase 5 durable progressive materialization PR: `#1396`;
+- Phase 5 implementation merge SHA: `0dc5c2bd9ef2d54d6162e15c54c21a26ffdc977a`;
+- exact PR `#1396` implementation head verified by GitHub Actions: `2cd47ffba2d65250b20598f6bb89480b5755e456`;
 - passing workflows for all implementation heads: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
@@ -157,7 +160,7 @@ Exit condition met: an author can create, validate, reconcile, and publish seman
 
 ## Phase 5 — Starter bubble and progressive maps
 
-Status: in progress
+Status: complete
 
 Delivered:
 
@@ -168,13 +171,16 @@ Delivered:
 - explicit deferred-map materialization;
 - navigable placeholder rendering while optional art is pending;
 - campaign pinning of progressively materialized definitions;
-- explicit promotion into a future World Revision.
+- explicit promotion into a future World Revision;
+- deterministic durable materialization jobs keyed by workspace, world revision, and deferred location;
+- campaign-proximity scheduling and explicit route-intent signal promotion without duplicate work;
+- a dedicated lease-backed internal worker that reuses the authoritative deferred-map materializer;
+- non-blocking launch-time predictive scheduling from exact campaign bindings;
+- bounded exponential retries, attempt history, terminal failure, and dead-letter recording;
+- hidden world and campaign scheduling APIs plus operational counts, attempts, completion, and failure telemetry;
+- PostgreSQL proof for duplicate suppression, stronger-signal priority promotion, future-release creation, retries, dead letters, and telemetry.
 
-Remaining:
-
-- durable background materialization jobs created from predictive candidates;
-- automatic scheduling based on campaign proximity or route intent;
-- retry, failure, and operational telemetry for background materialization.
+Exit condition met: deferred maps are predicted, scheduled, retried, materialized, and observed through durable generic jobs while current campaigns remain pinned and optional presentation work remains non-blocking.
 
 ## Phase 6 — Living NPC spatial goals and level-of-detail simulation
 
