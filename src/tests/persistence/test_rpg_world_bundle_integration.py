@@ -95,9 +95,7 @@ def _definition(world_id: str, *, asset_id: str) -> GridMapDefinition:
             world_revision=1,
             width=4,
             height=3,
-            terrain_palette=(
-                TerrainRule(code=".", terrain_id="stone"),
-            ),
+            terrain_palette=(TerrainRule(code=".", terrain_id="stone"),),
             terrain_rows=("....", "....", "...."),
             spawn_points=(
                 GridSpawnPoint(
@@ -116,7 +114,9 @@ def _definition(world_id: str, *, asset_id: str) -> GridMapDefinition:
 
 def test_world_bundle_exports_and_imports_world_maps_scenarios_and_images(tmp_path) -> None:
     database = _database()
-    asset_store = SharedAssetStore(root=tmp_path / "asset-store")
+    asset_store = SharedAssetStore(
+        manifest_path=tmp_path / "asset-store" / "manifest.json"
+    )
     source_world_id = "world:portable-source"
     target_world_id = "world:portable-clone"
     source_asset_id = "image:portable-harbor"
