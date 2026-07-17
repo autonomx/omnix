@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { RpgLaunchResponse, RpgNewGameRequest } from '../../api/client';
+import { omnixApiClient, type RpgLaunchResponse, type RpgNewGameRequest } from '../../api/client';
 import {
   rpgWorldLibraryClient,
   type RpgScenarioRevision,
@@ -10,12 +10,15 @@ import {
 } from '../../api/rpgWorldLibraryClient';
 import { loadSettingsProfile } from '../settings/settingsApi';
 import { RpgCreateCampaignWizard as LegacyRpgCreateCampaignWizard } from './RpgCreateCampaignWizardLegacy';
+import { RpgWorldCampaignCatalog } from './RpgWorldCampaignCatalog';
 import { applyRpgWizardDefaults, rpgWizardDefaultsFromSettings } from './rpgWizardDefaults';
 
 interface RpgCreateCampaignWizardProps {
   onCreateCampaign?: (request: RpgNewGameRequest) => Promise<RpgLaunchResponse>;
   onEnterWorld?: () => void;
 }
+
+type CampaignWizardView = 'catalog' | 'setup';
 
 const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
 
@@ -49,22 +52,28 @@ function releaseIsLaunchReady(release: RpgWorldRelease | undefined): boolean {
   return Boolean(record(record(release?.document).certification).launch_ready);
 }
 
-function worldLabel(world: RpgWorldSummary): string {
-  const scenarios = world.scenario_count ?? 0;
-  return `${world.title} · ${scenarios} published opening${scenarios === 1 ? '' : 's'}`;
-}
-
 function scenarioLabel(scenario: RpgScenarioSummary): string {
   return `${scenario.title}${scenario.description ? ` · ${scenario.description}` : ''}`;
+}
+
+function storeSelectedSession(sessionId: string): void {
+  try {
+    window.localStorage.setItem(RPG_SELECTED_SESSION_STORAGE_KEY, sessionId);
+  } catch {
+    // Reload still refreshes the session inventory when storage is unavailable.
+  }
 }
 
 export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const touchedRef = useRef(false);
   const applyingRef = useRef(false);
+  const [view, setView] = useState<CampaignWizardView>('catalog');
   const [selectedWorldId, setSelectedWorldId] = useState('');
   const [selectedScenarioId, setSelectedScenarioId] = useState('');
   const [launchedSessionId, setLaunchedSessionId] = useState('');
+  const [catalogError, setCatalogError] = useState<string>();
+  const [isContinuing, setIsContinuing] = useState(false);
 
   const libraryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-library', 'campaign-wizard'],
@@ -78,14 +87,8 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
   const detailQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-library', 'campaign-wizard', selectedWorldId],
     queryFn: () => rpgWorldLibraryClient.detail(selectedWorldId),
-    enabled: Boolean(selectedWorldId),
+    enabled: view === 'setup' && Boolean(selectedWorldId),
   });
-
-  useEffect(() => {
-    if (!selectedWorldId && availableWorlds[0]?.id) {
-      setSelectedWorldId(availableWorlds[0].id);
-    }
-  }, [availableWorlds, selectedWorldId]);
 
   const publishedScenarios = useMemo(
     () => (detailQuery.data?.scenarios ?? []).filter((scenario) => (
@@ -102,6 +105,7 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
   }, [publishedScenarios, selectedScenarioId]);
 
   useEffect(() => {
+    if (view !== 'setup') return undefined;
     let active = true;
     loadSettingsProfile()
       .then(({ profile }) => {
@@ -117,7 +121,7 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [view]);
 
   const selectedScenario = publishedScenarios.find((scenario) => scenario.id === selectedScenarioId);
   const selectedScenarioRevision = latestScenarioRevision(
@@ -136,9 +140,34 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
     if (!applyingRef.current) touchedRef.current = true;
   };
 
+  const openCampaignSetup = (worldId: string) => {
+    touchedRef.current = false;
+    setSelectedWorldId(worldId);
+    setSelectedScenarioId('');
+    setCatalogError(undefined);
+    setView('setup');
+  };
+
+  const continueCampaign = async (campaignId: string) => {
+    setIsContinuing(true);
+    setCatalogError(undefined);
+    try {
+      const result = await omnixApiClient.continueRpgSession(campaignId);
+      if (!result.ok) throw new Error(result.error ?? 'The selected campaign could not be continued.');
+      const sessionId = result.session_id ?? campaignId;
+      storeSelectedSession(sessionId);
+      props.onEnterWorld?.();
+      window.location.reload();
+    } catch (error) {
+      setCatalogError(error instanceof Error ? error.message : 'The selected campaign could not be continued.');
+    } finally {
+      setIsContinuing(false);
+    }
+  };
+
   const launchExistingCampaign = async (request: RpgNewGameRequest): Promise<RpgLaunchResponse> => {
     if (!selectedWorld || !selectedScenario || !selectedScenarioRevision || !selectedRelease) {
-      throw new Error('Select an existing world with a published scenario before starting a campaign.');
+      throw new Error('Select a published opening for this world before starting a campaign.');
     }
     if (!releaseIsLaunchReady(selectedRelease)) {
       throw new Error('The selected world release is not certified as launch ready.');
@@ -181,12 +210,7 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
     }
 
     setLaunchedSessionId(result.session_id);
-    try {
-      window.localStorage.setItem(RPG_SELECTED_SESSION_STORAGE_KEY, result.session_id);
-    } catch {
-      // Entering the world still works when storage is unavailable; reload will refresh the session inventory.
-    }
-
+    storeSelectedSession(result.session_id);
     return {
       ok: true,
       session_id: result.session_id,
@@ -201,22 +225,34 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
     if (launchedSessionId) window.location.reload();
   };
 
-  const sourceStatus = libraryQuery.isError
-    ? 'Unable to load reusable worlds.'
-    : !availableWorlds.length && !libraryQuery.isPending
-      ? 'Create or import a world in Worlds & Campaigns before starting a campaign.'
-      : detailQuery.isPending
-        ? 'Loading published scenarios and immutable releases…'
-        : !publishedScenarios.length
-          ? 'This world has no published scenario. Publish an opening before starting a campaign.'
-          : launchReady
-            ? `Ready: ${selectedWorld?.title} · ${selectedScenario?.title}`
-            : 'The selected scenario does not have a launch-ready certified release.';
+  const sourceStatus = detailQuery.isPending
+    ? 'Loading published scenarios and immutable releases…'
+    : !publishedScenarios.length
+      ? 'This world has no published scenario. Publish an opening before starting a campaign.'
+      : launchReady
+        ? `Ready: ${selectedWorld?.title} · ${selectedScenario?.title}`
+        : 'The selected scenario does not have a launch-ready certified release.';
+
+  if (view === 'catalog') {
+    return (
+      <div ref={rootRef} style={{ display: 'contents' }}>
+        <RpgWorldCampaignCatalog
+          campaigns={libraryQuery.data?.campaigns ?? []}
+          error={catalogError ?? (libraryQuery.isError ? 'Unable to load reusable worlds.' : undefined)}
+          isLoading={libraryQuery.isPending || isContinuing}
+          onBack={props.onEnterWorld ?? (() => undefined)}
+          onContinueCampaign={(campaignId) => void continueCampaign(campaignId)}
+          onNewCampaign={openCampaignSetup}
+          worlds={availableWorlds}
+        />
+      </div>
+    );
+  }
 
   return (
     <div ref={rootRef} style={{ display: 'contents' }} onChangeCapture={markTouched} onInputCapture={markTouched}>
       <section
-        aria-label="Existing world selection"
+        aria-label="Selected campaign world"
         style={{
           border: '1px solid var(--border-subtle, rgba(255,255,255,.12))',
           borderRadius: 14,
@@ -225,43 +261,31 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
           background: 'var(--surface-elevated, rgba(255,255,255,.035))',
         }}
       >
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>Campaign source</div>
-        <div style={{ opacity: 0.72, fontSize: 13, marginBottom: 10 }}>
-          Choose an existing reusable world and one of its published openings. New Campaign launches an immutable world release; it does not create or regenerate a world.
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Campaign world</div>
+            <div style={{ opacity: 0.72, fontSize: 13 }}>
+              {selectedWorld?.title ?? 'Selected world'} · {selectedWorld?.genre.replace(/[_-]+/g, ' ') ?? 'reusable world'}
+            </div>
+          </div>
+          <button className="rpg-secondary-button" type="button" onClick={() => setView('catalog')}>
+            Change world
+          </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-          <label style={{ display: 'grid', gap: 5 }}>
-            <span>Existing world</span>
-            <select
-              aria-label="Existing world"
-              value={selectedWorldId}
-              disabled={libraryQuery.isPending || !availableWorlds.length}
-              onChange={(event) => {
-                setSelectedWorldId(event.currentTarget.value);
-                setSelectedScenarioId('');
-              }}
-            >
-              {!availableWorlds.length ? <option value="">No reusable worlds available</option> : null}
-              {availableWorlds.map((world) => (
-                <option key={world.id} value={world.id}>{worldLabel(world)}</option>
-              ))}
-            </select>
-          </label>
-          <label style={{ display: 'grid', gap: 5 }}>
-            <span>Published scenario</span>
-            <select
-              aria-label="Published scenario"
-              value={selectedScenarioId}
-              disabled={detailQuery.isPending || !publishedScenarios.length}
-              onChange={(event) => setSelectedScenarioId(event.currentTarget.value)}
-            >
-              {!publishedScenarios.length ? <option value="">No published openings available</option> : null}
-              {publishedScenarios.map((scenario) => (
-                <option key={scenario.id} value={scenario.id}>{scenarioLabel(scenario)}</option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <label style={{ display: 'grid', gap: 5, marginTop: 12 }}>
+          <span>Published scenario</span>
+          <select
+            aria-label="Published scenario"
+            value={selectedScenarioId}
+            disabled={detailQuery.isPending || !publishedScenarios.length}
+            onChange={(event) => setSelectedScenarioId(event.currentTarget.value)}
+          >
+            {!publishedScenarios.length ? <option value="">No published openings available</option> : null}
+            {publishedScenarios.map((scenario) => (
+              <option key={scenario.id} value={scenario.id}>{scenarioLabel(scenario)}</option>
+            ))}
+          </select>
+        </label>
         <p style={{ margin: '10px 0 0', fontSize: 13, opacity: launchReady ? 0.9 : 0.72 }} aria-live="polite">
           {sourceStatus}
         </p>
