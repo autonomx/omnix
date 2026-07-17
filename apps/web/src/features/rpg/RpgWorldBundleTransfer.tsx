@@ -1,29 +1,33 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { rpgWorldBundleClient } from '../../api/rpgWorldBundleClient';
 
 interface RpgWorldBundleTransferProps {
-  selectedWorldId: string;
-  onImported: (worldId: string) => Promise<void> | void;
-  onFeedback: (message: string) => void;
-  onError: (message: string) => void;
+  initialWorldId?: string;
+  onImported?: (worldId: string) => Promise<void> | void;
 }
 
 export function RpgWorldBundleTransfer({
-  selectedWorldId,
+  initialWorldId = '',
   onImported,
-  onFeedback,
-  onError,
 }: RpgWorldBundleTransferProps) {
+  const [exportWorldId, setExportWorldId] = useState(initialWorldId);
   const [importFile, setImportFile] = useState<File>();
   const [targetWorldId, setTargetWorldId] = useState('');
+  const [feedback, setFeedback] = useState<string>();
+  const [error, setError] = useState<string>();
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
 
+  useEffect(() => {
+    if (initialWorldId) setExportWorldId(initialWorldId);
+  }, [initialWorldId]);
+
   const exportWorld = async () => {
-    if (!selectedWorldId || exporting) return;
+    const worldId = exportWorldId.trim();
+    if (!worldId || exporting) return;
     setExporting(true);
     try {
-      const download = await rpgWorldBundleClient.exportWorld(selectedWorldId);
+      const download = await rpgWorldBundleClient.exportWorld(worldId);
       const url = URL.createObjectURL(download.blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -32,9 +36,10 @@ export function RpgWorldBundleTransfer({
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      onFeedback(`World bundle exported: ${download.filename}`);
+      setFeedback(`World bundle exported: ${download.filename}`);
+      setError(undefined);
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'World export failed.');
+      setError(cause instanceof Error ? cause.message : 'World export failed.');
     } finally {
       setExporting(false);
     }
@@ -46,14 +51,16 @@ export function RpgWorldBundleTransfer({
     try {
       const result = await rpgWorldBundleClient.importWorld(importFile, targetWorldId);
       const imageCount = (result.counts.images_created ?? 0) + (result.counts.images_reused ?? 0);
-      onFeedback(
+      setFeedback(
         `World imported: ${result.world_id} • ${result.counts.map_definitions ?? 0} maps • ${imageCount} images`,
       );
+      setError(undefined);
+      setExportWorldId(result.world_id);
       setImportFile(undefined);
       setTargetWorldId('');
-      await onImported(result.world_id);
+      await onImported?.(result.world_id);
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'World import failed.');
+      setError(cause instanceof Error ? cause.message : 'World import failed.');
     } finally {
       setImporting(false);
     }
@@ -67,13 +74,21 @@ export function RpgWorldBundleTransfer({
         Transfer world canon, topic history, scenarios, map blueprints, compiled maps,
         releases, and referenced images in one checksummed archive.
       </p>
+      <label>
+        <span>World id to export</span>
+        <input
+          value={exportWorldId}
+          placeholder="world:my-world"
+          onChange={(event) => setExportWorldId(event.currentTarget.value)}
+        />
+      </label>
       <button
         type="button"
         className="rpg-secondary-button"
-        disabled={!selectedWorldId || exporting}
+        disabled={!exportWorldId.trim() || exporting}
         onClick={() => void exportWorld()}
       >
-        {exporting ? 'Preparing export…' : 'Export selected world'}
+        {exporting ? 'Preparing export…' : 'Export world bundle'}
       </button>
       <label>
         <span>World bundle</span>
@@ -100,6 +115,8 @@ export function RpgWorldBundleTransfer({
         {importing ? 'Validating and importing…' : 'Import world bundle'}
       </button>
       <small>Imports never overwrite an existing world. Use a new world id to create a portable clone.</small>
+      {feedback ? <p className="rpg-world-library-feedback" aria-live="polite">{feedback}</p> : null}
+      {error ? <p className="rpg-world-library-error" aria-live="assertive">{error}</p> : null}
     </section>
   );
 }
