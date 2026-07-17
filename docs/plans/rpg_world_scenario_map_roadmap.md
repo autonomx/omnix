@@ -1,6 +1,6 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0 and 2 complete; Phase 6.1 complete; closure work remains in phases 1, 3, 4, 5, 6, and later phases
+Status: phases 0-2 complete; Phase 6.1 complete; closure work remains in phases 3, 4, 5, 6, and later phases
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
@@ -18,6 +18,9 @@ Implementation evidence:
 - Phase 0 lifecycle implementation PR: `#1388`;
 - Phase 0 lifecycle merge SHA: `62272bcde8fe760b409ec1540aee1a1a09b9216f`;
 - exact PR `#1388` implementation head verified by GitHub Actions: `6eb132f6d527cb7dd65d9d284f9250c5a15fd1d1`;
+- Phase 1 legacy Campaign Bible import PR: `#1390`;
+- Phase 1 legacy import merge SHA: `9d84c69a0ce94376caa84e9e7a53bc169c5820bf`;
+- exact PR `#1390` implementation head verified by GitHub Actions: `52f5fc31cb65f1ff35e0e6601d6b29b1c32bd9ac`;
 - passing workflows for all implementation heads: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
@@ -45,7 +48,7 @@ Exit condition met: lifecycle behavior is explicit, reversible, auditable, and c
 
 ## Phase 1 — World, release, and scenario boundary
 
-Status: in progress
+Status: complete
 
 Delivered:
 
@@ -56,14 +59,13 @@ Delivered:
 - read/create/publish/list APIs with deterministic hashes;
 - persisted-definition verification for exact release revision, definition hash, and semantic-interface hash;
 - semantic validation of scenario map, spawn, route, object, and hazard references;
-- transactional published launch that creates the campaign, exact binding, and initialized starting Campaign Map Instance without World Forge.
+- transactional published launch that creates the campaign, exact binding, and initialized starting Campaign Map Instance without World Forge;
+- transactional import of a persisted Campaign Bible into an immutable World Revision, World Release, and Scenario Revision;
+- preservation of the complete Bible canon, retrieval indexes, completeness and consistency evidence, source Bible revision/hash, generator provenance, source campaign revision/state hash, and source timestamps;
+- deterministic, idempotent import identities without mutating or rebinding the legacy campaign;
+- explicit non-launch-ready certification until legacy spatial artifacts are compiled and certified.
 
-Exit condition met: one manually authored world and scenario can be published and launched into authoritative spatial state without World Forge.
-
-Remaining:
-
-- import one persisted legacy Campaign Bible as an immutable World Revision, World Release, and Scenario Revision;
-- preserve explicit historical authoring provenance through that migration.
+Exit condition met: manually authored and persisted legacy worlds can be separated from campaigns, published as immutable reusable resources, and either launched from certified spatial releases or held safely for explicit spatial promotion without World Forge during normal launch.
 
 ## Phase 2 — Minimum spatial foundation and golden slice
 
