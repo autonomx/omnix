@@ -8,7 +8,11 @@ from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
 from app.rpg.session.service import archive_session, save_session
 
-from .postgres_service import load_published_resources
+from .postgres_service import load_published_resources, load_release_definitions
+from .semantic_validation import (
+    initialize_starting_map_snapshot,
+    validate_scenario_against_release,
+)
 from .service import resolve_campaign_binding
 
 
@@ -38,18 +42,18 @@ def launch_published_scenario(
         scenario_revision=scenario_revision,
         database=database,
     )
+    definitions = load_release_definitions(revision, release, database=database)
+    starting_definition = validate_scenario_against_release(
+        scenario,
+        release,
+        definitions,
+    )
     certification = _record(release.certification)
     if not bool(certification.get("launch_ready")):
         raise ValueError(
             "world_release_not_launch_ready:"
             + ",".join(str(item) for item in certification.get("missing_requirements") or ())
         )
-    if scenario.world_id != revision.world_id:
-        raise ValueError("scenario_world_mismatch")
-    if scenario.world_revision != revision.revision:
-        raise ValueError("scenario_world_revision_mismatch")
-    if scenario.compatible_release not in {None, release.release}:
-        raise ValueError("scenario_release_incompatible")
 
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
@@ -95,11 +99,22 @@ def launch_published_scenario(
         world_release=release,
         scenario_revision=scenario,
     )
+    map_instance_id = f"{session_id}:map:{starting_definition.map_id}:1"
+    protagonist_actor_id = f"player:{session_id}"
+    starting_snapshot = initialize_starting_map_snapshot(
+        map_instance_id=map_instance_id,
+        campaign_id=session_id,
+        protagonist_actor_id=protagonist_actor_id,
+        scenario=scenario,
+        definition=starting_definition,
+    )
+
     state = _record(session.get("state"))
     manifest = _record(session.get("manifest"))
     runtime = _record(session.get("runtime_state"))
     setup = _record(session.get("setup_payload"))
     state["world_binding"] = binding.model_dump(mode="json")
+    state["current_map_instance_id"] = map_instance_id
     state["published_world"] = {
         "world_id": revision.world_id,
         "world_revision": revision.revision,
@@ -111,6 +126,7 @@ def launch_published_scenario(
         "initial_npc_ids": list(scenario.initial_npc_ids),
         "opening_seed_ids": list(scenario.opening_seed_ids),
         "starting_resources": dict(scenario.starting_resources),
+        "starting_map_instance_id": map_instance_id,
     }
     manifest["world_id"] = revision.world_id
     manifest["world_revision"] = revision.revision
@@ -124,9 +140,12 @@ def launch_published_scenario(
         "required_before_first_turn": True,
         "missing_requirements": [],
     }
-    runtime["published_scenario_initialization"] = [
-        operation.model_dump(mode="json") for operation in scenario.map_initialization
-    ]
+    runtime["published_scenario_initialization"] = {
+        "status": "applied",
+        "map_instance_id": map_instance_id,
+        "operation_ids": list(starting_snapshot.initialization_operation_ids),
+    }
+    runtime["starting_map_snapshot"] = starting_snapshot.model_dump(mode="json")
     setup["published_world_binding"] = binding.model_dump(mode="json")
     session["state"] = state
     session["manifest"] = manifest
@@ -153,6 +172,7 @@ def launch_published_scenario(
                         "world_release": release.release,
                         "scenario_id": scenario.scenario_id,
                         "scenario_revision": scenario.revision,
+                        "starting_map_instance_id": map_instance_id,
                     },
                 )
             stored_binding = work.world_scenarios.bind_campaign(
@@ -164,6 +184,16 @@ def launch_published_scenario(
                 scenario_id=binding.scenario_id,
                 scenario_revision=binding.scenario_revision,
                 binding=binding.model_dump(mode="json"),
+            )
+            stored_map_instance = work.map_instances.create_instance(
+                context,
+                map_instance_id=starting_snapshot.map_instance_id,
+                campaign_id=starting_snapshot.campaign_id,
+                location_id=starting_snapshot.location_id,
+                map_id=starting_snapshot.map_id,
+                definition_revision=starting_snapshot.definition_revision,
+                definition_hash=starting_snapshot.definition_hash,
+                snapshot=starting_snapshot.model_dump(mode="json"),
             )
             work.commit()
     except Exception:
@@ -177,6 +207,7 @@ def launch_published_scenario(
         "session": saved,
         "game": saved.get("state", {}),
         "binding": stored_binding,
+        "map_instance": stored_map_instance,
         "launch_mode": "published_scenario",
         "world_forge_invoked": False,
     }
