@@ -10,6 +10,9 @@ from app.rpg.session.service import archive_session, save_session
 
 from .lifecycle_service import require_scenario_writable
 from .postgres_service import load_published_resources, load_release_definitions
+from .progressive_materialization_job_service import (
+    schedule_campaign_predictive_materialization,
+)
 from .semantic_validation import (
     initialize_starting_map_snapshot,
     validate_scenario_against_release,
@@ -216,6 +219,23 @@ def launch_published_scenario(
         archive_session(session_id)
         raise
 
+    try:
+        materialization_schedule = schedule_campaign_predictive_materialization(
+            session_id,
+            current_location_id=scenario.starting_location_id,
+            database=database,
+            kick_worker=True,
+            allow_missing_plan=True,
+        )
+    except Exception as exc:
+        materialization_schedule = {
+            "ok": False,
+            "status": "deferred",
+            "scheduled": [],
+            "worker_started": False,
+            "error": str(exc),
+        }
+
     return {
         "ok": True,
         "status": "ready",
@@ -224,6 +244,7 @@ def launch_published_scenario(
         "game": saved.get("state", {}),
         "binding": stored_binding,
         "map_instance": stored_map_instance,
+        "materialization_schedule": materialization_schedule,
         "launch_mode": "published_scenario",
         "world_forge_invoked": False,
     }
