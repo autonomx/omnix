@@ -281,7 +281,14 @@ def test_world_bundle_exports_and_imports_world_maps_scenarios_and_images(tmp_pa
         assert clone_detail["scenario_revisions"]
 
         cloned_asset_id = result["identifier_map"][source_asset_id]
-        cloned_asset = asset_store.get_asset(cloned_asset_id)
+        cloned_asset = next(
+            (
+                asset
+                for asset in asset_store.list_assets().assets
+                if asset.id == cloned_asset_id
+            ),
+            None,
+        )
         assert cloned_asset is not None
         assert cloned_asset.metadata["world_bundle_import"]["target_world_id"] == target_world_id
         assert open(cloned_asset.storage_path, "rb").read() == image_bytes
