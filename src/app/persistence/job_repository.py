@@ -26,7 +26,7 @@ class PostgresJobRepository(_BaseJobRepository):
         context: TenantContext,
         payload: dict[str, Any],
     ) -> tuple[dict[str, Any], bool]:
-        """Create one deterministic job identity or return the existing row."""
+        """Create one deterministic job identity or reconcile a stronger queued signal."""
 
         row = self.connection.execute(
             f"""
@@ -59,9 +59,39 @@ class PostgresJobRepository(_BaseJobRepository):
             result = _job(row)
             self._event(context, result["id"], "job.created", {"status": "queued"})
             return result, True
+        updated = self.connection.execute(
+            f"""
+            UPDATE omnix_jobs AS jobs
+               SET priority = GREATEST(jobs.priority, %s),
+                   input_payload = %s::jsonb,
+                   metadata = %s::jsonb,
+                   max_attempts = GREATEST(jobs.max_attempts, %s),
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE jobs.id = %s AND jobs.workspace_id = %s
+               AND jobs.status IN ('queued', 'waiting', 'retrying')
+            RETURNING {_QUALIFIED_JOB_COLUMNS}
+            """,
+            (
+                int(payload.get("priority", 0)),
+                _json(payload.get("input_payload") or {}),
+                _json(payload.get("metadata") or {}),
+                max(1, int(payload.get("max_attempts", 3))),
+                payload["id"],
+                context.workspace_id,
+            ),
+        ).fetchone()
+        if updated is not None:
+            result = _job(updated)
+            self._event(
+                context,
+                result["id"],
+                "job.signal_reconciled",
+                {"priority": result["priority"], "status": result["status"]},
+            )
+            return result, False
         existing = self.get_job(context, str(payload["id"]))
         if existing is None:
-            raise RuntimeError(f"deterministic_job_insert_failed:{payload['id']}")
+            raise RuntimeError(f"deterministic_job_identity_conflict:{payload['id']}")
         return existing, False
 
     def claim_next(
