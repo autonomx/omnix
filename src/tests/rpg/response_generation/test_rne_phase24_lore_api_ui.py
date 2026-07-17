@@ -169,7 +169,7 @@ def test_generation_progress_and_discovery_transition_are_structured() -> None:
         )
 
 
-def test_web_ui_exposes_world_forge_depth_and_lore_browser() -> None:
+def test_web_ui_selects_published_worlds_and_keeps_lore_browser() -> None:
     wizard = (
         REPO_ROOT / "apps/web/src/features/rpg/RpgCreateCampaignWizard.tsx"
     ).read_text(encoding="utf-8")
@@ -182,9 +182,14 @@ def test_web_ui_exposes_world_forge_depth_and_lore_browser() -> None:
     routes = (
         REPO_ROOT / "src/app/gateway/rpg_campaign_lore_routes.py"
     ).read_text(encoding="utf-8")
-    for depth in ("quick", "standard", "epic"):
-        assert f"value: '{depth}'" in wizard
-    assert "World Forge depth" in wizard
+    assert 'aria-label="Existing world"' in wizard
+    assert 'aria-label="Published scenario"' in wizard
+    assert "rpgWorldLibraryClient.launchScenario" in wizard
+    assert "world_revision:" in wizard
+    assert "world_release:" in wizard
+    assert "does not create or regenerate a world" in wizard
+    assert "World Forge depth" not in wizard
+    assert "world_forge: {" not in wizard
     assert "RpgLorePanel" in tabs
     assert "World Forge generation evidence" in lore
     assert "/campaign-genesis" in routes
