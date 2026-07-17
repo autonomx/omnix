@@ -10,9 +10,13 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicGraph, CampaignTopicNode
-from app.rpg.worlds.contracts import ScenarioProjectCreate, WorldProjectCreate
-from app.rpg.worlds.generation_jobs import WorldTopicGenerationSettings
+from app.rpg.worlds.contracts import (
+    ScenarioProjectCreate,
+    WorldProjectCreate,
+    WorldReleaseDocument,
+)
 from app.rpg.worlds.generation_coordinator import start_world_generation
+from app.rpg.worlds.generation_jobs import WorldTopicGenerationSettings
 from app.rpg.worlds.library_service import save_world_topic, start_world_library_generation
 from app.rpg.worlds.lifecycle_service import (
     archive_scenario_project,
@@ -96,7 +100,8 @@ def _published_fixture(database: PostgresDatabase) -> tuple[str, str, str]:
         release=1,
         certification={"launch_ready": False, "missing_requirements": []},
     )
-    publish_world_release(release, database=database)
+    stored_release = publish_world_release(release, database=database)
+    certified_release = WorldReleaseDocument.model_validate(stored_release["document"])
     create_scenario_project(
         ScenarioProjectCreate(
             scenario_id=scenario_id,
@@ -116,7 +121,7 @@ def _published_fixture(database: PostgresDatabase) -> tuple[str, str, str]:
     binding = resolve_campaign_binding(
         campaign_id=campaign_id,
         world_revision=world,
-        world_release=release,
+        world_release=certified_release,
         scenario_revision=scenario,
     )
     context = bootstrap_local_tenant(database)
