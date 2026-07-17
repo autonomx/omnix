@@ -1,15 +1,18 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0-5 complete; later phases remain planned
+Status: phases 0-5 complete; Phase 6.1 complete; Phase 6 remains in progress
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
 Implementation evidence:
 
-- merged implementation PR: `#1382`;
-- merge SHA: `25a971e30946e5b93f5b2a202214f4c5fe5dd215`;
-- exact implementation head verified by GitHub Actions: `9a58145631fb0b7d677ac36ff9edd7901e2f2c0a`;
-- passing workflows: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
+- phases 0-5 merged implementation PR: `#1382`;
+- phases 0-5 merge SHA: `25a971e30946e5b93f5b2a202214f4c5fe5dd215`;
+- phases 0-5 exact implementation head verified by GitHub Actions: `9a58145631fb0b7d677ac36ff9edd7901e2f2c0a`;
+- Phase 6.1 merged implementation PR: `#1384`;
+- Phase 6.1 merge SHA: `f695cbc50bc04339b730d394dc0c05ea40127f86`;
+- Phase 6.1 exact implementation head verified by GitHub Actions: `b14eb99921338aaa1f85cb62163ee4560d5adeb1`;
+- passing workflows for both implementation heads: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
 
@@ -125,9 +128,36 @@ Delivered:
 
 Exit condition met: a published world is immediately playable, deferred maps can materialize safely into explicit future revisions, existing campaigns remain pinned, and image-generation failure cannot block navigation-ready gameplay.
 
+## Phase 6 — Living NPC spatial goals and level-of-detail simulation
+
+Status: in progress
+
+### Phase 6.1 — Deterministic scheduling foundation
+
+Status: complete
+
+Delivered:
+
+- immutable move-to-cell NPC spatial goal contracts;
+- stable goal arbitration by actor, priority, issue tick, and goal ID;
+- active, coarse, and dormant map-instance simulation tiers;
+- explicit per-tier cadence and actor budgets;
+- authoritative movement through existing commands and resolved events;
+- typed moved, completed, deferred, dormant, blocked, and already-applied decisions;
+- replay proof using recorded movement events without rerunning the scheduler.
+
+Exit condition met: a simulation tick can deterministically schedule living NPC movement at different levels of detail while preserving the existing event and replay authority boundary.
+
+Remaining Phase 6 work:
+
+- durable campaign ownership and persistence of NPC spatial goals;
+- campaign clock and tick-loop integration;
+- cross-map goals and explicit portal transitions;
+- schedule or routine authoring hooks;
+- operational metrics and measured budget tuning.
+
 ## Later phases
 
-- living NPC spatial goals and level-of-detail simulation;
 - observer knowledge, detection, and line of sight;
 - campaign geometry patches;
 - tactical movement, cover, reactions, and multi-cell actors;
