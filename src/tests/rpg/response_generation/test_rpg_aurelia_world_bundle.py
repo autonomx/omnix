@@ -19,7 +19,7 @@ SAMPLE_DIR = (
 
 def _bundle_bytes() -> bytes:
     parts = sorted((SAMPLE_DIR / "bundle-parts").glob("*.b64"))
-    assert len(parts) == 8
+    assert len(parts) == 9
     return zlib.decompress(
         base64.b64decode(
             "".join(part.read_text(encoding="ascii").strip() for part in parts),
