@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { createOmnixModePreview } from '../../app/omnixModePreview';
 import { OmnixStatusPill } from '../../design/primitives';
@@ -23,6 +24,8 @@ interface RpgWorkspaceHeaderProps {
 
 const RPG_PLAY_FOCUS_CLASS = 'rpg-play-focus-mode';
 const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
+const RPG_LAUNCHER_HOME_GRID_SELECTOR = '.rpg-launcher-home-grid';
+const RPG_LAUNCHER_BACKDROP_SELECTOR = '.rpg-launcher-backdrop';
 
 export function RpgWorkspaceHeader({
   isLiveDataExpanded,
@@ -37,6 +40,7 @@ export function RpgWorkspaceHeader({
 }: RpgWorkspaceHeaderProps) {
   const [isHidden, setIsHidden] = useState(false);
   const [isWorldLibraryOpen, setIsWorldLibraryOpen] = useState(false);
+  const [campaignLauncherHomeGrid, setCampaignLauncherHomeGrid] = useState<HTMLElement | null>(null);
   const routePreview = createOmnixModePreview('rpg');
 
   useEffect(() => {
@@ -46,6 +50,23 @@ export function RpgWorkspaceHeader({
       document.documentElement.classList.remove(RPG_PLAY_FOCUS_CLASS);
     };
   }, [isHidden]);
+
+  useEffect(() => {
+    const syncLauncherHomeGrid = () => {
+      setCampaignLauncherHomeGrid(document.querySelector<HTMLElement>(RPG_LAUNCHER_HOME_GRID_SELECTOR));
+    };
+
+    syncLauncherHomeGrid();
+    const observer = new MutationObserver(syncLauncherHomeGrid);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const openWorldLibrary = () => {
+    document.querySelector<HTMLButtonElement>(RPG_LAUNCHER_BACKDROP_SELECTOR)?.click();
+    setIsWorldLibraryOpen(true);
+  };
 
   const selectLaunchedSession = (sessionId: string) => {
     try {
@@ -72,7 +93,7 @@ export function RpgWorkspaceHeader({
         <button
           className="rpg-secondary-button rpg-world-library-entry-control"
           type="button"
-          onClick={() => setIsWorldLibraryOpen(true)}
+          onClick={openWorldLibrary}
         >
           Worlds &amp; Campaigns
         </button>
@@ -107,6 +128,18 @@ export function RpgWorkspaceHeader({
           </button>
         </div>
       </div>
+
+      {campaignLauncherHomeGrid ? createPortal(
+        <button
+          className="rpg-launcher-card"
+          type="button"
+          onClick={openWorldLibrary}
+        >
+          <strong>Worlds &amp; Campaigns</strong>
+          <span>Create or import worlds, manage maps and images, and launch published scenarios.</span>
+        </button>,
+        campaignLauncherHomeGrid,
+      ) : null}
 
       {isWorldLibraryOpen ? (
         <div className="rpg-world-library-overlay" role="dialog" aria-modal="true" aria-label="Worlds and Campaigns">
