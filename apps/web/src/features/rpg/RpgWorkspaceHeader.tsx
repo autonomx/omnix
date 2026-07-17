@@ -25,7 +25,9 @@ interface RpgWorkspaceHeaderProps {
 const RPG_PLAY_FOCUS_CLASS = 'rpg-play-focus-mode';
 const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
 const RPG_LAUNCHER_HOME_GRID_SELECTOR = '.rpg-launcher-home-grid';
-const RPG_LAUNCHER_BACKDROP_SELECTOR = '.rpg-launcher-backdrop';
+const RPG_LAUNCHER_DIALOG_SELECTOR = '.rpg-launcher-dialog';
+const RPG_LAUNCHER_BUTTON_SELECTOR = '.rpg-session-launcher button';
+const RPG_WORLD_LIBRARY_DIALOG_CLASS = 'rpg-launcher-dialog-world-library';
 
 export function RpgWorkspaceHeader({
   isLiveDataExpanded,
@@ -40,7 +42,9 @@ export function RpgWorkspaceHeader({
 }: RpgWorkspaceHeaderProps) {
   const [isHidden, setIsHidden] = useState(false);
   const [isWorldLibraryOpen, setIsWorldLibraryOpen] = useState(false);
+  const [worldLibraryRequested, setWorldLibraryRequested] = useState(false);
   const [campaignLauncherHomeGrid, setCampaignLauncherHomeGrid] = useState<HTMLElement | null>(null);
+  const [campaignLauncherDialog, setCampaignLauncherDialog] = useState<HTMLElement | null>(null);
   const routePreview = createOmnixModePreview('rpg');
 
   useEffect(() => {
@@ -52,20 +56,41 @@ export function RpgWorkspaceHeader({
   }, [isHidden]);
 
   useEffect(() => {
-    const syncLauncherHomeGrid = () => {
-      setCampaignLauncherHomeGrid(document.querySelector<HTMLElement>(RPG_LAUNCHER_HOME_GRID_SELECTOR));
+    const syncLauncherElements = () => {
+      const homeGrid = document.querySelector<HTMLElement>(RPG_LAUNCHER_HOME_GRID_SELECTOR);
+      const dialog = homeGrid?.closest<HTMLElement>(RPG_LAUNCHER_DIALOG_SELECTOR)
+        ?? document.querySelector<HTMLElement>(RPG_LAUNCHER_DIALOG_SELECTOR);
+      setCampaignLauncherHomeGrid(homeGrid);
+      setCampaignLauncherDialog(dialog);
+      if (!dialog) setIsWorldLibraryOpen(false);
     };
 
-    syncLauncherHomeGrid();
-    const observer = new MutationObserver(syncLauncherHomeGrid);
+    syncLauncherElements();
+    const observer = new MutationObserver(syncLauncherElements);
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (worldLibraryRequested && campaignLauncherDialog) {
+      setIsWorldLibraryOpen(true);
+      setWorldLibraryRequested(false);
+    }
+  }, [campaignLauncherDialog, worldLibraryRequested]);
+
+  useEffect(() => {
+    campaignLauncherDialog?.classList.toggle(RPG_WORLD_LIBRARY_DIALOG_CLASS, isWorldLibraryOpen);
+    return () => campaignLauncherDialog?.classList.remove(RPG_WORLD_LIBRARY_DIALOG_CLASS);
+  }, [campaignLauncherDialog, isWorldLibraryOpen]);
+
   const openWorldLibrary = () => {
-    document.querySelector<HTMLButtonElement>(RPG_LAUNCHER_BACKDROP_SELECTOR)?.click();
-    setIsWorldLibraryOpen(true);
+    if (campaignLauncherDialog) {
+      setIsWorldLibraryOpen(true);
+      return;
+    }
+    setWorldLibraryRequested(true);
+    document.querySelector<HTMLButtonElement>(RPG_LAUNCHER_BUTTON_SELECTOR)?.click();
   };
 
   const selectLaunchedSession = (sessionId: string) => {
@@ -141,15 +166,16 @@ export function RpgWorkspaceHeader({
         campaignLauncherHomeGrid,
       ) : null}
 
-      {isWorldLibraryOpen ? (
-        <div className="rpg-world-library-overlay" role="dialog" aria-modal="true" aria-label="Worlds and Campaigns">
-          <RpgStarterBubblePromotionPanel />
-          <RpgWorldBundleTransfer />
+      {campaignLauncherDialog && isWorldLibraryOpen ? createPortal(
+        <div className="rpg-launcher-world-library-view" role="region" aria-label="Worlds and Campaigns view">
           <RpgWorldsCampaignsLibrary
             onBack={() => setIsWorldLibraryOpen(false)}
             onSessionLaunched={selectLaunchedSession}
           />
-        </div>
+          <RpgWorldBundleTransfer />
+          <RpgStarterBubblePromotionPanel />
+        </div>,
+        campaignLauncherDialog,
       ) : null}
     </>
   );
