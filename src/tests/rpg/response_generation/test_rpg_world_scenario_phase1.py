@@ -156,4 +156,5 @@ def test_world_routes_register_separate_resource_endpoints() -> None:
     assert "/api/rpg/scenarios/{scenario_id}/archive" in paths
     assert "/api/rpg/scenarios/{scenario_id}/restore" in paths
     assert "/api/rpg/scenarios/{scenario_id}/revisions" in paths
+    assert "/api/rpg/campaigns/{campaign_id}/legacy-world-import" in paths
     assert "/api/rpg/campaigns/{campaign_id}/world-binding" in paths
