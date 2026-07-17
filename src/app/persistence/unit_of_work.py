@@ -52,6 +52,7 @@ from .rpg_narrative_retirement_repository import (
     PostgresRpgNarrativeRetirementRepository,
 )
 from .rpg_npc_spatial_repository import PostgresRpgNpcSpatialRepository
+from .rpg_observer_repository import PostgresRpgObserverRepository
 from .rpg_repository import PostgresRpgRepository
 from .rpg_world_forge_repository import PostgresRpgWorldForgeRepository
 from .rpg_world_generation_repository import PostgresRpgWorldGenerationRepository
@@ -99,6 +100,7 @@ class PostgresUnitOfWork:
         self.world_library: PostgresRpgWorldLibraryRepository
         self.map_instances: PostgresRpgMapInstanceRepository
         self.npc_spatial: PostgresRpgNpcSpatialRepository
+        self.observers: PostgresRpgObserverRepository
         self.hermes_research: PostgresRpgHermesResearchRepository
         self.narrative_responses: PostgresRpgNarrativeResponseRepository
         self.narrative_deliveries: PostgresRpgNarrativeDeliveryRepository
@@ -164,6 +166,7 @@ class PostgresUnitOfWork:
         self.world_library = PostgresRpgWorldLibraryRepository(self.connection)
         self.map_instances = PostgresRpgMapInstanceRepository(self.connection)
         self.npc_spatial = PostgresRpgNpcSpatialRepository(self.connection)
+        self.observers = PostgresRpgObserverRepository(self.connection)
         self.hermes_research = PostgresRpgHermesResearchRepository(self.connection)
         self.narrative_responses = PostgresRpgNarrativeResponseRepository(self.connection)
         self.narrative_deliveries = PostgresRpgNarrativeDeliveryRepository(
