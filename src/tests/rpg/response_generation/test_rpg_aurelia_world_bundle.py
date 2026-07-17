@@ -36,6 +36,7 @@ def test_aurelia_sample_world_bundle_is_import_ready() -> None:
     payload = parsed.payload
     revision = payload.world_revisions[0]["document"]
     manifest = revision["entity_manifest"]
+    quest_topic = next(row for row in payload.topics if row["topic_id"] == "quests")
 
     assert parsed.manifest.source_world_id == "world:aurelia-echoes-beyond-the-gate"
     assert payload.world["title"] == "Aurelia: Echoes Beyond the Gate"
@@ -47,7 +48,8 @@ def test_aurelia_sample_world_bundle_is_import_ready() -> None:
     assert len(payload.scenario_revisions) == 3
     assert len(manifest["characters"]) == 10
     assert len(manifest["factions"]) == 6
-    assert len(revision["adventure_seeds"]) >= 6
+    assert len(revision["adventure_seeds"]) == 5
+    assert len(quest_topic["content"]["quests"]) == 6
 
     map_ids = {row["map_id"] for row in payload.map_definitions}
     assert map_ids == {
