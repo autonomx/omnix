@@ -4,7 +4,7 @@ A ready-to-import fantasy isekai world for the Omnix RPG World Library.
 
 ## Build the import file
 
-The checksummed bundle is stored as eight reviewable Base64-compressed parts so the repository does not depend on Git LFS for this sample binary.
+The checksummed bundle is stored as nine reviewable Base64-compressed parts so the repository does not depend on Git LFS for this sample binary.
 
 ```bash
 python examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate/materialize.py
