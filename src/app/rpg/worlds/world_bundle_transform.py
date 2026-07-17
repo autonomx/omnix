@@ -15,7 +15,12 @@ from .contracts import (
 from .generation_jobs import canonical_hash
 from .map_blueprint_authoring import MapBlueprintDocument
 from .semantic_validation import certify_world_release
-from .world_bundle import WorldBundlePayload, replace_identifiers, safe_bundle_segment
+from .world_bundle import (
+    WorldBundlePayload,
+    discover_image_asset_ids,
+    replace_identifiers,
+    safe_bundle_segment,
+)
 
 
 @dataclass(frozen=True)
@@ -100,79 +105,39 @@ def _import_metadata(
     return result
 
 
-def transform_world_bundle(
+def _source_ids(payload: WorldBundlePayload) -> dict[str, set[str]]:
+    return {
+        "map": {
+            str(row.get("map_id") or "")
+            for row in (*payload.map_blueprints, *payload.map_definitions)
+            if str(row.get("map_id") or "")
+        },
+        "scenario": {
+            str(row.get("id") or "")
+            for row in payload.scenarios
+            if str(row.get("id") or "")
+        }
+        | {
+            str(row.get("scenario_id") or "")
+            for row in payload.scenario_revisions
+            if str(row.get("scenario_id") or "")
+        },
+        "asset": discover_image_asset_ids(payload.model_dump(mode="json")),
+        "run": {
+            str(row.get("run_id") or "")
+            for row in payload.generation_runs
+            if str(row.get("run_id") or "")
+        },
+    }
+
+
+def _transform_blueprints(
     payload: WorldBundlePayload,
-    *,
-    target_world_id: str,
-    bundle_sha256: str,
-    existing_scenario_ids: Iterable[str] = (),
-    existing_map_ids: Iterable[str] = (),
-    existing_asset_ids: Iterable[str] = (),
-    existing_run_ids: Iterable[str] = (),
-) -> TransformedWorldBundle:
-    source_world_id = str(payload.world.get("id") or "")
-    if not source_world_id or not target_world_id.strip():
-        raise ValueError("world_bundle_world_id_required")
-    target_world_id = target_world_id.strip()
-
-    source_map_ids = {
-        str(row.get("map_id") or "")
-        for row in (*payload.map_blueprints, *payload.map_definitions)
-    }
-    source_scenario_ids = {
-        str(row.get("id") or "") for row in payload.scenarios
-    } | {
-        str(row.get("scenario_id") or "") for row in payload.scenario_revisions
-    }
-    source_asset_ids = set()
-    for root in payload.model_dump(mode="json").values():
-        source_asset_ids.update(_referenced_assets(root))
-    source_run_ids = {
-        str(row.get("run_id") or "") for row in payload.generation_runs
-    }
-
-    map_id_map = _mapping(
-        source_map_ids,
-        kind="map",
-        target_world_id=target_world_id,
-        source_world_id=source_world_id,
-        bundle_sha256=bundle_sha256,
-        occupied=set(existing_map_ids),
-    )
-    scenario_id_map = _mapping(
-        source_scenario_ids,
-        kind="scenario",
-        target_world_id=target_world_id,
-        source_world_id=source_world_id,
-        bundle_sha256=bundle_sha256,
-        occupied=set(existing_scenario_ids),
-    )
-    asset_id_map = _mapping(
-        source_asset_ids,
-        kind="asset",
-        target_world_id=target_world_id,
-        source_world_id=source_world_id,
-        bundle_sha256=bundle_sha256,
-        occupied=set(existing_asset_ids),
-    )
-    run_id_map = _mapping(
-        source_run_ids,
-        kind="run",
-        target_world_id=target_world_id,
-        source_world_id="",
-        bundle_sha256=bundle_sha256,
-        occupied=set(existing_run_ids),
-    )
-    replacements = {
-        source_world_id: target_world_id,
-        **map_id_map,
-        **scenario_id_map,
-        **asset_id_map,
-        **run_id_map,
-    }
-
-    blueprints: list[dict[str, Any]] = []
-    blueprint_hashes: dict[tuple[str, int], tuple[str, str]] = {}
+    replacements: Mapping[str, str],
+    map_id_map: Mapping[str, str],
+) -> tuple[list[dict[str, Any]], dict[tuple[str, int], tuple[str, str]]]:
+    rows: list[dict[str, Any]] = []
+    hashes: dict[tuple[str, int], tuple[str, str]] = {}
     for row in payload.map_blueprints:
         source_map_id = str(row.get("map_id") or "")
         revision = int(row.get("blueprint_revision") or 0)
@@ -181,8 +146,8 @@ def transform_world_bundle(
         document = MapBlueprintDocument.model_validate(raw)
         content_hash = canonical_content_hash(document)
         semantic_hash = canonical_content_hash(document.semantic_interface())
-        blueprint_hashes[(document.map_id, revision)] = (content_hash, semantic_hash)
-        blueprints.append(
+        hashes[(document.map_id, revision)] = (content_hash, semantic_hash)
+        rows.append(
             {
                 **replace_identifiers(dict(row), replacements),
                 "map_id": document.map_id,
@@ -194,9 +159,17 @@ def transform_world_bundle(
                 "status": "ready",
             }
         )
+    return rows, hashes
 
-    world_revisions: list[dict[str, Any]] = []
-    world_revision_models: dict[int, WorldRevisionDocument] = {}
+
+def _transform_world_revisions(
+    payload: WorldBundlePayload,
+    replacements: Mapping[str, str],
+    target_world_id: str,
+    blueprint_hashes: Mapping[tuple[str, int], tuple[str, str]],
+) -> tuple[list[dict[str, Any]], dict[int, WorldRevisionDocument]]:
+    rows: list[dict[str, Any]] = []
+    models: dict[int, WorldRevisionDocument] = {}
     for row in payload.world_revisions:
         revision = int(row.get("revision") or 0)
         raw = replace_identifiers(dict(row.get("document") or {}), replacements)
@@ -205,7 +178,10 @@ def transform_world_bundle(
         requirements = []
         for requirement in list(raw.get("blueprint_requirements") or []):
             item = dict(requirement)
-            key = (str(item.get("map_id") or ""), int(item.get("blueprint_revision") or 0))
+            key = (
+                str(item.get("map_id") or ""),
+                int(item.get("blueprint_revision") or 0),
+            )
             hashes = blueprint_hashes.get(key)
             if hashes:
                 item["blueprint_hash"], item["semantic_interface_hash"] = hashes
@@ -213,8 +189,8 @@ def transform_world_bundle(
         raw["blueprint_requirements"] = requirements
         raw["content_hash"] = ""
         document = _with_hash(WorldRevisionDocument.model_validate(raw), "content_hash")
-        world_revision_models[revision] = document
-        world_revisions.append(
+        models[revision] = document
+        rows.append(
             {
                 **replace_identifiers(dict(row), replacements),
                 "revision": revision,
@@ -222,9 +198,17 @@ def transform_world_bundle(
                 "content_hash": document.content_hash,
             }
         )
+    return rows, models
 
-    map_definitions: list[dict[str, Any]] = []
-    definition_models: dict[tuple[str, int], GridMapDefinition] = {}
+
+def _transform_definitions(
+    payload: WorldBundlePayload,
+    replacements: Mapping[str, str],
+    target_world_id: str,
+    map_id_map: Mapping[str, str],
+) -> tuple[list[dict[str, Any]], dict[tuple[str, int], GridMapDefinition]]:
+    rows: list[dict[str, Any]] = []
+    models: dict[tuple[str, int], GridMapDefinition] = {}
     for row in payload.map_definitions:
         source_map_id = str(row.get("map_id") or "")
         definition_revision = int(row.get("definition_revision") or 0)
@@ -240,8 +224,8 @@ def transform_world_bundle(
             }
         )
         definition = with_grid_definition_hashes(GridMapDefinition.model_validate(raw))
-        definition_models[(definition.map_id, definition.definition_revision)] = definition
-        map_definitions.append(
+        models[(definition.map_id, definition.definition_revision)] = definition
+        rows.append(
             {
                 **replace_identifiers(dict(row), replacements),
                 "map_id": definition.map_id,
@@ -252,13 +236,21 @@ def transform_world_bundle(
                 "semantic_interface_hash": definition.semantic_interface_hash,
             }
         )
+    return rows, models
 
-    releases: list[dict[str, Any]] = []
-    release_models: dict[tuple[int, int], WorldReleaseDocument] = {}
+
+def _transform_releases(
+    payload: WorldBundlePayload,
+    replacements: Mapping[str, str],
+    target_world_id: str,
+    world_revisions: Mapping[int, WorldRevisionDocument],
+    definitions: Mapping[tuple[str, int], GridMapDefinition],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     for row in payload.world_releases:
         world_revision = int(row.get("world_revision") or 0)
         release_number = int(row.get("release") or 0)
-        revision_document = world_revision_models[world_revision]
+        revision_document = world_revisions[world_revision]
         raw = replace_identifiers(dict(row.get("document") or {}), replacements)
         raw.update(
             {
@@ -269,32 +261,31 @@ def transform_world_bundle(
                 "release_hash": "",
             }
         )
-        bindings = []
+        bindings: list[dict[str, Any]] = []
+        pinned: dict[str, GridMapDefinition] = {}
         for binding in list(raw.get("map_bindings") or []):
             item = dict(binding)
-            definition = definition_models.get(
-                (str(item.get("map_id") or ""), int(item.get("definition_revision") or 0))
+            key = (
+                str(item.get("map_id") or ""),
+                int(item.get("definition_revision") or 0),
             )
+            definition = definitions.get(key)
             if definition is None:
                 raise ValueError(
                     "world_bundle_release_definition_missing:"
-                    f"{item.get('map_id')}:{item.get('definition_revision')}"
+                    f"{key[0]}:{key[1]}"
                 )
             item["definition_hash"] = definition.definition_hash
             item["semantic_interface_hash"] = definition.semantic_interface_hash
             bindings.append(item)
+            pinned[definition.map_id] = definition
         raw["map_bindings"] = bindings
         release = certify_world_release(
             revision_document,
             WorldReleaseDocument.model_validate(raw),
-            {
-                definition.map_id: definition
-                for definition in definition_models.values()
-                if definition.world_revision == world_revision
-            },
+            pinned,
         )
-        release_models[(world_revision, release_number)] = release
-        releases.append(
+        rows.append(
             {
                 **replace_identifiers(dict(row), replacements),
                 "world_revision": world_revision,
@@ -303,11 +294,25 @@ def transform_world_bundle(
                 "release_hash": release.release_hash,
             }
         )
+    return rows
 
-    scenarios = tuple(
+
+def _transform_scenarios(
+    payload: WorldBundlePayload,
+    replacements: Mapping[str, str],
+    scenario_id_map: Mapping[str, str],
+    target_world_id: str,
+    source_world_id: str,
+    bundle_sha256: str,
+    world_revisions: Mapping[int, WorldRevisionDocument],
+) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
+    projects = tuple(
         {
             **replace_identifiers(dict(row), replacements),
-            "id": scenario_id_map.get(str(row.get("id") or ""), str(row.get("id") or "")),
+            "id": scenario_id_map.get(
+                str(row.get("id") or ""),
+                str(row.get("id") or ""),
+            ),
             "metadata": _import_metadata(
                 replace_identifiers(dict(row.get("metadata") or {}), replacements),
                 source_world_id=source_world_id,
@@ -317,7 +322,7 @@ def transform_world_bundle(
         }
         for row in payload.scenarios
     )
-    scenario_revisions = []
+    revisions: list[dict[str, Any]] = []
     for row in payload.scenario_revisions:
         revision = int(row.get("revision") or 0)
         source_scenario_id = str(row.get("scenario_id") or "")
@@ -325,16 +330,22 @@ def transform_world_bundle(
         raw = replace_identifiers(dict(row.get("document") or {}), replacements)
         raw.update(
             {
-                "scenario_id": scenario_id_map.get(source_scenario_id, source_scenario_id),
+                "scenario_id": scenario_id_map.get(
+                    source_scenario_id,
+                    source_scenario_id,
+                ),
                 "revision": revision,
                 "world_id": target_world_id,
                 "world_revision": world_revision,
-                "world_revision_hash": world_revision_models[world_revision].content_hash,
+                "world_revision_hash": world_revisions[world_revision].content_hash,
                 "content_hash": "",
             }
         )
-        document = _with_hash(ScenarioRevisionDocument.model_validate(raw), "content_hash")
-        scenario_revisions.append(
+        document = _with_hash(
+            ScenarioRevisionDocument.model_validate(raw),
+            "content_hash",
+        )
+        revisions.append(
             {
                 **replace_identifiers(dict(row), replacements),
                 "scenario_id": document.scenario_id,
@@ -344,70 +355,7 @@ def transform_world_bundle(
                 "content_hash": document.content_hash,
             }
         )
-
-    topics = tuple(
-        _transform_topic(
-            row,
-            replacements,
-            source_world_id=source_world_id,
-            target_world_id=target_world_id,
-            bundle_sha256=bundle_sha256,
-        )
-        for row in payload.topics
-    )
-    topic_history = tuple(
-        _transform_topic(
-            row,
-            replacements,
-            source_world_id=source_world_id,
-            target_world_id=target_world_id,
-            bundle_sha256=bundle_sha256,
-        )
-        for row in payload.topic_history
-    )
-    generation_runs = tuple(
-        _transform_run(
-            row,
-            replacements,
-            run_id_map,
-            source_world_id=source_world_id,
-            target_world_id=target_world_id,
-            bundle_sha256=bundle_sha256,
-        )
-        for row in payload.generation_runs
-    )
-    world = replace_identifiers(dict(payload.world), replacements)
-    world["id"] = target_world_id
-    world["metadata"] = _import_metadata(
-        replace_identifiers(dict(payload.world.get("metadata") or {}), replacements),
-        source_world_id=source_world_id,
-        target_world_id=target_world_id,
-        bundle_sha256=bundle_sha256,
-    )
-
-    return TransformedWorldBundle(
-        payload=WorldBundlePayload(
-            world=world,
-            topics=topics,
-            topic_history=topic_history,
-            generation_runs=generation_runs,
-            map_blueprints=tuple(blueprints),
-            world_revisions=tuple(world_revisions),
-            map_definitions=tuple(map_definitions),
-            world_releases=tuple(releases),
-            scenarios=scenarios,
-            scenario_revisions=tuple(scenario_revisions),
-        ),
-        identifier_map=replacements,
-        asset_id_map=asset_id_map,
-        run_id_map=run_id_map,
-    )
-
-
-def _referenced_assets(value: Any) -> set[str]:
-    from .world_bundle import discover_image_asset_ids
-
-    return discover_image_asset_ids(value)
+    return projects, tuple(revisions)
 
 
 def _transform_topic(
@@ -451,7 +399,9 @@ def _transform_run(
     source_run_id = str(row.get("run_id") or "")
     result["run_id"] = run_id_map.get(source_run_id, source_run_id)
     parent = row.get("parent_run_id")
-    result["parent_run_id"] = run_id_map.get(str(parent), str(parent)) if parent else None
+    result["parent_run_id"] = (
+        run_id_map.get(str(parent), str(parent)) if parent else None
+    )
     if str(result.get("status") or "") in {"planned", "running"}:
         result["status"] = "canceled"
         result["completed_at"] = result.get("updated_at") or result.get("created_at")
@@ -464,3 +414,148 @@ def _transform_run(
     }
     result["lineage"] = lineage
     return result
+
+
+def transform_world_bundle(
+    payload: WorldBundlePayload,
+    *,
+    target_world_id: str,
+    bundle_sha256: str,
+    existing_scenario_ids: Iterable[str] = (),
+    existing_map_ids: Iterable[str] = (),
+    existing_asset_ids: Iterable[str] = (),
+    existing_run_ids: Iterable[str] = (),
+) -> TransformedWorldBundle:
+    source_world_id = str(payload.world.get("id") or "")
+    if not source_world_id or not target_world_id.strip():
+        raise ValueError("world_bundle_world_id_required")
+    target_world_id = target_world_id.strip()
+    source_ids = _source_ids(payload)
+    map_id_map = _mapping(
+        source_ids["map"],
+        kind="map",
+        target_world_id=target_world_id,
+        source_world_id=source_world_id,
+        bundle_sha256=bundle_sha256,
+        occupied=set(existing_map_ids),
+    )
+    scenario_id_map = _mapping(
+        source_ids["scenario"],
+        kind="scenario",
+        target_world_id=target_world_id,
+        source_world_id=source_world_id,
+        bundle_sha256=bundle_sha256,
+        occupied=set(existing_scenario_ids),
+    )
+    asset_id_map = _mapping(
+        source_ids["asset"],
+        kind="asset",
+        target_world_id=target_world_id,
+        source_world_id=source_world_id,
+        bundle_sha256=bundle_sha256,
+        occupied=set(existing_asset_ids),
+    )
+    run_id_map = _mapping(
+        source_ids["run"],
+        kind="run",
+        target_world_id=target_world_id,
+        source_world_id="",
+        bundle_sha256=bundle_sha256,
+        occupied=set(existing_run_ids),
+    )
+    replacements = {
+        source_world_id: target_world_id,
+        **map_id_map,
+        **scenario_id_map,
+        **asset_id_map,
+        **run_id_map,
+    }
+    blueprints, blueprint_hashes = _transform_blueprints(
+        payload,
+        replacements,
+        map_id_map,
+    )
+    revision_rows, revision_models = _transform_world_revisions(
+        payload,
+        replacements,
+        target_world_id,
+        blueprint_hashes,
+    )
+    definition_rows, definition_models = _transform_definitions(
+        payload,
+        replacements,
+        target_world_id,
+        map_id_map,
+    )
+    release_rows = _transform_releases(
+        payload,
+        replacements,
+        target_world_id,
+        revision_models,
+        definition_models,
+    )
+    scenario_rows, scenario_revision_rows = _transform_scenarios(
+        payload,
+        replacements,
+        scenario_id_map,
+        target_world_id,
+        source_world_id,
+        bundle_sha256,
+        revision_models,
+    )
+    topics = tuple(
+        _transform_topic(
+            row,
+            replacements,
+            source_world_id=source_world_id,
+            target_world_id=target_world_id,
+            bundle_sha256=bundle_sha256,
+        )
+        for row in payload.topics
+    )
+    history = tuple(
+        _transform_topic(
+            row,
+            replacements,
+            source_world_id=source_world_id,
+            target_world_id=target_world_id,
+            bundle_sha256=bundle_sha256,
+        )
+        for row in payload.topic_history
+    )
+    runs = tuple(
+        _transform_run(
+            row,
+            replacements,
+            run_id_map,
+            source_world_id=source_world_id,
+            target_world_id=target_world_id,
+            bundle_sha256=bundle_sha256,
+        )
+        for row in payload.generation_runs
+    )
+    world = replace_identifiers(dict(payload.world), replacements)
+    world["id"] = target_world_id
+    world["metadata"] = _import_metadata(
+        replace_identifiers(dict(payload.world.get("metadata") or {}), replacements),
+        source_world_id=source_world_id,
+        target_world_id=target_world_id,
+        bundle_sha256=bundle_sha256,
+    )
+    return TransformedWorldBundle(
+        payload=WorldBundlePayload(
+            world=world,
+            topics=topics,
+            topic_history=history,
+            generation_runs=runs,
+            map_blueprints=tuple(blueprints),
+            world_revisions=tuple(revision_rows),
+            map_definitions=tuple(definition_rows),
+            world_releases=tuple(release_rows),
+            scenarios=scenario_rows,
+            scenario_revisions=scenario_revision_rows,
+        ),
+        identifier_map=replacements,
+        asset_id_map=asset_id_map,
+        run_id_map=run_id_map,
+    )
