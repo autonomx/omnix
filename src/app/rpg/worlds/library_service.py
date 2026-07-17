@@ -11,6 +11,7 @@ from .generation_coordinator import reconcile_world_generation, start_world_gene
 from .generation_jobs import WorldTopicGenerationSettings, canonical_hash
 from .generation_publication import publish_world_generation
 from .generation_worker import kick_world_generation_worker
+from .lifecycle_service import require_world_writable
 
 
 def _database(value: Any | None) -> Any | None:
@@ -104,9 +105,7 @@ def save_world_topic(
 ) -> dict[str, Any]:
     context = bootstrap_local_tenant(_database(database))
     with unit_of_work(database) as work:
-        world = work.world_scenarios.get_world(context, world_id, for_update=True)
-        if world is None:
-            raise KeyError(f"world_not_found:{world_id}")
+        world = require_world_writable(work, context, world_id)
         payload = dict(content)
         payload.setdefault("topic_id", topic_id)
         stored = work.world_scenarios.put_topic(
@@ -150,12 +149,12 @@ def start_world_library_generation(
 ) -> dict[str, Any]:
     context = bootstrap_local_tenant(_database(database))
     with unit_of_work(database) as work:
-        world = work.world_scenarios.get_world(context, world_id)
+        world = require_world_writable(work, context, world_id)
         work.rollback()
-    if world is None:
-        raise KeyError(f"world_not_found:{world_id}")
     graph = build_campaign_topic_graph(
-        campaign_template=str(world.get("metadata", {}).get("campaign_template") or "classic_fantasy"),
+        campaign_template=str(
+            world.get("metadata", {}).get("campaign_template") or "classic_fantasy"
+        ),
         genre=str(world.get("genre") or "classic_fantasy"),
         tone=str(world.get("tone") or "heroic adventure"),
         depth=depth,
@@ -210,4 +209,11 @@ def publish_world_library_generation(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
+    context = bootstrap_local_tenant(_database(database))
+    with unit_of_work(database) as work:
+        run = work.world_generation.get(context, run_id)
+        if run is None:
+            raise KeyError(f"world_generation_run_not_found:{run_id}")
+        require_world_writable(work, context, str(run["world_id"]))
+        work.rollback()
     return publish_world_generation(run_id, database=database)
