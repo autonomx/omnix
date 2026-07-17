@@ -148,6 +148,8 @@ def test_world_routes_register_separate_resource_endpoints() -> None:
     assert "/api/rpg/worlds" in paths
     assert "/api/rpg/worlds/{world_id}/archive" in paths
     assert "/api/rpg/worlds/{world_id}/restore" in paths
+    assert "/api/rpg/worlds/{world_id}/topic-history" in paths
+    assert "/api/rpg/worlds/{world_id}/drafts/{source_draft_revision}/restore" in paths
     assert "/api/rpg/worlds/{world_id}/revisions" in paths
     assert (
         "/api/rpg/worlds/{world_id}/revisions/{world_revision}/releases" in paths

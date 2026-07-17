@@ -10,7 +10,7 @@ from .tenant import TenantContext
 _RUN_COLUMNS = """
 workspace_id, run_id, world_id, draft_revision, status, graph_jsonb,
 context_jsonb, settings_jsonb, plan_jsonb, progress_jsonb, error_jsonb,
-created_at, updated_at, completed_at
+parent_run_id, lineage_jsonb, created_at, updated_at, completed_at
 """
 
 
@@ -27,9 +27,11 @@ def _run_row(row: Any) -> dict[str, Any]:
         "plan": dict(row[8]),
         "progress": dict(row[9]),
         "error": dict(row[10]),
-        "created_at": row[11].isoformat(),
-        "updated_at": row[12].isoformat(),
-        "completed_at": row[13].isoformat() if row[13] is not None else None,
+        "parent_run_id": str(row[11]) if row[11] is not None else None,
+        "lineage": dict(row[12]),
+        "created_at": row[13].isoformat(),
+        "updated_at": row[14].isoformat(),
+        "completed_at": row[15].isoformat() if row[15] is not None else None,
     }
 
 
@@ -61,14 +63,31 @@ class PostgresRpgWorldGenerationRepository:
             raise EntityNotFound(world_id)
         if str(world[0]) == "archived":
             raise ValueError(f"world_archived:{world_id}")
+        parent = self.connection.execute(
+            "SELECT run_id, draft_revision, lineage_jsonb "
+            "FROM omnix_rpg_world_generation_runs "
+            "WHERE workspace_id = %s AND world_id = %s AND draft_revision < %s "
+            "ORDER BY draft_revision DESC LIMIT 1",
+            (context.workspace_id, world_id, int(draft_revision)),
+        ).fetchone()
+        parent_run_id = str(parent[0]) if parent is not None else None
+        parent_draft_revision = int(parent[1]) if parent is not None else None
+        parent_lineage = dict(parent[2]) if parent is not None else {}
+        root_run_id = str(parent_lineage.get("root_run_id") or parent_run_id or run_id)
+        lineage = {
+            "root_run_id": root_run_id,
+            "parent_run_id": parent_run_id,
+            "parent_draft_revision": parent_draft_revision,
+            "draft_revision": int(draft_revision),
+        }
         row = self.connection.execute(
             f"""
             INSERT INTO omnix_rpg_world_generation_runs (
                 workspace_id, run_id, world_id, draft_revision, status,
                 graph_jsonb, context_jsonb, settings_jsonb, plan_jsonb,
-                progress_jsonb
+                progress_jsonb, parent_run_id, lineage_jsonb
             ) VALUES (%s, %s, %s, %s, 'planned', %s::jsonb, %s::jsonb,
-                      %s::jsonb, %s::jsonb, %s::jsonb)
+                      %s::jsonb, %s::jsonb, %s::jsonb, %s, %s::jsonb)
             ON CONFLICT (workspace_id, world_id, draft_revision) DO NOTHING
             RETURNING {_RUN_COLUMNS}
             """,
@@ -82,6 +101,8 @@ class PostgresRpgWorldGenerationRepository:
                 canonical_json(dict(settings)),
                 canonical_json(dict(plan)),
                 canonical_json(dict(progress)),
+                parent_run_id,
+                canonical_json(lineage),
             ),
         ).fetchone()
         if row is not None:
