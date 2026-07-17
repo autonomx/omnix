@@ -31,9 +31,11 @@ class CampaignMapInstanceSnapshot(FrozenRuntimeModel):
     actors: tuple[GridActorPlacement, ...] = ()
     object_states: dict[str, dict[str, Any]] = Field(default_factory=dict)
     route_states: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    hazard_states: dict[str, dict[str, Any]] = Field(default_factory=dict)
     revealed_secret_ids: tuple[str, ...] = ()
     revealed_actor_ids: tuple[str, ...] = ()
     applied_command_ids: tuple[str, ...] = ()
+    initialization_operation_ids: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def unique_actors(self) -> "CampaignMapInstanceSnapshot":

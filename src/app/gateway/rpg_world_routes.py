@@ -45,6 +45,18 @@ def _validation_error(exc: ValidationError) -> HTTPException:
     return HTTPException(status_code=422, detail=exc.errors())
 
 
+def _domain_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, KeyError):
+        return HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": str(exc).strip("'")},
+        )
+    return HTTPException(
+        status_code=409,
+        detail={"ok": False, "error": str(exc)},
+    )
+
+
 def register_rpg_world_routes(app: FastAPI) -> None:
     if getattr(app.state, _ROUTE_SENTINEL, False):
         return
@@ -93,6 +105,8 @@ def register_rpg_world_routes(app: FastAPI) -> None:
             return {"ok": True, "world_revision": stored}
         except ValidationError as exc:
             raise _validation_error(exc) from exc
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
 
     @app.post(
         "/api/rpg/worlds/{world_id}/revisions/{world_revision}/releases",
@@ -113,6 +127,8 @@ def register_rpg_world_routes(app: FastAPI) -> None:
             return {"ok": True, "world_release": stored}
         except ValidationError as exc:
             raise _validation_error(exc) from exc
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
 
     @app.post(
         "/api/rpg/scenarios",
@@ -125,6 +141,8 @@ def register_rpg_world_routes(app: FastAPI) -> None:
             return {"ok": True, "scenario": create_scenario_project(contract)}
         except ValidationError as exc:
             raise _validation_error(exc) from exc
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
 
     @app.post(
         "/api/rpg/scenarios/{scenario_id}/revisions",
@@ -143,6 +161,8 @@ def register_rpg_world_routes(app: FastAPI) -> None:
             return {"ok": True, "scenario_revision": stored}
         except ValidationError as exc:
             raise _validation_error(exc) from exc
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
 
     @app.get(
         "/api/rpg/campaigns/{campaign_id}/world-binding",
@@ -178,6 +198,8 @@ def register_rpg_world_routes(app: FastAPI) -> None:
             return {"ok": True, "binding": bind_campaign_world(binding)}
         except ValidationError as exc:
             raise _validation_error(exc) from exc
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
 
     register_rpg_world_library_routes(app)
 

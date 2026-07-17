@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
+from app.rpg.map_grid_contracts import GridMapDefinition
 
 from .contracts import (
     CampaignWorldBinding,
@@ -16,6 +17,12 @@ from .contracts import (
     WorldReleaseDocument,
     WorldRevisionDocument,
     canonical_content_hash,
+)
+from .semantic_validation import (
+    WorldSemanticError,
+    certify_world_release,
+    validate_release_bindings,
+    validate_scenario_against_release,
 )
 
 _HashedContract = TypeVar("_HashedContract", bound=BaseModel)
@@ -29,6 +36,36 @@ def _ensure_hash(document: _HashedContract, field: str) -> _HashedContract:
     payload[field] = ""
     payload[field] = canonical_content_hash(payload)
     return type(document).model_validate(payload)
+
+
+def _definitions_from_work(
+    work: Any,
+    context: Any,
+    release: WorldReleaseDocument,
+) -> dict[str, GridMapDefinition]:
+    definitions: dict[str, GridMapDefinition] = {}
+    for binding in release.map_bindings:
+        row = work.map_instances.get_definition(
+            context,
+            binding.map_id,
+            binding.definition_revision,
+        )
+        if row is None:
+            continue
+        definitions[binding.map_id] = GridMapDefinition.model_validate(row["document"])
+    return definitions
+
+
+def _world_revision_from_work(
+    work: Any,
+    context: Any,
+    world_id: str,
+    revision: int,
+) -> WorldRevisionDocument:
+    row = work.world_scenarios.get_world_revision(context, world_id, revision)
+    if row is None:
+        raise KeyError(f"world_revision_not_found:{world_id}:{revision}")
+    return WorldRevisionDocument.model_validate(row["document"])
 
 
 def create_world_project(
@@ -90,15 +127,33 @@ def publish_world_release(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    document = _ensure_hash(document, "release_hash")
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
+        world_revision = _world_revision_from_work(
+            work,
+            context,
+            document.world_id,
+            document.world_revision,
+        )
+        next_row = work.connection.execute(
+            "SELECT COALESCE(MAX(release), 0) + 1 FROM omnix_rpg_world_releases "
+            "WHERE workspace_id = %s AND world_id = %s AND world_revision = %s",
+            (context.workspace_id, document.world_id, document.world_revision),
+        ).fetchone()
+        next_release = int(next_row[0])
+        if document.release != next_release:
+            raise WorldSemanticError(
+                "world_release_sequence_mismatch",
+                f"expected={next_release}:received={document.release}",
+            )
+        definitions = _definitions_from_work(work, context, document)
+        certified = certify_world_release(world_revision, document, definitions)
         stored = work.world_scenarios.publish_world_release(
             context,
-            world_id=document.world_id,
-            world_revision=document.world_revision,
-            document=document.model_dump(mode="json"),
-            release_hash=document.release_hash,
+            world_id=certified.world_id,
+            world_revision=certified.world_revision,
+            document=certified.model_dump(mode="json"),
+            release_hash=certified.release_hash,
         )
         work.commit()
     return stored
@@ -131,6 +186,42 @@ def publish_scenario_revision(
     document = _ensure_hash(document, "content_hash")
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
+        next_row = work.connection.execute(
+            "SELECT COALESCE(MAX(revision), 0) + 1 FROM omnix_rpg_scenario_revisions "
+            "WHERE workspace_id = %s AND scenario_id = %s",
+            (context.workspace_id, document.scenario_id),
+        ).fetchone()
+        next_revision = int(next_row[0])
+        if document.revision != next_revision:
+            raise WorldSemanticError(
+                "scenario_revision_sequence_mismatch",
+                f"expected={next_revision}:received={document.revision}",
+            )
+        world_revision = _world_revision_from_work(
+            work,
+            context,
+            document.world_id,
+            document.world_revision,
+        )
+        if document.world_revision_hash != world_revision.content_hash:
+            raise WorldSemanticError("scenario_world_hash_mismatch")
+        if document.compatible_release is not None:
+            release_row = work.world_scenarios.get_world_release(
+                context,
+                document.world_id,
+                document.world_revision,
+                document.compatible_release,
+            )
+            if release_row is None:
+                raise KeyError(
+                    "world_release_not_found:"
+                    f"{document.world_id}:{document.world_revision}:"
+                    f"{document.compatible_release}"
+                )
+            release = WorldReleaseDocument.model_validate(release_row["document"])
+            definitions = _definitions_from_work(work, context, release)
+            validate_release_bindings(world_revision, release, definitions)
+            validate_scenario_against_release(document, release, definitions)
         stored = work.world_scenarios.publish_scenario_revision(
             context,
             scenario_id=document.scenario_id,
@@ -174,6 +265,20 @@ def read_campaign_world_binding(
         binding = work.world_scenarios.get_campaign_binding(context, campaign_id)
         work.rollback()
     return binding
+
+
+def load_release_definitions(
+    world_revision: WorldRevisionDocument,
+    release: WorldReleaseDocument,
+    *,
+    database: Any | None = None,
+) -> dict[str, GridMapDefinition]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        definitions = _definitions_from_work(work, context, release)
+        work.rollback()
+    validate_release_bindings(world_revision, release, definitions)
+    return definitions
 
 
 def load_published_resources(
