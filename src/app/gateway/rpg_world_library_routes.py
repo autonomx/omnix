@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from pydantic import ValidationError
 
 from app.rpg.worlds.library_service import (
     publish_world_library_generation,
@@ -12,6 +13,11 @@ from app.rpg.worlds.library_service import (
     read_world_library,
     save_world_topic,
     start_world_library_generation,
+)
+from app.rpg.worlds.map_blueprint_authoring import (
+    MapBlueprintDocument,
+    list_map_blueprints,
+    save_map_blueprint,
 )
 from app.rpg.worlds.published_launch import launch_published_scenario
 from app.rpg.worlds.starter_bubble import (
@@ -61,6 +67,57 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
     def rpg_world_detail(world_id: str) -> dict[str, Any]:
         try:
             return read_world_detail(world_id)
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.get(
+        "/api/rpg/worlds/{world_id}/map-blueprints",
+        include_in_schema=False,
+    )
+    def rpg_world_map_blueprints(
+        world_id: str,
+        latest_only: bool = Query(default=True),
+    ) -> dict[str, Any]:
+        try:
+            return {
+                "ok": True,
+                "map_blueprints": list_map_blueprints(
+                    world_id,
+                    latest_only=latest_only,
+                ),
+            }
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/map-blueprints/{map_id}",
+        include_in_schema=False,
+    )
+    async def rpg_world_save_map_blueprint(
+        world_id: str,
+        map_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        document_payload = payload.get("document")
+        if not isinstance(document_payload, Mapping):
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "map_blueprint_document_required"},
+            )
+        raw = dict(document_payload)
+        raw["map_id"] = map_id
+        try:
+            document = MapBlueprintDocument.model_validate(raw)
+            return save_map_blueprint(
+                world_id,
+                document,
+                expected_revision=int(payload.get("expected_revision") or 0),
+            )
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=exc.errors()) from exc
         except Exception as exc:
             _raise_domain_error(exc)
             raise
@@ -122,8 +179,12 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
                     if isinstance(payload.get("entity_manifest"), Mapping)
                     else {}
                 ),
-                generator_version=str(payload.get("generator_version") or "world-generator-v1"),
-                prompt_version=str(payload.get("prompt_version") or "world-prompt-v1"),
+                generator_version=str(
+                    payload.get("generator_version") or "world-generator-v1"
+                ),
+                prompt_version=str(
+                    payload.get("prompt_version") or "world-prompt-v1"
+                ),
                 provider_route=str(payload.get("provider_route") or "configured"),
                 model=str(payload.get("model") or "configured"),
             )
