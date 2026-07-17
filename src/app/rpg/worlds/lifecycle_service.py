@@ -6,8 +6,6 @@ from typing import Any
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
-_ACTIVE_GENERATION_STATUSES = ("planned", "running")
-
 
 def require_world_writable(work: Any, context: Any, world_id: str) -> dict[str, Any]:
     world = work.world_scenarios.get_world(context, world_id, for_update=True)
@@ -78,9 +76,9 @@ def archive_world_project(
             return {"ok": True, "world": world, "idempotent": True}
         active = work.connection.execute(
             "SELECT run_id FROM omnix_rpg_world_generation_runs "
-            "WHERE workspace_id = %s AND world_id = %s AND status = ANY(%s) "
-            "ORDER BY created_at LIMIT 1",
-            (context.workspace_id, world_id, list(_ACTIVE_GENERATION_STATUSES)),
+            "WHERE workspace_id = %s AND world_id = %s "
+            "AND status IN ('planned', 'running') ORDER BY created_at LIMIT 1",
+            (context.workspace_id, world_id),
         ).fetchone()
         if active is not None:
             raise ValueError(f"world_generation_active:{world_id}:{active[0]}")
