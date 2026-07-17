@@ -2,7 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
@@ -64,27 +64,34 @@ describe('RpgWorkspaceHeader', () => {
     expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
   });
 
-  it('adds world creation and import to the Campaign Menu', async () => {
-    const closeLauncher = vi.fn();
+  it('opens world creation and import as a Campaign Menu view', async () => {
     const view = renderWithTheme(
       <>
-        <div className="rpg-launcher-home-grid" />
-        <button className="rpg-launcher-backdrop" type="button" onClick={closeLauncher}>Close launcher</button>
+        <section className="rpg-launcher-dialog">
+          <div className="rpg-launcher-panel-heading">Campaign Menu</div>
+          <div className="rpg-launcher-home-grid" />
+        </section>
         <RpgWorkspaceHeader {...headerProps} />
       </>
     );
     const launcherGrid = view.container.querySelector<HTMLElement>('.rpg-launcher-home-grid');
+    const launcherDialog = view.container.querySelector<HTMLElement>('.rpg-launcher-dialog');
     expect(launcherGrid).not.toBeNull();
+    expect(launcherDialog).not.toBeNull();
 
     const worldCard = await within(launcherGrid as HTMLElement).findByRole('button', {
       name: /Worlds & Campaigns Create or import worlds/i,
     });
     fireEvent.click(worldCard);
 
-    expect(closeLauncher).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('dialog', { name: 'Worlds and Campaigns' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Worlds & Campaigns' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Create world' })).toBeInTheDocument();
-    expect(screen.getByText('Export / import world')).toBeInTheDocument();
+    const worldView = await screen.findByRole('region', { name: 'Worlds and Campaigns view' });
+    expect(launcherDialog).toHaveClass('rpg-launcher-dialog-world-library');
+    expect(within(worldView).getByRole('heading', { name: 'Worlds & Campaigns' })).toBeInTheDocument();
+    expect(within(worldView).getByRole('heading', { name: 'Create world' })).toBeInTheDocument();
+    expect(within(worldView).getByText('Export / import world')).toBeInTheDocument();
+
+    fireEvent.click(within(worldView).getByRole('button', { name: 'Back to Play' }));
+    expect(screen.queryByRole('region', { name: 'Worlds and Campaigns view' })).not.toBeInTheDocument();
+    expect(launcherDialog).not.toHaveClass('rpg-launcher-dialog-world-library');
   });
 });

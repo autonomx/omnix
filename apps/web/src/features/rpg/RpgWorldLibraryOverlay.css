@@ -1,15 +1,21 @@
-.rpg-world-library-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  overflow: auto;
-  background: var(--mantine-color-dark-9, #101113);
-  color: var(--mantine-color-gray-1, #f1f3f5);
+.rpg-launcher-dialog-world-library {
+  width: min(1600px, 100%);
 }
 
-.rpg-world-library-overlay .rpg-world-library {
+.rpg-launcher-dialog-world-library > .rpg-launcher-panel-heading,
+.rpg-launcher-dialog-world-library > .rpg-launcher-home-grid {
+  display: none;
+}
+
+.rpg-launcher-world-library-view {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.rpg-launcher-world-library-view .rpg-world-library {
   box-sizing: border-box;
-  min-height: 100%;
-  max-width: 120rem;
-  margin: 0 auto;
+  width: 100%;
+  min-height: auto;
+  margin: 0;
 }

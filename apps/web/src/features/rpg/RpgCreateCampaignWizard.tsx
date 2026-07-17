@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { omnixApiClient, type RpgLaunchResponse, type RpgNewGameRequest } from '../../api/client';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import type { RpgLaunchResponse, RpgNewGameRequest } from '../../api/client';
+import {
+  rpgWorldLibraryClient,
+  type RpgScenarioRevision,
+  type RpgScenarioSummary,
+  type RpgWorldRelease,
+  type RpgWorldSummary,
+} from '../../api/rpgWorldLibraryClient';
 import { loadSettingsProfile } from '../settings/settingsApi';
 import { RpgCreateCampaignWizard as LegacyRpgCreateCampaignWizard } from './RpgCreateCampaignWizardLegacy';
 import { applyRpgWizardDefaults, rpgWizardDefaultsFromSettings } from './rpgWizardDefaults';
@@ -9,147 +17,89 @@ interface RpgCreateCampaignWizardProps {
   onEnterWorld?: () => void;
 }
 
-type WorldForgeDepth = 'quick' | 'standard' | 'epic';
-
-type CampaignCreationProgress = {
-  error?: string;
-  job_id?: string;
-  launch_ready?: boolean;
-  percent?: number;
-  progress?: number;
-  stage?: string;
-  status?: string;
-};
-
-type CampaignCreationResponse = RpgLaunchResponse & {
-  creation_job?: CampaignCreationProgress & { id?: string };
-  creation_progress?: CampaignCreationProgress;
-};
-
-const CAMPAIGN_CREATION_POLL_MS = 1_000;
-const CAMPAIGN_CREATION_TIMEOUT_MS = 15 * 60_000;
-const ACTIVE_CREATION_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying']);
+const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
 
 function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
-function campaignGeneration(response: RpgLaunchResponse): CampaignCreationProgress {
-  const session = record(response.session);
-  const runtime = record(session.runtime_state);
-  return record(runtime.campaign_generation) as CampaignCreationProgress;
+function number(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function creationJobId(response: CampaignCreationResponse): string {
-  return String(response.creation_job?.id ?? response.creation_job?.job_id ?? response.creation_progress?.job_id ?? '').trim();
+function latestScenarioRevision(revisions: RpgScenarioRevision[]): RpgScenarioRevision | undefined {
+  return [...revisions].sort((left, right) => right.revision - left.revision)[0];
 }
 
-function creationStatus(response: CampaignCreationResponse): string {
-  return String(response.creation_progress?.status ?? response.creation_job?.status ?? response.status ?? '').trim().toLowerCase();
+function matchingRelease(
+  releases: RpgWorldRelease[],
+  scenarioRevision: RpgScenarioRevision | undefined,
+): RpgWorldRelease | undefined {
+  if (!scenarioRevision) return undefined;
+  const compatibleRelease = number(record(scenarioRevision.document).compatible_release);
+  return releases.find((release) => (
+    release.world_revision === scenarioRevision.world_revision
+    && (!compatibleRelease || release.release === compatibleRelease)
+  ));
 }
 
-function jobErrorMessage(job: Record<string, unknown>): string {
-  const error = record(job.error);
-  return String(error.message ?? error.code ?? 'Campaign World Forge generation failed.');
+function releaseIsLaunchReady(release: RpgWorldRelease | undefined): boolean {
+  return Boolean(record(record(release?.document).certification).launch_ready);
 }
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+function worldLabel(world: RpgWorldSummary): string {
+  const scenarios = world.scenario_count ?? 0;
+  return `${world.title} · ${scenarios} published opening${scenarios === 1 ? '' : 's'}`;
 }
 
-async function awaitCampaignCreation(
-  initial: RpgLaunchResponse,
-  onProgress?: (response: RpgLaunchResponse) => void,
-): Promise<RpgLaunchResponse> {
-  const queued = initial as CampaignCreationResponse;
-  const jobId = creationJobId(queued);
-  if (!jobId || !ACTIVE_CREATION_STATUSES.has(creationStatus(queued))) {
-    return initial;
-  }
-
-  onProgress?.(initial);
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < CAMPAIGN_CREATION_TIMEOUT_MS) {
-    await delay(CAMPAIGN_CREATION_POLL_MS);
-    const job = await omnixApiClient.getJob(jobId) as unknown as Record<string, unknown>;
-    const status = String(job.status ?? '').toLowerCase();
-    const sessionResponse = initial.session_id
-      ? await omnixApiClient.getRpgSession(initial.session_id)
-      : initial;
-    const generation = campaignGeneration(sessionResponse);
-    const progressResponse: CampaignCreationResponse = {
-      ...initial,
-      ...sessionResponse,
-      status,
-      creation_job: {
-        id: jobId,
-        job_id: jobId,
-        status,
-        progress: generation.progress ?? generation.percent ?? 0,
-        error: generation.error,
-      },
-      creation_progress: {
-        ...generation,
-        job_id: jobId,
-        status,
-        progress: generation.progress ?? generation.percent ?? 0,
-      },
-    };
-    onProgress?.(progressResponse);
-
-    if (status === 'completed') {
-      return {
-        ...progressResponse,
-        ok: true,
-        status: 'ready',
-        creation_job: { ...progressResponse.creation_job, status: 'completed', progress: 100 },
-        creation_progress: {
-          ...progressResponse.creation_progress,
-          status: 'completed',
-          launch_ready: true,
-          progress: 100,
-        },
-      } as RpgLaunchResponse;
-    }
-    if (status === 'failed' || status === 'canceled' || status === 'stale') {
-      return {
-        ...progressResponse,
-        ok: false,
-        error: generation.error || jobErrorMessage(job),
-        creation_progress: { ...progressResponse.creation_progress, status: 'failed' },
-      } as RpgLaunchResponse;
-    }
-  }
-  throw new Error('Campaign World Forge generation did not finish within 15 minutes.');
+function scenarioLabel(scenario: RpgScenarioSummary): string {
+  return `${scenario.title}${scenario.description ? ` · ${scenario.description}` : ''}`;
 }
-
-const depthOptions: Array<{
-  value: WorldForgeDepth;
-  label: string;
-  detail: string;
-}> = [
-  {
-    value: 'quick',
-    label: 'Quick',
-    detail: '12–20 lore pages, 4–6 major NPCs, 5–8 locations, 3–4 factions.',
-  },
-  {
-    value: 'standard',
-    label: 'Standard',
-    detail: '30–50 lore pages, 8–12 major NPCs, 10–16 locations, 5–8 factions.',
-  },
-  {
-    value: 'epic',
-    label: 'Epic',
-    detail: '70–120 lore pages, 15–25 major NPCs, 20–35 locations, 8–14 factions.',
-  },
-];
 
 export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const touchedRef = useRef(false);
   const applyingRef = useRef(false);
-  const [worldForgeDepth, setWorldForgeDepth] = useState<WorldForgeDepth>('standard');
+  const [selectedWorldId, setSelectedWorldId] = useState('');
+  const [selectedScenarioId, setSelectedScenarioId] = useState('');
+  const [launchedSessionId, setLaunchedSessionId] = useState('');
+
+  const libraryQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'world-library', 'campaign-wizard'],
+    queryFn: () => rpgWorldLibraryClient.list(),
+  });
+  const availableWorlds = useMemo(
+    () => (libraryQuery.data?.worlds ?? []).filter((world) => world.status !== 'archived'),
+    [libraryQuery.data?.worlds],
+  );
+  const selectedWorld = availableWorlds.find((world) => world.id === selectedWorldId);
+  const detailQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'world-library', 'campaign-wizard', selectedWorldId],
+    queryFn: () => rpgWorldLibraryClient.detail(selectedWorldId),
+    enabled: Boolean(selectedWorldId),
+  });
+
+  useEffect(() => {
+    if (!selectedWorldId && availableWorlds[0]?.id) {
+      setSelectedWorldId(availableWorlds[0].id);
+    }
+  }, [availableWorlds, selectedWorldId]);
+
+  const publishedScenarios = useMemo(
+    () => (detailQuery.data?.scenarios ?? []).filter((scenario) => (
+      scenario.status === 'published'
+      && Boolean(detailQuery.data?.scenario_revisions[scenario.id]?.length)
+    )),
+    [detailQuery.data],
+  );
+
+  useEffect(() => {
+    if (!publishedScenarios.some((scenario) => scenario.id === selectedScenarioId)) {
+      setSelectedScenarioId(publishedScenarios[0]?.id ?? '');
+    }
+  }, [publishedScenarios, selectedScenarioId]);
 
   useEffect(() => {
     let active = true;
@@ -169,35 +119,104 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
     };
   }, []);
 
+  const selectedScenario = publishedScenarios.find((scenario) => scenario.id === selectedScenarioId);
+  const selectedScenarioRevision = latestScenarioRevision(
+    detailQuery.data?.scenario_revisions[selectedScenarioId] ?? [],
+  );
+  const selectedRelease = matchingRelease(detailQuery.data?.releases ?? [], selectedScenarioRevision);
+  const launchReady = Boolean(
+    selectedWorld
+    && selectedScenario
+    && selectedScenarioRevision
+    && selectedRelease
+    && releaseIsLaunchReady(selectedRelease),
+  );
+
   const markTouched = () => {
     if (!applyingRef.current) touchedRef.current = true;
   };
 
-  const createCampaign = props.onCreateCampaign
-    ? async (
-        request: RpgNewGameRequest,
-        onProgress?: (response: RpgLaunchResponse) => void,
-      ): Promise<RpgLaunchResponse> => {
-        const enriched = {
-          ...request,
-          world_forge: {
-            enabled: true,
-            depth: worldForgeDepth,
-            background_expansion: false,
-            use_hermes: true,
-            require_consistency_audit: true,
-            require_opening_dossiers: true,
-          },
-        } as RpgNewGameRequest;
-        const initial = await props.onCreateCampaign?.(enriched) as RpgLaunchResponse;
-        return awaitCampaignCreation(initial, onProgress);
-      }
-    : undefined;
+  const launchExistingCampaign = async (request: RpgNewGameRequest): Promise<RpgLaunchResponse> => {
+    if (!selectedWorld || !selectedScenario || !selectedScenarioRevision || !selectedRelease) {
+      throw new Error('Select an existing world with a published scenario before starting a campaign.');
+    }
+    if (!releaseIsLaunchReady(selectedRelease)) {
+      throw new Error('The selected world release is not certified as launch ready.');
+    }
+
+    const result = await rpgWorldLibraryClient.launchScenario(
+      selectedScenario.id,
+      selectedScenarioRevision.revision,
+      {
+        world_id: selectedWorld.id,
+        world_revision: selectedScenarioRevision.world_revision,
+        world_release: selectedRelease.release,
+        player: request.player ?? {},
+        gameplay: {
+          campaign_template: request.campaign_template,
+          genre: request.genre,
+          tone: request.tone,
+          background: request.background,
+          primary_capability: request.primary_capability,
+          secondary_capabilities: request.secondary_capabilities,
+          power_source: request.power_source,
+          generated_class_name: request.generated_class_name,
+          generated_class_summary: request.generated_class_summary,
+          difficulty: request.difficulty,
+          world_activity: request.world_activity,
+          economy_pressure: request.economy_pressure,
+          combat_lethality: request.combat_lethality,
+          companions_enabled: request.companions_enabled,
+          permadeath: request.permadeath,
+          seed: request.seed,
+          initial_stats: request.initial_stats,
+          genesis: request.genesis,
+        },
+        features: request.features ?? {},
+      },
+    );
+
+    if (!result.ok || !result.session_id) {
+      throw new Error(result.error ?? 'The selected published scenario did not return a campaign session.');
+    }
+
+    setLaunchedSessionId(result.session_id);
+    try {
+      window.localStorage.setItem(RPG_SELECTED_SESSION_STORAGE_KEY, result.session_id);
+    } catch {
+      // Entering the world still works when storage is unavailable; reload will refresh the session inventory.
+    }
+
+    return {
+      ok: true,
+      session_id: result.session_id,
+      status: result.status ?? 'ready',
+      session: result.session,
+      game: result.game,
+    };
+  };
+
+  const enterExistingWorld = () => {
+    props.onEnterWorld?.();
+    if (launchedSessionId) window.location.reload();
+  };
+
+  const sourceStatus = libraryQuery.isError
+    ? 'Unable to load reusable worlds.'
+    : !availableWorlds.length && !libraryQuery.isPending
+      ? 'Create or import a world in Worlds & Campaigns before starting a campaign.'
+      : detailQuery.isPending
+        ? 'Loading published scenarios and immutable releases…'
+        : !publishedScenarios.length
+          ? 'This world has no published scenario. Publish an opening before starting a campaign.'
+          : launchReady
+            ? `Ready: ${selectedWorld?.title} · ${selectedScenario?.title}`
+            : 'The selected scenario does not have a launch-ready certified release.';
 
   return (
     <div ref={rootRef} style={{ display: 'contents' }} onChangeCapture={markTouched} onInputCapture={markTouched}>
       <section
-        aria-label="World generation depth"
+        aria-label="Existing world selection"
         style={{
           border: '1px solid var(--border-subtle, rgba(255,255,255,.12))',
           borderRadius: 14,
@@ -206,41 +225,52 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
           background: 'var(--surface-elevated, rgba(255,255,255,.035))',
         }}
       >
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>World Forge depth</div>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>Campaign source</div>
         <div style={{ opacity: 0.72, fontSize: 13, marginBottom: 10 }}>
-          Omnix creates a linked Campaign Bible, rich opening dossiers, a consistency audit, and a retrieval index before the first turn.
+          Choose an existing reusable world and one of its published openings. New Campaign launches an immutable world release; it does not create or regenerate a world.
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
-          {depthOptions.map((option) => {
-            const selected = worldForgeDepth === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => setWorldForgeDepth(option.value)}
-                style={{
-                  textAlign: 'left',
-                  borderRadius: 10,
-                  border: selected
-                    ? '1px solid var(--accent, #8ea7ff)'
-                    : '1px solid var(--border-subtle, rgba(255,255,255,.12))',
-                  background: selected
-                    ? 'color-mix(in srgb, var(--accent, #8ea7ff) 16%, transparent)'
-                    : 'transparent',
-                  padding: 10,
-                  color: 'inherit',
-                  cursor: 'pointer',
-                }}
-              >
-                <strong style={{ display: 'block' }}>{option.label}</strong>
-                <span style={{ display: 'block', opacity: 0.7, fontSize: 12, marginTop: 4 }}>{option.detail}</span>
-              </button>
-            );
-          })}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+          <label style={{ display: 'grid', gap: 5 }}>
+            <span>Existing world</span>
+            <select
+              aria-label="Existing world"
+              value={selectedWorldId}
+              disabled={libraryQuery.isPending || !availableWorlds.length}
+              onChange={(event) => {
+                setSelectedWorldId(event.currentTarget.value);
+                setSelectedScenarioId('');
+              }}
+            >
+              {!availableWorlds.length ? <option value="">No reusable worlds available</option> : null}
+              {availableWorlds.map((world) => (
+                <option key={world.id} value={world.id}>{worldLabel(world)}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 5 }}>
+            <span>Published scenario</span>
+            <select
+              aria-label="Published scenario"
+              value={selectedScenarioId}
+              disabled={detailQuery.isPending || !publishedScenarios.length}
+              onChange={(event) => setSelectedScenarioId(event.currentTarget.value)}
+            >
+              {!publishedScenarios.length ? <option value="">No published openings available</option> : null}
+              {publishedScenarios.map((scenario) => (
+                <option key={scenario.id} value={scenario.id}>{scenarioLabel(scenario)}</option>
+              ))}
+            </select>
+          </label>
         </div>
+        <p style={{ margin: '10px 0 0', fontSize: 13, opacity: launchReady ? 0.9 : 0.72 }} aria-live="polite">
+          {sourceStatus}
+        </p>
       </section>
-      <LegacyRpgCreateCampaignWizard {...props} onCreateCampaign={createCampaign} />
+      <LegacyRpgCreateCampaignWizard
+        {...props}
+        onCreateCampaign={launchExistingCampaign}
+        onEnterWorld={enterExistingWorld}
+      />
     </div>
   );
 }
