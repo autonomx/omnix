@@ -1,6 +1,6 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0-2 complete; Phase 6.1 complete; closure work remains in phases 3, 4, 5, 6, and later phases
+Status: phases 0-3 complete; Phase 6.1 complete; closure work remains in phases 4, 5, 6, and later phases
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
@@ -21,6 +21,9 @@ Implementation evidence:
 - Phase 1 legacy Campaign Bible import PR: `#1390`;
 - Phase 1 legacy import merge SHA: `9d84c69a0ce94376caa84e9e7a53bc169c5820bf`;
 - exact PR `#1390` implementation head verified by GitHub Actions: `52f5fc31cb65f1ff35e0e6601d6b29b1c32bd9ac`;
+- Phase 3 topic history and generation lineage PR: `#1392`;
+- Phase 3 history/lineage merge SHA: `63d939afbbbe58f0f1b01f015f4bb12d9e2e7ea1`;
+- exact PR `#1392` implementation head verified by GitHub Actions: `8326e37d3586d056a3720d984b3fa97ac58913b4`;
 - passing workflows for all implementation heads: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
@@ -103,7 +106,7 @@ Golden proof completed:
 
 ## Phase 3 — Durable World Forge DAG
 
-Status: in progress
+Status: complete
 
 Delivered:
 
@@ -115,15 +118,15 @@ Delivered:
 - stale-result rejection;
 - partial regeneration and reconciliation;
 - publication into immutable World Revisions and Releases;
-- interruption recovery from persisted completed topics.
+- interruption recovery from persisted completed topics;
+- append-only topic-draft snapshots capturing content, directives, dependency hashes, statuses, hashes, provenance, and timestamps;
+- optimistic review and rollback that copies a historical draft into a fresh draft revision without mutating source history;
+- active-run and stale-current-draft restore guards;
+- deterministic parent/root lineage across generation runs for successive draft revisions;
+- library and gateway read surfaces for history and lineage;
+- PostgreSQL proof that draft 1 survives draft 2 edits, restores into draft 3, and run lineage remains reproducible.
 
-Core exit condition met: process interruption can resume without losing completed topics, and changed inputs cannot reuse stale outputs.
-
-Remaining:
-
-- revision-preserving topic-draft history instead of overwriting the same world/topic row;
-- explicit generation-run lineage across regenerated draft revisions;
-- review and rollback proof using preserved prior draft content.
+Exit condition met: process interruption can resume without losing completed topics, changed inputs cannot reuse stale outputs, and every draft remains reviewable and restorable through an explicit auditable lineage.
 
 ## Phase 4 — Worlds & Campaigns UI
 
