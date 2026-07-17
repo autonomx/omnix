@@ -159,8 +159,10 @@ describe('RpgCreateCampaignWizard', () => {
     renderWizard();
 
     expect(screen.queryByText('World Forge depth')).not.toBeInTheDocument();
-    expect(await screen.findByRole('combobox', { name: 'Existing world' })).toHaveValue(world.id);
-    expect(await screen.findByRole('combobox', { name: 'Published scenario' })).toHaveValue(scenario.id);
+    const worldSelect = await screen.findByRole('combobox', { name: 'Existing world' });
+    await waitFor(() => expect(worldSelect).toHaveValue(world.id));
+    const scenarioSelect = screen.getByRole('combobox', { name: 'Published scenario' });
+    await waitFor(() => expect(scenarioSelect).toHaveValue(scenario.id));
     expect(screen.getByText(/does not create or regenerate a world/i)).toBeInTheDocument();
     expect(await screen.findByText(`Ready: ${world.title} · ${scenario.title}`)).toBeInTheDocument();
 
