@@ -5,7 +5,12 @@ from typing import Iterable, Literal
 
 from pydantic import Field
 
-from .map_effective_geometry import effective_is_walkable
+from .map_actor_footprints import (
+    footprint_is_inside,
+    footprint_is_walkable,
+    footprint_overlaps,
+    occupied_actor_cells,
+)
 from .map_grid_contracts import GridActorPlacement, GridMapDefinition, GridPoint
 from .map_instance_runtime import (
     ActorMovedEvent,
@@ -88,10 +93,17 @@ def resolve_portal_transition(
     actor = source_snapshot.actor(actor_id)
     if actor.cell != portal.source.cell:
         raise MapMovementError("actor_not_at_portal", actor_id)
-    target_definition.require_inside(portal.target.cell)
-    if not effective_is_walkable(target_definition, target_snapshot, portal.target.cell):
+    target_actor = actor.model_copy(update={"cell": portal.target.cell})
+    if not footprint_is_inside(target_definition, target_actor):
+        raise MapMovementError("portal_target_footprint_out_of_bounds", portal_id)
+    if not footprint_is_walkable(
+        target_definition,
+        target_snapshot,
+        target_actor,
+    ):
         raise MapMovementError("portal_target_blocked", portal_id)
-    if any(row.cell == portal.target.cell for row in target_snapshot.actors):
+    target_occupied = set(occupied_actor_cells(target_snapshot.actors))
+    if footprint_overlaps(target_actor, target_occupied):
         raise MapMovementError("portal_target_occupied", portal_id)
 
     exit_command_id = f"{transition_id}:exit"
@@ -117,7 +129,7 @@ def resolve_portal_transition(
         command_id=enter_command_id,
         transition_id=transition_id,
         map_instance_id=target_snapshot.map_instance_id,
-        actor=actor.model_copy(update={"cell": portal.target.cell}),
+        actor=target_actor,
         portal_id=portal_id,
         source_map_instance_id=source_snapshot.map_instance_id,
         source_cell=actor.cell,
@@ -153,8 +165,12 @@ def reduce_npc_spatial_map_event(
     else:
         if any(row.actor_id == event.actor.actor_id for row in snapshot.actors):
             raise MapMovementError("event_actor_already_present", event.actor.actor_id)
-        if any(row.cell == event.actor.cell for row in snapshot.actors):
-            raise MapMovementError("event_actor_cell_occupied", event.actor.actor_id)
+        occupied = set(occupied_actor_cells(snapshot.actors))
+        if footprint_overlaps(event.actor, occupied):
+            raise MapMovementError(
+                "event_actor_footprint_occupied",
+                event.actor.actor_id,
+            )
         actors = tuple(sorted((*snapshot.actors, event.actor), key=lambda row: row.actor_id))
     return snapshot.model_copy(
         update={

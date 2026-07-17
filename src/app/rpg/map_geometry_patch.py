@@ -5,6 +5,7 @@ from typing import Iterable, Literal
 
 from pydantic import Field, model_validator
 
+from .map_actor_footprints import occupied_actor_cells
 from .map_effective_geometry import (
     definition_terrain_code,
     geometry_cell_key,
@@ -74,7 +75,7 @@ def resolve_geometry_patch_command(
         raise MapMovementError("command_already_applied", command.command_id)
     if command.patch_id in snapshot.geometry_patch_ids:
         raise MapMovementError("geometry_patch_already_applied", command.patch_id)
-    occupied = {actor.cell: actor.actor_id for actor in snapshot.actors}
+    occupied = occupied_actor_cells(snapshot.actors)
     for patch in command.cells:
         definition.require_inside(patch.cell)
         code = (

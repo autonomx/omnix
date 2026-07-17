@@ -6,16 +6,19 @@ from typing import Any, Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .map_effective_geometry import (
-    effective_is_walkable,
-    effective_movement_cost,
-    effective_terrain_rows,
-    normalize_terrain_overrides,
+from .map_actor_footprints import (
+    actor_footprint_cells,
+    footprint_is_inside,
+    footprint_is_walkable,
+    footprint_movement_cost,
+    footprint_overlaps,
+    occupied_actor_cells,
 )
+from .map_effective_geometry import effective_terrain_rows, normalize_terrain_overrides
 from .map_grid_contracts import GridActorPlacement, GridMapDefinition, GridPoint
 
 MAP_INSTANCE_SCHEMA_VERSION = 1
-PATHFINDER_VERSION = 1
+PATHFINDER_VERSION = 2
 MAP_REDUCER_VERSION = 1
 
 
@@ -50,9 +53,16 @@ class CampaignMapInstanceSnapshot(FrozenRuntimeModel):
         actor_ids = [actor.actor_id for actor in self.actors]
         if len(actor_ids) != len(set(actor_ids)):
             raise ValueError("duplicate_map_instance_actor")
-        cells = [actor.cell for actor in self.actors]
-        if len(cells) != len(set(cells)):
+        anchors = [actor.cell for actor in self.actors]
+        if len(anchors) != len(set(anchors)):
             raise ValueError("duplicate_map_instance_actor_cell")
+        footprint_cells = [
+            cell
+            for actor in self.actors
+            for cell in actor_footprint_cells(actor)
+        ]
+        if len(footprint_cells) != len(set(footprint_cells)):
+            raise ValueError("overlapping_map_instance_actor_footprints")
         if len(self.geometry_patch_ids) != len(set(self.geometry_patch_ids)):
             raise ValueError("duplicate_map_geometry_patch_id")
         normalized = normalize_terrain_overrides(self.terrain_overrides)
@@ -107,10 +117,16 @@ def create_map_instance_snapshot(
     actors: Iterable[GridActorPlacement] = (),
 ) -> CampaignMapInstanceSnapshot:
     placements = tuple(actors)
+    occupied: set[GridPoint] = set()
     for actor in placements:
-        definition.require_inside(actor.cell)
-        if not definition.is_walkable(actor.cell):
+        cells = actor_footprint_cells(actor)
+        if not footprint_is_inside(definition, actor):
+            raise MapMovementError("actor_spawn_footprint_out_of_bounds", actor.actor_id)
+        if any(not definition.is_walkable(cell) for cell in cells):
             raise MapMovementError("actor_spawn_not_walkable", actor.actor_id)
+        if any(cell in occupied for cell in cells):
+            raise MapMovementError("actor_spawn_footprint_occupied", actor.actor_id)
+        occupied.update(cells)
     return CampaignMapInstanceSnapshot(
         map_instance_id=map_instance_id,
         campaign_id=campaign_id,
@@ -136,20 +152,27 @@ def resolve_move_command(
     if command.command_id in snapshot.applied_command_ids:
         raise MapMovementError("command_already_applied", command.command_id)
     actor = snapshot.actor(command.actor_id)
-    definition.require_inside(command.destination)
-    occupied = {
-        placement.cell
-        for placement in snapshot.actors
-        if placement.actor_id != command.actor_id
-    }
-    if command.destination in occupied:
+    occupied = set(
+        occupied_actor_cells(
+            snapshot.actors,
+            exclude_actor_id=command.actor_id,
+        )
+    )
+    if not footprint_is_inside(definition, actor, anchor=command.destination):
+        raise MapMovementError("destination_footprint_out_of_bounds", command.actor_id)
+    if footprint_overlaps(actor, occupied, anchor=command.destination):
         raise MapMovementError("destination_occupied", command.actor_id)
-    if not effective_is_walkable(definition, snapshot, command.destination):
+    if not footprint_is_walkable(
+        definition,
+        snapshot,
+        actor,
+        anchor=command.destination,
+    ):
         raise MapMovementError("destination_blocked", command.actor_id)
     path, movement_cost = _find_path(
         definition,
         snapshot,
-        actor.cell,
+        actor,
         command.destination,
         occupied,
     )
@@ -284,10 +307,11 @@ def _validate_definition_binding(
 def _find_path(
     definition: GridMapDefinition,
     snapshot: CampaignMapInstanceSnapshot,
-    start: GridPoint,
+    actor: GridActorPlacement,
     destination: GridPoint,
     occupied: set[GridPoint],
 ) -> tuple[tuple[GridPoint, ...], int]:
+    start = actor.cell
     if start == destination:
         return (start,), 0
     frontier: list[tuple[int, int, int, GridPoint]] = []
@@ -304,6 +328,7 @@ def _find_path(
         for neighbor, step_cost in _neighbors(
             definition,
             snapshot,
+            actor,
             current,
             occupied,
         ):
@@ -333,6 +358,7 @@ def _find_path(
 def _neighbors(
     definition: GridMapDefinition,
     snapshot: CampaignMapInstanceSnapshot,
+    actor: GridActorPlacement,
     cell: GridPoint,
     occupied: set[GridPoint],
 ) -> tuple[tuple[GridPoint, int], ...]:
@@ -350,30 +376,49 @@ def _neighbors(
     rows: list[tuple[GridPoint, int]] = []
     for dx, dy in offsets:
         target = (column + dx, row + dy)
-        if not _inside(definition, target):
-            continue
-        if target in occupied or not effective_is_walkable(definition, snapshot, target):
+        if not _anchor_is_open(definition, snapshot, actor, target, occupied):
             continue
         diagonal = dx != 0 and dy != 0
         if diagonal:
             side_a = (column + dx, row)
             side_b = (column, row + dy)
-            if (
-                side_a in occupied
-                or side_b in occupied
-                or not effective_is_walkable(definition, snapshot, side_a)
-                or not effective_is_walkable(definition, snapshot, side_b)
+            if not _anchor_is_open(
+                definition,
+                snapshot,
+                actor,
+                side_a,
+                occupied,
+            ) or not _anchor_is_open(
+                definition,
+                snapshot,
+                actor,
+                side_b,
+                occupied,
             ):
                 continue
-        terrain_cost = effective_movement_cost(definition, snapshot, target)
+        terrain_cost = footprint_movement_cost(
+            definition,
+            snapshot,
+            actor,
+            anchor=target,
+        )
         step_cost = (terrain_cost * 14 + 9) // 10 if diagonal else terrain_cost
         rows.append((target, step_cost))
     return tuple(rows)
 
 
-def _inside(definition: GridMapDefinition, cell: GridPoint) -> bool:
-    column, row = cell
-    return 0 <= column < definition.width and 0 <= row < definition.height
+def _anchor_is_open(
+    definition: GridMapDefinition,
+    snapshot: CampaignMapInstanceSnapshot,
+    actor: GridActorPlacement,
+    anchor: GridPoint,
+    occupied: set[GridPoint],
+) -> bool:
+    return (
+        footprint_is_inside(definition, actor, anchor=anchor)
+        and not footprint_overlaps(actor, occupied, anchor=anchor)
+        and footprint_is_walkable(definition, snapshot, actor, anchor=anchor)
+    )
 
 
 def _octile_distance(left: GridPoint, right: GridPoint) -> int:
