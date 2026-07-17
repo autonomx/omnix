@@ -52,6 +52,15 @@ class PostgresRpgWorldGenerationRepository:
         plan: Mapping[str, Any],
         progress: Mapping[str, Any],
     ) -> dict[str, Any]:
+        world = self.connection.execute(
+            "SELECT status FROM omnix_rpg_worlds WHERE workspace_id = %s "
+            "AND id = %s FOR UPDATE",
+            (context.workspace_id, world_id),
+        ).fetchone()
+        if world is None:
+            raise EntityNotFound(world_id)
+        if str(world[0]) == "archived":
+            raise ValueError(f"world_archived:{world_id}")
         row = self.connection.execute(
             f"""
             INSERT INTO omnix_rpg_world_generation_runs (
