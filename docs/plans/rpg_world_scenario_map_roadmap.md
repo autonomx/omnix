@@ -1,6 +1,6 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0-6 complete; closure work remains in later spatial phases
+Status: phases 0-8 complete; closure work remains in tactical spatial systems and measured performance escalation
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
@@ -33,7 +33,14 @@ Implementation evidence:
 - Phase 6 durable campaign spatial runtime PR: `#1398`;
 - Phase 6 implementation merge SHA: `a660732f4485816b8de0f50defdd3ffbc9ec1ab5`;
 - exact PR `#1398` implementation head verified by GitHub Actions: `97a41239322771022d7d9242f4e868ca6450a9cf`;
-- passing workflows for all implementation heads: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
+- Phase 7 observer knowledge, detection, and LOS PR: `#1400`;
+- Phase 7 implementation merge SHA: `7db2f438c7ab958ff1b77e6a306701d98f3762d2`;
+- exact PR `#1400` implementation head: `2bbb010b3947adae5719440cd5d2591f28000808`;
+- Phase 8 campaign geometry patch PR: `#1401`;
+- Phase 8 implementation merge SHA: `6630f947577d962cd18c76ad5b21606538618493`;
+- exact PR `#1401` implementation head verified by GitHub Actions: `55076c46b0178a03f511bde43127a58b26bf1dcb`;
+- PR `#1400` passed architecture, PostgreSQL, and Live Chat workflows; its missing deterministic `GridZone.name` test fixture was corrected and the complete observer suite was revalidated on exact PR `#1401` head;
+- exact PR `#1401` head passed RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
 
@@ -207,10 +214,48 @@ Delivered:
 
 Exit condition met: living NPC spatial intent is campaign-owned, durable, scheduled through a serialized clock, replayable across direct and cross-map movement, authorable as routines, and measurable against explicit level-of-detail budgets.
 
+## Phase 7 — Observer knowledge, detection, and line of sight
+
+Status: complete
+
+Delivered:
+
+- durable observer-owned map knowledge and deterministic observation-event history;
+- supercover square-grid line of sight using authoritative terrain `blocks_sight` rules;
+- explicit sight and detection radii;
+- hidden actor and secret portal, spawn, and zone detection rules;
+- remembered terrain and discovered features without retaining stale hidden actor positions;
+- explicit unknown-terrain masking;
+- complete hazard-authority exclusion from observer projections;
+- optimistic knowledge revisions and observation sequences per campaign, map instance, and observer;
+- idempotent repeat observations at unchanged map revision and policy;
+- hidden observe and safe-projection APIs;
+- routing of existing map projections through observer masking;
+- deterministic and PostgreSQL proof for LOS, detection, memory, secret redaction, idempotency, observer movement, event history, stale/current map reporting, and hazard exclusion.
+
+Exit condition met: player and NPC observers receive durable, reproducible knowledge projections derived from authoritative map state without receiving omniscient terrain, hidden actors, or hazard authority.
+
+## Phase 8 — Campaign geometry patches
+
+Status: complete
+
+Delivered:
+
+- campaign-owned terrain overrides and applied patch IDs on authoritative map-instance snapshots;
+- a shared effective-terrain layer used by movement, weighted pathfinding, portal targets, NPC goal validation, observer LOS, and terrain projections;
+- optimistic `ApplyGeometryPatchCommand` resolution and `map_geometry_patched` events;
+- deterministic set and clear-to-definition terrain patch semantics;
+- stale revision, duplicate command, duplicate patch, duplicate-cell, unknown-terrain, and occupied-actor safety guards;
+- persistence through the existing map-event ledger and snapshot compare-and-swap boundary;
+- deterministic replay across interleaved geometry and actor-movement events;
+- hidden production gateway API for geometry patches;
+- PostgreSQL proof that two campaigns sharing one immutable Map Definition remain isolated while only one campaign changes movement and LOS;
+- proof that immutable Map Definitions remain unchanged while campaign overlays open and restore terrain.
+
+Exit condition met: campaign-specific geometry can change movement and visibility through recorded optimistic events while shared release-owned definitions stay immutable, cross-campaign state remains isolated, and replay never reruns generation or pathfinding.
+
 ## Later phases
 
-- observer knowledge, detection, and line of sight;
-- campaign geometry patches;
 - tactical movement, cover, reactions, and multi-cell actors;
 - performance profiling and renderer escalation only when measured.
 
