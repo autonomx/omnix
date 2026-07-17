@@ -163,9 +163,25 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
         def rollback(self):
             captured["rolled_back"] = True
 
+    def fake_schedule(campaign_id: str, **kwargs):
+        captured["materialization_signal"] = {
+            "campaign_id": campaign_id,
+            **kwargs,
+        }
+        return {
+            "ok": True,
+            "status": "not_applicable",
+            "scheduled": [],
+            "worker_started": False,
+        }
+
     monkeypatch.setattr(
         "app.rpg.worlds.published_launch.unit_of_work",
         lambda _database: FakeWork(),
+    )
+    monkeypatch.setattr(
+        "app.rpg.worlds.published_launch.schedule_campaign_predictive_materialization",
+        fake_schedule,
     )
 
     result = launch_published_scenario(
@@ -181,6 +197,14 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
     assert result["session_id"] == "campaign:published"
     assert result["launch_mode"] == "published_scenario"
     assert result["world_forge_invoked"] is False
+    assert result["materialization_schedule"]["status"] == "not_applicable"
+    assert captured["materialization_signal"] == {
+        "campaign_id": "campaign:published",
+        "current_location_id": "rusty_flagon_tavern",
+        "database": None,
+        "kick_worker": True,
+        "allow_missing_plan": True,
+    }
     assert (
         result["session"]["state"]["world_binding"]["world_revision_hash"]
         == world_revision.content_hash
