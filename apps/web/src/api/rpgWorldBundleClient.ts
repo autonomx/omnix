@@ -50,7 +50,8 @@ export const rpgWorldBundleClient = {
   async importWorld(file: File, targetWorldId?: string): Promise<RpgWorldBundleImportResponse> {
     const query = new URLSearchParams();
     if (targetWorldId?.trim()) query.set('target_world_id', targetWorldId.trim());
-    const suffix = query.size ? `?${query.toString()}` : '';
+    const queryString = query.toString();
+    const suffix = queryString ? `?${queryString}` : '';
     const response = await fetch(`/api/rpg/worlds/import${suffix}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/zip' },
