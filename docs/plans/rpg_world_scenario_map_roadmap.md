@@ -1,18 +1,21 @@
 # RPG World, Scenario, and Spatial Runtime Roadmap
 
-Status: phases 0-5 complete; Phase 6.1 complete; Phase 6 remains in progress
+Status: Phase 2 and Phase 6.1 complete; closure work remains in phases 0, 1, 3, 4, 5, 6, and later phases
 
 ADR: `docs/architecture/ADR-0003-rpg-world-scenario-map-architecture.md`
 
 Implementation evidence:
 
-- phases 0-5 merged implementation PR: `#1382`;
-- phases 0-5 merge SHA: `25a971e30946e5b93f5b2a202214f4c5fe5dd215`;
-- phases 0-5 exact implementation head verified by GitHub Actions: `9a58145631fb0b7d677ac36ff9edd7901e2f2c0a`;
-- Phase 6.1 merged implementation PR: `#1384`;
+- phases 0-5 foundation implementation PR: `#1382`;
+- phases 0-5 foundation merge SHA: `25a971e30946e5b93f5b2a202214f4c5fe5dd215`;
+- phases 0-5 exact foundation head verified by GitHub Actions: `9a58145631fb0b7d677ac36ff9edd7901e2f2c0a`;
+- Phase 6.1 implementation PR: `#1384`;
 - Phase 6.1 merge SHA: `f695cbc50bc04339b730d394dc0c05ea40127f86`;
 - Phase 6.1 exact implementation head verified by GitHub Actions: `b14eb99921338aaa1f85cb62163ee4560d5adeb1`;
-- passing workflows for both implementation heads: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
+- release certification and scenario initialization PR: `#1386`;
+- release certification and scenario initialization merge SHA: `601266fc87114b286d24310a6fadf7e1de77d35c`;
+- exact PR `#1386` implementation head verified by GitHub Actions: `8c1376fa4a28411472bbe2d6614d2fe2785ee29f`;
+- passing workflows for all implementation heads: RPG Phase 0 architecture compliance, RPG deterministic PR gates, PostgreSQL persistence gates, and Live Chat hardening gates.
 
 ## Objective
 
@@ -20,19 +23,24 @@ Separate reusable world authoring from campaign launch, introduce revisioned sce
 
 ## Phase 0 — ADR and contracts
 
-Status: complete
+Status: in progress
 
-Exit conditions:
+Delivered:
 
-- ownership and revision terminology is fixed;
-- event and snapshot authority is fixed;
-- visibility and deletion boundaries are documented;
-- generation job fingerprint rules are documented;
-- the mandatory two-campaign tavern gate is documented.
+- ownership and revision terminology;
+- event and snapshot authority;
+- visibility and secret-data boundaries;
+- generation job fingerprint rules;
+- mandatory two-campaign tavern gate.
+
+Remaining:
+
+- explicit lifecycle policy for draft deletion, published-resource retention, archival, restoration, and campaign-reference restrictions;
+- archive and restore service/API proof for World and Scenario projects.
 
 ## Phase 1 — World, release, and scenario boundary
 
-Status: complete
+Status: in progress
 
 Delivered:
 
@@ -40,9 +48,17 @@ Delivered:
 - campaign world-binding and launch contracts;
 - PostgreSQL migration and repositories;
 - compatibility adapter for current Campaign Genesis payloads;
-- read/create/publish/list APIs with deterministic hashes.
+- read/create/publish/list APIs with deterministic hashes;
+- persisted-definition verification for exact release revision, definition hash, and semantic-interface hash;
+- semantic validation of scenario map, spawn, route, object, and hazard references;
+- transactional published launch that creates the campaign, exact binding, and initialized starting Campaign Map Instance without World Forge.
 
-Exit condition met: one manually authored world and scenario can be published and a launch binding can be resolved without World Forge.
+Exit condition met: one manually authored world and scenario can be published and launched into authoritative spatial state without World Forge.
+
+Remaining:
+
+- import one persisted legacy Campaign Bible as an immutable World Revision, World Release, and Scenario Revision;
+- preserve explicit historical authoring provenance through that migration.
 
 ## Phase 2 — Minimum spatial foundation and golden slice
 
@@ -80,7 +96,7 @@ Golden proof completed:
 
 ## Phase 3 — Durable World Forge DAG
 
-Status: complete
+Status: in progress
 
 Delivered:
 
@@ -89,15 +105,22 @@ Delivered:
 - generic durable jobs per topic;
 - dependency-hash scheduling;
 - exact-result reuse;
-- stale-state propagation;
+- stale-result rejection;
 - partial regeneration and reconciliation;
-- publication into immutable World Revisions and Releases.
+- publication into immutable World Revisions and Releases;
+- interruption recovery from persisted completed topics.
 
-Exit condition met: process interruption can resume without losing completed topics, and changed inputs cannot reuse stale outputs.
+Core exit condition met: process interruption can resume without losing completed topics, and changed inputs cannot reuse stale outputs.
+
+Remaining:
+
+- revision-preserving topic-draft history instead of overwriting the same world/topic row;
+- explicit generation-run lineage across regenerated draft revisions;
+- review and rollback proof using preserved prior draft content.
 
 ## Phase 4 — Worlds & Campaigns UI
 
-Status: complete
+Status: in progress
 
 Delivered:
 
@@ -106,27 +129,36 @@ Delivered:
 - world/topic authoring surface;
 - scenario editor;
 - generation progress and validation findings;
-- map-blueprint summary/editor;
+- map-blueprint requirements summary;
 - release history;
-- fast launch from a published scenario.
+- fast launch from a certified published scenario into an initialized starting map.
 
-Exit condition met: the primary UI does not require World Forge during normal campaign launch from a certified release.
+Remaining:
+
+- editable map-blueprint authoring with validation and persistence;
+- visual reconciliation of semantic IDs used by scenarios;
+- lifecycle controls for archive and restore.
 
 ## Phase 5 — Starter bubble and progressive maps
 
-Status: complete
+Status: in progress
 
 Delivered:
 
 - world topology and deferred location slots;
 - starting region, settlement, interior, and one neighboring destination;
 - simulation and presentation readiness axes;
-- predictive background materialization;
+- deterministic predictive materialization candidate queue;
+- explicit deferred-map materialization;
 - navigable placeholder rendering while optional art is pending;
 - campaign pinning of progressively materialized definitions;
 - explicit promotion into a future World Revision.
 
-Exit condition met: a published world is immediately playable, deferred maps can materialize safely into explicit future revisions, existing campaigns remain pinned, and image-generation failure cannot block navigation-ready gameplay.
+Remaining:
+
+- durable background materialization jobs created from predictive candidates;
+- automatic scheduling based on campaign proximity or route intent;
+- retry, failure, and operational telemetry for background materialization.
 
 ## Phase 6 — Living NPC spatial goals and level-of-detail simulation
 
