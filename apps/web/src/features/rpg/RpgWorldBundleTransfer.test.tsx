@@ -23,11 +23,8 @@ describe('RpgWorldBundleTransfer', () => {
       });
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('URL', {
-      ...URL,
-      createObjectURL: vi.fn(() => 'blob:portable'),
-      revokeObjectURL: vi.fn(),
-    });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:portable');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
 
     render(<RpgWorldBundleTransfer initialWorldId="world:portable" />);
