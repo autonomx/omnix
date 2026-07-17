@@ -1,10 +1,14 @@
 """Deterministic observer knowledge, detection, line of sight, and projection."""
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any
 
 from pydantic import Field
 
+from .map_effective_geometry import (
+    effective_blocks_sight,
+    effective_terrain_rows,
+)
 from .map_grid_contracts import GridMapDefinition, GridPoint
 from .map_instance_runtime import CampaignMapInstanceSnapshot, FrozenRuntimeModel
 
@@ -89,12 +93,19 @@ def has_line_of_sight(
     definition: GridMapDefinition,
     start: GridPoint,
     end: GridPoint,
+    *,
+    snapshot: CampaignMapInstanceSnapshot | None = None,
 ) -> bool:
     definition.require_inside(start)
     definition.require_inside(end)
     cells = line_cells(start, end)
     for cell in cells[1:-1]:
-        if definition.terrain_rule(cell).blocks_sight:
+        blocked = (
+            effective_blocks_sight(definition, snapshot, cell)
+            if snapshot is not None
+            else definition.terrain_rule(cell).blocks_sight
+        )
+        if blocked:
             return False
     return True
 
@@ -103,6 +114,8 @@ def visible_cells(
     definition: GridMapDefinition,
     origin: GridPoint,
     sight_radius: int,
+    *,
+    snapshot: CampaignMapInstanceSnapshot | None = None,
 ) -> tuple[GridPoint, ...]:
     definition.require_inside(origin)
     cells = []
@@ -111,7 +124,12 @@ def visible_cells(
             cell = (column, row)
             if grid_distance(origin, cell) > sight_radius:
                 continue
-            if has_line_of_sight(definition, origin, cell):
+            if has_line_of_sight(
+                definition,
+                origin,
+                cell,
+                snapshot=snapshot,
+            ):
                 cells.append(cell)
     return tuple(sorted(cells, key=lambda cell: (cell[1], cell[0])))
 
@@ -152,10 +170,17 @@ def observe_map(
     policy: ObserverPerceptionPolicy | None = None,
 ) -> tuple[ObserverMapKnowledge, ObserverMapObservedEvent]:
     observer = snapshot.actor(observer_actor_id)
-    perception = policy or (previous.policy if previous is not None else ObserverPerceptionPolicy())
+    perception = policy or (
+        previous.policy if previous is not None else ObserverPerceptionPolicy()
+    )
     if perception.detection_radius > perception.sight_radius:
         raise ValueError("observer_detection_radius_exceeds_sight_radius")
-    current_visible = visible_cells(definition, observer.cell, perception.sight_radius)
+    current_visible = visible_cells(
+        definition,
+        observer.cell,
+        perception.sight_radius,
+        snapshot=snapshot,
+    )
     visible_set = set(current_visible)
     previous_known_cells = set(previous.known_cells if previous is not None else ())
     known_cells = (
@@ -277,31 +302,20 @@ def observe_map(
         map_state_revision=snapshot.map_state_revision,
         visible_cells=current_visible,
         newly_known_cells=tuple(
-            sorted(known_cells - previous_known_cells, key=lambda cell: (cell[1], cell[0]))
+            sorted(
+                known_cells - previous_known_cells,
+                key=lambda cell: (cell[1], cell[0]),
+            )
         ),
         detected_actor_ids=detected_actor_ids,
-        newly_detected_actor_ids=tuple(sorted(set(detected_actor_ids) - previous_actors)),
+        newly_detected_actor_ids=tuple(
+            sorted(set(detected_actor_ids) - previous_actors)
+        ),
         discovered_portal_ids=tuple(sorted(known_portals - previous_portals)),
         discovered_spawn_point_ids=tuple(sorted(known_spawns - previous_spawns)),
         discovered_zone_ids=tuple(sorted(known_zones - previous_zones)),
     )
     return knowledge, event
-
-
-def _masked_terrain_rows(
-    definition: GridMapDefinition,
-    known_cells: Iterable[GridPoint],
-) -> list[str]:
-    known = set(known_cells)
-    return [
-        "".join(
-            definition.terrain_rows[row][column]
-            if (column, row) in known
-            else "?"
-            for column in range(definition.width)
-        )
-        for row in range(definition.height)
-    ]
 
 
 def project_observer_knowledge(
@@ -333,7 +347,11 @@ def project_observer_knowledge(
             "width": definition.width,
             "height": definition.height,
             "transform": definition.transform.model_dump(mode="json"),
-            "terrain_rows": _masked_terrain_rows(definition, knowledge.known_cells),
+            "terrain_rows": effective_terrain_rows(
+                definition,
+                snapshot,
+                unknown_cells=set(knowledge.known_cells),
+            ),
             "terrain_palette": [
                 rule.model_dump(mode="json") for rule in definition.terrain_palette
             ],

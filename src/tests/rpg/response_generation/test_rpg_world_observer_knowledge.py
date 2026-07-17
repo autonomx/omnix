@@ -66,6 +66,7 @@ def _definition() -> GridMapDefinition:
             zones=(
                 GridZone(
                     zone_id="zone:secret",
+                    name="Secret Zone",
                     cells=((2, 4),),
                     secret=True,
                 ),
@@ -97,6 +98,7 @@ def test_observer_los_detection_memory_and_masked_projection() -> None:
         observer_actor_id="player:a",
         policy=ObserverPerceptionPolicy(sight_radius=6, detection_radius=2),
     )
+    first_projection = project_observer_knowledge(definition, snapshot, first)
 
     assert first.detected_actor_ids == (
         "npc:near-hidden",
@@ -107,6 +109,8 @@ def test_observer_los_detection_memory_and_masked_projection() -> None:
     assert first.known_spawn_point_ids == ("spawn:secret",)
     assert first.known_zone_ids == ("zone:secret",)
     assert "npc:far-hidden" not in event.detected_actor_ids
+    assert any("?" in row for row in first_projection["grid"]["terrain_rows"])
+    assert "hazard_states" not in first_projection
 
     moved = snapshot.model_copy(
         update={
@@ -131,7 +135,6 @@ def test_observer_los_detection_memory_and_masked_projection() -> None:
     assert second.known_portal_ids == ("portal:secret",)
     assert "npc:near-hidden" not in {actor["actor_id"] for actor in projection["actors"]}
     assert "npc:far-hidden" in {actor["actor_id"] for actor in projection["actors"]}
-    assert any("?" in row for row in projection["grid"]["terrain_rows"])
     assert "hazard_states" not in projection
     assert projection["object_states"] == {}
 
