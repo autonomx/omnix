@@ -177,7 +177,7 @@ def _seed_campaign(
         work.commit()
 
 
-def test_predictive_jobs_are_idempotent_complete_and_report_telemetry() -> None:
+def test_predictive_jobs_are_idempotent_promoted_complete_and_report_telemetry() -> None:
     database = _database()
     try:
         _reset(database)
@@ -186,7 +186,14 @@ def test_predictive_jobs_are_idempotent_complete_and_report_telemetry() -> None:
             world_id="world:materialization-success",
             campaign_id="campaign:materialization-success",
         )
-        first = schedule_campaign_predictive_materialization(
+        proximity = schedule_campaign_predictive_materialization(
+            "campaign:materialization-success",
+            current_location_id="location:harbor",
+            minimum_score=0.35,
+            database=database,
+            kick_worker=False,
+        )
+        route_intent = schedule_campaign_predictive_materialization(
             "campaign:materialization-success",
             current_location_id="location:harbor",
             route_intent_location_id="location:old-road:frontier",
@@ -203,18 +210,30 @@ def test_predictive_jobs_are_idempotent_complete_and_report_telemetry() -> None:
             kick_worker=False,
         )
 
-        assert len(first["scheduled"]) == 1
-        assert first["scheduled"][0]["created"] is True
-        assert first["scheduled"][0]["priority"] == 95
-        assert first["scheduled"][0]["trigger_reasons"] == ["route_intent"]
+        assert len(proximity["scheduled"]) == 1
+        assert proximity["scheduled"][0]["created"] is True
+        assert proximity["scheduled"][0]["priority"] == 45
+        assert proximity["scheduled"][0]["trigger_reasons"] == [
+            "campaign_proximity"
+        ]
+        assert route_intent["scheduled"][0]["created"] is False
+        assert route_intent["scheduled"][0]["priority"] == 95
+        assert route_intent["scheduled"][0]["trigger_reasons"] == ["route_intent"]
+        assert route_intent["scheduled"][0]["job_id"] == proximity["scheduled"][0][
+            "job_id"
+        ]
         assert repeated["scheduled"][0]["created"] is False
-        assert repeated["scheduled"][0]["job_id"] == first["scheduled"][0]["job_id"]
+        assert repeated["scheduled"][0]["job_id"] == proximity["scheduled"][0][
+            "job_id"
+        ]
         queued = materialization_job_telemetry(
             world_id="world:materialization-success",
             source_world_revision=2,
             database=database,
         )
         assert queued["counts"] == {"queued": 1}
+        assert queued["jobs"][0]["priority"] == 95
+        assert queued["jobs"][0]["trigger_reasons"] == ["route_intent"]
         completed = run_materialization_worker_once(database=database)
         assert completed is not None and completed["ok"] is True
         assert completed["job"]["status"] == "completed"
