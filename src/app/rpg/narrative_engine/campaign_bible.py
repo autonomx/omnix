@@ -110,23 +110,27 @@ def _effective_visibility(
     *,
     discovery_status: str = "",
 ) -> VisibilityClass:
+    raw = _visibility(raw_visibility)
+    if raw not in {VisibilityClass.PUBLIC, VisibilityClass.PLAYER_KNOWN}:
+        return raw
     status = str(discovery_status or "").strip().casefold()
-    if status:
-        if status not in _VISIBLE_DISCOVERY_STATUSES:
-            return VisibilityClass.GAME_MASTER_ONLY
-        if status == "public_at_campaign_start":
-            return VisibilityClass.PUBLIC
-        return VisibilityClass.PLAYER_KNOWN
-    return _visibility(raw_visibility)
+    if not status:
+        return raw
+    if status not in _VISIBLE_DISCOVERY_STATUSES:
+        return VisibilityClass.GAME_MASTER_ONLY
+    if status == "public_at_campaign_start":
+        return VisibilityClass.PUBLIC
+    return VisibilityClass.PLAYER_KNOWN
 
 
 def _content_value(value: Any) -> str:
     if isinstance(value, Mapping):
-        return ", ".join(
-            f"{key}: {_content_value(item)}"
-            for key, item in value.items()
-            if _content_value(item)
-        )
+        parts = []
+        for key, item in value.items():
+            text = _content_value(item)
+            if text:
+                parts.append(f"{key}: {text}")
+        return ", ".join(parts)
     if isinstance(value, list | tuple | set):
         return ", ".join(str(item) for item in value if str(item).strip())
     return str(value or "").strip()
@@ -267,7 +271,10 @@ def campaign_bible_evidence(snapshot: CampaignBibleSnapshot) -> tuple[EvidenceRe
                 snapshot,
                 raw,
                 index=index,
-                evidence_id=str(raw.get("evidence_id") or f"bible:document:{document_id}"),
+                evidence_id=str(
+                    raw.get("evidence_id")
+                    or f"bible:document:{document_id or index}"
+                ),
                 content=f"{title}\n{body}"[:8_000],
                 category=str(raw.get("category") or raw.get("topic_id") or "world_lore"),
                 visibility=_effective_visibility(
@@ -296,6 +303,9 @@ def campaign_bible_evidence(snapshot: CampaignBibleSnapshot) -> tuple[EvidenceRe
         if not isinstance(value, Mapping):
             continue
         raw = {"id": str(entity_id), **dict(value)}
+        raw["entity_refs"] = list(
+            dict.fromkeys((str(entity_id), *_strings(raw.get("entity_refs"))))
+        )
         content = _entity_content(str(entity_id), raw)
         if not content:
             continue
