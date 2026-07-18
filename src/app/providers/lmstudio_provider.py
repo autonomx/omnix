@@ -63,9 +63,9 @@ class LMStudioProvider(BaseProvider):
             (parsed.scheme, f"127.0.0.1{port}", parsed.path, parsed.query, parsed.fragment)
         )
 
-    def _chat_completion_endpoint(self) -> str:
+    def _metrics_chat_completion_endpoint(self) -> str:
         configured = str(
-            self.config.extra_params.get("chat_completions_endpoint") or ""
+            self.config.extra_params.get("metrics_chat_completions_endpoint") or ""
         ).strip()
         if not configured:
             return _NATIVE_CHAT_COMPLETIONS_ENDPOINT
@@ -110,8 +110,7 @@ class LMStudioProvider(BaseProvider):
         except RequestsHTTPError as e:
             if e.response.status_code == 401:
                 raise AuthenticationError(f"Authentication failed: {e}")
-            else:
-                raise ConnectionError(f"HTTP error {e.response.status_code}: {e}")
+            raise ConnectionError(f"HTTP error {e.response.status_code}: {e}")
         except Exception as e:
             if isinstance(e, ConnectionError):
                 raise
@@ -122,9 +121,18 @@ class LMStudioProvider(BaseProvider):
         payload: Dict[str, Any],
         *,
         stream: bool,
+        include_metrics: bool,
     ) -> requests.Response:
-        """Prefer LM Studio's stats-bearing endpoint with an OpenAI fallback."""
-        endpoint = self._chat_completion_endpoint()
+        """Use the stats-bearing native endpoint only for explicit metric requests."""
+        if not include_metrics:
+            return self._make_request(
+                'post',
+                _OPENAI_CHAT_COMPLETIONS_ENDPOINT,
+                json=payload,
+                stream=stream,
+            )
+
+        endpoint = self._metrics_chat_completion_endpoint()
         try:
             return self._make_request(
                 'post',
@@ -183,9 +191,8 @@ class LMStudioProvider(BaseProvider):
             if not messages:
                 raise ValueError("Messages list cannot be empty")
 
-            # Prepare minimal OpenAI-compatible payload for LM Studio
             resolved_model = model or self.config.model
-
+            include_metrics = bool(kwargs.get("include_metrics", False))
             payload = {
                 "messages": [msg.to_dict() for msg in messages],
                 "temperature": kwargs.get("temperature", 0.7),
@@ -198,25 +205,40 @@ class LMStudioProvider(BaseProvider):
             if resolved_model:
                 payload["model"] = resolved_model
 
-            # Add other optional parameters only if explicitly provided
+            # Add other optional parameters only if explicitly provided.
+            # include_metrics is an Omnix adapter option, not an LM Studio field.
             for key in ["max_tokens", "top_p", "response_format", "chat_template_kwargs"]:
                 if key in kwargs:
                     payload[key] = kwargs[key]
 
-            # Make request
             if stream:
-                result = self._stream_completion(payload)
+                result = self._stream_completion(
+                    payload,
+                    include_metrics=include_metrics,
+                )
             else:
-                result = self._non_stream_completion(payload)
+                result = self._non_stream_completion(
+                    payload,
+                    include_metrics=include_metrics,
+                )
             provider_call_exit(_trace_row, ok=True)
             return result
         except Exception as exc:
             provider_call_exit(_trace_row, ok=False, error=f"{type(exc).__name__}: {exc}")
             raise
 
-    def _non_stream_completion(self, payload: Dict[str, Any]) -> ChatResponse:
+    def _non_stream_completion(
+        self,
+        payload: Dict[str, Any],
+        *,
+        include_metrics: bool = False,
+    ) -> ChatResponse:
         """Handle non-streaming completion."""
-        response = self._make_chat_completion_request(payload, stream=False)
+        response = self._make_chat_completion_request(
+            payload,
+            stream=False,
+            include_metrics=include_metrics,
+        )
 
         try:
             data = response.json()
@@ -229,8 +251,6 @@ class LMStudioProvider(BaseProvider):
 
         message = choices[0].get('message', {})
         content = message.get('content', '')
-
-        # Handle OpenRouter-style thinking/reasoning
         thinking = message.get('reasoning') or message.get('thinking')
 
         return ChatResponse(
@@ -240,17 +260,25 @@ class LMStudioProvider(BaseProvider):
             thinking=thinking,
             reasoning=thinking,
             finish_reason=choices[0].get('finish_reason'),
-            raw_response=data
+            raw_response=data,
         )
 
-    def _stream_completion(self, payload: Dict[str, Any]) -> Iterator[ChatResponse]:
-        """Handle streaming completion and retain the final LM Studio stats chunk."""
+    def _stream_completion(
+        self,
+        payload: Dict[str, Any],
+        *,
+        include_metrics: bool = False,
+    ) -> Iterator[ChatResponse]:
+        """Handle streaming completion and retain the final usage or stats chunk."""
         try:
-            response = self._make_chat_completion_request(payload, stream=True)
+            response = self._make_chat_completion_request(
+                payload,
+                stream=True,
+                include_metrics=include_metrics,
+            )
         except Exception as e:
             raise ConnectionError(f"Failed to start stream: {e}")
 
-        content_buffer = ""
         thinking_buffer = ""
         usage: Dict[str, Any] | None = None
         finish_reason: str | None = None
@@ -276,16 +304,20 @@ class LMStudioProvider(BaseProvider):
                         continue
 
                     choices = data.get('choices')
-                    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+                    choice = (
+                        choices[0]
+                        if isinstance(choices, list)
+                        and choices
+                        and isinstance(choices[0], dict)
+                        else {}
+                    )
                     delta = choice.get('delta') if isinstance(choice.get('delta'), dict) else {}
 
                     reasoning = delta.get('reasoning')
                     if isinstance(reasoning, str):
                         thinking_buffer += reasoning
                     content = delta.get('content')
-                    if isinstance(content, str):
-                        content_buffer += content
-                    else:
+                    if not isinstance(content, str):
                         content = ''
 
                     chunk_usage = data.get('usage')
@@ -304,12 +336,12 @@ class LMStudioProvider(BaseProvider):
                         thinking=reasoning if isinstance(reasoning, str) else None,
                         reasoning=reasoning if isinstance(reasoning, str) else None,
                         finish_reason=str(chunk_finish_reason) if chunk_finish_reason else None,
-                        raw_response=data
+                        raw_response=data,
                     )
                 except (ValueError, SyntaxError, KeyError, IndexError, TypeError):
                     continue
 
-            # Final response carries usage, finish reason, and the stats-bearing
+            # Final response carries usage, finish reason, and a stats-bearing
             # final payload even when it has no text content.
             yield ChatResponse(
                 content="",
@@ -318,7 +350,7 @@ class LMStudioProvider(BaseProvider):
                 thinking=thinking_buffer if thinking_buffer else None,
                 reasoning=thinking_buffer if thinking_buffer else None,
                 finish_reason=finish_reason,
-                raw_response=last_response
+                raw_response=last_response,
             )
 
         except Exception as e:
@@ -393,7 +425,6 @@ class LMStudioProvider(BaseProvider):
             True if connection successful, False otherwise
         """
         try:
-            # Try the models endpoint as a health check
             response = self._make_request('get', '/v1/models', timeout=5)
             return response.status_code == 200
         except Exception:
