@@ -1,9 +1,17 @@
-"""Read-only RPG inventory item details with presentation-only LLM prose."""
+"""Read-only RPG inventory item details with persisted presentation-only LLM prose."""
 from __future__ import annotations
 
+import hashlib
 from copy import deepcopy
+from functools import lru_cache
 from typing import Any
 
+from app.persistence.database import default_database
+from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.rpg_item_description_repository import (
+    PostgresRpgItemDescriptionRepository,
+)
+from app.persistence.rpg_repository import canonical_json
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.inventory_items import (
     canonical_item_id,
@@ -225,6 +233,73 @@ def _detail_payload(item_name: str, item: dict[str, Any] | None, *, summary: str
     }
 
 
+@lru_cache(maxsize=1)
+def _description_database_context() -> tuple[Any, Any]:
+    database = default_database()
+    context = bootstrap_local_tenant(database)
+    return database, context
+
+
+def _description_key(
+    item: dict[str, Any],
+    lore_item: dict[str, Any],
+    setting: dict[str, Any],
+) -> tuple[str, str, str]:
+    item_key = canonical_item_id(item) or display_item_name(item).casefold().replace(" ", "_")
+    encoded = canonical_json(
+        {
+            "prompt_version": ITEM_DETAIL_SOURCE,
+            "item_key": item_key,
+            "item": lore_item,
+            "setting": setting,
+        }
+    )
+    context_hash = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return context_hash, context_hash, item_key
+
+
+def _read_persisted_description(description_key: str) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        database, context = _description_database_context()
+        with database.transaction() as connection:
+            row = PostgresRpgItemDescriptionRepository(connection).get(
+                context,
+                description_key,
+            )
+        return row, None
+    except Exception as exc:  # PostgreSQL availability must not hide the item UI.
+        return None, type(exc).__name__
+
+
+def _persist_description(
+    *,
+    description_key: str,
+    context_hash: str,
+    item_key: str,
+    item_name: str,
+    genre: str,
+    summary: str,
+    metadata: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        database, context = _description_database_context()
+        with database.transaction() as connection:
+            row = PostgresRpgItemDescriptionRepository(connection).put(
+                context,
+                description_key=description_key,
+                item_key=item_key,
+                item_name=item_name,
+                genre=genre,
+                context_hash=context_hash,
+                summary=summary,
+                source="llm",
+                metadata=metadata,
+            )
+        return row, None
+    except Exception as exc:  # Generation remains usable while persistence is repaired.
+        return None, type(exc).__name__
+
+
 def generate_item_detail(
     state: dict[str, Any],
     item_name: str,
@@ -232,7 +307,7 @@ def generate_item_detail(
     genre: str | None = None,
     llm_gateway: Any | None = None,
 ) -> dict[str, Any]:
-    """Generate bounded prose for an inventory item without mutating state."""
+    """Read a cached item description or generate and persist it once."""
 
     player, items = _inventory(_safe_dict(state))
     item = _find_item(items, item_name)
@@ -261,6 +336,28 @@ def generate_item_detail(
     }
     lore_item = _lore_item_context(item, context)
     setting = _setting_context(state, resolved_genre)
+    description_key, context_hash, item_key = _description_key(item, lore_item, setting)
+    cached, cache_error = _read_persisted_description(description_key)
+    if cached is not None:
+        detail = _detail_payload(
+            item_name,
+            item,
+            summary=_text(cached.get("summary")),
+            source="postgresql_cache",
+        )
+        detail["status"] = facts["status"]
+        return {
+            "ok": True,
+            "item_detail": detail,
+            "mechanics_source": ITEM_DETAIL_SOURCE,
+            "description_persistence": {
+                "backend": "postgresql",
+                "status": "stored",
+                "cache_hit": True,
+                "description_key": description_key,
+            },
+        }
+
     gateway = llm_gateway or build_app_llm_gateway()
     if gateway is None:
         detail = _detail_payload(
@@ -275,6 +372,12 @@ def generate_item_detail(
             "error": "item_detail_llm_unavailable",
             "item_detail": detail,
             "mechanics_source": ITEM_DETAIL_SOURCE,
+            "description_persistence": {
+                "backend": "postgresql",
+                "status": "cache_miss" if cache_error is None else "unavailable",
+                "cache_hit": False,
+                "error": cache_error,
+            },
         }
 
     prompt = (
@@ -309,12 +412,38 @@ def generate_item_detail(
             "error": "item_detail_llm_failed",
             "item_detail": detail,
             "mechanics_source": ITEM_DETAIL_SOURCE,
+            "description_persistence": {
+                "backend": "postgresql",
+                "status": "cache_miss" if cache_error is None else "unavailable",
+                "cache_hit": False,
+                "error": cache_error,
+            },
         }
 
+    persisted, persistence_error = _persist_description(
+        description_key=description_key,
+        context_hash=context_hash,
+        item_key=item_key,
+        item_name=facts["name"],
+        genre=resolved_genre,
+        summary=summary,
+        metadata={
+            "prompt_version": ITEM_DETAIL_SOURCE,
+            "item_type": facts["item_type"],
+            "tags": facts["tags"],
+        },
+    )
     detail = _detail_payload(item_name, item, summary=summary, source="llm")
     detail["status"] = facts["status"]
     return {
         "ok": True,
         "item_detail": detail,
         "mechanics_source": ITEM_DETAIL_SOURCE,
+        "description_persistence": {
+            "backend": "postgresql",
+            "status": "stored" if persisted is not None else "unavailable",
+            "cache_hit": False,
+            "description_key": description_key,
+            "error": persistence_error,
+        },
     }
