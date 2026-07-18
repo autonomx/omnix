@@ -25,21 +25,20 @@ def _stats_payload() -> dict[str, Any]:
     }
 
 
-def test_lmstudio_stream_retains_final_usage_and_stats(monkeypatch) -> None:
-    calls: list[tuple[str, str, dict[str, Any]]] = []
+class _StreamResponse:
+    def iter_lines(self):
+        yield b'data: {"model":"qwen","choices":[{"delta":{"content":"Howdy"}}]}'
+        yield (
+            b'data: {"model":"qwen","choices":[{"delta":{},"finish_reason":"stop"}],'
+            b'"usage":{"prompt_tokens":18,"completion_tokens":37,"total_tokens":55},'
+            b'"stats":{"tokens_per_second":127.26,"time_to_first_token":0.11,'
+            b'"generation_time":0.38,"stop_reason":"eosFound"}}'
+        )
+        yield b'data: [DONE]'
 
-    class FakeResponse:
-        def iter_lines(self):
-            yield b'data: {"model":"qwen","choices":[{"delta":{"content":"Howdy"}}]}'
-            yield (
-                b'data: {"model":"qwen","choices":[{"delta":{},"finish_reason":"stop"}],'
-                b'"usage":{"prompt_tokens":18,"completion_tokens":37,"total_tokens":55},'
-                b'"stats":{"tokens_per_second":127.26,"time_to_first_token":0.11,'
-                b'"generation_time":0.38,"stop_reason":"eosFound"}}'
-            )
-            yield b'data: [DONE]'
 
-    provider = LMStudioProvider(
+def _provider() -> LMStudioProvider:
+    return LMStudioProvider(
         ProviderConfig(
             provider_type="lmstudio",
             base_url="http://localhost:1234",
@@ -47,9 +46,14 @@ def test_lmstudio_stream_retains_final_usage_and_stats(monkeypatch) -> None:
         )
     )
 
-    def fake_make_request(method: str, endpoint: str, **kwargs: Any) -> FakeResponse:
+
+def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> None:
+    calls: list[tuple[str, str, dict[str, Any]]] = []
+    provider = _provider()
+
+    def fake_make_request(method: str, endpoint: str, **kwargs: Any) -> _StreamResponse:
         calls.append((method, endpoint, kwargs))
-        return FakeResponse()
+        return _StreamResponse()
 
     monkeypatch.setattr(provider, "_make_request", fake_make_request)
 
@@ -57,6 +61,7 @@ def test_lmstudio_stream_retains_final_usage_and_stats(monkeypatch) -> None:
         provider.chat_completion(
             [ChatMessage(role="user", content="Hello")],
             stream=True,
+            include_metrics=True,
         )
     )
 
@@ -70,6 +75,26 @@ def test_lmstudio_stream_retains_final_usage_and_stats(monkeypatch) -> None:
     }
     assert chunks[-1].finish_reason == "stop"
     assert chunks[-1].raw_response["stats"]["tokens_per_second"] == 127.26
+
+
+def test_lmstudio_regular_stream_keeps_openai_compatible_endpoint(monkeypatch) -> None:
+    calls: list[str] = []
+    provider = _provider()
+
+    def fake_make_request(method: str, endpoint: str, **kwargs: Any) -> _StreamResponse:
+        calls.append(endpoint)
+        return _StreamResponse()
+
+    monkeypatch.setattr(provider, "_make_request", fake_make_request)
+
+    list(
+        provider.chat_completion(
+            [ChatMessage(role="user", content="Hello")],
+            stream=True,
+        )
+    )
+
+    assert calls == ["/v1/chat/completions"]
 
 
 def test_provider_metrics_normalize_lmstudio_stats() -> None:
@@ -123,6 +148,7 @@ def test_lmstudio_prompt_stream_persists_metrics_on_completion(monkeypatch) -> N
 
         def chat_completion(self, **kwargs: Any):
             assert kwargs["stream"] is True
+            assert kwargs["include_metrics"] is True
             return iter(
                 [
                     ChatResponse(content="Hello there.", model="qwen"),
