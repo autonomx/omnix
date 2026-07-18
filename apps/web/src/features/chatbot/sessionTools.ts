@@ -1,5 +1,7 @@
 import { omnixApiClient } from '../../api/client';
 import type { ChatSession, CreateChatSessionRequest } from '../../api/client';
+import './chat-response-metrics-controller.css';
+import { initializeChatResponseMetricsController } from './chat-response-metrics-controller';
 import { characterClient, type SessionInteraction } from './characterClient';
 
 const INSTALLED_KEY = '__omnix_chat_session_tools__';
@@ -184,4 +186,5 @@ export function installSessionTools(): void {
   else watchButtons();
 }
 
+initializeChatResponseMetricsController();
 installSessionTools();
