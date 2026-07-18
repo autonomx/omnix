@@ -66,7 +66,7 @@ def _evidence_ids(evidence: Sequence[EvidenceRecord], *entity_hints: str) -> tup
     if not hints:
         return tuple(record.evidence_id for record in evidence[:3])
     matching = [record.evidence_id for record in evidence if hints.intersection(record.entity_refs)]
-    return tuple(matching[:4])
+    return tuple(matching[:4]) or tuple(record.evidence_id for record in evidence[:3])
 
 
 def _authoritative_evidence_ids(evidence: Sequence[EvidenceRecord]) -> tuple[str, ...]:
@@ -365,6 +365,6 @@ class DeterministicBeatPlanner:
                 "player_evidence_count": len(player_evidence),
                 "narrator_evidence_count": len(narrator_evidence),
                 "speaker_evidence_count": len(grants.for_speaker(speaker)),
-                "speaker_id": speaker or "",
+                "dialogue_speaker_count": dialogue_speaker_count,
             },
         )
