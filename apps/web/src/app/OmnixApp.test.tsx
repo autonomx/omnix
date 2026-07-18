@@ -43,6 +43,8 @@ describe('OmnixApp', () => {
     expect(screen.getByRole('link', { name: 'Reports' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Diagnostics' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Storyteller mode' })).toHaveTextContent('Storyteller');
+    expect(screen.getByRole('button', { name: 'Open Podcast mode' })).toHaveTextContent('Podcast');
   });
 
   it('uses the Omnix mark as a complete sidebar visibility toggle', async () => {
