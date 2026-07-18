@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RpgLorePanel } from './RpgLorePanel';
 
@@ -8,12 +8,12 @@ describe('RpgLorePanel', () => {
     window.localStorage.clear();
   });
 
-  it('renders player-safe character, location, and faction dossiers', async () => {
+  it('shows the complete lore navigation and discovered dossiers', async () => {
     window.localStorage.setItem('omnix:rpg:selected-session-id', 'campaign:test');
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       ok: true,
       session_id: 'campaign:test',
-      canon_revision: 1,
+      canon_revision: 2,
       content_hash: 'sha256:test',
       categories: [],
       visible_count: 0,
@@ -24,14 +24,30 @@ describe('RpgLorePanel', () => {
         factions: [{ id: 'faction:watch', kind: 'faction', name: 'Northern Watch', status: 'partially_known', public_goal: 'Keep the roads safe.' }],
       },
       generation: { status: 'ready', launch_ready: true, percent: 100, jobs: [] },
+      storage: {
+        mode: 'postgresql_authority',
+        persisted: true,
+        revision: 2,
+        current_location: { id: 'location:tavern', name: 'Rusty Flagon Tavern' },
+        generated_current_location: true,
+      },
     }), { status: 200 })));
 
     render(<RpgLorePanel />);
 
-    await waitFor(() => expect(screen.getByText('Known world dossiers')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Campaign Bible summary' })).toBeInTheDocument());
+    expect(screen.getByText('PostgreSQL authority')).toBeInTheDocument();
+    expect(screen.getByText('Lore generated and stored')).toBeInTheDocument();
+
+    for (const category of ['World Lore', 'Areas', 'Points of Interest', 'Characters', 'Races', 'Classes', 'Monsters', 'Items', 'Spells', 'Feats', 'Quests', 'Discoveries']) {
+      expect(screen.getByRole('region', { name: category })).toBeInTheDocument();
+    }
+
     expect(screen.getByText('Bran')).toBeInTheDocument();
-    expect(screen.getByText('Rusty Flagon Tavern')).toBeInTheDocument();
+    expect(screen.getAllByText('Rusty Flagon Tavern').length).toBeGreaterThan(0);
     expect(screen.getByText('Northern Watch')).toBeInTheDocument();
-    expect(screen.getByText('A watchful innkeeper.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Rusty Flagon Tavern/i }));
+    expect(screen.getByText('Rain and hearth smoke.')).toBeInTheDocument();
   });
 });
