@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Callable, Dict, List
 
+from app.rpg.session.dialogue_focus import resolve_dialogue_target
 from app.rpg.session.memory_prompt import build_relevant_memory_context_from_runtime
 
 
@@ -203,7 +204,14 @@ def build_turn_grounding_packet(*, player_input: str, simulation_state: Dict[str
     all_npcs = _npcs(sim, rt)
     present = _present_ids(sim, rt, scene)
     referenced = _referenced_npcs(player_input, all_npcs)
-    addressed = _addressed(referenced, present)
+    dialogue_resolution = resolve_dialogue_target(
+        player_input=player_input,
+        simulation_state=sim,
+        runtime_state=rt,
+        candidate_action=cand,
+    )
+    locked_target_id = _s(dialogue_resolution.get("target_id")) if dialogue_resolution.get("locked") else ""
+    addressed = [locked_target_id] if locked_target_id else _addressed(referenced, present)
     referenced_absent = [npc_id for npc_id in referenced if present and npc_id not in present]
     by_id = {_npc_id("", npc): npc for npc in all_npcs}
     addressed_profiles = [_rich_profile(npc_id, by_id.get(npc_id, {}), sim, rt, profile_loader) for npc_id in addressed if npc_id]
@@ -223,6 +231,9 @@ def build_turn_grounding_packet(*, player_input: str, simulation_state: Dict[str
         actor_ids=addressed,
         location_id=scene.get("location_id") or player.get("location_id"),
     )
+    dialogue_context = _d(dialogue_resolution.get("dialogue_context"))
+    exact_recent_turns = [_d(row) for row in _l(dialogue_context.get("recent_turns")) if _d(row)]
+    recent_turns = exact_recent_turns[-8:] or _recent(rt)
     return {
         "format_version": "turn_grounding_packet_v1",
         "source": "deterministic_runtime_context",
@@ -233,11 +244,13 @@ def build_turn_grounding_packet(*, player_input: str, simulation_state: Dict[str
             "active_modes": {"combat_active": bool(combat.get("active")), "commerce_available": bool(_l(rt.get("transaction_menus")) or _l(rt.get("active_transaction_menus"))), "active_interaction_count": len(_l(sim.get("active_interactions"))), "narration_mode": _s(rt.get("narration_mode") or _d(rt.get("settings")).get("narration_mode"))},
             "addressed_npc_ids": addressed,
             "referenced_absent_npc_ids": referenced_absent,
-            "recent_turns": _recent(rt),
+            "dialogue_resolution": dialogue_resolution,
+            "dialogue_context": dialogue_context,
+            "recent_turns": recent_turns,
         },
         "authoritative_state": {"player": {"location_id": _s(player.get("location_id")), "stats": _d(player.get("stats")), "skills": _d(player.get("skills")), "currency": _d(inv.get("currency")), "inventory_items": _l(inv.get("items"))[:20]}, "combat": combat, "active_interactions": _l(sim.get("active_interactions"))[:8], "quests": _d(sim.get("quest_state") or rt.get("quest_state"))},
         "npc_context": {"addressed_npcs": addressed_profiles, "nearby_npcs": nearby},
         "relevant_memory": relevant_memory,
         "private_context": {"note": "Private biography/inventory fields are for adjudication only. Do not reveal them unless runtime exposes them.", "addressed_npc_private_fields_present": [{"id": _s(p.get("id")), "has_private_biography": bool(_s(_d(p.get("biography")).get("private"))), "has_private_inventory": bool(_l(_d(p.get("inventory")).get("private")))} for p in addressed_profiles]},
-        "rules": {"runtime_state_overrides_memory": True, "first_llm_may_classify_intent": True, "first_llm_may_answer_non_stateful_interpretive_dialogue": True, "first_llm_must_not_resolve_stateful_outcomes": True, "stateful_actions_require_deterministic_runtime": True, "do_not_reveal_private_context": True},
+        "rules": {"runtime_state_overrides_memory": True, "dialogue_target_lock_is_authoritative": bool(dialogue_resolution.get("locked")), "first_llm_may_classify_intent": True, "first_llm_may_answer_non_stateful_interpretive_dialogue": True, "first_llm_must_not_resolve_stateful_outcomes": True, "stateful_actions_require_deterministic_runtime": True, "do_not_reveal_private_context": True},
     }
