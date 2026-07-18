@@ -7,6 +7,7 @@ import { RpgWorldBundleTransfer } from './RpgWorldBundleTransfer';
 import { RpgWorldsCampaignsLibrary } from './RpgWorldsCampaignsLibrary';
 import type { RpgSessionSummaryPreview } from './rpgUiState';
 import './RpgLoreOverlay.css';
+import './RpgPlayFocus.css';
 import './RpgWorldLibraryOverlay.css';
 
 interface RpgWorkspaceHeaderProps {
@@ -21,6 +22,7 @@ interface RpgWorkspaceHeaderProps {
   submitStatus: string;
 }
 
+const RPG_PLAY_FOCUS_CLASS = 'rpg-play-focus-mode';
 const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
 const RPG_LAUNCHER_HOME_GRID_SELECTOR = '.rpg-launcher-home-grid';
 const RPG_LAUNCHER_DIALOG_SELECTOR = '.rpg-launcher-dialog';
@@ -37,11 +39,17 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
     onToggleWorldRail,
     selectedSessionSummary,
   } = props;
+  const [isHidden, setIsHidden] = useState(false);
   const [isLoreOpen, setIsLoreOpen] = useState(false);
   const [isWorldLibraryOpen, setIsWorldLibraryOpen] = useState(false);
   const [worldLibraryRequested, setWorldLibraryRequested] = useState(false);
   const [campaignLauncherHomeGrid, setCampaignLauncherHomeGrid] = useState<HTMLElement | null>(null);
   const [campaignLauncherDialog, setCampaignLauncherDialog] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle(RPG_PLAY_FOCUS_CLASS, isHidden);
+    return () => document.documentElement.classList.remove(RPG_PLAY_FOCUS_CLASS);
+  }, [isHidden]);
 
   useEffect(() => {
     if (!isLoreOpen) return undefined;
@@ -123,6 +131,9 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
           Worlds &amp; Campaigns
         </button>
         <div className="rpg-unified-header-controls" aria-label="Workspace layout controls">
+          <button className="rpg-secondary-button rpg-header-toggle" type="button" onClick={() => setIsHidden((value) => !value)}>
+            {isHidden ? 'Show header' : 'Hide header'}
+          </button>
           <button
             className="rpg-secondary-button"
             type="button"
