@@ -5,7 +5,11 @@ from typing import Any
 
 from app import shared
 from app.chat.provider_metrics import merge_provider_response_metrics
-from app.gateway.live_chat_provider_metrics import _is_lmstudio, _stream_lmstudio_reply
+from app.gateway.live_chat_provider_metrics import (
+    _LowLatencyTextChunker,
+    _is_lmstudio,
+    _stream_lmstudio_reply,
+)
 from app.providers import ChatMessage, ChatResponse, LMStudioProvider, ProviderConfig
 
 
@@ -140,6 +144,16 @@ def test_default_provider_is_detected_as_lmstudio(monkeypatch) -> None:
     assert requested == [None]
 
 
+def test_low_latency_chunker_emits_first_word_before_sentence_completion() -> None:
+    chunker = _LowLatencyTextChunker()
+
+    assert chunker.push("How") == []
+    assert chunker.push("dy ") == ["Howdy "]
+    assert chunker.push("right back") == []
+    assert chunker.push(" at ya.") == ["right back at ya."]
+    assert chunker.flush() == ""
+
+
 def test_lmstudio_prompt_stream_persists_metrics_on_completion(monkeypatch) -> None:
     payload = _stats_payload()
 
@@ -195,3 +209,57 @@ def test_lmstudio_prompt_stream_persists_metrics_on_completion(monkeypatch) -> N
     assert complete["metadata"]["usage"]["completion_tokens"] == 37
     assert complete["metadata"]["provider_metrics"]["tokens_per_second"] == 127.26
     assert complete["metadata"]["provider_metrics"]["stop_reason"] == "eosFound"
+
+
+def test_lmstudio_prompt_stream_reconstructs_split_provider_deltas(monkeypatch) -> None:
+    payload = _stats_payload()
+
+    class FakeProvider:
+        provider_name = "lmstudio"
+
+        def chat_completion(self, **kwargs: Any):
+            return iter(
+                [
+                    ChatResponse(content="How", model="qwen"),
+                    ChatResponse(content="dy ", model="qwen"),
+                    ChatResponse(content="right", model="qwen"),
+                    ChatResponse(content=" back", model="qwen"),
+                    ChatResponse(content=" at ya.", model="qwen"),
+                    ChatResponse(
+                        content="",
+                        model="qwen",
+                        usage=payload["usage"],
+                        finish_reason="stop",
+                        raw_response=payload,
+                    ),
+                ]
+            )
+
+    rendered = SimpleNamespace(
+        messages=[SimpleNamespace(role="user", content="Hello")],
+    )
+    store = SimpleNamespace(
+        build_provider_prompt=lambda session, user_message, context_items: (
+            SimpleNamespace(diagnostics={}),
+            rendered,
+        ),
+        _active_memory_metadata=lambda assembly, current_rendered: {},
+        _active_history_metadata=lambda assembly: {},
+    )
+
+    events = list(
+        _stream_lmstudio_reply(
+            store,
+            SimpleNamespace(id="chat:test"),
+            SimpleNamespace(id="msg:user", content="Hello"),
+            provider_id="llm:lmstudio",
+            model_id="llm:lmstudio:qwen",
+            context_items=[],
+            provider=FakeProvider(),
+        )
+    )
+
+    text_events = [event["text"] for event in events if event["type"] == "text_chunk"]
+    assert text_events[0] == "Howdy "
+    assert "".join(text_events) == "Howdy right back at ya."
+    assert events[-1]["content"] == "Howdy right back at ya."
