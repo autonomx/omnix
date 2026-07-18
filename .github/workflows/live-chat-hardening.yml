@@ -43,9 +43,11 @@ jobs:
       - name: Ruff Live Chat hardening modules
         run: |
           ruff check \
+            src/app/chat/provider_metrics.py \
             src/app/gateway/blocking_route_offload.py \
             src/app/gateway/event_loop_lag_monitor.py \
             src/app/gateway/live_chat_postgres_fast_path.py \
+            src/app/gateway/live_chat_provider_metrics.py \
             src/app/gateway/live_chat_stream_retry.py \
             src/app/gateway/live_voice_runtime_offload.py \
             src/app/gateway/live_voice_release_gate.py \
@@ -58,11 +60,13 @@ jobs:
             src/app/gateway/tts_stream_contract.py \
             src/app/gateway/tts_stream_diagnostics.py \
             src/app/persistence/chat_runtime_compat.py \
+            src/app/providers/lmstudio_provider.py \
             src/app/providers/stt_live_runtime_support.py \
             src/app/providers/stt_live_websocket.py \
             src/app/providers/stt_streaming_audio.py \
             src/parakeet_stt_runtime.py \
             src/parakeet_stt_server.py \
+            src/tests/app/test_chat_response_metrics.py \
             src/tests/app/test_gateway_blocking_route_offload.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
             src/tests/app/test_live_chat_postgres_fast_path.py \
@@ -105,6 +109,7 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest \
+            src/tests/app/test_chat_response_metrics.py \
             src/tests/app/test_live_chat_postgres_fast_path.py \
             src/tests/app/test_live_chat_stream_retry.py \
             src/tests/app/test_live_chat_release_gate.py \
