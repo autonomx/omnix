@@ -1,6 +1,7 @@
 """Build one evidence packet from simulation, Campaign Bible, and Hermes research."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -12,6 +13,46 @@ from app.rpg.narrative_engine.shadow import runtime_evidence
 
 from .campaign_bible_runtime import load_campaign_bible_snapshot
 from .hermes_campaign_research import CampaignResearchPacket, research_campaign_turn
+
+
+_LORE_QUERY_PREFIXES = (
+    "who ",
+    "what ",
+    "where ",
+    "when ",
+    "why ",
+    "how ",
+    "which ",
+    "tell me ",
+    "explain ",
+    "describe ",
+    "remind me ",
+    "do you know ",
+    "have you heard ",
+)
+_LORE_QUERY_TERMS = (
+    "look around",
+    "look at",
+    "inspect",
+    "examine",
+    "observe",
+    "survey",
+    "study",
+    "search the room",
+    "search this place",
+    "tell me about",
+    "what do you know",
+    "history of",
+    "lore",
+    "legend",
+    "rumor",
+    "remember",
+    "recall",
+    "where are we",
+    "this place",
+    "this area",
+    "this region",
+)
 
 
 @dataclass(frozen=True)
@@ -66,12 +107,39 @@ def _entity_ids(
         scene.get("location_id"),
         scene.get("region_id"),
         _mapping(state.get("location")).get("id"),
+        _mapping(state.get("current_location")).get("id"),
+        state.get("current_location_id"),
         _mapping(state.get("world")).get("active_location_id"),
+        _mapping(state.get("world")).get("current_location_id"),
     ):
         value = str(candidate or "").strip()
         if value:
             values.append(value)
     return tuple(dict.fromkeys(values))
+
+
+def campaign_lore_research_required(
+    player_input: str,
+    result: Mapping[str, Any] | None = None,
+) -> bool:
+    """Return true when a fast turn still needs Campaign Bible retrieval."""
+
+    text = re.sub(r"\s+", " ", str(player_input or "").strip().casefold())
+    if not text:
+        return False
+    resolved = _mapping(_mapping(result or {}).get("resolved_result") or _mapping(result or {}).get("result"))
+    mode = str(
+        resolved.get("response_mode")
+        or resolved.get("semantic_family")
+        or resolved.get("action_type")
+        or _mapping(result or {}).get("response_mode")
+        or ""
+    ).strip().casefold()
+    if mode in {"observation", "investigation", "travel", "look", "inspect"}:
+        return True
+    if "?" in str(player_input or "") or text.startswith(_LORE_QUERY_PREFIXES):
+        return True
+    return any(term in text for term in _LORE_QUERY_TERMS)
 
 
 def build_turn_grounding_packet(
@@ -86,6 +154,9 @@ def build_turn_grounding_packet(
 ) -> TurnGroundingPacket:
     """Assemble evidence without mutating simulation or Campaign Bible state."""
 
+    lore_required = campaign_lore_research_required(player_input, result)
+    requested_runtime_only = runtime_only
+    runtime_only = runtime_only and not lore_required
     runtime = tuple(runtime_evidence(result))
     session = _session(result, campaign_id)
     snapshot = (
@@ -128,6 +199,11 @@ def build_turn_grounding_packet(
         "hermes_research_id": research.result.research_id if research else "",
         "canon_topic_count": len(topic_titles),
         "canon_topic_titles": topic_titles,
+        "lore_search_required": lore_required,
+        "lore_search_performed": research is not None,
+        "lore_topics_researched": len(topic_titles),
+        "lore_topic_titles": topic_titles,
+        "grounding_entity_ids": list(entity_ids),
         "hermes_source_ids": [
             source.source_id for source in research.result.sources
         ]
@@ -152,6 +228,8 @@ def build_turn_grounding_packet(
     }
     if runtime_only:
         metadata["runtime_only"] = True
+    elif requested_runtime_only:
+        metadata["runtime_only_overridden_for_lore"] = True
     return TurnGroundingPacket(
         evidence=tuple(by_id.values()),
         metadata=metadata,
@@ -166,13 +244,19 @@ def narrative_grounding_footer(
 ) -> dict[str, Any]:
     topics = int(metadata.get("canon_topic_count") or 0)
     passed = metadata.get("grounding_passed") is True
+    searched = metadata.get("lore_search_performed") is True
     return {
         "canon_topics_used": topics,
+        "topics_researched": int(metadata.get("lore_topics_researched") or topics),
+        "lore_search_performed": searched,
         "narrative_blocks": int(block_count),
         "grounding_passed": passed,
         "label": (
             f"{topics} canon topics used · {int(block_count)} narrative blocks · "
             + ("grounding passed" if passed else "grounding failed")
+        ),
+        "research_label": (
+            f"{topics} lore topics researched" if searched else "Runtime context only"
         ),
         "topic_titles": list(metadata.get("canon_topic_titles") or ()),
         "campaign_bible_revision": int(
