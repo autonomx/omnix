@@ -21,7 +21,6 @@ _LORE_QUERY_PREFIXES = (
     "where ",
     "when ",
     "why ",
-    "how ",
     "which ",
     "tell me ",
     "explain ",
@@ -29,6 +28,15 @@ _LORE_QUERY_PREFIXES = (
     "remind me ",
     "do you know ",
     "have you heard ",
+)
+_NON_LORE_FAST_QUESTIONS = (
+    "how are you",
+    "how is your day",
+    "how was your day",
+    "what are you doing",
+    "are you okay",
+    "are you all right",
+    "can you help me",
 )
 _LORE_QUERY_TERMS = (
     "look around",
@@ -52,6 +60,21 @@ _LORE_QUERY_TERMS = (
     "this place",
     "this area",
     "this region",
+    "old road",
+    "around here",
+    "local area",
+    "nearby town",
+    "safe here",
+)
+_HOW_LORE_TERMS = (
+    "how did ",
+    "how does ",
+    "how do i get",
+    "how do we get",
+    "how was ",
+    "how were ",
+    "how long has",
+    "how long have",
 )
 
 
@@ -127,7 +150,10 @@ def campaign_lore_research_required(
     text = re.sub(r"\s+", " ", str(player_input or "").strip().casefold())
     if not text:
         return False
-    resolved = _mapping(_mapping(result or {}).get("resolved_result") or _mapping(result or {}).get("result"))
+    resolved = _mapping(
+        _mapping(result or {}).get("resolved_result")
+        or _mapping(result or {}).get("result")
+    )
     mode = str(
         resolved.get("response_mode")
         or resolved.get("semantic_family")
@@ -137,7 +163,11 @@ def campaign_lore_research_required(
     ).strip().casefold()
     if mode in {"observation", "investigation", "travel", "look", "inspect"}:
         return True
-    if "?" in str(player_input or "") or text.startswith(_LORE_QUERY_PREFIXES):
+    if text.startswith(_NON_LORE_FAST_QUESTIONS):
+        return False
+    if text.startswith(_LORE_QUERY_PREFIXES):
+        return True
+    if text.startswith("how ") and any(term in text for term in _HOW_LORE_TERMS):
         return True
     return any(term in text for term in _LORE_QUERY_TERMS)
 
