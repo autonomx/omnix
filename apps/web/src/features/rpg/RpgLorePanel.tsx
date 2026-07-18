@@ -233,7 +233,7 @@ export function RpgLorePanel({
     })));
     const seen = new Set<string>();
     return [...documents, ...dossiers].filter((entry) => {
-      const key = `${entry.category}:${entry.title.casefold?.() ?? entry.title.toLowerCase()}`;
+      const key = `${entry.category}:${entry.title.toLocaleLowerCase()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
