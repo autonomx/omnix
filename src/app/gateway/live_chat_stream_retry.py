@@ -7,6 +7,7 @@ first text chunk so a partially delivered answer can never be duplicated.
 from __future__ import annotations
 
 import os
+import time
 from collections.abc import Callable, Iterator
 from functools import wraps
 from typing import Any
@@ -16,8 +17,12 @@ from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_chat_stream_retry_installed"
-_DEFAULT_STREAM_ATTEMPTS = 3
+_DEFAULT_STREAM_ATTEMPTS = 4
 _MAX_STREAM_ATTEMPTS = 5
+_DEFAULT_RETRY_BASE_DELAY_MS = 250.0
+_DEFAULT_RETRY_MAX_DELAY_MS = 1_000.0
+_DEFAULT_FALLBACK_DELAY_MS = 1_000.0
+_MAX_CONFIGURED_DELAY_MS = 5_000.0
 
 
 class EmptyProviderStreamError(RuntimeError):
@@ -38,6 +43,35 @@ def _stream_attempts() -> int:
     return max(1, min(_MAX_STREAM_ATTEMPTS, value))
 
 
+def _configured_delay_ms(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, str(default)) or default)
+    except (TypeError, ValueError):
+        value = default
+    return max(0.0, min(_MAX_CONFIGURED_DELAY_MS, value))
+
+
+def _retry_base_delay_ms() -> float:
+    return _configured_delay_ms(
+        "OMNIX_LIVE_CHAT_RETRY_BASE_DELAY_MS",
+        _DEFAULT_RETRY_BASE_DELAY_MS,
+    )
+
+
+def _retry_max_delay_ms() -> float:
+    return _configured_delay_ms(
+        "OMNIX_LIVE_CHAT_RETRY_MAX_DELAY_MS",
+        _DEFAULT_RETRY_MAX_DELAY_MS,
+    )
+
+
+def _fallback_delay_ms() -> float:
+    return _configured_delay_ms(
+        "OMNIX_LIVE_CHAT_FALLBACK_DELAY_MS",
+        _DEFAULT_FALLBACK_DELAY_MS,
+    )
+
+
 def _event_text(event: dict[str, Any]) -> str:
     if event.get("type") == "text_chunk":
         return str(event.get("text") or "").strip()
@@ -46,15 +80,27 @@ def _event_text(event: dict[str, Any]) -> str:
     return ""
 
 
+def _bounded_retry_delay_ms(attempt: int, *, base_ms: float, maximum_ms: float) -> float:
+    if base_ms <= 0.0 or maximum_ms <= 0.0:
+        return 0.0
+    return min(maximum_ms, base_ms * (2 ** max(0, attempt - 1)))
+
+
 def retry_provider_stream(
     stream_factory: Callable[[], Iterator[dict[str, Any]]],
     fallback_factory: Callable[[], dict[str, Any]] | None,
     *,
     attempts: int,
+    retry_base_delay_ms: float = 0.0,
+    retry_max_delay_ms: float = 0.0,
+    fallback_delay_ms: float = 0.0,
+    sleep_fn: Callable[[float], None] = time.sleep,
+    diagnostic_context: dict[str, Any] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Retry failures or empty completion only before any text is delivered."""
     max_attempts = max(1, min(_MAX_STREAM_ATTEMPTS, int(attempts)))
     last_error: Exception | None = None
+    context = dict(diagnostic_context or {})
 
     for attempt in range(1, max_attempts + 1):
         delivered_text = False
@@ -89,6 +135,7 @@ def retry_provider_stream(
                         "live_chat_stream_retry_recovered",
                         attempt=attempt,
                         max_attempts=max_attempts,
+                        **context,
                     )
                 return
             raise EmptyProviderStreamError(
@@ -106,9 +153,15 @@ def retry_provider_stream(
                     attempt=attempt,
                     max_attempts=max_attempts,
                     error_type=type(exc).__name__,
+                    **context,
                 )
                 raise
             if attempt < max_attempts:
+                delay_ms = _bounded_retry_delay_ms(
+                    attempt,
+                    base_ms=max(0.0, retry_base_delay_ms),
+                    maximum_ms=max(0.0, retry_max_delay_ms),
+                )
                 stream_log(
                     "gateway-live-chat-stream",
                     "runtime",
@@ -116,11 +169,27 @@ def retry_provider_stream(
                     attempt=attempt,
                     next_attempt=attempt + 1,
                     max_attempts=max_attempts,
+                    delay_ms=round(delay_ms, 3),
                     error_type=type(exc).__name__,
+                    **context,
                 )
+                if delay_ms > 0.0:
+                    sleep_fn(delay_ms / 1_000.0)
                 continue
 
     if fallback_factory is not None:
+        cooldown_ms = max(0.0, fallback_delay_ms)
+        if cooldown_ms > 0.0:
+            stream_log(
+                "gateway-live-chat-stream",
+                "runtime",
+                "live_chat_stream_fallback_scheduled",
+                max_attempts=max_attempts,
+                delay_ms=round(cooldown_ms, 3),
+                error_type=type(last_error).__name__ if last_error is not None else "unknown",
+                **context,
+            )
+            sleep_fn(cooldown_ms / 1_000.0)
         try:
             fallback = fallback_factory()
             content = str(fallback.get("content") or "").strip()
@@ -135,6 +204,7 @@ def retry_provider_stream(
                 "live_chat_stream_fallback_completed",
                 max_attempts=max_attempts,
                 response_chars=len(content),
+                **context,
             )
             yield {"type": "text_chunk", "text": content}
             yield {
@@ -152,6 +222,7 @@ def retry_provider_stream(
         "live_chat_stream_retry_exhausted",
         max_attempts=max_attempts,
         error_type=type(last_error).__name__ if last_error is not None else "unknown",
+        **context,
     )
     if last_error is not None:
         raise last_error
@@ -198,6 +269,13 @@ def install_live_chat_stream_retry_hook() -> None:
             stream_factory,
             fallback_factory,
             attempts=_stream_attempts(),
+            retry_base_delay_ms=_retry_base_delay_ms(),
+            retry_max_delay_ms=_retry_max_delay_ms(),
+            fallback_delay_ms=_fallback_delay_ms(),
+            diagnostic_context={
+                "provider_id": provider_id or "default",
+                "model_configured": bool(model_id),
+            },
         )
 
     PromptChatSessionStore.stream_provider_reply_chunks = patched
