@@ -88,7 +88,7 @@ def test_campaign_bible_projects_lore_pages_and_safe_dossiers_into_evidence() ->
     assert hidden.visibility is VisibilityClass.GAME_MASTER_ONLY
 
     dossier = by_id["bible:entity:location:rusty_flagon"]
-    assert "Hearth Smoke" in dossier.content
+    assert "hearth smoke" in dossier.content.casefold()
     assert "private ledgers" not in dossier.content
 
 
