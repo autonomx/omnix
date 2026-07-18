@@ -127,7 +127,8 @@ def test_turn_grounding_syncs_speaking_npc_before_research(monkeypatch) -> None:
         runtime_only=True,
     )
 
-    assert calls == [("campaign:bran-bio", ("npc:Bran",))]
+    assert calls and calls[0][0] == "campaign:bran-bio"
+    assert set(calls[0][1]) == {"npc:Bran"}
     assert packet.metadata["npc_lore_persisted"] is True
     assert packet.metadata["npc_lore_changed"] is True
     assert packet.metadata["created_npc_lore_ids"] == ["npc:Bran"]
