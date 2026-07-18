@@ -45,6 +45,16 @@ interface LoreDossier {
   goals?: string[];
 }
 
+interface LoreStorage {
+  mode?: string;
+  persisted?: boolean;
+  revision?: number;
+  generated_current_location?: boolean;
+  generated_document_id?: string | null;
+  current_location?: { id?: string; name?: string } | null;
+  error?: string;
+}
+
 interface LoreResponse {
   ok: boolean;
   session_id: string;
@@ -67,6 +77,7 @@ interface LoreResponse {
     total_jobs?: number;
     jobs?: GenerationJob[];
   };
+  storage?: LoreStorage;
 }
 
 interface RpgLorePanelProps {
@@ -74,6 +85,38 @@ interface RpgLorePanelProps {
   panelId?: string;
   role?: 'region' | 'tabpanel';
 }
+
+interface LoreEntry {
+  id: string;
+  title: string;
+  category: string;
+  kind: 'document' | 'dossier';
+  status: string;
+  summary: string;
+  document?: LoreDocumentSummary;
+  dossier?: LoreDossier;
+}
+
+const LORE_CATEGORY_ORDER = [
+  'World Lore',
+  'Regions',
+  'Areas',
+  'Points of Interest',
+  'Locations',
+  'Characters',
+  'Races',
+  'Classes',
+  'Factions',
+  'Institutions',
+  'Monsters',
+  'Items',
+  'Spells',
+  'Feats',
+  'Quests',
+  'History & Calendar',
+  'Conflicts',
+  'Discoveries',
+] as const;
 
 function selectedSessionId(): string {
   if (typeof window === 'undefined') return '';
@@ -100,6 +143,32 @@ function dossierSummary(dossier: LoreDossier): string {
   return String(text);
 }
 
+function dossierFacts(dossier: LoreDossier): Array<{ label: string; value: string }> {
+  const fields: Array<[string, unknown]> = [
+    ['Appearance', dossier.appearance],
+    ['Personality', dossier.personality],
+    ['Speech style', dossier.speech_style],
+    ['Role', dossier.role],
+    ['Location', dossier.location_id],
+    ['Factions', dossier.faction_ids],
+    ['Region', dossier.region_id],
+    ['Atmosphere', dossier.sensory_profile],
+    ['Services', dossier.services],
+    ['Values', dossier.values],
+    ['Public goal', dossier.public_goal],
+    ['Goals', dossier.goals],
+  ];
+  return fields.flatMap(([label, raw]) => {
+    const value = Array.isArray(raw) ? raw.join(', ') : String(raw ?? '').trim();
+    return value ? [{ label, value }] : [];
+  });
+}
+
+function normalizedCategory(value: string): string {
+  const label = value.trim();
+  return LORE_CATEGORY_ORDER.includes(label as typeof LORE_CATEGORY_ORDER[number]) ? label : 'World Lore';
+}
+
 async function readJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!response.ok) {
@@ -115,7 +184,7 @@ export function RpgLorePanel({
 }: RpgLorePanelProps = {}) {
   const sessionId = selectedSessionId();
   const [lore, setLore] = useState<LoreResponse | null>(null);
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState('overview');
   const [detail, setDetail] = useState<LoreDocumentDetail | null>(null);
   const [error, setError] = useState('');
 
@@ -123,15 +192,13 @@ export function RpgLorePanel({
     let active = true;
     setLore(null);
     setDetail(null);
-    setSelectedId('');
+    setSelectedId('overview');
     setError('');
     if (!sessionId) return () => { active = false; };
     readJson<LoreResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/lore`)
       .then((payload) => {
         if (!active) return;
         setLore(payload);
-        const first = payload.categories.flatMap((category) => category.documents)[0];
-        setSelectedId(first?.document_id ?? '');
       })
       .catch((reason: unknown) => {
         if (active) setError(reason instanceof Error ? reason.message : 'Lore could not be loaded.');
@@ -139,12 +206,49 @@ export function RpgLorePanel({
     return () => { active = false; };
   }, [sessionId]);
 
+  const entries = useMemo<LoreEntry[]>(() => {
+    if (!lore) return [];
+    const documents = lore.categories.flatMap((category) => category.documents.map((document) => ({
+      id: document.document_id,
+      title: document.title,
+      category: normalizedCategory(document.category || category.label),
+      kind: 'document' as const,
+      status: document.status,
+      summary: document.summary_120 || document.summary_500,
+      document,
+    })));
+    const dossierGroups: Array<{ category: string; rows: LoreDossier[] }> = [
+      { category: 'Characters', rows: lore.dossiers?.characters ?? [] },
+      { category: 'Locations', rows: lore.dossiers?.locations ?? [] },
+      { category: 'Factions', rows: lore.dossiers?.factions ?? [] },
+    ];
+    const dossiers = dossierGroups.flatMap((group) => group.rows.map((dossier) => ({
+      id: `dossier:${dossier.kind}:${dossier.id}`,
+      title: dossier.name,
+      category: group.category,
+      kind: 'dossier' as const,
+      status: dossier.status,
+      summary: dossierSummary(dossier),
+      dossier,
+    })));
+    const seen = new Set<string>();
+    return [...documents, ...dossiers].filter((entry) => {
+      const key = `${entry.category}:${entry.title.casefold?.() ?? entry.title.toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [lore]);
+
+  const selectedEntry = entries.find((entry) => entry.id === selectedId) ?? null;
+  const selectedDocumentId = selectedEntry?.kind === 'document' ? selectedEntry.id : '';
+
   useEffect(() => {
     let active = true;
     setDetail(null);
-    if (!sessionId || !selectedId) return () => { active = false; };
+    if (!sessionId || !selectedDocumentId) return () => { active = false; };
     readJson<{ document: LoreDocumentDetail }>(
-      `/api/rpg/sessions/${encodeURIComponent(sessionId)}/lore/document?document_id=${encodeURIComponent(selectedId)}`,
+      `/api/rpg/sessions/${encodeURIComponent(sessionId)}/lore/document?document_id=${encodeURIComponent(selectedDocumentId)}`,
     )
       .then((payload) => {
         if (active) setDetail(payload.document);
@@ -153,17 +257,10 @@ export function RpgLorePanel({
         if (active) setError(reason instanceof Error ? reason.message : 'Lore page could not be loaded.');
       });
     return () => { active = false; };
-  }, [selectedId, sessionId]);
+  }, [selectedDocumentId, sessionId]);
 
   const generation = lore?.generation;
   const jobs = generation?.jobs ?? [];
-  const dossierGroups = lore?.dossiers
-    ? [
-        { label: 'Characters', rows: lore.dossiers.characters },
-        { label: 'Locations', rows: lore.dossiers.locations },
-        { label: 'Factions', rows: lore.dossiers.factions },
-      ]
-    : [];
   const topicSummary = useMemo(() => {
     const completed = jobs.filter((job) => job.status === 'completed').length;
     return jobs.length ? `${completed}/${jobs.length} topics compiled` : 'No generation jobs recorded';
@@ -176,61 +273,126 @@ export function RpgLorePanel({
     return <div className="rpg-journal-detail"><h3>Lore unavailable</h3><p>{error}</p></div>;
   }
   if (!lore) {
-    return <div className="rpg-journal-detail"><h3>Loading Campaign Bible…</h3><p>Reading generated lore and discovery state.</p></div>;
+    return <div className="rpg-journal-detail"><h3>Loading Campaign Bible…</h3><p>Reading PostgreSQL canon and discovery state.</p></div>;
   }
+
+  const selectedDossier = selectedEntry?.dossier;
+  const title = selectedId === 'overview'
+    ? 'Campaign Bible'
+    : detail?.title || selectedEntry?.title || 'Campaign Bible';
+  const body = selectedId === 'overview'
+    ? 'Browse every known lore page and discovered dossier for this campaign. New player-safe lore for the current location is generated once when missing, committed to PostgreSQL, and reused on later visits.'
+    : detail?.full_text || detail?.summary_500 || selectedEntry?.summary || 'This entry has no player-visible details yet.';
+  const storageLabel = lore.storage?.persisted ? 'PostgreSQL authority' : 'Portable fallback';
 
   return (
     <div aria-labelledby={labelledById} className="rpg-journal-grid" id={panelId} role={role}>
-      <div className="rpg-journal-list" aria-label="Lore categories">
-        <article className="active">
+      <div className="rpg-journal-list" aria-label="Campaign Bible navigation">
+        <article
+          aria-pressed={selectedId === 'overview'}
+          className={selectedId === 'overview' ? 'active' : undefined}
+          onClick={() => setSelectedId('overview')}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setSelectedId('overview');
+            }
+          }}
+          role="button"
+          tabIndex={0}
+        >
           <span aria-hidden="true" />
           <div>
-            <strong>{generation?.launch_ready ? 'World ready' : statusLabel(generation?.status ?? 'unknown')}</strong>
-            <p>{generation?.percent ?? 0}% · {topicSummary}</p>
+            <strong>Overview</strong>
+            <p>{lore.visible_count} pages · {entries.filter((entry) => entry.kind === 'dossier').length} dossiers</p>
           </div>
         </article>
-        {lore.categories.map((category) => (
-          <div key={category.label} style={{ display: 'contents' }}>
-            <div style={{ padding: '10px 12px 4px', opacity: 0.68, fontSize: 12, fontWeight: 700 }}>
-              {category.label}
-            </div>
-            {category.documents.map((document) => (
-              <article
-                aria-pressed={selectedId === document.document_id}
-                className={selectedId === document.document_id ? 'active' : undefined}
-                key={document.document_id}
-                onClick={() => setSelectedId(document.document_id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    setSelectedId(document.document_id);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-              >
-                <span aria-hidden="true" />
-                <div>
-                  <strong>{statusLabel(document.status)}</strong>
-                  <p>{document.title}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        ))}
+
+        {LORE_CATEGORY_ORDER.map((category) => {
+          const rows = entries.filter((entry) => entry.category === category);
+          return (
+            <section aria-label={category} key={category} style={{ display: 'contents' }}>
+              <div style={{ padding: '10px 12px 4px', opacity: 0.72, fontSize: 12, fontWeight: 800 }}>
+                {category} <span style={{ opacity: 0.7 }}>({rows.length})</span>
+              </div>
+              {rows.length === 0 ? (
+                <div style={{ padding: '2px 18px 8px', opacity: 0.5, fontSize: 12 }}>No known entries yet</div>
+              ) : rows.map((entry) => (
+                <article
+                  aria-pressed={selectedId === entry.id}
+                  className={selectedId === entry.id ? 'active' : undefined}
+                  key={entry.id}
+                  onClick={() => setSelectedId(entry.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedId(entry.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <span aria-hidden="true" />
+                  <div>
+                    <strong>{entry.title}</strong>
+                    <p>{statusLabel(entry.status)} · {entry.kind === 'dossier' ? 'Dossier' : 'Lore page'}</p>
+                  </div>
+                </article>
+              ))}
+            </section>
+          );
+        })}
       </div>
+
       <article className="rpg-journal-detail">
-        <h3>{detail?.title ?? 'Campaign Bible'}</h3>
-        <p>{detail?.full_text || detail?.summary_500 || 'Select a lore page to read it.'}</p>
+        <h3>{title}</h3>
+        <p style={{ whiteSpace: 'pre-line' }}>{body}</p>
         <div className="rpg-chip-row">
           <span>Canon r{lore.canon_revision}</span>
           <span>{lore.visible_count} known pages</span>
           <span>{lore.hidden_count} undiscovered</span>
-          {detail ? <span>{statusLabel(detail.status)}</span> : null}
+          <span>{storageLabel}</span>
+          {selectedEntry ? <span>{statusLabel(selectedEntry.status)}</span> : null}
         </div>
-        <details style={{ marginTop: 14 }}>
+
+        {selectedId === 'overview' ? (
+          <section aria-label="Campaign Bible summary" style={{ marginTop: 18 }}>
+            <h4>Current campaign knowledge</h4>
+            <div className="rpg-chip-row" style={{ alignItems: 'stretch', marginTop: 8 }}>
+              <article style={{ minWidth: 190, padding: 10 }}>
+                <strong>Current location</strong>
+                <p>{lore.storage?.current_location?.name || 'Not recorded'}</p>
+                <small>{lore.storage?.generated_current_location ? 'Lore generated and stored' : 'Lore already available'}</small>
+              </article>
+              <article style={{ minWidth: 190, padding: 10 }}>
+                <strong>World Forge</strong>
+                <p>{generation?.percent ?? 0}% · {topicSummary}</p>
+                <small>{generation?.launch_ready ? 'World ready' : statusLabel(generation?.status ?? 'unknown')}</small>
+              </article>
+              <article style={{ minWidth: 190, padding: 10 }}>
+                <strong>Persistence</strong>
+                <p>{storageLabel}</p>
+                <small>{lore.storage?.error ? `Fallback reason: ${lore.storage.error}` : 'Campaign canon is reusable across sessions.'}</small>
+              </article>
+            </div>
+          </section>
+        ) : null}
+
+        {selectedDossier && dossierFacts(selectedDossier).length > 0 ? (
+          <dl style={{ display: 'grid', gap: 10, marginTop: 18 }}>
+            {dossierFacts(selectedDossier).map((fact) => (
+              <div key={fact.label}>
+                <dt style={{ fontWeight: 800 }}>{fact.label}</dt>
+                <dd style={{ margin: '3px 0 0', opacity: 0.82 }}>{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+
+        <details style={{ marginTop: 18 }}>
           <summary>World Forge generation evidence</summary>
           <ul>
+            {jobs.length === 0 ? <li>No generation jobs recorded.</li> : null}
             {jobs.slice(0, 20).map((job) => (
               <li key={job.topic_id ?? `${job.generator_role}:${job.status}`}>
                 {statusLabel(job.topic_id ?? job.generator_role ?? 'topic')} — {statusLabel(job.status ?? 'unknown')}
@@ -239,25 +401,6 @@ export function RpgLorePanel({
             ))}
           </ul>
         </details>
-        {dossierGroups.some((group) => group.rows.length > 0) ? (
-          <section aria-label="Known world dossiers" style={{ marginTop: 18 }}>
-            <h4>Known world dossiers</h4>
-            {dossierGroups.map((group) => group.rows.length ? (
-              <div key={group.label} style={{ marginTop: 12 }}>
-                <strong>{group.label}</strong>
-                <div className="rpg-chip-row" style={{ alignItems: 'stretch', marginTop: 8 }}>
-                  {group.rows.map((dossier) => (
-                    <article key={dossier.id} style={{ minWidth: 180, maxWidth: 300, padding: 10 }}>
-                      <strong>{dossier.name}</strong>
-                      <p>{dossierSummary(dossier)}</p>
-                      <small>{statusLabel(dossier.status)}</small>
-                    </article>
-                  ))}
-                </div>
-              </div>
-            ) : null)}
-          </section>
-        ) : null}
         {error ? <p role="alert">{error}</p> : null}
       </article>
     </div>
