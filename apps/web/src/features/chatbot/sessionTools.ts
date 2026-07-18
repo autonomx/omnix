@@ -1,9 +1,24 @@
 import { omnixApiClient } from '../../api/client';
+import type { ChatSession, CreateChatSessionRequest } from '../../api/client';
+import { characterClient, type SessionInteraction } from './characterClient';
 
 const INSTALLED_KEY = '__omnix_chat_session_tools__';
 const BUTTON_CLASS = 'omnix-new-chat-button';
 const MODE_BUTTON_CLASS = 'omnix-chat-mode-button';
 const MODE_STORAGE_KEY = 'omnix.chat.mode';
+const SESSION_SELECTED_EVENT = 'omnix:chat-session-selected';
+
+type PreservedChatSessionRequest = CreateChatSessionRequest & {
+  interaction_mode: 'system' | 'character';
+  character_id?: string | null;
+  voice_asset_id?: string | null;
+  read_memory: boolean;
+  write_memory: boolean;
+  shared_memory_access: 'none' | 'read_only';
+  transcript_policy: 'persistent' | 'temporary' | 'none';
+};
+
+let selectedSessionId: string | null = null;
 
 type AnyWindow = Window & Record<string, unknown>;
 
@@ -50,8 +65,34 @@ function patchSendMessage(): void {
   };
 }
 
+export function preservedNewChatRequest(
+  session: ChatSession,
+  interaction: SessionInteraction,
+): PreservedChatSessionRequest {
+  return {
+    title: 'New chat',
+    provider_id: session.provider_id ?? undefined,
+    model_id: session.model_id ?? undefined,
+    interaction_mode: interaction.interaction_mode,
+    character_id: interaction.character_id ?? null,
+    voice_asset_id: interaction.voice_asset_id ?? null,
+    read_memory: interaction.read_memory,
+    write_memory: interaction.write_memory,
+    shared_memory_access: interaction.shared_memory_access,
+    transcript_policy: interaction.transcript_policy,
+  };
+}
+
 async function startBlankChat(): Promise<void> {
-  await omnixApiClient.createChatSession({ title: 'New chat' });
+  let request: CreateChatSessionRequest = { title: 'New chat' };
+  if (selectedSessionId) {
+    const [session, interaction] = await Promise.all([
+      omnixApiClient.getChatSession(selectedSessionId),
+      characterClient.session(selectedSessionId),
+    ]);
+    request = preservedNewChatRequest(session, interaction);
+  }
+  await omnixApiClient.createChatSession(request);
   window.location.assign('/chatbot');
 }
 
@@ -134,6 +175,9 @@ export function installSessionTools(): void {
   const w = window as unknown as AnyWindow;
   if (w[INSTALLED_KEY]) return;
   w[INSTALLED_KEY] = true;
+  window.addEventListener(SESSION_SELECTED_EVENT, (event) => {
+    selectedSessionId = (event as CustomEvent<{ sessionId?: string | null }>).detail?.sessionId ?? null;
+  });
   patchSessionList();
   patchSendMessage();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchButtons, { once: true });

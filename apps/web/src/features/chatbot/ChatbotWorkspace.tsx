@@ -325,6 +325,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }, [selectedSessionId, sessionsQuery.data]);
 
   useEffect(() => {
+    window.dispatchEvent(new CustomEvent('omnix:chat-session-selected', { detail: { sessionId: selectedSessionId } }));
+  }, [selectedSessionId]);
+
+  useEffect(() => {
     const syncLiveChatSession = (event: Event) => {
       const sessionId = (event as CustomEvent<{ sessionId?: string }>).detail?.sessionId;
       if (sessionId) setSelectedSessionId(sessionId);
