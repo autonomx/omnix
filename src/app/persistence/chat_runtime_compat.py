@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from functools import lru_cache
 from typing import Any
 
 from app.assistant_memory import MemoryService, default_memory_service
@@ -169,9 +170,21 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
     pass
 
 
+@lru_cache(maxsize=1)
 def default_history_search_service() -> PostgresHistorySearchService:
+    """Reuse readiness-checked history search state across chat turns."""
     return PostgresHistorySearchService()
 
 
+@lru_cache(maxsize=1)
 def default_chat_store() -> PostgresCharacterChatSessionStore:
-    return PostgresCharacterChatSessionStore()
+    """Reuse the authoritative chat store instead of re-running startup checks per request."""
+    return PostgresCharacterChatSessionStore(
+        history_search_factory=default_history_search_service,
+    )
+
+
+def reset_default_chat_runtime_caches() -> None:
+    """Clear process-resident defaults for isolated tests and controlled restarts."""
+    default_chat_store.cache_clear()
+    default_history_search_service.cache_clear()
