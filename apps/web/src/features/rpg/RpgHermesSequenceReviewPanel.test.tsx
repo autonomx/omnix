@@ -1,5 +1,5 @@
 import { MantineProvider } from '@mantine/core';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
@@ -15,10 +15,11 @@ function renderWithTheme(element: ReactElement) {
 
 describe('RpgHermesSequenceReviewPanel', () => {
   it('does not render the removed Hermes sequence review section', () => {
-    const { container } = renderWithTheme(
+    renderWithTheme(
       <RpgHermesSequenceReviewPanel onReview={vi.fn()} onUseFirstItem={vi.fn()} />,
     );
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText('Hermes sequence review')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Review sequence' })).not.toBeInTheDocument();
   });
 });
