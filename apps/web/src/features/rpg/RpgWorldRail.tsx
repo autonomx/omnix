@@ -86,7 +86,7 @@ export function RpgWorldRail({
 
   return (
     <>
-      <aside className={railClassName} aria-label="World and jobs">
+      <aside className={railClassName} aria-label="World, jobs, and reports">
         <section className="rpg-card rpg-map-card">
           <div className="rpg-section-heading">
             <p className="eyebrow">World & location</p>
