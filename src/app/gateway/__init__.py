@@ -5,6 +5,7 @@ from typing import Any
 
 from .assistant_context_routes import install_assistant_context_route_hook
 from .audiobook_streaming import install_audiobook_websocket_hook
+from .event_loop_lag_monitor import install_event_loop_lag_monitor_hook
 from .hermes_routes import install_hermes_route_hook
 from .image_asset_routes import install_image_asset_file_hook
 from .image_reference_routes import install_image_reference_route_hook
@@ -73,6 +74,7 @@ install_audiobook_websocket_hook()
 install_hermes_route_hook()
 install_realtime_route_hook()
 install_live_voice_diagnostics_hook()
+install_event_loop_lag_monitor_hook()
 install_tts_runtime_route_hook()
 install_tts_pcm_websocket_hook()
 install_tts_live_call_websocket_hook()
