@@ -14,7 +14,11 @@ from app.rpg.session.genesis.campaign_lore_api import (
     campaign_lore_payload,
     transition_lore_discovery,
 )
-from app.rpg.session.service import load_session, save_session
+from app.rpg.session.genesis.campaign_lore_store import (
+    load_campaign_lore,
+    persist_campaign_lore,
+)
+from app.rpg.session.service import load_session
 
 
 class LoreDiscoveryRequest(BaseModel):
@@ -90,10 +94,16 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
     def rpg_campaign_genesis(session_id: str) -> dict[str, Any]:
         _kick_genesis_recovery()
         session = _session_or_404(session_id)
+        session, storage = load_campaign_lore(
+            session_id,
+            session,
+            ensure_current_location=False,
+        )
         return {
             "ok": True,
             "session_id": session_id,
             "generation": campaign_genesis_progress_payload(session),
+            "storage": storage,
         }
 
     @app.get(
@@ -103,9 +113,15 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
     )
     def rpg_campaign_lore(session_id: str) -> dict[str, Any]:
         session = _session_or_404(session_id)
+        session, storage = load_campaign_lore(
+            session_id,
+            session,
+            ensure_current_location=True,
+        )
         return {
             **campaign_lore_payload(session),
             "session_id": session_id,
+            "storage": storage,
         }
 
     @app.get(
@@ -118,6 +134,11 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
         document_id: str = Query(min_length=1, max_length=300),
     ) -> dict[str, Any]:
         session = _session_or_404(session_id)
+        session, storage = load_campaign_lore(
+            session_id,
+            session,
+            ensure_current_location=True,
+        )
         try:
             return {
                 **campaign_lore_document_payload(
@@ -125,6 +146,7 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
                     document_id,
                 ),
                 "session_id": session_id,
+                "storage": storage,
             }
         except Exception as exc:
             raise _lore_error(exc, session_id) from exc
@@ -139,6 +161,11 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
         request: LoreDiscoveryRequest,
     ) -> dict[str, Any]:
         session = _session_or_404(session_id)
+        session, _storage = load_campaign_lore(
+            session_id,
+            session,
+            ensure_current_location=True,
+        )
         try:
             updated = transition_lore_discovery(
                 session,
@@ -146,13 +173,14 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
                 status=request.status,
                 source=request.source,
             )
-            saved = save_session(updated, compact=True)
+            saved, storage = persist_campaign_lore(session_id, updated)
             return {
                 "ok": True,
                 "session_id": session_id,
                 "document_id": request.document_id,
                 "status": request.status,
                 "lore": campaign_lore_payload(saved),
+                "storage": storage,
             }
         except Exception as exc:
             raise _lore_error(exc, session_id) from exc
