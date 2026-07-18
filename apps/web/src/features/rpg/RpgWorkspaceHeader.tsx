@@ -176,12 +176,12 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
       ) : null}
 
       {isLoreOpen && typeof document !== 'undefined' ? createPortal(
-        <div className="rpg-lore-overlay" role="dialog" aria-modal="true" aria-labelledby="rpg-lore-tab">
+        <div className="rpg-lore-overlay" role="dialog" aria-modal="true" aria-labelledby="rpg-lore-overlay-title">
           <div className="rpg-lore-overlay-shell">
             <header className="rpg-lore-overlay-heading">
               <div>
                 <p className="eyebrow">Campaign bible</p>
-                <h2 id="rpg-lore-tab">{selectedSessionSummary.title}</h2>
+                <h2 id="rpg-lore-overlay-title">{selectedSessionSummary.title}</h2>
                 <p>{selectedSessionSummary.location} · known world lore and discovered dossiers</p>
               </div>
               <button className="rpg-secondary-button" type="button" onClick={() => setIsLoreOpen(false)}>
@@ -189,7 +189,11 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
               </button>
             </header>
             <div className="rpg-lore-overlay-content">
-              <RpgLorePanel />
+              <RpgLorePanel
+                labelledById="rpg-lore-overlay-title"
+                panelId="rpg-lore-overlay-panel"
+                role="region"
+              />
             </div>
           </div>
         </div>,
