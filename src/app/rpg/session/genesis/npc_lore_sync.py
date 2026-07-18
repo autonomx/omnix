@@ -41,6 +41,23 @@ def sync_encountered_npc_lore(
         }
     campaign_id = _campaign_id(session_id, session)
     portable = _portable_bible(session)
+    projection = _mapping(session.get("campaign_bible_projection"))
+    _preview, ensured, _created, preview_changed = ensure_encountered_npc_lore(
+        portable,
+        session,
+        explicit_npc_ids=npc_ids,
+    )
+    if projection.get("content_hash") and not preview_changed:
+        return dict(session), {
+            "mode": "portable_projection_already_synced",
+            "persisted": True,
+            "campaign_id": campaign_id,
+            "revision": int(projection.get("canon_revision") or 0),
+            "content_hash": _text(projection.get("content_hash")),
+            "encountered_npc_ids": list(ensured),
+            "created_npc_ids": [],
+            "changed": False,
+        }
     try:
         db = database or default_database()
         context = bootstrap_local_tenant(db)
