@@ -95,7 +95,12 @@ class DeliveryPersistenceWorker:
         try:
             self._queue.put_nowait(None)
         except queue.Full:
-            pass
+            try:
+                self._queue.get_nowait()
+                self._queue.task_done()
+                self._queue.put_nowait(None)
+            except (queue.Empty, queue.Full):
+                pass
         if thread is not None and thread.is_alive():
             thread.join(timeout)
 
@@ -138,7 +143,7 @@ class DeliveryPersistenceWorker:
 
 
 class CachedTtsProviderResolver:
-    """Return a warmed provider immediately and refresh settings off-thread."""
+    """Return a warmed provider immediately and refresh settings while idle."""
 
     def __init__(
         self,
@@ -160,6 +165,28 @@ class CachedTtsProviderResolver:
         self._provider: Any = None
         self._resolved_at = 0.0
         self._refreshing = False
+        self._stop_event = threading.Event()
+        self._monitor_thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        with self._lock:
+            if self._monitor_thread is not None and self._monitor_thread.is_alive():
+                return
+            self._stop_event.clear()
+            self._monitor_thread = threading.Thread(
+                target=self._monitor_loop,
+                name="omnix-live-voice-provider-monitor",
+                daemon=True,
+            )
+            self._monitor_thread.start()
+
+    def stop(self, timeout: float = 0.25) -> None:
+        self._stop_event.set()
+        with self._lock:
+            thread = self._monitor_thread
+            self._monitor_thread = None
+        if thread is not None and thread.is_alive():
+            thread.join(timeout)
 
     def get(self, provider_name: str | None = None) -> Any:
         if provider_name is not None:
@@ -192,6 +219,11 @@ class CachedTtsProviderResolver:
             daemon=True,
         ).start()
         return True
+
+    def _monitor_loop(self) -> None:
+        while not self._stop_event.wait(self._refresh_seconds):
+            if not self._active_streams():
+                self.refresh()
 
     def _begin_refresh(self) -> bool:
         with self._lock:
@@ -263,6 +295,7 @@ def install_live_voice_runtime_offload_hook() -> None:
 
         async def startup() -> None:
             await asyncio.to_thread(provider_resolver.refresh)
+            provider_resolver.start()
             stream_log(
                 "gateway-live-voice-runtime",
                 "runtime",
@@ -270,6 +303,7 @@ def install_live_voice_runtime_offload_hook() -> None:
             )
 
         async def shutdown() -> None:
+            provider_resolver.stop()
             persistence_worker.stop()
 
         self.router.add_event_handler("startup", startup)
