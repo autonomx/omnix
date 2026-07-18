@@ -46,19 +46,27 @@ interface RpgWorldRailProps {
   worldStateRows: RpgWorldStateRowPreview[];
 }
 
-export function RpgWorldRail(props: RpgWorldRailProps) {
-  const {
-    className,
-    currentMapId,
-    encounter,
-    isRefreshingJobs,
-    jobCards,
-    npcRelationships,
-    onRefreshJobs,
-    rpgJobCount,
-    selectedSessionSummary,
-    worldStateRows,
-  } = props;
+export function RpgWorldRail({
+  autoplayRunning,
+  autoplayStatusLabel,
+  className,
+  checkpointControlStatus,
+  checkpointSummary,
+  currentMapId,
+  encounter,
+  isAutoplayPending,
+  isCreatingCheckpoint,
+  isRefreshingJobs,
+  jobCards,
+  npcRelationships,
+  onCreateCheckpoint,
+  onRefreshJobs,
+  onToggleAutoplay,
+  rpgAssets,
+  rpgJobCount,
+  selectedSessionSummary,
+  worldStateRows,
+}: RpgWorldRailProps) {
   const railClassName = className ? `rpg-right-rail ${className}` : 'rpg-right-rail';
   const isPreview = selectedSessionSummary.source === 'preview';
   const liveSessionQuery = useQuery({
@@ -72,6 +80,7 @@ export function RpgWorldRail(props: RpgWorldRailProps) {
   const queriedMapId = typeof mapStateRecord.current_map_id === 'string' ? mapStateRecord.current_map_id.trim() : '';
   const activeMapId = currentMapId?.trim() || queriedMapId;
   const visibleJobCards = jobCards.slice(0, 3);
+  const visibleAssets = rpgAssets.slice(0, 3);
   const canOpenLiveMap = !isPreview && Boolean(selectedSessionSummary.id.trim() && activeMapId);
   const [isMapOpen, setIsMapOpen] = useState(false);
 
@@ -161,6 +170,24 @@ export function RpgWorldRail(props: RpgWorldRailProps) {
               <p className="rpg-empty-state">No RPG jobs are currently queued or running.</p>
             )}
           </div>
+          <div className="rpg-survival-actions" aria-label="RPG runtime tools">
+            <button className="rpg-secondary-button" type="button" onClick={onToggleAutoplay} disabled={isAutoplayPending}>
+              {isAutoplayPending ? 'Updating autoplay…' : autoplayRunning ? 'Stop autoplay' : 'Start autoplay'}
+            </button>
+            <button className="rpg-secondary-button" type="button" onClick={onCreateCheckpoint} disabled={isCreatingCheckpoint}>
+              {isCreatingCheckpoint ? 'Creating checkpoint…' : 'Create checkpoint'}
+            </button>
+          </div>
+          <small>{autoplayStatusLabel} · {checkpointSummary.label}: {checkpointSummary.detail}</small>
+          {checkpointControlStatus ? <small>{checkpointControlStatus}</small> : null}
+          {visibleAssets.map((asset) => (
+            <article className="rpg-job-row" key={String(asset.id)}>
+              <div>
+                <h3>{String(asset.type)} / {String(asset.module)}</h3>
+                <small>{String(asset.storage_path ?? asset.id)}</small>
+              </div>
+            </article>
+          ))}
         </section>
       </aside>
       {canOpenLiveMap && activeMapId ? (
