@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from app.gateway import tts_stream_contract
 from app.gateway.tts_stream_contract import (
     audio_chunk_to_pcm16_bytes,
     initial_speech_start_byte,
@@ -71,3 +72,17 @@ def test_initial_speech_start_byte_returns_none_for_silence() -> None:
         threshold=0.01,
         preroll_ms=40.0,
     ) is None
+
+
+def test_pcm_helpers_fall_back_when_numpy_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(tts_stream_contract, "np", None)
+
+    assert _decode_pcm16(audio_chunk_to_pcm16_bytes([0.5, -0.5])) == [16383, -16383]
+
+    samples = np.asarray([0, 20_000], dtype="<i2")
+    assert initial_speech_start_byte(
+        samples.tobytes(),
+        sample_rate=24_000,
+        threshold=0.01,
+        preroll_ms=0.0,
+    ) == 2
