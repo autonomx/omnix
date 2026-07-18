@@ -1,0 +1,16 @@
+/*
+ * Keep chat message geometry stable while the user scrolls.
+ *
+ * The base chat styles used content-visibility:auto with a fixed intrinsic
+ * height. Long, variable-height messages were remeasured as they entered the
+ * viewport, which changed scrollHeight mid-gesture and made the transcript
+ * jump backward and forward.
+ */
+.assistant-chat-messages {
+  scroll-behavior: auto;
+}
+
+.assistant-chat-messages > .assistant-chat-message {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+}
