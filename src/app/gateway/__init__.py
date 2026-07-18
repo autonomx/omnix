@@ -12,6 +12,7 @@ from .image_asset_routes import install_image_asset_file_hook
 from .image_reference_routes import install_image_reference_route_hook
 from .image_workspace_routes import install_image_workspace_route_hook
 from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
+from .live_voice_runtime_offload import install_live_voice_runtime_offload_hook
 from .realtime_routes import install_realtime_route_hook
 from .research_mode_routes import install_research_mode_route_hook
 from .rpg_debug_routes import install_rpg_debug_route_hook
@@ -77,6 +78,7 @@ install_realtime_route_hook()
 install_live_voice_diagnostics_hook()
 install_event_loop_lag_monitor_hook()
 install_blocking_route_offload_hook()
+install_live_voice_runtime_offload_hook()
 install_tts_runtime_route_hook()
 install_tts_pcm_websocket_hook()
 install_tts_live_call_websocket_hook()
