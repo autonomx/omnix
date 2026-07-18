@@ -36,7 +36,7 @@ describe('RpgLorePanel', () => {
     render(<RpgLorePanel />);
 
     await waitFor(() => expect(screen.getByRole('region', { name: 'Campaign Bible summary' })).toBeInTheDocument());
-    expect(screen.getByText('PostgreSQL authority')).toBeInTheDocument();
+    expect(screen.getAllByText('PostgreSQL authority')).toHaveLength(2);
     expect(screen.getByText('Lore generated and stored')).toBeInTheDocument();
 
     for (const category of ['World Lore', 'Areas', 'Points of Interest', 'Characters', 'Races', 'Classes', 'Monsters', 'Items', 'Spells', 'Feats', 'Quests', 'Discoveries']) {
