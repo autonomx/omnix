@@ -5,6 +5,7 @@ Implements the BaseProvider interface for local LM Studio servers.
 LM Studio provides an OpenAI-compatible API on a configurable port.
 """
 
+import json
 from typing import Any, Dict, Iterator, List, Optional, Union
 from urllib.parse import urlsplit, urlunsplit
 
@@ -23,6 +24,9 @@ from .base import (
     ProviderCapability,
 )
 from .provider_trace import provider_call_enter, provider_call_exit
+
+_NATIVE_CHAT_COMPLETIONS_ENDPOINT = "/api/v0/chat/completions"
+_OPENAI_CHAT_COMPLETIONS_ENDPOINT = "/v1/chat/completions"
 
 
 class LMStudioProvider(BaseProvider):
@@ -58,6 +62,14 @@ class LMStudioProvider(BaseProvider):
         return urlunsplit(
             (parsed.scheme, f"127.0.0.1{port}", parsed.path, parsed.query, parsed.fragment)
         )
+
+    def _chat_completion_endpoint(self) -> str:
+        configured = str(
+            self.config.extra_params.get("chat_completions_endpoint") or ""
+        ).strip()
+        if not configured:
+            return _NATIVE_CHAT_COMPLETIONS_ENDPOINT
+        return configured if configured.startswith("/") else f"/{configured}"
 
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """
@@ -101,7 +113,37 @@ class LMStudioProvider(BaseProvider):
             else:
                 raise ConnectionError(f"HTTP error {e.response.status_code}: {e}")
         except Exception as e:
+            if isinstance(e, ConnectionError):
+                raise
             raise ConnectionError(f"Unexpected error: {e}")
+
+    def _make_chat_completion_request(
+        self,
+        payload: Dict[str, Any],
+        *,
+        stream: bool,
+    ) -> requests.Response:
+        """Prefer LM Studio's stats-bearing endpoint with an OpenAI fallback."""
+        endpoint = self._chat_completion_endpoint()
+        try:
+            return self._make_request(
+                'post',
+                endpoint,
+                json=payload,
+                stream=stream,
+            )
+        except ConnectionError as exc:
+            if endpoint != _NATIVE_CHAT_COMPLETIONS_ENDPOINT or "HTTP error 404" not in str(exc):
+                raise
+            fallback_payload = dict(payload)
+            if stream:
+                fallback_payload["stream_options"] = {"include_usage": True}
+            return self._make_request(
+                'post',
+                _OPENAI_CHAT_COMPLETIONS_ENDPOINT,
+                json=fallback_payload,
+                stream=stream,
+            )
 
     def chat_completion(
         self,
@@ -174,7 +216,7 @@ class LMStudioProvider(BaseProvider):
 
     def _non_stream_completion(self, payload: Dict[str, Any]) -> ChatResponse:
         """Handle non-streaming completion."""
-        response = self._make_request('post', '/v1/chat/completions', json=payload)
+        response = self._make_chat_completion_request(payload, stream=False)
 
         try:
             data = response.json()
@@ -202,14 +244,18 @@ class LMStudioProvider(BaseProvider):
         )
 
     def _stream_completion(self, payload: Dict[str, Any]) -> Iterator[ChatResponse]:
-        """Handle streaming completion."""
+        """Handle streaming completion and retain the final LM Studio stats chunk."""
         try:
-            response = self._make_request('post', '/v1/chat/completions', json=payload, stream=True)
+            response = self._make_chat_completion_request(payload, stream=True)
         except Exception as e:
             raise ConnectionError(f"Failed to start stream: {e}")
 
         content_buffer = ""
         thinking_buffer = ""
+        usage: Dict[str, Any] | None = None
+        finish_reason: str | None = None
+        resolved_model = str(payload.get('model') or '')
+        last_response: Dict[str, Any] | None = None
 
         try:
             for line in response.iter_lines():
@@ -225,36 +271,54 @@ class LMStudioProvider(BaseProvider):
                     break
 
                 try:
-                    import json
                     data = json.loads(data_str)
                     if not isinstance(data, dict):
                         continue
 
-                    delta = data.get('choices', [{}])[0].get('delta', {})
+                    choices = data.get('choices')
+                    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+                    delta = choice.get('delta') if isinstance(choice.get('delta'), dict) else {}
 
-                    # Accumulate content and thinking
-                    if 'reasoning' in delta:
-                        thinking_buffer += delta['reasoning']
-                    if 'content' in delta:
-                        content_buffer += delta['content']
+                    reasoning = delta.get('reasoning')
+                    if isinstance(reasoning, str):
+                        thinking_buffer += reasoning
+                    content = delta.get('content')
+                    if isinstance(content, str):
+                        content_buffer += content
+                    else:
+                        content = ''
+
+                    chunk_usage = data.get('usage')
+                    if isinstance(chunk_usage, dict):
+                        usage = chunk_usage
+                    chunk_finish_reason = choice.get('finish_reason')
+                    if chunk_finish_reason:
+                        finish_reason = str(chunk_finish_reason)
+                    resolved_model = str(data.get('model') or resolved_model)
+                    last_response = data
 
                     yield ChatResponse(
-                        content=delta.get('content', ''),
-                        model=payload.get('model', ''),
-                        thinking=delta.get('reasoning'),
-                        reasoning=delta.get('reasoning'),
+                        content=content,
+                        model=resolved_model,
+                        usage=chunk_usage if isinstance(chunk_usage, dict) else None,
+                        thinking=reasoning if isinstance(reasoning, str) else None,
+                        reasoning=reasoning if isinstance(reasoning, str) else None,
+                        finish_reason=str(chunk_finish_reason) if chunk_finish_reason else None,
                         raw_response=data
                     )
-                except (ValueError, SyntaxError, KeyError, IndexError):
+                except (ValueError, SyntaxError, KeyError, IndexError, TypeError):
                     continue
 
-            # Final response with accumulated content
+            # Final response carries usage, finish reason, and the stats-bearing
+            # final payload even when it has no text content.
             yield ChatResponse(
-                content="",  # Empty content for final yield, content already streamed
-                model=payload.get('model', ''),
+                content="",
+                model=resolved_model,
+                usage=usage,
                 thinking=thinking_buffer if thinking_buffer else None,
                 reasoning=thinking_buffer if thinking_buffer else None,
-                raw_response=None
+                finish_reason=finish_reason,
+                raw_response=last_response
             )
 
         except Exception as e:
@@ -344,7 +408,7 @@ class LMStudioProvider(BaseProvider):
         Get configuration schema for LM Studio provider.
 
         Returns:
-            Dictionary with configuration fields for frontend
+            Dictionary with configuration fields and metadata
         """
         return {
             "provider_type": self.provider_name,
