@@ -44,7 +44,12 @@ def _generate_lmstudio_reply(
         for message in rendered.messages
     ]
     model_name = _model_key(model_id)
-    response = provider.chat_completion(messages=messages, model=model_name, stream=False)
+    response = provider.chat_completion(
+        messages=messages,
+        model=model_name,
+        stream=False,
+        include_metrics=True,
+    )
     content = (getattr(response, "content", "") or "").strip()
     if not content:
         raise RuntimeError("Chat response was empty")
@@ -98,7 +103,12 @@ def _stream_lmstudio_reply(
         for message in rendered.messages
     ]
     model_name = _model_key(model_id)
-    response = provider.chat_completion(messages=messages, model=model_name, stream=True)
+    response = provider.chat_completion(
+        messages=messages,
+        model=model_name,
+        stream=True,
+        include_metrics=True,
+    )
     pending = ""
     full_text = ""
     resolved_model = model_name
