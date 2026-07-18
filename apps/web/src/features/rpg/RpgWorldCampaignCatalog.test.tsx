@@ -12,7 +12,7 @@ const world = {
   tone: 'heroic wonder',
   seed: 482193,
   draft_revision: 1,
-  metadata: {},
+  metadata: { cover_image_asset_id: 'image:aurelia:cover' },
   scenario_count: 3,
   generation: null,
   created_at: '2026-07-17T00:00:00Z',
@@ -52,7 +52,7 @@ describe('RpgWorldCampaignCatalog', () => {
   it('shows one card per world and supports continuing or creating within that world', () => {
     const onContinueCampaign = vi.fn();
     const onNewCampaign = vi.fn();
-    render(
+    const { container } = render(
       <RpgWorldCampaignCatalog
         campaigns={campaigns}
         isLoading={false}
@@ -67,6 +67,9 @@ describe('RpgWorldCampaignCatalog', () => {
     expect(screen.getAllByText(world.title).length).toBeGreaterThan(0);
     expect(screen.getByText('3 published openings')).toBeInTheDocument();
     expect(screen.getByText('2 campaigns')).toBeInTheDocument();
+    expect(container.querySelector('.rpg-world-card-cover-image')).toHaveStyle({
+      backgroundImage: expect.stringContaining('/api/assets/image%3Aaurelia%3Acover/file'),
+    });
     expect(screen.getByRole('combobox', { name: `Existing campaigns for ${world.title}` })).toHaveValue('campaign:recent');
 
     fireEvent.click(screen.getByRole('button', { name: `Continue campaign in ${world.title}` }));
