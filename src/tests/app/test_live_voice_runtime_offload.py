@@ -29,7 +29,7 @@ def test_delivery_persistence_runs_without_blocking_caller() -> None:
 
     assert caller_elapsed < 0.025
     assert started.wait(1.0)
-    assert worker_thread_ids == [worker_thread_ids[0]]
+    assert len(worker_thread_ids) == 1
     assert worker_thread_ids[0] != caller_thread_id
 
     release.set()
@@ -89,3 +89,36 @@ def test_cached_provider_defers_refresh_during_active_tts() -> None:
     assert resolver.get() is provider
     time.sleep(0.025)
     assert calls == 1
+
+
+def test_provider_monitor_refreshes_after_stream_becomes_idle() -> None:
+    provider = object()
+    active = True
+    refresh_finished = threading.Event()
+    calls = 0
+
+    def resolve() -> object:
+        nonlocal calls
+        calls += 1
+        if calls >= 2:
+            refresh_finished.set()
+        return provider
+
+    def active_streams() -> dict[str, object]:
+        return {"stream-1": {}} if active else {}
+
+    resolver = CachedTtsProviderResolver(
+        resolve,
+        active_streams=active_streams,
+        refresh_seconds=0.010,
+        log=lambda *_args, **_kwargs: None,
+    )
+    assert resolver.refresh() is provider
+    resolver.start()
+    time.sleep(0.030)
+    assert calls == 1
+
+    active = False
+    assert refresh_finished.wait(1.0)
+    resolver.stop(timeout=1.0)
+    assert calls >= 2
