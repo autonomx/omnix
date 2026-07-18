@@ -13,7 +13,14 @@ _HOOK_SENTINEL = "_omnix_live_chat_provider_metrics_installed"
 
 
 def _is_lmstudio(provider_id: str | None) -> bool:
-    return _provider_key(provider_id) == "lmstudio"
+    from app import shared
+
+    provider = shared.get_provider(_provider_key(provider_id))
+    return str(getattr(provider, "provider_name", "")).strip().lower() == "lmstudio"
+
+
+def _metrics_provider_id(provider_id: str | None) -> str:
+    return provider_id or "lmstudio"
 
 
 def _generate_lmstudio_reply(
@@ -56,7 +63,7 @@ def _generate_lmstudio_reply(
     provider_metrics = merge_provider_response_metrics(
         None,
         response,
-        provider_id=provider_id,
+        provider_id=_metrics_provider_id(provider_id),
     )
     if provider_metrics:
         metadata["provider_metrics"] = provider_metrics
@@ -104,7 +111,7 @@ def _stream_lmstudio_reply(
         provider_metrics = merge_provider_response_metrics(
             provider_metrics,
             chunk,
-            provider_id=provider_id,
+            provider_id=_metrics_provider_id(provider_id),
         )
         text = getattr(chunk, "content", "") or ""
         if not text:
