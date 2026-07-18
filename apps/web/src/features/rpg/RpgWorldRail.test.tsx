@@ -43,7 +43,7 @@ describe('RpgWorldRail', () => {
   it('keeps world information without restoring the Autoplay & reports section', () => {
     renderWithTheme(<RpgWorldRail {...baseProps} />);
 
-    expect(screen.getByRole('complementary', { name: 'World and jobs' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
     expect(screen.getByLabelText('Glimmerdeep Pass travel map')).toBeInTheDocument();
     expect(screen.getByText('Calendar / Season')).toBeInTheDocument();
     expect(screen.getByText('Hazards')).toBeInTheDocument();
