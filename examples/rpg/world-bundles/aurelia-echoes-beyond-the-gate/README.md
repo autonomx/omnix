@@ -4,7 +4,7 @@ A ready-to-import fantasy isekai world for the Omnix RPG World Library.
 
 ## Build the import file
 
-The checksummed bundle is stored as nine reviewable Base64-compressed parts so the repository does not depend on Git LFS for this sample binary.
+The original checksummed world data remains stored as nine reviewable Base64-compressed parts so the repository does not depend on Git LFS. Eleven production WebP artworks are committed beside the materializer under `artwork/`.
 
 ```bash
 python examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate/materialize.py
@@ -14,9 +14,22 @@ This writes:
 
 `examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate.omnix-world.zip`
 
-Bundle SHA-256: `9582c2ee7aecfb1d0890210bcd198baedfe4d1ef4ddfbadd6b5086a35f6eb944`
+Bundle SHA-256: `7b4b4d2868af5b96070f3f40a6f27983576dfda50bb5c9d2972424db64e45eb6`
 
 Open **Worlds & Campaigns**, select **World bundle**, choose the generated ZIP, and import it. Leave the optional world ID empty to use `world:aurelia-echoes-beyond-the-gate`, or enter another ID to create a clone.
+
+## Production artwork
+
+The materializer replaces the earlier lightweight SVG placeholders while preserving the existing asset IDs referenced by maps and characters. The import contains:
+
+- dedicated Aurelia cover art for the world-card catalog;
+- Starfall Grove arrival art;
+- portraits for Liora Fen, Archon Malrec, Princess Seraphine Valecourt, and Vael Ardyn;
+- illustrated Starfall Village and Moonroot Ruins maps;
+- Skybridge Pass and Wayfarers' Guild location art;
+- an illustrated Aurelia world map.
+
+The images are optimized for world cards, map/location previews, and character codex portraits while remaining embedded in the portable world bundle.
 
 ## Premise
 
@@ -35,7 +48,7 @@ The central campaign asks whether the way home should be closed, opened, or tran
 - 6 main quest arcs plus supporting adventure seeds;
 - a Resonance magic system with five schools and Earthborn Echo abilities;
 - economy, services, items, bestiary, religions, history, cosmology, and GM guidance;
-- 10 checksummed SVG illustrations, including the world map, four character portraits, and five location scenes.
+- 11 checksummed production WebP artworks.
 
 ## Playable maps
 
@@ -74,4 +87,4 @@ A level 3–5 opening for an established party entering the ruins to recover sto
 
 ## Verification
 
-The deterministic regression reconstructs the bundle, validates its SHA-256 through the production archive parser, and checks its lore, character, faction, map, scenario, release, and artwork counts.
+The deterministic regression reconstructs the bundle, validates its SHA-256 through the production archive parser, verifies every artwork's stable asset ID, WebP MIME type, archive extension, and byte-size floor, and checks the lore, character, faction, map, scenario, and release counts.
