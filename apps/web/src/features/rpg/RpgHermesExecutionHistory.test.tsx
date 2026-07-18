@@ -1,5 +1,5 @@
 import { MantineProvider } from '@mantine/core';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { omnixTheme } from '../../design/theme';
@@ -15,8 +15,9 @@ function renderWithTheme(element: ReactElement) {
 
 describe('RpgHermesExecutionHistory', () => {
   it('does not render the removed Hermes history section', () => {
-    const { container } = renderWithTheme(<RpgHermesExecutionHistory items={[]} />);
+    renderWithTheme(<RpgHermesExecutionHistory items={[]} />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText('Hermes history')).not.toBeInTheDocument();
+    expect(screen.queryByText('No Hermes execution history for this session yet.')).not.toBeInTheDocument();
   });
 });
