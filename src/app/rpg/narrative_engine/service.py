@@ -110,11 +110,18 @@ class NarrativeEngineService:
 
     @staticmethod
     def _entity_ids(request: TurnPresentationRequest) -> tuple[str, ...]:
+        grounding_ids = request.metadata.get("grounding_entity_ids") or ()
+        if isinstance(grounding_ids, str):
+            grounding_ids = (grounding_ids,)
         return tuple(
             dict.fromkeys(
-                value
-                for value in (*request.actor_ids, request.target_actor_id or "")
-                if value
+                str(value).strip()
+                for value in (
+                    *request.actor_ids,
+                    request.target_actor_id or "",
+                    *grounding_ids,
+                )
+                if str(value or "").strip()
             )
         )
 
@@ -249,6 +256,17 @@ class NarrativeEngineService:
             ),
             "canon_topic_titles": list(
                 request.metadata.get("canon_topic_titles") or ()
+            ),
+            "lore_search_required": request.metadata.get("lore_search_required") is True,
+            "lore_search_performed": request.metadata.get("lore_search_performed") is True,
+            "lore_topics_researched": int(
+                request.metadata.get("lore_topics_researched") or 0
+            ),
+            "lore_topic_titles": list(
+                request.metadata.get("lore_topic_titles") or ()
+            ),
+            "grounding_entity_ids": list(
+                request.metadata.get("grounding_entity_ids") or ()
             ),
             "hermes_source_ids": list(
                 request.metadata.get("hermes_source_ids") or ()

@@ -14,20 +14,10 @@ function renderWithTheme(element: ReactElement) {
 }
 
 describe('RpgHermesExecutionHistory', () => {
-  it('renders empty history', () => {
+  it('does not render the removed Hermes history section', () => {
     renderWithTheme(<RpgHermesExecutionHistory items={[]} />);
 
-    expect(screen.getByText('No Hermes execution history for this session yet.')).toBeInTheDocument();
-  });
-
-  it('renders ledger items', () => {
-    renderWithTheme(
-      <RpgHermesExecutionHistory
-        items={[{ execution_id: 'e1', command_text: 'look around', sequence_id: 'seq-1', state_changed: true, result_summary: 'You look around.' }]}
-      />,
-    );
-
-    expect(screen.getByRole('region', { name: 'Hermes execution history' })).toHaveTextContent('look around');
-    expect(screen.getByText('You look around.')).toBeInTheDocument();
+    expect(screen.queryByText('Hermes history')).not.toBeInTheDocument();
+    expect(screen.queryByText('No Hermes execution history for this session yet.')).not.toBeInTheDocument();
   });
 });

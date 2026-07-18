@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Iterable, Mapping, Protocol, Sequence
+from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from .authority import VisibilityClass
 from .contracts import EvidenceRecord
+
 
 _TOKEN_PATTERN = re.compile(r"[a-z0-9']+", re.IGNORECASE)
 
@@ -112,12 +113,47 @@ def _tokens(value: str) -> set[str]:
     return set(_TOKEN_PATTERN.findall(value.casefold()))
 
 
+def _metadata_text(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return " ".join(_metadata_text(item) for item in value.values())
+    if isinstance(value, list | tuple | set):
+        return " ".join(str(item) for item in value if str(item).strip())
+    return str(value or "")
+
+
+def _search_text(record: EvidenceRecord) -> str:
+    metadata = dict(record.metadata or {})
+    searchable = {
+        key: metadata.get(key)
+        for key in (
+            "title",
+            "category",
+            "topic_id",
+            "document_id",
+            "entity_id",
+            "entity_kind",
+            "fact_id",
+            "keywords",
+            "aliases",
+            "tags",
+        )
+    }
+    return " ".join((record.content, _metadata_text(searchable))).strip()
+
+
 def _score(record: EvidenceRecord, query: EvidenceQuery) -> tuple[float, int, int, str]:
     query_tokens = _tokens(query.text)
-    content_tokens = _tokens(record.content)
+    search_text = _search_text(record)
+    content_tokens = _tokens(search_text)
     overlap = len(query_tokens.intersection(content_tokens))
     entity_overlap = len(set(query.entity_ids).intersection(record.entity_refs))
-    score = float(overlap * 3 + entity_overlap * 8) + max(0.0, min(record.confidence, 1.0))
+    normalized_query = " ".join(_TOKEN_PATTERN.findall(query.text.casefold()))
+    normalized_search = " ".join(_TOKEN_PATTERN.findall(search_text.casefold()))
+    phrase_bonus = 6 if normalized_query and normalized_query in normalized_search else 0
+    score = (
+        float(overlap * 3 + entity_overlap * 8 + phrase_bonus)
+        + max(0.0, min(record.confidence, 1.0))
+    )
     return (score, entity_overlap, record.source_revision, record.evidence_id)
 
 
