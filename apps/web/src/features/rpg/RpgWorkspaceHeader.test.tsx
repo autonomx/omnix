@@ -2,7 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
@@ -45,23 +45,29 @@ const headerProps = {
 };
 
 describe('RpgWorkspaceHeader', () => {
-  it('keeps workspace controls available when runtime context is hidden', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('replaces runtime status options with a full world lore view', () => {
     renderWithTheme(<RpgWorkspaceHeader {...headerProps} />);
 
-    expect(screen.getByLabelText('RPG runtime status')).toHaveTextContent('Engine: ready');
-    expect(screen.getByLabelText('RPG runtime status')).toHaveTextContent('Session: Preview campaign');
-    expect(screen.getByText('Replay-preserving')).toBeInTheDocument();
-    expect(screen.getByText('/rpg')).toBeInTheDocument();
+    expect(screen.queryByLabelText('RPG runtime status')).not.toBeInTheDocument();
+    expect(screen.queryByText('Replay-preserving')).not.toBeInTheDocument();
+    expect(screen.queryByText('/rpg')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'World Lore' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide world rail' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand live data' })).toHaveAttribute('aria-expanded', 'false');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hide header' }));
+    fireEvent.click(screen.getByRole('button', { name: 'World Lore' }));
 
-    expect(screen.queryByLabelText('RPG runtime status')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Show header' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
+    const loreDialog = screen.getByRole('dialog', { name: 'Preview campaign' });
+    expect(within(loreDialog).getByRole('heading', { name: 'Preview campaign' })).toBeInTheDocument();
+    expect(within(loreDialog).getByText('Select or create a campaign to browse its Campaign Bible.')).toBeInTheDocument();
+
+    fireEvent.click(within(loreDialog).getByRole('button', { name: 'Back to Play' }));
+    expect(screen.queryByRole('dialog', { name: 'Preview campaign' })).not.toBeInTheDocument();
   });
 
   it('opens world creation and import as a Campaign Menu view', async () => {
