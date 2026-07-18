@@ -1,13 +1,19 @@
 """Transport-neutral request policy and PCM helpers for TTS streaming."""
 from __future__ import annotations
 
+import importlib
+import math
 import re
 from typing import Any, Iterator
 
-import numpy as np
 from pydantic import BaseModel, Field, model_validator
 
 from app.shared import remove_emojis
+
+try:
+    np = importlib.import_module("numpy")
+except ImportError:  # pragma: no cover - exercised in minimal dependency environments.
+    np = None
 
 DEFAULT_SAMPLE_RATE = 24_000
 STREAM_OUTPUT_BLOCK_SAMPLES = 2_048
@@ -148,6 +154,9 @@ def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
     if isinstance(audio_chunk, (bytearray, memoryview)):
         return bytes(audio_chunk)
 
+    if np is None:
+        return _audio_chunk_to_pcm16_bytes_fallback(audio_chunk)
+
     try:
         values = np.asarray(audio_chunk, dtype=np.float32)
     except (TypeError, ValueError):
@@ -177,12 +186,10 @@ def _audio_chunk_to_pcm16_bytes_fallback(audio_chunk: Any) -> bytes:
             sample = float(value)
         except (TypeError, ValueError):
             continue
-        if np.isnan(sample):
+        if math.isnan(sample):
             sample = 0.0
-        elif np.isposinf(sample):
-            sample = 1.0
-        elif np.isneginf(sample):
-            sample = -1.0
+        elif math.isinf(sample):
+            sample = 1.0 if sample > 0 else -1.0
         sample = max(-1.0, min(1.0, sample))
         pcm.extend(int(sample * 32767).to_bytes(2, byteorder="little", signed=True))
     return bytes(pcm)
@@ -207,9 +214,21 @@ def initial_speech_start_byte(
         return None
     threshold_int = int(max(0.0, min(1.0, threshold)) * 32767)
     preroll_samples = max(0, int(sample_rate * max(0.0, preroll_ms) / 1000.0))
-    samples = np.frombuffer(even_bytes, dtype="<i2").astype(np.int32, copy=False)
-    speech_indices = np.flatnonzero(np.abs(samples) > threshold_int)
-    if speech_indices.size == 0:
-        return None
-    start_sample = max(0, int(speech_indices[0]) - preroll_samples)
-    return start_sample * 2
+    if np is not None:
+        samples = np.frombuffer(even_bytes, dtype="<i2").astype(np.int32, copy=False)
+        speech_indices = np.flatnonzero(np.abs(samples) > threshold_int)
+        if speech_indices.size == 0:
+            return None
+        start_sample = max(0, int(speech_indices[0]) - preroll_samples)
+        return start_sample * 2
+
+    for sample_index in range(len(even_bytes) // 2):
+        offset = sample_index * 2
+        sample = int.from_bytes(
+            even_bytes[offset : offset + 2],
+            byteorder="little",
+            signed=True,
+        )
+        if abs(sample) > threshold_int:
+            return max(0, sample_index - preroll_samples) * 2
+    return None
