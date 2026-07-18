@@ -1,12 +1,19 @@
 """Transport-neutral request policy and PCM helpers for TTS streaming."""
 from __future__ import annotations
 
+import importlib
+import math
 import re
 from typing import Any, Iterator
 
 from pydantic import BaseModel, Field, model_validator
 
 from app.shared import remove_emojis
+
+try:
+    np = importlib.import_module("numpy")
+except ImportError:  # pragma: no cover - exercised in minimal dependency environments.
+    np = None
 
 DEFAULT_SAMPLE_RATE = 24_000
 STREAM_OUTPUT_BLOCK_SAMPLES = 2_048
@@ -139,14 +146,34 @@ def stream_pcm16_blocks(
 
 
 def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
-    """Convert float-like mono chunks to little-endian PCM16 without numpy."""
+    """Convert float-like mono audio to little-endian PCM16 using a vectorized fast path."""
     if audio_chunk is None:
         return b""
     if isinstance(audio_chunk, bytes):
         return audio_chunk
-    if isinstance(audio_chunk, bytearray):
+    if isinstance(audio_chunk, (bytearray, memoryview)):
         return bytes(audio_chunk)
 
+    if np is None:
+        return _audio_chunk_to_pcm16_bytes_fallback(audio_chunk)
+
+    try:
+        values = np.asarray(audio_chunk, dtype=np.float32)
+    except (TypeError, ValueError):
+        return _audio_chunk_to_pcm16_bytes_fallback(audio_chunk)
+
+    if values.size == 0:
+        return b""
+    if values.ndim > 1:
+        values = values[..., 0]
+    values = np.ascontiguousarray(values.reshape(-1), dtype=np.float32)
+    np.nan_to_num(values, copy=False, nan=0.0, posinf=1.0, neginf=-1.0)
+    np.clip(values, -1.0, 1.0, out=values)
+    return (values * 32767.0).astype("<i2", copy=False).tobytes()
+
+
+def _audio_chunk_to_pcm16_bytes_fallback(audio_chunk: Any) -> bytes:
+    """Compatibility path for irregular iterables that NumPy cannot coerce."""
     values = audio_chunk.tolist() if hasattr(audio_chunk, "tolist") else audio_chunk
     if not isinstance(values, (list, tuple)):
         values = [values]
@@ -159,6 +186,10 @@ def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
             sample = float(value)
         except (TypeError, ValueError):
             continue
+        if math.isnan(sample):
+            sample = 0.0
+        elif math.isinf(sample):
+            sample = 1.0 if sample > 0 else -1.0
         sample = max(-1.0, min(1.0, sample))
         pcm.extend(int(sample * 32767).to_bytes(2, byteorder="little", signed=True))
     return bytes(pcm)
@@ -178,11 +209,26 @@ def initial_speech_start_byte(
     threshold: float,
     preroll_ms: float,
 ) -> int | None:
+    even_bytes = even_pcm16_bytes(pcm_bytes)
+    if not even_bytes:
+        return None
     threshold_int = int(max(0.0, min(1.0, threshold)) * 32767)
     preroll_samples = max(0, int(sample_rate * max(0.0, preroll_ms) / 1000.0))
-    for sample_index in range(len(pcm_bytes) // 2):
+    if np is not None:
+        samples = np.frombuffer(even_bytes, dtype="<i2").astype(np.int32, copy=False)
+        speech_indices = np.flatnonzero(np.abs(samples) > threshold_int)
+        if speech_indices.size == 0:
+            return None
+        start_sample = max(0, int(speech_indices[0]) - preroll_samples)
+        return start_sample * 2
+
+    for sample_index in range(len(even_bytes) // 2):
         offset = sample_index * 2
-        sample = int.from_bytes(pcm_bytes[offset : offset + 2], byteorder="little", signed=True)
+        sample = int.from_bytes(
+            even_bytes[offset : offset + 2],
+            byteorder="little",
+            signed=True,
+        )
         if abs(sample) > threshold_int:
             return max(0, sample_index - preroll_samples) * 2
     return None
