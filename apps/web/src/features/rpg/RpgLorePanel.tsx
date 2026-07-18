@@ -69,6 +69,12 @@ interface LoreResponse {
   };
 }
 
+interface RpgLorePanelProps {
+  labelledById?: string;
+  panelId?: string;
+  role?: 'region' | 'tabpanel';
+}
+
 function selectedSessionId(): string {
   if (typeof window === 'undefined') return '';
   try {
@@ -102,7 +108,11 @@ async function readJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function RpgLorePanel() {
+export function RpgLorePanel({
+  labelledById = 'rpg-lore-tab',
+  panelId = 'rpg-lore-panel',
+  role = 'tabpanel',
+}: RpgLorePanelProps = {}) {
   const sessionId = selectedSessionId();
   const [lore, setLore] = useState<LoreResponse | null>(null);
   const [selectedId, setSelectedId] = useState('');
@@ -170,7 +180,7 @@ export function RpgLorePanel() {
   }
 
   return (
-    <div aria-labelledby="rpg-lore-tab" className="rpg-journal-grid" id="rpg-lore-panel" role="tabpanel">
+    <div aria-labelledby={labelledById} className="rpg-journal-grid" id={panelId} role={role}>
       <div className="rpg-journal-list" aria-label="Lore categories">
         <article className="active">
           <span aria-hidden="true" />
