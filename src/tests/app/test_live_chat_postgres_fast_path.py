@@ -6,6 +6,7 @@ from typing import Any
 
 from app.chat.models import ChatSession, SendChatMessageRequest
 from app.gateway import live_chat_postgres_fast_path as fast_path
+from app.persistence import chat_runtime_compat
 
 
 NOW = "2026-07-18T00:00:00+00:00"
@@ -156,3 +157,43 @@ def test_begin_user_message_persists_one_targeted_turn(monkeypatch) -> None:
     assert duplicate[0] is session
     assert duplicate[1] is message
     assert len(persisted) == 1
+
+
+def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> None:
+    created_history: list[object] = []
+    created_stores: list[object] = []
+
+    class FakeHistorySearchService:
+        def __init__(self) -> None:
+            created_history.append(self)
+
+    class FakeChatStore:
+        def __init__(self, *, history_search_factory) -> None:
+            self.history_search_factory = history_search_factory
+            created_stores.append(self)
+
+    chat_runtime_compat.reset_default_chat_runtime_caches()
+    monkeypatch.setattr(
+        chat_runtime_compat,
+        "PostgresHistorySearchService",
+        FakeHistorySearchService,
+    )
+    monkeypatch.setattr(
+        chat_runtime_compat,
+        "PostgresCharacterChatSessionStore",
+        FakeChatStore,
+    )
+
+    try:
+        first_history = chat_runtime_compat.default_history_search_service()
+        second_history = chat_runtime_compat.default_history_search_service()
+        first_store = chat_runtime_compat.default_chat_store()
+        second_store = chat_runtime_compat.default_chat_store()
+
+        assert first_history is second_history
+        assert first_store is second_store
+        assert first_store.history_search_factory() is first_history
+        assert created_history == [first_history]
+        assert created_stores == [first_store]
+    finally:
+        chat_runtime_compat.reset_default_chat_runtime_caches()
