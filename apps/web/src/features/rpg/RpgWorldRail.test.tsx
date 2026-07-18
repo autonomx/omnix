@@ -20,7 +20,7 @@ function renderWithTheme(element: ReactElement) {
 
 const baseProps = {
   autoplayRunning: false,
-  autoplayStatusLabel: 'Off',
+  autoplayStatusLabel: 'Autoplay off',
   checkpointSummary: { label: 'Latest checkpoint', detail: 'checkpoint-001.json', source: 'live' as const },
   encounter: previewEncounter,
   isAutoplayPending: false,
@@ -40,7 +40,7 @@ const baseProps = {
 };
 
 describe('RpgWorldRail', () => {
-  it('keeps world information and removes autoplay and report controls', () => {
+  it('keeps world information without restoring the Autoplay & reports section', () => {
     renderWithTheme(<RpgWorldRail {...baseProps} />);
 
     expect(screen.getByRole('complementary', { name: 'World and jobs' })).toBeInTheDocument();
@@ -51,19 +51,33 @@ describe('RpgWorldRail', () => {
     expect(screen.getByText('RPG jobs')).toBeInTheDocument();
 
     expect(screen.queryByText('Autoplay & reports')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Start autoplay' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Generate last 10 turn report' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Open reports index' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Create checkpoint' })).not.toBeInTheDocument();
-    expect(screen.queryByText('rpg_checkpoint / rpg')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start autoplay' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create checkpoint' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'rpg_checkpoint / rpg' })).toBeInTheDocument();
   });
 
-  it('keeps the RPG job refresh control active', () => {
+  it('keeps job and compact runtime controls active', () => {
     const onRefreshJobs = vi.fn();
-    renderWithTheme(<RpgWorldRail {...baseProps} onRefreshJobs={onRefreshJobs} rpgJobCount={1} />);
+    const onCreateCheckpoint = vi.fn();
+    const onToggleAutoplay = vi.fn();
+    renderWithTheme(
+      <RpgWorldRail
+        {...baseProps}
+        onCreateCheckpoint={onCreateCheckpoint}
+        onRefreshJobs={onRefreshJobs}
+        onToggleAutoplay={onToggleAutoplay}
+        rpgJobCount={1}
+      />,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh RPG jobs' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start autoplay' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create checkpoint' }));
     expect(onRefreshJobs).toHaveBeenCalledTimes(1);
+    expect(onToggleAutoplay).toHaveBeenCalledTimes(1);
+    expect(onCreateCheckpoint).toHaveBeenCalledTimes(1);
     expect(screen.getByText('1 live')).toBeInTheDocument();
   });
 
@@ -86,7 +100,7 @@ describe('RpgWorldRail', () => {
           { id: 'job-4', title: 'rpg.turn.4', status: 'Queued', progress: 0, detail: 'Fourth job', source: 'live' },
         ]}
         rpgJobCount={4}
-      />
+      />,
     );
 
     expect(screen.getByText('4 live')).toBeInTheDocument();
