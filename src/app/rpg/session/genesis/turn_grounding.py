@@ -13,6 +13,7 @@ from app.rpg.narrative_engine.shadow import runtime_evidence
 
 from .campaign_bible_runtime import load_campaign_bible_snapshot
 from .hermes_campaign_research import CampaignResearchPacket, research_campaign_turn
+from .npc_lore_sync import sync_encountered_npc_lore
 
 
 _LORE_QUERY_PREFIXES = (
@@ -182,13 +183,33 @@ def build_turn_grounding_packet(
     max_topics: int = 5,
     runtime_only: bool = False,
 ) -> TurnGroundingPacket:
-    """Assemble evidence without mutating simulation or Campaign Bible state."""
+    """Assemble evidence and persist newly encountered NPC canon without changing simulation."""
 
     lore_required = campaign_lore_research_required(player_input, result)
     requested_runtime_only = runtime_only
     runtime_only = runtime_only and not lore_required
     runtime = tuple(runtime_evidence(result))
     session = _session(result, campaign_id)
+    explicit_npc_ids = tuple(
+        value
+        for value in (*actor_ids, speaker_id or "")
+        if str(value).strip().casefold().startswith("npc:")
+    )
+    try:
+        session, npc_lore_sync = sync_encountered_npc_lore(
+            campaign_id,
+            session,
+            explicit_npc_ids=explicit_npc_ids,
+        )
+    except Exception as exc:
+        npc_lore_sync = {
+            "mode": "sync_error",
+            "persisted": False,
+            "encountered_npc_ids": list(explicit_npc_ids),
+            "created_npc_ids": [],
+            "changed": False,
+            "error": type(exc).__name__,
+        }
     snapshot = (
         None
         if runtime_only
@@ -255,7 +276,14 @@ def build_turn_grounding_packet(
         "faction_ids": list(factions),
         "grounding_passed": True,
         "research_read_only": True,
+        "npc_lore_sync_mode": str(npc_lore_sync.get("mode") or ""),
+        "npc_lore_persisted": npc_lore_sync.get("persisted") is True,
+        "npc_lore_changed": npc_lore_sync.get("changed") is True,
+        "encountered_npc_ids": list(npc_lore_sync.get("encountered_npc_ids") or ()),
+        "created_npc_lore_ids": list(npc_lore_sync.get("created_npc_ids") or ()),
     }
+    if npc_lore_sync.get("error"):
+        metadata["npc_lore_sync_error"] = str(npc_lore_sync.get("error"))
     if runtime_only:
         metadata["runtime_only"] = True
     elif requested_runtime_only:
