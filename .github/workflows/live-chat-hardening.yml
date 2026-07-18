@@ -45,6 +45,7 @@ jobs:
           ruff check \
             src/app/gateway/blocking_route_offload.py \
             src/app/gateway/event_loop_lag_monitor.py \
+            src/app/gateway/live_voice_runtime_offload.py \
             src/app/gateway/live_voice_release_gate.py \
             src/app/gateway/live_chat_release_gate.py \
             src/app/gateway/live_chat_release_aggregation.py \
@@ -56,6 +57,7 @@ jobs:
             src/app/gateway/tts_stream_diagnostics.py \
             src/tests/app/test_gateway_blocking_route_offload.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
+            src/tests/app/test_live_voice_runtime_offload.py \
             src/tests/app/test_live_voice_release_gate.py \
             src/tests/app/test_live_chat_release_gate.py \
             src/tests/app/test_live_chat_release_completion.py \
@@ -76,6 +78,7 @@ jobs:
           python -m pytest \
             src/tests/app/test_gateway_blocking_route_offload.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
+            src/tests/app/test_live_voice_runtime_offload.py \
             src/tests/app/test_gateway_tts_live_call_websocket.py \
             src/tests/app/test_gateway_tts_live_call_latency.py \
             src/tests/app/test_tts_stream_contract_performance.py \
