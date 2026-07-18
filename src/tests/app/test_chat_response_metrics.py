@@ -5,7 +5,7 @@ from typing import Any
 
 from app import shared
 from app.chat.provider_metrics import merge_provider_response_metrics
-from app.gateway.live_chat_provider_metrics import _stream_lmstudio_reply
+from app.gateway.live_chat_provider_metrics import _is_lmstudio, _stream_lmstudio_reply
 from app.providers import ChatMessage, ChatResponse, LMStudioProvider, ProviderConfig
 
 
@@ -101,10 +101,26 @@ def test_provider_metrics_normalize_lmstudio_stats() -> None:
     }
 
 
+def test_default_provider_is_detected_as_lmstudio(monkeypatch) -> None:
+    provider = SimpleNamespace(provider_name="lmstudio")
+    requested: list[str | None] = []
+
+    def fake_get_provider(name: str | None):
+        requested.append(name)
+        return provider
+
+    monkeypatch.setattr(shared, "get_provider", fake_get_provider)
+
+    assert _is_lmstudio(None) is True
+    assert requested == [None]
+
+
 def test_lmstudio_prompt_stream_persists_metrics_on_completion(monkeypatch) -> None:
     payload = _stats_payload()
 
     class FakeProvider:
+        provider_name = "lmstudio"
+
         def chat_completion(self, **kwargs: Any):
             assert kwargs["stream"] is True
             return iter(
