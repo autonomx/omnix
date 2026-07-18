@@ -34,8 +34,17 @@ _ROUTE_SENTINEL = "_omnix_tts_live_call_ws_registered"
 _HOOK_SENTINEL = "_omnix_tts_live_call_ws_hook_installed"
 TTS_LIVE_CALL_WEBSOCKET_PATH = "/api/tts/live-call/websocket"
 TTS_PCM_FRAME_SAMPLES = 2_400  # 100 ms at 24 kHz.
+FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS = 0.050
 
-FrameMessage = tuple[str, bytes | None, int, dict[str, Any]]
+
+@dataclass(frozen=True)
+class FrameMessage:
+    message_type: str
+    pcm_bytes: bytes | None
+    sample_rate: int
+    metadata: dict[str, Any]
+    queued_at: float | None = None
+    sent_ack: threading.Event | None = None
 
 
 @dataclass
@@ -68,7 +77,12 @@ def _stop_connection(state: ConnectionState, reason: str) -> None:
     state.stop_event.set()
     if state.active_frames is not None:
         state.active_frames.put_nowait(
-            ("client_disconnect", None, DEFAULT_SAMPLE_RATE, {"reason": reason})
+            FrameMessage(
+                "client_disconnect",
+                None,
+                DEFAULT_SAMPLE_RATE,
+                {"reason": reason},
+            )
         )
     state.requests.put_nowait(None)
 
@@ -210,6 +224,7 @@ async def _stream_phrase(
             )
             return
 
+        provider_resolved_at = time.perf_counter()
         stream_log(
             stream_id,
             "server",
@@ -217,6 +232,10 @@ async def _stream_phrase(
             provider_class=f"{type(provider).__module__}.{type(provider).__qualname__}",
             provider_name=getattr(provider, "provider_name", None),
             provider_object_id=id(provider),
+            request_to_provider_ms=round(
+                (provider_resolved_at - route_started_at) * 1000,
+                3,
+            ),
         )
         loop = asyncio.get_running_loop()
         frames: asyncio.Queue[FrameMessage] = asyncio.Queue()
@@ -240,6 +259,10 @@ async def _stream_phrase(
                 "provider",
                 "producer_thread_started",
                 phrase_index=phrase_index,
+                request_to_producer_ms=round(
+                    (producer_started_at - route_started_at) * 1000,
+                    3,
+                ),
             )
             try:
                 stream_kwargs: dict[str, Any] = {
@@ -273,13 +296,26 @@ async def _stream_phrase(
                     for audio_chunk, sample_rate, timing in provider_stream:
                         if stopped():
                             return
-                        now = time.perf_counter()
+                        raw_chunk_ready_at = time.perf_counter()
+                        if raw_chunk_count == 0:
+                            stream_log(
+                                stream_id,
+                                "provider",
+                                "first_raw_chunk_ready",
+                                generation_elapsed_ms=round(
+                                    (raw_chunk_ready_at - producer_started_at) * 1000,
+                                    3,
+                                ),
+                                provider_timing=timing,
+                            )
+                        conversion_started_at = time.perf_counter()
                         pcm_bytes = _audio_chunk_to_pcm16_bytes(audio_chunk)
+                        conversion_finished_at = time.perf_counter()
                         resolved_rate = int(sample_rate or DEFAULT_SAMPLE_RATE)
                         sample_count = len(pcm_bytes) // 2
                         raw_chunk_count += 1
                         produced_samples += sample_count
-                        elapsed_ms = (now - producer_started_at) * 1000
+                        elapsed_ms = (raw_chunk_ready_at - producer_started_at) * 1000
                         audio_ms = produced_samples * 1000 / max(1, resolved_rate)
                         stream_log(
                             stream_id,
@@ -289,8 +325,12 @@ async def _stream_phrase(
                             sample_rate=resolved_rate,
                             samples=sample_count,
                             bytes=len(pcm_bytes),
-                            interval_ms=round((now - last_raw_chunk_at) * 1000, 3),
+                            interval_ms=round((raw_chunk_ready_at - last_raw_chunk_at) * 1000, 3),
                             generation_elapsed_ms=round(elapsed_ms, 3),
+                            pcm_conversion_ms=round(
+                                (conversion_finished_at - conversion_started_at) * 1000,
+                                3,
+                            ),
                             cumulative_audio_ms=round(audio_ms, 3),
                             generation_rtf=(
                                 round(elapsed_ms / audio_ms, 5) if audio_ms else None
@@ -298,7 +338,7 @@ async def _stream_phrase(
                             provider_timing=timing,
                             stop_requested=stopped(),
                         )
-                        last_raw_chunk_at = now
+                        last_raw_chunk_at = raw_chunk_ready_at
                         yield pcm_bytes, resolved_rate, timing
 
                 for pcm_bytes, sample_rate, timing in _stream_pcm16_blocks(
@@ -307,16 +347,28 @@ async def _stream_phrase(
                 ):
                     if stopped():
                         return
+                    is_first_frame = queued_frame_count == 0
+                    first_frame_ack = threading.Event() if is_first_frame else None
+                    queued_at = time.perf_counter()
                     metadata = {
                         "frame_index": queued_frame_count,
                         "provider_timing": timing,
                         "producer_elapsed_ms": round(
-                            (time.perf_counter() - producer_started_at) * 1000,
+                            (queued_at - producer_started_at) * 1000,
                             3,
                         ),
                     }
                     queued_frame_count += 1
-                    emit(("chunk", pcm_bytes, sample_rate, metadata))
+                    emit(
+                        FrameMessage(
+                            "chunk",
+                            pcm_bytes,
+                            sample_rate,
+                            metadata,
+                            queued_at=queued_at,
+                            sent_ack=first_frame_ack,
+                        )
+                    )
                     stream_log(
                         stream_id,
                         "provider",
@@ -325,8 +377,32 @@ async def _stream_phrase(
                         sample_rate=sample_rate,
                         samples=len(pcm_bytes) // 2,
                         bytes=len(pcm_bytes),
+                        first_frame_handoff_requested=is_first_frame,
                     )
-                emit(("done", None, DEFAULT_SAMPLE_RATE, {}))
+                    if first_frame_ack is not None:
+                        handoff_started_at = time.perf_counter()
+                        acknowledged = first_frame_ack.wait(
+                            timeout=FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS
+                        )
+                        handoff_finished_at = time.perf_counter()
+                        stream_log(
+                            stream_id,
+                            "provider",
+                            "first_frame_handoff_completed",
+                            acknowledged=acknowledged,
+                            wait_ms=round(
+                                (handoff_finished_at - handoff_started_at) * 1000,
+                                3,
+                            ),
+                            timeout_ms=round(
+                                FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS * 1000,
+                                3,
+                            ),
+                            stop_requested=stopped(),
+                        )
+                        if stopped():
+                            return
+                emit(FrameMessage("done", None, DEFAULT_SAMPLE_RATE, {}))
             except Exception as exc:  # pragma: no cover - surfaced to browser.
                 stream_log(
                     stream_id,
@@ -335,7 +411,7 @@ async def _stream_phrase(
                     error=repr(exc),
                 )
                 emit(
-                    (
+                    FrameMessage(
                         "error",
                         None,
                         DEFAULT_SAMPLE_RATE,
@@ -374,7 +450,17 @@ async def _stream_phrase(
         current_sample_rate = DEFAULT_SAMPLE_RATE
         last_send_at = route_started_at
         while True:
-            message_type, pcm_bytes, sample_rate, metadata = await frames.get()
+            message = await frames.get()
+            message_type = message.message_type
+            pcm_bytes = message.pcm_bytes
+            sample_rate = message.sample_rate
+            metadata = message.metadata
+            dequeued_at = time.perf_counter()
+            frame_queue_wait_ms = (
+                round((dequeued_at - message.queued_at) * 1000, 3)
+                if message.queued_at is not None
+                else None
+            )
             if message_type == "client_disconnect":
                 stream_log(
                     stream_id,
@@ -384,24 +470,41 @@ async def _stream_phrase(
                 )
                 return
             if message_type == "chunk" and pcm_bytes is not None:
-                if not started or sample_rate != current_sample_rate:
-                    current_sample_rate = sample_rate
-                    await websocket.send_json(
-                        {
-                            "type": "start" if not started else "format",
-                            "stream_id": stream_id,
-                            "phrase_index": phrase_index,
-                            "sample_rate": current_sample_rate,
-                            "sample_format": "pcm_s16le",
-                            "channels": 1,
-                            "frame_samples": TTS_PCM_FRAME_SAMPLES,
-                            "diagnostics_log": diagnostics_log_path(),
-                        }
-                    )
-                    started = True
-                send_started_at = time.perf_counter()
-                await websocket.send_bytes(pcm_bytes)
-                sent_at = time.perf_counter()
+                try:
+                    if not started or sample_rate != current_sample_rate:
+                        current_sample_rate = sample_rate
+                        control_started_at = time.perf_counter()
+                        await websocket.send_json(
+                            {
+                                "type": "start" if not started else "format",
+                                "stream_id": stream_id,
+                                "phrase_index": phrase_index,
+                                "sample_rate": current_sample_rate,
+                                "sample_format": "pcm_s16le",
+                                "channels": 1,
+                                "frame_samples": TTS_PCM_FRAME_SAMPLES,
+                                "diagnostics_log": diagnostics_log_path(),
+                            }
+                        )
+                        control_sent_at = time.perf_counter()
+                        if not started:
+                            stream_log(
+                                stream_id,
+                                "server",
+                                "first_start_control_sent",
+                                frame_queue_wait_ms=frame_queue_wait_ms,
+                                send_duration_ms=round(
+                                    (control_sent_at - control_started_at) * 1000,
+                                    3,
+                                ),
+                            )
+                        started = True
+                    send_started_at = time.perf_counter()
+                    await websocket.send_bytes(pcm_bytes)
+                    sent_at = time.perf_counter()
+                finally:
+                    if message.sent_ack is not None:
+                        message.sent_ack.set()
                 frame_samples = len(pcm_bytes) // 2
                 sent_frames += 1
                 sent_samples += frame_samples
@@ -413,6 +516,7 @@ async def _stream_phrase(
                     bytes=len(pcm_bytes),
                     samples=frame_samples,
                     sample_rate=current_sample_rate,
+                    frame_queue_wait_ms=frame_queue_wait_ms,
                     send_duration_ms=round((sent_at - send_started_at) * 1000, 3),
                     interval_since_previous_send_ms=round(
                         (sent_at - last_send_at) * 1000,
@@ -425,6 +529,21 @@ async def _stream_phrase(
                     pending_server_frames=frames.qsize(),
                     producer_metadata=metadata,
                 )
+                if sent_frames == 1:
+                    stream_log(
+                        stream_id,
+                        "server",
+                        "first_pcm_frame_sent",
+                        request_to_first_frame_ms=round(
+                            (sent_at - route_started_at) * 1000,
+                            3,
+                        ),
+                        frame_queue_wait_ms=frame_queue_wait_ms,
+                        send_duration_ms=round(
+                            (sent_at - send_started_at) * 1000,
+                            3,
+                        ),
+                    )
                 last_send_at = sent_at
                 continue
             if message_type == "done":
@@ -450,13 +569,13 @@ async def _stream_phrase(
                     persistent_connection=True,
                 )
                 return
-            message = metadata.get("message") or "TTS stream failed."
+            message_text = metadata.get("message") or "TTS stream failed."
             await websocket.send_json(
                 {
                     "type": "error",
                     "stream_id": stream_id,
                     "phrase_index": phrase_index,
-                    "message": message,
+                    "message": message_text,
                 }
             )
             return
