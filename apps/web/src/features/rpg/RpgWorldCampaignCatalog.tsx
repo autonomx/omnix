@@ -19,6 +19,11 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function assetImageUrl(value: unknown): string | undefined {
+  const assetId = text(value);
+  return assetId ? `/api/assets/${encodeURIComponent(assetId)}/file` : undefined;
+}
+
 function coverImage(world: RpgWorldSummary): string | undefined {
   const metadata = world.metadata ?? {};
   const candidate = [
@@ -28,8 +33,12 @@ function coverImage(world: RpgWorldSummary): string | undefined {
     metadata.banner_url,
     metadata.image_url,
   ].map(text).find(Boolean);
-  if (!candidate) return undefined;
-  return /^(?:https?:\/\/|\/|data:image\/)/i.test(candidate) ? candidate : undefined;
+  if (candidate && /^(?:https?:\/\/|\/|data:image\/)/i.test(candidate)) return candidate;
+  return [
+    metadata.cover_image_asset_id,
+    metadata.hero_image_asset_id,
+    metadata.thumbnail_asset_id,
+  ].map(assetImageUrl).find(Boolean);
 }
 
 function displayGenre(value: string): string {
