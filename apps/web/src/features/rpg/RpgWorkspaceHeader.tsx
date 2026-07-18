@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { createOmnixModePreview } from '../../app/omnixModePreview';
-import { OmnixStatusPill } from '../../design/primitives';
+import { RpgLorePanel } from './RpgLorePanel';
 import { RpgStarterBubblePromotionPanel } from './RpgStarterBubblePromotionPanel';
 import { RpgWorldBundleTransfer } from './RpgWorldBundleTransfer';
 import { RpgWorldsCampaignsLibrary } from './RpgWorldsCampaignsLibrary';
 import type { RpgSessionSummaryPreview } from './rpgUiState';
+import './RpgLoreOverlay.css';
 import './RpgPlayFocus.css';
 import './RpgWorldLibraryOverlay.css';
 
@@ -29,31 +29,41 @@ const RPG_LAUNCHER_DIALOG_SELECTOR = '.rpg-launcher-dialog';
 const RPG_LAUNCHER_BUTTON_SELECTOR = '.rpg-session-launcher button';
 const RPG_WORLD_LIBRARY_DIALOG_CLASS = 'rpg-launcher-dialog-world-library';
 
-export function RpgWorkspaceHeader({
-  isLiveDataExpanded,
-  isPlayerRailCollapsed,
-  isWorldRailCollapsed,
-  module,
-  onToggleLiveData,
-  onTogglePlayerRail,
-  onToggleWorldRail,
-  selectedSessionSummary,
-  submitStatus,
-}: RpgWorkspaceHeaderProps) {
+export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
+  const {
+    isLiveDataExpanded,
+    isPlayerRailCollapsed,
+    isWorldRailCollapsed,
+    onToggleLiveData,
+    onTogglePlayerRail,
+    onToggleWorldRail,
+    selectedSessionSummary,
+  } = props;
   const [isHidden, setIsHidden] = useState(false);
+  const [isLoreOpen, setIsLoreOpen] = useState(false);
   const [isWorldLibraryOpen, setIsWorldLibraryOpen] = useState(false);
   const [worldLibraryRequested, setWorldLibraryRequested] = useState(false);
   const [campaignLauncherHomeGrid, setCampaignLauncherHomeGrid] = useState<HTMLElement | null>(null);
   const [campaignLauncherDialog, setCampaignLauncherDialog] = useState<HTMLElement | null>(null);
-  const routePreview = createOmnixModePreview('rpg');
 
   useEffect(() => {
     document.documentElement.classList.toggle(RPG_PLAY_FOCUS_CLASS, isHidden);
-
-    return () => {
-      document.documentElement.classList.remove(RPG_PLAY_FOCUS_CLASS);
-    };
+    return () => document.documentElement.classList.remove(RPG_PLAY_FOCUS_CLASS);
   }, [isHidden]);
+
+  useEffect(() => {
+    if (!isLoreOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsLoreOpen(false);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isLoreOpen]);
 
   useEffect(() => {
     const syncLauncherElements = () => {
@@ -106,15 +116,13 @@ export function RpgWorkspaceHeader({
   return (
     <>
       <div className="rpg-workspace-header-content">
-        {isHidden ? null : (
-          <div className="rpg-header-pills" aria-label="RPG runtime status">
-            <OmnixStatusPill>Engine: {submitStatus}</OmnixStatusPill>
-            <OmnixStatusPill>Session: {selectedSessionSummary.title}</OmnixStatusPill>
-            <OmnixStatusPill>Replay-preserving</OmnixStatusPill>
-            <OmnixStatusPill>Route: {routePreview.path}</OmnixStatusPill>
-            <code>{module.route}</code>
-          </div>
-        )}
+        <button
+          className="rpg-secondary-button rpg-lore-entry-control"
+          type="button"
+          onClick={() => setIsLoreOpen(true)}
+        >
+          World Lore
+        </button>
         <button
           className="rpg-secondary-button rpg-world-library-entry-control"
           type="button"
@@ -176,6 +184,31 @@ export function RpgWorkspaceHeader({
           <RpgStarterBubblePromotionPanel />
         </div>,
         campaignLauncherDialog,
+      ) : null}
+
+      {isLoreOpen && typeof document !== 'undefined' ? createPortal(
+        <div className="rpg-lore-overlay" role="dialog" aria-modal="true" aria-labelledby="rpg-lore-overlay-title">
+          <div className="rpg-lore-overlay-shell">
+            <header className="rpg-lore-overlay-heading">
+              <div>
+                <p className="eyebrow">Campaign bible</p>
+                <h2 id="rpg-lore-overlay-title">{selectedSessionSummary.title}</h2>
+                <p>{selectedSessionSummary.location} · known world lore and discovered dossiers</p>
+              </div>
+              <button className="rpg-secondary-button" type="button" onClick={() => setIsLoreOpen(false)}>
+                Back to Play
+              </button>
+            </header>
+            <div className="rpg-lore-overlay-content">
+              <RpgLorePanel
+                labelledById="rpg-lore-overlay-title"
+                panelId="rpg-lore-overlay-panel"
+                role="region"
+              />
+            </div>
+          </div>
+        </div>,
+        document.body,
       ) : null}
     </>
   );
