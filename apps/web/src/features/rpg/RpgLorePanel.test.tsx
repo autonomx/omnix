@@ -48,6 +48,6 @@ describe('RpgLorePanel', () => {
     expect(screen.getByText('Northern Watch')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Rusty Flagon Tavern/i }));
-    expect(screen.getByText('Rain and hearth smoke.')).toBeInTheDocument();
+    expect(screen.getAllByText('Rain and hearth smoke.')).toHaveLength(2);
   });
 });
