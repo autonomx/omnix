@@ -107,6 +107,16 @@ def stream_log(stream_id: str, source: str, event: str, **details: Any) -> None:
         )
 
 
+def active_streams_snapshot() -> dict[str, float]:
+    """Return current stream IDs and ages without exposing request text."""
+    now = time.perf_counter()
+    with _ACTIVE_LOCK:
+        return {
+            active_id: round((now - started_at) * 1000, 3)
+            for active_id, started_at in sorted(_ACTIVE_STREAMS.items())
+        }
+
+
 def begin_stream(stream_id: str, **details: Any) -> int:
     """Register a live stream and log overlap information."""
     now = time.perf_counter()
