@@ -14,8 +14,6 @@ import type {
 import './RpgVisualAssets.css';
 
 const MAP_ART_SRC = '/rpg/glimmerdeep-pass-map.svg';
-const LAST10_REPORT_JOB_TYPE = 'rpg.report.last10';
-const LAST10_REPORT_TIMEOUT_MS = 45_000;
 
 interface RpgReportAssetPreview {
   id: unknown;
@@ -48,29 +46,19 @@ interface RpgWorldRailProps {
   worldStateRows: RpgWorldStateRowPreview[];
 }
 
-export function RpgWorldRail({
-  autoplayRunning,
-  autoplayStatusLabel,
-  className,
-  checkpointControlStatus,
-  checkpointSummary,
-  currentMapId,
-  encounter,
-  isAutoplayPending,
-  isCreatingCheckpoint,
-  isRefreshingJobs,
-  jobCards,
-  npcRelationships,
-  onCreateCheckpoint,
-  onRefreshJobs,
-  onToggleAutoplay,
-  reportsHref,
-  rpgAssets,
-  rpgJobCount,
-  rpgReportCount,
-  selectedSessionSummary,
-  worldStateRows,
-}: RpgWorldRailProps) {
+export function RpgWorldRail(props: RpgWorldRailProps) {
+  const {
+    className,
+    currentMapId,
+    encounter,
+    isRefreshingJobs,
+    jobCards,
+    npcRelationships,
+    onRefreshJobs,
+    rpgJobCount,
+    selectedSessionSummary,
+    worldStateRows,
+  } = props;
   const railClassName = className ? `rpg-right-rail ${className}` : 'rpg-right-rail';
   const isPreview = selectedSessionSummary.source === 'preview';
   const liveSessionQuery = useQuery({
@@ -84,57 +72,12 @@ export function RpgWorldRail({
   const queriedMapId = typeof mapStateRecord.current_map_id === 'string' ? mapStateRecord.current_map_id.trim() : '';
   const activeMapId = currentMapId?.trim() || queriedMapId;
   const visibleJobCards = jobCards.slice(0, 3);
-  const canGenerateLast10Report = selectedSessionSummary.source === 'live' && selectedSessionSummary.id.trim().length > 0;
   const canOpenLiveMap = !isPreview && Boolean(selectedSessionSummary.id.trim() && activeMapId);
-  const [isGeneratingLast10Report, setIsGeneratingLast10Report] = useState(false);
-  const [last10ReportStatusLabel, setLast10ReportStatusLabel] = useState('Ready to generate');
   const [isMapOpen, setIsMapOpen] = useState(false);
-
-  async function generateLast10Report(): Promise<void> {
-    if (!canGenerateLast10Report || isGeneratingLast10Report) {
-      return;
-    }
-    setIsGeneratingLast10Report(true);
-    setLast10ReportStatusLabel('Generating ZIP report…');
-    try {
-      const job = await omnixApiClient.createJob(
-        {
-          module: 'rpg',
-          type: LAST10_REPORT_JOB_TYPE,
-          resource_class: 'cpu',
-          priority: 0,
-          input_ref: { session_id: selectedSessionSummary.id },
-          input_payload: {
-            source: 'rpg-workspace',
-            report_kind: 'last_10_turns_debug_evaluation',
-            report_style: 'interactive_feature_matrix_zip_like_bundle',
-            turn_limit: 10,
-            include_performance_metrics: true,
-          },
-          stages: [
-            { id: 'load-session', label: 'Load RPG session', resource_class: 'cpu', status: 'queued' },
-            { id: 'collect-turns', label: 'Collect last 10 turns', resource_class: 'cpu', status: 'queued' },
-            { id: 'write-report', label: 'Write debug ZIP report', resource_class: 'cpu', status: 'queued' },
-          ],
-        },
-        {
-          timeoutMs: LAST10_REPORT_TIMEOUT_MS,
-          timeoutMessage:
-            'The RPG last-10 turn report request is taking longer than expected. Check RPG jobs and the Reports index for the generated ZIP.',
-        },
-      );
-      setLast10ReportStatusLabel(`${job.status} • ${job.id}`);
-      onRefreshJobs();
-    } catch (error) {
-      setLast10ReportStatusLabel(error instanceof Error ? error.message : 'Report generation failed.');
-    } finally {
-      setIsGeneratingLast10Report(false);
-    }
-  }
 
   return (
     <>
-      <aside className={railClassName} aria-label="World, jobs, and reports">
+      <aside className={railClassName} aria-label="World and jobs">
         <section className="rpg-card rpg-map-card">
           <div className="rpg-section-heading">
             <p className="eyebrow">World & location</p>
@@ -218,68 +161,6 @@ export function RpgWorldRail({
               <p className="rpg-empty-state">No RPG jobs are currently queued or running.</p>
             )}
           </div>
-        </section>
-
-        <section className="rpg-card rpg-reports-card">
-          <p className="eyebrow">Autoplay & reports</p>
-          <div className="rpg-report-row">
-            <span>▷</span>
-            <div>
-              <strong>Autoplay</strong>
-              <small>{autoplayStatusLabel}</small>
-              <button className="rpg-secondary-button" type="button" onClick={onToggleAutoplay} disabled={isAutoplayPending}>
-                {isAutoplayPending ? 'Updating autoplay…' : autoplayRunning ? 'Stop autoplay' : 'Start autoplay'}
-              </button>
-            </div>
-          </div>
-          <div className="rpg-report-row">
-            <span>⇩</span>
-            <div>
-              <strong>Last 10 turn debug report</strong>
-              <small>{canGenerateLast10Report ? last10ReportStatusLabel : 'Select a live session to generate a ZIP report.'}</small>
-              <button className="rpg-secondary-button" type="button" onClick={() => void generateLast10Report()} disabled={isGeneratingLast10Report || !canGenerateLast10Report}>
-                {isGeneratingLast10Report ? 'Generating report…' : 'Generate last 10 turn report'}
-              </button>
-            </div>
-          </div>
-          <div className="rpg-report-row">
-            <span>▤</span>
-            <div>
-              <strong>Reports</strong>
-              <small>{rpgReportCount ? `${rpgReportCount} ready` : 'No RPG reports found'}</small>
-              <a className="rpg-secondary-button" href={reportsHref}>Open reports index</a>
-            </div>
-          </div>
-          <div className="rpg-report-row">
-            <span>▣</span>
-            <div>
-              <strong>Checkpoint</strong>
-              <small>{checkpointSummary.label}: {checkpointSummary.detail}</small>
-              {checkpointControlStatus ? <small>{checkpointControlStatus}</small> : null}
-            </div>
-          </div>
-          {rpgAssets.length ? (
-            rpgAssets.map((asset) => (
-              <article className="rpg-report-row" key={String(asset.id)}>
-                <span aria-hidden="true">◈</span>
-                <div>
-                  <h3>{String(asset.type)} / {String(asset.module)}</h3>
-                  <small>{String(asset.storage_path ?? asset.id)}</small>
-                </div>
-              </article>
-            ))
-          ) : (
-            <article className="rpg-report-row rpg-empty-state" aria-label="No RPG artifacts">
-              <span aria-hidden="true">◇</span>
-              <div>
-                <strong>No checkpoint/report artifacts yet</strong>
-                <small>Create a checkpoint or run autoplay to produce artifact links.</small>
-              </div>
-            </article>
-          )}
-          <button className="rpg-primary-button" type="button" onClick={onCreateCheckpoint} disabled={isCreatingCheckpoint}>
-            {isCreatingCheckpoint ? 'Creating checkpoint…' : 'Create checkpoint'}
-          </button>
         </section>
       </aside>
       {canOpenLiveMap && activeMapId ? (
