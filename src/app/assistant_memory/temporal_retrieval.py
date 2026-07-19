@@ -6,7 +6,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from datetime import datetime, time as clock_time, timedelta, timezone
+from datetime import date, datetime, time as clock_time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -223,8 +223,36 @@ def _parse_clock(value: Any) -> clock_time | None:
         return None
 
 
+def _parse_exception_date(value: str) -> date | None:
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _routine_exception_active(payload: dict[str, Any], now: datetime) -> bool:
+    current_date = now.date()
+    for raw in payload.get("exceptions") or []:
+        value = str(raw).strip()
+        if not value:
+            continue
+        if "/" in value:
+            start_value, end_value = value.split("/", 1)
+            start_date = _parse_exception_date(start_value)
+            end_date = _parse_exception_date(end_value)
+            if start_date is not None and end_date is not None and start_date <= current_date <= end_date:
+                return True
+            continue
+        exception_date = _parse_exception_date(value)
+        if exception_date == current_date:
+            return True
+    return False
+
+
 def _routine_active(record: MemoryRecord, now: datetime) -> tuple[bool, int, list[str]]:
     payload = record.structured_payload
+    if _routine_exception_active(payload, now):
+        return False, 0, ["routine_exception"]
     days = [str(item).upper() for item in payload.get("days") or []]
     if days and _WEEKDAYS[now.weekday()] not in days:
         return False, 0, ["routine_wrong_weekday"]

@@ -44,6 +44,7 @@ jobs:
         run: |
           set -o pipefail
           ruff check \
+            src/app/assistant_memory/companion_context.py \
             src/app/assistant_memory/controls.py \
             src/app/assistant_memory/initiative.py \
             src/app/assistant_memory/jobs.py \
@@ -54,6 +55,7 @@ jobs:
             src/app/assistant_memory/settings.py \
             src/app/assistant_memory/settings_routes.py \
             src/app/assistant_memory/structured_consolidation.py \
+            src/app/assistant_memory/temporal_retrieval.py \
             src/app/chat/character_store.py \
             src/app/chat/compaction.py \
             src/app/chat/memory_commands.py \
@@ -103,10 +105,13 @@ jobs:
             src/tests/app/test_gateway_tts_live_call_latency.py \
             src/tests/app/test_tts_stream_contract_performance.py \
             src/tests/app/test_stt_streaming_audio.py \
+            src/tests/unit/assistant_memory/test_companion_completion_acceptance.py \
+            src/tests/unit/assistant_memory/test_companion_context.py \
             src/tests/unit/assistant_memory/test_companion_controls.py \
             src/tests/unit/assistant_memory/test_companion_phase8_evaluation.py \
             src/tests/unit/assistant_memory/test_initiative.py \
             src/tests/unit/assistant_memory/test_paralinguistic_state.py \
+            src/tests/unit/assistant_memory/test_temporal_retrieval.py \
             src/tests/unit/chat/test_companion_retention_policy.py \
             2>&1 | tee ruff-output.txt
 
@@ -138,11 +143,14 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest \
+            src/tests/unit/assistant_memory/test_companion_completion_acceptance.py \
+            src/tests/unit/assistant_memory/test_companion_context.py \
             src/tests/unit/assistant_memory/test_companion_controls.py \
             src/tests/unit/assistant_memory/test_companion_phase8_evaluation.py \
             src/tests/unit/assistant_memory/test_initiative.py \
             src/tests/unit/assistant_memory/test_paralinguistic_state.py \
             src/tests/unit/assistant_memory/test_settings.py \
+            src/tests/unit/assistant_memory/test_temporal_retrieval.py \
             src/tests/unit/chat/test_companion_retention_policy.py \
             -q --tb=short 2>&1 | tee companion-memory-completion-output.txt
 
