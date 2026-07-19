@@ -25,8 +25,19 @@ PROFILE_BASE_REVISION_KEY = "base_revision"
 
 def get_settings_payload() -> SettingsPayload:
     payload = get_legacy_settings_payload()
-    profile = load_settings_profile(payload.settings)
-    payload.settings[SETTINGS_PROFILE_KEY] = profile_payload(profile)
+    # Revisions must be derived from the authoritative application-settings
+    # document.  ``get_legacy_settings_payload`` overlays masked provider secrets
+    # for display; including those masks in the revision makes the next save
+    # conflict with the secret-free document loaded by ``save_settings_payload``.
+    profile = load_settings_profile(load_settings())
+    serialized_profile = profile_payload(profile)
+    provider_configs = serialized_profile.get("providerConfigs", {})
+    for provider_id in ("openrouter", "cerebras"):
+        displayed_config = payload.settings.get(provider_id, {})
+        profile_config = provider_configs.get(provider_id, {})
+        if isinstance(displayed_config, dict) and isinstance(profile_config, dict):
+            profile_config["apiKey"] = str(displayed_config.get("api_key") or "")
+    payload.settings[SETTINGS_PROFILE_KEY] = serialized_profile
     return payload
 
 
@@ -69,7 +80,7 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
         if isinstance(patch, dict) and base_revision:
             current = load_settings_profile(settings)
             if current.revision != str(base_revision):
-                raise SettingsProfileRevisionConflict("settings profile revision conflict")
+                raise SettingsProfileRevisionConflict(str(base_revision), current.revision)
 
         secrets_changed = apply_settings_payload(settings, secrets, legacy) if legacy else False
         if isinstance(patch, dict):
