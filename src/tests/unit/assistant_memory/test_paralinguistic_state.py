@@ -40,6 +40,38 @@ def test_interruption_attempt_takes_style_priority() -> None:
     assert "opening brief" in directive.casefold()
 
 
+def test_neutral_turn_replaces_signal_state_and_removes_directive() -> None:
+    clear_ephemeral_call_state()
+    observe_paralinguistic_turn(
+        "chat:replace",
+        "Wait",
+        metadata={"interruption_attempt": True},
+    )
+
+    neutral = observe_paralinguistic_turn("chat:replace", "What time is the meeting?")
+
+    assert neutral.signals == ()
+    assert paralinguistic_prompt_directive(neutral) is None
+    assert get_ephemeral_call_state("chat:replace") == neutral
+
+
+def test_current_signal_replaces_stale_higher_priority_signal() -> None:
+    clear_ephemeral_call_state()
+    observe_paralinguistic_turn(
+        "chat:priority",
+        "Wait",
+        metadata={"interruption_attempt": True},
+    )
+
+    current = observe_paralinguistic_turn("chat:priority", "haha that worked!!")
+    directive = paralinguistic_prompt_directive(current)
+
+    assert {signal.kind for signal in current.signals} == {"laughter", "excited_delivery"}
+    assert directive is not None
+    assert "light response" in directive.casefold()
+    assert "opening brief" not in directive.casefold()
+
+
 def test_state_retains_no_transcript_or_audio_and_never_creates_affect_memory() -> None:
     clear_ephemeral_call_state()
     state = observe_paralinguistic_turn(
@@ -74,7 +106,7 @@ def test_state_is_bounded_and_clearable() -> None:
         )
     state = get_ephemeral_call_state("chat:bounded")
     assert state is not None
-    assert len(state.signals) <= 16
+    assert len(state.signals) <= 3
 
     clear_ephemeral_call_state("chat:bounded")
     assert get_ephemeral_call_state("chat:bounded") is None
