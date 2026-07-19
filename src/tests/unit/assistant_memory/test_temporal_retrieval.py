@@ -105,6 +105,32 @@ def test_commute_does_not_activate_outside_window_or_on_weekend() -> None:
     ) == ()
 
 
+def test_routine_exact_date_and_date_range_exceptions_suppress_activation() -> None:
+    route = _record(
+        "memory:route-x",
+        kind="routine",
+        content="The user usually takes Route X to work.",
+        payload={
+            "activity": "commute_to_work",
+            "days": ["MO", "TU", "WE", "TH", "FR"],
+            "start_time": "07:00",
+            "exceptions": ["2026-07-20", "2026-07-27/2026-07-31"],
+        },
+    )
+    zone = ZoneInfo("America/Vancouver")
+
+    assert rank_temporal_records(
+        [route], "hello", now=datetime(2026, 7, 20, 7, 0, tzinfo=zone), timezone_name=zone.key
+    ) == ()
+    assert rank_temporal_records(
+        [route], "hello", now=datetime(2026, 7, 29, 7, 0, tzinfo=zone), timezone_name=zone.key
+    ) == ()
+    selected = rank_temporal_records(
+        [route], "hello", now=datetime(2026, 7, 21, 7, 0, tzinfo=zone), timezone_name=zone.key
+    )
+    assert [item.memory_id for item in selected] == ["memory:route-x"]
+
+
 def test_timezone_and_dst_use_local_wall_clock() -> None:
     route = _record(
         "memory:route-x",
