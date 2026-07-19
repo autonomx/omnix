@@ -43,6 +43,21 @@ def test_default_provider_is_concretized_before_metrics_and_retry(monkeypatch) -
     assert resolved_provider.provider_name == "lmstudio"
 
 
+def test_default_provider_resolution_is_process_cached(monkeypatch) -> None:
+    settings_loads = 0
+
+    def fake_load_settings():
+        nonlocal settings_loads
+        settings_loads += 1
+        return {"provider": "lmstudio"}
+
+    monkeypatch.setattr(shared, "load_settings", fake_load_settings)
+
+    assert resolve_effective_provider_id(None) == "lmstudio"
+    assert resolve_effective_provider_id(None) == "lmstudio"
+    assert settings_loads == 1
+
+
 def test_implicit_turn_overrides_stale_session_provider_and_model(monkeypatch) -> None:
     monkeypatch.setattr(shared, "load_settings", lambda: {"provider": "lmstudio"})
     request = SendChatMessageRequest(content="Hello")
