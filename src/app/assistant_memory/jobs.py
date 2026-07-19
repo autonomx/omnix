@@ -52,10 +52,9 @@ class MemorySuggestionJobResult(BaseModel):
 def memory_suggestions_enabled() -> bool:
     settings = load_memory_runtime_settings()
     policy = companion_rollout_policy(settings)
-    return settings.suggestions_enabled and (
-        policy.review_candidates_enabled
-        or policy.automatic_direct_assertions_enabled
-    )
+    return (
+        settings.suggestions_enabled and policy.review_candidates_enabled
+    ) or policy.automatic_direct_assertions_enabled
 
 
 def suggestion_idempotency_key(session_id: str, user_message_id: str) -> str:
