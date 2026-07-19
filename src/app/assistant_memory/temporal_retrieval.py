@@ -6,7 +6,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from datetime import datetime, time as clock_time, timedelta, timezone
+from datetime import date, datetime, time as clock_time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -223,7 +223,7 @@ def _parse_clock(value: Any) -> clock_time | None:
         return None
 
 
-def _parse_exception_date(value: str) -> datetime.date | None:
+def _parse_exception_date(value: str) -> date | None:
     try:
         return datetime.strptime(value.strip(), "%Y-%m-%d").date()
     except ValueError:
