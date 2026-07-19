@@ -16,6 +16,8 @@ export interface ManagedMemoryRecord {
   scope: MemoryScope;
   scope_id: string;
   category: MemoryCategory;
+  kind: string;
+  structured_payload: Record<string, unknown>;
   source: string;
   content: string;
   confidence: number;
@@ -102,6 +104,38 @@ export interface CompanionMemoryMetrics {
   diagnostics_policy: 'content_free';
 }
 
+export interface MemoryUsageItem {
+  memory_id: string;
+  selection_reason: string;
+  activation_score: number;
+  section: string;
+  source_revision: number;
+}
+
+export interface MemoryUsageResponse {
+  session_id: string;
+  recorded_at: string;
+  items: MemoryUsageItem[];
+  diagnostics_policy: 'content_free';
+}
+
+export interface MemoryExportResponse {
+  exported_at: string;
+  owner_type: string;
+  owner_id: string;
+  records: ManagedMemoryRecord[];
+  candidates: ManagedMemoryCandidate[];
+}
+
+export interface MemoryResetResponse {
+  ok: true;
+  owner_type: string;
+  owner_id: string;
+  record_count: number;
+  candidate_count: number;
+  snapshot_count: number;
+}
+
 export interface SessionMemoryState {
   session_id: string;
   memory_enabled: boolean;
@@ -132,6 +166,10 @@ function jsonInit(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
 
+function revisionBody(sessionId: string, record: ManagedMemoryRecord): RequestInit {
+  return jsonInit('POST', { session_id: sessionId, expected_revision: record.revision });
+}
+
 export const memoryClient = {
   list(sessionId: string, query = '', scope = '', category = ''): Promise<ManagedMemoryList> {
     const params = new URLSearchParams({ session_id: sessionId });
@@ -139,6 +177,21 @@ export const memoryClient = {
     if (scope) params.set('scope', scope);
     if (category) params.set('category', category);
     return request(`/api/assistant/memory?${params.toString()}`);
+  },
+  archived(sessionId: string): Promise<ManagedMemoryList> {
+    return request(`/api/assistant/memory/archived?session_id=${encodeURIComponent(sessionId)}`);
+  },
+  recentAutomatic(sessionId: string): Promise<{ session_id: string; records: ManagedMemoryRecord[] }> {
+    return request(`/api/assistant/memory/recent-automatic?session_id=${encodeURIComponent(sessionId)}`);
+  },
+  usage(sessionId: string): Promise<MemoryUsageResponse> {
+    return request(`/api/assistant/memory/usage?session_id=${encodeURIComponent(sessionId)}`);
+  },
+  exportMemory(sessionId: string): Promise<MemoryExportResponse> {
+    return request(`/api/assistant/memory/export?session_id=${encodeURIComponent(sessionId)}`);
+  },
+  reset(sessionId: string): Promise<MemoryResetResponse> {
+    return request(`/api/assistant/memory/reset?session_id=${encodeURIComponent(sessionId)}`, { method: 'POST' });
   },
   create(sessionId: string, input: { scope: MemoryScope; category: MemoryCategory; content: string; pinned: boolean }): Promise<ManagedMemoryRecord> {
     return request('/api/assistant/memory', jsonInit('POST', { session_id: sessionId, ...input }));
@@ -152,10 +205,7 @@ export const memoryClient = {
   },
   pin(sessionId: string, record: ManagedMemoryRecord, pinned: boolean): Promise<ManagedMemoryRecord> {
     const action = pinned ? 'pin' : 'unpin';
-    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/${action}`, jsonInit('POST', {
-      session_id: sessionId,
-      expected_revision: record.revision,
-    }));
+    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/${action}`, revisionBody(sessionId, record));
   },
   move(sessionId: string, record: ManagedMemoryRecord, targetScope: MemoryScope): Promise<ManagedMemoryRecord> {
     return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/move`, jsonInit('POST', {
@@ -163,6 +213,15 @@ export const memoryClient = {
       expected_revision: record.revision,
       target_scope: targetScope,
     }));
+  },
+  archive(sessionId: string, record: ManagedMemoryRecord): Promise<ManagedMemoryRecord> {
+    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/archive`, revisionBody(sessionId, record));
+  },
+  restore(sessionId: string, record: ManagedMemoryRecord): Promise<ManagedMemoryRecord> {
+    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/restore`, revisionBody(sessionId, record));
+  },
+  undo(sessionId: string, record: ManagedMemoryRecord): Promise<{ ok: true; memory_id: string }> {
+    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/undo`, revisionBody(sessionId, record));
   },
   forget(sessionId: string, record: ManagedMemoryRecord): Promise<{ ok: true; memory_id: string }> {
     const params = new URLSearchParams({ session_id: sessionId, expected_revision: String(record.revision) });
