@@ -24,7 +24,8 @@ class OwnerMemoryRowSupport:
     def record_select() -> str:
         return (
             "SELECT id, workspace_id, owner_type, owner_id, scope, scope_id, "
-            "category, content, normalized_content, confidence, pinned, "
+            "category, kind, structured_payload, supersedes_memory_id, "
+            "contradiction_group, content, normalized_content, confidence, pinned, "
             "trust_level, sensitivity, provenance_type, provenance_id, source, "
             "status, revision, created_at, updated_at, expires_at "
             "FROM omnix_memory_records"
@@ -35,10 +36,10 @@ class OwnerMemoryRowSupport:
         return (
             "SELECT id, source_session_id, source_message_id, "
             "candidate_fingerprint, proposed_owner_type, proposed_owner_id, "
-            "proposed_scope, proposed_scope_id, proposed_category, "
-            "proposed_content, confidence, source, trust_level, sensitivity, "
-            "extraction_metadata, status, created_at, resolved_at "
-            "FROM omnix_memory_candidates"
+            "proposed_scope, proposed_scope_id, proposed_category, proposed_kind, "
+            "proposed_payload, proposed_supersedes_memory_id, proposed_content, "
+            "confidence, source, trust_level, sensitivity, extraction_metadata, "
+            "status, created_at, resolved_at FROM omnix_memory_candidates"
         )
 
     @staticmethod
@@ -59,6 +60,19 @@ class OwnerMemoryRowSupport:
 
     @staticmethod
     def record_from_row(row: Any) -> MemoryRecord:
+        typed = len(row) >= 25
+        if typed:
+            kind = str(row[7])
+            payload = dict(row[8] or {})
+            supersedes = str(row[9]) if row[9] is not None else None
+            contradiction = str(row[10]) if row[10] is not None else None
+            offset = 4
+        else:
+            kind = "semantic_fact"
+            payload = {}
+            supersedes = None
+            contradiction = None
+            offset = 0
         return MemoryRecord(
             id=str(row[0]),
             owner_type=str(row[2]),
@@ -66,24 +80,47 @@ class OwnerMemoryRowSupport:
             scope=str(row[4]),
             scope_id=str(row[5]),
             category=str(row[6]),
-            content=str(row[7]),
-            normalized_content=str(row[8]),
-            confidence=float(row[9]),
-            pinned=bool(row[10]),
-            trust_level=str(row[11]),
-            sensitivity=str(row[12]),
-            provenance_type=str(row[13]) if row[13] is not None else None,
-            provenance_id=str(row[14]) if row[14] is not None else None,
-            source=str(row[15]),
-            status=str(row[16]),
-            revision=int(row[17]),
-            created_at=row[18].isoformat(),
-            updated_at=row[19].isoformat(),
-            expires_at=row[20].isoformat() if row[20] is not None else None,
+            kind=kind,
+            structured_payload=payload,
+            supersedes_memory_id=supersedes,
+            contradiction_group=contradiction,
+            content=str(row[7 + offset]),
+            normalized_content=str(row[8 + offset]),
+            confidence=float(row[9 + offset]),
+            pinned=bool(row[10 + offset]),
+            trust_level=str(row[11 + offset]),
+            sensitivity=str(row[12 + offset]),
+            provenance_type=(
+                str(row[13 + offset]) if row[13 + offset] is not None else None
+            ),
+            provenance_id=(
+                str(row[14 + offset]) if row[14 + offset] is not None else None
+            ),
+            source=str(row[15 + offset]),
+            status=str(row[16 + offset]),
+            revision=int(row[17 + offset]),
+            created_at=row[18 + offset].isoformat(),
+            updated_at=row[19 + offset].isoformat(),
+            expires_at=(
+                row[20 + offset].isoformat()
+                if row[20 + offset] is not None
+                else None
+            ),
         )
 
     @staticmethod
     def candidate_from_row(row: Any) -> MemoryCandidate:
+        typed = len(row) >= 21
+        if typed:
+            kind = str(row[9])
+            payload = dict(row[10] or {})
+            supersedes = str(row[11]) if row[11] is not None else None
+            offset = 3
+        else:
+            kind = "semantic_fact"
+            payload = {}
+            supersedes = None
+            offset = 0
         return MemoryCandidate(
             id=str(row[0]),
             owner_type=str(row[4]),
@@ -94,15 +131,22 @@ class OwnerMemoryRowSupport:
             proposed_scope=str(row[6]),
             proposed_scope_id=str(row[7]),
             proposed_category=str(row[8]),
-            proposed_content=str(row[9]),
-            confidence=float(row[10]),
-            source=str(row[11]),
-            trust_level=str(row[12]),
-            sensitivity=str(row[13]),
-            extraction_metadata=dict(row[14] or {}),
-            status=str(row[15]),
-            created_at=row[16].isoformat(),
-            resolved_at=row[17].isoformat() if row[17] is not None else None,
+            proposed_kind=kind,
+            proposed_payload=payload,
+            proposed_supersedes_memory_id=supersedes,
+            proposed_content=str(row[9 + offset]),
+            confidence=float(row[10 + offset]),
+            source=str(row[11 + offset]),
+            trust_level=str(row[12 + offset]),
+            sensitivity=str(row[13 + offset]),
+            extraction_metadata=dict(row[14 + offset] or {}),
+            status=str(row[15 + offset]),
+            created_at=row[16 + offset].isoformat(),
+            resolved_at=(
+                row[17 + offset].isoformat()
+                if row[17 + offset] is not None
+                else None
+            ),
         )
 
     @staticmethod
