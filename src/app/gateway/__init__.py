@@ -13,6 +13,7 @@ from .image_reference_routes import install_image_reference_route_hook
 from .image_workspace_routes import install_image_workspace_route_hook
 from .live_chat_postgres_fast_path import install_live_chat_postgres_fast_path
 from .live_chat_provider_metrics import install_live_chat_provider_metrics_hook
+from .live_chat_provider_routing import install_live_chat_provider_routing_hook
 from .live_chat_stream_retry import install_live_chat_stream_retry_hook
 from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
 from .live_voice_runtime_offload import install_live_voice_runtime_offload_hook
@@ -81,6 +82,7 @@ install_realtime_route_hook()
 install_live_chat_postgres_fast_path()
 install_live_chat_provider_metrics_hook()
 install_live_chat_stream_retry_hook()
+install_live_chat_provider_routing_hook()
 install_live_voice_diagnostics_hook()
 install_event_loop_lag_monitor_hook()
 install_blocking_route_offload_hook()
