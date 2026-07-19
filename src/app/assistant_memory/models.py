@@ -8,6 +8,18 @@ from pydantic import BaseModel, ConfigDict, Field
 MemoryScope = Literal["global", "workspace", "project", "session"]
 MemoryOwnerType = Literal["system", "character"]
 MemoryCategory = Literal["preference", "fact", "project", "relationship", "instruction"]
+MemoryKind = Literal[
+    "semantic_fact",
+    "preference",
+    "instruction",
+    "relationship_state",
+    "episode",
+    "routine",
+    "goal",
+    "open_loop",
+    "temporal_fact",
+    "pronunciation",
+]
 MemorySource = Literal["user_saved", "assistant_suggested", "imported", "hermes"]
 MemoryCandidateStatus = Literal["pending", "rejected", "accepted"]
 MemoryRecordStatus = Literal["active", "superseded", "archived"]
@@ -40,6 +52,10 @@ class MemoryRecord(BaseModel):
     scope: MemoryScope
     scope_id: str = Field(min_length=1, max_length=200)
     category: MemoryCategory
+    kind: MemoryKind = "semantic_fact"
+    structured_payload: dict[str, Any] = Field(default_factory=dict)
+    supersedes_memory_id: str | None = Field(default=None, max_length=200)
+    contradiction_group: str | None = Field(default=None, max_length=200)
     source: MemorySource
     content: str = Field(min_length=1, max_length=4096)
     normalized_content: str = Field(min_length=1, max_length=4096)
@@ -69,6 +85,9 @@ class MemoryCandidate(BaseModel):
     proposed_scope: MemoryScope
     proposed_scope_id: str = Field(min_length=1, max_length=200)
     proposed_category: MemoryCategory
+    proposed_kind: MemoryKind = "semantic_fact"
+    proposed_payload: dict[str, Any] = Field(default_factory=dict)
+    proposed_supersedes_memory_id: str | None = Field(default=None, max_length=200)
     proposed_content: str = Field(min_length=1, max_length=4096)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     source: MemorySource = "assistant_suggested"
