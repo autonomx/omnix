@@ -72,7 +72,7 @@ def _build_companion_prompt(
     assembly.diagnostics["history_recall"] = {
         "enabled": False,
         "retrieved_count": 0,
-        "reason": "companion_context_packet",
+        "reason": "live_voice_latency_profile",
     }
     rendered = render_prompt_assembly(assembly)
     assembly.diagnostics["latency_profile"] = {
