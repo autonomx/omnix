@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import threading
 from collections import Counter
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,6 +12,7 @@ _LOCK = threading.RLock()
 _COUNTERS: Counter[str] = Counter()
 _TOTALS: Counter[str] = Counter()
 _MAXIMA: dict[str, float] = {}
+_LATEST_USAGE: dict[str, "MemoryUsageResponse"] = {}
 _ALLOWED_REASON_FIELDS = {
     "action",
     "reason",
@@ -25,6 +27,25 @@ class CompanionMemoryMetrics(BaseModel):
     counters: dict[str, int] = Field(default_factory=dict)
     totals: dict[str, float] = Field(default_factory=dict)
     maxima: dict[str, float] = Field(default_factory=dict)
+    diagnostics_policy: str = "content_free"
+
+
+class MemoryUsageItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    memory_id: str
+    selection_reason: str
+    activation_score: int
+    section: str
+    source_revision: int = Field(ge=1)
+
+
+class MemoryUsageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    session_id: str
+    recorded_at: str
+    items: tuple[MemoryUsageItem, ...] = ()
     diagnostics_policy: str = "content_free"
 
 
@@ -96,6 +117,29 @@ def record_companion_diagnostics(diagnostics: dict[str, Any]) -> None:
             _record_section(section, diagnostics.get(section))
 
 
+def record_memory_usage(session_id: str, items: list[dict[str, object]]) -> None:
+    """Store the latest content-free selection explanation for one Chat."""
+
+    validated = tuple(MemoryUsageItem.model_validate(item) for item in items[:50])
+    with _LOCK:
+        _LATEST_USAGE[session_id] = MemoryUsageResponse(
+            session_id=session_id,
+            recorded_at=datetime.now(timezone.utc).isoformat(),
+            items=validated,
+        )
+
+
+def memory_usage_snapshot(session_id: str) -> MemoryUsageResponse:
+    with _LOCK:
+        current = _LATEST_USAGE.get(session_id)
+        if current is not None:
+            return current
+    return MemoryUsageResponse(
+        session_id=session_id,
+        recorded_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
 def companion_metrics_snapshot() -> CompanionMemoryMetrics:
     with _LOCK:
         return CompanionMemoryMetrics(
@@ -115,11 +159,16 @@ def reset_companion_metrics() -> None:
         _COUNTERS.clear()
         _TOTALS.clear()
         _MAXIMA.clear()
+        _LATEST_USAGE.clear()
 
 
 __all__ = [
     "CompanionMemoryMetrics",
+    "MemoryUsageItem",
+    "MemoryUsageResponse",
     "companion_metrics_snapshot",
+    "memory_usage_snapshot",
     "record_companion_diagnostics",
+    "record_memory_usage",
     "reset_companion_metrics",
 ]
