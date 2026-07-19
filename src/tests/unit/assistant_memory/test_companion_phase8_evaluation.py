@@ -146,6 +146,17 @@ def test_commute_lifecycle_activation_tool_supersession_and_owner_isolation() ->
         auto_save_direct_assertions=True,
     )
     assert action == "saved"
+    for observation in range(2, 5):
+        action, saved = consolidate_structured_proposal(
+            service,
+            context,
+            routine,
+            source_session_id=context.session_id,
+            source_message_id=f"message:route:{observation}",
+            auto_save_direct_assertions=True,
+        )
+        assert action == "duplicate_merged"
+    assert saved.structured_payload["evidence_count"] == 4
 
     now = datetime(2026, 7, 20, 7, 5, tzinfo=ZoneInfo("America/Vancouver"))
     result = _temporal_result(service.list_active(context), "hello", now)
