@@ -10,9 +10,14 @@ from app.assistant_memory.initiative import (
     initiative_prompt_directive,
     plan_companion_initiative,
 )
+from app.assistant_memory.paralinguistic_state import (
+    observe_paralinguistic_turn,
+    paralinguistic_prompt_directive,
+)
 from app.assistant_memory.scope import resolve_session_memory_scope
 from app.assistant_memory.temporal_retrieval import retrieve_temporal_context
 from app.characters.live_conversation_profile import (
+    LiveConversationProfile,
     default_live_conversation_profile_store,
 )
 from app.chat.compaction import compaction_enabled
@@ -60,6 +65,13 @@ def _merge_memory(
     return list(merged.values())
 
 
+def _effective_profile(session_id: str) -> LiveConversationProfile:
+    try:
+        return default_live_conversation_profile_store().get(session_id).effective
+    except Exception:
+        return LiveConversationProfile()
+
+
 def _build_companion_prompt(
     self: Any,
     session: Any,
@@ -75,12 +87,15 @@ def _build_companion_prompt(
         memory_service_factory=lambda: memory_service,
     )
     scope_context = resolve_session_memory_scope(session)
+    query = str(getattr(user_message, "content", "") or "")
+    private_mode = getattr(session, "transcript_policy", "persistent") != "persistent"
+    profile = _effective_profile(session.id)
     temporal_result = None
     if memory_diagnostics.get("memory_enabled"):
         temporal_result = retrieve_temporal_context(
             memory_service,
             scope_context,
-            str(getattr(user_message, "content", "") or ""),
+            query,
             timezone_name=os.environ.get("OMNIX_USER_TIMEZONE"),
             deadline_ms=float(os.environ.get("OMNIX_LIVE_MEMORY_RETRIEVAL_DEADLINE_MS") or 50),
             limit=int(os.environ.get("OMNIX_LIVE_MEMORY_RETRIEVAL_LIMIT") or 12),
@@ -112,19 +127,33 @@ def _build_companion_prompt(
     initiative_decision = None
     if temporal_result is not None:
         try:
-            profile = default_live_conversation_profile_store().get(session.id).effective
             initiative_decision = plan_companion_initiative(
                 temporal_result,
                 scope_context,
                 profile,
-                str(getattr(user_message, "content", "") or ""),
-                privacy_mode=getattr(session, "transcript_policy", "persistent") != "persistent",
+                query,
+                privacy_mode=private_mode,
             )
-            directive = initiative_prompt_directive(initiative_decision, temporal_result)
-            if directive:
-                assembly.system_instructions.append(directive)
+            initiative_directive = initiative_prompt_directive(
+                initiative_decision,
+                temporal_result,
+            )
+            if initiative_directive:
+                assembly.system_instructions.append(initiative_directive)
         except Exception:
             initiative_decision = None
+    paralinguistic_state = observe_paralinguistic_turn(
+        session.id,
+        query,
+        metadata=dict(getattr(user_message, "metadata", {}) or {}),
+        private_mode=private_mode,
+    )
+    style_directive = paralinguistic_prompt_directive(
+        paralinguistic_state,
+        emotional_attunement=profile.emotional_attunement,
+    )
+    if style_directive:
+        assembly.system_instructions.append(style_directive)
     assembly.diagnostics["memory"] = memory_diagnostics
     assembly.diagnostics["companion_context"] = packet.content_free_diagnostics()
     assembly.diagnostics["temporal_retrieval"] = (
@@ -144,6 +173,9 @@ def _build_companion_prompt(
             "reason": "initiative_unavailable",
             "proactive": False,
         }
+    )
+    assembly.diagnostics["paralinguistic_state"] = (
+        paralinguistic_state.content_free_diagnostics()
     )
     assembly.diagnostics["compaction"] = (
         {
@@ -172,6 +204,7 @@ def _build_companion_prompt(
         "companion_context_enabled": True,
         "temporal_retrieval_enabled": temporal_result is not None,
         "initiative_enabled": initiative_decision is not None,
+        "paralinguistic_enabled": bool(paralinguistic_state.signals),
         "recent_message_limit": recent_message_limit,
         "max_input_tokens": budget.max_input_tokens,
         "reserved_output_tokens": budget.reserved_output_tokens,
@@ -205,6 +238,10 @@ def _build_companion_prompt(
             initiative_decision.reason if initiative_decision else "initiative_unavailable"
         ),
         initiative_tool=(initiative_decision.requested_tool if initiative_decision else None),
+        paralinguistic_signal_count=len(paralinguistic_state.signals),
+        paralinguistic_signal_kinds=[
+            signal.kind for signal in paralinguistic_state.signals
+        ],
     )
     return assembly, rendered
 
