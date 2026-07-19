@@ -7,7 +7,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from app.assistant_tools.capability_dashboard import (
     AssistantCapabilityDashboard,
