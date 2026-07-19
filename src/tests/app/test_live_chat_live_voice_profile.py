@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app import shared
-from app.chat.models import ChatMessage, ChatSession
+from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
 from app.gateway import live_chat_live_voice_profile as profile
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import LMStudioProvider, ProviderConfig
@@ -43,6 +43,18 @@ def _session_with_long_history() -> tuple[ChatSession, ChatMessage]:
         updated_at=now,
     )
     return session, current
+
+
+def test_browser_live_turn_marker_derives_existing_request_ids() -> None:
+    request = SendChatMessageRequest.model_validate(
+        {
+            "content": "Hello",
+            "live_voice_turn_id": "voice-turn:12345",
+        }
+    )
+
+    assert request.user_turn_id == "voice-user-turn:voice-turn:12345"
+    assert request.speech_segment_id == "voice-segment:voice-turn:12345"
 
 
 def test_live_voice_prompt_bounds_history_and_skips_cross_session_recall(monkeypatch) -> None:
