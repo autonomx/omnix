@@ -1,6 +1,7 @@
 """Shared chat session contract for the web gateway."""
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any, Literal
 
@@ -16,8 +17,8 @@ from app.characters import (
 from app.jobs import JobRecord
 from app.research import ResearchMode
 
-
 ChatMessageRole = Literal["system", "user", "assistant"]
+_LIVE_VOICE_TURN_ID_PATTERN = re.compile(r"voice-turn:[A-Za-z0-9_.:-]+")
 
 
 class ChatMessage(BaseModel):
@@ -179,6 +180,25 @@ class SendChatMessageRequest(BaseModel):
     research_mode: ResearchMode | None = None
     user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
     speech_segment_id: str | None = Field(default=None, min_length=1, max_length=160)
+
+    @model_validator(mode="before")
+    @classmethod
+    def derive_live_voice_ids(cls, value: Any) -> Any:
+        """Honor the browser's existing live turn marker without expanding the API."""
+
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        live_turn_id = str(payload.get("live_voice_turn_id") or "").strip()
+        if (
+            not live_turn_id
+            or len(live_turn_id) > 120
+            or _LIVE_VOICE_TURN_ID_PATTERN.fullmatch(live_turn_id) is None
+        ):
+            return payload
+        payload.setdefault("user_turn_id", f"voice-user-turn:{live_turn_id}")
+        payload.setdefault("speech_segment_id", f"voice-segment:{live_turn_id}")
+        return payload
 
 
 class SendChatMessageResponse(BaseModel):
