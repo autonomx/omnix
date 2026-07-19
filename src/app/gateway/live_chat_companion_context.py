@@ -10,7 +10,10 @@ from app.assistant_memory.initiative import (
     initiative_prompt_directive,
     plan_companion_initiative,
 )
-from app.assistant_memory.observability import record_companion_diagnostics
+from app.assistant_memory.observability import (
+    record_companion_diagnostics,
+    record_memory_usage,
+)
 from app.assistant_memory.paralinguistic_state import (
     observe_paralinguistic_turn,
     paralinguistic_prompt_directive,
@@ -119,6 +122,20 @@ def _build_companion_prompt(
             temporal_memory,
         ),
         token_budget=budget.memory_tokens,
+    )
+    record_memory_usage(
+        session.id,
+        [
+            {
+                "memory_id": item.memory_id,
+                "selection_reason": item.selection_reason,
+                "activation_score": item.activation_score,
+                "section": item.section,
+                "source_revision": item.source_revision,
+            }
+            for items in packet.sections.values()
+            for item in items
+        ],
     )
     summary_record = (
         self.summary_repository_factory().latest(session.id)
