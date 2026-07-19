@@ -137,6 +137,9 @@ def test_commute_lifecycle_activation_tool_supersession_and_owner_isolation() ->
     )
     assert skipped == []
     routine = next(item for item in proposals if item.kind == "routine")
+    assert routine.content == "The user usually take Route X"
+    assert routine.payload["activity"] == "take_route_x"
+    assert routine.payload["start_time"] == "07:00"
     action, saved = consolidate_structured_proposal(
         service,
         context,
@@ -160,16 +163,22 @@ def test_commute_lifecycle_activation_tool_supersession_and_owner_isolation() ->
 
     now = datetime(2026, 7, 20, 7, 5, tzinfo=ZoneInfo("America/Vancouver"))
     result = _temporal_result(service.list_active(context), "hello", now)
+    assert result.items
+    selected = result.items[0]
+    assert selected.score >= 850
+    assert "routine_start_window" in selected.reasons
     decision = plan_companion_initiative(
         result,
         context,
-        LiveConversationProfile(initiative_mode="active"),
+        LiveConversationProfile(initiative_mode="gentle"),
         "hello",
         privacy_mode=False,
         capabilities=TrustedCapabilityManifest(available_tools=frozenset({"traffic"})),
         now=now,
     )
     assert decision.action == "surface_with_tool", decision.model_dump(mode="json")
+    assert decision.reason == "tool_enrichment_allowed"
+    assert decision.activation_score == selected.score
     assert decision.requested_tool == "traffic"
 
     replacement = supersede_typed_memory(
