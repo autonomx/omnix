@@ -44,10 +44,9 @@ def _reset(database: PostgresDatabase) -> None:
         connection.execute(
             """
             UPDATE omnix_persistence_cutover
-               SET mode = 'legacy_preflight', import_run_id = NULL,
-                   source_hash = NULL, activated_at = NULL,
-                   rollback_recorded_at = NULL, metadata = '{}'::jsonb,
-                   updated_at = CURRENT_TIMESTAMP
+               SET mode = 'postgresql', import_run_id = NULL,
+                   source_hash = NULL, rollback_recorded_at = NULL,
+                   metadata = '{}'::jsonb, updated_at = CURRENT_TIMESTAMP
              WHERE singleton = TRUE
             """
         )
