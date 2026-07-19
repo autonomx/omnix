@@ -10,11 +10,14 @@ from app.assistant_memory.initiative import (
     initiative_prompt_directive,
     plan_companion_initiative,
 )
+from app.assistant_memory.observability import record_companion_diagnostics
 from app.assistant_memory.paralinguistic_state import (
     observe_paralinguistic_turn,
     paralinguistic_prompt_directive,
 )
+from app.assistant_memory.rollout import companion_rollout_policy
 from app.assistant_memory.scope import resolve_session_memory_scope
+from app.assistant_memory.settings import load_memory_runtime_settings
 from app.assistant_memory.temporal_retrieval import retrieve_temporal_context
 from app.characters.live_conversation_profile import (
     LiveConversationProfile,
@@ -86,12 +89,19 @@ def _build_companion_prompt(
         session,
         memory_service_factory=lambda: memory_service,
     )
+    settings = load_memory_runtime_settings()
+    rollout = companion_rollout_policy(settings)
     scope_context = resolve_session_memory_scope(session)
     query = str(getattr(user_message, "content", "") or "")
-    private_mode = getattr(session, "transcript_policy", "persistent") != "persistent"
+    private_mode = (
+        getattr(session, "transcript_policy", "persistent") != "persistent"
+        or not settings.transcript_retention_enabled
+    )
     profile = _effective_profile(session.id)
+    if profile.initiative_mode == "active" and not rollout.active_initiative_enabled:
+        profile = profile.model_copy(update={"initiative_mode": "gentle"})
     temporal_result = None
-    if memory_diagnostics.get("memory_enabled"):
+    if memory_diagnostics.get("memory_enabled") and rollout.memory_read_enabled:
         temporal_result = retrieve_temporal_context(
             memory_service,
             scope_context,
@@ -104,7 +114,10 @@ def _build_companion_prompt(
     packet = build_companion_context_packet(
         session,
         user_message,
-        _merge_memory(approved_memory, temporal_memory),
+        _merge_memory(
+            approved_memory if rollout.memory_read_enabled else [],
+            temporal_memory,
+        ),
         token_budget=budget.memory_tokens,
     )
     summary_record = (
@@ -125,7 +138,7 @@ def _build_companion_prompt(
         budget=budget,
     )
     initiative_decision = None
-    if temporal_result is not None:
+    if temporal_result is not None and rollout.proactive_memory_enabled:
         try:
             initiative_decision = plan_companion_initiative(
                 temporal_result,
@@ -142,18 +155,20 @@ def _build_companion_prompt(
                 assembly.system_instructions.append(initiative_directive)
         except Exception:
             initiative_decision = None
-    paralinguistic_state = observe_paralinguistic_turn(
-        session.id,
-        query,
-        metadata=dict(getattr(user_message, "metadata", {}) or {}),
-        private_mode=private_mode,
-    )
-    style_directive = paralinguistic_prompt_directive(
-        paralinguistic_state,
-        emotional_attunement=profile.emotional_attunement,
-    )
-    if style_directive:
-        assembly.system_instructions.append(style_directive)
+    paralinguistic_state = None
+    if rollout.paralinguistic_signals_enabled:
+        paralinguistic_state = observe_paralinguistic_turn(
+            session.id,
+            query,
+            metadata=dict(getattr(user_message, "metadata", {}) or {}),
+            private_mode=private_mode,
+        )
+        style_directive = paralinguistic_prompt_directive(
+            paralinguistic_state,
+            emotional_attunement=profile.emotional_attunement,
+        )
+        if style_directive:
+            assembly.system_instructions.append(style_directive)
     assembly.diagnostics["memory"] = memory_diagnostics
     assembly.diagnostics["companion_context"] = packet.content_free_diagnostics()
     assembly.diagnostics["temporal_retrieval"] = (
@@ -162,7 +177,11 @@ def _build_companion_prompt(
         else {
             "candidate_count": 0,
             "selected_count": 0,
-            "disabled_reason": "memory_not_enabled",
+            "disabled_reason": (
+                "rollout_stage_disabled"
+                if not rollout.memory_read_enabled
+                else "memory_not_enabled"
+            ),
         }
     )
     assembly.diagnostics["initiative"] = (
@@ -170,13 +189,26 @@ def _build_companion_prompt(
         if initiative_decision is not None
         else {
             "action": "suppress",
-            "reason": "initiative_unavailable",
+            "reason": (
+                "rollout_stage_disabled"
+                if not rollout.proactive_memory_enabled
+                else "initiative_unavailable"
+            ),
             "proactive": False,
         }
     )
     assembly.diagnostics["paralinguistic_state"] = (
         paralinguistic_state.content_free_diagnostics()
+        if paralinguistic_state is not None
+        else {
+            "signal_count": 0,
+            "signal_kinds": [],
+            "private_mode": private_mode,
+            "durable_candidate_created": False,
+            "disabled_reason": "rollout_stage_disabled",
+        }
     )
+    assembly.diagnostics["rollout"] = rollout.content_free_diagnostics()
     assembly.diagnostics["compaction"] = (
         {
             "enabled": True,
@@ -201,10 +233,12 @@ def _build_companion_prompt(
     rendered = render_prompt_assembly(assembly)
     assembly.diagnostics["latency_profile"] = {
         "name": "live_voice",
-        "companion_context_enabled": True,
+        "companion_context_enabled": rollout.memory_read_enabled,
         "temporal_retrieval_enabled": temporal_result is not None,
         "initiative_enabled": initiative_decision is not None,
-        "paralinguistic_enabled": bool(paralinguistic_state.signals),
+        "paralinguistic_enabled": bool(
+            paralinguistic_state and paralinguistic_state.signals
+        ),
         "recent_message_limit": recent_message_limit,
         "max_input_tokens": budget.max_input_tokens,
         "reserved_output_tokens": budget.reserved_output_tokens,
@@ -214,6 +248,7 @@ def _build_companion_prompt(
         "external_context_tokens": budget.external_context_tokens,
         "estimated_tokens": rendered.diagnostics.estimated_tokens,
     }
+    record_companion_diagnostics(assembly.diagnostics)
     stream_log(
         "gateway-live-chat-first-token",
         "runtime",
@@ -226,6 +261,7 @@ def _build_companion_prompt(
         packet_build_ms=round(packet.build_ms, 3),
         cache_hit=packet.cache_hit,
         truncated=packet.truncated,
+        rollout_stage=rollout.stage,
         temporal_selected_count=(temporal_result.selected_count if temporal_result else 0),
         temporal_preload_ms=(
             round(temporal_result.preload_ms, 3) if temporal_result else 0.0
@@ -238,10 +274,14 @@ def _build_companion_prompt(
             initiative_decision.reason if initiative_decision else "initiative_unavailable"
         ),
         initiative_tool=(initiative_decision.requested_tool if initiative_decision else None),
-        paralinguistic_signal_count=len(paralinguistic_state.signals),
-        paralinguistic_signal_kinds=[
-            signal.kind for signal in paralinguistic_state.signals
-        ],
+        paralinguistic_signal_count=(
+            len(paralinguistic_state.signals) if paralinguistic_state else 0
+        ),
+        paralinguistic_signal_kinds=(
+            [signal.kind for signal in paralinguistic_state.signals]
+            if paralinguistic_state
+            else []
+        ),
     )
     return assembly, rendered
 
