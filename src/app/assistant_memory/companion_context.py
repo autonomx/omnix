@@ -7,7 +7,9 @@ import threading
 import time
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -53,6 +55,7 @@ _SECTION_ORDER: tuple[CompanionSection, ...] = (
     "query_relevant_memories",
     "capability_context",
 )
+_DEFAULT_BUCKET_MINUTES = 15
 
 
 class CompanionContextItem(BaseModel):
@@ -96,7 +99,8 @@ class CompanionContextPacket(BaseModel):
 
     def content_free_diagnostics(self) -> dict[str, Any]:
         return {
-            "packet_version": 1,
+            "packet_version": 2,
+            "cache_dimension_version": 2,
             "snapshot_id": self.snapshot_id,
             "snapshot_revision": self.snapshot_revision,
             "token_budget": self.token_budget,
@@ -164,13 +168,71 @@ def _snapshot_identity(session: Any) -> tuple[str | None, int | None]:
     return snapshot_id, parsed_revision
 
 
-def _cache_key(session: Any, approved_memory: list[PromptMemoryItem]) -> str:
+def _text_dimension(value: object, fallback: str) -> str:
+    normalized = str(value or "").strip()
+    return normalized if normalized else fallback
+
+
+def _default_privacy_policy(session: Any) -> str:
+    return ":".join(
+        [
+            _text_dimension(getattr(session, "transcript_policy", None), "persistent"),
+            str(bool(getattr(session, "memory_enabled", False))).lower(),
+            str(bool(getattr(session, "read_memory", False))).lower(),
+            str(bool(getattr(session, "write_memory", False))).lower(),
+            _text_dimension(getattr(session, "shared_memory_access", None), "none"),
+        ]
+    )
+
+
+def _zone(value: str | None) -> ZoneInfo:
+    try:
+        return ZoneInfo(_text_dimension(value, "UTC"))
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
+
+
+def _time_bucket(
+    now: datetime | None,
+    timezone_name: str | None,
+    bucket_minutes: int,
+) -> tuple[str, str]:
+    zone = _zone(timezone_name)
+    if now is None:
+        local_now = datetime.now(zone)
+    elif now.tzinfo is None:
+        local_now = now.replace(tzinfo=zone)
+    else:
+        local_now = now.astimezone(zone)
+    bounded = max(1, min(int(bucket_minutes), 24 * 60))
+    minute = local_now.minute - local_now.minute % bounded
+    bucket = local_now.replace(minute=minute, second=0, microsecond=0).isoformat()
+    return zone.key, bucket
+
+
+def _cache_key(
+    session: Any,
+    approved_memory: list[PromptMemoryItem],
+    *,
+    privacy_policy: str | None,
+    locale: str | None,
+    timezone_name: str | None,
+    now: datetime | None,
+    time_bucket_minutes: int,
+) -> str:
     session_id, owner_type, owner_id = _session_identity(session)
     snapshot_id, snapshot_revision = _snapshot_identity(session)
+    resolved_timezone, time_bucket = _time_bucket(
+        now,
+        timezone_name,
+        time_bucket_minutes,
+    )
     signature = hashlib.sha256(
         "\n".join(
-            f"{item.memory_id}:{item.revision}:{item.source}:{item.scope}:{item.category}"
-            for item in approved_memory
+            sorted(
+                f"{item.memory_id}:{item.revision}:{item.source}:{item.scope}:{item.category}"
+                for item in approved_memory
+            )
         ).encode("utf-8")
     ).hexdigest()[:20]
     return "\x1f".join(
@@ -178,8 +240,16 @@ def _cache_key(session: Any, approved_memory: list[PromptMemoryItem]) -> str:
             session_id,
             owner_type,
             owner_id,
+            _text_dimension(getattr(session, "character_id", None), "none"),
+            _text_dimension(getattr(session, "profile_id", None), "profile:default"),
+            _text_dimension(getattr(session, "workspace_id", None), "workspace:local"),
+            _text_dimension(getattr(session, "project_id", None), "none"),
             snapshot_id or "none",
             str(snapshot_revision or 0),
+            _text_dimension(privacy_policy, _default_privacy_policy(session)),
+            _text_dimension(locale or getattr(session, "locale", None), "und").casefold(),
+            resolved_timezone,
+            time_bucket,
             signature,
         ]
     )
@@ -211,8 +281,25 @@ def _baseline_item(item: PromptMemoryItem) -> CompanionContextItem:
     )
 
 
-def _baseline(session: Any, approved_memory: list[PromptMemoryItem]) -> tuple[_CachedBaseline, bool]:
-    key = _cache_key(session, approved_memory)
+def _baseline(
+    session: Any,
+    approved_memory: list[PromptMemoryItem],
+    *,
+    privacy_policy: str | None,
+    locale: str | None,
+    timezone_name: str | None,
+    now: datetime | None,
+    time_bucket_minutes: int,
+) -> tuple[_CachedBaseline, bool]:
+    key = _cache_key(
+        session,
+        approved_memory,
+        privacy_policy=privacy_policy,
+        locale=locale,
+        timezone_name=timezone_name,
+        now=now,
+        time_bucket_minutes=time_bucket_minutes,
+    )
     with _cache_lock:
         cached = _baseline_cache.get(key)
         if cached is not None:
@@ -250,12 +337,25 @@ def build_companion_context_packet(
     approved_memory: list[PromptMemoryItem],
     *,
     token_budget: int = 1_000,
+    privacy_policy: str | None = None,
+    locale: str | None = None,
+    timezone_name: str | None = None,
+    now: datetime | None = None,
+    time_bucket_minutes: int = _DEFAULT_BUCKET_MINUTES,
 ) -> CompanionContextPacket:
     """Select a bounded packet without transcript or history scans."""
 
     started = time.perf_counter()
     budget = max(0, int(token_budget))
-    baseline, cache_hit = _baseline(session, approved_memory)
+    baseline, cache_hit = _baseline(
+        session,
+        approved_memory,
+        privacy_policy=privacy_policy,
+        locale=locale,
+        timezone_name=timezone_name,
+        now=now,
+        time_bucket_minutes=time_bucket_minutes,
+    )
     query_terms = _terms(str(getattr(user_message, "content", "") or ""))
     scored: list[CompanionContextItem] = []
     for item in baseline.items:
