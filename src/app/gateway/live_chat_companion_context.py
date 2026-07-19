@@ -1,18 +1,56 @@
 """Install deterministic companion packets on the bounded live-voice prompt path."""
 from __future__ import annotations
 
+import os
 from typing import Any
 
+from app.assistant_memory import companion_context as companion_context_module
 from app.assistant_memory.companion_context import build_companion_context_packet
+from app.assistant_memory.scope import resolve_session_memory_scope
+from app.assistant_memory.temporal_retrieval import retrieve_temporal_context
 from app.chat.compaction import compaction_enabled
 from app.chat.memory_prompt import resolve_prompt_memory
-from app.chat.prompt_assembly import build_prompt_assembly
+from app.chat.prompt_assembly import PromptMemoryItem, build_prompt_assembly
 from app.chat.prompt_rendering import render_prompt_assembly
 
 from . import live_chat_live_voice_profile as live_profile
 from .tts_stream_diagnostics import stream_log
 
 _SENTINEL = "_omnix_companion_context_packet_installed"
+_TEMPORAL_CATEGORY = {
+    "routine": "routine",
+    "open_loop": "open_loop",
+    "goal": "goal",
+    "episode": "episode",
+    "relationship_state": "relationship",
+}
+
+
+def _temporal_prompt_memory(result: Any) -> list[PromptMemoryItem]:
+    values: list[PromptMemoryItem] = []
+    for selected in result.items:
+        record = selected.record
+        values.append(
+            PromptMemoryItem(
+                memory_id=record.id,
+                content=record.content,
+                scope=record.scope,
+                category=_TEMPORAL_CATEGORY.get(record.kind, record.category),
+                revision=record.revision,
+                source="character" if record.owner_type == "character" else "system",
+            )
+        )
+    return values
+
+
+def _merge_memory(
+    approved: list[PromptMemoryItem],
+    temporal: list[PromptMemoryItem],
+) -> list[PromptMemoryItem]:
+    merged: dict[str, PromptMemoryItem] = {item.memory_id: item for item in approved}
+    for item in temporal:
+        merged[item.memory_id] = item
+    return list(merged.values())
 
 
 def _build_companion_prompt(
@@ -24,14 +62,26 @@ def _build_companion_prompt(
     from app import shared
 
     budget = live_profile._live_voice_prompt_budget()
+    memory_service = self.memory_service_factory()
     approved_memory, memory_diagnostics = resolve_prompt_memory(
         session,
-        memory_service_factory=self.memory_service_factory,
+        memory_service_factory=lambda: memory_service,
     )
+    temporal_result = None
+    if memory_diagnostics.get("memory_enabled"):
+        temporal_result = retrieve_temporal_context(
+            memory_service,
+            resolve_session_memory_scope(session),
+            str(getattr(user_message, "content", "") or ""),
+            timezone_name=os.environ.get("OMNIX_USER_TIMEZONE"),
+            deadline_ms=float(os.environ.get("OMNIX_LIVE_MEMORY_RETRIEVAL_DEADLINE_MS") or 50),
+            limit=int(os.environ.get("OMNIX_LIVE_MEMORY_RETRIEVAL_LIMIT") or 12),
+        )
+    temporal_memory = _temporal_prompt_memory(temporal_result) if temporal_result else []
     packet = build_companion_context_packet(
         session,
         user_message,
-        approved_memory,
+        _merge_memory(approved_memory, temporal_memory),
         token_budget=budget.memory_tokens,
     )
     summary_record = (
@@ -53,6 +103,15 @@ def _build_companion_prompt(
     )
     assembly.diagnostics["memory"] = memory_diagnostics
     assembly.diagnostics["companion_context"] = packet.content_free_diagnostics()
+    assembly.diagnostics["temporal_retrieval"] = (
+        temporal_result.content_free_diagnostics()
+        if temporal_result is not None
+        else {
+            "candidate_count": 0,
+            "selected_count": 0,
+            "disabled_reason": "memory_not_enabled",
+        }
+    )
     assembly.diagnostics["compaction"] = (
         {
             "enabled": True,
@@ -78,6 +137,7 @@ def _build_companion_prompt(
     assembly.diagnostics["latency_profile"] = {
         "name": "live_voice",
         "companion_context_enabled": True,
+        "temporal_retrieval_enabled": temporal_result is not None,
         "recent_message_limit": recent_message_limit,
         "max_input_tokens": budget.max_input_tokens,
         "reserved_output_tokens": budget.reserved_output_tokens,
@@ -99,6 +159,13 @@ def _build_companion_prompt(
         packet_build_ms=round(packet.build_ms, 3),
         cache_hit=packet.cache_hit,
         truncated=packet.truncated,
+        temporal_selected_count=(temporal_result.selected_count if temporal_result else 0),
+        temporal_preload_ms=(
+            round(temporal_result.preload_ms, 3) if temporal_result else 0.0
+        ),
+        temporal_preload_timed_out=(
+            temporal_result.preload_timed_out if temporal_result else False
+        ),
     )
     return assembly, rendered
 
@@ -108,6 +175,17 @@ def install_live_chat_companion_context_hook() -> None:
 
     if getattr(live_profile, _SENTINEL, False):
         return
+    companion_context_module._CATEGORY_SECTION.update(  # type: ignore[attr-defined]
+        {
+            "routine": "due_routines",
+            "open_loop": "open_loops",
+            "goal": "active_goals",
+            "episode": "recent_episodes",
+        }
+    )
+    companion_context_module._CATEGORY_BASE.update(  # type: ignore[attr-defined]
+        {"routine": 575, "open_loop": 525, "goal": 475, "episode": 350}
+    )
     live_profile._build_live_voice_prompt = _build_companion_prompt
     setattr(live_profile, _SENTINEL, True)
 
