@@ -190,6 +190,14 @@ class _CharacterSessionMixin:
                     generated_parts.append(str(event["text"]))
                 if event.get("type") == "complete":
                     saw_completion = True
+                    if assistant_turn_id:
+                        event = {
+                            **event,
+                            "metadata": {
+                                **dict(event.get("metadata") or {}),
+                                "assistant_turn_id": assistant_turn_id,
+                            },
+                        }
                 yield event
         except GeneratorExit:
             if assistant_turn_id:
@@ -222,7 +230,11 @@ class _CharacterSessionMixin:
         before = self.get_session(session_id)
         segment_id = before.active_segment_id if before else None
         user_message = next((message for message in before.messages if message.id == user_message_id), None) if before else None
-        assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip() if user_message else ""
+        assistant_turn_id = (
+            str(user_message.metadata.get("assistant_turn_id") or "").strip()
+            if user_message
+            else str(metadata.get("assistant_turn_id") or "").strip()
+        )
         coordinator = default_assistant_turn_coordinator()
         if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
             return _persist_interrupted_reply(
@@ -386,7 +398,7 @@ def _persist_interrupted_reply(store, *, session_id: str, user_message_id: str, 
             continue
         user_message = next((message for message in session.messages if message.id == user_message_id), None)
         if user_message is None:
-            return None
+            return session
         user_message.metadata["generation_status"] = "interrupted"
         turn = coordinator.get(assistant_turn_id)
         if turn is not None:

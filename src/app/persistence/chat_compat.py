@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from app.chat.models import ChatMessage, ChatSession
+from app.chat.retention_policy import transcript_retention_allowed
 
 from .database import PostgresDatabase, default_database
 from .identity_service import bootstrap_local_tenant
@@ -122,7 +123,12 @@ class PostgresChatRepositoryAdapter:
                         f"Chat transcript rewrite rejected for {session.id}; "
                         "PostgreSQL message history is append-only"
                     )
-                for message in session.messages[len(stored_ids) :]:
+                retained_messages = (
+                    session.messages
+                    if transcript_retention_allowed(session)
+                    else session.messages[: len(stored_ids)]
+                )
+                for message in retained_messages[len(stored_ids) :]:
                     work.chats.append_message(
                         self.context,
                         session.id,

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.chat.retention_policy import automatic_memory_derivation_allowed
 from app.jobs import (
     CompleteJobRequest,
     CreateJobRequest,
@@ -156,6 +157,8 @@ def process_memory_suggestion_job(
         result.skipped_reasons.append("rollout_stage_disabled")
     elif session is None:
         result.skipped_reasons.append("session_missing")
+    elif not automatic_memory_derivation_allowed(session):
+        result.skipped_reasons.append("private_session")
     elif session.interaction_mode == "character" and not session.write_memory:
         result.skipped_reasons.append("character_memory_write_disabled")
     else:

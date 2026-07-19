@@ -10,6 +10,7 @@ from app.assistant_memory import MemoryService, resolve_session_memory_scope
 
 from .memory_session import RefreshSessionMemoryRequest, refresh_session_memory
 from .models import ChatSession
+from .retention_policy import explicit_memory_mutation_allowed
 
 MemoryCommandKind = Literal["save", "list", "forget", "refresh", "disable", "update"]
 
@@ -81,6 +82,16 @@ def _scope(session: ChatSession):
     return resolve_session_memory_scope(session)
 
 
+def _privacy_rejected(session: ChatSession, command: MemoryCommand) -> MemoryCommandResult | None:
+    if explicit_memory_mutation_allowed(session, command.kind):
+        return None
+    return MemoryCommandResult(
+        content="Private Chat does not create or update durable memory. No memory was changed.",
+        command=command.kind,
+        mutated=False,
+    )
+
+
 def _write_rejected(session: ChatSession, command: MemoryCommand) -> MemoryCommandResult | None:
     if session.interaction_mode != "character" or session.write_memory:
         return None
@@ -115,6 +126,9 @@ def execute_memory_command(
     session = store.get_session(session_id)
     if session is None:
         return MemoryCommandResult(content="The Chat session no longer exists.", command=command.kind, mutated=False)
+    privacy_rejected = _privacy_rejected(session, command)
+    if privacy_rejected is not None:
+        return privacy_rejected
     write_rejected = _write_rejected(session, command)
     if write_rejected is not None:
         return write_rejected
