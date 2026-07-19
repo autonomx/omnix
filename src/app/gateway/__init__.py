@@ -20,6 +20,7 @@ from .live_chat_provider_routing import install_live_chat_provider_routing_hook
 from .live_chat_stream_retry import install_live_chat_stream_retry_hook
 from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
 from .live_voice_runtime_offload import install_live_voice_runtime_offload_hook
+from .memory_job_offload import install_memory_job_offload_hook
 from .realtime_routes import install_realtime_route_hook
 from .research_mode_routes import install_research_mode_route_hook
 from .rpg_debug_routes import install_rpg_debug_route_hook
@@ -89,6 +90,7 @@ install_live_chat_stream_retry_hook()
 install_live_chat_provider_routing_hook()
 install_live_chat_live_voice_profile_hook()
 install_live_chat_companion_context_hook()
+install_memory_job_offload_hook()
 install_live_voice_diagnostics_hook()
 install_event_loop_lag_monitor_hook()
 install_blocking_route_offload_hook()
