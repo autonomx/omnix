@@ -43,13 +43,16 @@ jobs:
       - name: Ruff Live Chat hardening modules
         run: |
           ruff check \
+            src/app/assistant_memory/controls.py \
             src/app/assistant_memory/initiative.py \
             src/app/assistant_memory/jobs.py \
+            src/app/assistant_memory/management_routes.py \
             src/app/assistant_memory/observability.py \
             src/app/assistant_memory/paralinguistic_state.py \
             src/app/assistant_memory/rollout.py \
             src/app/assistant_memory/settings.py \
             src/app/assistant_memory/settings_routes.py \
+            src/app/assistant_memory/structured_consolidation.py \
             src/app/chat/character_store.py \
             src/app/chat/compaction.py \
             src/app/chat/memory_commands.py \
@@ -99,6 +102,7 @@ jobs:
             src/tests/app/test_gateway_tts_live_call_latency.py \
             src/tests/app/test_tts_stream_contract_performance.py \
             src/tests/app/test_stt_streaming_audio.py \
+            src/tests/unit/assistant_memory/test_companion_controls.py \
             src/tests/unit/assistant_memory/test_companion_phase8_evaluation.py \
             src/tests/unit/assistant_memory/test_initiative.py \
             src/tests/unit/assistant_memory/test_paralinguistic_state.py \
@@ -132,6 +136,7 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest \
+            src/tests/unit/assistant_memory/test_companion_controls.py \
             src/tests/unit/assistant_memory/test_companion_phase8_evaluation.py \
             src/tests/unit/assistant_memory/test_initiative.py \
             src/tests/unit/assistant_memory/test_paralinguistic_state.py \
