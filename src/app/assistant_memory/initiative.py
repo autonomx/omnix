@@ -165,7 +165,7 @@ def _tool_for_record(record: MemoryRecord) -> CompanionTool | None:
     terms = _terms(record.content)
     activity = str(record.structured_payload.get("activity") or "").casefold()
     combined = set(terms)
-    combined.update(_terms(activity))
+    combined.update(_terms(activity.replace("_", " ").replace("-", " ")))
     if record.kind == "routine" and combined & {
         "commute",
         "drive",
