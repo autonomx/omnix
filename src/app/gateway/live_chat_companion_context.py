@@ -76,7 +76,8 @@ def _build_companion_prompt(
     }
     rendered = render_prompt_assembly(assembly)
     assembly.diagnostics["latency_profile"] = {
-        "name": "live_voice_companion",
+        "name": "live_voice",
+        "companion_context_enabled": True,
         "recent_message_limit": recent_message_limit,
         "max_input_tokens": budget.max_input_tokens,
         "reserved_output_tokens": budget.reserved_output_tokens,
