@@ -44,6 +44,7 @@ jobs:
         run: |
           ruff check \
             src/app/assistant_memory/initiative.py \
+            src/app/assistant_memory/paralinguistic_state.py \
             src/app/chat/provider_metrics.py \
             src/app/gateway/blocking_route_offload.py \
             src/app/gateway/event_loop_lag_monitor.py \
@@ -88,7 +89,8 @@ jobs:
             src/tests/app/test_gateway_tts_live_call_latency.py \
             src/tests/app/test_tts_stream_contract_performance.py \
             src/tests/app/test_stt_streaming_audio.py \
-            src/tests/unit/assistant_memory/test_initiative.py
+            src/tests/unit/assistant_memory/test_initiative.py \
+            src/tests/unit/assistant_memory/test_paralinguistic_state.py
 
       - name: Existing live voice release-gate regression
         run: |
@@ -127,6 +129,7 @@ jobs:
             src/tests/app/test_live_chat_release_gate.py \
             src/tests/app/test_live_chat_release_completion.py \
             src/tests/unit/assistant_memory/test_initiative.py \
+            src/tests/unit/assistant_memory/test_paralinguistic_state.py \
             -q --tb=short 2>&1 | tee live-chat-release-gate-output.txt
 
       - name: Phase 11 authoritative-state source guard
