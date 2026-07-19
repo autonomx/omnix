@@ -1,5 +1,15 @@
 export type MemoryScope = 'global' | 'workspace' | 'project' | 'session';
 export type MemoryCategory = 'preference' | 'fact' | 'project' | 'relationship' | 'instruction';
+export type CompanionRolloutStage =
+  | 'authority_only'
+  | 'shadow'
+  | 'read_only_pilot'
+  | 'explicit_typed'
+  | 'review_required'
+  | 'automatic_assertions'
+  | 'gentle_initiative'
+  | 'active_initiative'
+  | 'paralinguistic_pilot';
 
 export interface ManagedMemoryRecord {
   id: string;
@@ -64,6 +74,12 @@ export interface AssistantMemoryRuntimeSettings {
   compaction_enabled: boolean;
   hermes_sync_enabled: boolean;
   require_approval_for_inferred_memory: boolean;
+  automatic_direct_assertion_memory: boolean;
+  proactive_memory_enabled: boolean;
+  paralinguistic_signals_enabled: boolean;
+  transcript_retention_enabled: boolean;
+  companion_master_enabled: boolean;
+  companion_rollout_stage: CompanionRolloutStage;
   memory_token_budget: number;
   history_token_budget: number;
   retention_days: number;
@@ -75,6 +91,14 @@ export interface AssistantMemoryRuntimeStatus {
   settings_path: string;
   environment_overrides: string[];
   approval_policy_locked: boolean;
+  diagnostics_policy: 'content_free';
+}
+
+export interface CompanionMemoryMetrics {
+  turns: number;
+  counters: Record<string, number>;
+  totals: Record<string, number>;
+  maxima: Record<string, number>;
   diagnostics_policy: 'content_free';
 }
 
@@ -173,5 +197,8 @@ export const memoryClient = {
   },
   updateSettings(update: Partial<AssistantMemoryRuntimeSettings>): Promise<AssistantMemoryRuntimeStatus> {
     return request('/api/assistant/memory/settings', jsonInit('POST', update));
+  },
+  metrics(): Promise<CompanionMemoryMetrics> {
+    return request('/api/assistant/memory/metrics');
   },
 };
