@@ -163,13 +163,13 @@ def test_commute_lifecycle_activation_tool_supersession_and_owner_isolation() ->
     decision = plan_companion_initiative(
         result,
         context,
-        LiveConversationProfile(initiative_mode="gentle"),
+        LiveConversationProfile(initiative_mode="active"),
         "hello",
         privacy_mode=False,
         capabilities=TrustedCapabilityManifest(available_tools=frozenset({"traffic"})),
         now=now,
     )
-    assert decision.action == "surface_with_tool"
+    assert decision.action == "surface_with_tool", decision.model_dump(mode="json")
     assert decision.requested_tool == "traffic"
 
     replacement = supersede_typed_memory(
