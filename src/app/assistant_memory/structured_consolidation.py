@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any
 
 from .models import MemoryCandidate, MemoryRecord, MemoryScopeContext
 from .owner_service import OwnerAwareMemoryService
@@ -63,6 +62,29 @@ def _persist_candidate_metadata(
             state.candidates[candidate.id] = changed
         return changed
     return changed
+
+
+def _mark_automatic_direct_assertion(
+    service: OwnerAwareMemoryService,
+    record: MemoryRecord,
+) -> MemoryRecord:
+    payload = {**record.structured_payload, "automatic_direct_assertion": True}
+    repository = service.repository
+    database = getattr(repository, "database", None)
+    workspace_id = getattr(repository, "workspace_id", None)
+    if database is not None and workspace_id:
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_memory_records SET structured_payload = %s::jsonb "
+                "WHERE id = %s AND workspace_id = %s",
+                (json.dumps(payload, sort_keys=True), record.id, workspace_id),
+            )
+        stored = repository.get_record(record.id)
+        if stored is None:
+            raise RuntimeError("automatic memory disappeared after metadata persistence")
+        return stored
+    changed = record.model_copy(update={"structured_payload": payload})
+    return repository.update_record(changed, expected_revision=record.revision)
 
 
 def propose_structured_memory(
@@ -217,9 +239,10 @@ def consolidate_structured_proposal(
         )
         return "superseded", replacement
 
-    if proposal.claim_type == "explicit_command" or (
+    automatic_direct_assertion = (
         auto_save_direct_assertions and proposal.claim_type == "user_asserted"
-    ):
+    )
+    if proposal.claim_type == "explicit_command" or automatic_direct_assertion:
         record = create_typed_memory(
             service,
             context,
@@ -231,6 +254,8 @@ def consolidate_structured_proposal(
             provenance_id=source_message_id,
             contradiction_group=proposal.contradiction_key,
         )
+        if automatic_direct_assertion:
+            record = _mark_automatic_direct_assertion(service, record)
         return "saved", record
 
     candidate = propose_structured_memory(

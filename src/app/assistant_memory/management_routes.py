@@ -7,6 +7,16 @@ from fastapi import FastAPI, HTTPException, Query
 
 from app.chat import ChatSessionStore, default_chat_store
 
+from .controls import (
+    MemoryExportResponse,
+    MemoryResetResponse,
+    RecentAutomaticMemoryResponse,
+    export_owner_memory,
+    recent_automatic_memories,
+    reset_owner_memory,
+    set_memory_archived,
+    undo_automatic_memory,
+)
 from .management import (
     CandidateCleanupRequest,
     CandidateResolutionRequest,
@@ -24,6 +34,7 @@ from .management import (
     resolve_session_scope,
 )
 from .models import MemoryCandidate, MemoryCategory, MemoryRecord, MemoryScope
+from .observability import MemoryUsageResponse, memory_usage_snapshot
 from .repository import MemoryConflictError, MemoryNotFoundError
 from .service import MemoryPolicyError, MemoryService, default_memory_service
 
@@ -50,15 +61,20 @@ def register_memory_management_routes(
 ) -> None:
     names = {getattr(route, "name", "") for route in app.routes}
 
-    def write_context(session_id: str):
-        session, context = resolve_session_scope(chat_store_factory(), session_id)
+    def read_context(session_id: str):
+        store = chat_store_factory()
+        session, context = resolve_session_scope(store, session_id)
         if session is None or context is None:
             raise _not_found("chat session not found")
+        return store, session, context
+
+    def write_context(session_id: str):
+        store, session, context = read_context(session_id)
         try:
             require_memory_write(session)
         except Exception as exc:
             raise _translate_memory_error(exc) from exc
-        return context
+        return store, session, context
 
     if "assistant_memory_list_endpoint" not in names:
 
@@ -99,7 +115,7 @@ def register_memory_management_routes(
             name="assistant_memory_create_endpoint",
         )
         async def assistant_memory_create_endpoint(request: CreateManagedMemoryRequest) -> MemoryRecord:
-            context = write_context(request.session_id)
+            _, _, context = write_context(request.session_id)
             try:
                 return memory_service_factory().create_explicit_memory(
                     context,
@@ -111,6 +127,113 @@ def register_memory_management_routes(
                 )
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
+
+        @app.get(
+            "/api/assistant/memory/archived",
+            response_model=MemoryListResponse,
+            include_in_schema=False,
+            name="assistant_memory_archived_endpoint",
+        )
+        async def assistant_memory_archived_endpoint(session_id: str) -> MemoryListResponse:
+            _, _, context = read_context(session_id)
+            service = memory_service_factory()
+            records = []
+            for scope in ("global", "workspace", "project", "session"):
+                scope_id = {
+                    "global": context.profile_id,
+                    "workspace": context.workspace_id,
+                    "project": context.project_id,
+                    "session": context.session_id,
+                }[scope]
+                if scope_id is None:
+                    continue
+                records.extend(
+                    service.repository.list_records(
+                        owner_type=context.owner_type,
+                        owner_id=context.owner_id,
+                        scope=scope,
+                        scope_id=scope_id,
+                        status="archived",
+                        limit=500,
+                    )
+                )
+            records.sort(key=lambda item: (item.scope, item.category, item.id))
+            return MemoryListResponse(records=records, total=len(records), session_id=session_id)
+
+        @app.get(
+            "/api/assistant/memory/recent-automatic",
+            response_model=RecentAutomaticMemoryResponse,
+            include_in_schema=False,
+            name="assistant_memory_recent_automatic_endpoint",
+        )
+        async def assistant_memory_recent_automatic_endpoint(
+            session_id: str,
+            limit: int = Query(default=5, ge=0, le=20),
+        ) -> RecentAutomaticMemoryResponse:
+            _, session, context = read_context(session_id)
+            message_ids = {message.id for message in session.messages if message.role == "user"}
+            return RecentAutomaticMemoryResponse(
+                session_id=session_id,
+                records=recent_automatic_memories(
+                    memory_service_factory(),
+                    context,
+                    message_ids,
+                    limit=limit,
+                ),
+            )
+
+        @app.get(
+            "/api/assistant/memory/usage",
+            response_model=MemoryUsageResponse,
+            include_in_schema=False,
+            name="assistant_memory_usage_endpoint",
+        )
+        async def assistant_memory_usage_endpoint(session_id: str) -> MemoryUsageResponse:
+            read_context(session_id)
+            return memory_usage_snapshot(session_id)
+
+        @app.get(
+            "/api/assistant/memory/export",
+            response_model=MemoryExportResponse,
+            include_in_schema=False,
+            name="assistant_memory_export_endpoint",
+        )
+        async def assistant_memory_export_endpoint(session_id: str) -> MemoryExportResponse:
+            _, _, context = read_context(session_id)
+            return export_owner_memory(memory_service_factory(), context)
+
+        @app.post(
+            "/api/assistant/memory/reset",
+            response_model=MemoryResetResponse,
+            include_in_schema=False,
+            name="assistant_memory_reset_endpoint",
+        )
+        async def assistant_memory_reset_endpoint(session_id: str) -> MemoryResetResponse:
+            store, _, context = write_context(session_id)
+            try:
+                return reset_owner_memory(store, memory_service_factory(), context)
+            except Exception as exc:
+                raise _translate_memory_error(exc) from exc
+
+        @app.get(
+            "/api/assistant/memory/candidates/pending",
+            response_model=MemoryCandidateListResponse,
+            include_in_schema=False,
+            name="assistant_memory_candidates_endpoint",
+        )
+        async def assistant_memory_candidates_endpoint(
+            session_id: str,
+            limit: int = Query(default=100, ge=0, le=500),
+        ) -> MemoryCandidateListResponse:
+            result = candidates_for_session(
+                chat_store_factory(),
+                memory_service_factory(),
+                session_id,
+                limit=limit,
+            )
+            if result is None:
+                raise _not_found("chat session not found")
+            return result
 
         @app.get(
             "/api/assistant/memory/{memory_id}",
@@ -142,7 +265,7 @@ def register_memory_management_routes(
             memory_id: str,
             request: UpdateManagedMemoryRequest,
         ) -> MemoryRecord:
-            context = write_context(request.session_id)
+            _, _, context = write_context(request.session_id)
             try:
                 return memory_service_factory().edit_memory(
                     context,
@@ -164,7 +287,7 @@ def register_memory_management_routes(
             session_id: str,
             expected_revision: int = Query(ge=1),
         ) -> ForgetMemoryResponse:
-            context = write_context(session_id)
+            _, _, context = write_context(session_id)
             try:
                 memory_service_factory().forget_memory(
                     context,
@@ -185,7 +308,7 @@ def register_memory_management_routes(
             memory_id: str,
             request: RevisionedMemoryRequest,
         ) -> MemoryRecord:
-            context = write_context(request.session_id)
+            _, _, context = write_context(request.session_id)
             try:
                 return memory_service_factory().set_pinned(
                     context,
@@ -206,7 +329,7 @@ def register_memory_management_routes(
             memory_id: str,
             request: RevisionedMemoryRequest,
         ) -> MemoryRecord:
-            context = write_context(request.session_id)
+            _, _, context = write_context(request.session_id)
             try:
                 return memory_service_factory().set_pinned(
                     context,
@@ -227,7 +350,7 @@ def register_memory_management_routes(
             memory_id: str,
             request: MoveManagedMemoryRequest,
         ) -> MemoryRecord:
-            context = write_context(request.session_id)
+            _, _, context = write_context(request.session_id)
             try:
                 return memory_service_factory().move_memory(
                     context,
@@ -238,25 +361,73 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.get(
-            "/api/assistant/memory/candidates/pending",
-            response_model=MemoryCandidateListResponse,
+        @app.post(
+            "/api/assistant/memory/{memory_id}/archive",
+            response_model=MemoryRecord,
             include_in_schema=False,
-            name="assistant_memory_candidates_endpoint",
+            name="assistant_memory_archive_endpoint",
         )
-        async def assistant_memory_candidates_endpoint(
-            session_id: str,
-            limit: int = Query(default=100, ge=0, le=500),
-        ) -> MemoryCandidateListResponse:
-            result = candidates_for_session(
-                chat_store_factory(),
-                memory_service_factory(),
-                session_id,
-                limit=limit,
-            )
-            if result is None:
-                raise _not_found("chat session not found")
-            return result
+        async def assistant_memory_archive_endpoint(
+            memory_id: str,
+            request: RevisionedMemoryRequest,
+        ) -> MemoryRecord:
+            _, _, context = write_context(request.session_id)
+            try:
+                return set_memory_archived(
+                    memory_service_factory(),
+                    context,
+                    memory_id,
+                    archived=True,
+                    expected_revision=request.expected_revision,
+                )
+            except Exception as exc:
+                raise _translate_memory_error(exc) from exc
+
+        @app.post(
+            "/api/assistant/memory/{memory_id}/restore",
+            response_model=MemoryRecord,
+            include_in_schema=False,
+            name="assistant_memory_restore_endpoint",
+        )
+        async def assistant_memory_restore_endpoint(
+            memory_id: str,
+            request: RevisionedMemoryRequest,
+        ) -> MemoryRecord:
+            _, _, context = write_context(request.session_id)
+            try:
+                return set_memory_archived(
+                    memory_service_factory(),
+                    context,
+                    memory_id,
+                    archived=False,
+                    expected_revision=request.expected_revision,
+                )
+            except Exception as exc:
+                raise _translate_memory_error(exc) from exc
+
+        @app.post(
+            "/api/assistant/memory/{memory_id}/undo",
+            response_model=ForgetMemoryResponse,
+            include_in_schema=False,
+            name="assistant_memory_undo_endpoint",
+        )
+        async def assistant_memory_undo_endpoint(
+            memory_id: str,
+            request: RevisionedMemoryRequest,
+        ) -> ForgetMemoryResponse:
+            _, session, context = write_context(request.session_id)
+            message_ids = {message.id for message in session.messages if message.role == "user"}
+            try:
+                undo_automatic_memory(
+                    memory_service_factory(),
+                    context,
+                    message_ids,
+                    memory_id,
+                    expected_revision=request.expected_revision,
+                )
+            except Exception as exc:
+                raise _translate_memory_error(exc) from exc
+            return ForgetMemoryResponse(memory_id=memory_id)
 
         @app.post(
             "/api/assistant/memory/candidates/{candidate_id}/approve",
@@ -268,7 +439,7 @@ def register_memory_management_routes(
             candidate_id: str,
             request: CandidateResolutionRequest,
         ) -> MemoryRecord:
-            context = write_context(request.session_id)
+            _, _, context = write_context(request.session_id)
             try:
                 return memory_service_factory().approve_candidate(
                     context,
@@ -288,10 +459,12 @@ def register_memory_management_routes(
             candidate_id: str,
             request: CandidateResolutionRequest,
         ) -> MemoryCandidate:
-            write_context(request.session_id)
+            _, _, context = write_context(request.session_id)
             candidate = memory_service_factory().repository.get_candidate(candidate_id)
             if candidate is None:
                 raise _not_found("memory candidate not found")
+            if (candidate.owner_type, candidate.owner_id) != (context.owner_type, context.owner_id):
+                raise HTTPException(status_code=403, detail={"code": "candidate_scope_mismatch"})
             visible = candidates_for_session(
                 chat_store_factory(),
                 memory_service_factory(),
@@ -315,7 +488,7 @@ def register_memory_management_routes(
             candidate_id: str,
             request: CandidateCleanupRequest,
         ) -> ForgetCandidateResponse:
-            context = write_context(request.session_id)
+            _, _, context = write_context(request.session_id)
             try:
                 memory_service_factory().delete_resolved_candidate(
                     context,
