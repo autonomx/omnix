@@ -170,14 +170,15 @@ def extract_structured_memory_proposals(
         )
 
     routine = re.match(
-        r"^i\s+(?:normally|usually|typically|generally)\s+(.+?)(?:\s+(?:at|around|by)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?(?:\s+(.*))?$",
+        r"^i\s+(?:normally|usually|typically|generally)\s+"
+        r"(?:(.+?)\s+(?:at|around|by)\s+"
+        r"(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?:\s+(.*))?|(.+))$",
         text,
         re.I,
     )
     if routine:
-        activity = routine.group(1).strip().rstrip(".")
+        activity = (routine.group(1) or routine.group(4)).strip().rstrip(".")
         time_value = _parse_time(routine.group(2))
-        suffix = routine.group(3) or ""
         payload: dict[str, Any] = {
             "activity": activity.casefold().replace(" ", "_"),
             "days": _days(text),
