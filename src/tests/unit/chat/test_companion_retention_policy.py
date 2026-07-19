@@ -46,7 +46,11 @@ def test_transcript_retention_toggle_is_independent_from_memory_derivation(monke
     assert transcript_retention_allowed(session) is False
     assert automatic_memory_derivation_allowed(session) is True
 
-    private = _session(transcript_policy="private")
+    temporary = _session(transcript_policy="temporary")
+    assert transcript_retention_allowed(temporary) is False
+    assert automatic_memory_derivation_allowed(temporary) is False
+
+    private = _session(transcript_policy="none")
     assert transcript_retention_allowed(private) is False
     assert automatic_memory_derivation_allowed(private) is False
 
@@ -54,7 +58,7 @@ def test_transcript_retention_toggle_is_independent_from_memory_derivation(monke
 def test_private_session_memory_job_completes_without_candidate(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_COMPANION_ROLLOUT_STAGE", "review_required")
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED", "1")
-    session = _session(transcript_policy="private", messages=[_message(1)])
+    session = _session(transcript_policy="none", messages=[_message(1)])
     store = InMemoryJobStore()
     job = store.create_job(create_memory_suggestion_job_request(session.id, "msg:1"))
 
@@ -81,7 +85,7 @@ def test_compaction_never_runs_without_transcript_retention(monkeypatch) -> None
 
 
 def test_private_explicit_save_is_rejected_before_service_mutation() -> None:
-    session = _session(transcript_policy="private")
+    session = _session(transcript_policy="none")
 
     class RejectMutationService:
         def create_explicit_memory(self, *_args, **_kwargs):
