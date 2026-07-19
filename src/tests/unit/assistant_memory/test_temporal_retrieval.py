@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
-from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from app.assistant_memory.models import MemoryRecord, MemoryScopeContext
