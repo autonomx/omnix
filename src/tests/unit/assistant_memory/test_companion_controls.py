@@ -163,8 +163,10 @@ def test_memory_usage_explanation_is_content_free() -> None:
         ],
     )
     payload = memory_usage_snapshot("chat:controls").model_dump(mode="json")
-    assert payload["items"][0]["selection_reason"] == "routine_start_window"
-    assert "content" not in str(payload)
+    usage_item = payload["items"][0]
+    assert usage_item["selection_reason"] == "routine_start_window"
+    assert "content" not in usage_item
+    assert "memory_content" not in usage_item
 
 
 def test_management_static_control_routes_are_reachable() -> None:
