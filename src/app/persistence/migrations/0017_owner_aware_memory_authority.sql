@@ -37,8 +37,6 @@ BEGIN
         IF NEW.owner_type IN ('global', 'workspace', 'project', 'session') THEN
             NEW.scope := NEW.owner_type;
             NEW.scope_id := NEW.owner_id;
-            NEW.owner_type := 'system';
-            NEW.owner_id := 'system-assistant';
         ELSE
             NEW.scope := 'workspace';
             NEW.scope_id := NEW.workspace_id;
@@ -93,8 +91,6 @@ BEGIN
         IF NEW.proposed_owner_type IN ('global', 'workspace', 'project', 'session') THEN
             NEW.proposed_scope := NEW.proposed_owner_type;
             NEW.proposed_scope_id := NEW.proposed_owner_id;
-            NEW.proposed_owner_type := 'system';
-            NEW.proposed_owner_id := 'system-assistant';
         ELSE
             NEW.proposed_scope := 'workspace';
             NEW.proposed_scope_id := NEW.workspace_id;
