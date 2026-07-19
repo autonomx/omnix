@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import {
   memoryClient,
+  type CompanionRolloutStage,
   type ManagedMemoryRecord,
   type MemoryCategory,
   type MemoryScope,
@@ -10,6 +11,17 @@ import './MemoryManagementPanel.css';
 
 const scopes: MemoryScope[] = ['global', 'workspace', 'project', 'session'];
 const categories: MemoryCategory[] = ['preference', 'fact', 'project', 'relationship', 'instruction'];
+const rolloutStages: CompanionRolloutStage[] = [
+  'authority_only',
+  'shadow',
+  'read_only_pilot',
+  'explicit_typed',
+  'review_required',
+  'automatic_assertions',
+  'gentle_initiative',
+  'active_initiative',
+  'paralinguistic_pilot',
+];
 
 export function MemoryManagementPanel({ sessionId }: { sessionId: string | null }) {
   const queryClient = useQueryClient();
@@ -25,6 +37,7 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
   const candidatesQuery = useQuery({ queryKey: ['feature', 'chatbot', 'memory-candidates', sessionId], queryFn: () => memoryClient.candidates(sessionId ?? ''), enabled: Boolean(sessionId) });
   const snapshotQuery = useQuery({ queryKey: ['feature', 'chatbot', 'memory-state', sessionId], queryFn: () => memoryClient.sessionState(sessionId ?? ''), enabled: Boolean(sessionId) });
   const settingsQuery = useQuery({ queryKey: ['feature', 'chatbot', 'memory-settings'], queryFn: () => memoryClient.settings() });
+  const metricsQuery = useQuery({ queryKey: ['feature', 'chatbot', 'memory-metrics'], queryFn: () => memoryClient.metrics(), refetchInterval: 30_000 });
 
   async function refreshAll(): Promise<void> {
     await Promise.all([
@@ -33,6 +46,7 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
       queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'memory-state'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'sessions'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'memory-settings'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'memory-metrics'] }),
     ]);
   }
 
@@ -78,7 +92,7 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
     <section className="assistant-view-panel memory-management-panel" aria-label="Memory view">
       <header className="memory-page-header">
         <div><p className="eyebrow">Omnix Assistant</p><h2>Memory</h2><p>Review saved memory, approve suggestions, and control what this Chat can use.</p></div>
-        <div className="memory-page-stats" aria-label="Memory totals"><span><strong>{records.length}</strong> saved</span><span><strong>{candidates.length}</strong> pending</span><span><strong>{snapshot?.memory_record_count ?? 0}</strong> active</span></div>
+        <div className="memory-page-stats" aria-label="Memory totals"><span><strong>{records.length}</strong> saved</span><span><strong>{candidates.length}</strong> pending</span><span><strong>{snapshot?.memory_record_count ?? 0}</strong> active</span><span><strong>{metricsQuery.data?.turns ?? 0}</strong> observed turns</span></div>
       </header>
       {status ? <p className="memory-status" role="status">{status}</p> : null}
 
@@ -96,15 +110,20 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
         </article>
 
         <article className="memory-card memory-settings-card">
-          <MemoryCardHeading icon="*" title="Memory and privacy settings" detail="Controls apply immediately on the server." />
+          <MemoryCardHeading icon="*" title="Memory, privacy, and rollout" detail="Controls apply immediately without deleting saved memory." />
           {settingsQuery.isPending ? <p>Loading settings...</p> : settingsQuery.data ? <><div className="memory-settings-grid">{([
+            ['companion_master_enabled', 'Enable companion memory runtime'],
             ['curated_memory_enabled', 'Use approved memory in Chat'],
             ['suggestions_enabled', 'Create pending suggestions'],
+            ['automatic_direct_assertion_memory', 'Automatically save direct user assertions'],
+            ['proactive_memory_enabled', 'Allow proactive memory references'],
+            ['paralinguistic_signals_enabled', 'Use ephemeral conversational signals'],
+            ['transcript_retention_enabled', 'Allow transcript retention'],
             ['history_recall_enabled', 'Search previous conversations'],
             ['compaction_enabled', 'Compact long conversations'],
             ['hermes_sync_enabled', 'Allow Hermes synchronization'],
             ['show_memory_use_indicator', 'Show memory-use indicators'],
-          ] as const).map(([key, label]) => <label className="memory-toggle-row" key={key}><input type="checkbox" checked={settingsQuery.data.settings[key]} disabled={settingsMutation.isPending || settingsQuery.data.environment_overrides.includes(key)} onChange={(event) => settingsMutation.mutate({ [key]: event.currentTarget.checked })} />{label}{settingsQuery.data.environment_overrides.includes(key) ? ' - environment controlled' : ''}</label>)}</div><p>Inferred memory approval is required and cannot be disabled. Diagnostics are content-free.</p></> : <p>Memory settings are unavailable.</p>}
+          ] as const).map(([key, label]) => <label className="memory-toggle-row" key={key}><input type="checkbox" checked={settingsQuery.data.settings[key]} disabled={settingsMutation.isPending || settingsQuery.data.environment_overrides.includes(key)} onChange={(event) => settingsMutation.mutate({ [key]: event.currentTarget.checked })} />{label}{settingsQuery.data.environment_overrides.includes(key) ? ' - environment controlled' : ''}</label>)}</div><label>Rollout stage<select aria-label="Companion rollout stage" value={settingsQuery.data.settings.companion_rollout_stage} disabled={settingsMutation.isPending || settingsQuery.data.environment_overrides.includes('companion_rollout_stage')} onChange={(event) => settingsMutation.mutate({ companion_rollout_stage: event.currentTarget.value as CompanionRolloutStage })}>{rolloutStages.map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></label><p>Inferred memory approval remains required. Automatic direct assertions apply only to explicit user-authored claims. Diagnostics are content-free.</p></> : <p>Memory settings are unavailable.</p>}
         </article>
       </div>
 
