@@ -48,6 +48,7 @@ jobs:
             src/app/gateway/event_loop_lag_monitor.py \
             src/app/gateway/live_chat_postgres_fast_path.py \
             src/app/gateway/live_chat_provider_metrics.py \
+            src/app/gateway/live_chat_provider_routing.py \
             src/app/gateway/live_chat_stream_retry.py \
             src/app/gateway/live_voice_runtime_offload.py \
             src/app/gateway/live_voice_release_gate.py \
@@ -70,6 +71,7 @@ jobs:
             src/tests/app/test_gateway_blocking_route_offload.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
             src/tests/app/test_live_chat_postgres_fast_path.py \
+            src/tests/app/test_live_chat_provider_routing.py \
             src/tests/app/test_live_chat_stream_retry.py \
             src/tests/app/test_live_voice_runtime_offload.py \
             src/tests/app/test_live_voice_release_gate.py \
@@ -111,6 +113,7 @@ jobs:
           python -m pytest \
             src/tests/app/test_chat_response_metrics.py \
             src/tests/app/test_live_chat_postgres_fast_path.py \
+            src/tests/app/test_live_chat_provider_routing.py \
             src/tests/app/test_live_chat_stream_retry.py \
             src/tests/app/test_live_chat_release_gate.py \
             src/tests/app/test_live_chat_release_completion.py \
