@@ -178,7 +178,8 @@ def test_commute_lifecycle_activation_tool_supersession_and_owner_isolation() ->
     )
     assert decision.action == "surface_with_tool", decision.model_dump(mode="json")
     assert decision.reason == "tool_enrichment_allowed"
-    assert decision.activation_score == selected.score
+    assert decision.activation_score >= 850
+    assert decision.activation_score > selected.score
     assert decision.requested_tool == "traffic"
 
     replacement = supersede_typed_memory(
