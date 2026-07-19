@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 from fastapi import FastAPI, HTTPException
 
+from .observability import CompanionMemoryMetrics, companion_metrics_snapshot
 from .settings import (
     AssistantMemoryRuntimeStatus,
     AssistantMemorySettingsStore,
@@ -46,3 +47,12 @@ def register_memory_settings_routes(
                 status_code=403,
                 detail={"code": "memory_privacy_policy_rejected", "message": str(exc)},
             ) from exc
+
+    @app.get(
+        "/api/assistant/memory/metrics",
+        response_model=CompanionMemoryMetrics,
+        include_in_schema=False,
+        name="assistant_memory_metrics_endpoint",
+    )
+    async def assistant_memory_metrics_endpoint() -> CompanionMemoryMetrics:
+        return companion_metrics_snapshot()
