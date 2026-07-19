@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
-import type { AssistantMemoryRuntimeStatus } from './memoryClient';
+import type { AssistantMemoryRuntimeStatus, ManagedMemoryRecord } from './memoryClient';
 
 function renderPanel() {
   const queryClient = new QueryClient({
@@ -42,9 +42,41 @@ function settings(curated = false): AssistantMemoryRuntimeStatus {
   };
 }
 
+function record(overrides: Partial<ManagedMemoryRecord> = {}): ManagedMemoryRecord {
+  return {
+    id: 'memory:one',
+    scope: 'session',
+    scope_id: 'chat:one',
+    category: 'preference',
+    kind: 'preference',
+    structured_payload: { automatic_direct_assertion: true },
+    source: 'user_saved',
+    content: 'The user prefers quiet mornings',
+    confidence: 0.95,
+    pinned: false,
+    trust_level: 'user_approved',
+    provenance_type: 'user_message',
+    provenance_id: 'msg:one',
+    status: 'active',
+    revision: 1,
+    created_at: '2026-07-19T00:00:00Z',
+    updated_at: '2026-07-19T00:00:00Z',
+    ...overrides,
+  };
+}
+
 function commonResponse(url: URL) {
   if (url.pathname === '/api/assistant/memory/metrics') {
     return Response.json({ turns: 7, counters: {}, totals: {}, maxima: {}, diagnostics_policy: 'content_free' });
+  }
+  if (url.pathname === '/api/assistant/memory/archived') {
+    return Response.json({ session_id: 'chat:one', total: 0, records: [] });
+  }
+  if (url.pathname === '/api/assistant/memory/recent-automatic') {
+    return Response.json({ session_id: 'chat:one', records: [] });
+  }
+  if (url.pathname === '/api/assistant/memory/usage') {
+    return Response.json({ session_id: 'chat:one', recorded_at: '2026-07-19T00:00:00Z', items: [], diagnostics_policy: 'content_free' });
   }
   if (url.pathname.endsWith('/memory') && url.pathname.includes('/api/chat/sessions/')) {
     return Response.json({ session_id: 'chat:one', memory_enabled: false, memory_record_count: 0, snapshot: null });
@@ -109,5 +141,36 @@ describe('MemoryManagementPanel settings', () => {
     const toggle = await screen.findByRole('checkbox', { name: /Use approved memory in Chat/ });
     expect(toggle).toBeDisabled();
     expect(screen.getByText(/Inferred memory approval remains required/)).toBeInTheDocument();
+  });
+
+  it('shows automatic-memory undo, usage reasons, archive, export, and reset controls', async () => {
+    const saved = record();
+    const requests: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input.toString(), 'http://localhost');
+      requests.push(`${init?.method ?? 'GET'} ${url.pathname}`);
+      if (url.pathname === '/api/assistant/memory/settings') return Response.json(settings(true));
+      if (url.pathname === '/api/assistant/memory') return Response.json({ session_id: 'chat:one', total: 1, records: [saved] });
+      if (url.pathname === '/api/assistant/memory/archived') return Response.json({ session_id: 'chat:one', total: 0, records: [] });
+      if (url.pathname === '/api/assistant/memory/recent-automatic') return Response.json({ session_id: 'chat:one', records: [saved] });
+      if (url.pathname === '/api/assistant/memory/usage') return Response.json({ session_id: 'chat:one', recorded_at: '2026-07-19T00:00:00Z', diagnostics_policy: 'content_free', items: [{ memory_id: saved.id, selection_reason: 'current_turn_term_overlap', activation_score: 625, section: 'communication_preferences', source_revision: 1 }] });
+      if (url.pathname.endsWith('/undo')) return Response.json({ ok: true, memory_id: saved.id });
+      if (url.pathname.endsWith('/archive')) return Response.json({ ...saved, status: 'archived', revision: 2 });
+      return commonResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPanel();
+
+    expect(await screen.findByLabelText('Automatically remembered memory')).toHaveTextContent('Remembered —');
+    expect(await screen.findByText(/Reason: current turn term overlap/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export memory JSON' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reset all memory' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(requests).toContain('POST /api/assistant/memory/memory%3Aone/undo'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    await waitFor(() => expect(requests).toContain('POST /api/assistant/memory/memory%3Aone/archive'));
   });
 });
