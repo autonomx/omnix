@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any
 
 from .models import MemoryCandidate, MemoryRecord, MemoryScopeContext
 from .owner_service import OwnerAwareMemoryService
