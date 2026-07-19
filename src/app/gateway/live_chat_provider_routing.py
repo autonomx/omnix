@@ -15,7 +15,9 @@ from app.persistence.chat_runtime_compat import PostgresCharacterChatSessionStor
 from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_chat_provider_routing_installed"
+_SETTINGS_HOOK_SENTINEL = "_omnix_live_chat_provider_routing_settings_hook_installed"
 _ROUTE_LOCK = threading.RLock()
+_DEFAULT_PROVIDER_ID: str | None = None
 _TURN_ROUTES: dict[str, "_TurnProviderRoute"] = {}
 
 
@@ -32,7 +34,14 @@ def _normalized(value: str | None) -> str | None:
     return text or None
 
 
+def _invalidate_default_provider_cache() -> None:
+    global _DEFAULT_PROVIDER_ID
+    with _ROUTE_LOCK:
+        _DEFAULT_PROVIDER_ID = None
+
+
 def _reset_provider_route_state_for_tests() -> None:
+    _invalidate_default_provider_cache()
     with _ROUTE_LOCK:
         _TURN_ROUTES.clear()
 
@@ -44,9 +53,17 @@ def resolve_effective_provider_id(provider_id: str | None) -> str | None:
     if explicit:
         return explicit
 
+    global _DEFAULT_PROVIDER_ID
+    with _ROUTE_LOCK:
+        if _DEFAULT_PROVIDER_ID is not None:
+            return _DEFAULT_PROVIDER_ID
+
     from app import shared
 
-    return _normalized(shared.load_settings().get("provider")) or "lmstudio"
+    configured = _normalized(shared.load_settings().get("provider")) or "lmstudio"
+    with _ROUTE_LOCK:
+        _DEFAULT_PROVIDER_ID = configured
+    return configured
 
 
 def resolve_provider_route(provider_id: str | None) -> tuple[str | None, Any]:
@@ -137,6 +154,24 @@ def _log_route(
         lmstudio_metrics_path_expected=effective_provider_name == "lmstudio",
         stream=stream,
     )
+
+
+def _install_settings_cache_invalidation() -> None:
+    from app.platform import settings_control
+
+    if getattr(settings_control, _SETTINGS_HOOK_SENTINEL, False):
+        return
+    original_save_settings = settings_control.save_settings
+
+    @wraps(original_save_settings)
+    def patched_save_settings(settings: Any) -> Any:
+        try:
+            return original_save_settings(settings)
+        finally:
+            _invalidate_default_provider_cache()
+
+    settings_control.save_settings = patched_save_settings
+    setattr(settings_control, _SETTINGS_HOOK_SENTINEL, True)
 
 
 def install_live_chat_provider_routing_hook() -> None:
@@ -271,4 +306,5 @@ def install_live_chat_provider_routing_hook() -> None:
     PromptChatSessionStore.stream_provider_reply_chunks = patched_stream
     PromptChatSessionStore.begin_user_message = wrap_begin(original_prompt_begin)
     PostgresCharacterChatSessionStore.begin_user_message = wrap_begin(original_postgres_begin)
+    _install_settings_cache_invalidation()
     setattr(PromptChatSessionStore, _HOOK_SENTINEL, True)
