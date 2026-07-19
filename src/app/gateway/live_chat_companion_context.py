@@ -6,8 +6,15 @@ from typing import Any
 
 from app.assistant_memory import companion_context as companion_context_module
 from app.assistant_memory.companion_context import build_companion_context_packet
+from app.assistant_memory.initiative import (
+    initiative_prompt_directive,
+    plan_companion_initiative,
+)
 from app.assistant_memory.scope import resolve_session_memory_scope
 from app.assistant_memory.temporal_retrieval import retrieve_temporal_context
+from app.characters.live_conversation_profile import (
+    default_live_conversation_profile_store,
+)
 from app.chat.compaction import compaction_enabled
 from app.chat.memory_prompt import resolve_prompt_memory
 from app.chat.prompt_assembly import PromptMemoryItem, build_prompt_assembly
@@ -67,11 +74,12 @@ def _build_companion_prompt(
         session,
         memory_service_factory=lambda: memory_service,
     )
+    scope_context = resolve_session_memory_scope(session)
     temporal_result = None
     if memory_diagnostics.get("memory_enabled"):
         temporal_result = retrieve_temporal_context(
             memory_service,
-            resolve_session_memory_scope(session),
+            scope_context,
             str(getattr(user_message, "content", "") or ""),
             timezone_name=os.environ.get("OMNIX_USER_TIMEZONE"),
             deadline_ms=float(os.environ.get("OMNIX_LIVE_MEMORY_RETRIEVAL_DEADLINE_MS") or 50),
@@ -101,6 +109,22 @@ def _build_companion_prompt(
         recent_message_limit=recent_message_limit,
         budget=budget,
     )
+    initiative_decision = None
+    if temporal_result is not None:
+        try:
+            profile = default_live_conversation_profile_store().get(session.id).effective
+            initiative_decision = plan_companion_initiative(
+                temporal_result,
+                scope_context,
+                profile,
+                str(getattr(user_message, "content", "") or ""),
+                privacy_mode=getattr(session, "transcript_policy", "persistent") != "persistent",
+            )
+            directive = initiative_prompt_directive(initiative_decision, temporal_result)
+            if directive:
+                assembly.system_instructions.append(directive)
+        except Exception:
+            initiative_decision = None
     assembly.diagnostics["memory"] = memory_diagnostics
     assembly.diagnostics["companion_context"] = packet.content_free_diagnostics()
     assembly.diagnostics["temporal_retrieval"] = (
@@ -110,6 +134,15 @@ def _build_companion_prompt(
             "candidate_count": 0,
             "selected_count": 0,
             "disabled_reason": "memory_not_enabled",
+        }
+    )
+    assembly.diagnostics["initiative"] = (
+        initiative_decision.content_free_diagnostics()
+        if initiative_decision is not None
+        else {
+            "action": "suppress",
+            "reason": "initiative_unavailable",
+            "proactive": False,
         }
     )
     assembly.diagnostics["compaction"] = (
@@ -138,6 +171,7 @@ def _build_companion_prompt(
         "name": "live_voice",
         "companion_context_enabled": True,
         "temporal_retrieval_enabled": temporal_result is not None,
+        "initiative_enabled": initiative_decision is not None,
         "recent_message_limit": recent_message_limit,
         "max_input_tokens": budget.max_input_tokens,
         "reserved_output_tokens": budget.reserved_output_tokens,
@@ -166,6 +200,11 @@ def _build_companion_prompt(
         temporal_preload_timed_out=(
             temporal_result.preload_timed_out if temporal_result else False
         ),
+        initiative_action=(initiative_decision.action if initiative_decision else "suppress"),
+        initiative_reason=(
+            initiative_decision.reason if initiative_decision else "initiative_unavailable"
+        ),
+        initiative_tool=(initiative_decision.requested_tool if initiative_decision else None),
     )
     return assembly, rendered
 
