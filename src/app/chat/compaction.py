@@ -18,6 +18,7 @@ from app.assistant_memory.settings import load_memory_runtime_settings
 from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, default_job_store
 
 from .models import MessageContentPurpose, project_message_content
+from .retention_policy import transcript_retention_allowed
 
 if TYPE_CHECKING:
     from .prompt_store import ChatSessionStore
@@ -110,6 +111,8 @@ def _estimate_tokens(text: str) -> int:
 def build_deterministic_summary(session: Any, *, recent_message_limit: int = DEFAULT_RECENT_MESSAGE_LIMIT) -> ConversationSummary | None:
     from datetime import datetime, timezone
 
+    if not transcript_retention_allowed(session):
+        return None
     messages = [message for message in session.messages if message.role in {"user", "assistant"}]
     if len(messages) <= recent_message_limit:
         return None
@@ -153,6 +156,8 @@ def compaction_idempotency_key(session_id: str, through_message_id: str) -> str:
 
 
 def enqueue_compaction_job(session: Any, *, job_store: Any | None = None) -> JobRecord | None:
+    if not transcript_retention_allowed(session):
+        return None
     if not compaction_enabled() or len(session.messages) < compaction_threshold():
         return None
     messages = [message for message in session.messages if message.role in {"user", "assistant"}]
@@ -191,7 +196,7 @@ def process_compaction_job(
         raise ValueError(f"unsupported compaction job type: {job.type}")
     payload = CompactionJobInput.model_validate(job.input_payload or {})
     session = chat_store.get_session(payload.session_id)
-    summary = None if session is None else build_deterministic_summary(
+    summary = None if session is None or not transcript_retention_allowed(session) else build_deterministic_summary(
         session,
         recent_message_limit=payload.recent_message_limit,
     )
