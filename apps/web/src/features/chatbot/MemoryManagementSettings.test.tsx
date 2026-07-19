@@ -24,6 +24,12 @@ function settings(curated = false): AssistantMemoryRuntimeStatus {
       compaction_enabled: false,
       hermes_sync_enabled: false,
       require_approval_for_inferred_memory: true,
+      automatic_direct_assertion_memory: false,
+      proactive_memory_enabled: true,
+      paralinguistic_signals_enabled: true,
+      transcript_retention_enabled: true,
+      companion_master_enabled: true,
+      companion_rollout_stage: 'paralinguistic_pilot',
       memory_token_budget: 4000,
       history_token_budget: 8000,
       retention_days: 365,
@@ -36,10 +42,26 @@ function settings(curated = false): AssistantMemoryRuntimeStatus {
   };
 }
 
+function commonResponse(url: URL) {
+  if (url.pathname === '/api/assistant/memory/metrics') {
+    return Response.json({ turns: 7, counters: {}, totals: {}, maxima: {}, diagnostics_policy: 'content_free' });
+  }
+  if (url.pathname.endsWith('/memory') && url.pathname.includes('/api/chat/sessions/')) {
+    return Response.json({ session_id: 'chat:one', memory_enabled: false, memory_record_count: 0, snapshot: null });
+  }
+  if (url.pathname === '/api/assistant/memory/candidates/pending') {
+    return Response.json({ session_id: 'chat:one', total: 0, candidates: [] });
+  }
+  if (url.pathname === '/api/assistant/memory') {
+    return Response.json({ session_id: 'chat:one', total: 0, records: [] });
+  }
+  return new Response('not found', { status: 404 });
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('MemoryManagementPanel settings', () => {
-  it('shows server settings and persists an independent toggle', async () => {
+  it('shows server settings and persists independent toggles and rollout stage', async () => {
     const updates: unknown[] = [];
     let current = settings(false);
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -48,20 +70,14 @@ describe('MemoryManagementPanel settings', () => {
         if (init?.method === 'POST') {
           const update = JSON.parse(String(init.body));
           updates.push(update);
-          current = settings(Boolean(update.curated_memory_enabled));
+          current = {
+            ...current,
+            settings: { ...current.settings, ...update },
+          };
         }
         return Response.json(current);
       }
-      if (url.pathname.endsWith('/memory') && url.pathname.includes('/api/chat/sessions/')) {
-        return Response.json({ session_id: 'chat:one', memory_enabled: false, memory_record_count: 0, snapshot: null });
-      }
-      if (url.pathname === '/api/assistant/memory/candidates/pending') {
-        return Response.json({ session_id: 'chat:one', total: 0, candidates: [] });
-      }
-      if (url.pathname === '/api/assistant/memory') {
-        return Response.json({ session_id: 'chat:one', total: 0, records: [] });
-      }
-      return new Response('not found', { status: 404 });
+      return commonResponse(url);
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -69,9 +85,13 @@ describe('MemoryManagementPanel settings', () => {
     const toggle = await screen.findByRole('checkbox', { name: 'Use approved memory in Chat' });
     expect(toggle).not.toBeChecked();
     fireEvent.click(toggle);
+    await waitFor(() => expect(updates).toContainEqual({ curated_memory_enabled: true }));
 
-    await waitFor(() => expect(updates).toEqual([{ curated_memory_enabled: true }]));
+    const stage = await screen.findByRole('combobox', { name: 'Companion rollout stage' });
+    fireEvent.change(stage, { target: { value: 'active_initiative' } });
+    await waitFor(() => expect(updates).toContainEqual({ companion_rollout_stage: 'active_initiative' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Memory settings saved.');
+    expect(await screen.findByText('7')).toBeInTheDocument();
   });
 
   it('disables environment-controlled settings and explains approval privacy', async () => {
@@ -80,12 +100,7 @@ describe('MemoryManagementPanel settings', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(input.toString(), 'http://localhost');
       if (url.pathname === '/api/assistant/memory/settings') return Response.json(controlled);
-      if (url.pathname.endsWith('/memory') && url.pathname.includes('/api/chat/sessions/')) {
-        return Response.json({ session_id: 'chat:one', memory_enabled: false, memory_record_count: 0, snapshot: null });
-      }
-      if (url.pathname === '/api/assistant/memory/candidates/pending') return Response.json({ session_id: 'chat:one', total: 0, candidates: [] });
-      if (url.pathname === '/api/assistant/memory') return Response.json({ session_id: 'chat:one', total: 0, records: [] });
-      return new Response('not found', { status: 404 });
+      return commonResponse(url);
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -93,6 +108,6 @@ describe('MemoryManagementPanel settings', () => {
 
     const toggle = await screen.findByRole('checkbox', { name: /Use approved memory in Chat/ });
     expect(toggle).toBeDisabled();
-    expect(screen.getByText(/Inferred memory approval is required and cannot be disabled/)).toBeInTheDocument();
+    expect(screen.getByText(/Inferred memory approval remains required/)).toBeInTheDocument();
   });
 });
