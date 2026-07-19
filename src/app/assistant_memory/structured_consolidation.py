@@ -217,15 +217,19 @@ def consolidate_structured_proposal(
         )
         return "superseded", replacement
 
-    if proposal.claim_type == "explicit_command" or (
+    automatic_direct_assertion = (
         auto_save_direct_assertions and proposal.claim_type == "user_asserted"
-    ):
+    )
+    if proposal.claim_type == "explicit_command" or automatic_direct_assertion:
+        payload = dict(proposal.payload)
+        if automatic_direct_assertion:
+            payload["automatic_direct_assertion"] = True
         record = create_typed_memory(
             service,
             context,
             kind=proposal.kind,
             content=proposal.content,
-            payload=proposal.payload,
+            payload=payload,
             scope=proposal.scope,
             category=proposal.category,
             provenance_id=source_message_id,
