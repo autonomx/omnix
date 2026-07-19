@@ -327,7 +327,7 @@ def _append_character_greeting(messages: list[ChatMessage], character_profile, n
     if character_profile is None or not character_profile.default_greeting.strip():
         return
     messages.append(ChatMessage(
-        id=f"msg:{uuid.uuid4().hex", role="assistant",
+        id=f"msg:{uuid.uuid4().hex}", role="assistant",
         content=character_profile.default_greeting.strip(), created_at=now,
         metadata={"source": "character_profile_greeting", "character_id": character_profile.id, "character_profile_version": character_profile.version, "segment_id": segment_id},
     ))
