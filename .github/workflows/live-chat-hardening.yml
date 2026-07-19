@@ -43,9 +43,11 @@ jobs:
       - name: Ruff Live Chat hardening modules
         run: |
           ruff check \
+            src/app/assistant_memory/initiative.py \
             src/app/chat/provider_metrics.py \
             src/app/gateway/blocking_route_offload.py \
             src/app/gateway/event_loop_lag_monitor.py \
+            src/app/gateway/live_chat_companion_context.py \
             src/app/gateway/live_chat_live_voice_profile.py \
             src/app/gateway/live_chat_low_latency_stream.py \
             src/app/gateway/live_chat_postgres_fast_path.py \
@@ -85,7 +87,8 @@ jobs:
             src/tests/app/test_live_chat_authoritative_state_source.py \
             src/tests/app/test_gateway_tts_live_call_latency.py \
             src/tests/app/test_tts_stream_contract_performance.py \
-            src/tests/app/test_stt_streaming_audio.py
+            src/tests/app/test_stt_streaming_audio.py \
+            src/tests/unit/assistant_memory/test_initiative.py
 
       - name: Existing live voice release-gate regression
         run: |
@@ -123,6 +126,7 @@ jobs:
             src/tests/app/test_live_chat_stream_retry.py \
             src/tests/app/test_live_chat_release_gate.py \
             src/tests/app/test_live_chat_release_completion.py \
+            src/tests/unit/assistant_memory/test_initiative.py \
             -q --tb=short 2>&1 | tee live-chat-release-gate-output.txt
 
       - name: Phase 11 authoritative-state source guard
