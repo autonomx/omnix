@@ -4,10 +4,34 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.runtime_paths import resources_data_root
+
+CompanionRolloutStage = Literal[
+    "authority_only",
+    "shadow",
+    "read_only_pilot",
+    "explicit_typed",
+    "review_required",
+    "automatic_assertions",
+    "gentle_initiative",
+    "active_initiative",
+    "paralinguistic_pilot",
+]
+_COMPANION_STAGES: tuple[CompanionRolloutStage, ...] = (
+    "authority_only",
+    "shadow",
+    "read_only_pilot",
+    "explicit_typed",
+    "review_required",
+    "automatic_assertions",
+    "gentle_initiative",
+    "active_initiative",
+    "paralinguistic_pilot",
+)
 
 
 class AssistantMemoryRuntimeSettings(BaseModel):
@@ -19,6 +43,12 @@ class AssistantMemoryRuntimeSettings(BaseModel):
     compaction_enabled: bool = False
     hermes_sync_enabled: bool = False
     require_approval_for_inferred_memory: bool = True
+    automatic_direct_assertion_memory: bool = False
+    proactive_memory_enabled: bool = True
+    paralinguistic_signals_enabled: bool = True
+    transcript_retention_enabled: bool = True
+    companion_master_enabled: bool = True
+    companion_rollout_stage: CompanionRolloutStage = "paralinguistic_pilot"
     memory_token_budget: int = Field(default=4_000, ge=0, le=64_000)
     history_token_budget: int = Field(default=8_000, ge=0, le=64_000)
     retention_days: int = Field(default=365, ge=1, le=3_650)
@@ -34,6 +64,12 @@ class AssistantMemorySettingsUpdate(BaseModel):
     compaction_enabled: bool | None = None
     hermes_sync_enabled: bool | None = None
     require_approval_for_inferred_memory: bool | None = None
+    automatic_direct_assertion_memory: bool | None = None
+    proactive_memory_enabled: bool | None = None
+    paralinguistic_signals_enabled: bool | None = None
+    transcript_retention_enabled: bool | None = None
+    companion_master_enabled: bool | None = None
+    companion_rollout_stage: CompanionRolloutStage | None = None
     memory_token_budget: int | None = Field(default=None, ge=0, le=64_000)
     history_token_budget: int | None = Field(default=None, ge=0, le=64_000)
     retention_days: int | None = Field(default=None, ge=1, le=3_650)
@@ -73,6 +109,13 @@ def _env_int(name: str, fallback: int, minimum: int, maximum: int) -> tuple[int,
     return min(maximum, max(minimum, value)), True
 
 
+def _env_stage(fallback: CompanionRolloutStage) -> tuple[CompanionRolloutStage, bool]:
+    raw = (os.environ.get("OMNIX_COMPANION_ROLLOUT_STAGE") or "").strip()
+    if not raw:
+        return fallback, False
+    return (raw if raw in _COMPANION_STAGES else fallback), True  # type: ignore[return-value]
+
+
 class AssistantMemorySettingsStore:
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path) if path is not None else default_memory_settings_path()
@@ -96,12 +139,21 @@ class AssistantMemorySettingsStore:
             "history_recall_enabled": "OMNIX_CHAT_HISTORY_RECALL_ENABLED",
             "compaction_enabled": "OMNIX_CHAT_COMPACTION_ENABLED",
             "hermes_sync_enabled": "OMNIX_HERMES_MEMORY_SYNC_ENABLED",
+            "automatic_direct_assertion_memory": "OMNIX_MEMORY_AUTOMATIC_DIRECT_ASSERTIONS",
+            "proactive_memory_enabled": "OMNIX_COMPANION_PROACTIVE_MEMORY_ENABLED",
+            "paralinguistic_signals_enabled": "OMNIX_COMPANION_PARALINGUISTIC_ENABLED",
+            "transcript_retention_enabled": "OMNIX_CHAT_TRANSCRIPT_RETENTION_ENABLED",
+            "companion_master_enabled": "OMNIX_COMPANION_MASTER_ENABLED",
         }
         for field, env_name in bool_fields.items():
             value, overridden = _env_bool(env_name, bool(values[field]))
             values[field] = value
             if overridden:
                 overrides.append(field)
+        stage, stage_overridden = _env_stage(values["companion_rollout_stage"])
+        values["companion_rollout_stage"] = stage
+        if stage_overridden:
+            overrides.append("companion_rollout_stage")
         memory_budget, memory_overridden = _env_int(
             "OMNIX_CHAT_MEMORY_TOKEN_BUDGET",
             int(values["memory_token_budget"]),
@@ -150,3 +202,14 @@ def load_memory_runtime_status() -> AssistantMemoryRuntimeStatus:
 
 def load_memory_runtime_settings() -> AssistantMemoryRuntimeSettings:
     return load_memory_runtime_status().settings
+
+
+__all__ = [
+    "AssistantMemoryRuntimeSettings",
+    "AssistantMemoryRuntimeStatus",
+    "AssistantMemorySettingsStore",
+    "AssistantMemorySettingsUpdate",
+    "CompanionRolloutStage",
+    "load_memory_runtime_settings",
+    "load_memory_runtime_status",
+]

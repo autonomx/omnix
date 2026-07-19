@@ -165,7 +165,7 @@ def _tool_for_record(record: MemoryRecord) -> CompanionTool | None:
     terms = _terms(record.content)
     activity = str(record.structured_payload.get("activity") or "").casefold()
     combined = set(terms)
-    combined.update(_terms(activity))
+    combined.update(_terms(activity.replace("_", " ").replace("-", " ")))
     if record.kind == "routine" and combined & {
         "commute",
         "drive",
@@ -199,6 +199,22 @@ def _directly_relevant(item: TemporalRetrievalItem, query: str) -> bool:
     return bool(_terms(query) & _terms(item.record.content))
 
 
+def _activation_score(item: TemporalRetrievalItem) -> int:
+    """Add bounded confidence only after repeated evidence for a learned routine."""
+
+    if item.kind != "routine":
+        return item.score
+    try:
+        evidence_count = max(
+            1,
+            int(item.record.structured_payload.get("evidence_count") or 1),
+        )
+    except (TypeError, ValueError):
+        evidence_count = 1
+    evidence_bonus = min(280, max(0, evidence_count - 1) * 70)
+    return item.score + evidence_bonus
+
+
 def plan_companion_initiative(
     result: TemporalRetrievalResult,
     context: MemoryScopeContext,
@@ -225,6 +241,7 @@ def plan_companion_initiative(
             reason="no_proactive_candidate",
             mode=mode,
         )
+    activation_score = _activation_score(item)
     direct = _directly_relevant(item, query)
     if mode == "off":
         return CompanionInitiativeDecision(
@@ -233,7 +250,7 @@ def plan_companion_initiative(
             mode=mode,
             selected_memory_id=item.memory_id if direct else None,
             selected_kind=item.kind if direct else None,
-            activation_score=item.score if direct else 0,
+            activation_score=activation_score if direct else 0,
         )
     if direct:
         return CompanionInitiativeDecision(
@@ -242,7 +259,7 @@ def plan_companion_initiative(
             mode=mode,
             selected_memory_id=item.memory_id,
             selected_kind=item.kind,
-            activation_score=item.score,
+            activation_score=activation_score,
         )
     if not _is_low_content_turn(query):
         return CompanionInitiativeDecision(
@@ -252,14 +269,14 @@ def plan_companion_initiative(
         )
     threshold = 850 if mode == "gentle" else 650
     cooldown_hours = 36 if mode == "gentle" else 12
-    if item.score < threshold:
+    if activation_score < threshold:
         return CompanionInitiativeDecision(
             action="suppress",
             reason="activation_below_threshold",
             mode=mode,
             selected_memory_id=item.memory_id,
             selected_kind=item.kind,
-            activation_score=item.score,
+            activation_score=activation_score,
             cooldown_hours=cooldown_hours,
         )
     current = now or datetime.now(timezone.utc)
@@ -275,7 +292,7 @@ def plan_companion_initiative(
             mode=mode,
             selected_memory_id=item.memory_id,
             selected_kind=item.kind,
-            activation_score=item.score,
+            activation_score=activation_score,
             cooldown_hours=cooldown_hours,
         )
     manifest = capabilities or build_trusted_capability_manifest()
@@ -298,7 +315,7 @@ def plan_companion_initiative(
         mode=mode,
         selected_memory_id=item.memory_id,
         selected_kind=item.kind,
-        activation_score=item.score,
+        activation_score=activation_score,
         requested_tool=requested_tool,
         tool_available=available,
         cooldown_hours=cooldown_hours,

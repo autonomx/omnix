@@ -44,7 +44,12 @@ jobs:
         run: |
           ruff check \
             src/app/assistant_memory/initiative.py \
+            src/app/assistant_memory/jobs.py \
+            src/app/assistant_memory/observability.py \
             src/app/assistant_memory/paralinguistic_state.py \
+            src/app/assistant_memory/rollout.py \
+            src/app/assistant_memory/settings.py \
+            src/app/assistant_memory/settings_routes.py \
             src/app/chat/provider_metrics.py \
             src/app/gateway/blocking_route_offload.py \
             src/app/gateway/event_loop_lag_monitor.py \
@@ -89,6 +94,7 @@ jobs:
             src/tests/app/test_gateway_tts_live_call_latency.py \
             src/tests/app/test_tts_stream_contract_performance.py \
             src/tests/app/test_stt_streaming_audio.py \
+            src/tests/unit/assistant_memory/test_companion_phase8_evaluation.py \
             src/tests/unit/assistant_memory/test_initiative.py \
             src/tests/unit/assistant_memory/test_paralinguistic_state.py
 
@@ -116,6 +122,16 @@ jobs:
           python -m pytest src/tests/app/test_stt_streaming_audio.py -q --tb=short \
             2>&1 | tee live-stt-finalization-output.txt
 
+      - name: Companion memory completion evaluation
+        run: |
+          set -o pipefail
+          python -m pytest \
+            src/tests/unit/assistant_memory/test_companion_phase8_evaluation.py \
+            src/tests/unit/assistant_memory/test_initiative.py \
+            src/tests/unit/assistant_memory/test_paralinguistic_state.py \
+            src/tests/unit/assistant_memory/test_settings.py \
+            -q --tb=short 2>&1 | tee companion-memory-completion-output.txt
+
       - name: Live Chat stream and release regression
         run: |
           set -o pipefail
@@ -128,8 +144,6 @@ jobs:
             src/tests/app/test_live_chat_stream_retry.py \
             src/tests/app/test_live_chat_release_gate.py \
             src/tests/app/test_live_chat_release_completion.py \
-            src/tests/unit/assistant_memory/test_initiative.py \
-            src/tests/unit/assistant_memory/test_paralinguistic_state.py \
             -q --tb=short 2>&1 | tee live-chat-release-gate-output.txt
 
       - name: Phase 11 authoritative-state source guard
@@ -153,6 +167,7 @@ jobs:
             live-voice-release-gate-output.txt
             live-tts-response-onset-output.txt
             live-stt-finalization-output.txt
+            companion-memory-completion-output.txt
             live-chat-release-gate-output.txt
             live-chat-authoritative-state-output.txt
             live-chat-durable-evaluation-output.txt
