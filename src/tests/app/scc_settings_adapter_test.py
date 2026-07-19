@@ -105,6 +105,44 @@ def test_postgresql_provider_change_commits_once_without_secret_write() -> None:
     assert state["settings"]["settings_control_center"]["global"]["providers"]["llm"] == "cerebras"
 
 
+def test_postgresql_provider_change_uses_authoritative_revision_with_masked_secret() -> None:
+    import app.shared as shared
+
+    state = {"settings": {"provider": "cerebras"}, "settings_writes": 0}
+
+    def save_settings_callback(payload):
+        state["settings"] = deepcopy(payload)
+        state["settings_writes"] += 1
+
+    shared.install_postgresql_document_callbacks(
+        load_settings_callback=lambda: deepcopy(state["settings"]),
+        save_settings_callback=save_settings_callback,
+        load_sessions_callback=lambda: {},
+        save_sessions_callback=lambda payload: None,
+        load_secrets_callback=lambda: {"api_keys": {"cerebras": "csk-installed-secret"}},
+        save_secrets_callback=lambda payload: None,
+    )
+    try:
+        profile = get_settings_payload().settings["settings_control_center"]
+        result = save_settings_payload(
+            {
+                "base_revision": profile["revision"],
+                "provider": "lmstudio",
+                "settings_profile_patch": {
+                    "global": {"providers": {"llm": "lmstudio"}},
+                },
+            }
+        )
+    finally:
+        shared.clear_postgresql_document_callbacks()
+
+    assert profile["providerConfigs"]["cerebras"]["apiKey"] == "***cret"
+    assert result.success is True
+    assert state["settings_writes"] == 1
+    assert state["settings"]["provider"] == "lmstudio"
+    assert state["settings"]["settings_control_center"]["global"]["providers"]["llm"] == "lmstudio"
+
+
 def test_postgresql_secret_edit_fails_before_settings_commit() -> None:
     import app.shared as shared
 
