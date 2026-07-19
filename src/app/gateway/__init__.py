@@ -11,6 +11,7 @@ from .hermes_routes import install_hermes_route_hook
 from .image_asset_routes import install_image_asset_file_hook
 from .image_reference_routes import install_image_reference_route_hook
 from .image_workspace_routes import install_image_workspace_route_hook
+from .live_chat_companion_context import install_live_chat_companion_context_hook
 from .live_chat_live_voice_profile import install_live_chat_live_voice_profile_hook
 from .live_chat_low_latency_stream import install_live_chat_low_latency_stream_hook
 from .live_chat_postgres_fast_path import install_live_chat_postgres_fast_path
@@ -87,6 +88,7 @@ install_live_chat_provider_metrics_hook()
 install_live_chat_stream_retry_hook()
 install_live_chat_provider_routing_hook()
 install_live_chat_live_voice_profile_hook()
+install_live_chat_companion_context_hook()
 install_live_voice_diagnostics_hook()
 install_event_loop_lag_monitor_hook()
 install_blocking_route_offload_hook()
