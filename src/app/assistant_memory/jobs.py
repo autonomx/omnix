@@ -17,13 +17,11 @@ from app.jobs import (
 
 from .models import MemoryCandidate, MemoryRecord
 from .owner_defaults import default_memory_service
+from .rollout import companion_rollout_policy
 from .scope import resolve_session_memory_scope
 from .settings import load_memory_runtime_settings
 from .structured_consolidation import consolidate_structured_proposal
-from .structured_extraction import (
-    StructuredMemoryProposal,
-    extract_structured_memory_proposals,
-)
+from .structured_extraction import extract_structured_memory_proposals
 from .service import MemoryService
 
 if TYPE_CHECKING:
@@ -52,7 +50,12 @@ class MemorySuggestionJobResult(BaseModel):
 
 
 def memory_suggestions_enabled() -> bool:
-    return load_memory_runtime_settings().suggestions_enabled
+    settings = load_memory_runtime_settings()
+    policy = companion_rollout_policy(settings)
+    return settings.suggestions_enabled and (
+        policy.review_candidates_enabled
+        or policy.automatic_direct_assertions_enabled
+    )
 
 
 def suggestion_idempotency_key(session_id: str, user_message_id: str) -> str:
@@ -148,7 +151,11 @@ def process_memory_suggestion_job(
     payload = MemorySuggestionJobInput.model_validate(job.input_payload or {})
     session = chat_store.get_session(payload.session_id)
     result = MemorySuggestionJobResult(job_id=job.id)
-    if session is None:
+    settings = load_memory_runtime_settings()
+    rollout = companion_rollout_policy(settings)
+    if not rollout.review_candidates_enabled and not rollout.automatic_direct_assertions_enabled:
+        result.skipped_reasons.append("rollout_stage_disabled")
+    elif session is None:
         result.skipped_reasons.append("session_missing")
     elif session.interaction_mode == "character" and not session.write_memory:
         result.skipped_reasons.append("character_memory_write_disabled")
@@ -180,7 +187,9 @@ def process_memory_suggestion_job(
                     proposal,
                     source_session_id=session.id,
                     source_message_id=message.id,
-                    auto_save_direct_assertions=False,
+                    auto_save_direct_assertions=(
+                        rollout.automatic_direct_assertions_enabled
+                    ),
                 )
                 result.actions.append(action)
                 if isinstance(entity, MemoryCandidate):
