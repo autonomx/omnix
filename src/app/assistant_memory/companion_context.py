@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import threading
 import time
@@ -222,9 +223,19 @@ def _cache_key(
 ) -> str:
     session_id, owner_type, owner_id = _session_identity(session)
     snapshot_id, snapshot_revision = _snapshot_identity(session)
+    configured_timezone = (
+        timezone_name
+        or getattr(session, "timezone", None)
+        or os.environ.get("OMNIX_USER_TIMEZONE")
+    )
+    configured_locale = (
+        locale
+        or getattr(session, "locale", None)
+        or os.environ.get("OMNIX_USER_LOCALE")
+    )
     resolved_timezone, time_bucket = _time_bucket(
         now,
-        timezone_name,
+        configured_timezone,
         time_bucket_minutes,
     )
     signature = hashlib.sha256(
@@ -247,7 +258,7 @@ def _cache_key(
             snapshot_id or "none",
             str(snapshot_revision or 0),
             _text_dimension(privacy_policy, _default_privacy_policy(session)),
-            _text_dimension(locale or getattr(session, "locale", None), "und").casefold(),
+            _text_dimension(configured_locale, "und").casefold(),
             resolved_timezone,
             time_bucket,
             signature,
