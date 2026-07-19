@@ -20,10 +20,11 @@ from .models import MemoryCandidate, MemoryRecord
 from .owner_defaults import default_memory_service
 from .rollout import companion_rollout_policy
 from .scope import resolve_session_memory_scope
+from .service import MemoryService
 from .settings import load_memory_runtime_settings
 from .structured_consolidation import consolidate_structured_proposal
 from .structured_extraction import extract_structured_memory_proposals
-from .service import MemoryService
+from .structured_provider import StructuredProposalProvider
 
 if TYPE_CHECKING:
     from app.chat import ChatSessionStore
@@ -100,7 +101,7 @@ def enqueue_memory_suggestion_job(
 
 
 def extract_memory_candidates(content: str) -> tuple[list[dict[str, Any]], list[str]]:
-    """Compatibility adapter exposing the structured extractor as dictionaries."""
+    """Compatibility adapter exposing the deterministic fallback as dictionaries."""
 
     proposals, skipped = extract_structured_memory_proposals(
         content,
@@ -145,6 +146,7 @@ def process_memory_suggestion_job(
     chat_store: ChatSessionStore,
     memory_service: MemoryService | None = None,
     job_store: InMemoryJobStore | None = None,
+    proposal_provider: StructuredProposalProvider | None = None,
 ) -> MemorySuggestionJobResult:
     if job.type != MEMORY_SUGGEST_JOB_TYPE:
         raise ValueError(f"unsupported memory job type: {job.type}")
@@ -180,6 +182,7 @@ def process_memory_suggestion_job(
             proposals, skipped = extract_structured_memory_proposals(
                 message.content,
                 source_message_id=message.id,
+                proposal_provider=proposal_provider,
             )
             result.skipped_reasons.extend(skipped)
             for proposal in proposals:

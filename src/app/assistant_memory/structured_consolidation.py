@@ -28,7 +28,7 @@ def _persist_candidate_metadata(
                 "claim_type": proposal.claim_type,
                 "evidence_message_ids": proposal.evidence_message_ids,
                 "contradiction_key": proposal.contradiction_key,
-                "extractor": "structured_v1",
+                "extractor": proposal.extractor,
             },
         }
     )
@@ -105,7 +105,7 @@ def propose_structured_memory(
         confidence=proposal.confidence,
         extraction_metadata={
             "claim_type": proposal.claim_type,
-            "extractor": "structured_v1",
+            "extractor": proposal.extractor,
         },
     )
     return _persist_candidate_metadata(service, candidate, proposal)
