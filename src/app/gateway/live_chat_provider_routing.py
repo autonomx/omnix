@@ -2,28 +2,51 @@
 
 from __future__ import annotations
 
+import threading
+from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Iterator
 
+from app.chat.models import SendChatMessageRequest
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from app.chat.store import _provider_key
+from app.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
 
 from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_chat_provider_routing_installed"
+_ROUTE_LOCK = threading.RLock()
+_TURN_ROUTES: dict[str, "_TurnProviderRoute"] = {}
+
+
+@dataclass(frozen=True)
+class _TurnProviderRoute:
+    provider_id: str | None
+    model_id: str | None
+    provider_explicit: bool
+    model_explicit: bool
+
+
+def _normalized(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _reset_provider_route_state_for_tests() -> None:
+    with _ROUTE_LOCK:
+        _TURN_ROUTES.clear()
 
 
 def resolve_effective_provider_id(provider_id: str | None) -> str | None:
     """Preserve explicit routing and concretize the configured default provider."""
 
-    explicit = str(provider_id or "").strip()
+    explicit = _normalized(provider_id)
     if explicit:
         return explicit
 
     from app import shared
 
-    configured = str(shared.load_settings().get("provider") or "").strip()
-    return configured or "lmstudio"
+    return _normalized(shared.load_settings().get("provider")) or "lmstudio"
 
 
 def resolve_provider_route(provider_id: str | None) -> tuple[str | None, Any]:
@@ -36,19 +59,64 @@ def resolve_provider_route(provider_id: str | None) -> tuple[str | None, Any]:
     return effective_provider_id, provider
 
 
-def _provider_name(provider: Any) -> str | None:
-    value = str(getattr(provider, "provider_name", "") or "").strip().lower()
-    return value or None
+def route_chat_request(
+    request: SendChatMessageRequest,
+) -> tuple[SendChatMessageRequest, _TurnProviderRoute]:
+    """Concretize implicit provider routing while retaining explicit model intent."""
+
+    provider_explicit = _normalized(request.provider_id) is not None
+    model_explicit = _normalized(request.model_id) is not None
+    route = _TurnProviderRoute(
+        provider_id=resolve_effective_provider_id(request.provider_id),
+        model_id=request.model_id if model_explicit else None,
+        provider_explicit=provider_explicit,
+        model_explicit=model_explicit,
+    )
+    routed_request = request.model_copy(update={"provider_id": route.provider_id})
+    return routed_request, route
+
+
+def _remember_turn_route(message_id: str, route: _TurnProviderRoute) -> None:
+    with _ROUTE_LOCK:
+        _TURN_ROUTES[message_id] = route
+
+
+def _forget_turn_route(message_id: str) -> None:
+    with _ROUTE_LOCK:
+        _TURN_ROUTES.pop(message_id, None)
+
+
+def _stream_route(
+    user_message: Any,
+    provider_id: str | None,
+    model_id: str | None,
+) -> tuple[str | None, str | None, _TurnProviderRoute | None]:
+    message_id = _normalized(getattr(user_message, "id", None))
+    with _ROUTE_LOCK:
+        turn_route = _TURN_ROUTES.get(message_id or "")
+    if turn_route is None:
+        return provider_id, model_id, None
+    return turn_route.provider_id, turn_route.model_id, turn_route
+
+
+def _provider_name_from_id(provider_id: str | None) -> str | None:
+    return _normalized(_provider_key(provider_id))
+
+
+def _provider_name(provider: Any, provider_id: str | None = None) -> str | None:
+    value = _normalized(getattr(provider, "provider_name", None))
+    return value.lower() if value else _provider_name_from_id(provider_id)
 
 
 def _log_route(
     *,
     provider_id: str | None,
     effective_provider_id: str | None,
-    provider: Any,
     stream: bool,
+    turn_route: _TurnProviderRoute | None = None,
+    provider: Any = None,
 ) -> None:
-    effective_provider_name = _provider_name(provider)
+    effective_provider_name = _provider_name(provider, effective_provider_id)
     stream_log(
         "gateway-live-chat-first-token",
         "runtime",
@@ -61,6 +129,11 @@ def _log_route(
             if provider is not None
             else None
         ),
+        provider_explicit=turn_route.provider_explicit if turn_route is not None else None,
+        model_explicit=turn_route.model_explicit if turn_route is not None else None,
+        session_provider_overridden=(
+            bool(turn_route is not None and _provider_key(provider_id) != _provider_key(effective_provider_id))
+        ),
         lmstudio_metrics_path_expected=effective_provider_name == "lmstudio",
         stream=stream,
     )
@@ -72,8 +145,36 @@ def install_live_chat_provider_routing_hook() -> None:
     if getattr(PromptChatSessionStore, _HOOK_SENTINEL, False):
         return
 
+    original_generate_reply = PromptChatSessionStore._generate_reply
     original_generate = PromptChatSessionStore._generate_provider_reply
     original_stream = PromptChatSessionStore.stream_provider_reply_chunks
+    original_prompt_begin = PromptChatSessionStore.begin_user_message
+    original_postgres_begin = PostgresCharacterChatSessionStore.begin_user_message
+
+    @wraps(original_generate_reply)
+    def patched_generate_reply(
+        self: PromptChatSessionStore,
+        session: Any,
+        user_message: Any,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+        request: SendChatMessageRequest,
+        context_items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if _normalized(request.provider_id) is None:
+            provider_id = resolve_effective_provider_id(None)
+            if _normalized(request.model_id) is None:
+                model_id = None
+        return original_generate_reply(
+            self,
+            session,
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            request=request,
+            context_items=context_items,
+        )
 
     @wraps(original_generate)
     def patched_generate(
@@ -85,11 +186,10 @@ def install_live_chat_provider_routing_hook() -> None:
         model_id: str | None,
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        effective_provider_id, provider = resolve_provider_route(provider_id)
+        effective_provider_id = resolve_effective_provider_id(provider_id)
         _log_route(
             provider_id=provider_id,
             effective_provider_id=effective_provider_id,
-            provider=provider,
             stream=False,
         )
         return original_generate(
@@ -111,22 +211,64 @@ def install_live_chat_provider_routing_hook() -> None:
         model_id: str | None,
         context_items: list[dict[str, Any]] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        effective_provider_id, provider = resolve_provider_route(provider_id)
+        routed_provider_id, routed_model_id, turn_route = _stream_route(
+            user_message,
+            provider_id,
+            model_id,
+        )
+        effective_provider_id = resolve_effective_provider_id(routed_provider_id)
         _log_route(
             provider_id=provider_id,
             effective_provider_id=effective_provider_id,
-            provider=provider,
             stream=True,
+            turn_route=turn_route,
         )
-        yield from original_stream(
-            self,
-            session,
-            user_message,
-            provider_id=effective_provider_id,
-            model_id=model_id,
-            context_items=context_items,
-        )
+        try:
+            yield from original_stream(
+                self,
+                session,
+                user_message,
+                provider_id=effective_provider_id,
+                model_id=routed_model_id,
+                context_items=context_items,
+            )
+        finally:
+            message_id = _normalized(getattr(user_message, "id", None))
+            if message_id:
+                _forget_turn_route(message_id)
 
+    def wrap_begin(original_begin):
+        @wraps(original_begin)
+        def patched_begin(
+            self,
+            session_id: str,
+            request: SendChatMessageRequest,
+            *,
+            context_items: list[dict[str, Any]] | None = None,
+            context_diagnostics: dict[str, Any] | None = None,
+        ):
+            routed_request, route = route_chat_request(request)
+            appended = original_begin(
+                self,
+                session_id,
+                routed_request,
+                context_items=context_items,
+                context_diagnostics=context_diagnostics,
+            )
+            if appended is None:
+                return None
+            session, user_message = appended
+            _remember_turn_route(user_message.id, route)
+            session.provider_id = route.provider_id
+            if not route.model_explicit:
+                session.model_id = None
+            return session, user_message
+
+        return patched_begin
+
+    PromptChatSessionStore._generate_reply = patched_generate_reply
     PromptChatSessionStore._generate_provider_reply = patched_generate
     PromptChatSessionStore.stream_provider_reply_chunks = patched_stream
+    PromptChatSessionStore.begin_user_message = wrap_begin(original_prompt_begin)
+    PostgresCharacterChatSessionStore.begin_user_message = wrap_begin(original_postgres_begin)
     setattr(PromptChatSessionStore, _HOOK_SENTINEL, True)
