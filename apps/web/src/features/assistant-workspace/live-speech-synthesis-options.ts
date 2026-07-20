@@ -15,18 +15,36 @@ const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 const CALL_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 
+export type LiveSpeechSynthesisPlanningOptions = {
+  scopeKey?: string;
+  enablePerformancePlan?: boolean;
+  enableVocalContinuity?: boolean;
+};
+
 let responseCueSequence = 0;
 let lastResponseCueAt = 0;
 let resetListenersInstalled = false;
 
-export function createLiveSpeechSynthesisOptions(text: string): SpeechSynthesisOptions {
+export function createLiveSpeechSynthesisOptions(
+  text: string,
+  options: LiveSpeechSynthesisPlanningOptions = {},
+): SpeechSynthesisOptions {
   installResetListeners();
   const profile = readEffectiveLiveConversationProfile();
+  const performanceEnabled = options.enablePerformancePlan ?? true;
+  const continuityEnabled = options.enableVocalContinuity ?? true;
   const serious = /\b(?:sorry|grief|loss|afraid|hurt|serious|take your time)\b/i.test(text);
-  const basePerformancePlan = profile ? createSpeechDeliveryPlan(text, profile, serious) : undefined;
-  const performancePlan = basePerformancePlan && profile
-    ? humanizeSpeechPerformance(text, basePerformancePlan, profile).plan
+  const basePerformancePlan = profile && performanceEnabled
+    ? createSpeechDeliveryPlan(text, profile, serious)
     : undefined;
+  const performancePlan = basePerformancePlan && profile && continuityEnabled
+    ? humanizeSpeechPerformance(
+      text,
+      basePerformancePlan,
+      profile,
+      options.scopeKey ?? 'default',
+    ).plan
+    : basePerformancePlan;
   const pronunciationLexicon = readActivePronunciations().map((entry) => ({
     phrase: entry.phrase,
     pronunciation: entry.pronunciation,
