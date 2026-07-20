@@ -9,6 +9,14 @@ const entity: RpgAuthoringEntityCard = {
   title: 'Bran',
   summary: 'A practical innkeeper.',
   kind: 'npc',
+  card_type: 'npcs',
+  presentation: {
+    variant: 'npcs',
+    eyebrow: 'Character',
+    badges: [],
+    highlights: [],
+    groups: [{ label: 'Goals', items: ['protect the inn'], style: 'list' }],
+  },
   metadata: { id: 'npc:bran', name: 'Bran', kind: 'npc', goals: ['protect the inn'] },
 };
 
