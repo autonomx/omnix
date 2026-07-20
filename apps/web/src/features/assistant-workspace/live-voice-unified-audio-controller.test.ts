@@ -4,12 +4,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const session = {
     sampleRate: 48_000,
-    enqueuePhrase: vi.fn(async () => undefined),
-    enqueueSilence: vi.fn(async () => undefined),
-    enqueueCue: vi.fn(async () => undefined),
-    setStartPolicy: vi.fn(),
+    enqueuePhrase: vi.fn(async (
+      _text: string,
+      _phraseIndex: number,
+      _options?: { performancePlan?: Record<string, unknown> },
+    ) => undefined),
+    enqueueSilence: vi.fn(async (
+      _durationMs: number,
+      _reason: string,
+      _minimumFollowingSpeechMs?: number,
+    ) => undefined),
+    enqueueCue: vi.fn(async (_cueId: string, _variantId: string, _gain?: number) => undefined),
+    setStartPolicy: vi.fn((_policy: Record<string, number>) => undefined),
     finish: vi.fn(async () => undefined),
-    stop: vi.fn(async () => undefined),
+    stop: vi.fn(async (_reason?: string) => undefined),
     isClosed: vi.fn(() => false),
   };
   const recordSpy = vi.fn();
