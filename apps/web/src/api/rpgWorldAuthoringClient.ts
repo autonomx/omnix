@@ -27,12 +27,33 @@ export interface RpgAuthoringManifestResponse {
   generation: RpgWorldGenerationRun | Record<string, never>;
 }
 
+export interface RpgAuthoringCardHighlight {
+  label: string;
+  value: unknown;
+}
+
+export interface RpgAuthoringCardGroup {
+  label: string;
+  items: unknown[];
+  style: 'chips' | 'list' | string;
+}
+
+export interface RpgAuthoringCardPresentation {
+  variant: string;
+  eyebrow: string;
+  badges: unknown[];
+  highlights: RpgAuthoringCardHighlight[];
+  groups: RpgAuthoringCardGroup[];
+}
+
 export interface RpgAuthoringEntityCard {
   id: string;
   title: string;
   summary: string;
   kind: string;
+  card_type: string;
   image_target_id?: string;
+  presentation: RpgAuthoringCardPresentation;
   metadata: Record<string, unknown>;
 }
 
