@@ -4,6 +4,7 @@ import {
   createLiveCallTraceId,
   type LiveCallDiagnosticsReporter,
 } from './live-call-diagnostics-client';
+import { StableClauseAccumulator, type StableClause } from './live-voice-clause-stabilizer';
 import {
   advanceDeliveryLedger,
   appendDeliveryPhrase,
@@ -13,6 +14,8 @@ import {
   renderDeliveryLedger,
   type LiveVoiceDeliveryLedger,
 } from './live-voice-delivery-ledger';
+import { createOnsetTimingPlan, naturalPauseAfterClause } from './live-voice-natural-timing';
+import { millisecondsToPlaybackSamples } from './live-voice-playback-contract';
 import {
   createLiveVoicePcmSession,
   type LiveVoicePcmSession,
@@ -28,8 +31,8 @@ const LIVE_VOICE_CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connect
 const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
 const AUDIO_PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
-const MIN_SENTENCE_CHARS = 36;
-const MAX_PHRASE_CHARS = 120;
+const REQUESTED_PLAYBACK_SAMPLE_RATE = 24_000;
+const START_BUFFER_MS = 400;
 const AUDIO_COMPLETION_TIMEOUT_MS = 60_000;
 const SPEAKABLE_TEXT_PATTERN = /[\p{L}\p{N}]/u;
 
@@ -61,6 +64,7 @@ type ActiveLiveTurn = {
   phraseCount: number;
   textChunkCount: number;
   delivery: LiveVoiceDeliveryLedger;
+  previousClause: string | null;
 };
 
 type LiveTurnIds = {
@@ -161,7 +165,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
     ? `live-call:greeting:${sessionId}:${generation}`
     : voiceTurnId ? `live-call:${voiceTurnId}` : createLiveCallTraceId(sessionId);
   const reporter = createLiveCallDiagnosticsReporter(traceId);
-  const delivery = createLiveVoiceDeliveryLedger();
+  const delivery = createLiveVoiceDeliveryLedger(REQUESTED_PLAYBACK_SAMPLE_RATE);
   instrumentDeliveryReporter(reporter, () => delivery, (ledger) => {
     renderDeliveryLedger(ledger);
     recordDeliveryCheckpoint(reporter, ledger);
@@ -183,6 +187,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
     phraseCount: 0,
     textChunkCount: 0,
     delivery,
+    previousClause: null,
   };
   activeTurn = turn;
   reporter.record('turn_intercepted', {
@@ -304,49 +309,71 @@ function cancelGreetingStartup(reason: string, preserveUserSpoke = false): void 
 async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: ActiveLiveTurn): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
+  const clauses = new StableClauseAccumulator();
   let pending = '';
-  let phrase = '';
+  let deadlineTimer: number | null = null;
 
-  while (turn.generation === playbackGeneration && !turn.abortController.signal.aborted) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    pending += decoder.decode(value, { stream: true });
-    const blocks = pending.split(/\n\n/);
-    pending = blocks.pop() ?? '';
-    for (const block of blocks) {
-      const event = parseSseBlock(block);
-      captureAssistantTurnId(turn, event);
-      if (event?.type !== 'text_chunk' || typeof event.text !== 'string') continue;
-      turn.textChunkCount += 1;
-      turn.reporter.record('llm_text_chunk_received', {
-        text_chunk_index: turn.textChunkCount - 1,
-        text: event.text,
-        text_length: event.text.length,
-        elapsed_ms: performance.now() - turn.startedAtMs,
-        turn_kind: turn.kind,
-      }, 'controller');
-      phrase = mergeText(phrase, event.text);
-      if (shouldFlushPhrase(phrase)) {
-        queuePhrase(phrase, turn, 'boundary');
-        phrase = '';
+  const clearDeadlineTimer = (): void => {
+    if (deadlineTimer !== null) window.clearTimeout(deadlineTimer);
+    deadlineTimer = null;
+  };
+  const commit = (ready: StableClause[]): void => {
+    ready.forEach((clause) => queuePhrase(clause.text, turn, clause.reason));
+  };
+  const scheduleDeadline = (): void => {
+    clearDeadlineTimer();
+    const remaining = clauses.deadlineRemainingMs();
+    if (remaining === null) return;
+    deadlineTimer = window.setTimeout(() => {
+      deadlineTimer = null;
+      if (turn.generation !== playbackGeneration || turn.abortController.signal.aborted) return;
+      commit(clauses.takeReady(performance.now()));
+      scheduleDeadline();
+    }, Math.max(1, Math.ceil(remaining + 1)));
+  };
+
+  try {
+    while (turn.generation === playbackGeneration && !turn.abortController.signal.aborted) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      const blocks = pending.split(/\n\n/);
+      pending = blocks.pop() ?? '';
+      for (const block of blocks) {
+        const event = parseSseBlock(block);
+        captureAssistantTurnId(turn, event);
+        if (event?.type !== 'text_chunk' || typeof event.text !== 'string') continue;
+        turn.textChunkCount += 1;
+        turn.reporter.record('llm_text_chunk_received', {
+          text_chunk_index: turn.textChunkCount - 1,
+          text: event.text,
+          text_length: event.text.length,
+          elapsed_ms: performance.now() - turn.startedAtMs,
+          turn_kind: turn.kind,
+        }, 'controller');
+        commit(clauses.append(event.text, performance.now()));
+        scheduleDeadline();
       }
     }
+
+    if (turn.abortController.signal.aborted) {
+      await reader.cancel('live-turn-aborted').catch(() => undefined);
+      return;
+    }
+    pending += decoder.decode();
+    if (pending.trim()) {
+      const event = parseSseBlock(pending);
+      captureAssistantTurnId(turn, event);
+      if (event?.type === 'text_chunk' && typeof event.text === 'string') {
+        turn.textChunkCount += 1;
+        commit(clauses.append(event.text, performance.now()));
+      }
+    }
+    commit(clauses.flush());
+  } finally {
+    clearDeadlineTimer();
   }
 
-  if (turn.abortController.signal.aborted) {
-    await reader.cancel('live-turn-aborted').catch(() => undefined);
-    return;
-  }
-  pending += decoder.decode();
-  if (pending.trim()) {
-    const event = parseSseBlock(pending);
-    captureAssistantTurnId(turn, event);
-    if (event?.type === 'text_chunk' && typeof event.text === 'string') {
-      turn.textChunkCount += 1;
-      phrase = mergeText(phrase, event.text);
-    }
-  }
-  if (phrase.trim()) queuePhrase(phrase, turn, 'stream-end');
   turn.reporter.record('llm_stream_finished', {
     elapsed_ms: performance.now() - turn.startedAtMs,
     text_chunks: turn.textChunkCount,
@@ -409,8 +436,12 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
     return;
   }
   const phraseIndex = turn.phraseCount;
+  const precedingPause = turn.previousClause === null
+    ? null
+    : naturalPauseAfterClause(turn.previousClause, phraseIndex - 1);
   appendDeliveryPhrase(turn.delivery, phraseIndex, phrase);
   turn.phraseCount += 1;
+  turn.previousClause = phrase;
   setVoiceSpeaking(true, turn.kind);
   setInlineStatus(turn.kind === 'greeting' ? 'Buffering generated greeting…' : 'Buffering live response audio…');
   turn.reporter.record('phrase_queued', {
@@ -418,10 +449,39 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
     reason,
     text: phrase,
     text_length: phrase.length,
+    preceding_pause_ms: precedingPause?.durationMs ?? 0,
+    preceding_pause_reason: precedingPause?.reason ?? null,
     elapsed_ms: performance.now() - turn.startedAtMs,
     turn_kind: turn.kind,
   }, 'controller');
-  void turn.sessionPromise.then((session) => session.enqueuePhrase(phrase, phraseIndex)).catch((error: unknown) => {
+  void turn.sessionPromise.then(async (session) => {
+    if (phraseIndex === 0) {
+      const onset = createOnsetTimingPlan(performance.now() - turn.startedAtMs, {
+        desiredPerceivedOnsetMs: turn.kind === 'greeting' ? 320 : 450,
+        maximumAdditionalDelayMs: 350,
+      });
+      session.setStartPolicy({
+        notBeforeRenderSample: millisecondsToPlaybackSamples(
+          onset.extraDelayMs,
+          REQUESTED_PLAYBACK_SAMPLE_RATE,
+        ),
+        minimumBufferedSpeechSamples: millisecondsToPlaybackSamples(
+          START_BUFFER_MS,
+          REQUESTED_PLAYBACK_SAMPLE_RATE,
+        ),
+      });
+      turn.reporter.record('perceived_onset_planned', {
+        desired_perceived_onset_ms: onset.desiredPerceivedOnsetMs,
+        elapsed_ms: onset.elapsedMs,
+        extra_delay_ms: onset.extraDelayMs,
+        sample_rate: REQUESTED_PLAYBACK_SAMPLE_RATE,
+      }, 'controller');
+    }
+    if (precedingPause) {
+      await session.enqueueSilence(precedingPause.durationMs, precedingPause.reason);
+    }
+    await session.enqueuePhrase(phrase, phraseIndex);
+  }).catch((error: unknown) => {
     if (turn.abortController.signal.aborted) return;
     turn.reporter.record('phrase_queue_failed', {
       phrase_index: phraseIndex,
@@ -442,6 +502,8 @@ function recordDeliveryCheckpoint(
     audio_delivered_phrase_count: ledger.audioDeliveredPhraseCount,
     audio_active_phrase_index: ledger.activePhraseIndex,
     audio_played_samples: ledger.audioPlayedSamples,
+    semantic_speech_samples: ledger.semanticSpeechSamples,
+    playback_sample_rate: ledger.playbackSampleRate,
     visual_delivered_text_end: ledger.visualDeliveredTextEnd,
     context_delivered_text_end: ledger.contextDeliveredTextEnd,
     delivery_policy: 'reveal_as_spoken',
@@ -627,20 +689,6 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
     .join('\n');
   if (!data) return null;
   try { return JSON.parse(data) as ChatStreamEvent; } catch { return null; }
-}
-
-function mergeText(current: string, next: string): string {
-  const left = current.trim();
-  const right = next.trim();
-  if (!left) return right;
-  if (!right) return left;
-  return `${left} ${right}`;
-}
-
-function shouldFlushPhrase(text: string): boolean {
-  const phrase = text.trim();
-  if (phrase.length >= MAX_PHRASE_CHARS) return true;
-  return phrase.length >= MIN_SENTENCE_CHARS && /[.!?][\]})"'’”]*$/.test(phrase);
 }
 
 function selectedVoiceId(): string | null {
