@@ -21,6 +21,7 @@ from .live_chat_stream_retry import install_live_chat_stream_retry_hook
 from .live_voice_cue_asset_routes import install_live_voice_cue_asset_hook
 from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
 from .live_voice_runtime_offload import install_live_voice_runtime_offload_hook
+from .live_voice_spoken_style import install_live_voice_spoken_style_hook
 from .memory_job_offload import install_memory_job_offload_hook
 from .realtime_routes import install_realtime_route_hook
 from .research_mode_routes import install_research_mode_route_hook
@@ -90,6 +91,7 @@ install_live_chat_provider_metrics_hook()
 install_live_chat_stream_retry_hook()
 install_live_chat_provider_routing_hook()
 install_live_chat_live_voice_profile_hook()
+install_live_voice_spoken_style_hook()
 install_live_chat_companion_context_hook()
 install_memory_job_offload_hook()
 install_live_voice_diagnostics_hook()
