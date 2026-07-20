@@ -105,8 +105,13 @@ def test_launch_canon_resumes_into_full_revision_without_regeneration() -> None:
         canon_revision=2,
     )
 
+    expected_full_ids = {
+        node.topic_id
+        for node in expanded.graph.nodes
+        if node.category not in {"compiler", "audit", "index", "bootstrap"}
+    }
     assert expanded.launch_ready is True
-    assert len(expanded.generation.topics) == 15
+    assert {topic.topic_id for topic in expanded.generation.topics} == expected_full_ids
     assert expanded.compilation.document["canon_revision"] == 2
     assert all(
         expanded.compilation.document["generation_provenance"][topic_id]
