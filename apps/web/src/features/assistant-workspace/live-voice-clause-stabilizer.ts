@@ -76,10 +76,13 @@ export class StableClauseAccumulator {
 
   private nextBoundary(nowMs: number): { end: number; reason: ClauseCommitReason } | null {
     const strong = findSafeBoundary(this.buffer, STRONG_BOUNDARY, this.minimum);
-    if (strong !== null) return { end: strong, reason: 'strong-boundary' };
-
     const weak = findStableWeakBoundary(this.buffer, this.minimum, this.lookahead);
-    if (weak !== null) return { end: weak, reason: 'stable-boundary' };
+    if (strong !== null || weak !== null) {
+      if (weak !== null && (strong === null || weak < strong)) {
+        return { end: weak, reason: 'stable-boundary' };
+      }
+      if (strong !== null) return { end: strong, reason: 'strong-boundary' };
+    }
 
     if (this.buffer.length >= this.maximum) {
       const fallback = safeWhitespaceBoundary(this.buffer, this.maximum, this.minimum);
