@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const session = {
     enqueuePhrase: vi.fn(async () => undefined),
+    enqueueSilence: vi.fn(async () => undefined),
+    setStartPolicy: vi.fn(),
     finish: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
     isClosed: vi.fn(() => false),
@@ -102,6 +104,8 @@ beforeEach(() => {
   });
   vi.stubGlobal('fetch', fetchMock);
   mocks.session.enqueuePhrase.mockReset().mockResolvedValue(undefined);
+  mocks.session.enqueueSilence.mockReset().mockResolvedValue(undefined);
+  mocks.session.setStartPolicy.mockReset();
   mocks.session.finish.mockReset().mockResolvedValue(undefined);
   mocks.session.stop.mockReset().mockResolvedValue(undefined);
   mocks.session.isClosed.mockReset().mockReturnValue(false);
@@ -155,6 +159,8 @@ describe('live voice unified audio controller', () => {
       mocks.reporter,
     );
     await waitFor(() => expect(mocks.session.enqueuePhrase).toHaveBeenCalledTimes(2));
+    expect(mocks.session.setStartPolicy).toHaveBeenCalledTimes(1);
+    expect(mocks.session.enqueueSilence).toHaveBeenCalledTimes(1);
     expect(mocks.session.enqueuePhrase).toHaveBeenNthCalledWith(
       1,
       'Hello there. This first phrase is ready for speech.',
