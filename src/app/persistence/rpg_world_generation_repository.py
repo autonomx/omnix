@@ -66,9 +66,9 @@ class PostgresRpgWorldGenerationRepository:
         parent = self.connection.execute(
             "SELECT run_id, draft_revision, lineage_jsonb "
             "FROM omnix_rpg_world_generation_runs "
-            "WHERE workspace_id = %s AND world_id = %s AND draft_revision < %s "
-            "ORDER BY draft_revision DESC LIMIT 1",
-            (context.workspace_id, world_id, int(draft_revision)),
+            "WHERE workspace_id = %s AND world_id = %s AND run_id <> %s "
+            "ORDER BY created_at DESC LIMIT 1",
+            (context.workspace_id, world_id, run_id),
         ).fetchone()
         parent_run_id = str(parent[0]) if parent is not None else None
         parent_draft_revision = int(parent[1]) if parent is not None else None
@@ -88,7 +88,7 @@ class PostgresRpgWorldGenerationRepository:
                 progress_jsonb, parent_run_id, lineage_jsonb
             ) VALUES (%s, %s, %s, %s, 'planned', %s::jsonb, %s::jsonb,
                       %s::jsonb, %s::jsonb, %s::jsonb, %s, %s::jsonb)
-            ON CONFLICT (workspace_id, world_id, draft_revision) DO NOTHING
+            ON CONFLICT (workspace_id, run_id) DO NOTHING
             RETURNING {_RUN_COLUMNS}
             """,
             (
@@ -107,15 +107,9 @@ class PostgresRpgWorldGenerationRepository:
         ).fetchone()
         if row is not None:
             return _run_row(row)
-        existing = self.get_for_world_revision(
-            context,
-            world_id=world_id,
-            draft_revision=draft_revision,
-        )
+        existing = self.get(context, run_id)
         if existing is None:
             raise RuntimeError("world_generation_run_insert_failed")
-        if existing["run_id"] != run_id:
-            raise RuntimeError("world_generation_run_identity_conflict")
         return existing
 
     def get(self, context: TenantContext, run_id: str) -> dict[str, Any] | None:
@@ -135,7 +129,8 @@ class PostgresRpgWorldGenerationRepository:
     ) -> dict[str, Any] | None:
         row = self.connection.execute(
             f"SELECT {_RUN_COLUMNS} FROM omnix_rpg_world_generation_runs "
-            "WHERE workspace_id = %s AND world_id = %s AND draft_revision = %s",
+            "WHERE workspace_id = %s AND world_id = %s AND draft_revision = %s "
+            "ORDER BY created_at DESC LIMIT 1",
             (context.workspace_id, world_id, int(draft_revision)),
         ).fetchone()
         return _run_row(row) if row is not None else None
