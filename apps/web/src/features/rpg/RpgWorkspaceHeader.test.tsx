@@ -70,7 +70,7 @@ describe('RpgWorkspaceHeader', () => {
     expect(screen.queryByRole('dialog', { name: 'Preview campaign' })).not.toBeInTheDocument();
   });
 
-  it('opens world creation and import as a Campaign Menu view', async () => {
+  it('opens the world library and keeps bundle import available', async () => {
     const view = renderWithTheme(
       <>
         <section className="rpg-launcher-dialog">
@@ -92,8 +92,8 @@ describe('RpgWorkspaceHeader', () => {
 
     const worldView = await screen.findByRole('region', { name: 'Worlds and Campaigns view' });
     expect(launcherDialog).toHaveClass('rpg-launcher-dialog-world-library');
-    expect(within(worldView).getByRole('heading', { name: 'Worlds & Campaigns' })).toBeInTheDocument();
-    expect(within(worldView).getByRole('heading', { name: 'Create world' })).toBeInTheDocument();
+    expect(within(worldView).getByRole('heading', { name: 'Worlds' })).toBeInTheDocument();
+    expect(within(worldView).getByRole('button', { name: 'Create New World' })).toBeInTheDocument();
     expect(within(worldView).getByText('Export / import world')).toBeInTheDocument();
 
     fireEvent.click(within(worldView).getByRole('button', { name: 'Back to Play' }));
