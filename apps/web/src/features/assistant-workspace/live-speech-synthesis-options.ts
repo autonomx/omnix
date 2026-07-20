@@ -1,4 +1,7 @@
-import { readEffectiveLiveConversationProfile } from '../chatbot/liveConversationProfileClient';
+import {
+  readEffectiveLiveConversationProfile,
+  type LiveConversationProfile,
+} from '../chatbot/liveConversationProfileClient';
 import { readActivePronunciations } from '../chatbot/livePronunciationClient';
 import { createSpeechDeliveryPlan } from './live-speech-delivery-plan';
 import type {
@@ -15,6 +18,26 @@ const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 const CALL_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 
+const FALLBACK_LIVE_CONVERSATION_PROFILE: Readonly<LiveConversationProfile> = {
+  presence_preset: 'natural',
+  talkativeness: 50,
+  conversation_stance: 'automatic',
+  conversation_pace: 'balanced',
+  interruption_preference: 'balanced',
+  assistant_backchannel_mode: 'off',
+  initiative_mode: 'gentle',
+  idle_threshold_ms: 15_000,
+  long_pause_behavior: 'wait',
+  response_length: 'conversational',
+  response_onset_style: 'adaptive',
+  emotional_attunement: 'subtle',
+  topic_continuity: 'natural',
+  max_idle_prompts: 1,
+  duplex_mode: 'automatic',
+  pronunciation_save_policy: 'ask',
+  profile_version: 1,
+};
+
 export type LiveSpeechSynthesisPlanningOptions = {
   scopeKey?: string;
   enablePerformancePlan?: boolean;
@@ -30,7 +53,8 @@ export function createLiveSpeechSynthesisOptions(
   options: LiveSpeechSynthesisPlanningOptions = {},
 ): SpeechSynthesisOptions {
   installResetListeners();
-  const profile = readEffectiveLiveConversationProfile();
+  const profile = readEffectiveLiveConversationProfile()
+    ?? fallbackProfileForCanonicalChatScope(options.scopeKey);
   const performanceEnabled = options.enablePerformancePlan ?? true;
   const continuityEnabled = options.enableVocalContinuity ?? true;
   const serious = /\b(?:sorry|grief|loss|afraid|hurt|serious|take your time)\b/i.test(text);
@@ -82,6 +106,15 @@ export function resetLiveSpeechCueState(): void {
   responseCueSequence = 0;
   lastResponseCueAt = 0;
   resetVocalInteractionState();
+}
+
+function fallbackProfileForCanonicalChatScope(scopeKey: string | undefined): LiveConversationProfile | null {
+  // Persisted Chat sessions use the `chat:` namespace. Delivery planning must
+  // remain available even when the settings panel has not mirrored the server
+  // profile into localStorage yet.
+  return scopeKey?.startsWith('chat:')
+    ? { ...FALLBACK_LIVE_CONVERSATION_PROFILE }
+    : null;
 }
 
 function installResetListeners(): void {
