@@ -33,6 +33,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     this.bufferedSpeechSamples = 0;
     this.started = false;
     this.waitingForBuffer = false;
+    this.waitingForFollowingSpeech = false;
     this.inputEnded = false;
     this.stopped = false;
     this.drained = false;
@@ -57,13 +58,13 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     };
   }
 
-  segmentFields(segment = this.activeSegment) {
+  segmentFields(segment = this.activeSegment, playedSamples = this.activeSegmentPlayedSamples) {
     if (!segment) return {};
     return {
       segment_id: segment.segmentId,
       segment_kind: segment.segmentKind,
       phrase_index: Number.isInteger(segment.phraseIndex) ? segment.phraseIndex : undefined,
-      segment_played_samples: this.activeSegmentPlayedSamples,
+      segment_played_samples: playedSamples,
     };
   }
 
@@ -111,6 +112,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
           ? this.currentRebufferSamples
           : this.startPolicy.minimumBufferedSpeechSamples,
         waiting_for_buffer: this.waitingForBuffer,
+        waiting_for_following_speech: this.waitingForFollowingSpeech,
         input_ended: this.inputEnded,
         underrun_count: this.underrunCount,
       });
@@ -126,6 +128,10 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
         segmentKind: 'silence',
         phraseIndex: null,
         remainingSamples: durationSamples,
+        minimumFollowingSpeechSamples: Math.max(
+          0,
+          Math.round(Number(message.minimumFollowingSpeechSamples) || 0),
+        ),
         reason: String(message.reason || 'clause'),
       });
       this.endedSegments.add(segmentId);
@@ -136,10 +142,15 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
         buffered_samples: this.queuedSamples,
         buffered_speech_samples: this.bufferedSpeechSamples,
         incoming_samples: durationSamples,
+        minimum_following_speech_samples: Math.max(
+          0,
+          Math.round(Number(message.minimumFollowingSpeechSamples) || 0),
+        ),
         target_samples: this.waitingForBuffer
           ? this.currentRebufferSamples
           : this.startPolicy.minimumBufferedSpeechSamples,
         waiting_for_buffer: this.waitingForBuffer,
+        waiting_for_following_speech: this.waitingForFollowingSpeech,
         input_ended: this.inputEnded,
         underrun_count: this.underrunCount,
       });
@@ -159,18 +170,23 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     }
     if (message.type === 'end') {
       this.inputEnded = true;
+      if (!this.started && this.bufferedSpeechSamples <= 0 && this.queue.length > 0) {
+        this.cancelQueuedSegments('input_ended_without_speech');
+      }
       this.emit('input_ended', {
         buffered_samples: this.queuedSamples,
         buffered_speech_samples: this.bufferedSpeechSamples,
         waiting_for_buffer: this.waitingForBuffer,
+        waiting_for_following_speech: this.waitingForFollowingSpeech,
         underrun_count: this.underrunCount,
       });
       this.maybeStartOrResume();
       return;
     }
     if (message.type === 'stop') {
-      this.interruptActiveSegment();
-      this.queue = [];
+      const reason = String(message.reason || 'stopped');
+      this.interruptActiveSegment(reason);
+      this.cancelQueuedSegments(reason);
       this.queuedSamples = 0;
       this.bufferedSpeechSamples = 0;
       this.stopped = true;
@@ -178,6 +194,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
         buffered_samples: 0,
         buffered_speech_samples: 0,
         underrun_count: this.underrunCount,
+        reason,
       });
     }
   }
@@ -190,8 +207,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     const onsetReady = this.renderClockSamples >= this.startPolicy.notBeforeRenderSample;
     const speechReady = this.bufferedSpeechSamples >= this.startPolicy.minimumBufferedSpeechSamples;
     const finalShortInputReady = this.inputEnded && this.bufferedSpeechSamples > 0;
-    const finalScheduledInputReady = this.inputEnded && this.queuedSamples > 0;
-    if (!this.started && onsetReady && (speechReady || finalShortInputReady || finalScheduledInputReady)) {
+    if (!this.started && onsetReady && (speechReady || finalShortInputReady)) {
       this.started = true;
       this.waitingForBuffer = false;
       this.beginFadeIn();
@@ -215,6 +231,14 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
         underrun_count: this.underrunCount,
       });
     }
+  }
+
+  followingSpeechReady(segment) {
+    if (segment.segmentKind !== 'silence') return true;
+    const minimum = Math.max(0, Number(segment.minimumFollowingSpeechSamples) || 0);
+    if (minimum <= 0) return true;
+    if (this.bufferedSpeechSamples >= minimum) return true;
+    return this.inputEnded && this.bufferedSpeechSamples > 0;
   }
 
   beginSegment(segment) {
@@ -248,13 +272,33 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     this.activeSegmentPlayedSamples = 0;
   }
 
-  interruptActiveSegment() {
+  interruptActiveSegment(reason) {
     const segment = this.activeSegment;
     if (!segment || this.terminalSegments.has(segment.segmentId)) return;
     this.terminalSegments.add(segment.segmentId);
-    this.emit('segment_interrupted', this.segmentFields(segment));
+    this.emit('segment_interrupted', {
+      ...this.segmentFields(segment),
+      reason,
+    });
     this.activeSegment = null;
     this.activeSegmentPlayedSamples = 0;
+  }
+
+  cancelQueuedSegments(reason) {
+    const seen = new Set();
+    for (const segment of this.queue) {
+      if (seen.has(segment.segmentId) || this.terminalSegments.has(segment.segmentId)) continue;
+      seen.add(segment.segmentId);
+      this.terminalSegments.add(segment.segmentId);
+      this.emit('segment_cancelled', {
+        ...this.segmentFields(segment, 0),
+        reason,
+      });
+      this.endedSegments.delete(segment.segmentId);
+    }
+    this.queue = [];
+    this.headOffset = 0;
+    this.waitingForFollowingSpeech = false;
   }
 
   applyFadeIn(channel, written) {
@@ -317,6 +361,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       buffered_speech_samples: this.bufferedSpeechSamples,
       target_samples: this.waitingForBuffer ? this.currentRebufferSamples : 0,
       waiting_for_buffer: this.waitingForBuffer,
+      waiting_for_following_speech: this.waitingForFollowingSpeech,
       input_ended: this.inputEnded,
       underrun_count: this.underrunCount,
       current_rebuffer_samples: this.currentRebufferSamples,
@@ -340,6 +385,26 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     let written = 0;
     while (written < channel.length && this.queue.length > 0) {
       const head = this.queue[0];
+      if (!this.followingSpeechReady(head)) {
+        if (!this.waitingForFollowingSpeech) {
+          this.waitingForFollowingSpeech = true;
+          this.emit('pause_waiting_for_following_speech', {
+            segment_id: head.segmentId,
+            segment_kind: head.segmentKind,
+            buffered_speech_samples: this.bufferedSpeechSamples,
+            minimum_following_speech_samples: head.minimumFollowingSpeechSamples || 0,
+          });
+        }
+        break;
+      }
+      if (this.waitingForFollowingSpeech) {
+        this.waitingForFollowingSpeech = false;
+        this.emit('pause_following_speech_ready', {
+          segment_id: head.segmentId,
+          segment_kind: head.segmentKind,
+          buffered_speech_samples: this.bufferedSpeechSamples,
+        });
+      }
       if (!this.beginSegment(head)) break;
       const available = head.segmentKind === 'silence'
         ? head.remainingSamples
@@ -370,7 +435,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     }
 
     this.applyFadeIn(channel, written);
-    if (this.queuedSamples === 0) {
+    if (this.queue.length === 0) {
       this.applyFadeOut(channel, written);
       this.maybeCompleteActiveSegment();
       if (this.inputEnded) return this.signalDrained();
