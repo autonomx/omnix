@@ -1,4 +1,5 @@
 import type { LiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
+import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
 import type { SpeechSynthesisOptions } from './live-speech-performance-contract';
 import {
   createSilenceSegmentId,
@@ -412,7 +413,7 @@ export async function createLiveVoicePcmSession(
   const streamPhrase = async (
     text: string,
     phraseIndex: number,
-    synthesisOptions?: SpeechSynthesisOptions,
+    synthesisOptions: SpeechSynthesisOptions,
   ): Promise<void> => {
     if (closed) throw new Error('Live voice PCM session is closed.');
     await socketReady;
@@ -449,8 +450,8 @@ export async function createLiveVoicePcmSession(
         phrase_index: phraseIndex,
         phrase_stream_id: phraseStreamId,
         text_length: text.length,
-        performance_schema_version: synthesisOptions?.performancePlan?.schema_version ?? null,
-        pronunciation_count: synthesisOptions?.pronunciationLexicon?.length ?? 0,
+        performance_schema_version: synthesisOptions.performancePlan?.schema_version ?? null,
+        pronunciation_count: synthesisOptions.pronunciationLexicon?.length ?? 0,
         turn_elapsed_ms: phraseStartedAtMs - startedAtMs,
         websocket_reused: true,
       }, 'pcm_session');
@@ -472,8 +473,8 @@ export async function createLiveVoicePcmSession(
           non_streaming_mode: false,
           parity_mode: true,
           diagnostics_stream_id: phraseStreamId,
-          delivery_plan: synthesisOptions?.performancePlan,
-          pronunciation_lexicon: synthesisOptions?.pronunciationLexicon ?? [],
+          delivery_plan: synthesisOptions.performancePlan,
+          pronunciation_lexicon: synthesisOptions.pronunciationLexicon ?? [],
         }));
       } catch (error) {
         failActivePhrase(error instanceof Error ? error : new Error(String(error)));
@@ -487,12 +488,13 @@ export async function createLiveVoicePcmSession(
     synthesisOptions?: SpeechSynthesisOptions,
   ): Promise<void> => {
     if (closed || inputFinished) return Promise.reject(new Error('Live voice input is already closed.'));
+    const resolvedOptions = synthesisOptions ?? createLiveSpeechSynthesisOptions(text);
     reporter.record('phrase_generation_queued', {
       phrase_index: phraseIndex,
       text,
       text_length: text.length,
-      performance_schema_version: synthesisOptions?.performancePlan?.schema_version ?? null,
-      pronunciation_count: synthesisOptions?.pronunciationLexicon?.length ?? 0,
+      performance_schema_version: resolvedOptions.performancePlan?.schema_version ?? null,
+      pronunciation_count: resolvedOptions.pronunciationLexicon?.length ?? 0,
     }, 'pcm_session');
     const task = generationQueue.catch(() => undefined).then(() => {
       void resumeAudioContext('phrase_generation_started');
@@ -500,7 +502,7 @@ export async function createLiveVoicePcmSession(
         phrase_index: phraseIndex,
         text_length: text.length,
       }, 'pcm_session');
-      return streamPhrase(text, phraseIndex, synthesisOptions);
+      return streamPhrase(text, phraseIndex, resolvedOptions);
     });
     generationQueue = task;
     return task;
