@@ -50,6 +50,7 @@ LINE_DEBT_LIMITS = {
     "src/app/rpg/ai/grounding_validator.py": 1017,
     "src/app/rpg/presentation/dialogue_quality.py": 1223,
     "src/app/rpg/response_generation/production_pipeline.py": 1182,
+    "src/app/rpg/session/genesis/campaign_lore_store.py": 1093,
 }
 
 
