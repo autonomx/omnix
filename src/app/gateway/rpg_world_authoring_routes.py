@@ -11,6 +11,11 @@ from app.rpg.worlds.authoring_service import (
     read_authoring_section,
     update_world_metadata,
 )
+from app.rpg.worlds.entity_authoring import (
+    read_world_entity,
+    regenerate_world_entity,
+    update_world_entity,
+)
 from app.rpg.worlds.topic_authoring import (
     read_world_topic,
     restore_world_topic,
@@ -155,6 +160,86 @@ def register_rpg_world_authoring_routes(app: FastAPI) -> None:
                 content=content,
                 generation_lock=bool(payload.get("generation_lock", True)),
                 approved=bool(payload.get("approved", False)),
+            )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.get(
+        "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    def rpg_read_world_entity(
+        world_id: str,
+        topic_id: str,
+        entity_id: str,
+    ) -> dict[str, Any]:
+        try:
+            return read_world_entity(world_id, topic_id, entity_id)
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.patch(
+        "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    async def rpg_update_world_entity(
+        world_id: str,
+        topic_id: str,
+        entity_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        revision, content_hash = _expected(payload)
+        changes = payload.get("changes")
+        if not isinstance(changes, Mapping):
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "entity_changes_required"},
+            )
+        try:
+            return update_world_entity(
+                world_id,
+                topic_id,
+                entity_id,
+                expected_draft_revision=revision,
+                expected_content_hash=content_hash,
+                changes=changes,
+            )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}/regenerate",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    async def rpg_regenerate_world_entity(
+        world_id: str,
+        topic_id: str,
+        entity_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        revision, content_hash = _expected(payload)
+        directives = payload.get("directives")
+        if directives is not None and not isinstance(directives, Mapping):
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "entity_directives_must_be_object"},
+            )
+        try:
+            return regenerate_world_entity(
+                world_id,
+                topic_id,
+                entity_id,
+                expected_draft_revision=revision,
+                expected_content_hash=content_hash,
+                directives=dict(directives or {}),
             )
         except Exception as exc:
             _raise_domain_error(exc)
