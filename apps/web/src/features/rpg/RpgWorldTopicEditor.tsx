@@ -4,6 +4,7 @@ import {
   rpgWorldAuthoringClient,
   type RpgAuthoringTopic,
 } from '../../api/rpgWorldAuthoringClient';
+import './RpgWorldTopicEditor.css';
 
 interface RpgWorldTopicEditorProps {
   topic: RpgAuthoringTopic;
