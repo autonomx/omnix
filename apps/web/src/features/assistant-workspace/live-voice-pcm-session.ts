@@ -1,4 +1,11 @@
 import type { LiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
+import {
+  createSilenceSegmentId,
+  createSpeechSegmentId,
+  millisecondsToPlaybackSamples,
+  type PlaybackStartPolicy,
+  type SilenceReason,
+} from './live-voice-playback-contract';
 import { LIVE_VOICE_PCM_WORKLET_NAME, liveVoicePcmWorkletSource } from './live-voice-pcm-worklet';
 
 const SAMPLE_RATE = 24_000;
@@ -10,7 +17,6 @@ const TTS_LIVE_CALL_WEBSOCKET_PATH = '/api/tts/live-call/websocket';
 const TTS_CHUNK_SIZE = 8;
 const DRAIN_TIMEOUT_MS = 120_000;
 const CHARACTER_AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
-
 const WEBSOCKET_OPEN = 1;
 
 type StreamingAudioWindow = Window & typeof globalThis & {
@@ -31,10 +37,18 @@ type ControlEvent = {
 
 type WorkletEvent = {
   type?: string;
+  sample_rate?: number;
+  segment_id?: string;
+  segment_kind?: 'speech' | 'silence' | 'cue';
+  phrase_index?: number;
+  segment_played_samples?: number;
   buffered_samples?: number;
+  buffered_speech_samples?: number;
   incoming_samples?: number;
   target_samples?: number;
   render_clock_samples?: number;
+  segment_timeline_samples?: number;
+  semantic_speech_samples?: number;
   played_samples?: number;
   underrun_count?: number;
   current_rebuffer_samples?: number;
@@ -46,6 +60,7 @@ type PhraseStats = {
   frameCount: number;
   receivedBytes: number;
   receivedSamples: number;
+  playbackSamples: number;
   firstFrameAtMs: number | null;
   lastFrameAtMs: number | null;
   sampleRate: number;
@@ -55,6 +70,7 @@ type ActivePhrase = {
   text: string;
   phraseIndex: number;
   phraseStreamId: string;
+  segmentId: string;
   startedAtMs: number;
   stats: PhraseStats;
   completed: boolean;
@@ -64,6 +80,8 @@ type ActivePhrase = {
 
 export type LiveVoicePcmSession = {
   enqueuePhrase: (text: string, phraseIndex: number) => Promise<void>;
+  enqueueSilence: (durationMs: number, reason: SilenceReason) => Promise<void>;
+  setStartPolicy: (policy: Partial<PlaybackStartPolicy>) => void;
   finish: () => Promise<void>;
   stop: (reason?: string) => Promise<void>;
   isClosed: () => boolean;
@@ -102,8 +120,10 @@ export async function createLiveVoicePcmSession(
   let drainResolve: (() => void) | null = null;
   let totalFrames = 0;
   let totalReceivedSamples = 0;
+  let totalPlaybackSamples = 0;
   let underruns = 0;
   let resumes = 0;
+  let silenceSequence = 0;
   const drainPromise = new Promise<void>((resolve) => {
     drainResolve = resolve;
   });
@@ -139,12 +159,15 @@ export async function createLiveVoicePcmSession(
   window.addEventListener('focus', handlePlaybackResumeSignal);
   window.addEventListener('pageshow', handlePlaybackResumeSignal);
 
+  const startBufferSamples = Math.round(audioContext.sampleRate * START_BUFFER_SECONDS);
   const node = new AudioWorkletNodeCtor(audioContext, LIVE_VOICE_PCM_WORKLET_NAME, {
     numberOfInputs: 0,
     numberOfOutputs: 1,
     outputChannelCount: [1],
     processorOptions: {
-      startBufferSamples: Math.round(audioContext.sampleRate * START_BUFFER_SECONDS),
+      startBufferSamples,
+      minimumBufferedSpeechSamples: startBufferSamples,
+      notBeforeRenderSample: 0,
       rebufferSamples: Math.round(audioContext.sampleRate * REBUFFER_SECONDS),
       maxRebufferSamples: Math.round(audioContext.sampleRate * MAX_REBUFFER_SECONDS),
       transitionFadeSamples: Math.round(audioContext.sampleRate * TRANSITION_FADE_SECONDS),
@@ -158,9 +181,11 @@ export async function createLiveVoicePcmSession(
     if (eventType === 'resumed') resumes += 1;
     reporter.record(`worklet_${eventType}`, {
       ...event.data,
+      sample_rate: event.data?.sample_rate ?? audioContext.sampleRate,
       audio_context_state: audioContext.state,
       total_frames: totalFrames,
       total_received_samples: totalReceivedSamples,
+      total_playback_samples: totalPlaybackSamples,
       total_received_audio_ms: totalReceivedSamples * 1000 / SAMPLE_RATE,
       underruns,
       resumes,
@@ -176,7 +201,7 @@ export async function createLiveVoicePcmSession(
     voice_id: voiceId,
     audio_context_sample_rate: audioContext.sampleRate,
     audio_context_state: audioContext.state,
-    start_buffer_samples: Math.round(audioContext.sampleRate * START_BUFFER_SECONDS),
+    start_buffer_samples: startBufferSamples,
     rebuffer_samples: Math.round(audioContext.sampleRate * REBUFFER_SECONDS),
     max_rebuffer_samples: Math.round(audioContext.sampleRate * MAX_REBUFFER_SECONDS),
     transition_fade_samples: Math.round(audioContext.sampleRate * TRANSITION_FADE_SECONDS),
@@ -201,6 +226,7 @@ export async function createLiveVoicePcmSession(
     phrase.completed = true;
     activePhrase = null;
     reporter.record('phrase_generation_failed', {
+      segment_id: phrase.segmentId,
       phrase_index: phrase.phraseIndex,
       phrase_stream_id: phrase.phraseStreamId,
       text: phrase.text,
@@ -221,6 +247,7 @@ export async function createLiveVoicePcmSession(
     if (phrase.stats.firstFrameAtMs === null) {
       phrase.stats.firstFrameAtMs = now;
       reporter.record('phrase_first_frame_received', {
+        segment_id: phrase.segmentId,
         phrase_index: phrase.phraseIndex,
         phrase_stream_id: phrase.phraseStreamId,
         first_frame_delay_ms: now - phrase.startedAtMs,
@@ -245,7 +272,15 @@ export async function createLiveVoicePcmSession(
       phrase.stats.sampleRate,
       audioContext.sampleRate,
     );
-    node.port.postMessage({ type: 'push', samples: converted }, [converted.buffer]);
+    phrase.stats.playbackSamples += converted.length;
+    totalPlaybackSamples += converted.length;
+    node.port.postMessage({
+      type: 'push_segment_samples',
+      segmentId: phrase.segmentId,
+      segmentKind: 'speech',
+      phraseIndex: phrase.phraseIndex,
+      samples: converted,
+    }, [converted.buffer]);
   };
 
   const handleControlMessage = (message: ControlEvent): void => {
@@ -256,6 +291,7 @@ export async function createLiveVoicePcmSession(
     }
     if (message.stream_id && message.stream_id !== phrase.phraseStreamId) {
       reporter.record('phrase_stream_id_mismatch', {
+        segment_id: phrase.segmentId,
         phrase_index: phrase.phraseIndex,
         expected_stream_id: phrase.phraseStreamId,
         received_stream_id: message.stream_id,
@@ -276,9 +312,12 @@ export async function createLiveVoicePcmSession(
     if (message.type !== 'done') return;
 
     phrase.completed = true;
+    node.port.postMessage({ type: 'segment_end', segmentId: phrase.segmentId });
     const elapsedMs = performance.now() - phrase.startedAtMs;
     const audioMs = phrase.stats.receivedSamples * 1000 / Math.max(1, phrase.stats.sampleRate);
     reporter.record('phrase_buffered', {
+      segment_id: phrase.segmentId,
+      segment_kind: 'speech',
       phrase_index: phrase.phraseIndex,
       phrase_stream_id: phrase.phraseStreamId,
       text: phrase.text,
@@ -287,6 +326,8 @@ export async function createLiveVoicePcmSession(
       frames: phrase.stats.frameCount,
       received_bytes: phrase.stats.receivedBytes,
       received_samples: phrase.stats.receivedSamples,
+      playback_samples: phrase.stats.playbackSamples,
+      sample_rate: audioContext.sampleRate,
       audio_ms: audioMs,
       elapsed_ms: elapsedMs,
       generation_rtf: audioMs > 0 ? elapsedMs / audioMs : null,
@@ -301,9 +342,12 @@ export async function createLiveVoicePcmSession(
         event: 'playback_finished',
         details: {
           completion_scope: 'phrase_buffered_into_live_turn',
+          segment_id: phrase.segmentId,
           phrase_index: phrase.phraseIndex,
           frames: phrase.stats.frameCount,
           received_samples: phrase.stats.receivedSamples,
+          playback_samples: phrase.stats.playbackSamples,
+          sample_rate: audioContext.sampleRate,
           audio_ms: audioMs,
           elapsed_ms: elapsedMs,
         },
@@ -370,11 +414,13 @@ export async function createLiveVoicePcmSession(
 
     const phraseStartedAtMs = performance.now();
     const phraseStreamId = createPhraseStreamId(traceId, phraseIndex);
+    const segmentId = createSpeechSegmentId(traceId, phraseIndex);
     return new Promise<void>((resolve, reject) => {
       activePhrase = {
         text,
         phraseIndex,
         phraseStreamId,
+        segmentId,
         startedAtMs: phraseStartedAtMs,
         completed: false,
         resolve,
@@ -383,12 +429,14 @@ export async function createLiveVoicePcmSession(
           frameCount: 0,
           receivedBytes: 0,
           receivedSamples: 0,
+          playbackSamples: 0,
           firstFrameAtMs: null,
           lastFrameAtMs: null,
           sampleRate: SAMPLE_RATE,
         },
       };
       reporter.record('phrase_request_sent', {
+        segment_id: segmentId,
         phrase_index: phraseIndex,
         phrase_stream_id: phraseStreamId,
         text_length: text.length,
@@ -400,6 +448,7 @@ export async function createLiveVoicePcmSession(
           type: 'synthesize',
           request_id: phraseStreamId,
           phrase_index: phraseIndex,
+          segment_id: segmentId,
           text,
           speaker: voiceId,
           language: 'English',
@@ -438,6 +487,50 @@ export async function createLiveVoicePcmSession(
     return task;
   };
 
+  const enqueueSilence = (durationMs: number, reason: SilenceReason): Promise<void> => {
+    if (closed || inputFinished) return Promise.reject(new Error('Live voice input is already closed.'));
+    const durationSamples = millisecondsToPlaybackSamples(durationMs, audioContext.sampleRate);
+    if (durationSamples <= 0) return Promise.resolve();
+    const segmentId = createSilenceSegmentId(traceId, silenceSequence);
+    silenceSequence += 1;
+    const task = generationQueue.catch(() => undefined).then(() => {
+      node.port.postMessage({
+        type: 'push_segment_silence',
+        segmentId,
+        durationSamples,
+        reason,
+      });
+      reporter.record('silence_segment_queued', {
+        segment_id: segmentId,
+        segment_kind: 'silence',
+        duration_samples: durationSamples,
+        duration_ms: durationSamples * 1000 / audioContext.sampleRate,
+        sample_rate: audioContext.sampleRate,
+        reason,
+      }, 'pcm_session');
+    });
+    generationQueue = task;
+    return task;
+  };
+
+  const setStartPolicy = (policy: Partial<PlaybackStartPolicy>): void => {
+    const notBeforeRenderSample = Math.max(0, Math.round(policy.notBeforeRenderSample ?? 0));
+    const minimumBufferedSpeechSamples = Math.max(
+      1,
+      Math.round(policy.minimumBufferedSpeechSamples ?? startBufferSamples),
+    );
+    node.port.postMessage({
+      type: 'set_start_policy',
+      notBeforeRenderSample,
+      minimumBufferedSpeechSamples,
+    });
+    reporter.record('playback_start_policy_set', {
+      not_before_render_sample: notBeforeRenderSample,
+      minimum_buffered_speech_samples: minimumBufferedSpeechSamples,
+      sample_rate: audioContext.sampleRate,
+    }, 'pcm_session');
+  };
+
   const cleanup = async (reason: string): Promise<void> => {
     if (closed) return;
     closed = true;
@@ -447,6 +540,7 @@ export async function createLiveVoicePcmSession(
       drained,
       total_frames: totalFrames,
       total_received_samples: totalReceivedSamples,
+      total_playback_samples: totalPlaybackSamples,
       total_received_audio_ms: totalReceivedSamples * 1000 / SAMPLE_RATE,
       underruns,
       resumes,
@@ -479,6 +573,7 @@ export async function createLiveVoicePcmSession(
       elapsed_ms: performance.now() - startedAtMs,
       total_frames: totalFrames,
       total_received_samples: totalReceivedSamples,
+      total_playback_samples: totalPlaybackSamples,
       total_received_audio_ms: totalReceivedSamples * 1000 / SAMPLE_RATE,
       underruns,
       resumes,
@@ -491,7 +586,14 @@ export async function createLiveVoicePcmSession(
     await cleanup(reason);
   };
 
-  return { enqueuePhrase, finish, stop, isClosed: () => closed };
+  return {
+    enqueuePhrase,
+    enqueueSilence,
+    setStartPolicy,
+    finish,
+    stop,
+    isClosed: () => closed,
+  };
 }
 
 function createPhraseStreamId(traceId: string, phraseIndex: number): string {
