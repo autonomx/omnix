@@ -33,14 +33,18 @@ def test_spoken_style_is_inserted_before_the_current_user_turn() -> None:
     )
 
 
-def test_spoken_style_explicitly_rejects_assistant_copy_patterns() -> None:
+def test_spoken_style_rejects_assistant_copy_without_forcing_brevity() -> None:
     normalized = LIVE_VOICE_SPOKEN_STYLE.casefold()
 
     assert "ordinary conversational language" in normalized
     assert "polished copy" in normalized
+    assert "longer responses are welcome" in normalized
+    assert "do not force every reply into a brief summary" in normalized
+    assert "easy to follow aloud" in normalized
     assert "customer-service phrasing" in normalized
     assert "do not end every response with a question" in normalized
     assert "circuits" in normalized
+    assert "one to three short sentences" not in normalized
 
 
 def test_spoken_style_application_is_idempotent() -> None:
