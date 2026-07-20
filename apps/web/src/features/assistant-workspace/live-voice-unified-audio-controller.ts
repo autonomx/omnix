@@ -311,7 +311,7 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
   const decoder = new TextDecoder();
   const clauses = new StableClauseAccumulator();
   let pending = '';
-  let deadlineTimer: number | null = null;
+  let deadlineTimer: ReturnType<typeof window.setTimeout> | null = null;
 
   const clearDeadlineTimer = (): void => {
     if (deadlineTimer !== null) window.clearTimeout(deadlineTimer);
