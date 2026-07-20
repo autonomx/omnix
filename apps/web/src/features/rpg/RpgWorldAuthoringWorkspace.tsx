@@ -8,7 +8,7 @@ import {
   type RpgWorldSummary,
 } from '../../api/rpgWorldLibraryClient';
 import { RpgWorldCard } from './RpgWorldCard';
-import { RpgWorldsCampaignsLibrary } from './RpgWorldsCampaignsLibrary';
+import { RpgWorldEditorShell } from './RpgWorldEditorShell';
 import './RpgWorldAuthoringWorkspace.css';
 
 interface RpgWorldAuthoringWorkspaceProps {
@@ -18,43 +18,8 @@ interface RpgWorldAuthoringWorkspaceProps {
 
 type WorldWorkspaceView =
   | { kind: 'library' }
-  | { kind: 'editor'; worldId: string; sectionId: string }
+  | { kind: 'editor'; worldId: string }
   | { kind: 'campaignSetup'; worldId: string };
-
-const EDITOR_SECTIONS = [
-  ['workspace', 'Overview', 'overview'],
-  ['workspace', 'World Generation', 'generation'],
-  ['workspace', 'Images', 'images'],
-  ['world', 'Map', 'map'],
-  ['world', 'Regions', 'regions'],
-  ['world', 'Areas', 'areas'],
-  ['world', 'Points of Interest', 'points_of_interest'],
-  ['world', 'Characters', 'npcs'],
-  ['world', 'Races', 'races'],
-  ['world', 'Classes', 'classes'],
-  ['world', 'Factions', 'factions'],
-  ['world', 'Monsters', 'monsters'],
-  ['world', 'Items', 'items'],
-  ['world', 'Spells', 'spells'],
-  ['world', 'Feats', 'feats'],
-  ['world', 'Quests', 'quests'],
-  ['lore', 'Realm Overview', 'realm'],
-  ['lore', 'History & Calendar', 'history'],
-  ['lore', 'Cosmology', 'cosmology'],
-  ['lore', 'Magic & Technology', 'magic_technology'],
-  ['lore', 'Cultures', 'cultures'],
-  ['lore', 'Religions', 'pantheon'],
-  ['lore', 'Institutions', 'institutions'],
-  ['lore', 'Current Conflicts', 'current_conflicts'],
-  ['game-master', 'Opening Threads', 'opening_threads'],
-  ['game-master', 'Scenarios', 'scenarios'],
-  ['game-master', 'Map Blueprints', 'map_blueprints'],
-  ['game-master', 'Relationships', 'relationships'],
-  ['game-master', 'Validation', 'validation'],
-  ['game-master', 'Releases', 'releases'],
-  ['game-master', 'Revision History', 'history_revisions'],
-  ['game-master', 'Advanced', 'advanced'],
-] as const;
 
 function slug(value: string): string {
   const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -114,10 +79,7 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
     refetchInterval: 5000,
   });
 
-  const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['feature', 'rpg'] });
-  };
-
+  const refresh = async () => queryClient.invalidateQueries({ queryKey: ['feature', 'rpg'] });
   const createWorld = useMutation({
     mutationFn: () => rpgWorldLibraryClient.createWorld({
       world_id: `world:${slug(title)}:${Date.now().toString(36)}`,
@@ -135,34 +97,28 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
       setDescription('');
       setFeedback(`Created ${result.world.title}.`);
       await refresh();
-      setView({ kind: 'editor', worldId: result.world.id, sectionId: 'overview' });
+      setView({ kind: 'editor', worldId: result.world.id });
     },
   });
-
   const lifecycle = useMutation({
-    mutationFn: (world: RpgWorldSummary) => (
-      world.status === 'archived'
-        ? rpgWorldLibraryClient.restoreWorld(world.id)
-        : rpgWorldLibraryClient.archiveWorld(world.id)
-    ),
+    mutationFn: (world: RpgWorldSummary) => world.status === 'archived'
+      ? rpgWorldLibraryClient.restoreWorld(world.id)
+      : rpgWorldLibraryClient.archiveWorld(world.id),
     onSuccess: async () => refresh(),
   });
-
   const continueCampaign = useMutation({
     mutationFn: (campaignId: string) => omnixApiClient.continueRpgSession(campaignId),
     onSuccess: (result) => {
-      if (!result.ok) throw new Error(result.error ?? 'Campaign could not be continued.');
-      onSessionLaunched(result.session_id ?? '');
+      if (!result.ok || !result.session_id) throw new Error(result.error ?? 'Campaign could not be continued.');
+      onSessionLaunched(result.session_id);
     },
   });
-
   const launchScenario = useMutation({
     mutationFn: async (scenarioId: string) => {
       const detail = detailQuery.data;
       if (!detail) throw new Error('World detail is not available.');
-      const revisions = [...(detail.scenario_revisions[scenarioId] ?? [])]
-        .sort((left, right) => right.revision - left.revision);
-      const revision = revisions[0];
+      const revision = [...(detail.scenario_revisions[scenarioId] ?? [])]
+        .sort((left, right) => right.revision - left.revision)[0];
       const release = matchingRelease(detail.releases, revision);
       if (!revision || !release) throw new Error('This opening does not have a compatible published release.');
       return rpgWorldLibraryClient.launchScenario(scenarioId, revision.revision, {
@@ -214,7 +170,7 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
                 key={world.id}
                 world={world}
                 facts={<><span>{worldState(world)}</span><span>{scenarioCount} opening{scenarioCount === 1 ? '' : 's'}</span><span>{campaignCount} campaign{campaignCount === 1 ? '' : 's'}</span></>}
-                actions={<><button className="rpg-secondary-button" type="button" onClick={() => setView({ kind: 'editor', worldId: world.id, sectionId: 'overview' })}>Edit</button><button type="button" onClick={() => setView({ kind: 'campaignSetup', worldId: world.id })}>Play</button></>}
+                actions={<><button className="rpg-secondary-button" type="button" onClick={() => setView({ kind: 'editor', worldId: world.id })}>Edit</button><button type="button" onClick={() => setView({ kind: 'campaignSetup', worldId: world.id })}>Play</button></>}
                 footer={<details className="rpg-world-card-more"><summary>More</summary><button className="rpg-secondary-button" type="button" onClick={() => lifecycle.mutate(world)}>{world.status === 'archived' ? 'Restore' : 'Archive'}</button></details>}
               />
             );
@@ -246,29 +202,20 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
         <header className="rpg-authoring-heading"><div><p className="eyebrow">Campaign setup</p><h2>{world?.title ?? 'World'}</h2><p>Continue a campaign or start from a published opening.</p></div><button className="rpg-secondary-button" type="button" onClick={() => setView({ kind: 'library' })}>Back to Worlds</button></header>
         <div className="rpg-authoring-two-column">
           <section><h3>Continue Campaign</h3>{campaigns.map((campaign) => <article key={campaign.campaign_id}><div><strong>{campaign.title}</strong><p>{campaign.status}</p></div><button type="button" disabled={continueCampaign.isPending} onClick={() => continueCampaign.mutate(campaign.campaign_id)}>Continue</button></article>)}{!campaigns.length ? <p>No campaigns have started in this world.</p> : null}</section>
-          <section><h3>Start New Campaign</h3>{scenarios.map((scenario) => <article key={scenario.id}><div><strong>{scenario.title}</strong><p>{scenario.description || 'Published opening scenario'}</p></div><button type="button" disabled={launchScenario.isPending} onClick={() => launchScenario.mutate(scenario.id)}>Play</button></article>)}{!scenarios.length ? <><p>World setup is incomplete. Publish an opening scenario before play.</p><button type="button" onClick={() => setView({ kind: 'editor', worldId: view.worldId, sectionId: 'scenarios' })}>Review World Setup</button></> : null}</section>
+          <section><h3>Start New Campaign</h3>{scenarios.map((scenario) => <article key={scenario.id}><div><strong>{scenario.title}</strong><p>{scenario.description || 'Published opening scenario'}</p></div><button type="button" disabled={launchScenario.isPending} onClick={() => launchScenario.mutate(scenario.id)}>Play</button></article>)}{!scenarios.length ? <><p>World setup is incomplete. Publish an opening scenario before play.</p><button type="button" onClick={() => setView({ kind: 'editor', worldId: view.worldId })}>Review World Setup</button></> : null}</section>
         </div>
       </section>
     );
   }
 
-  const selectedSection = EDITOR_SECTIONS.find((section) => section[2] === view.sectionId) ?? EDITOR_SECTIONS[0];
-  const topic = detailQuery.data?.topics.find((candidate) => candidate.topic_id === selectedSection[2]);
+  if (!world) return <p>Loading world editor…</p>;
   return (
-    <section className="rpg-authoring-editor" aria-label="World editor">
-      <header className="rpg-authoring-editor-header"><div><button className="rpg-secondary-button" type="button" onClick={() => setView({ kind: 'library' })}>Back to Worlds</button><span>/</span><strong>{world?.title ?? 'World'}</strong></div><div><span>{world ? worldState(world) : 'Loading'}</span><button type="button" onClick={() => setView({ kind: 'campaignSetup', worldId: view.worldId })}>Play</button></div></header>
-      <div className="rpg-authoring-editor-layout">
-        <nav aria-label="World editor sections">
-          {(['workspace', 'world', 'lore', 'game-master'] as const).map((group) => (
-            <section key={group}><h4>{group === 'workspace' ? 'Workspace' : group === 'game-master' ? 'Game Master' : group}</h4>{EDITOR_SECTIONS.filter((section) => section[0] === group).map((section) => <button className={view.sectionId === section[2] ? 'is-active' : ''} key={section[2]} type="button" onClick={() => setView({ ...view, sectionId: section[2] })}><span>{section[1]}</span><small>{detailQuery.data?.topics.some((candidate) => candidate.topic_id === section[2]) ? 'Complete' : 'Empty'}</small></button>)}</section>
-          ))}
-        </nav>
-        <main>
-          {view.sectionId === 'advanced' ? <RpgWorldsCampaignsLibrary onBack={() => setView({ kind: 'library' })} onSessionLaunched={onSessionLaunched} /> : (
-            <section className="rpg-authoring-page"><p className="eyebrow">{selectedSection[0]}</p><h2>{selectedSection[1]}</h2>{detailQuery.isPending ? <p>Loading world content…</p> : null}{topic ? <><p>{topic.status} · {topic.source}</p><pre>{JSON.stringify(topic.content, null, 2)}</pre></> : <div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This section will populate as world generation completes.</p>{view.sectionId === 'overview' && world ? <><p>{world.description || 'No description yet.'}</p><dl><div><dt>Genre</dt><dd>{world.genre}</dd></div><div><dt>Tone</dt><dd>{world.tone}</dd></div><div><dt>Draft</dt><dd>{world.draft_revision}</dd></div></dl></> : null}</div>}</section>
-          )}
-        </main>
-      </div>
-    </section>
+    <RpgWorldEditorShell
+      onBack={() => setView({ kind: 'library' })}
+      onPlay={() => setView({ kind: 'campaignSetup', worldId: view.worldId })}
+      onSessionLaunched={onSessionLaunched}
+      world={world}
+      worldId={view.worldId}
+    />
   );
 }
