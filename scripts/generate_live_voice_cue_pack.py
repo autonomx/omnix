@@ -1,27 +1,26 @@
 #!/usr/bin/env python3
-"""Generate cached voice-matched live cue WAV packs with the active TTS provider.
+"""Generate cached voice-matched live cue WAV packs.
 
-By default this generates the spoken acknowledgement cues (``mhm`` and ``hmm``).
-Nonverbal inhale/exhale prompts are opt-in because provider quality varies and each
-voice pack should be auditioned before those files are shipped.
+By default the generator calls the already-running Omnix TTS service. Use
+``--in-process`` only when the current Python environment can load the TTS
+runtime itself.
 """
 from __future__ import annotations
 
 import argparse
+import io
 import json
+import os
 import sys
+import urllib.error
+import urllib.request
 import wave
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
-if str(SRC_ROOT) not in sys.path:
-    sys.path.insert(0, str(SRC_ROOT))
-
-from app.gateway.tts_stream_contract import audio_chunk_to_pcm16_bytes  # noqa: E402
-from app.runtime_paths import resources_data_root  # noqa: E402
-from app.shared import get_tts_provider  # noqa: E402
+DEFAULT_TTS_SERVER_URL = "http://127.0.0.1:5101"
 
 DEFAULT_PROMPTS = {
     "mhm": "Mhm.",
@@ -33,6 +32,11 @@ EXPERIMENTAL_NONVERBAL_PROMPTS = {
 }
 
 
+def default_output_root() -> Path:
+    override = str(os.environ.get("OMNIX_LIVE_VOICE_CUE_ROOT") or "").strip()
+    return Path(override) if override else REPO_ROOT / "resources" / "data" / "voice_cues"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--voice", action="append", required=True, help="Voice clone ID; repeat for multiple voices.")
@@ -40,11 +44,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=resources_data_root() / "voice_cues",
+        default=default_output_root(),
         help="Cue-pack root served by /api/voice/cues.",
     )
     parser.add_argument("--language", default="English")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--server-url",
+        default=str(os.environ.get("OMNIX_TTS_URL") or DEFAULT_TTS_SERVER_URL),
+        help="Running Omnix TTS service URL. Defaults to OMNIX_TTS_URL or http://127.0.0.1:5101.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=180.0,
+        help="Per-request timeout in seconds when using the TTS service.",
+    )
+    parser.add_argument(
+        "--in-process",
+        action="store_true",
+        help="Load the active TTS provider in this Python process instead of calling the running TTS service.",
+    )
     parser.add_argument(
         "--include-experimental-nonverbal",
         action="store_true",
@@ -71,9 +91,9 @@ def main() -> int:
             raise SystemExit(f"Invalid --prompt value: {raw!r}")
         prompts[cue_id] = text.strip()
 
-    provider = get_tts_provider()
-    if provider is None or not hasattr(provider, "generate_audio_stream"):
-        raise SystemExit("The active TTS provider does not support streaming generation.")
+    provider = load_in_process_provider() if args.in_process else None
+    if not args.in_process:
+        require_ready_tts_server(args.server_url, timeout=min(args.timeout, 15.0))
 
     generated: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
@@ -90,14 +110,28 @@ def main() -> int:
                 if output.exists() and not args.overwrite:
                     skipped.append({"voice_id": voice_id, "variant_id": variant_id, "reason": "exists"})
                     continue
-                pcm_bytes, sample_rate = synthesize(
-                    provider,
-                    voice_id=voice_id,
-                    text=prompt,
-                    language=args.language,
-                    variant=variant,
-                )
-                write_wav(output, pcm_bytes, sample_rate)
+
+                if args.in_process:
+                    pcm_bytes, sample_rate = synthesize_in_process(
+                        provider,
+                        voice_id=voice_id,
+                        text=prompt,
+                        language=args.language,
+                        variant=variant,
+                    )
+                    write_pcm_wav(output, pcm_bytes, sample_rate)
+                    sample_count = len(pcm_bytes) // 2
+                else:
+                    wav_bytes, sample_rate, sample_count = synthesize_via_server(
+                        args.server_url,
+                        voice_id=voice_id,
+                        text=prompt,
+                        language=args.language,
+                        variant=variant,
+                        timeout=args.timeout,
+                    )
+                    write_wav_payload(output, wav_bytes)
+
                 generated.append(
                     {
                         "voice_id": voice_id,
@@ -105,8 +139,9 @@ def main() -> int:
                         "variant_id": variant_id,
                         "path": str(output),
                         "sample_rate": sample_rate,
-                        "samples": len(pcm_bytes) // 2,
+                        "samples": sample_count,
                         "experimental_nonverbal": cue_id in EXPERIMENTAL_NONVERBAL_PROMPTS,
+                        "source": "in_process" if args.in_process else "tts_server",
                     }
                 )
 
@@ -114,7 +149,98 @@ def main() -> int:
     return 0
 
 
-def synthesize(
+def require_ready_tts_server(server_url: str, *, timeout: float) -> None:
+    health_url = f"{server_url.rstrip('/')}/health"
+    try:
+        with urllib.request.urlopen(health_url, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        raise SystemExit(
+            f"Could not reach a ready Omnix TTS service at {health_url}: {exc}. "
+            "Start the TTS launcher service or pass --server-url."
+        ) from exc
+    if not payload.get("ok"):
+        raise SystemExit(
+            f"Omnix TTS service is not ready at {health_url}: "
+            f"{payload.get('error') or payload.get('status') or 'unknown error'}"
+        )
+
+
+def synthesize_via_server(
+    server_url: str,
+    *,
+    voice_id: str,
+    text: str,
+    language: str,
+    variant: int,
+    timeout: float,
+) -> tuple[bytes, int, int]:
+    payload = json.dumps(
+        {
+            "text": text,
+            "speaker": voice_id,
+            "language": language,
+            "chunk_size": 8,
+            "temperature": min(0.85, 0.56 + variant * 0.04),
+            "top_k": 20,
+            "top_p": 0.85,
+            "repetition_penalty": 1.05,
+            "append_silence": False,
+            "max_new_tokens": 64,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"{server_url.rstrip('/')}/api/tts/generate_stream_audio",
+        data=payload,
+        headers={"Accept": "audio/wav", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            content_type = str(response.headers.get("Content-Type") or "").lower()
+            wav_bytes = response.read()
+    except urllib.error.HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"TTS server returned HTTP {exc.code}: {details}") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeError(f"TTS server request failed for {voice_id!r}: {exc}") from exc
+
+    if "audio/wav" not in content_type and "audio/x-wav" not in content_type:
+        preview = wav_bytes[:500].decode("utf-8", errors="replace")
+        raise RuntimeError(f"TTS server returned {content_type or 'unknown content type'} instead of WAV: {preview}")
+    sample_rate, sample_count = inspect_wav(wav_bytes)
+    return wav_bytes, sample_rate, sample_count
+
+
+def inspect_wav(wav_bytes: bytes) -> tuple[int, int]:
+    try:
+        with wave.open(io.BytesIO(wav_bytes), "rb") as handle:
+            channels = handle.getnchannels()
+            sample_width = handle.getsampwidth()
+            sample_rate = handle.getframerate()
+            sample_count = handle.getnframes()
+    except (wave.Error, EOFError) as exc:
+        raise RuntimeError(f"TTS server returned an invalid WAV payload: {exc}") from exc
+    if channels != 1 or sample_width != 2 or sample_rate <= 0 or sample_count <= 0:
+        raise RuntimeError(
+            "TTS server returned an unsupported WAV payload: "
+            f"channels={channels}, sample_width={sample_width}, sample_rate={sample_rate}, samples={sample_count}"
+        )
+    return sample_rate, sample_count
+
+
+def load_in_process_provider() -> Any:
+    if str(SRC_ROOT) not in sys.path:
+        sys.path.insert(0, str(SRC_ROOT))
+    from app.shared import get_tts_provider
+
+    provider = get_tts_provider()
+    if provider is None or not hasattr(provider, "generate_audio_stream"):
+        raise SystemExit("The active in-process TTS provider does not support streaming generation.")
+    return provider
+
+
+def synthesize_in_process(
     provider: Any,
     *,
     voice_id: str,
@@ -122,6 +248,10 @@ def synthesize(
     language: str,
     variant: int,
 ) -> tuple[bytes, int]:
+    if str(SRC_ROOT) not in sys.path:
+        sys.path.insert(0, str(SRC_ROOT))
+    from app.gateway.tts_stream_contract import audio_chunk_to_pcm16_bytes
+
     chunks: list[bytes] = []
     sample_rate = 0
     stream = provider.generate_audio_stream(
@@ -153,13 +283,19 @@ def synthesize(
     return payload, sample_rate or 24_000
 
 
-def write_wav(path: Path, pcm_bytes: bytes, sample_rate: int) -> None:
+def write_pcm_wav(path: Path, pcm_bytes: bytes, sample_rate: int) -> None:
     temporary = path.with_suffix(".wav.tmp")
     with wave.open(str(temporary), "wb") as handle:
         handle.setnchannels(1)
         handle.setsampwidth(2)
         handle.setframerate(sample_rate)
         handle.writeframes(pcm_bytes)
+    temporary.replace(path)
+
+
+def write_wav_payload(path: Path, wav_bytes: bytes) -> None:
+    temporary = path.with_suffix(".wav.tmp")
+    temporary.write_bytes(wav_bytes)
     temporary.replace(path)
 
 
