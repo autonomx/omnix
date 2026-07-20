@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldAuthoringClient,
@@ -26,8 +26,10 @@ function operationLabel(value: string): string {
 
 export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityEditorProps) {
   const queryClient = useQueryClient();
+  const initialEntity = JSON.stringify(entity.metadata, null, 2);
   const [open, setOpen] = useState(false);
-  const [rawEntity, setRawEntity] = useState(JSON.stringify(entity.metadata, null, 2));
+  const [rawEntity, setRawEntity] = useState(initialEntity);
+  const rawEntityRef = useRef(initialEntity);
   const [entityDraftDirty, setEntityDraftDirty] = useState(false);
   const [rawDirectives, setRawDirectives] = useState('{}');
   const [feedback, setFeedback] = useState('');
@@ -38,10 +40,15 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
     enabled: open,
   });
 
+  const replaceDraft = (value: string) => {
+    rawEntityRef.current = value;
+    setRawEntity(value);
+  };
+
   useEffect(() => {
     if (entityDraftDirty) return;
     const current = entityQuery.data?.entity ?? entity.metadata;
-    setRawEntity(JSON.stringify(current, null, 2));
+    replaceDraft(JSON.stringify(current, null, 2));
   }, [entity.metadata, entityDraftDirty, entityQuery.data?.entity]);
 
   const refresh = async () => {
@@ -61,12 +68,12 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
       {
         expected_draft_revision: topic.draft_revision,
         expected_content_hash: topic.content_hash,
-        changes: parseObject(rawEntity, 'Entity'),
+        changes: parseObject(rawEntityRef.current, 'Entity'),
       },
     ),
     onSuccess: async (result) => {
       setEntityDraftDirty(false);
-      setRawEntity(JSON.stringify(result.entity, null, 2));
+      replaceDraft(JSON.stringify(result.entity, null, 2));
       setFeedback(`Saved ${entity.title}. ${result.stale_entity_ids.length} dependent entities need review.`);
       await refresh();
     },
@@ -87,7 +94,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
     onSuccess: async (result) => {
       setEntityDraftDirty(false);
       setFeedback(`Regenerated ${entity.title} while preserving ${Math.max(0, ((topic.content.entities as unknown[]) ?? []).length - 1)} sibling entities.`);
-      setRawEntity(JSON.stringify(result.entity, null, 2));
+      replaceDraft(JSON.stringify(result.entity, null, 2));
       await refresh();
     },
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Entity could not be regenerated.'),
@@ -111,7 +118,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
             value={rawEntity}
             onChange={(event) => {
               setEntityDraftDirty(true);
-              setRawEntity(event.currentTarget.value);
+              replaceDraft(event.currentTarget.value);
             }}
           />
         </label>
