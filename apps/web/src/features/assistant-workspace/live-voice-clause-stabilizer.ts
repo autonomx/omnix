@@ -21,6 +21,7 @@ const WEAK_BOUNDARY = /[,;:][\]})"'’”]*(?=\s|$)/g;
 const ABBREVIATION = /(?:\b(?:mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|e\.g|i\.e)|\b[A-Z])\.$/i;
 const DECIMAL_OR_VERSION = /\d\.\d$/;
 const URL_TAIL = /(?:https?:\/\/|www\.)\S*$/i;
+const OPENING_QUOTE = /^["“‘]/;
 
 export class StableClauseAccumulator {
   private buffer = '';
@@ -133,6 +134,7 @@ function findStableWeakBoundary(text: string, minimum: number, lookahead: number
   while ((match = WEAK_BOUNDARY.exec(text)) !== null) {
     const end = match.index + match[0].length;
     if (end < minimum || text.length - end < lookahead) continue;
+    if (OPENING_QUOTE.test(text.slice(end).trimStart())) continue;
     if (isProtectedBoundary(text.slice(0, end))) continue;
     return end;
   }
