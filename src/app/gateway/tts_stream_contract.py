@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.shared import remove_emojis
 
+from .tts_performance_contract import SpeechPerformancePlan
+
 try:
     np = importlib.import_module("numpy")
 except ImportError:  # pragma: no cover - exercised in minimal dependency environments.
@@ -75,7 +77,7 @@ class TtsStreamRequest(BaseModel):
     parity_mode: bool | None = None
     request_id: str | None = None
     diagnostics_stream_id: str | None = None
-    delivery_plan: dict[str, Any] | None = None
+    delivery_plan: SpeechPerformancePlan | None = None
     pronunciation_lexicon: list[TtsPronunciationEntry] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
