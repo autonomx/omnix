@@ -156,11 +156,25 @@ function isProtectedBoundary(prefix: string): boolean {
     || URL_TAIL.test(trimmed)
     || hasUnclosedPair(trimmed, '(', ')')
     || hasUnclosedPair(trimmed, '[', ']')
-    || hasUnclosedPair(trimmed, '{', '}');
+    || hasUnclosedPair(trimmed, '{', '}')
+    || hasUnclosedPair(trimmed, '“', '”')
+    || hasUnclosedPair(trimmed, '‘', '’')
+    || hasOddUnescapedQuoteCount(trimmed, '"');
 }
 
 function hasUnclosedPair(text: string, open: string, close: string): boolean {
   return text.lastIndexOf(open) > text.lastIndexOf(close);
+}
+
+function hasOddUnescapedQuoteCount(text: string, quote: string): boolean {
+  let count = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] !== quote) continue;
+    let backslashes = 0;
+    for (let cursor = index - 1; cursor >= 0 && text[cursor] === '\\'; cursor -= 1) backslashes += 1;
+    if (backslashes % 2 === 0) count += 1;
+  }
+  return count % 2 === 1;
 }
 
 function positiveInteger(value: number | undefined, fallback: number): number {
