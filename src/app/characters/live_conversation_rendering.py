@@ -18,8 +18,12 @@ SpeechDeliveryPlan = SpeechPerformancePlan
 
 
 class SpeechDeliveryPlanRequest(BaseModel):
+    """Compatibility request for the browser-authoritative delivery policy."""
+
     text: str = Field(min_length=1, max_length=4_000)
     stance: str = Field(default="automatic", max_length=40)
+    presence_preset: str = Field(default="natural", max_length=40)
+    conversation_pace: str = Field(default="balanced", max_length=40)
     emotional_attunement: str = Field(default="subtle", max_length=40)
     response_length: str = Field(default="conversational", max_length=40)
     response_onset_style: str = Field(default="adaptive", max_length=40)
@@ -48,10 +52,23 @@ class PronunciationListResponse(BaseModel):
 
 
 def create_speech_delivery_plan(request: SpeechDeliveryPlanRequest) -> SpeechDeliveryPlan:
+    """Mirror the TypeScript policy for compatibility and parity fixtures.
+
+    Runtime live-voice planning is browser authoritative because the browser owns
+    clause commitment, scheduler state, and the active conversation profile.
+    """
+
     text = request.text.strip()
     lower = text.lower()
     speech_act = "question" if text.endswith("?") else "answer"
-    if any(token in lower for token in ("i understand", "that sounds", "take your time", "i'm sorry")):
+    reassurance_markers = (
+        "i understand",
+        "that sounds",
+        "take your time",
+        "i'm sorry",
+        "i am sorry",
+    )
+    if any(token in lower for token in reassurance_markers):
         speech_act = "reassurance"
     elif request.stance == "listen":
         speech_act = "reflection"
@@ -60,12 +77,48 @@ def create_speech_delivery_plan(request: SpeechDeliveryPlanRequest) -> SpeechDel
     elif len(text.split()) <= 4:
         speech_act = "acknowledgement"
 
-    warmth = "high" if request.emotional_attunement == "expressive" or request.serious else "moderate"
-    energy = "low" if request.serious or speech_act in {"reassurance", "reflection"} else "moderate"
-    certainty = "high" if speech_act in {"instruction", "answer"} and "maybe" not in lower else "moderate"
-    pace = "slightly_slow" if request.serious or request.response_length == "detailed" else "natural"
-    clause_pause = "long" if request.serious else "short" if speech_act == "acknowledgement" else "medium"
-    emphasis = [word.strip(".,!?;:") for word in text.split() if word.isupper() and len(word) > 1][:6]
+    reflective = request.serious or speech_act in {"reassurance", "reflection"}
+    energy = (
+        "low"
+        if reflective
+        else "high"
+        if request.presence_preset == "engaged"
+        else "moderate"
+    )
+    warmth = (
+        "high"
+        if request.serious or request.emotional_attunement == "expressive"
+        else "low"
+        if request.emotional_attunement == "off"
+        else "moderate"
+    )
+    uncertain_markers = ("maybe", "perhaps", "might", "not sure", "uncertain")
+    certainty = (
+        "low"
+        if any(token in lower for token in uncertain_markers)
+        else "high"
+        if speech_act in {"answer", "instruction"}
+        else "moderate"
+    )
+    pace = (
+        "slightly_slow"
+        if request.serious or request.response_length == "detailed"
+        else "slightly_fast"
+        if request.conversation_pace == "quick"
+        else "natural"
+    )
+    clause_pause = (
+        "long"
+        if request.serious
+        else "short"
+        if speech_act == "acknowledgement"
+        else "medium"
+    )
+    emphasis = [
+        word.strip(".,!?;:")
+        for word in text.split()
+        if word.strip(".,!?;:").isupper() and len(word.strip(".,!?;:")) > 1
+    ][:6]
     desired_onset_ms = (
         220
         if request.response_onset_style == "immediate"
@@ -89,7 +142,9 @@ def create_speech_delivery_plan(request: SpeechDeliveryPlanRequest) -> SpeechDel
         nonverbal_eligibility={
             "breath": request.emotional_attunement != "off",
             "acknowledgement": request.assistant_backchannel_mode != "off",
-            "amused_exhale": request.emotional_attunement == "expressive" and not request.serious,
+            "amused_exhale": (
+                request.emotional_attunement == "expressive" and not request.serious
+            ),
             "sigh": request.emotional_attunement == "expressive" and request.serious,
         },
     )
@@ -101,7 +156,11 @@ def _utcnow() -> str:
 
 def default_pronunciation_path() -> Path:
     configured = os.getenv("OMNIX_LIVE_PRONUNCIATION_PATH", "").strip()
-    return Path(configured) if configured else Path("resources/data/live-conversation-pronunciations.json")
+    return (
+        Path(configured)
+        if configured
+        else Path("resources/data/live-conversation-pronunciations.json")
+    )
 
 
 class PronunciationStore:
@@ -112,31 +171,50 @@ class PronunciationStore:
     def list(self, session_id: str) -> PronunciationListResponse:
         with self._lock:
             data = self._read()
-            entries = [PronunciationEntry.model_validate(item) for item in data.get(session_id, [])]
+            entries = [
+                PronunciationEntry.model_validate(item)
+                for item in data.get(session_id, [])
+            ]
             return PronunciationListResponse(session_id=session_id, entries=entries)
 
-    def create(self, session_id: str, request: PronunciationCreateRequest) -> PronunciationListResponse:
+    def create(
+        self,
+        session_id: str,
+        request: PronunciationCreateRequest,
+    ) -> PronunciationListResponse:
         phrase = request.phrase.strip()
         pronunciation = request.pronunciation.strip()
         now = _utcnow()
         with self._lock:
             data = self._read()
-            entries = [PronunciationEntry.model_validate(item) for item in data.get(session_id, [])]
-            matching = next((entry for entry in entries if entry.phrase.casefold() == phrase.casefold()), None)
+            entries = [
+                PronunciationEntry.model_validate(item)
+                for item in data.get(session_id, [])
+            ]
+            matching = next(
+                (
+                    entry
+                    for entry in entries
+                    if entry.phrase.casefold() == phrase.casefold()
+                ),
+                None,
+            )
             if matching:
                 matching.phrase = phrase
                 matching.pronunciation = pronunciation
                 matching.locale = request.locale
                 matching.updated_at = now
             else:
-                entries.append(PronunciationEntry(
-                    id=f"pronunciation:{uuid.uuid4().hex}",
-                    phrase=phrase,
-                    pronunciation=pronunciation,
-                    locale=request.locale,
-                    created_at=now,
-                    updated_at=now,
-                ))
+                entries.append(
+                    PronunciationEntry(
+                        id=f"pronunciation:{uuid.uuid4().hex}",
+                        phrase=phrase,
+                        pronunciation=pronunciation,
+                        locale=request.locale,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
             data[session_id] = [entry.model_dump(mode="json") for entry in entries]
             self._write(data)
             return PronunciationListResponse(session_id=session_id, entries=entries)
@@ -144,8 +222,12 @@ class PronunciationStore:
     def delete(self, session_id: str, entry_id: str) -> PronunciationListResponse:
         with self._lock:
             data = self._read()
-            entries = [PronunciationEntry.model_validate(item) for item in data.get(session_id, [])]
-            data[session_id] = [entry.model_dump(mode="json") for entry in entries if entry.id != entry_id]
+            entries = [
+                PronunciationEntry.model_validate(item)
+                for item in data.get(session_id, [])
+            ]
+            data[session_id] = [entry for entry in entries if entry.id != entry_id]
+            data[session_id] = [entry.model_dump(mode="json") for entry in data[session_id]]
             self._write(data)
             return self.list(session_id)
 
@@ -159,7 +241,10 @@ class PronunciationStore:
     def _write(self, payload: dict[str, list[dict[str, Any]]]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(self.path.suffix + ".tmp")
-        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        temporary.write_text(
+            json.dumps(payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
         temporary.replace(self.path)
 
 
@@ -171,7 +256,9 @@ def register_live_conversation_rendering_routes(
     app: FastAPI,
     *,
     chat_store_factory: Callable[[], Any] | None = None,
-    pronunciation_store_factory: Callable[[], PronunciationStore] = default_pronunciation_store,
+    pronunciation_store_factory: Callable[[], PronunciationStore] = (
+        default_pronunciation_store
+    ),
 ) -> None:
     def require_session(session_id: str) -> None:
         if chat_store_factory is None or chat_store_factory().get_session(session_id) is None:
@@ -183,7 +270,10 @@ def register_live_conversation_rendering_routes(
         tags=["live-chat"],
         include_in_schema=False,
     )
-    async def delivery_plan(session_id: str, request: SpeechDeliveryPlanRequest) -> SpeechDeliveryPlan:
+    async def delivery_plan(
+        session_id: str,
+        request: SpeechDeliveryPlanRequest,
+    ) -> SpeechDeliveryPlan:
         require_session(session_id)
         return create_speech_delivery_plan(request)
 
@@ -203,7 +293,10 @@ def register_live_conversation_rendering_routes(
         tags=["live-chat"],
         include_in_schema=False,
     )
-    async def create_pronunciation(session_id: str, request: PronunciationCreateRequest) -> PronunciationListResponse:
+    async def create_pronunciation(
+        session_id: str,
+        request: PronunciationCreateRequest,
+    ) -> PronunciationListResponse:
         require_session(session_id)
         return pronunciation_store_factory().create(session_id, request)
 
@@ -213,18 +306,9 @@ def register_live_conversation_rendering_routes(
         tags=["live-chat"],
         include_in_schema=False,
     )
-    async def delete_pronunciation(session_id: str, entry_id: str) -> PronunciationListResponse:
+    async def delete_pronunciation(
+        session_id: str,
+        entry_id: str,
+    ) -> PronunciationListResponse:
         require_session(session_id)
         return pronunciation_store_factory().delete(session_id, entry_id)
-
-
-__all__ = [
-    "PronunciationCreateRequest",
-    "PronunciationEntry",
-    "PronunciationListResponse",
-    "PronunciationStore",
-    "SpeechDeliveryPlan",
-    "SpeechDeliveryPlanRequest",
-    "create_speech_delivery_plan",
-    "register_live_conversation_rendering_routes",
-]
