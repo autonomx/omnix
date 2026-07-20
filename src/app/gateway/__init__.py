@@ -18,6 +18,7 @@ from .live_chat_postgres_fast_path import install_live_chat_postgres_fast_path
 from .live_chat_provider_metrics import install_live_chat_provider_metrics_hook
 from .live_chat_provider_routing import install_live_chat_provider_routing_hook
 from .live_chat_stream_retry import install_live_chat_stream_retry_hook
+from .live_voice_cue_asset_routes import install_live_voice_cue_asset_hook
 from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
 from .live_voice_runtime_offload import install_live_voice_runtime_offload_hook
 from .memory_job_offload import install_memory_job_offload_hook
@@ -92,6 +93,7 @@ install_live_chat_live_voice_profile_hook()
 install_live_chat_companion_context_hook()
 install_memory_job_offload_hook()
 install_live_voice_diagnostics_hook()
+install_live_voice_cue_asset_hook()
 install_event_loop_lag_monitor_hook()
 install_blocking_route_offload_hook()
 install_live_voice_runtime_offload_hook()
