@@ -140,6 +140,7 @@ export function RpgWorldEditorShell({
           ) : selectedSection.id === 'generation' ? (
             <RpgWorldGenerationPanel
               generation={manifestQuery.data?.generation}
+              onOpenImages={() => setSectionId('images')}
               sections={sections}
               worldId={worldId}
             />
