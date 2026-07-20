@@ -1,16 +1,18 @@
 import type { LiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
 import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
 import type { SpeechSynthesisOptions } from './live-speech-performance-contract';
+import { cloneCueSamples, type LiveVoiceCueId } from './live-voice-cue-bank';
 import {
+  createCueSegmentId,
   createSilenceSegmentId,
   createSpeechSegmentId,
   millisecondsToPlaybackSamples,
-  type PlaybackStartPolicy,
+  type PlaybackStartPolicyMs,
   type SilenceReason,
 } from './live-voice-playback-contract';
 import { LIVE_VOICE_PCM_WORKLET_NAME, liveVoicePcmWorkletSource } from './live-voice-pcm-worklet';
 
-const SAMPLE_RATE = 24_000;
+const REQUESTED_SAMPLE_RATE = 24_000;
 const START_BUFFER_SECONDS = 0.4;
 const REBUFFER_SECONDS = 0.75;
 const MAX_REBUFFER_SECONDS = 1.5;
@@ -21,7 +23,7 @@ const DRAIN_TIMEOUT_MS = 120_000;
 const CHARACTER_AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 const WEBSOCKET_OPEN = 1;
 
-type StreamingAudioWindow = Window & typeof globalThis & {
+ type StreamingAudioWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
   webkitAudioContext?: typeof AudioContext;
   AudioWorkletNode?: typeof AudioWorkletNode;
@@ -55,7 +57,9 @@ type WorkletEvent = {
   underrun_count?: number;
   current_rebuffer_samples?: number;
   waiting_for_buffer?: boolean;
+  waiting_for_following_speech?: boolean;
   input_ended?: boolean;
+  reason?: string;
 };
 
 type PhraseStats = {
@@ -81,13 +85,23 @@ type ActivePhrase = {
 };
 
 export type LiveVoicePcmSession = {
+  readonly sampleRate: number;
   enqueuePhrase: (
     text: string,
     phraseIndex: number,
     synthesisOptions?: SpeechSynthesisOptions,
   ) => Promise<void>;
-  enqueueSilence: (durationMs: number, reason: SilenceReason) => Promise<void>;
-  setStartPolicy: (policy: Partial<PlaybackStartPolicy>) => void;
+  enqueueSilence: (
+    durationMs: number,
+    reason: SilenceReason,
+    minimumFollowingSpeechMs?: number,
+  ) => Promise<void>;
+  enqueueCue: (
+    cueId: LiveVoiceCueId,
+    variantId: string,
+    gainValue?: number,
+  ) => Promise<void>;
+  setStartPolicy: (policy: Partial<PlaybackStartPolicyMs>) => void;
   finish: () => Promise<void>;
   stop: (reason?: string) => Promise<void>;
   isClosed: () => boolean;
@@ -107,7 +121,7 @@ export async function createLiveVoicePcmSession(
   }
 
   const startedAtMs = performance.now();
-  const audioContext = new AudioContextCtor({ latencyHint: 'interactive', sampleRate: SAMPLE_RATE });
+  const audioContext = new AudioContextCtor({ latencyHint: 'interactive', sampleRate: REQUESTED_SAMPLE_RATE });
   if (audioContext.state !== 'running') await audioContext.resume();
   const moduleUrl = createWorkletModuleUrl();
   try {
@@ -130,6 +144,7 @@ export async function createLiveVoicePcmSession(
   let underruns = 0;
   let resumes = 0;
   let silenceSequence = 0;
+  let cueSequence = 0;
   const drainPromise = new Promise<void>((resolve) => {
     drainResolve = resolve;
   });
@@ -192,7 +207,7 @@ export async function createLiveVoicePcmSession(
       total_frames: totalFrames,
       total_received_samples: totalReceivedSamples,
       total_playback_samples: totalPlaybackSamples,
-      total_received_audio_ms: totalReceivedSamples * 1000 / SAMPLE_RATE,
+      total_received_audio_ms: totalReceivedSamples * 1000 / REQUESTED_SAMPLE_RATE,
       underruns,
       resumes,
     }, 'audio_worklet');
@@ -267,17 +282,11 @@ export async function createLiveVoicePcmSession(
     totalFrames += 1;
     totalReceivedSamples += sourceSamples;
     const evenBytes = buffer.byteLength - (buffer.byteLength % 2);
+    const sourcePcm = new Int16Array(buffer.slice(0, evenBytes));
     window.dispatchEvent(new CustomEvent(CHARACTER_AVATAR_PCM_EVENT, {
-      detail: {
-        samples: new Int16Array(buffer.slice(0, evenBytes)),
-        sampleRate: phrase.stats.sampleRate,
-      },
+      detail: { samples: sourcePcm, sampleRate: phrase.stats.sampleRate },
     }));
-    const converted = pcm16ToFloat32(
-      new Int16Array(buffer.slice(0, evenBytes)),
-      phrase.stats.sampleRate,
-      audioContext.sampleRate,
-    );
+    const converted = pcm16ToFloat32(sourcePcm, phrase.stats.sampleRate, audioContext.sampleRate);
     phrase.stats.playbackSamples += converted.length;
     totalPlaybackSamples += converted.length;
     node.port.postMessage({
@@ -442,7 +451,7 @@ export async function createLiveVoicePcmSession(
           playbackSamples: 0,
           firstFrameAtMs: null,
           lastFrameAtMs: null,
-          sampleRate: SAMPLE_RATE,
+          sampleRate: REQUESTED_SAMPLE_RATE,
         },
       };
       reporter.record('phrase_request_sent', {
@@ -508,10 +517,18 @@ export async function createLiveVoicePcmSession(
     return task;
   };
 
-  const enqueueSilence = (durationMs: number, reason: SilenceReason): Promise<void> => {
+  const enqueueSilence = (
+    durationMs: number,
+    reason: SilenceReason,
+    minimumFollowingSpeechMs = 120,
+  ): Promise<void> => {
     if (closed || inputFinished) return Promise.reject(new Error('Live voice input is already closed.'));
     const durationSamples = millisecondsToPlaybackSamples(durationMs, audioContext.sampleRate);
     if (durationSamples <= 0) return Promise.resolve();
+    const minimumFollowingSpeechSamples = millisecondsToPlaybackSamples(
+      minimumFollowingSpeechMs,
+      audioContext.sampleRate,
+    );
     const segmentId = createSilenceSegmentId(traceId, silenceSequence);
     silenceSequence += 1;
     const task = generationQueue.catch(() => undefined).then(() => {
@@ -519,6 +536,7 @@ export async function createLiveVoicePcmSession(
         type: 'push_segment_silence',
         segmentId,
         durationSamples,
+        minimumFollowingSpeechSamples,
         reason,
       });
       reporter.record('silence_segment_queued', {
@@ -526,6 +544,8 @@ export async function createLiveVoicePcmSession(
         segment_kind: 'silence',
         duration_samples: durationSamples,
         duration_ms: durationSamples * 1000 / audioContext.sampleRate,
+        minimum_following_speech_samples: minimumFollowingSpeechSamples,
+        minimum_following_speech_ms: minimumFollowingSpeechMs,
         sample_rate: audioContext.sampleRate,
         reason,
       }, 'pcm_session');
@@ -534,11 +554,54 @@ export async function createLiveVoicePcmSession(
     return task;
   };
 
-  const setStartPolicy = (policy: Partial<PlaybackStartPolicy>): void => {
-    const notBeforeRenderSample = Math.max(0, Math.round(policy.notBeforeRenderSample ?? 0));
-    const minimumBufferedSpeechSamples = Math.max(
+  const enqueueCue = (
+    cueId: LiveVoiceCueId,
+    variantId: string,
+    gainValue = 0.68,
+  ): Promise<void> => {
+    if (closed || inputFinished) return Promise.reject(new Error('Live voice input is already closed.'));
+    const segmentId = createCueSegmentId(traceId, cueId, cueSequence);
+    cueSequence += 1;
+    const task = generationQueue.catch(() => undefined).then(() => {
+      const samples = cloneCueSamples(cueId, variantId, audioContext.sampleRate);
+      const gain = Math.max(0, Math.min(1, gainValue));
+      if (gain !== 1) {
+        for (let index = 0; index < samples.length; index += 1) samples[index] *= gain;
+      }
+      totalPlaybackSamples += samples.length;
+      node.port.postMessage({
+        type: 'push_segment_samples',
+        segmentId,
+        segmentKind: 'cue',
+        cueId,
+        variantId,
+        samples,
+      }, [samples.buffer]);
+      node.port.postMessage({ type: 'segment_end', segmentId });
+      reporter.record('cue_segment_queued', {
+        segment_id: segmentId,
+        segment_kind: 'cue',
+        cue_id: cueId,
+        variant_id: variantId,
+        playback_samples: samples.length,
+        sample_rate: audioContext.sampleRate,
+        semantic_speech_samples: 0,
+      }, 'pcm_session');
+    });
+    generationQueue = task;
+    return task;
+  };
+
+  const setStartPolicy = (policy: Partial<PlaybackStartPolicyMs>): void => {
+    const notBeforeMs = Math.max(0, Number(policy.notBeforeMs ?? 0));
+    const minimumBufferedSpeechMs = Math.max(
       1,
-      Math.round(policy.minimumBufferedSpeechSamples ?? startBufferSamples),
+      Number(policy.minimumBufferedSpeechMs ?? START_BUFFER_SECONDS * 1_000),
+    );
+    const notBeforeRenderSample = millisecondsToPlaybackSamples(notBeforeMs, audioContext.sampleRate);
+    const minimumBufferedSpeechSamples = millisecondsToPlaybackSamples(
+      minimumBufferedSpeechMs,
+      audioContext.sampleRate,
     );
     node.port.postMessage({
       type: 'set_start_policy',
@@ -546,6 +609,8 @@ export async function createLiveVoicePcmSession(
       minimumBufferedSpeechSamples,
     });
     reporter.record('playback_start_policy_set', {
+      not_before_ms: notBeforeMs,
+      minimum_buffered_speech_ms: minimumBufferedSpeechMs,
       not_before_render_sample: notBeforeRenderSample,
       minimum_buffered_speech_samples: minimumBufferedSpeechSamples,
       sample_rate: audioContext.sampleRate,
@@ -562,7 +627,7 @@ export async function createLiveVoicePcmSession(
       total_frames: totalFrames,
       total_received_samples: totalReceivedSamples,
       total_playback_samples: totalPlaybackSamples,
-      total_received_audio_ms: totalReceivedSamples * 1000 / SAMPLE_RATE,
+      total_received_audio_ms: totalReceivedSamples * 1000 / REQUESTED_SAMPLE_RATE,
       underruns,
       resumes,
       websocket_scope: 'turn',
@@ -572,7 +637,7 @@ export async function createLiveVoicePcmSession(
       try { socket.send(JSON.stringify({ type: 'close', reason })); } catch { /* ignore cleanup failures */ }
     }
     try { socket.close(1000, reason.slice(0, 120)); } catch { /* ignore cleanup failures */ }
-    try { node.port.postMessage({ type: 'stop' }); } catch { /* ignore cleanup failures */ }
+    try { node.port.postMessage({ type: 'stop', reason }); } catch { /* ignore cleanup failures */ }
     try { node.disconnect(); } catch { /* ignore cleanup failures */ }
     document.removeEventListener('visibilitychange', handlePlaybackResumeSignal);
     window.removeEventListener('focus', handlePlaybackResumeSignal);
@@ -595,7 +660,7 @@ export async function createLiveVoicePcmSession(
       total_frames: totalFrames,
       total_received_samples: totalReceivedSamples,
       total_playback_samples: totalPlaybackSamples,
-      total_received_audio_ms: totalReceivedSamples * 1000 / SAMPLE_RATE,
+      total_received_audio_ms: totalReceivedSamples * 1000 / REQUESTED_SAMPLE_RATE,
       underruns,
       resumes,
     }, 'pcm_session');
@@ -608,8 +673,10 @@ export async function createLiveVoicePcmSession(
   };
 
   return {
+    sampleRate: audioContext.sampleRate,
     enqueuePhrase,
     enqueueSilence,
+    enqueueCue,
     setStartPolicy,
     finish,
     stop,
