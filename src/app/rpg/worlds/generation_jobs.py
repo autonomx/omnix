@@ -137,13 +137,15 @@ def world_topic_job_id(
     draft_revision: int,
     topic_id: str,
     fingerprint: str,
+    run_id: str = "",
 ) -> str:
     safe_world = _SAFE_ID.sub("-", world_id).strip("-")
     safe_topic = _SAFE_ID.sub("-", topic_id).strip("-")
-    digest = fingerprint.removeprefix("sha256:")[:20]
+    digest = fingerprint.removeprefix("sha256:")[:16]
+    run_digest = canonical_hash({"run_id": run_id}).removeprefix("sha256:")[:10]
     return (
         f"world-topic:{safe_world}:draft:{int(draft_revision)}:"
-        f"{safe_topic}:{digest}"
+        f"{safe_topic}:{digest}:{run_digest}"
     )
 
 
@@ -211,6 +213,7 @@ def plan_ready_topic_jobs(
             draft_revision=draft_revision,
             topic_id=node.topic_id,
             fingerprint=fingerprint,
+            run_id=run_id,
         )
         if job_id in existing:
             continue
