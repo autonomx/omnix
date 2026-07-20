@@ -8,6 +8,7 @@ export type LiveVoiceHumanizationFlags = {
   performancePlans: boolean;
   responseCues: boolean;
   listenerCues: boolean;
+  proceduralCueFallback: boolean;
   vocalContinuity: boolean;
 };
 
@@ -18,6 +19,7 @@ export const DEFAULT_LIVE_VOICE_HUMANIZATION_FLAGS: Readonly<LiveVoiceHumanizati
   performancePlans: true,
   responseCues: true,
   listenerCues: true,
+  proceduralCueFallback: false,
   vocalContinuity: true,
 };
 
