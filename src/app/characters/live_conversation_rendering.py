@@ -7,25 +7,14 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-SpeechAct = Literal["acknowledgement", "answer", "question", "reassurance", "reflection", "instruction"]
-DeliveryLevel = Literal["low", "moderate", "high"]
-DeliveryPace = Literal["slightly_slow", "natural", "slightly_fast"]
-ClausePause = Literal["short", "medium", "long"]
+from app.gateway.tts_performance_contract import SpeechPerformancePlan
 
-
-class SpeechDeliveryPlan(BaseModel):
-    speech_act: SpeechAct = "answer"
-    energy: DeliveryLevel = "moderate"
-    warmth: DeliveryLevel = "moderate"
-    certainty: DeliveryLevel = "moderate"
-    pace: DeliveryPace = "natural"
-    clause_pause: ClausePause = "medium"
-    emphasis: list[str] = Field(default_factory=list, max_length=6)
+SpeechDeliveryPlan = SpeechPerformancePlan
 
 
 class SpeechDeliveryPlanRequest(BaseModel):
@@ -33,6 +22,8 @@ class SpeechDeliveryPlanRequest(BaseModel):
     stance: str = Field(default="automatic", max_length=40)
     emotional_attunement: str = Field(default="subtle", max_length=40)
     response_length: str = Field(default="conversational", max_length=40)
+    response_onset_style: str = Field(default="adaptive", max_length=40)
+    assistant_backchannel_mode: str = Field(default="off", max_length=40)
     serious: bool = False
 
 
@@ -59,7 +50,7 @@ class PronunciationListResponse(BaseModel):
 def create_speech_delivery_plan(request: SpeechDeliveryPlanRequest) -> SpeechDeliveryPlan:
     text = request.text.strip()
     lower = text.lower()
-    speech_act: SpeechAct = "question" if text.endswith("?") else "answer"
+    speech_act = "question" if text.endswith("?") else "answer"
     if any(token in lower for token in ("i understand", "that sounds", "take your time", "i'm sorry")):
         speech_act = "reassurance"
     elif request.stance == "listen":
@@ -69,12 +60,20 @@ def create_speech_delivery_plan(request: SpeechDeliveryPlanRequest) -> SpeechDel
     elif len(text.split()) <= 4:
         speech_act = "acknowledgement"
 
-    warmth: DeliveryLevel = "high" if request.emotional_attunement == "expressive" or request.serious else "moderate"
-    energy: DeliveryLevel = "low" if request.serious or speech_act in {"reassurance", "reflection"} else "moderate"
-    certainty: DeliveryLevel = "high" if speech_act in {"instruction", "answer"} and "maybe" not in lower else "moderate"
-    pace: DeliveryPace = "slightly_slow" if request.serious or request.response_length == "detailed" else "natural"
-    clause_pause: ClausePause = "long" if request.serious else "short" if speech_act == "acknowledgement" else "medium"
+    warmth = "high" if request.emotional_attunement == "expressive" or request.serious else "moderate"
+    energy = "low" if request.serious or speech_act in {"reassurance", "reflection"} else "moderate"
+    certainty = "high" if speech_act in {"instruction", "answer"} and "maybe" not in lower else "moderate"
+    pace = "slightly_slow" if request.serious or request.response_length == "detailed" else "natural"
+    clause_pause = "long" if request.serious else "short" if speech_act == "acknowledgement" else "medium"
     emphasis = [word.strip(".,!?;:") for word in text.split() if word.isupper() and len(word) > 1][:6]
+    desired_onset_ms = (
+        220
+        if request.response_onset_style == "immediate"
+        else 650
+        if request.response_onset_style == "reflective"
+        else 450
+    )
+    maximum_delay_ms = 120 if request.response_onset_style == "immediate" else 350
     return SpeechDeliveryPlan(
         speech_act=speech_act,
         energy=energy,
@@ -83,6 +82,16 @@ def create_speech_delivery_plan(request: SpeechDeliveryPlanRequest) -> SpeechDel
         pace=pace,
         clause_pause=clause_pause,
         emphasis=emphasis,
+        onset_policy={
+            "desired_perceived_onset_ms": desired_onset_ms,
+            "maximum_additional_delay_ms": maximum_delay_ms,
+        },
+        nonverbal_eligibility={
+            "breath": request.emotional_attunement != "off",
+            "acknowledgement": request.assistant_backchannel_mode != "off",
+            "amused_exhale": request.emotional_attunement == "expressive" and not request.serious,
+            "sigh": request.emotional_attunement == "expressive" and request.serious,
+        },
     )
 
 
