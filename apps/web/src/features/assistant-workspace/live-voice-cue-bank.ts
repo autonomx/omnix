@@ -1,3 +1,5 @@
+import { readLiveVoiceHumanizationFlags } from './live-voice-humanization-flags';
+
 export type LiveVoiceCueId = 'mhm' | 'hmm' | 'inhale' | 'amused_exhale';
 export type CueSampleSource = 'voice_asset' | 'procedural_fallback';
 
@@ -101,7 +103,9 @@ export function resolveCueSamples(
       };
     }
   }
-  if (!(options.allowProceduralFallback ?? true)) return null;
+  const proceduralFallbackAllowed = options.allowProceduralFallback === true
+    || readLiveVoiceHumanizationFlags().proceduralCueFallback;
+  if (!proceduralFallbackAllowed) return null;
   return {
     samples: getCachedCueSamples(cueId, variantId, playbackSampleRate).slice(),
     source: 'procedural_fallback',
