@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Mapping
+import uuid
+from typing import Any, Mapping, Sequence
 
 from app.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
@@ -18,6 +19,7 @@ from .generation_jobs import (
     WorldTopicGenerationSettings,
     canonical_hash,
     generation_progress,
+    generation_topic_ids,
     plan_ready_topic_jobs,
     topic_generation_fingerprint,
     world_generation_run_id,
@@ -85,15 +87,20 @@ def _settings_from_payload(value: Mapping[str, Any]) -> WorldTopicGenerationSett
     )
 
 
-def _generation_topic_ids(graph: CampaignTopicGraph) -> tuple[str, ...]:
-    return tuple(
-        node.topic_id
-        for node in graph.topological_order()
-        if node.category not in _NON_GENERATION_CATEGORIES
+def _authoring(row: Mapping[str, Any]) -> dict[str, Any]:
+    provenance = row.get("provenance")
+    provenance = provenance if isinstance(provenance, Mapping) else {}
+    authoring = provenance.get("authoring")
+    return dict(authoring) if isinstance(authoring, Mapping) else {}
+
+
+def _protected(row: Mapping[str, Any]) -> bool:
+    return str(row.get("source") or "") == "manual" or bool(
+        _authoring(row).get("generation_lock")
     )
 
 
-def reusable_completed_topics(
+def available_completed_topics(
     graph: CampaignTopicGraph,
     *,
     rows: Mapping[str, Mapping[str, Any]],
@@ -101,18 +108,34 @@ def reusable_completed_topics(
     topic_directives: Mapping[str, Mapping[str, Any]],
     entity_manifest_hash: str,
     settings: WorldTopicGenerationSettings,
-) -> dict[str, Mapping[str, Any]]:
-    reusable: dict[str, Mapping[str, Any]] = {}
+    forced_topic_ids: Sequence[str] = (),
+) -> tuple[
+    dict[str, Mapping[str, Any]],
+    tuple[str, ...],
+    tuple[str, ...],
+]:
+    """Return dependency-usable rows, generated reuses, and protected rows."""
+
+    available: dict[str, Mapping[str, Any]] = {}
+    reusable: list[str] = []
+    protected: list[str] = []
+    forced = set(forced_topic_ids)
     for node in graph.topological_order():
         if node.category in _NON_GENERATION_CATEGORIES:
             continue
         row = rows.get(node.topic_id)
         if row is None or str(row.get("status") or "") != "ready":
             continue
-        if not set(node.dependencies).issubset(reusable):
+        if not set(node.dependencies).issubset(available):
+            continue
+        if node.topic_id in forced:
+            continue
+        if _protected(row):
+            available[node.topic_id] = row
+            protected.append(node.topic_id)
             continue
         dependency_hashes = {
-            dependency_id: str(reusable[dependency_id]["content_hash"])
+            dependency_id: str(available[dependency_id]["content_hash"])
             for dependency_id in node.dependencies
         }
         fingerprint, input_hash, directive_hash = topic_generation_fingerprint(
@@ -137,8 +160,31 @@ def reusable_completed_topics(
             continue
         if dict(row.get("dependency_hashes") or {}) != dependency_hashes:
             continue
-        reusable[node.topic_id] = row
-    return reusable
+        available[node.topic_id] = row
+        reusable.append(node.topic_id)
+    return available, tuple(reusable), tuple(protected)
+
+
+def reusable_completed_topics(
+    graph: CampaignTopicGraph,
+    *,
+    rows: Mapping[str, Mapping[str, Any]],
+    generation_context: Mapping[str, Any],
+    topic_directives: Mapping[str, Mapping[str, Any]],
+    entity_manifest_hash: str,
+    settings: WorldTopicGenerationSettings,
+) -> dict[str, Mapping[str, Any]]:
+    """Backward-compatible generated-topic reuse projection."""
+
+    available, reusable, _protected_ids = available_completed_topics(
+        graph,
+        rows=rows,
+        generation_context=generation_context,
+        topic_directives=topic_directives,
+        entity_manifest_hash=entity_manifest_hash,
+        settings=settings,
+    )
+    return {topic_id: available[topic_id] for topic_id in reusable}
 
 
 def start_world_generation(
@@ -150,6 +196,10 @@ def start_world_generation(
     topic_directives: Mapping[str, Mapping[str, Any]],
     entity_manifest_hash: str,
     settings: WorldTopicGenerationSettings,
+    target_topic_ids: Sequence[str] | None = None,
+    forced_topic_ids: Sequence[str] = (),
+    scope: Mapping[str, Any] | None = None,
+    strategy: str = "reuse_unchanged",
     database: Any | None = None,
 ) -> dict[str, Any]:
     issues = graph.validate()
@@ -160,9 +210,26 @@ def start_world_generation(
     from app.persistence.unit_of_work import unit_of_work
 
     context = bootstrap_local_tenant(db)
+    targets = generation_topic_ids(graph, target_topic_ids)
+    scope_payload = {
+        "topic_ids": list(targets),
+        **dict(scope or {}),
+    }
+    scope_hash = canonical_hash(
+        {
+            "scope": scope_payload,
+            "strategy": strategy,
+            "forced_topic_ids": sorted(set(forced_topic_ids)),
+            "directives": {
+                key: dict(value) for key, value in sorted(topic_directives.items())
+            },
+        }
+    )
     run_id = world_generation_run_id(
         world_id=world_id,
         draft_revision=draft_revision,
+        scope_hash=scope_hash,
+        run_nonce=uuid.uuid4().hex[:12],
     )
     run_context = {
         "generation_context": dict(generation_context),
@@ -171,6 +238,11 @@ def start_world_generation(
             for topic_id, value in sorted(topic_directives.items())
         },
         "entity_manifest_hash": entity_manifest_hash,
+        "scope": scope_payload,
+        "scope_hash": scope_hash,
+        "strategy": strategy,
+        "target_topic_ids": list(targets),
+        "forced_topic_ids": sorted(set(forced_topic_ids)),
     }
     with unit_of_work(db) as work:
         if work.world_scenarios.get_world(context, world_id) is None:
@@ -183,11 +255,12 @@ def start_world_generation(
             graph=graph.as_dict(),
             generation_context=run_context,
             settings=settings.as_dict(),
-            plan={"job_ids": [], "topic_ids": list(_generation_topic_ids(graph))},
+            plan={"job_ids": [], "topic_ids": list(targets)},
             progress=generation_progress(
                 graph,
                 completed_topic_ids=(),
                 active_topic_ids=(),
+                target_topic_ids=targets,
             ),
         )
         work.commit()
@@ -228,6 +301,8 @@ def _reconcile_world_generation_unlocked(
             if isinstance(value, Mapping)
         }
         entity_manifest_hash = str(run_context.get("entity_manifest_hash") or "")
+        targets = tuple(str(value) for value in run_context.get("target_topic_ids") or ())
+        forced = tuple(str(value) for value in run_context.get("forced_topic_ids") or ())
         settings = _settings_from_payload(run["settings"])
         topic_rows = work.world_generation.list_topics(
             context,
@@ -235,13 +310,14 @@ def _reconcile_world_generation_unlocked(
             draft_revision=run["draft_revision"],
         )
         topic_map = {row["topic_id"]: row for row in topic_rows}
-        reusable = reusable_completed_topics(
+        available, reusable_ids, protected_ids = available_completed_topics(
             graph,
             rows=topic_map,
             generation_context=generation_context,
             topic_directives=topic_directives,
             entity_manifest_hash=entity_manifest_hash,
             settings=settings,
+            forced_topic_ids=forced,
         )
         jobs = [
             job
@@ -257,10 +333,11 @@ def _reconcile_world_generation_unlocked(
             draft_revision=run["draft_revision"],
             generation_context=generation_context,
             topic_directives=topic_directives,
-            completed_topics=reusable,
+            completed_topics=available,
             existing_job_ids=existing_job_ids,
             entity_manifest_hash=entity_manifest_hash,
             settings=settings,
+            target_topic_ids=targets,
         )
         for plan in plans:
             work.jobs.create_job(context, dict(plan.job_payload))
@@ -283,11 +360,12 @@ def _reconcile_world_generation_unlocked(
         ]
         progress = generation_progress(
             graph,
-            completed_topic_ids=tuple(reusable),
+            completed_topic_ids=tuple(available),
             active_topic_ids=active_topics,
             failed_topic_ids=failed_topics,
+            target_topic_ids=targets,
         )
-        if failed_topics:
+        if progress["failed_topic_ids"]:
             status = "failed"
         elif progress["generation_complete"]:
             status = "review"
@@ -296,8 +374,10 @@ def _reconcile_world_generation_unlocked(
         plan_payload = {
             "job_ids": sorted(set(existing_job_ids)),
             "new_job_ids": [plan.job_id for plan in plans],
-            "reusable_topic_ids": sorted(reusable),
-            "topic_ids": list(_generation_topic_ids(graph)),
+            "available_topic_ids": sorted(available),
+            "reusable_topic_ids": sorted(reusable_ids),
+            "protected_topic_ids": sorted(protected_ids),
+            "topic_ids": list(targets),
         }
         updated = work.world_generation.update(
             context,
@@ -306,8 +386,11 @@ def _reconcile_world_generation_unlocked(
             plan=plan_payload,
             progress=progress,
             error=(
-                {"code": "world_topic_job_failed", "topic_ids": failed_topics}
-                if failed_topics
+                {
+                    "code": "world_topic_job_failed",
+                    "topic_ids": progress["failed_topic_ids"],
+                }
+                if progress["failed_topic_ids"]
                 else {}
             ),
         )

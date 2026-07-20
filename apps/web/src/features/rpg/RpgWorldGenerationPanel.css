@@ -1,0 +1,124 @@
+.rpg-generation-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.rpg-generation-settings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid rgba(168, 139, 250, 0.18);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.44);
+}
+
+.rpg-generation-settings label,
+.rpg-generation-advanced-grid label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.rpg-generation-settings input,
+.rpg-generation-settings select,
+.rpg-generation-advanced-grid input,
+.rpg-generation-advanced-grid textarea,
+.rpg-generation-topic-grid textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(168, 139, 250, 0.24);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.78);
+  color: #f8fafc;
+  padding: 0.65rem 0.75rem;
+}
+
+.rpg-generation-advanced-grid textarea {
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.rpg-generation-settings .rpg-authoring-checkbox {
+  grid-column: 1 / -1;
+  display: flex;
+}
+
+.rpg-generation-advanced {
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(168, 139, 250, 0.18);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.32);
+}
+
+.rpg-generation-advanced > summary {
+  cursor: pointer;
+  color: #c4b5fd;
+  font-weight: 800;
+}
+
+.rpg-generation-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding-top: 0.9rem;
+}
+
+.rpg-generation-advanced-grid label > span,
+.rpg-generation-settings label > span {
+  color: var(--omnix-muted, #a7a4b8);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.rpg-generation-advanced-grid .rpg-generation-manifest {
+  grid-column: 1 / -1;
+}
+
+.rpg-generation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.rpg-generation-topic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.rpg-generation-topic-grid article {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid rgba(168, 139, 250, 0.16);
+  border-radius: 12px;
+  background: rgba(7, 12, 28, 0.64);
+}
+
+.rpg-generation-topic-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.rpg-generation-topic-choice span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.rpg-generation-topic-choice small {
+  color: var(--omnix-muted, #a7a4b8);
+}
+
+@media (max-width: 800px) {
+  .rpg-generation-settings,
+  .rpg-generation-advanced-grid,
+  .rpg-generation-topic-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rpg-generation-advanced-grid .rpg-generation-manifest {
+    grid-column: auto;
+  }
+}

@@ -10,6 +10,7 @@ from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_gr
 from .generation_coordinator import reconcile_world_generation, start_world_generation
 from .generation_jobs import WorldTopicGenerationSettings, canonical_hash
 from .generation_publication import publish_world_generation
+from .generation_scope import resolve_generation_scope
 from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_world_writable
 from .map_blueprint_authoring import list_map_blueprints
@@ -34,8 +35,6 @@ def read_world_library(
 
     scenarios_by_world: dict[str, list[dict[str, Any]]] = {}
     for scenario in scenarios:
-        # This count gates campaign creation and is presented as published
-        # openings. Draft scenario projects are not launchable openings.
         if str(scenario.get("status") or "").lower() == "published":
             scenarios_by_world.setdefault(str(scenario["world_id"]), []).append(scenario)
     runs_by_world: dict[str, list[dict[str, Any]]] = {}
@@ -145,6 +144,9 @@ def start_world_library_generation(
     background_expansion: bool = True,
     topic_directives: Mapping[str, Mapping[str, Any]] | None = None,
     entity_manifest: Mapping[str, Any] | None = None,
+    scope: Mapping[str, Any] | None = None,
+    strategy: str = "reuse_unchanged",
+    replace_locked: bool = False,
     generator_version: str = "world-generator-v1",
     prompt_version: str = "world-prompt-v1",
     provider_route: str = "configured",
@@ -152,9 +154,17 @@ def start_world_library_generation(
     database: Any | None = None,
     kick_worker: bool = True,
 ) -> dict[str, Any]:
+    if strategy not in {"reuse_unchanged", "force"}:
+        raise ValueError(f"invalid_generation_strategy:{strategy}")
     context = bootstrap_local_tenant(_database(database))
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
+        topics = work.world_library.list_topics(context, world_id)
+        runs = work.world_library.list_generation_runs(
+            context,
+            world_id=world_id,
+            limit=1,
+        )
         work.rollback()
     graph = build_campaign_topic_graph(
         campaign_template=str(
@@ -165,6 +175,14 @@ def start_world_library_generation(
         depth=depth,
         starting_location=starting_location,
         background_expansion=background_expansion,
+    )
+    target_topic_ids, forced_topic_ids, normalized_scope = resolve_generation_scope(
+        graph,
+        scope=scope,
+        strategy=strategy,
+        topic_rows=topics,
+        latest_run=runs[0] if runs else None,
+        replace_locked=replace_locked,
     )
     run = start_world_generation(
         world_id=world_id,
@@ -185,10 +203,19 @@ def start_world_library_generation(
             model=model,
             seed=int(world.get("seed") or 0),
         ),
+        target_topic_ids=target_topic_ids,
+        forced_topic_ids=forced_topic_ids,
+        scope=normalized_scope,
+        strategy=strategy,
         database=database,
     )
     worker_started = kick_world_generation_worker(database=database) if kick_worker else False
-    return {"ok": True, "run": run, "worker_started": worker_started}
+    return {
+        "ok": True,
+        "run": run,
+        "worker_started": worker_started,
+        "scope": normalized_scope,
+    }
 
 
 def read_world_generation(

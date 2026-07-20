@@ -1,0 +1,93 @@
+.rpg-authoring-topic-editor {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid rgba(168, 139, 250, 0.22);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.rpg-authoring-topic-editor h3,
+.rpg-authoring-topic-editor h4,
+.rpg-authoring-topic-editor p {
+  margin-top: 0;
+}
+
+.rpg-authoring-topic-regeneration {
+  margin-bottom: 1rem;
+  padding: 0.8rem;
+  border: 1px solid rgba(168, 139, 250, 0.16);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.38);
+}
+
+.rpg-authoring-topic-regeneration > summary {
+  cursor: pointer;
+  color: #c4b5fd;
+  font-weight: 800;
+}
+
+.rpg-authoring-topic-regeneration > div,
+.rpg-authoring-topic-regeneration label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.rpg-authoring-topic-regeneration > div {
+  padding-top: 0.75rem;
+}
+
+.rpg-authoring-topic-regeneration .rpg-authoring-checkbox {
+  display: flex;
+}
+
+.rpg-authoring-topic-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  gap: 1rem;
+}
+
+.rpg-authoring-topic-editor form,
+.rpg-authoring-topic-editor form label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.rpg-authoring-topic-editor textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid rgba(168, 139, 250, 0.24);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.8);
+  color: #f8fafc;
+  padding: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.rpg-authoring-checkbox {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.rpg-authoring-topic-editor-grid > section article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(168, 139, 250, 0.14);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.46);
+}
+
+.rpg-authoring-topic-editor-grid > section article p {
+  margin: 0.2rem 0;
+  color: var(--omnix-muted, #a7a4b8);
+}
+
+@media (max-width: 900px) {
+  .rpg-authoring-topic-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}

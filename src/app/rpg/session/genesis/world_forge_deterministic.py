@@ -6,6 +6,7 @@ import random
 from typing import Any, Mapping, Sequence
 
 from .world_forge_contract import CampaignTopicNode
+from .world_forge_domains import generate_deterministic_domain, is_structured_domain
 from .world_forge_generation import GeneratedTopic
 
 
@@ -81,6 +82,14 @@ class DeterministicWorldForgeGenerator:
         local_seed = int(hashlib.sha256(f"{seed}:{node.topic_id}".encode()).hexdigest()[:16], 16)
         rng = random.Random(local_seed)
         template = str(campaign_context.get("campaign_template") or "classic_fantasy")
+        if is_structured_domain(node.topic_id):
+            return generate_deterministic_domain(
+                node,
+                template=template,
+                campaign_context=campaign_context,
+                dependency_topics=dependency_topics,
+                rng=rng,
+            )
         if node.category == "regions":
             return self._regions(node, template, rng)
         if node.category == "factions":

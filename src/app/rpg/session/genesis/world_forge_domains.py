@@ -1,0 +1,401 @@
+"""Structured contracts, fallback generation, and reference normalization for world domains."""
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+import random
+from typing import Any, Mapping, Sequence
+
+from .world_forge_contract import CampaignTopicNode
+from .world_forge_generation import GeneratedTopic
+
+
+@dataclass(frozen=True)
+class DomainSpec:
+    kind: str
+    id_prefix: str
+    required_scalars: tuple[str, ...]
+    required_lists: tuple[str, ...]
+    reference_fields: Mapping[str, tuple[str, ...]]
+
+
+DOMAIN_SPECS: Mapping[str, DomainSpec] = {
+    "points_of_interest": DomainSpec(
+        "point_of_interest", "poi",
+        ("name", "location_id", "region_id", "purpose", "sensory_profile"),
+        ("hooks",),
+        {"location_id": ("location",), "region_id": ("region",)},
+    ),
+    "quests": DomainSpec(
+        "quest", "quest", ("name", "giver_id", "stakes"),
+        ("location_ids", "faction_ids", "objectives", "rewards"),
+        {"giver_id": ("npc",), "location_ids": ("location",), "faction_ids": ("faction",)},
+    ),
+    "monsters": DomainSpec(
+        "monster", "monster", ("name", "threat_level"),
+        ("region_ids", "habitats", "abilities", "weaknesses"),
+        {"region_ids": ("region",)},
+    ),
+    "items": DomainSpec(
+        "item", "item", ("name", "item_type", "rarity", "value"),
+        ("effects", "origin_ids"),
+        {"origin_ids": ("faction", "location")},
+    ),
+    "races": DomainSpec(
+        "race", "race", ("name", "lifespan"),
+        ("homelands", "cultures", "traits", "languages"),
+        {"homelands": ("region",)},
+    ),
+    "classes": DomainSpec(
+        "class", "class", ("name",),
+        ("capabilities", "progression", "equipment", "institution_ids"),
+        {"institution_ids": ("institution", "lore_topic")},
+    ),
+    "spells": DomainSpec(
+        "spell", "spell", ("name", "school", "tier", "range"),
+        ("costs", "effects"),
+        {"institution_ids": ("institution", "lore_topic")},
+    ),
+    "feats": DomainSpec(
+        "feat", "feat", ("name",),
+        ("prerequisites", "benefits", "limitations"),
+        {"class_ids": ("class",)},
+    ),
+    "encounter_seeds": DomainSpec(
+        "encounter_seed", "encounter", ("name", "setup"),
+        ("location_ids", "actor_ids", "threat_ids", "complications", "outcomes"),
+        {"location_ids": ("location",), "actor_ids": ("npc",), "threat_ids": ("monster",)},
+    ),
+    "one_shots": DomainSpec(
+        "one_shot", "one-shot", ("name", "premise"),
+        ("location_ids", "actor_ids", "quest_ids", "beats", "rewards"),
+        {"location_ids": ("location",), "actor_ids": ("npc",), "quest_ids": ("quest",)},
+    ),
+    "opening_scenarios": DomainSpec(
+        "opening_scenario", "opening", ("name", "starting_location_id", "premise"),
+        ("initial_npc_ids", "opening_seed_ids", "starting_resources"),
+        {
+            "starting_location_id": ("location",),
+            "initial_npc_ids": ("npc",),
+            "opening_seed_ids": ("quest", "one_shot", "encounter_seed"),
+        },
+    ),
+}
+
+_REFERENCE_HINTS: Mapping[str, tuple[str, ...]] = {
+    "institution_ids": ("topic:institutions",),
+    "giver_id": ("npc:",),
+    "starting_location_id": ("location:",),
+}
+
+
+def is_structured_domain(topic_id: str) -> bool:
+    return topic_id in DOMAIN_SPECS
+
+
+def _slug(value: str) -> str:
+    return "_".join("".join(ch.casefold() if ch.isalnum() else " " for ch in value).split()) or "entry"
+
+
+def _known_entities(dependencies: Mapping[str, GeneratedTopic]) -> dict[str, dict[str, Any]]:
+    return {
+        str(entity["id"]): dict(entity)
+        for topic in dependencies.values()
+        for entity in topic.entities
+        if str(entity.get("id") or "")
+    }
+
+
+def _reference_candidates(
+    field: str,
+    known: Mapping[str, Mapping[str, Any]],
+    kinds: Sequence[str],
+) -> list[str]:
+    allowed = set(kinds)
+    candidates = sorted(
+        entity_id
+        for entity_id, entity in known.items()
+        if str(entity.get("kind") or "") in allowed
+    )
+    hints = _REFERENCE_HINTS.get(field, ())
+    if hints:
+        preferred = [
+            entity_id
+            for entity_id in candidates
+            if any(entity_id == hint or entity_id.startswith(hint) for hint in hints)
+        ]
+        if preferred:
+            return preferred
+    return candidates
+
+
+def _name(node: CampaignTopicNode, index: int) -> str:
+    return f"{node.title.rstrip('s')} {index + 1}"
+
+
+def _scalar_default(field: str, *, name: str, index: int, spec: DomainSpec) -> Any:
+    values: Mapping[str, Any] = {
+        "name": name,
+        "purpose": f"A consequential {spec.kind.replace('_', ' ')} tied to active world pressures.",
+        "sensory_profile": f"{name} has a distinct atmosphere, material history, and signs of recent activity.",
+        "stakes": f"Failure changes local power, safety, or access around {name}.",
+        "threat_level": ("minor", "dangerous", "elite", "catastrophic")[index % 4],
+        "item_type": ("weapon", "armor", "tool", "relic")[index % 4],
+        "rarity": ("common", "uncommon", "rare", "legendary")[index % 4],
+        "value": (index + 1) * 25,
+        "lifespan": "Adulthood, aging, and longevity vary by lineage and environment.",
+        "school": ("evocation", "warding", "divination", "transmutation")[index % 4],
+        "tier": index % 5 + 1,
+        "range": ("self", "touch", "near", "far")[index % 4],
+        "setup": f"The party encounters {name} while another force acts under time pressure.",
+        "premise": f"A self-contained adventure centered on {name}, a clear choice, and a lasting consequence.",
+    }
+    return values.get(field, f"Defined {field.replace('_', ' ')} for {name}.")
+
+
+def _list_default(field: str, *, name: str) -> list[Any]:
+    values: Mapping[str, list[Any]] = {
+        "hooks": [f"A rumor points toward {name}", f"A rival reaches {name} first"],
+        "objectives": [f"Investigate {name}", "Choose which interested party to support"],
+        "rewards": ["currency", "reputation", "a durable lead"],
+        "habitats": ["a region-specific lair", "a contested travel route"],
+        "abilities": ["a signature attack", "an environmental adaptation"],
+        "weaknesses": ["a discoverable behavioral or material weakness"],
+        "effects": ["a bounded mechanical effect", "a narrative consequence"],
+        "traits": ["a physical adaptation", "a social tradition"],
+        "languages": ["Common", "a regional language"],
+        "cultures": ["a named regional culture"],
+        "progression": ["novice", "adept", "master"],
+        "capabilities": ["an exploration capability", "a conflict capability"],
+        "equipment": ["a signature tool", "travel gear"],
+        "costs": ["time", "focus or material components"],
+        "prerequisites": ["a related class, skill, or story achievement"],
+        "benefits": ["one bounded mechanical advantage"],
+        "limitations": ["one explicit restriction or tradeoff"],
+        "complications": ["a third party intervenes", "the environment changes"],
+        "outcomes": ["success changes local state", "failure advances an opposing clock"],
+        "beats": ["hook", "escalation", "choice", "climax", "aftermath"],
+        "starting_resources": [
+            {"resource": "currency", "amount": 25},
+            {"resource": "rations", "amount": 3},
+        ],
+    }
+    return list(values.get(field, [f"Defined {field.replace('_', ' ')} for {name}"]))
+
+
+def _normalize_reference(
+    field: str,
+    value: Any,
+    *,
+    known: Mapping[str, Mapping[str, Any]],
+    kinds: Sequence[str],
+    multiple: bool,
+) -> Any:
+    candidates = _reference_candidates(field, known, kinds)
+    raw_values = value if isinstance(value, list) else [value] if value else []
+    resolved = [str(item) for item in raw_values if str(item) in candidates]
+    if not resolved and candidates:
+        resolved = [candidates[0]]
+    if not resolved and not known:
+        prefix = next(iter(kinds), "entity")
+        resolved = [f"{prefix}:pending"]
+    return resolved if multiple else (resolved[0] if resolved else "")
+
+
+def _normalize_entity(
+    node: CampaignTopicNode,
+    source: Mapping[str, Any],
+    *,
+    index: int,
+    known: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    spec = DOMAIN_SPECS[node.topic_id]
+    entity = dict(source)
+    name = str(entity.get("name") or entity.get("title") or _name(node, index)).strip()
+    entity_id = str(entity.get("id") or entity.get("entity_id") or f"{spec.id_prefix}:{_slug(name)}")
+    if not entity_id.startswith(f"{spec.id_prefix}:"):
+        entity_id = f"{spec.id_prefix}:{_slug(entity_id)}"
+    entity.update(
+        {
+            "id": entity_id,
+            "name": name,
+            "kind": spec.kind,
+            "visibility": str(entity.get("visibility") or node.visibility),
+        }
+    )
+    for field in spec.required_scalars:
+        value = entity.get(field)
+        if field in spec.reference_fields:
+            value = _normalize_reference(
+                field, value, known=known, kinds=spec.reference_fields[field], multiple=False
+            )
+        if value in (None, ""):
+            value = _scalar_default(field, name=name, index=index, spec=spec)
+        entity[field] = value
+    for field in spec.required_lists:
+        value = entity.get(field)
+        if field in spec.reference_fields:
+            value = _normalize_reference(
+                field, value, known=known, kinds=spec.reference_fields[field], multiple=True
+            )
+        elif field == "starting_resources" and isinstance(value, Mapping):
+            value = [dict(value)]
+        elif not isinstance(value, list):
+            value = [value] if value not in (None, "") else []
+        if not value:
+            value = _list_default(field, name=name)
+        entity[field] = value
+    entity.setdefault(
+        "description",
+        f"{name} is structured {spec.kind.replace('_', ' ')} canon for the campaign world.",
+    )
+    entity.setdefault(
+        "schema_version",
+        str(node.metadata.get("schema_version") or f"rpg_world_{node.topic_id}_v1"),
+    )
+    return entity
+
+
+def _document(node: CampaignTopicNode, entity: Mapping[str, Any]) -> dict[str, Any]:
+    description = str(entity.get("description") or "")
+    return {
+        "document_id": f"lore:{node.topic_id}:{_slug(str(entity['id']))}",
+        "topic_id": node.topic_id,
+        "title": str(entity["name"]),
+        "full_text": description,
+        "summary_500": description[:500],
+        "summary_120": description[:120],
+        "facts": [],
+        "entities": [str(entity["id"])],
+        "relationships": [],
+        "keywords": [node.topic_id, str(entity.get("kind") or "")],
+        "visibility": str(entity.get("visibility") or node.visibility),
+        "canon_revision": 0,
+    }
+
+
+def _fact(node: CampaignTopicNode, entity: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "id": f"fact:{_slug(str(entity['id']))}:definition",
+        "subject": str(entity["id"]),
+        "predicate": "defined_as",
+        "object": str(entity.get("description") or ""),
+        "content": str(entity.get("description") or ""),
+        "authority": "generated_proposal",
+        "approved_authority": "objective_canon",
+        "visibility": str(entity.get("visibility") or node.visibility),
+        "entity_refs": [str(entity["id"])],
+        "category": node.category,
+    }
+
+
+def normalize_structured_domain(
+    node: CampaignTopicNode,
+    topic: GeneratedTopic,
+    dependency_topics: Mapping[str, GeneratedTopic],
+) -> GeneratedTopic:
+    if node.topic_id not in DOMAIN_SPECS:
+        return topic
+    known = _known_entities(dependency_topics)
+    sources = list(topic.entities)
+    while len(sources) < node.target_count:
+        sources.append({"name": _name(node, len(sources))})
+    entities = tuple(
+        _normalize_entity(node, row, index=index, known=known)
+        for index, row in enumerate(sources[: node.target_count])
+    )
+    documents = [dict(row) for row in topic.documents]
+    documented = {
+        str(entity_id)
+        for row in documents
+        for entity_id in row.get("entities") or ()
+    }
+    documents.extend(_document(node, entity) for entity in entities if str(entity["id"]) not in documented)
+    facts = [dict(row) for row in topic.facts]
+    fact_refs = {
+        str(entity_id)
+        for row in facts
+        for entity_id in row.get("entity_refs") or ()
+    }
+    facts.extend(_fact(node, entity) for entity in entities if str(entity["id"]) not in fact_refs)
+    normalized = replace(
+        topic,
+        entities=entities,
+        documents=tuple(documents),
+        facts=tuple(facts),
+        provenance={
+            **dict(topic.provenance),
+            "domain_contract": str(
+                node.metadata.get("schema_version") or f"rpg_world_{node.topic_id}_v1"
+            ),
+            "domain_normalized": True,
+            "domain_entity_ids": sorted(str(entity["id"]) for entity in entities),
+        },
+    )
+    validate_structured_domain(node, normalized, dependency_topics)
+    return normalized
+
+
+def validate_structured_domain(
+    node: CampaignTopicNode,
+    topic: GeneratedTopic,
+    dependency_topics: Mapping[str, GeneratedTopic],
+) -> None:
+    if node.topic_id not in DOMAIN_SPECS:
+        return
+    spec = DOMAIN_SPECS[node.topic_id]
+    known = _known_entities(dependency_topics)
+    seen: set[str] = set()
+    if len(topic.entities) < node.target_count:
+        raise ValueError(
+            f"structured_domain_count:{node.topic_id}:{len(topic.entities)}:{node.target_count}"
+        )
+    for entity in topic.entities:
+        entity_id = str(entity.get("id") or "")
+        if not entity_id.startswith(f"{spec.id_prefix}:") or entity_id in seen:
+            raise ValueError(f"structured_domain_entity_id:{node.topic_id}:{entity_id}")
+        seen.add(entity_id)
+        if str(entity.get("kind") or "") != spec.kind:
+            raise ValueError(f"structured_domain_kind:{node.topic_id}:{entity_id}")
+        for field in spec.required_scalars:
+            if entity.get(field) in (None, ""):
+                raise ValueError(f"structured_domain_field:{node.topic_id}:{entity_id}:{field}")
+        for field in spec.required_lists:
+            if not isinstance(entity.get(field), list) or not entity.get(field):
+                raise ValueError(f"structured_domain_list:{node.topic_id}:{entity_id}:{field}")
+        for field, kinds in spec.reference_fields.items():
+            values = entity.get(field)
+            values = values if isinstance(values, list) else [values] if values else []
+            candidates = set(_reference_candidates(field, known, kinds))
+            for value in values:
+                if known and str(value) not in candidates:
+                    raise ValueError(
+                        f"structured_domain_reference:{node.topic_id}:{entity_id}:{field}:{value}"
+                    )
+
+
+def generate_deterministic_domain(
+    node: CampaignTopicNode,
+    *,
+    template: str,
+    campaign_context: Mapping[str, Any],
+    dependency_topics: Mapping[str, GeneratedTopic],
+    rng: random.Random,
+) -> GeneratedTopic:
+    del campaign_context
+    entities = []
+    adjectives = ("Ashen", "Silver", "Hidden", "Storm", "Verdant", "Glass")
+    noun = node.title.split(" and ", 1)[0].rstrip("s")
+    for index in range(node.target_count):
+        entities.append({"name": f"{adjectives[rng.randrange(len(adjectives))]} {noun} {index + 1}"})
+    return normalize_structured_domain(
+        node,
+        GeneratedTopic(
+            topic_id=node.topic_id,
+            entities=tuple(entities),
+            provenance={
+                "generator": "deterministic_structured_domain_v1",
+                "template": template,
+            },
+        ),
+        dependency_topics,
+    )

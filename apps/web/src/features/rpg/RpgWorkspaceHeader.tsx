@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { RpgLorePanel } from './RpgLorePanel';
 import { RpgStarterBubblePromotionPanel } from './RpgStarterBubblePromotionPanel';
+import { RpgWorldAuthoringWorkspace } from './RpgWorldAuthoringWorkspace';
 import { RpgWorldBundleTransfer } from './RpgWorldBundleTransfer';
-import { RpgWorldsCampaignsLibrary } from './RpgWorldsCampaignsLibrary';
 import type { RpgSessionSummaryPreview } from './rpgUiState';
 import './RpgLoreOverlay.css';
 import './RpgPlayFocus.css';
@@ -176,7 +176,7 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
 
       {campaignLauncherDialog && isWorldLibraryOpen ? createPortal(
         <div className="rpg-launcher-world-library-view" role="region" aria-label="Worlds and Campaigns view">
-          <RpgWorldsCampaignsLibrary
+          <RpgWorldAuthoringWorkspace
             onBack={() => setIsWorldLibraryOpen(false)}
             onSessionLaunched={selectLaunchedSession}
           />

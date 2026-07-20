@@ -24,6 +24,7 @@ from .lifecycle_service import require_world_writable
 from .map_blueprint_authoring import latest_ready_blueprint_requirements
 from .map_blueprint_publication import merge_authored_blueprints
 from .service import compile_world_release, compile_world_revision
+from .world_image_bindings import approved_world_asset_bindings
 
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 
@@ -162,6 +163,7 @@ def compile_world_generation_publication(
     topic_rows: list[Mapping[str, Any]],
     revision: int,
     starting_location_override: str = "",
+    asset_bindings: Mapping[str, Any] | None = None,
 ) -> WorldGenerationPublication:
     """Build deterministic immutable publication documents from one completed run."""
 
@@ -237,6 +239,7 @@ def compile_world_generation_publication(
         world_revision,
         release=1,
         indexes=dict(compilation.retrieval_index),
+        asset_bindings=dict(asset_bindings or {}),
         compiler_provenance={
             "compiler": "rpg_world_generation_publication_v1",
             "generation_run_id": str(run.get("run_id") or ""),
@@ -292,11 +295,13 @@ def publish_world_generation(
             (context.workspace_id, world_id),
         ).fetchone()
         current_revision = int(current_row[0])
+        asset_bindings = approved_world_asset_bindings(work, context, world_id)
         compiled = compile_world_generation_publication(
             run=run,
             world=world,
             topic_rows=topic_rows,
             revision=current_revision + 1,
+            asset_bindings=asset_bindings,
         )
         requirements = latest_ready_blueprint_requirements(work, context, world_id)
         revision, release = merge_authored_blueprints(
@@ -331,6 +336,7 @@ def publish_world_generation(
             "world_release_hash": str(stored_release["release_hash"]),
             "certification": dict(compiled.certification),
             "authored_map_blueprint_count": len(requirements),
+            "approved_image_binding_count": len(asset_bindings),
         }
         plan = {**dict(run.get("plan") or {}), "publication": publication_payload}
         progress = {
