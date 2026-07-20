@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type {
   RpgAuthoringDocumentBlock,
   RpgAuthoringPage,
   RpgAuthoringSection,
 } from '../../api/rpgWorldAuthoringClient';
+import { rpgWorldImageClient } from '../../api/rpgWorldImageClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
 import { RpgWorldEntityCard } from './RpgWorldEntityCard';
 import { RpgWorldTopicEditor } from './RpgWorldTopicEditor';
@@ -76,6 +78,17 @@ export function RpgWorldAuthoringPage({
   const [genre, setGenre] = useState(world.genre);
   const [tone, setTone] = useState(world.tone);
   const [seed, setSeed] = useState(world.seed);
+  const imagesQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'world-image-targets', worldId],
+    queryFn: () => rpgWorldImageClient.list(worldId),
+    enabled: page?.page_kind === 'collection' && section.id !== 'images',
+    staleTime: 10_000,
+  });
+  const approvedAssets = useMemo(() => new Map(
+    (imagesQuery.data?.targets ?? [])
+      .filter((target) => target.review_state === 'approved' && target.active_asset_id)
+      .map((target) => [target.entity_id, String(target.active_asset_id)]),
+  ), [imagesQuery.data?.targets]);
 
   useEffect(() => {
     setTitle(world.title);
@@ -122,6 +135,7 @@ export function RpgWorldAuthoringPage({
           {page.entities.map((entity) => (
             <RpgWorldEntityCard
               entity={entity}
+              imageAssetId={approvedAssets.get(entity.id)}
               key={entity.id}
               topic={page.topic}
               worldId={worldId}
