@@ -1,7 +1,8 @@
 """World-authoring projections and metadata routes."""
 from __future__ import annotations
 
-from typing import Any, Mapping
+from functools import wraps
+from typing import Any, Callable, Mapping
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -12,6 +13,7 @@ from app.rpg.worlds.authoring_service import (
 )
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_authoring_routes_registered"
+_HOOK_SENTINEL = "_omnix_rpg_world_authoring_route_hook_installed"
 
 
 def _body(value: object) -> Mapping[str, Any]:
@@ -94,3 +96,20 @@ def register_rpg_world_authoring_routes(app: FastAPI) -> None:
         except Exception as exc:
             _raise_domain_error(exc)
             raise
+
+
+def install_rpg_world_authoring_route_hook() -> None:
+    if getattr(FastAPI, _HOOK_SENTINEL, False):
+        return
+    original_init: Callable[..., None] = FastAPI.__init__
+
+    @wraps(original_init)
+    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
+        original_init(self, *args, **kwargs)
+        if kwargs.get("title") == "Omnix Web Gateway" or (
+            args and args[0] == "Omnix Web Gateway"
+        ):
+            register_rpg_world_authoring_routes(self)
+
+    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
+    setattr(FastAPI, _HOOK_SENTINEL, True)
