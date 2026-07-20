@@ -6,6 +6,7 @@ import json
 import math
 import mimetypes
 import re
+import tempfile
 import wave
 from datetime import datetime, timezone
 from io import BytesIO
@@ -22,6 +23,7 @@ VOICE_STUDIO_JOB_TYPES = {
     "tts.synthesize",
     "tts.multi_speaker_synthesize",
     "voice-cloning.create-profile",
+    "voice-cloning.transcribe-sample",
 }
 DEFAULT_UNTAGGED_SPEAKER = "Narrator"
 
@@ -51,6 +53,8 @@ def execute_voice_studio_job(job_store: Any, job: JobRecord) -> JobRecord:
     try:
         if job.type == "voice-cloning.create-profile":
             result = _execute_clone_job(job)
+        elif job.type == "voice-cloning.transcribe-sample":
+            result = _execute_transcribe_sample_job(job)
         elif job.type in {"tts.synthesize", "tts.multi_speaker_synthesize"}:
             result = _execute_tts_job(job)
         else:  # pragma: no cover - guarded by caller.
@@ -97,7 +101,25 @@ def _execute_clone_job(job: JobRecord) -> dict[str, Any]:
     clone_dir.mkdir(parents=True, exist_ok=True)
     clone_path = clone_dir / f"{voice_id}{suffix}"
     clone_path.write_bytes(audio_bytes)
-    _upsert_legacy_voice_manifest(voice_id, profile_name, payload, clone_path)
+    reference_text, transcript_source, stt_provider = _reference_transcript(payload, clone_path)
+    transcript_path = _write_reference_metadata(
+        clone_dir=clone_dir,
+        voice_id=voice_id,
+        profile_name=profile_name,
+        clone_path=clone_path,
+        language=_text(payload.get("language")) or "English (US)",
+        reference_text=reference_text,
+        transcript_source=transcript_source,
+        stt_provider=stt_provider,
+    )
+    enriched_payload = {
+        **payload,
+        "reference_text": reference_text,
+        "transcript_source": transcript_source,
+        "transcript_path": str(transcript_path) if transcript_path else "",
+        "stt_provider_id": stt_provider,
+    }
+    _upsert_legacy_voice_manifest(voice_id, profile_name, enriched_payload, clone_path)
 
     asset = _upsert_asset(
         AssetRecord(
@@ -115,6 +137,10 @@ def _execute_clone_job(job: JobRecord) -> dict[str, Any]:
                 "source_kind": _text(payload.get("source_kind")) or "upload",
                 "source_file_name": source_file_name,
                 "provider_id": _text(payload.get("provider_id")),
+                "reference_text": reference_text,
+                "transcript_source": transcript_source,
+                "transcript_path": str(transcript_path) if transcript_path else "",
+                "stt_provider_id": stt_provider,
                 "has_audio": True,
             },
             source_job_id=job.id,
@@ -129,10 +155,113 @@ def _execute_clone_job(job: JobRecord) -> dict[str, Any]:
     }
 
 
+def _execute_transcribe_sample_job(job: JobRecord) -> dict[str, Any]:
+    """Transcribe a clone sample without creating a voice-library entry."""
+    payload = job.input_payload or {}
+    audio_bytes = _decode_audio_payload(payload.get("sample_audio_base64"))
+    source_file_name = _text(payload.get("source_file_name")) or "voice-sample.wav"
+    suffix = Path(source_file_name).suffix.lower() or ".wav"
+    if suffix not in {".wav", ".mp3", ".mp4", ".m4a", ".webm", ".ogg", ".flac"}:
+        suffix = ".wav"
+
+    with tempfile.TemporaryDirectory(prefix="omnix-voice-transcript-") as temp_dir:
+        sample_path = Path(temp_dir) / f"sample{suffix}"
+        sample_path.write_bytes(audio_bytes)
+        transcript, _source, provider_name = _reference_transcript(
+            {**payload, "reference_text": "", "generate_transcript": True},
+            sample_path,
+        )
+
+    return {
+        "content": transcript,
+        "log_message": "Voice clone sample transcribed",
+        "output_refs": [
+            {
+                "type": "transcript",
+                "title": "Reference transcript",
+                "content": transcript,
+                "provider_id": provider_name,
+            }
+        ],
+    }
+
+
+def _reference_transcript(payload: dict[str, Any], clone_path: Path) -> tuple[str, str, str]:
+    manual_text = _text(payload.get("reference_text"))
+    if manual_text:
+        return manual_text, "manual", ""
+    if not bool(payload.get("generate_transcript")):
+        return "", "", ""
+
+    import app.shared as shared
+
+    requested_provider = _text(payload.get("stt_provider_id"))
+    provider = shared.get_stt_provider(requested_provider or None)
+    if provider is None:
+        raise ValueError(
+            "The configured STT provider is unavailable; enter a reference transcript "
+            "manually or disable STT generation"
+        )
+
+    result = provider.transcribe(
+        str(clone_path),
+        language=_text(payload.get("language")) or None,
+    )
+    transcript = _text(result.get("text")) if isinstance(result, dict) else ""
+    if not isinstance(result, dict) or not result.get("success") or not transcript:
+        detail = _text(result.get("error")) if isinstance(result, dict) else ""
+        raise ValueError(
+            f"STT could not generate a reference transcript{': ' + detail if detail else ''}"
+        )
+
+    provider_name = (
+        requested_provider
+        or _text(getattr(provider, "provider_name", ""))
+        or "configured-stt"
+    )
+    return transcript, "stt", provider_name
+
+
+def _write_reference_metadata(
+    *,
+    clone_dir: Path,
+    voice_id: str,
+    profile_name: str,
+    clone_path: Path,
+    language: str,
+    reference_text: str,
+    transcript_source: str,
+    stt_provider: str,
+) -> Path | None:
+    if not reference_text:
+        return None
+    transcript_path = clone_dir / f"{voice_id}.json"
+    transcript_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "voice_id": voice_id,
+                "profile_name": profile_name,
+                "audio_path": str(clone_path),
+                "language": language,
+                "ref_text": reference_text,
+                "transcript_source": transcript_source,
+                "stt_provider": stt_provider,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return transcript_path
+
+
 def _execute_tts_job(job: JobRecord) -> dict[str, Any]:
     payload = job.input_payload or {}
     text = _require_text(payload.get("text"), "Text is required")
-    assignments = payload.get("character_voice_assignments") if isinstance(payload.get("character_voice_assignments"), list) else []
+    raw_assignments = payload.get("character_voice_assignments")
+    assignments: list[Any] = raw_assignments if isinstance(raw_assignments, list) else []
     assignments_by_speaker = _assignments_by_speaker(assignments)
     segments = _script_segments(payload, text)
     primary_voice = _text(payload.get("voice_id")) or _first_assignment_voice(assignments)
@@ -369,8 +498,8 @@ def _fallback_duration(text: str) -> float:
 
 def _script_segments(payload: dict[str, Any], text: str) -> list[dict[str, Any]]:
     raw_segments = payload.get("script_segments")
+    segments: list[dict[str, Any]] = []
     if isinstance(raw_segments, list):
-        segments = []
         for index, raw in enumerate(raw_segments):
             if not isinstance(raw, dict):
                 continue
@@ -380,7 +509,7 @@ def _script_segments(payload: dict[str, Any], text: str) -> list[dict[str, Any]]
         if segments:
             return segments
 
-    segments: list[dict[str, Any]] = []
+    segments = []
     untagged: list[str] = []
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -460,6 +589,10 @@ def _upsert_legacy_voice_manifest(voice_id: str, profile_name: str, payload: dic
         "source_file_name": _text(payload.get("source_file_name")) or clone_path.name,
         "source_path": str(clone_path),
         "notes": _text(payload.get("notes")),
+        "ref_text": _text(payload.get("reference_text")),
+        "transcript_source": _text(payload.get("transcript_source")),
+        "transcript_path": _text(payload.get("transcript_path")),
+        "stt_provider": _text(payload.get("stt_provider_id")),
     }
     manifest_path.write_text(json.dumps(raw, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

@@ -7,6 +7,7 @@ This module contains concrete implementations of audio providers:
 
 import base64
 import io
+import json
 import logging
 import os
 import subprocess
@@ -25,6 +26,21 @@ from .audio_base import (
 )
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_PARAKEET_BASE_URL = "http://127.0.0.1:5201"
+LEGACY_PARAKEET_BASE_URLS = {"http://localhost:8000", "http://127.0.0.1:8000"}
+
+
+def _parakeet_base_url(config: Dict[str, Any]) -> str:
+    """Resolve the dedicated STT service, migrating the retired gateway URL."""
+    configured = str(config.get("base_url") or "").strip().rstrip("/")
+    environment_url = str(os.environ.get("OMNIX_STT_URL") or "").strip().rstrip("/")
+    base_url = environment_url or configured or DEFAULT_PARAKEET_BASE_URL
+    if base_url in LEGACY_PARAKEET_BASE_URLS:
+        return DEFAULT_PARAKEET_BASE_URL
+    if base_url.endswith("/transcribe"):
+        return base_url.removesuffix("/transcribe")
+    return base_url
 
 
 class ParakeetSTT(BaseSTTProvider):
@@ -72,10 +88,10 @@ class ParakeetSTT(BaseSTTProvider):
     
     def health_check(self) -> bool:
         try:
-            base_url = self.config.get("base_url", "http://localhost:8000")
+            base_url = _parakeet_base_url(self.config)
             response = requests.get(f"{base_url}/health", timeout=5)
             return response.status_code == 200
-        except:
+        except Exception:
             return False
             
     def _parse_response(self, response) -> Dict[str, Any]:
@@ -116,7 +132,7 @@ class ParakeetSTT(BaseSTTProvider):
             error_body = response.json()
             print(f"[PARAKEET-PLUGIN] Server Error JSON: {error_body}")
             error_msg = error_body.get('error', error_body.get('message', response.text))
-        except:
+        except Exception:
             error_msg = f"Status {response.status_code}: {response.text}"
             
         print(f"[PARAKEET-PLUGIN] Transcription failed: {error_msg}")
@@ -125,7 +141,7 @@ class ParakeetSTT(BaseSTTProvider):
     def transcribe(self, audio_file_path: str, language: Optional[str] = None, 
                   **kwargs) -> Dict[str, Any]:
         try:
-            base_url = self.config.get("base_url", "http://localhost:8000")
+            base_url = _parakeet_base_url(self.config)
             
             with open(audio_file_path, 'rb') as audio_file:
                 files = {'file': (os.path.basename(audio_file_path), audio_file, 'audio/wav')}
@@ -147,7 +163,7 @@ class ParakeetSTT(BaseSTTProvider):
     def transcribe_raw(self, audio_data: bytes, sample_rate: int = 16000, 
                       language: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         try:
-            base_url = self.config.get("base_url", "http://localhost:8000")
+            base_url = _parakeet_base_url(self.config)
             
             import tempfile
             import wave
@@ -199,13 +215,13 @@ class ParakeetSTT(BaseSTTProvider):
             Dict with 'partial' or 'final' keys containing text
         """
         try:
-            base_url = self.config.get("base_url", "http://localhost:8000")
+            base_url = _parakeet_base_url(self.config)
             
             # Try WebSocket first for real-time streaming
             try:
                 import websocket
                 ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://")
-                ws_url += "/ws/stt"
+                ws_url += "/ws/transcribe"
                 
                 ws = websocket.create_connection(ws_url, timeout=10)
                 
@@ -998,7 +1014,7 @@ class FasterQwen3TTSTTS(BaseTTSProvider):
         try:
             from app import shared
             return [vid for vid, data in shared.custom_voices.items() if data.get("has_audio", False)]
-        except:
+        except Exception:
             return []
     
     def _get_voice_audio_path(self, voice_id: str) -> Optional[str]:

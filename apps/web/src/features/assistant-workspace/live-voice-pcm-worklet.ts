@@ -18,78 +18,185 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       Number(settings.transitionFadeSamples) || Math.round(sampleRate * 0.008),
     );
     this.progressIntervalSamples = Math.max(128, Math.round(sampleRate * 0.5));
+    this.startPolicy = {
+      notBeforeRenderSample: Math.max(0, Number(settings.notBeforeRenderSample) || 0),
+      minimumBufferedSpeechSamples: Math.max(
+        1,
+        Number(settings.minimumBufferedSpeechSamples) || this.startBufferSamples,
+      ),
+    };
     this.queue = [];
-    this.endedPhrases = new Set();
+    this.endedSegments = new Set();
+    this.terminalSegments = new Set();
     this.headOffset = 0;
     this.queuedSamples = 0;
+    this.bufferedSpeechSamples = 0;
     this.started = false;
     this.waitingForBuffer = false;
+    this.waitingForFollowingSpeech = false;
     this.inputEnded = false;
     this.stopped = false;
     this.drained = false;
     this.fadeInRemaining = 0;
     this.underrunCount = 0;
     this.renderClockSamples = 0;
-    this.playedSamples = 0;
+    this.segmentTimelineSamples = 0;
+    this.semanticSpeechSamples = 0;
     this.lastProgressSamples = 0;
-    this.currentPhraseIndex = null;
-    this.currentPhrasePlayedSamples = 0;
-    this.port.onmessage = (event) => {
-      const message = event.data || {};
-      if (message.type === 'push' && message.samples) {
-        const samples = message.samples instanceof Float32Array
-          ? message.samples
-          : new Float32Array(message.samples);
-        const phraseIndex = Number.isInteger(message.phraseIndex) ? message.phraseIndex : -1;
-        if (samples.length > 0) {
-          this.queue.push({ phraseIndex, samples });
-          this.queuedSamples += samples.length;
-          this.port.postMessage({
-            type: 'buffered',
-            phrase_index: phraseIndex,
-            buffered_samples: this.queuedSamples,
-            incoming_samples: samples.length,
-            target_samples: this.waitingForBuffer ? this.currentRebufferSamples : this.startBufferSamples,
-            waiting_for_buffer: this.waitingForBuffer,
-            input_ended: this.inputEnded,
-            underrun_count: this.underrunCount,
-            render_clock_samples: this.renderClockSamples,
-            played_samples: this.playedSamples,
-          });
-          this.maybeStartOrResume();
-        }
-        return;
-      }
-      if (message.type === 'phrase_end' && Number.isInteger(message.phraseIndex)) {
-        this.endedPhrases.add(message.phraseIndex);
-        this.maybeCompleteCurrentPhrase();
-        return;
-      }
-      if (message.type === 'end') {
-        this.inputEnded = true;
-        this.port.postMessage({
-          type: 'input_ended',
-          buffered_samples: this.queuedSamples,
-          waiting_for_buffer: this.waitingForBuffer,
-          underrun_count: this.underrunCount,
-          render_clock_samples: this.renderClockSamples,
-          played_samples: this.playedSamples,
-        });
-        this.maybeStartOrResume();
-        return;
-      }
-      if (message.type === 'stop') {
-        this.signalPhraseInterrupted();
-        this.stopped = true;
-        this.port.postMessage({
-          type: 'stopped',
-          buffered_samples: this.queuedSamples,
-          render_clock_samples: this.renderClockSamples,
-          played_samples: this.playedSamples,
-          underrun_count: this.underrunCount,
-        });
-      }
+    this.activeSegment = null;
+    this.activeSegmentPlayedSamples = 0;
+    this.port.onmessage = (event) => this.handleMessage(event.data || {});
+  }
+
+  counters() {
+    return {
+      sample_rate: sampleRate,
+      render_clock_samples: this.renderClockSamples,
+      segment_timeline_samples: this.segmentTimelineSamples,
+      semantic_speech_samples: this.semanticSpeechSamples,
+      played_samples: this.semanticSpeechSamples,
     };
+  }
+
+  segmentFields(segment = this.activeSegment, playedSamples = this.activeSegmentPlayedSamples) {
+    if (!segment) return {};
+    return {
+      segment_id: segment.segmentId,
+      segment_kind: segment.segmentKind,
+      phrase_index: Number.isInteger(segment.phraseIndex) ? segment.phraseIndex : undefined,
+      segment_played_samples: playedSamples,
+    };
+  }
+
+  emit(type, details = {}) {
+    this.port.postMessage({
+      type,
+      ...this.counters(),
+      ...details,
+    });
+  }
+
+  handleMessage(message) {
+    if (message.type === 'set_start_policy') {
+      this.startPolicy = {
+        notBeforeRenderSample: Math.max(0, Number(message.notBeforeRenderSample) || 0),
+        minimumBufferedSpeechSamples: Math.max(
+          1,
+          Number(message.minimumBufferedSpeechSamples) || this.startBufferSamples,
+        ),
+      };
+      this.maybeStartOrResume();
+      return;
+    }
+    if ((message.type === 'push_segment_samples' || message.type === 'push') && message.samples) {
+      const samples = message.samples instanceof Float32Array
+        ? message.samples
+        : new Float32Array(message.samples);
+      if (samples.length <= 0) return;
+      const segmentKind = message.segmentKind === 'cue' ? 'cue' : 'speech';
+      const phraseIndex = Number.isInteger(message.phraseIndex) ? message.phraseIndex : -1;
+      const segmentId = String(
+        message.segmentId || (segmentKind === 'speech' ? 'legacy-phrase-' + phraseIndex : 'legacy-cue'),
+      );
+      this.queue.push({ segmentId, segmentKind, phraseIndex, samples });
+      this.queuedSamples += samples.length;
+      if (segmentKind === 'speech') this.bufferedSpeechSamples += samples.length;
+      this.emit('buffered', {
+        segment_id: segmentId,
+        segment_kind: segmentKind,
+        phrase_index: phraseIndex,
+        buffered_samples: this.queuedSamples,
+        buffered_speech_samples: this.bufferedSpeechSamples,
+        incoming_samples: samples.length,
+        target_samples: this.waitingForBuffer
+          ? this.currentRebufferSamples
+          : this.startPolicy.minimumBufferedSpeechSamples,
+        waiting_for_buffer: this.waitingForBuffer,
+        waiting_for_following_speech: this.waitingForFollowingSpeech,
+        input_ended: this.inputEnded,
+        underrun_count: this.underrunCount,
+      });
+      this.maybeStartOrResume();
+      return;
+    }
+    if (message.type === 'push_segment_silence') {
+      const durationSamples = Math.max(0, Math.round(Number(message.durationSamples) || 0));
+      if (durationSamples <= 0) return;
+      const segmentId = String(message.segmentId || 'silence-' + this.renderClockSamples);
+      this.queue.push({
+        segmentId,
+        segmentKind: 'silence',
+        phraseIndex: null,
+        remainingSamples: durationSamples,
+        minimumFollowingSpeechSamples: Math.max(
+          0,
+          Math.round(Number(message.minimumFollowingSpeechSamples) || 0),
+        ),
+        reason: String(message.reason || 'clause'),
+      });
+      this.endedSegments.add(segmentId);
+      this.queuedSamples += durationSamples;
+      this.emit('buffered', {
+        segment_id: segmentId,
+        segment_kind: 'silence',
+        buffered_samples: this.queuedSamples,
+        buffered_speech_samples: this.bufferedSpeechSamples,
+        incoming_samples: durationSamples,
+        minimum_following_speech_samples: Math.max(
+          0,
+          Math.round(Number(message.minimumFollowingSpeechSamples) || 0),
+        ),
+        target_samples: this.waitingForBuffer
+          ? this.currentRebufferSamples
+          : this.startPolicy.minimumBufferedSpeechSamples,
+        waiting_for_buffer: this.waitingForBuffer,
+        waiting_for_following_speech: this.waitingForFollowingSpeech,
+        input_ended: this.inputEnded,
+        underrun_count: this.underrunCount,
+      });
+      this.maybeStartOrResume();
+      return;
+    }
+    if (message.type === 'segment_end') {
+      const segmentId = String(message.segmentId || '');
+      if (segmentId) this.endedSegments.add(segmentId);
+      this.maybeCompleteActiveSegment();
+      return;
+    }
+    if (message.type === 'phrase_end' && Number.isInteger(message.phraseIndex)) {
+      this.endedSegments.add('legacy-phrase-' + message.phraseIndex);
+      this.maybeCompleteActiveSegment();
+      return;
+    }
+    if (message.type === 'end') {
+      this.inputEnded = true;
+      if (!this.started && this.bufferedSpeechSamples <= 0 && this.queue.length > 0) {
+        this.cancelQueuedSegments('input_ended_without_speech');
+      }
+      this.emit('input_ended', {
+        buffered_samples: this.queuedSamples,
+        buffered_speech_samples: this.bufferedSpeechSamples,
+        waiting_for_buffer: this.waitingForBuffer,
+        waiting_for_following_speech: this.waitingForFollowingSpeech,
+        underrun_count: this.underrunCount,
+      });
+      this.maybeStartOrResume();
+      return;
+    }
+    if (message.type === 'stop') {
+      const reason = String(message.reason || 'stopped');
+      this.interruptActiveSegment(reason);
+      this.cancelQueuedSegments(reason);
+      this.queuedSamples = 0;
+      this.bufferedSpeechSamples = 0;
+      this.stopped = true;
+      this.emit('stopped', {
+        buffered_samples: 0,
+        buffered_speech_samples: 0,
+        underrun_count: this.underrunCount,
+        reason,
+      });
+    }
   }
 
   beginFadeIn() {
@@ -97,76 +204,101 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   }
 
   maybeStartOrResume() {
-    if (!this.started && (this.queuedSamples >= this.startBufferSamples || (this.inputEnded && this.queuedSamples > 0))) {
+    const onsetReady = this.renderClockSamples >= this.startPolicy.notBeforeRenderSample;
+    const speechReady = this.bufferedSpeechSamples >= this.startPolicy.minimumBufferedSpeechSamples;
+    const finalShortInputReady = this.inputEnded && this.bufferedSpeechSamples > 0;
+    if (!this.started && onsetReady && (speechReady || finalShortInputReady)) {
       this.started = true;
       this.waitingForBuffer = false;
       this.beginFadeIn();
-      this.port.postMessage({
-        type: 'started',
+      this.emit('started', {
         buffered_samples: this.queuedSamples,
-        render_clock_samples: this.renderClockSamples,
-        played_samples: this.playedSamples,
+        buffered_speech_samples: this.bufferedSpeechSamples,
       });
       return;
     }
     if (
       this.started
       && this.waitingForBuffer
-      && (this.queuedSamples >= this.currentRebufferSamples || this.inputEnded)
+      && (this.bufferedSpeechSamples >= this.currentRebufferSamples || this.inputEnded)
     ) {
       this.waitingForBuffer = false;
       this.beginFadeIn();
-      this.port.postMessage({
-        type: 'resumed',
+      this.emit('resumed', {
         buffered_samples: this.queuedSamples,
+        buffered_speech_samples: this.bufferedSpeechSamples,
         target_samples: this.currentRebufferSamples,
         underrun_count: this.underrunCount,
-        render_clock_samples: this.renderClockSamples,
-        played_samples: this.playedSamples,
       });
     }
   }
 
-  beginPhrase(phraseIndex) {
-    if (this.currentPhraseIndex === phraseIndex) return;
-    this.maybeCompleteCurrentPhrase();
-    this.currentPhraseIndex = phraseIndex;
-    this.currentPhrasePlayedSamples = 0;
-    this.port.postMessage({
-      type: 'phrase_started',
-      phrase_index: phraseIndex,
-      render_clock_samples: this.renderClockSamples,
-      played_samples: this.playedSamples,
-    });
+  followingSpeechReady(segment) {
+    if (segment.segmentKind !== 'silence') return true;
+    const minimum = Math.max(0, Number(segment.minimumFollowingSpeechSamples) || 0);
+    if (minimum <= 0) return true;
+    if (this.bufferedSpeechSamples >= minimum) return true;
+    return this.inputEnded;
   }
 
-  maybeCompleteCurrentPhrase() {
-    if (this.currentPhraseIndex === null) return;
-    const hasQueuedSamples = this.queue.some((item) => item.phraseIndex === this.currentPhraseIndex);
-    if (hasQueuedSamples || !this.endedPhrases.has(this.currentPhraseIndex)) return;
-    this.port.postMessage({
-      type: 'phrase_completed',
-      phrase_index: this.currentPhraseIndex,
-      phrase_played_samples: this.currentPhrasePlayedSamples,
-      render_clock_samples: this.renderClockSamples,
-      played_samples: this.playedSamples,
-    });
-    this.endedPhrases.delete(this.currentPhraseIndex);
-    this.currentPhraseIndex = null;
-    this.currentPhrasePlayedSamples = 0;
+  beginSegment(segment) {
+    if (this.activeSegment && this.activeSegment.segmentId === segment.segmentId) return true;
+    this.maybeCompleteActiveSegment();
+    if (this.activeSegment) return false;
+    this.activeSegment = {
+      segmentId: segment.segmentId,
+      segmentKind: segment.segmentKind,
+      phraseIndex: segment.phraseIndex,
+    };
+    this.activeSegmentPlayedSamples = 0;
+    this.emit('segment_started', this.segmentFields());
+    return true;
   }
 
-  signalPhraseInterrupted() {
-    if (this.currentPhraseIndex === null) return;
-    this.port.postMessage({
-      type: 'phrase_interrupted',
-      phrase_index: this.currentPhraseIndex,
-      phrase_played_samples: this.currentPhrasePlayedSamples,
-      render_clock_samples: this.renderClockSamples,
-      played_samples: this.playedSamples,
+  queuedForSegment(segmentId) {
+    return this.queue.some((item) => item.segmentId === segmentId);
+  }
+
+  maybeCompleteActiveSegment() {
+    const segment = this.activeSegment;
+    if (!segment) return;
+    if (this.queuedForSegment(segment.segmentId) || !this.endedSegments.has(segment.segmentId)) return;
+    if (!this.terminalSegments.has(segment.segmentId)) {
+      this.terminalSegments.add(segment.segmentId);
+      this.emit('segment_completed', this.segmentFields(segment));
+    }
+    this.endedSegments.delete(segment.segmentId);
+    this.activeSegment = null;
+    this.activeSegmentPlayedSamples = 0;
+  }
+
+  interruptActiveSegment(reason) {
+    const segment = this.activeSegment;
+    if (!segment || this.terminalSegments.has(segment.segmentId)) return;
+    this.terminalSegments.add(segment.segmentId);
+    this.emit('segment_interrupted', {
+      ...this.segmentFields(segment),
+      reason,
     });
-    this.currentPhraseIndex = null;
-    this.currentPhrasePlayedSamples = 0;
+    this.activeSegment = null;
+    this.activeSegmentPlayedSamples = 0;
+  }
+
+  cancelQueuedSegments(reason) {
+    const seen = new Set();
+    for (const segment of this.queue) {
+      if (seen.has(segment.segmentId) || this.terminalSegments.has(segment.segmentId)) continue;
+      seen.add(segment.segmentId);
+      this.terminalSegments.add(segment.segmentId);
+      this.emit('segment_cancelled', {
+        ...this.segmentFields(segment, 0),
+        reason,
+      });
+      this.endedSegments.delete(segment.segmentId);
+    }
+    this.queue = [];
+    this.headOffset = 0;
+    this.waitingForFollowingSpeech = false;
   }
 
   applyFadeIn(channel, written) {
@@ -190,6 +322,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   }
 
   beginRebuffering() {
+    if (this.waitingForBuffer) return;
     this.waitingForBuffer = true;
     this.underrunCount += 1;
     const multiplier = 1 + (Math.max(0, this.underrunCount - 1) * 0.5);
@@ -197,27 +330,23 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       this.maxRebufferSamples,
       Math.round(this.rebufferSamples * multiplier),
     );
-    this.port.postMessage({
-      type: 'underrun',
+    this.emit('underrun', {
       buffered_samples: this.queuedSamples,
+      buffered_speech_samples: this.bufferedSpeechSamples,
       target_samples: this.currentRebufferSamples,
       underrun_count: this.underrunCount,
-      render_clock_samples: this.renderClockSamples,
-      played_samples: this.playedSamples,
       input_ended: this.inputEnded,
     });
   }
 
   signalDrained() {
-    this.maybeCompleteCurrentPhrase();
+    this.maybeCompleteActiveSegment();
     if (!this.drained) {
       this.drained = true;
-      this.port.postMessage({
-        type: 'drained',
+      this.emit('drained', {
         buffered_samples: this.queuedSamples,
+        buffered_speech_samples: this.bufferedSpeechSamples,
         underrun_count: this.underrunCount,
-        render_clock_samples: this.renderClockSamples,
-        played_samples: this.playedSamples,
       });
     }
     return false;
@@ -226,18 +355,16 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   maybeReportProgress() {
     if (this.renderClockSamples - this.lastProgressSamples < this.progressIntervalSamples) return;
     this.lastProgressSamples = this.renderClockSamples;
-    this.port.postMessage({
-      type: 'render_progress',
-      phrase_index: this.currentPhraseIndex,
-      phrase_played_samples: this.currentPhrasePlayedSamples,
+    this.emit('render_progress', {
+      ...this.segmentFields(),
       buffered_samples: this.queuedSamples,
+      buffered_speech_samples: this.bufferedSpeechSamples,
       target_samples: this.waitingForBuffer ? this.currentRebufferSamples : 0,
       waiting_for_buffer: this.waitingForBuffer,
+      waiting_for_following_speech: this.waitingForFollowingSpeech,
       input_ended: this.inputEnded,
       underrun_count: this.underrunCount,
       current_rebuffer_samples: this.currentRebufferSamples,
-      render_clock_samples: this.renderClockSamples,
-      played_samples: this.playedSamples,
     });
   }
 
@@ -258,26 +385,59 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     let written = 0;
     while (written < channel.length && this.queue.length > 0) {
       const head = this.queue[0];
-      this.beginPhrase(head.phraseIndex);
-      const available = head.samples.length - this.headOffset;
+      if (!this.followingSpeechReady(head)) {
+        if (!this.waitingForFollowingSpeech) {
+          this.waitingForFollowingSpeech = true;
+          this.emit('pause_waiting_for_following_speech', {
+            segment_id: head.segmentId,
+            segment_kind: head.segmentKind,
+            buffered_speech_samples: this.bufferedSpeechSamples,
+            minimum_following_speech_samples: head.minimumFollowingSpeechSamples || 0,
+          });
+        }
+        break;
+      }
+      if (this.waitingForFollowingSpeech) {
+        this.waitingForFollowingSpeech = false;
+        this.emit('pause_following_speech_ready', {
+          segment_id: head.segmentId,
+          segment_kind: head.segmentKind,
+          buffered_speech_samples: this.bufferedSpeechSamples,
+        });
+      }
+      if (!this.beginSegment(head)) break;
+      const available = head.segmentKind === 'silence'
+        ? head.remainingSamples
+        : head.samples.length - this.headOffset;
       const take = Math.min(available, channel.length - written);
-      channel.set(head.samples.subarray(this.headOffset, this.headOffset + take), written);
+      if (head.segmentKind !== 'silence') {
+        channel.set(head.samples.subarray(this.headOffset, this.headOffset + take), written);
+        this.headOffset += take;
+      } else {
+        head.remainingSamples -= take;
+      }
       written += take;
-      this.headOffset += take;
       this.queuedSamples -= take;
-      this.currentPhrasePlayedSamples += take;
-      if (this.headOffset >= head.samples.length) {
+      this.segmentTimelineSamples += take;
+      this.activeSegmentPlayedSamples += take;
+      if (head.segmentKind === 'speech') {
+        this.bufferedSpeechSamples -= take;
+        this.semanticSpeechSamples += take;
+      }
+      const consumed = head.segmentKind === 'silence'
+        ? head.remainingSamples <= 0
+        : this.headOffset >= head.samples.length;
+      if (consumed) {
         this.queue.shift();
         this.headOffset = 0;
-        this.maybeCompleteCurrentPhrase();
+        this.maybeCompleteActiveSegment();
       }
     }
 
-    this.playedSamples += written;
     this.applyFadeIn(channel, written);
-    if (this.queuedSamples === 0) {
+    if (this.queue.length === 0) {
       this.applyFadeOut(channel, written);
-      this.maybeCompleteCurrentPhrase();
+      this.maybeCompleteActiveSegment();
       if (this.inputEnded) return this.signalDrained();
       this.beginRebuffering();
     }

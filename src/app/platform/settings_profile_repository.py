@@ -166,7 +166,7 @@ def _legacy_seed(settings: dict[str, Any]) -> dict[str, Any]:
                 "nonStreamingMode": bool(qwen_tts.get("non_streaming_mode", True)),
             },
             "parakeet": {
-                "baseUrl": str(parakeet.get("base_url") or "http://localhost:8000"),
+                "baseUrl": str(parakeet.get("base_url") or "http://127.0.0.1:5201"),
             },
             "fluxKlein": {
                 "enabled": bool(flux.get("enabled")),

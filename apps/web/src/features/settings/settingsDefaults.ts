@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS_DOCUMENT: SettingsDocument = {
     cerebras: { apiKey: '', model: 'llama-3.3-70b-versatile' },
     llamacpp: { baseUrl: 'http://localhost:8080', model: '', downloadLocation: 'server', autoStart: false },
     fasterQwen3Tts: { modelName: 'Qwen/Qwen3-TTS-12Hz-0.6B-Base', modelDir: '', device: 'cuda', dtype: 'bfloat16', chunkSize: 12, nonStreamingMode: true },
-    parakeet: { baseUrl: 'http://localhost:8000' },
+    parakeet: { baseUrl: 'http://127.0.0.1:5201' },
     fluxKlein: { enabled: false, repoId: 'black-forest-labs/FLUX.2-klein-4B', localDir: '', device: 'cuda', torchDtype: 'bfloat16', preferLocalFiles: true, allowRepoFallback: false },
   },
   appearance: { mode: 'system', theme: 'aurora', density: 'comfortable', reduceMotion: false, liveCaptions: true },

@@ -362,6 +362,10 @@ export class OmnixApiClient {
     return this.get<AssetContentResponse>(`/api/assets/${encodeURIComponent(assetId)}/content`);
   }
 
+  async deleteVoiceAsset(assetId: string): Promise<{ ok: boolean; asset_id: string; deleted: boolean; file_deleted: boolean }> {
+    return this.request(`/api/voice-cloning/assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' });
+  }
+
   async saveStoryAsset(request: SaveStoryAssetRequest): Promise<SavedStoryAssetResponse> {
     return this.post<SaveStoryAssetRequest, SavedStoryAssetResponse>('/api/assets/story', request);
   }

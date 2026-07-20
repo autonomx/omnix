@@ -27,7 +27,7 @@ os.makedirs(VOICE_CLONES_DIR, exist_ok=True)
 # Shared Service Constants
 TTS_SAMPLE_RATE = 24000
 TARGET_SR = TTS_SAMPLE_RATE  # canonical playback sample-rate for the whole pipeline
-STT_BASE_URL = "http://localhost:8000"
+STT_BASE_URL = "http://127.0.0.1:5201"
 
 # Secrets file path
 SECRETS_FILE = os.path.join(DATA_DIR, 'secrets.json')
@@ -89,7 +89,7 @@ DEFAULT_SETTINGS = {
         "non_streaming_mode": True,
         "append_silence": True
     },
-    "parakeet": {"base_url": "http://localhost:8000"},
+    "parakeet": {"base_url": "http://127.0.0.1:5201"},
     "image": {
         "enabled": False,
         "provider": "flux_klein",
@@ -599,7 +599,7 @@ def get_tts_provider(provider_name: Optional[str] = None) -> Optional[Any]:
             if not base_url:
                 # Fallback to default base URL if not configured
                 if provider == 'parakeet':
-                    base_url = "http://localhost:8000"
+                    base_url = STT_BASE_URL
                 else:
                     base_url = None
             

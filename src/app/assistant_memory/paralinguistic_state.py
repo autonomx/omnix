@@ -27,7 +27,6 @@ _STORE_LOCK = threading.RLock()
 _STORE: dict[str, tuple[float, "EphemeralCallState"]] = {}
 _TTL_SECONDS = 30 * 60
 _MAX_SESSIONS = 512
-_MAX_SIGNALS = 16
 
 
 class ParalinguisticSignal(BaseModel):
@@ -42,7 +41,7 @@ class ParalinguisticSignal(BaseModel):
 
 
 class EphemeralCallState(BaseModel):
-    """Bounded live state that expires and is never an authoritative memory record."""
+    """Current-turn live state that expires and is never an authoritative memory record."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -195,7 +194,7 @@ def observe_paralinguistic_turn(
     private_mode: bool = False,
     observed_at: datetime | None = None,
 ) -> EphemeralCallState:
-    """Derive bounded signals synchronously without retaining transcript or audio."""
+    """Replace immediate state with signals derived from the current turn only."""
 
     now = _utcnow(observed_at)
     signals = _detected_signals(
@@ -206,12 +205,9 @@ def observe_paralinguistic_turn(
     monotonic_now = time.monotonic()
     with _STORE_LOCK:
         _prune(monotonic_now)
-        previous = _STORE.get(session_id)
-        existing = list(previous[1].signals) if previous is not None else []
-        merged = (existing + signals)[-_MAX_SIGNALS:]
         state = EphemeralCallState(
             session_id=session_id,
-            signals=tuple(merged),
+            signals=tuple(signals),
             private_mode=private_mode,
             updated_at=now.isoformat(),
         )

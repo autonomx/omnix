@@ -26,10 +26,13 @@ interface VoiceCloneFormValues {
   language: string;
   quality: string;
   notes: string;
+  referenceText: string;
+  generateTranscript: boolean;
 }
 
 interface VoiceOutputRef {
   asset_id?: string;
+  content?: string;
   data_url?: string;
   duration?: number;
   mime_type?: string;
@@ -95,6 +98,16 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [enabledEffects, setEnabledEffects] = useState<string[]>(moduleDefaults.effects);
   const [tuningDirty, setTuningDirty] = useState(false);
   const [effectsDirty, setEffectsDirty] = useState(false);
+  const [pendingPlaybackJobId, setPendingPlaybackJobId] = useState('');
+  const pendingPlaybackJobQuery = useQuery({
+    queryKey: ['platform', 'jobs', pendingPlaybackJobId],
+    queryFn: () => omnixApiClient.getJob(pendingPlaybackJobId),
+    enabled: Boolean(pendingPlaybackJobId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'queued' || status === 'running' || status === 'leased' ? 1000 : false;
+    },
+  });
 
   const {
     register,
@@ -111,16 +124,18 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     register: registerClone,
     handleSubmit: handleCloneSubmit,
     reset: resetClone,
+    getValues: getCloneValues,
+    setValue: setCloneValue,
     formState: { errors: cloneErrors, isDirty: cloneFormDirty },
   } = useForm<VoiceCloneFormValues>({
-    defaultValues: { providerId: moduleDefaults.voiceCloningProviderId, profileName: '', language: moduleDefaults.cloningLanguage, quality: moduleDefaults.cloningQuality, notes: '' },
+    defaultValues: { providerId: moduleDefaults.voiceCloningProviderId, profileName: '', language: moduleDefaults.cloningLanguage, quality: moduleDefaults.cloningQuality, notes: '', referenceText: '', generateTranscript: true },
   });
 
   useEffect(() => {
     const revision = settingsQuery.data?.profile.revision;
     if (!revision || appliedSettingsRevision.current === revision) return;
     if (!voiceFormDirty) reset({ ...getValues(), providerId: moduleDefaults.providerId });
-    if (!cloneFormDirty) resetClone({ providerId: moduleDefaults.voiceCloningProviderId, profileName: '', language: moduleDefaults.cloningLanguage, quality: moduleDefaults.cloningQuality, notes: '' });
+    if (!cloneFormDirty) resetClone({ providerId: moduleDefaults.voiceCloningProviderId, profileName: '', language: moduleDefaults.cloningLanguage, quality: moduleDefaults.cloningQuality, notes: '', referenceText: '', generateTranscript: true });
     if (!tuningDirty) setOutputSettings(centralOutputSettings);
     if (!effectsDirty) setEnabledEffects([...moduleDefaults.effects]);
     appliedSettingsRevision.current = revision;
@@ -160,7 +175,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
           provider_id: values.providerId || defaultTtsProviderId || null,
           language: moduleDefaults.language || null,
           speaker: values.speaker || defaultSpeakerName || null,
-          voice_id: values.voiceId || assignedVoiceFor(parsedSpeakers[0] ?? { name: '', count: 0 }, profileAssets, speakerVoiceAssignments) || defaultVoiceId || null,
+          voice_id: assignedVoiceFor(parsedSpeakers[0] ?? { name: '', count: 0 }, profileAssets, speakerVoiceAssignments) || values.voiceId || defaultVoiceId || null,
           script_mode: parsedSpeakers.length > 1 ? 'multi_speaker' : 'single_speaker',
           script_speakers: parsedSpeakers,
           script_segments: scriptSegments,
@@ -171,8 +186,19 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         },
         stages: voiceSynthesisStages(scriptSegments),
       }),
+    onMutate: () => {
+      setSelectedOutputKey('');
+      setPendingPlaybackJobId('');
+      audioRef.current?.pause();
+      setIsPlaying(false);
+    },
     onSuccess: async (job) => {
-      selectFirstJobOutput(job, setSelectedOutputKey);
+      const output = extractPlayableOutputs([job])[0];
+      if (output) {
+        setSelectedOutputKey(output.key);
+      } else if (job.status !== 'failed') {
+        setPendingPlaybackJobId(job.id);
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
         queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
@@ -221,7 +247,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
       if (!sample) {
         throw new Error('Upload or record an audio sample before creating a clone.');
       }
-      return omnixApiClient.createJob({
+      const job = await omnixApiClient.createJob({
         module: 'voice-cloning',
         type: 'voice-cloning.create-profile',
         resource_class: 'gpu:tts',
@@ -232,6 +258,9 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
           language: values.language || moduleDefaults.cloningLanguage,
           quality: values.quality || moduleDefaults.cloningQuality,
           notes: values.notes,
+          reference_text: values.referenceText.trim(),
+          generate_transcript: values.generateTranscript,
+          stt_provider_id: moduleDefaults.sttProviderId || null,
           source_kind: cloneSource,
           source_file_name: selectedCloneSampleName,
           source_file_size: sample.size,
@@ -241,17 +270,24 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         },
         stages: [
           { id: 'capture-sample', label: cloneSource === 'record' ? 'Record voice sample' : 'Ingest uploaded audio', resource_class: 'cpu', status: 'queued' },
+          ...(values.generateTranscript && !values.referenceText.trim()
+            ? [{ id: 'transcribe-sample', label: 'Generate reference transcript', resource_class: 'gpu:stt' as const, status: 'queued' as const }]
+            : []),
           { id: 'build-profile', label: 'Create voice profile', resource_class: 'gpu:tts', status: 'queued' },
           { id: 'preview', label: 'Generate preview clip', resource_class: 'gpu:tts', status: 'queued' },
           { id: 'store-profile', label: 'Store local voice clone', resource_class: 'cpu', status: 'queued' },
         ],
       });
+      if (job.status === 'failed') {
+        throw new Error(job.error?.message || 'The voice clone could not be created.');
+      }
+      return job;
     },
     onSuccess: async (_job, values) => {
-      resetClone({ providerId: values.providerId, profileName: '', language: values.language, quality: values.quality, notes: '' });
+      resetClone({ providerId: values.providerId, profileName: '', language: values.language, quality: values.quality, notes: '', referenceText: '', generateTranscript: values.generateTranscript });
       setSampleFile(null);
       setRecordedSample(null);
-      setRecordingStatus('Voice clone queued and stored locally.');
+      setRecordingStatus(_job.status === 'completed' ? 'Voice clone created and added to the Voice Library.' : 'Voice clone queued. It will appear in the Voice Library when complete.');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
         queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
@@ -259,20 +295,90 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     },
   });
 
+  const deleteVoiceMutation = useMutation({
+    mutationFn: (asset: VoiceAsset) => omnixApiClient.deleteVoiceAsset(voiceAssetId(asset)),
+    onSuccess: async (_result, asset) => {
+      const deletedIds = new Set([voiceAssetId(asset), voiceStoragePath(asset)]);
+      if (deletedIds.has(getValues('voiceId'))) {
+        setValue('voiceId', '');
+        setValue('speaker', '');
+      }
+      setSpeakerVoiceAssignments((current) => Object.fromEntries(Object.entries(current).filter(([, voiceId]) => !deletedIds.has(voiceId))));
+      setSaveMessage(`${voiceAssetName(asset)} was deleted from the Voice Library.`);
+      await queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] });
+    },
+  });
+
+  const transcribeSampleMutation = useMutation({
+    mutationFn: async () => {
+      const sample = cloneSource === 'record' ? recordedSample : sampleFile;
+      if (!sample) {
+        throw new Error('Upload or record an audio sample before transcribing it.');
+      }
+      const values = getCloneValues();
+      const job = await omnixApiClient.createJob({
+        module: 'voice-cloning',
+        type: 'voice-cloning.transcribe-sample',
+        resource_class: 'gpu:stt',
+        priority: 0,
+        input_payload: {
+          provider_id: values.providerId || defaultCloneProviderId || null,
+          stt_provider_id: moduleDefaults.sttProviderId || null,
+          language: values.language || moduleDefaults.cloningLanguage,
+          source_file_name: selectedCloneSampleName,
+          source_mime_type: sample.type || null,
+          sample_audio_base64: await blobToDataUrl(sample),
+        },
+        stages: [{ id: 'transcribe-sample', label: 'Transcribe reference sample', resource_class: 'gpu:stt', status: 'queued' }],
+      });
+      if (job.status === 'failed') {
+        throw new Error(job.error?.message || 'STT could not transcribe the audio sample.');
+      }
+      const transcript = transcriptFromJob(job);
+      if (!transcript) {
+        throw new Error('STT completed without returning a transcript.');
+      }
+      return transcript;
+    },
+    onSuccess: (transcript) => {
+      setCloneValue('referenceText', transcript, { shouldDirty: true, shouldValidate: true });
+      setCloneValue('generateTranscript', false, { shouldDirty: true });
+      setRecordingStatus('Transcript generated. Review or correct it before creating the clone.');
+    },
+  });
+
   const voiceJobs = useMemo(
-    () => mergeVoiceJobs([createJobMutation.data, previewVoiceMutation.data, cloneJobMutation.data, ...queriedVoiceJobs]),
-    [cloneJobMutation.data, createJobMutation.data, previewVoiceMutation.data, queriedVoiceJobs],
+    () => mergeVoiceJobs([pendingPlaybackJobQuery.data, createJobMutation.data, previewVoiceMutation.data, cloneJobMutation.data, ...queriedVoiceJobs]),
+    [cloneJobMutation.data, createJobMutation.data, pendingPlaybackJobQuery.data, previewVoiceMutation.data, queriedVoiceJobs],
   );
   const filteredVoiceJobs = jobQueueFilter === 'active' ? activeJobs(voiceJobs) : jobQueueFilter === 'failed' ? voiceJobs.filter((job) => job.status === 'failed') : voiceJobs.filter((job) => job.status !== 'queued' && job.status !== 'running' && job.status !== 'leased');
   const playableOutputs = useMemo(() => extractPlayableOutputs(voiceJobs), [voiceJobs]);
-  const currentOutput = playableOutputs.find((output) => output.key === selectedOutputKey) ?? playableOutputs[0] ?? null;
-  const currentOutputTitle = currentOutput?.title ?? (latestResultAsset ? voiceAssetName(latestResultAsset) : `${module.label} output`);
-  const latestPreviewTitle = currentOutput?.title ?? (latestResultAsset ? voiceAssetName(latestResultAsset) : 'No generated audio yet');
+  const isPendingSpeechOutput = createJobMutation.isPending || Boolean(pendingPlaybackJobId);
+  const currentOutput = isPendingSpeechOutput ? null : playableOutputs.find((output) => output.key === selectedOutputKey) ?? playableOutputs[0] ?? null;
+  const currentOutputTitle = isPendingSpeechOutput ? 'Generating new speech…' : currentOutput?.title ?? (latestResultAsset ? voiceAssetName(latestResultAsset) : `${module.label} output`);
+  const latestPreviewTitle = isPendingSpeechOutput ? 'Waiting for the new speech output…' : currentOutput?.title ?? (latestResultAsset ? voiceAssetName(latestResultAsset) : 'No generated audio yet');
   const effectiveDuration = playbackDuration || currentOutput?.duration || estimateDurationFromText(scriptText);
   const createJobFailureMessage = voiceJobErrorMessage(createJobMutation.data);
   const previewFailureMessage = voiceJobErrorMessage(previewVoiceMutation.data);
-  const latestFailedVoiceJob = voiceJobs.find((job) => (job.module === 'voice' || job.module === 'voice-cloning') && job.status === 'failed');
-  const voiceGenerationFailure = createJobFailureMessage || previewFailureMessage || voiceJobErrorMessage(latestFailedVoiceJob);
+  const voiceGenerationFailure = createJobFailureMessage || previewFailureMessage;
+
+  useEffect(() => {
+    if (!pendingPlaybackJobId || !pendingPlaybackJobQuery.data) return;
+    const job = pendingPlaybackJobQuery.data;
+    if (job.status === 'failed') {
+      setPendingPlaybackJobId('');
+      setSaveMessage(voiceJobErrorMessage(job));
+      return;
+    }
+    const output = extractPlayableOutputs([job])[0];
+    if (!output) return;
+    setSelectedOutputKey(output.key);
+    setPendingPlaybackJobId('');
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+      queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
+    ]);
+  }, [pendingPlaybackJobId, pendingPlaybackJobQuery.data, queryClient]);
 
   useEffect(() => {
     if (playableOutputs.length > 0 && !playableOutputs.some((output) => output.key === selectedOutputKey)) {
@@ -396,11 +502,17 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   }
 
   function resetEmbeddedCloneDefaults() {
-    resetClone({ providerId: moduleDefaults.voiceCloningProviderId, profileName: '', language: moduleDefaults.cloningLanguage, quality: moduleDefaults.cloningQuality, notes: '' });
+    resetClone({ providerId: moduleDefaults.voiceCloningProviderId, profileName: '', language: moduleDefaults.cloningLanguage, quality: moduleDefaults.cloningQuality, notes: '', referenceText: '', generateTranscript: true });
     setSampleFile(null);
     setRecordedSample(null);
     setRecordingStatus('');
     setCloneSource('upload');
+  }
+
+  function requestVoiceDelete(asset: VoiceAsset) {
+    const name = voiceAssetName(asset);
+    if (typeof window !== 'undefined' && !window.confirm(`Delete “${name}”? This permanently removes the cloned voice audio and metadata.`)) return;
+    deleteVoiceMutation.mutate(asset);
   }
 
   return (
@@ -423,6 +535,10 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 <label>Voice Name<input aria-invalid={Boolean(cloneErrors.profileName)} placeholder="e.g. My New Voice" {...registerClone('profileName', { required: true })} /></label>
                 <label className="voice-file-field">Audio sample<input type="file" accept="audio/*" onChange={(event) => { setSampleFile(event.currentTarget.files?.[0] ?? null); setRecordedSample(null); setCloneSource('upload'); }} /><small>{cloneSource === 'record' ? recordingStatus || 'No recording yet.' : sampleFile ? `${sampleFile.name} · ${formatBytes(sampleFile.size)}` : 'No sample selected yet.'}</small></label>
                 <div className="voice-two-col"><label>Language / Accent<input {...registerClone('language')} /></label><label>Quality<select {...registerClone('quality')}><option>High</option><option>Standard</option><option>Draft</option><option>High (Recommended)</option><option>Balanced</option><option>Fast Preview</option></select></label></div>
+                <label>Reference transcript (optional)<textarea rows={3} placeholder="Paste the exact spoken words, or transcribe the selected sample with STT." {...registerClone('referenceText')} /></label>
+                <Group className="voice-transcribe-action" justify="space-between" align="center"><Text size="xs">Use STT now so you can verify the exact words before cloning.</Text><Button type="button" size="sm" variant="outline" loading={transcribeSampleMutation.isPending} disabled={!selectedCloneSample || transcribeSampleMutation.isPending} onClick={() => transcribeSampleMutation.mutate()}>Generate Transcript</Button></Group>
+                {transcribeSampleMutation.isError ? <div className="platform-empty" role="alert">{transcribeSampleMutation.error instanceof Error ? transcribeSampleMutation.error.message : 'STT could not transcribe the sample.'}</div> : null}
+                <label className="voice-transcript-option"><input type="checkbox" {...registerClone('generateTranscript')} /><span>Generate transcript with STT<small>Uses the configured STT provider when the reference transcript is empty.</small></span></label>
                 <label>Notes / Tags (optional)<textarea rows={2} placeholder="Add notes or tags to help identify this voice..." {...registerClone('notes')} /></label>
                 <Group justify="space-between"><Text size="xs">Clones are stored to Omnix: /resources/voice_clones</Text><Group gap="xs"><Button type="button" variant="subtle" onClick={resetEmbeddedCloneDefaults}>Reset defaults</Button><Button type="submit" loading={cloneJobMutation.isPending} disabled={!selectedCloneSample || cloneJobMutation.isPending}>Create Clone</Button></Group></Group>
               </form>
@@ -434,9 +550,10 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <Group justify="space-between"><div><Title order={4}>Voice Library</Title><Text size="sm">Your cloned voices stored in Omnix resources.</Text></div><Button size="xs" variant="subtle">Filter ⟳</Button></Group>
               <label className="voice-search"><span>Search voices</span><input aria-label="Search voices" value={voiceSearch} onChange={(event) => setVoiceSearch(event.currentTarget.value)} placeholder="Search voices..." /></label>
               <div className="voice-library-table" aria-label="Voice library">
-                <div className="voice-library-row table-head"><span>Name</span><span>ID / Prefix</span><span>Source</span><span>Status</span><span></span></div>
-                {visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} key={voiceAssetId(asset)} onPreview={() => previewVoiceMutation.mutate(asset)} onUse={() => useVoice(asset, setValue, setSaveMessage)} />)}
+                <div className="voice-library-row table-head"><span>Name</span><span>ID / Prefix</span><span>Status</span><span>Actions</span></div>
+                {visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} deleting={Boolean(deleteVoiceMutation.isPending && deleteVoiceMutation.variables && voiceAssetId(deleteVoiceMutation.variables) === voiceAssetId(asset))} key={voiceAssetId(asset)} onDelete={() => requestVoiceDelete(asset)} onPreview={() => previewVoiceMutation.mutate(asset)} onUse={() => useVoice(asset, setValue, setSaveMessage)} />)}
               </div>
+              {deleteVoiceMutation.isError ? <div className="platform-empty" role="alert">Voice deletion failed. The voice was not removed.</div> : null}
               <Group justify="space-between"><Text size="xs">{filteredProfileAssets.length} voices</Text><Button size="xs" variant="subtle" onClick={() => setShowAllVoices((value) => !value)}>{showAllVoices ? 'Show first 6' : 'View all voices →'}</Button></Group>
             </section>
 
@@ -474,8 +591,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   );
 }
 
-function VoiceLibraryRow({ asset, onPreview, onUse }: { asset: VoiceAsset; onPreview: () => void; onUse: () => void }) {
-  return <div className="voice-library-row"><span><i>{voiceInitial(asset)}</i><b>{voiceAssetName(asset)}</b><small>{voiceProfileDescription(asset)}</small></span><span>{voiceProfileName(asset)}</span><span>Local Clone</span><span className="ready-chip">Ready</span><span><Button size="xs" variant="subtle" onClick={onPreview}>▶</Button><Button size="xs" variant="subtle" onClick={onUse}>Use</Button><Button size="xs" variant="subtle">⋯</Button></span></div>;
+function VoiceLibraryRow({ asset, deleting, onDelete, onPreview, onUse }: { asset: VoiceAsset; deleting: boolean; onDelete: () => void; onPreview: () => void; onUse: () => void }) {
+  return <div className="voice-library-row"><span><i>{voiceInitial(asset)}</i><b>{voiceAssetName(asset)}</b><small>{voiceProfileDescription(asset)}</small></span><span title={voiceProfileName(asset)}>{voiceProfileName(asset)}</span><span className="ready-chip">Ready</span><span className="voice-library-actions"><Button aria-label={`Preview ${voiceAssetName(asset)}`} size="xs" variant="subtle" onClick={onPreview}>Preview</Button><Button size="xs" variant="subtle" onClick={onUse}>Use</Button><Button aria-label={`Delete ${voiceAssetName(asset)}`} color="red" loading={deleting} size="xs" variant="outline" onClick={onDelete}>Delete</Button></span></div>;
 }
 
 function QueueRow({ job, onSelect, selected }: { job: { id: string; type: string; status: string; module: string; progress?: { current: number; total: number }; stages?: Array<{ label?: string; status?: string }> }; onSelect?: () => void; selected?: boolean }) {
@@ -559,6 +676,12 @@ function extractPlayableOutputs(jobs: JobRecord[]): PlayableVoiceOutput[] {
     }
   }
   return outputs;
+}
+
+function transcriptFromJob(job: JobRecord): string {
+  const refs = (job.output_refs ?? []) as VoiceOutputRef[];
+  const transcript = refs.find((ref) => ref.type === 'transcript' && typeof ref.content === 'string')?.content;
+  return transcript?.trim() ?? '';
 }
 
 function isPlayableAudioRef(ref: VoiceOutputRef): ref is VoiceOutputRef & { data_url: string } {

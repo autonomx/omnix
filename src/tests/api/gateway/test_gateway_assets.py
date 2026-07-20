@@ -135,3 +135,47 @@ def test_gateway_assets_endpoint_uses_shared_store() -> None:
     legacy_dry_run = client.post("/api/assets/migrations/legacy-non-image/dry-run")
     assert legacy_dry_run.status_code == 200
     assert legacy_dry_run.json()["source"] == "fake legacy"
+
+
+def test_gateway_deletes_voice_clone_asset_and_local_source(tmp_path: Path, monkeypatch) -> None:
+    import json
+
+    from app.assets import AssetListResponse, AssetRecord, AssetType
+    from app.gateway.main import create_gateway_app
+    import app.shared as shared
+
+    clone_dir = tmp_path / "voice_clones"
+    clone_dir.mkdir()
+    clone_path = clone_dir / "jinx2.wav"
+    clone_path.write_bytes(b"voice")
+    manifest_path = clone_dir / "voice_clones.json"
+    manifest_path.write_text(json.dumps({"jinx2": {"voice_clone_id": "jinx2"}}), encoding="utf-8")
+    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(clone_dir))
+    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(manifest_path))
+
+    asset = AssetRecord(
+        id="voice-cloning:jinx2",
+        module="voice-cloning",
+        type=AssetType.VOICE_PROFILE,
+        mime_type="audio/wav",
+        storage_path=str(clone_path),
+        metadata={"profile_name": "jinx2", "voice_id": "jinx2"},
+        created_at="2026-07-20T00:00:00Z",
+    )
+
+    class FakeAssetStore:
+        def list_assets(self) -> AssetListResponse:
+            return AssetListResponse(assets=[asset])
+
+        def delete_asset(self, asset_id: str) -> dict[str, object]:
+            assert asset_id == asset.id
+            return {"deleted": True, "file_deleted": False}
+
+    client = TestClient(create_gateway_app(asset_store_factory=lambda: FakeAssetStore()))
+
+    response = client.delete("/api/voice-cloning/assets/voice-cloning:jinx2")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "asset_id": asset.id, "deleted": True, "file_deleted": True}
+    assert not clone_path.exists()
+    assert json.loads(manifest_path.read_text(encoding="utf-8")) == {}

@@ -87,6 +87,14 @@
     "is_preloaded": true,
     "gender": "neutral"
   },
+  "Sofia2": {
+    "speaker": "Sofia2",
+    "language": "en",
+    "voice_clone_id": "Sofia2",
+    "has_audio": true,
+    "is_preloaded": false,
+    "gender": "neutral"
+  },
   "Vic Cyberpunk": {
     "speaker": "default",
     "language": "en",
