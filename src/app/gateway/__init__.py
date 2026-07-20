@@ -36,6 +36,7 @@ from .rpg_tactical_spatial_routes import install_rpg_tactical_spatial_route_hook
 from .rpg_turn_job_mirror import install_rpg_turn_job_mirror_hook
 from .rpg_world_authoring_routes import install_rpg_world_authoring_route_hook
 from .rpg_world_bundle_routes import install_rpg_world_bundle_route_hook
+from .rpg_world_image_routes import install_rpg_world_image_route_hook
 from .rpg_world_routes import install_rpg_world_route_hook
 from .tts_live_call_websocket import install_tts_live_call_websocket_hook
 from .tts_pcm_websocket import install_tts_pcm_websocket_hook
@@ -77,6 +78,7 @@ install_rpg_map_route_hook()
 install_rpg_world_bundle_route_hook()
 install_rpg_world_route_hook()
 install_rpg_world_authoring_route_hook()
+install_rpg_world_image_route_hook()
 install_rpg_progressive_map_route_hook()
 install_rpg_npc_spatial_route_hook()
 install_rpg_observer_route_hook()
