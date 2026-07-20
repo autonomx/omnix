@@ -40,6 +40,26 @@ describe('stable live voice clauses', () => {
     ]);
   });
 
+  it('does not commit punctuation inside an unfinished quotation', () => {
+    const straight = new StableClauseAccumulator({ minimumClauseCharacters: 8 });
+    expect(straight.append('He said, "Wait. I need to explain', 0)).toEqual([]);
+    expect(straight.append('before we decide."', 50)).toEqual([
+      {
+        text: 'He said, "Wait. I need to explain before we decide."',
+        reason: 'strong-boundary',
+      },
+    ]);
+
+    const curly = new StableClauseAccumulator({ minimumClauseCharacters: 8 });
+    expect(curly.append('She replied, “Not yet. There is more', 0)).toEqual([]);
+    expect(curly.append('to consider.”', 50)).toEqual([
+      {
+        text: 'She replied, “Not yet. There is more to consider.”',
+        reason: 'strong-boundary',
+      },
+    ]);
+  });
+
   it('commits a safe fallback when the latency deadline expires', () => {
     const accumulator = new StableClauseAccumulator({
       minimumClauseCharacters: 12,
