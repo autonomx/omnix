@@ -37,7 +37,7 @@ export async function playLowLatencyVoiceCue(
   stopLowLatencyVoiceCue('superseded');
   const samples = cloneCueSamples(cueId, variantId, context.sampleRate);
   const buffer = context.createBuffer(1, samples.length, context.sampleRate);
-  buffer.copyToChannel(samples, 0);
+  buffer.copyToChannel(new Float32Array(samples), 0);
   const source = context.createBufferSource();
   const gain = context.createGain();
   gain.gain.value = Math.max(0, Math.min(1, gainValue));
