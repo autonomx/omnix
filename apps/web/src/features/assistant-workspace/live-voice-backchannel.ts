@@ -5,6 +5,7 @@ import {
 import { liveConversationStore } from './live-conversation-store';
 import { cueVariantId } from './live-voice-cue-bank';
 import { mapBackchannelTokenToCue } from './live-voice-cue-policy';
+import { readLiveVoiceHumanizationFlags } from './live-voice-humanization-flags';
 import { playLowLatencyVoiceCue, stopLowLatencyVoiceCue } from './live-voice-cue-player';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
@@ -78,6 +79,11 @@ export function resolveBackchannelTranscript(detailTranscript: unknown): string 
   return (transcript.partial || transcript.lastFinal).trim();
 }
 
+export function listenerBackchannelsRolloutEnabled(): boolean {
+  const flags = readLiveVoiceHumanizationFlags();
+  return flags.master && flags.listenerCues;
+}
+
 export function initializeEphemeralBackchannels(): () => void {
   if (initialized || typeof window === 'undefined') return () => undefined;
   initialized = true;
@@ -96,6 +102,7 @@ export function initializeEphemeralBackchannels(): () => void {
   };
   const handleUserSpeech = () => {
     clearSpeechTimer();
+    if (!listenerBackchannelsRolloutEnabled()) return;
     const startedAt = performance.now();
     const runtime = liveConversationStore.getState();
     const profile = runtime.profile ?? readEffectiveLiveConversationProfile();
@@ -106,6 +113,7 @@ export function initializeEphemeralBackchannels(): () => void {
     const cadence = resolveBackchannelCadence(frequency);
     if (!cadence.enabled) return;
     speechTimer = setTimeout(() => {
+      if (!listenerBackchannelsRolloutEnabled()) return;
       const current = liveConversationStore.getState();
       const currentProfile = current.profile ?? readEffectiveLiveConversationProfile();
       const currentPolicy = current.presencePolicy;
