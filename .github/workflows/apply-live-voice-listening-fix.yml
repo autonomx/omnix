@@ -1,0 +1,238 @@
+name: Apply live voice listening handoff fix
+
+on:
+  push:
+    branches:
+      - agent/live-voice-humanization
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/live-voice-humanization
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Patch listening handoff and regressions
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Expected patch anchor not found in {path}: {old[:120]!r}')
+              target.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts',
+              """  const finish = async (): Promise<void> => {
+    if (closed || inputFinished) return;
+    inputFinished = true;
+    reporter.record('turn_input_finished', {}, 'pcm_session');
+    await generationQueue;
+    if (closed) return;
+""",
+              """  const waitForGenerationQueueToSettle = async (): Promise<void> => {
+    let observedQueue = generationQueue;
+    while (true) {
+      await observedQueue.catch(() => undefined);
+      await Promise.resolve();
+      if (generationQueue === observedQueue) return;
+      observedQueue = generationQueue;
+    }
+  };
+
+  const finish = async (): Promise<void> => {
+    if (closed || inputFinished) return;
+    await waitForGenerationQueueToSettle();
+    if (closed || inputFinished) return;
+    inputFinished = true;
+    reporter.record('turn_input_finished', {}, 'pcm_session');
+    await generationQueue;
+    if (closed) return;
+""",
+          )
+
+          replace_once(
+              'apps/web/src/features/assistant-workspace/live-voice-pcm-worklet.ts',
+              """  applyFadeIn(channel, written) {
+""",
+              """  cancelHeadSegment(segment, reason) {
+    if (!segment || this.queue[0] !== segment) return;
+    const remainingSamples = segment.segmentKind === 'silence'
+      ? Math.max(0, Number(segment.remainingSamples) || 0)
+      : Math.max(0, segment.samples.length - this.headOffset);
+    this.queue.shift();
+    this.headOffset = 0;
+    this.queuedSamples = Math.max(0, this.queuedSamples - remainingSamples);
+    if (segment.segmentKind === 'speech') {
+      this.bufferedSpeechSamples = Math.max(0, this.bufferedSpeechSamples - remainingSamples);
+    }
+    if (!this.terminalSegments.has(segment.segmentId)) {
+      this.terminalSegments.add(segment.segmentId);
+      this.emit('segment_cancelled', {
+        ...this.segmentFields(segment, 0),
+        reason,
+      });
+    }
+    this.endedSegments.delete(segment.segmentId);
+    this.waitingForFollowingSpeech = false;
+  }
+
+  applyFadeIn(channel, written) {
+""",
+          )
+
+          replace_once(
+              'apps/web/src/features/assistant-workspace/live-voice-pcm-worklet.ts',
+              """      if (!this.followingSpeechReady(head)) {
+        if (!this.waitingForFollowingSpeech) {
+          this.waitingForFollowingSpeech = true;
+          this.emit('pause_waiting_for_following_speech', {
+            segment_id: head.segmentId,
+            segment_kind: head.segmentKind,
+            buffered_speech_samples: this.bufferedSpeechSamples,
+            minimum_following_speech_samples: head.minimumFollowingSpeechSamples || 0,
+          });
+        }
+        break;
+      }
+""",
+              """      if (!this.followingSpeechReady(head)) {
+        if (this.inputEnded && this.bufferedSpeechSamples <= 0 && head.segmentKind === 'silence') {
+          this.cancelHeadSegment(head, 'input_ended_without_following_speech');
+          continue;
+        }
+        if (!this.waitingForFollowingSpeech) {
+          this.waitingForFollowingSpeech = true;
+          this.emit('pause_waiting_for_following_speech', {
+            segment_id: head.segmentId,
+            segment_kind: head.segmentKind,
+            buffered_speech_samples: this.bufferedSpeechSamples,
+            minimum_following_speech_samples: head.minimumFollowingSpeechSamples || 0,
+          });
+        }
+        break;
+      }
+""",
+          )
+
+          replace_once(
+              'apps/web/src/features/assistant-workspace/live-voice-pcm-worklet.test.ts',
+              """  it('counts cues on the segment timeline without revealing canonical speech', () => {
+""",
+              """  it('cancels a guarded trailing pause and drains when no following speech can arrive', () => {
+    const processor = createProcessor();
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-0',
+      segmentKind: 'speech',
+      phraseIndex: 0,
+      samples: new Float32Array([0.2, 0.2, 0.2, 0.2]),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'speech-0' });
+    send(processor, {
+      type: 'push_segment_silence',
+      segmentId: 'silence-trailing',
+      durationSamples: 4,
+      minimumFollowingSpeechSamples: 4,
+      reason: 'clause',
+    });
+    send(processor, { type: 'end' });
+
+    expect(render(processor).some((sample) => sample !== 0)).toBe(true);
+
+    expect(events(processor, 'segment_cancelled')).toEqual([
+      expect.objectContaining({
+        segment_id: 'silence-trailing',
+        segment_kind: 'silence',
+        reason: 'input_ended_without_following_speech',
+      }),
+    ]);
+    expect(events(processor, 'drained')).toHaveLength(1);
+    expect(events(processor, 'pause_waiting_for_following_speech')).toHaveLength(0);
+    expect(events(processor).at(-1)).toMatchObject({
+      type: 'drained',
+      buffered_samples: 0,
+      buffered_speech_samples: 0,
+      segment_timeline_samples: 4,
+      semantic_speech_samples: 4,
+    });
+  });
+
+  it('counts cues on the segment timeline without revealing canonical speech', () => {
+""",
+          )
+
+          replace_once(
+              'apps/web/src/features/assistant-workspace/live-voice-pcm-session.test.ts',
+              """  it('converts onset and pause readiness from milliseconds in the actual playback domain', async () => {
+""",
+              """  it('waits for asynchronously extended generation chains before closing turn input', async () => {
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    const first = session.enqueuePhrase('First phrase.', 0);
+    const extendedQueue = first.then(async () => {
+      await session.enqueueSilence(100, 'clause', 120);
+      await session.enqueuePhrase('Second phrase.', 1);
+    });
+
+    const finish = session.finish();
+    await Promise.all([extendedQueue, finish]);
+
+    const sent = FakeWebSocket.instances[0].sent.map((message) => JSON.parse(message) as SentMessage);
+    const requests = sent.filter((message) => message.type === 'synthesize');
+    expect(requests.map((request) => request.text)).toEqual(['First phrase.', 'Second phrase.']);
+    const messages = FakeAudioWorkletNode.instances[0].port.messages as Record<string, unknown>[];
+    expect(messages).toContainEqual(expect.objectContaining({
+      type: 'push_segment_silence',
+      reason: 'clause',
+    }));
+    expect(messages.filter((message) => message.type === 'end')).toHaveLength(1);
+    expect(reporter.record).not.toHaveBeenCalledWith(
+      'phrase_generation_failed',
+      expect.objectContaining({ error: 'Live voice input is already closed.' }),
+      'pcm_session',
+    );
+  });
+
+  it('converts onset and pause readiness from milliseconds in the actual playback domain', async () => {
+""",
+          )
+
+          Path('.github/workflows/apply-live-voice-listening-fix.yml').unlink()
+          PY
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run focused regressions
+        run: npm --workspace @omnix/web run test -- --run src/features/assistant-workspace/live-voice-pcm-worklet.test.ts src/features/assistant-workspace/live-voice-pcm-session.test.ts src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts
+
+      - name: Typecheck web
+        run: npm --workspace @omnix/web run typecheck
+
+      - name: Commit validated fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts \
+                  apps/web/src/features/assistant-workspace/live-voice-pcm-worklet.ts \
+                  apps/web/src/features/assistant-workspace/live-voice-pcm-session.test.ts \
+                  apps/web/src/features/assistant-workspace/live-voice-pcm-worklet.test.ts \
+                  .github/workflows/apply-live-voice-listening-fix.yml
+          git commit -m 'Fix live voice listening handoff'
+          git push origin HEAD:agent/live-voice-humanization
