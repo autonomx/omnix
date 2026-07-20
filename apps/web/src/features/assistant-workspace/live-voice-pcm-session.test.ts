@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  clearVoiceCueAssets,
+  registerVoiceCueSamples,
+} from './live-voice-cue-bank';
 import { createLiveVoicePcmSession } from './live-voice-pcm-session';
 
 class FakePort {
@@ -160,6 +165,8 @@ beforeEach(() => {
   FakeAudioContext.nextSampleRate = 24_000;
   FakeAudioWorkletNode.instances = [];
   FakeWebSocket.instances = [];
+  clearVoiceCueAssets();
+  window.localStorage.clear();
   reporter.record.mockClear();
   vi.stubGlobal('AudioContext', FakeAudioContext as unknown as typeof AudioContext);
   vi.stubGlobal('AudioWorkletNode', FakeAudioWorkletNode as unknown as typeof AudioWorkletNode);
@@ -167,6 +174,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  clearVoiceCueAssets();
+  window.localStorage.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -250,7 +259,14 @@ describe('live voice PCM session', () => {
     expect(messages.some((message) => message.type === 'push_segment_samples')).toBe(false);
   });
 
-  it('queues nonverbal cues in the worklet without canonical phrase identity', async () => {
+  it('queues voice-matched cues in the worklet without canonical phrase identity', async () => {
+    registerVoiceCueSamples({
+      voiceId: 'Jinx',
+      cueId: 'hmm',
+      variantId: 'hmm-v2',
+      samples: new Float32Array([0, 0.2, -0.2, 0]),
+      sampleRate: 24_000,
+    });
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
     await session.enqueueCue('hmm', 'hmm-v2', 0.5);
     await session.stop('test-cleanup');
@@ -270,7 +286,39 @@ describe('live voice PCM session', () => {
     });
     expect(reporter.record).toHaveBeenCalledWith(
       'cue_segment_queued',
-      expect.objectContaining({ segment_kind: 'cue', semantic_speech_samples: 0 }),
+      expect.objectContaining({
+        segment_kind: 'cue',
+        cue_source: 'voice_asset',
+        voice_id: 'Jinx',
+        semantic_speech_samples: 0,
+      }),
+      'pcm_session',
+    );
+  });
+
+  it('skips a missing response cue unless procedural fallback is enabled', async () => {
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    await session.enqueueCue('hmm', 'hmm-v1', 0.5);
+
+    let messages = FakeAudioWorkletNode.instances[0].port.messages as Record<string, unknown>[];
+    expect(messages.some((message) => message.type === 'push_segment_samples')).toBe(false);
+    expect(reporter.record).toHaveBeenCalledWith(
+      'cue_segment_skipped',
+      expect.objectContaining({
+        voice_id: 'Jinx',
+        reason: 'voice_asset_unavailable',
+        procedural_fallback_allowed: false,
+      }),
+      'pcm_session',
+    );
+
+    await session.enqueueCue('hmm', 'hmm-v1', 0.5, true);
+    await session.stop('test-cleanup');
+    messages = FakeAudioWorkletNode.instances[0].port.messages as Record<string, unknown>[];
+    expect(messages.some((message) => message.type === 'push_segment_samples')).toBe(true);
+    expect(reporter.record).toHaveBeenCalledWith(
+      'cue_segment_queued',
+      expect.objectContaining({ cue_source: 'procedural_fallback' }),
       'pcm_session',
     );
   });
