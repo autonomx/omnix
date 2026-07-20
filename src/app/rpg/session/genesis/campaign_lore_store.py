@@ -11,6 +11,7 @@ from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.service import save_session
+from app.rpg.worlds.published_canon_projection import project_published_canon
 
 _PLAYER_VISIBLE_VISIBILITY = {
     "public",
@@ -29,6 +30,7 @@ _PROJECTION_KEYS = (
     "story_threads",
     "indexes",
     "discovery_state",
+    "mechanics_catalog",
 )
 
 
@@ -206,7 +208,7 @@ def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
         if value is not None:
             bible[key] = deepcopy(value)
         elif key not in bible:
-            bible[key] = [] if key != "indexes" else {}
+            bible[key] = {} if key in {"indexes", "mechanics_catalog"} else []
     return bible
 
 
@@ -239,6 +241,49 @@ def _public_world_context(bible: Mapping[str, Any]) -> list[str]:
         if len(context) >= 12:
             break
     return context
+
+
+def _merge_published_world_canon(
+    world_canon: Mapping[str, Any],
+    campaign_bible: Mapping[str, Any],
+    *,
+    campaign_id: str,
+) -> dict[str, Any]:
+    """Backfill pinned world canon without losing campaign-owned discoveries."""
+
+    merged = deepcopy(dict(world_canon))
+    current = deepcopy(dict(campaign_bible))
+    merged.update(
+        {
+            key: value
+            for key, value in current.items()
+            if key not in {"documents", "entities", "discovery_state"}
+        }
+    )
+
+    documents: dict[str, dict[str, Any]] = {}
+    for row in [*_rows(world_canon.get("documents")), *_rows(current.get("documents"))]:
+        document_id = _text(row.get("document_id") or row.get("id"))
+        if document_id:
+            documents[document_id] = row
+    merged["documents"] = list(documents.values())
+
+    entities = deepcopy(_mapping(world_canon.get("entities")))
+    entities.update(deepcopy(_mapping(current.get("entities"))))
+    merged["entities"] = entities
+
+    discovery = deepcopy(_mapping(world_canon.get("discovery_state")))
+    current_discovery = _mapping(current.get("discovery_state"))
+    for key in ("pages", "entities"):
+        statuses = deepcopy(_mapping(discovery.get(key)))
+        statuses.update(deepcopy(_mapping(current_discovery.get(key))))
+        discovery[key] = statuses
+    discovery["discoveries"] = deepcopy(
+        list(current_discovery.get("discoveries") or discovery.get("discoveries") or ())
+    )
+    merged["discovery_state"] = discovery
+    merged["campaign_id"] = campaign_id
+    return merged
 
 
 def _fallback_location_text(name: str) -> str:
@@ -381,7 +426,12 @@ def _hydrate_session(
 ) -> dict[str, Any]:
     hydrated = deepcopy(dict(session))
     projection = {
-        key: deepcopy(bible.get(key, [] if key != "indexes" else {}))
+        key: deepcopy(
+            bible.get(
+                key,
+                {} if key in {"indexes", "mechanics_catalog"} else [],
+            )
+        )
         for key in _PROJECTION_KEYS
     }
     projection.update(
@@ -436,6 +486,14 @@ def _hydrate_session(
     runtime["campaign_bible_revision"] = revision
     runtime["campaign_bible_content_hash"] = content_hash
     hydrated["runtime_state"] = runtime
+    mechanics_catalog = deepcopy(_mapping(bible.get("mechanics_catalog")))
+    if mechanics_catalog:
+        state = _mapping(hydrated.get("state"))
+        state["campaign_mechanics"] = mechanics_catalog
+        hydrated["state"] = state
+        simulation = _mapping(hydrated.get("simulation_state"))
+        simulation["campaign_mechanics"] = mechanics_catalog
+        hydrated["simulation_state"] = simulation
     manifest = _mapping(hydrated.get("manifest"))
     manifest["campaign_bible_revision"] = revision
     manifest["campaign_bible_content_hash"] = content_hash
@@ -483,6 +541,30 @@ def load_campaign_lore(
                 )
             stored = work.campaign_bibles.get(context, campaign_id, for_update=True)
             bible = deepcopy(stored["document"] if stored is not None else portable)
+            binding = work.world_scenarios.get_campaign_binding(context, campaign_id)
+            if binding is not None:
+                world_revision = work.world_scenarios.get_world_revision(
+                    context,
+                    _text(binding.get("world_id")),
+                    int(binding.get("world_revision") or 0),
+                )
+                revision_document = (
+                    _mapping(world_revision.get("document"))
+                    if world_revision is not None
+                    else {}
+                )
+                world_canon = _mapping(revision_document.get("canon"))
+                if world_canon:
+                    world_canon = project_published_canon(
+                        world_canon,
+                        campaign_id=campaign_id,
+                        canon_revision=int(binding.get("world_revision") or 1),
+                    )
+                    bible = _merge_published_world_canon(
+                        world_canon,
+                        bible,
+                        campaign_id=campaign_id,
+                    )
             generated_document_id: str | None = None
             generated = False
             if ensure_current_location:
@@ -642,3 +724,370 @@ def persist_campaign_lore(
             "campaign_id": campaign_id,
             "error": type(exc).__name__,
         }
+
+
+class LoreRegenerationUnavailable(RuntimeError):
+    """Raised when a lore page cannot be safely regenerated and persisted."""
+
+
+def _regeneration_context(
+    session: Mapping[str, Any],
+    bible: Mapping[str, Any],
+    target: Mapping[str, Any],
+    canonical_source: Mapping[str, Any],
+) -> dict[str, Any]:
+    known_pages = []
+    target_id = _text(target.get("document_id"))
+    target_terms = {
+        word
+        for word in re.findall(
+            r"[a-z0-9]+",
+            (
+                _text(canonical_source.get("title"))
+                + " "
+                + " ".join(str(value) for value in canonical_source.get("keywords") or ())
+            ).casefold(),
+        )
+        if len(word) >= 4
+    }
+    discovery = _mapping(bible.get("discovery_state"))
+    page_statuses = _mapping(discovery.get("pages"))
+    for document in _rows(bible.get("documents")):
+        document_id = _text(document.get("document_id"))
+        visibility = _text(document.get("visibility"))
+        status = _text(page_statuses.get(document_id))
+        if document_id == target_id or visibility not in _PLAYER_VISIBLE_VISIBILITY:
+            continue
+        if status and status not in {
+            "public_at_campaign_start",
+            "learned",
+            "partially_known",
+            "disputed",
+        }:
+            continue
+        document_terms = {
+            word
+            for word in re.findall(
+                r"[a-z0-9]+",
+                (
+                    _text(document.get("title"))
+                    + " "
+                    + " ".join(str(value) for value in document.get("keywords") or ())
+                ).casefold(),
+            )
+            if len(word) >= 4
+        }
+        foundational = _text(document.get("topic_id")) in {
+            "realm",
+            "cosmology",
+            "magic_technology",
+            "history",
+        }
+        if not foundational and not target_terms.intersection(document_terms):
+            continue
+        summary = _text(document.get("summary_500") or document.get("summary_120"))
+        if summary:
+            known_pages.append(
+                {
+                    "document_id": document_id,
+                    "title": _text(document.get("title")),
+                    "topic_id": _text(document.get("topic_id")),
+                    "summary": summary,
+                }
+            )
+        if len(known_pages) >= 12:
+            break
+    location = current_location_identity(session)
+    mechanics = _mapping(bible.get("mechanics_catalog"))
+    mechanic_group = _mapping(
+        mechanics.get(
+            "creatures"
+            if _text(target.get("topic_id")) == "monsters"
+            else "locations"
+        )
+    )
+    mechanics_definition: dict[str, Any] = {}
+    for entity_ref in target.get("entity_refs") or ():
+        mechanics_definition = deepcopy(
+            _mapping(mechanic_group.get(_text(entity_ref)))
+        )
+        if mechanics_definition:
+            break
+    return {
+        "campaign": {
+            "title": _campaign_title(session, "campaign"),
+            "current_location": location,
+        },
+        "authoritative_target": {
+            "document_id": target_id,
+            "title": _text(target.get("title")),
+            "topic_id": _text(target.get("topic_id")),
+            "canonical_source_text": _text(canonical_source.get("full_text")),
+            "current_page_text": _text(target.get("full_text")),
+            "keywords": list(target.get("keywords") or ()),
+            "mechanics_definition": mechanics_definition,
+        },
+        "known_campaign_canon": known_pages,
+    }
+
+
+def _generated_lore_text(value: Any, *, target: Mapping[str, Any]) -> str:
+    text = _text(value)
+    if text.startswith("```") and text.endswith("```"):
+        lines = text.splitlines()
+        text = "\n".join(lines[1:-1]).strip()
+    word_count = len(text.split())
+    paragraphs = [row.strip() for row in re.split(r"\n\s*\n", text) if row.strip()]
+    if word_count < 220 or len(paragraphs) < 3:
+        raise LoreRegenerationUnavailable(
+            "The lore provider returned prose that was too short; the existing canon was left unchanged."
+        )
+    topic_id = _text(target.get("topic_id"))
+    title = _text(target.get("title"))
+    if topic_id in {
+        "regions",
+        "factions",
+        "locations",
+        "monsters",
+        "items",
+        "spells",
+        "quests",
+        "npcs",
+    } and title.casefold() not in text[:1200].casefold():
+        raise LoreRegenerationUnavailable(
+            f'The lore provider did not stay focused on "{title}"; the existing canon was left unchanged.'
+        )
+    return text
+
+
+def _apply_regenerated_lore(
+    bible: Mapping[str, Any],
+    *,
+    document_id: str,
+    full_text: str,
+    canon_revision: int,
+) -> dict[str, Any]:
+    candidate = deepcopy(dict(bible))
+    documents = _rows(candidate.get("documents"))
+    replaced = False
+    for index, document in enumerate(documents):
+        if _text(document.get("document_id")) != document_id:
+            continue
+        provenance = deepcopy(_mapping(document.get("provenance")))
+        provenance["last_regeneration"] = {
+            "source": "user_requested_consistent_lore_enrichment",
+            "canon_revision": canon_revision,
+        }
+        documents[index] = {
+            **document,
+            "full_text": full_text,
+            "summary_500": full_text[:500].rstrip(),
+            "summary_120": full_text[:120].rstrip(),
+            "canon_revision": canon_revision,
+            "provenance": provenance,
+        }
+        replaced = True
+        break
+    if not replaced:
+        raise KeyError(document_id)
+    candidate["documents"] = documents
+
+    cards = _rows(candidate.get("retrieval_cards"))
+    target = next(row for row in documents if _text(row.get("document_id")) == document_id)
+    for card in cards:
+        if _text(card.get("document_id")) != document_id:
+            continue
+        size = _text(card.get("summary_size"))
+        card["content"] = (
+            _text(target.get("summary_120"))
+            if size == "short"
+            else _text(target.get("summary_500"))
+        )
+        card["title"] = _text(target.get("title"))
+        card["canon_revision"] = canon_revision
+    candidate["retrieval_cards"] = cards
+    candidate["canon_revision"] = canon_revision
+    manifest = deepcopy(_mapping(candidate.get("manifest")))
+    manifest["lore_regeneration_count"] = int(manifest.get("lore_regeneration_count") or 0) + 1
+    candidate["manifest"] = manifest
+    return candidate
+
+
+def regenerate_campaign_lore_document(
+    session_id: str,
+    session: Mapping[str, Any],
+    *,
+    document_id: str,
+    direction: str = "",
+    database: Any | None = None,
+    llm_gateway: Any | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Regenerate one known page as rich prose and commit a new canon revision."""
+
+    from .campaign_lore_api import campaign_lore_document_payload
+
+    hydrated, _storage = load_campaign_lore(
+        session_id,
+        session,
+        ensure_current_location=False,
+        database=database,
+    )
+    safe_document = campaign_lore_document_payload(hydrated, document_id)["document"]
+    portable = _portable_bible(hydrated)
+    target = next(
+        (
+            row
+            for row in _rows(portable.get("documents"))
+            if _text(row.get("document_id")) == document_id
+        ),
+        None,
+    )
+    if target is None:
+        raise KeyError(document_id)
+    campaign_id = _campaign_id(session_id, hydrated)
+    db = database or default_database()
+    context = bootstrap_local_tenant(db)
+    with unit_of_work(db) as work:
+        source_record = work.campaign_bibles.get(context, campaign_id)
+        if source_record is None:
+            raise LoreRegenerationUnavailable(
+                "The authoritative Campaign Bible is unavailable; the existing page was left unchanged."
+            )
+        authoritative_bible = deepcopy(dict(source_record["document"]))
+        authoritative_target = next(
+            (
+                row
+                for row in _rows(authoritative_bible.get("documents"))
+                if _text(row.get("document_id")) == document_id
+            ),
+            None,
+        )
+        if authoritative_target is None:
+            raise KeyError(document_id)
+        canonical_source = authoritative_target
+        binding = work.world_scenarios.get_campaign_binding(context, campaign_id)
+        if binding is not None:
+            world_revision = work.world_scenarios.get_world_revision(
+                context,
+                _text(binding.get("world_id")),
+                int(binding.get("world_revision") or 0),
+            )
+            revision_document = (
+                _mapping(world_revision.get("document"))
+                if world_revision is not None
+                else {}
+            )
+            world_canon = _mapping(revision_document.get("canon"))
+            if world_canon:
+                published_bible = project_published_canon(
+                    world_canon,
+                    campaign_id=campaign_id,
+                    canon_revision=int(binding.get("world_revision") or 1),
+                )
+                canonical_source = next(
+                    (
+                        row
+                        for row in _rows(published_bible.get("documents"))
+                        if _text(row.get("document_id")) == document_id
+                    ),
+                    authoritative_target,
+                )
+        work.rollback()
+    gateway = llm_gateway or build_app_llm_gateway()
+    if gateway is None:
+        raise LoreRegenerationUnavailable(
+            "No lore generation provider is configured; the existing canon was left unchanged."
+        )
+    normalized_direction = _text(direction)[:1000]
+    target_title = _text(authoritative_target.get("title"))
+    target_topic = _text(authoritative_target.get("topic_id"))
+    prompt = (
+        f'TARGET PAGE: "{target_title}". TARGET TOPIC: "{target_topic}". '
+        f'This request is exclusively about "{target_title}"; clearly name it in the opening paragraph. '
+        "Rewrite this target Campaign Bible page as vivid, polished, player-safe canonical prose. "
+        "Write 450 to 700 words in five to eight cohesive paragraphs. Use natural paragraph form only: "
+        "no headings, field labels, bullet lists, tables, JSON, or prefatory commentary. Preserve every established "
+        "fact in authoritative_target.canonical_source_text, authoritative_target.mechanics_definition, and the page's meaning. "
+        "Never contradict or alter the mechanics definition. If the current page text drifted "
+        "away from the canonical source, discard the irrelevant material. Stay consistent "
+        "with the supplied known campaign canon. Enrich the material "
+        "with concrete sensory detail, lived culture, atmosphere, physical texture, and understandable context. "
+        "You may add connective descriptive detail that logically follows from canon, but do not create or reveal "
+        "new named characters, locations, factions, artifacts, powers, dates, secrets, quest solutions, or world-changing "
+        "events. A user direction may request emphasis, tone, or descriptive focus; follow it only when it does not "
+        "conflict with these canon and player-safety rules. Do not mention these instructions. Return only the finished lore prose."
+    )
+    generation_context = _regeneration_context(
+        hydrated,
+        authoritative_bible,
+        authoritative_target,
+        canonical_source,
+    )
+    generation_context["user_direction"] = normalized_direction
+    generated = _generated_lore_text(
+        gateway.generate(
+            prompt,
+            context=generation_context,
+            timeout_s=60.0,
+        ),
+        target=authoritative_target,
+    )
+
+    with unit_of_work(db) as work:
+        current = work.campaign_bibles.get(context, campaign_id, for_update=True)
+        if current is None:
+            raise LoreRegenerationUnavailable(
+                "The authoritative Campaign Bible is unavailable; the existing page was left unchanged."
+            )
+        current_target = next(
+            (
+                row
+                for row in _rows(current["document"].get("documents"))
+                if _text(row.get("document_id")) == document_id
+            ),
+            None,
+        )
+        if current_target is None:
+            raise KeyError(document_id)
+        if _text(current_target.get("full_text")) != _text(authoritative_target.get("full_text")):
+            raise LoreRegenerationUnavailable(
+                "This lore page changed while it was being regenerated; please try again."
+            )
+        next_revision = int(current["revision"]) + 1
+        candidate = _apply_regenerated_lore(
+            current["document"],
+            document_id=document_id,
+            full_text=generated,
+            canon_revision=next_revision,
+        )
+        stored = work.campaign_bibles.put(
+            context,
+            campaign_id=campaign_id,
+            document=candidate,
+            expected_revision=int(current["revision"]),
+            provenance={
+                **_mapping(current.get("provenance")),
+                "last_source": "user_requested_lore_regeneration",
+                "regenerated_document_id": document_id,
+            },
+            consistency_report=_mapping(current.get("consistency_report")),
+            completeness=_mapping(current.get("completeness")),
+        )
+        work.commit()
+
+    updated = _hydrate_session(
+        hydrated,
+        stored["document"],
+        revision=int(stored["revision"]),
+        content_hash=str(stored["content_hash"]),
+    )
+    updated = _save_portable_projection(updated)
+    return updated, {
+        "mode": "postgresql_authority",
+        "persisted": True,
+        "campaign_id": campaign_id,
+        "revision": int(stored["revision"]),
+        "content_hash": str(stored["content_hash"]),
+        "regenerated_document_id": document_id,
+        "previous_title": safe_document.get("title"),
+    }

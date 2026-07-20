@@ -141,6 +141,12 @@ def _category(document: Mapping[str, Any]) -> str:
         "locations": "Locations",
         "current_conflicts": "Conflicts",
         "opening_threads": "Discoveries",
+        "economy": "World Lore",
+        "monsters": "Monsters",
+        "items": "Items",
+        "spells": "Spells",
+        "feats": "Feats",
+        "quests": "Quests",
     }
     return mapping.get(topic, "World Lore")
 

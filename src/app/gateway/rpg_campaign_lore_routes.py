@@ -1,10 +1,10 @@
 """Player-safe Campaign Genesis progress and Lore routes."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.rpg.session.genesis.campaign_lore_api import (
     LoreDocumentForbidden,
@@ -15,8 +15,15 @@ from app.rpg.session.genesis.campaign_lore_api import (
     transition_lore_discovery,
 )
 from app.rpg.session.genesis.campaign_lore_store import (
+    LoreRegenerationUnavailable,
     load_campaign_lore,
     persist_campaign_lore,
+    regenerate_campaign_lore_document,
+)
+from app.rpg.session.genesis.runtime_materialization import (
+    RuntimeMaterializationConflict,
+    RuntimeMaterializationUnavailable,
+    materialize_runtime_lore,
 )
 from app.rpg.session.service import load_session
 
@@ -25,6 +32,18 @@ class LoreDiscoveryRequest(BaseModel):
     document_id: str
     status: str
     source: str = "gameplay"
+
+
+class LoreRegenerationRequest(BaseModel):
+    document_id: str = Field(min_length=1, max_length=300)
+    direction: str = Field(default="", max_length=1000)
+
+
+class LoreMaterializationRequest(BaseModel):
+    kind: Literal["creature", "location"]
+    name: str = Field(min_length=1, max_length=120)
+    direction: str = Field(default="", max_length=1000)
+    document_id: str = Field(default="", max_length=300)
 
 
 def _session_or_404(session_id: str) -> dict[str, Any]:
@@ -152,6 +171,50 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
             raise _lore_error(exc, session_id) from exc
 
     @app.post(
+        "/api/rpg/sessions/{session_id}/lore/regenerate",
+        tags=["rpg-session"],
+        include_in_schema=False,
+    )
+    def rpg_campaign_lore_regenerate(
+        session_id: str,
+        request: LoreRegenerationRequest,
+    ) -> dict[str, Any]:
+        session = _session_or_404(session_id)
+        try:
+            updated, storage = regenerate_campaign_lore_document(
+                session_id,
+                session,
+                document_id=request.document_id,
+                direction=request.direction,
+            )
+            return {
+                "ok": True,
+                "session_id": session_id,
+                "document": campaign_lore_document_payload(
+                    updated,
+                    request.document_id,
+                )["document"],
+                "lore": {
+                    **campaign_lore_payload(updated),
+                    "session_id": session_id,
+                    "storage": storage,
+                },
+                "storage": storage,
+            }
+        except (LoreDocumentNotFound, LoreDocumentForbidden) as exc:
+            raise _lore_error(exc, session_id) from exc
+        except LoreRegenerationUnavailable as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "ok": False,
+                    "error": "lore_regeneration_unavailable",
+                    "session_id": session_id,
+                    "message": str(exc),
+                },
+            ) from exc
+
+    @app.post(
         "/api/rpg/sessions/{session_id}/lore/discovery",
         tags=["rpg-session"],
         include_in_schema=False,
@@ -184,3 +247,59 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
             }
         except Exception as exc:
             raise _lore_error(exc, session_id) from exc
+
+    @app.post(
+        "/api/rpg/sessions/{session_id}/lore/materialize",
+        tags=["rpg-session"],
+        include_in_schema=False,
+    )
+    def rpg_campaign_lore_materialize(
+        session_id: str,
+        request: LoreMaterializationRequest,
+    ) -> dict[str, Any]:
+        session = _session_or_404(session_id)
+        try:
+            updated, storage = materialize_runtime_lore(
+                session_id,
+                session,
+                kind=request.kind,
+                name=request.name,
+                direction=request.direction,
+                document_id=request.document_id,
+            )
+            document_id = str(storage["document_id"])
+            return {
+                "ok": True,
+                "session_id": session_id,
+                "document": campaign_lore_document_payload(
+                    updated,
+                    document_id,
+                )["document"],
+                "definition": storage["definition"],
+                "lore": {
+                    **campaign_lore_payload(updated),
+                    "session_id": session_id,
+                    "storage": storage,
+                },
+                "storage": storage,
+            }
+        except RuntimeMaterializationConflict as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "ok": False,
+                    "error": "runtime_materialization_conflict",
+                    "session_id": session_id,
+                    "message": str(exc),
+                },
+            ) from exc
+        except RuntimeMaterializationUnavailable as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "ok": False,
+                    "error": "runtime_materialization_unavailable",
+                    "session_id": session_id,
+                    "message": str(exc),
+                },
+            ) from exc

@@ -36,6 +36,7 @@ def _portable_snapshot(
         "indexes": dict(projection.get("indexes") or {}),
         "discovery_state": dict(projection.get("discovery_state") or {}),
         "story_threads": list(projection.get("story_threads") or ()),
+        "mechanics_catalog": dict(projection.get("mechanics_catalog") or {}),
         "completeness": dict(summary.get("completeness") or {}),
     }
     return CampaignBibleSnapshot(

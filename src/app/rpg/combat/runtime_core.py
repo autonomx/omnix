@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.interactions.equipment_runtime import project_equipment_stats
@@ -125,6 +126,19 @@ def participant_from_enemy(enemy: Dict[str, Any]) -> Dict[str, Any]:
         "initiative_bonus": safe_int(enemy.get("initiative_bonus"), 0),
         "status": safe_str(enemy.get("status") or "active"),
         "loot_table_id": safe_str(enemy.get("loot_table_id")),
+        "definition_id": safe_str(enemy.get("definition_id")),
+        "definition_revision": safe_int(enemy.get("definition_revision"), 0),
+        "level": safe_int(enemy.get("level"), 1),
+        "morale_threshold": safe_int(enemy.get("morale_threshold"), 35),
+        "tags": list(safe_list(enemy.get("tags"))),
+        "xp_value": safe_int(enemy.get("xp_value"), 0),
+        "budget_cost": safe_int(enemy.get("budget_cost"), 1),
+        "condition_immunities": list(
+            safe_list(enemy.get("condition_immunities"))
+        ),
+        "vulnerabilities": deepcopy(safe_list(enemy.get("vulnerabilities"))),
+        "status_effects": deepcopy(safe_list(enemy.get("status_effects"))),
+        "mechanics_source": safe_str(enemy.get("mechanics_source")),
         "source": SOURCE,
     }
 

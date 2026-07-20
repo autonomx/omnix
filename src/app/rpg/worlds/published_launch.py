@@ -1,9 +1,11 @@
 """Fast deterministic campaign launch from certified world releases."""
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Mapping
 
 from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
 from app.rpg.session.service import archive_session, save_session
@@ -13,6 +15,7 @@ from .postgres_service import load_published_resources, load_release_definitions
 from .progressive_materialization_job_service import (
     schedule_campaign_predictive_materialization,
 )
+from .published_canon_projection import project_published_canon
 from .semantic_validation import (
     initialize_starting_map_snapshot,
     validate_scenario_against_release,
@@ -22,6 +25,81 @@ from .service import resolve_campaign_binding
 
 def _record(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+_BIBLE_PROJECTION_KEYS = (
+    "documents",
+    "entities",
+    "facts",
+    "retrieval_cards",
+    "relationships",
+    "knowledge_rules",
+    "mechanics_catalog",
+    "story_threads",
+    "indexes",
+    "discovery_state",
+)
+
+
+def _attach_published_canon(
+    session: dict[str, Any],
+    canon: Mapping[str, Any],
+    *,
+    campaign_id: str,
+) -> tuple[dict[str, Any], dict[str, Any], str]:
+    """Attach immutable world canon as the new campaign's initial Bible."""
+
+    bible = project_published_canon(
+        canon,
+        campaign_id=campaign_id,
+        canon_revision=int(canon.get("canon_revision") or 1),
+    )
+    revision = int(bible.get("canon_revision") or 1)
+    digest = campaign_bible_hash(bible)
+    projection = {
+        key: deepcopy(
+            bible.get(
+                key,
+                {}
+                if key in {
+                    "entities",
+                    "indexes",
+                    "discovery_state",
+                    "mechanics_catalog",
+                }
+                else [],
+            )
+        )
+        for key in _BIBLE_PROJECTION_KEYS
+    }
+    projection.update(
+        {
+            "schema_version": str(bible.get("schema_version") or "rpg_campaign_bible_v2"),
+            "manifest": deepcopy(_record(bible.get("manifest"))),
+            "content_hash": digest,
+            "canon_revision": revision,
+        }
+    )
+    session["campaign_bible_projection"] = projection
+
+    state = _record(session.get("state"))
+    state["campaign_bible"] = {
+        "schema_version": projection["schema_version"],
+        "canon_revision": revision,
+        "content_hash": digest,
+        "manifest": deepcopy(projection["manifest"]),
+        "discovery_state": deepcopy(projection["discovery_state"]),
+    }
+    session["state"] = state
+    runtime = _record(session.get("runtime_state"))
+    runtime["campaign_bible_revision"] = revision
+    runtime["campaign_bible_content_hash"] = digest
+    session["runtime_state"] = runtime
+    manifest = _record(session.get("manifest"))
+    manifest["campaign_bible_revision"] = revision
+    manifest["campaign_bible_content_hash"] = digest
+    session["manifest"] = manifest
+    return session, bible, digest
 
 
 def launch_published_scenario(
@@ -168,6 +246,13 @@ def launch_published_scenario(
     session["manifest"] = manifest
     session["runtime_state"] = runtime
     session["setup_payload"] = setup
+    session, campaign_bible, campaign_bible_digest = _attach_published_canon(
+        session,
+        canon,
+        campaign_id=session_id,
+    )
+    state = _record(session.get("state"))
+    manifest = _record(session.get("manifest"))
     saved = save_session(session, compact=True)
 
     try:
@@ -192,7 +277,32 @@ def launch_published_scenario(
                         "scenario_id": scenario.scenario_id,
                         "scenario_revision": scenario.revision,
                         "starting_map_instance_id": map_instance_id,
+                        "campaign_bible_content_hash": campaign_bible_digest,
                     },
+                )
+            stored_bible = work.campaign_bibles.get(
+                context,
+                session_id,
+                for_update=True,
+            )
+            if stored_bible is None:
+                stored_bible = work.campaign_bibles.put(
+                    context,
+                    campaign_id=session_id,
+                    document=campaign_bible,
+                    expected_revision=0,
+                    provenance={
+                        "source": "published_world_release",
+                        "world_id": revision.world_id,
+                        "world_revision": revision.revision,
+                        "world_release": release.release,
+                    },
+                    consistency_report=_record(certification.get("consistency_report")),
+                    completeness=_record(certification.get("completeness")),
+                )
+            elif str(stored_bible.get("content_hash") or "") != campaign_bible_digest:
+                raise RuntimeError(
+                    f"published_campaign_bible_conflict:{session_id}"
                 )
             stored_binding = work.world_scenarios.bind_campaign(
                 context,

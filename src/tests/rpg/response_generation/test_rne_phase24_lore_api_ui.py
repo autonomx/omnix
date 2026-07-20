@@ -199,3 +199,7 @@ def test_web_ui_selects_published_worlds_and_keeps_lore_browser() -> None:
     assert "World Forge generation evidence" in lore
     assert "/campaign-genesis" in routes
     assert "/lore/document" in routes
+    assert "/lore/regenerate" in routes
+    assert "/lore/materialize" in routes
+    assert "Optional generation direction" in lore
+    assert "Create rules & lore" in lore

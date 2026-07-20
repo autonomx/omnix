@@ -131,6 +131,7 @@ def _apply_start_of_turn_conditions(combat_state: Dict[str, Any]) -> None:
     if not current_participant:
         return
 
+    was_stunned = actor_has_condition(current_participant, "stunned")
     current_participant, tick_result = tick_start_of_turn_status_effects(current_participant)
     participants[current_actor] = current_participant
     combat_state["participants"] = participants
@@ -140,7 +141,7 @@ def _apply_start_of_turn_conditions(combat_state: Dict[str, Any]) -> None:
         recent.append({"type": "condition_tick", "actor_id": current_actor, "tick_result": tick_result})
         combat_state["recent_events"] = recent[-24:]
 
-    if not actor_has_condition(current_participant, "stunned"):
+    if not was_stunned:
         return
 
     current_participant, removed = remove_status_effects_from_participant(current_participant, ["stunned"])

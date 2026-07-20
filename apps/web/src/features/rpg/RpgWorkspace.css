@@ -606,6 +606,99 @@
   padding: 0.28rem 0.55rem;
 }
 
+.rpg-lore-generation {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0 14px;
+  padding: 14px;
+  border: 1px solid rgba(145, 112, 255, 0.24);
+  border-radius: 14px;
+  background: rgba(90, 57, 156, 0.1);
+}
+
+.rpg-lore-generation label {
+  font-weight: 800;
+}
+
+.rpg-lore-generation textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  padding: 10px 12px;
+  color: inherit;
+  border: 1px solid rgba(169, 145, 255, 0.32);
+  border-radius: 10px;
+  background: rgba(7, 6, 15, 0.42);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.rpg-lore-generation > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rpg-lore-generation small {
+  max-width: 620px;
+  opacity: 0.7;
+}
+
+.rpg-lore-materialization {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid rgba(145, 112, 255, 0.24);
+  border-radius: 14px;
+  background: rgba(90, 57, 156, 0.1);
+}
+
+.rpg-lore-materialization h4,
+.rpg-lore-materialization p {
+  margin: 0;
+}
+
+.rpg-lore-materialization > div {
+  display: grid;
+  grid-template-columns: auto minmax(130px, 0.35fr) auto minmax(220px, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.rpg-lore-materialization label {
+  font-weight: 800;
+}
+
+.rpg-lore-materialization input,
+.rpg-lore-materialization select,
+.rpg-lore-materialization textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  color: inherit;
+  border: 1px solid rgba(169, 145, 255, 0.32);
+  border-radius: 10px;
+  background: rgba(7, 6, 15, 0.42);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.rpg-lore-materialization textarea {
+  resize: vertical;
+}
+
+.rpg-lore-materialization button {
+  justify-self: start;
+}
+
+@media (max-width: 760px) {
+  .rpg-lore-materialization > div {
+    grid-template-columns: 1fr;
+  }
+}
+
 .rpg-scene-art,
 .rpg-map-preview {
   background:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.rpg.map_grid_contracts import (
     GridMapDefinition,
     GridSpawnPoint,
@@ -47,7 +48,28 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
         world_id="world:published",
         revision=1,
         title="Published World",
-        canon={"campaign_template": "classic_fantasy"},
+        canon={
+            "schema_version": "rpg_campaign_bible_v2",
+            "campaign_template": "classic_fantasy",
+            "canon_revision": 1,
+            "documents": [
+                {
+                    "document_id": "lore:realm",
+                    "topic_id": "realm",
+                    "title": "The Published Realm",
+                    "full_text": "Public lore from the generated world.",
+                    "summary_120": "Public generated lore.",
+                    "visibility": "public",
+                    "canon_revision": 1,
+                }
+            ],
+            "entities": {},
+            "discovery_state": {
+                "pages": {"lore:realm": "public_at_campaign_start"},
+                "entities": {},
+                "discoveries": [],
+            },
+        },
         entity_manifest={},
         topology={"locations": ["rusty_flagon_tavern"], "routes": []},
         blueprint_requirements=(
@@ -140,6 +162,20 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
             captured["binding"] = kwargs
             return kwargs["binding"]
 
+    class FakeCampaignBibles:
+        def get(self, *_args, **_kwargs):
+            return captured.get("campaign_bible")
+
+        def put(self, _context, **kwargs):
+            captured["campaign_bible_put"] = kwargs
+            stored = {
+                "revision": 1,
+                "document": kwargs["document"],
+                "content_hash": campaign_bible_hash(kwargs["document"]),
+            }
+            captured["campaign_bible"] = stored
+            return stored
+
     class FakeMapInstances:
         def create_instance(self, _context, **kwargs):
             captured["map_instance"] = kwargs
@@ -150,6 +186,7 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
             self.rpg = FakeRpg()
             self.world_scenarios = FakeWorldScenarios()
             self.map_instances = FakeMapInstances()
+            self.campaign_bibles = FakeCampaignBibles()
 
         def __enter__(self):
             return self
@@ -227,5 +264,16 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
     assert captured["campaign"]["metadata"]["launch_mode"] == "published_scenario"
     assert captured["campaign"]["metadata"]["starting_map_instance_id"] == (
         "campaign:published:map:map:rusty_flagon:1"
+    )
+    projection = result["session"]["campaign_bible_projection"]
+    assert projection["documents"][0]["document_id"] == "lore:realm"
+    assert projection["discovery_state"]["pages"]["lore:realm"] == (
+        "public_at_campaign_start"
+    )
+    assert captured["campaign_bible_put"]["document"]["campaign_id"] == (
+        "campaign:published"
+    )
+    assert captured["campaign_bible_put"]["provenance"]["source"] == (
+        "published_world_release"
     )
     assert captured["committed"] is True

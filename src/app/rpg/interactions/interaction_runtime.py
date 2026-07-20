@@ -4,9 +4,16 @@ from copy import deepcopy
 from typing import Any, Dict
 
 from app.rpg.combat.runtime import (
+    advance_combat_turn,
+    gate_combat_action,
     is_combat_active,
     resolve_combat_attack,
     start_combat_encounter,
+)
+from app.rpg.combat.campaign_mechanics import (
+    apply_campaign_vulnerability_trigger,
+    campaign_vulnerability_trigger,
+    instantiate_campaign_creature,
 )
 from app.rpg.interactions.consumable_runtime import apply_consumable_interaction
 from app.rpg.interactions.container_runtime import apply_container_interaction
@@ -140,9 +147,19 @@ def resolve_general_interaction(
         enriched_action = deepcopy(action)
 
         if not is_combat_active(simulation_state):
+            target_ref = _safe_str(enriched_action.get("target_ref"))
+            campaign_enemy = instantiate_campaign_creature(
+                simulation_state,
+                target_ref,
+            )
             combat_result = start_combat_encounter(
                 simulation_state,
-                encounter_id="enc:bandit_ambush",
+                encounter_id=(
+                    f"enc:campaign:{campaign_enemy['definition_id']}"
+                    if campaign_enemy
+                    else "enc:bandit_ambush"
+                ),
+                enemies=[campaign_enemy] if campaign_enemy else None,
                 tick=tick,
             )
         else:
@@ -177,6 +194,89 @@ def resolve_general_interaction(
             "combat_state": deepcopy(interaction_result.get("combat_state")),
             "source": "deterministic_general_interaction_runtime",
         }
+
+    if kind == "use" and is_combat_active(simulation_state):
+        use_actor_id = _safe_str(action.get("actor_id") or actor_id or "player")
+        vulnerability_rule = campaign_vulnerability_trigger(
+            simulation_state,
+            target_ref=_safe_str(action.get("secondary_target_ref")),
+            trigger_ref=_safe_str(action.get("item_ref")),
+        )
+        if vulnerability_rule is not None:
+            gate = gate_combat_action(
+                simulation_state,
+                actor_id=use_actor_id,
+                action_kind="use",
+            )
+            if gate.get("resolved") is not True:
+                interaction_result = {
+                    "resolved": False,
+                    "changed_state": False,
+                    "reason": _safe_str(gate.get("reason")),
+                    "semantic_action_v2": deepcopy(action),
+                    "combat_gate": deepcopy(gate),
+                    "combat_state": deepcopy(simulation_state.get("combat_state") or {}),
+                    "source": "deterministic_general_interaction_runtime",
+                }
+                return {
+                    "handled": False,
+                    "semantic_action_v2": deepcopy(action),
+                    "interaction_result": deepcopy(interaction_result),
+                    "combat_gate": deepcopy(gate),
+                    "combat_state": deepcopy(interaction_result["combat_state"]),
+                    "source": "deterministic_general_interaction_runtime",
+                }
+            item_result = resolve_target_ref(
+                simulation_state,
+                target_ref=_safe_str(action.get("item_ref")),
+                expected_types=["item"],
+                allowed_sources=["player_inventory"],
+            )
+            if item_result.get("resolved") is not True:
+                interaction_result = {
+                    "resolved": False,
+                    "changed_state": False,
+                    "reason": "vulnerability_trigger_item_not_available",
+                    "semantic_action_v2": deepcopy(action),
+                    "item_resolution": deepcopy(item_result),
+                    "combat_state": deepcopy(simulation_state.get("combat_state") or {}),
+                    "source": "deterministic_general_interaction_runtime",
+                }
+                return {
+                    "handled": False,
+                    "semantic_action_v2": deepcopy(action),
+                    "interaction_result": deepcopy(interaction_result),
+                    "item_resolution": deepcopy(item_result),
+                    "combat_state": deepcopy(interaction_result["combat_state"]),
+                    "source": "deterministic_general_interaction_runtime",
+                }
+        vulnerability_result = apply_campaign_vulnerability_trigger(
+            simulation_state,
+            target_ref=_safe_str(action.get("secondary_target_ref")),
+            trigger_ref=_safe_str(action.get("item_ref")),
+            actor_id=use_actor_id,
+        )
+        if vulnerability_result.get("applied") is True:
+            turn_result = advance_combat_turn(simulation_state, tick=tick)
+            interaction_result = {
+                "resolved": True,
+                "changed_state": True,
+                "reason": "campaign_vulnerability_triggered",
+                "semantic_action_v2": deepcopy(action),
+                "vulnerability_result": deepcopy(vulnerability_result),
+                "turn_result": deepcopy(turn_result),
+                "combat_state": deepcopy(simulation_state.get("combat_state") or {}),
+                "source": "deterministic_general_interaction_runtime",
+            }
+            return {
+                "handled": True,
+                "semantic_action_v2": deepcopy(action),
+                "interaction_result": deepcopy(interaction_result),
+                "vulnerability_result": deepcopy(vulnerability_result),
+                "turn_result": deepcopy(turn_result),
+                "combat_state": deepcopy(interaction_result["combat_state"]),
+                "source": "deterministic_general_interaction_runtime",
+            }
 
     if kind == "craft":
         enriched_action = deepcopy(action)

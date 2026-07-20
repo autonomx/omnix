@@ -170,11 +170,30 @@ function normalizedCategory(value: string): string {
 }
 
 async function readJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { headers: { Accept: 'application/json' } });
+  const response = await fetch(url, {
+    cache: 'no-store',
+    headers: { Accept: 'application/json' },
+  });
   if (!response.ok) {
     throw new Error(`Lore request failed (${response.status})`);
   }
   return response.json() as Promise<T>;
+}
+
+type RuntimeLoreKind = 'creature' | 'location';
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    body: JSON.stringify(body),
+    cache: 'no-store',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    method: 'POST',
+  });
+  const payload = await response.json().catch(() => null) as { detail?: { message?: string } } | null;
+  if (!response.ok) {
+    throw new Error(payload?.detail?.message || `Lore generation failed (${response.status})`);
+  }
+  return payload as T;
 }
 
 export function RpgLorePanel({
@@ -187,6 +206,12 @@ export function RpgLorePanel({
   const [selectedId, setSelectedId] = useState('overview');
   const [detail, setDetail] = useState<LoreDocumentDetail | null>(null);
   const [error, setError] = useState('');
+  const [direction, setDirection] = useState('');
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [newLoreKind, setNewLoreKind] = useState<RuntimeLoreKind>('creature');
+  const [newLoreName, setNewLoreName] = useState('');
+  const [newLoreDirection, setNewLoreDirection] = useState('');
+  const [isMaterializing, setIsMaterializing] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -242,10 +267,23 @@ export function RpgLorePanel({
 
   const selectedEntry = entries.find((entry) => entry.id === selectedId) ?? null;
   const selectedDocumentId = selectedEntry?.kind === 'document' ? selectedEntry.id : '';
+  const selectedDetail = detail?.document_id === selectedDocumentId ? detail : null;
+  const selectedRuntimeKind: RuntimeLoreKind | null = selectedEntry?.category === 'Monsters'
+    ? 'creature'
+    : selectedEntry?.category === 'Locations'
+      ? 'location'
+      : null;
+  const selectEntry = (entryId: string) => {
+    setDetail(null);
+    setError('');
+    setSelectedId(entryId);
+  };
 
   useEffect(() => {
     let active = true;
     setDetail(null);
+    setDirection('');
+    setError('');
     if (!sessionId || !selectedDocumentId) return () => { active = false; };
     readJson<{ document: LoreDocumentDetail }>(
       `/api/rpg/sessions/${encodeURIComponent(sessionId)}/lore/document?document_id=${encodeURIComponent(selectedDocumentId)}`,
@@ -258,6 +296,58 @@ export function RpgLorePanel({
       });
     return () => { active = false; };
   }, [selectedDocumentId, sessionId]);
+
+  const regenerateSelectedPage = async () => {
+    if (!selectedDocumentId || isRegenerating) return;
+    setIsRegenerating(true);
+    setError('');
+    try {
+      const payload = await postJson<{
+        document: LoreDocumentDetail;
+        lore: LoreResponse;
+      }>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/lore/regenerate`, {
+        document_id: selectedDocumentId,
+        direction: direction.trim(),
+      });
+      setLore(payload.lore);
+      setDetail(payload.document);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : 'Lore generation failed.');
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
+  const materializeLore = async (
+    kind: RuntimeLoreKind,
+    name: string,
+    materializationDirection: string,
+    documentId = '',
+  ) => {
+    if (!name.trim() || isMaterializing) return;
+    setIsMaterializing(true);
+    setError('');
+    try {
+      const payload = await postJson<{
+        document: LoreDocumentDetail;
+        lore: LoreResponse;
+      }>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/lore/materialize`, {
+        kind,
+        name: name.trim(),
+        direction: materializationDirection.trim(),
+        document_id: documentId,
+      });
+      setLore(payload.lore);
+      setDetail(payload.document);
+      setSelectedId(payload.document.document_id);
+      setNewLoreName('');
+      setNewLoreDirection('');
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : 'Runtime lore materialization failed.');
+    } finally {
+      setIsMaterializing(false);
+    }
+  };
 
   const generation = lore?.generation;
   const jobs = generation?.jobs ?? [];
@@ -279,10 +369,12 @@ export function RpgLorePanel({
   const selectedDossier = selectedEntry?.dossier;
   const title = selectedId === 'overview'
     ? 'Campaign Bible'
-    : detail?.title || selectedEntry?.title || 'Campaign Bible';
+    : selectedDetail?.title || selectedEntry?.title || 'Campaign Bible';
   const body = selectedId === 'overview'
     ? 'Browse every known lore page and discovered dossier for this campaign. New player-safe lore for the current location is generated once when missing, committed to PostgreSQL, and reused on later visits.'
-    : detail?.full_text || detail?.summary_500 || selectedEntry?.summary || 'This entry has no player-visible details yet.';
+    : selectedDocumentId && !selectedDetail
+      ? 'Loading selected lore page…'
+      : selectedDetail?.full_text || selectedDetail?.summary_500 || selectedEntry?.summary || 'This entry has no player-visible details yet.';
   const storageLabel = lore.storage?.persisted ? 'PostgreSQL authority' : 'Portable fallback';
 
   return (
@@ -291,11 +383,11 @@ export function RpgLorePanel({
         <article
           aria-pressed={selectedId === 'overview'}
           className={selectedId === 'overview' ? 'active' : undefined}
-          onClick={() => setSelectedId('overview')}
+          onClick={() => selectEntry('overview')}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
-              setSelectedId('overview');
+              selectEntry('overview');
             }
           }}
           role="button"
@@ -322,11 +414,11 @@ export function RpgLorePanel({
                   aria-pressed={selectedId === entry.id}
                   className={selectedId === entry.id ? 'active' : undefined}
                   key={entry.id}
-                  onClick={() => setSelectedId(entry.id)}
+                  onClick={() => selectEntry(entry.id)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
-                      setSelectedId(entry.id);
+                      selectEntry(entry.id);
                     }
                   }}
                   role="button"
@@ -347,6 +439,48 @@ export function RpgLorePanel({
       <article className="rpg-journal-detail">
         <h3>{title}</h3>
         <p style={{ whiteSpace: 'pre-line' }}>{body}</p>
+        {selectedDocumentId ? (
+          <section aria-label="Lore page generation" className="rpg-lore-generation">
+            <label htmlFor="rpg-lore-generation-direction">Optional generation direction</label>
+            <textarea
+              disabled={isRegenerating}
+              id="rpg-lore-generation-direction"
+              maxLength={1000}
+              onChange={(event) => setDirection(event.currentTarget.value)}
+              placeholder="Example: Emphasize everyday beliefs, rituals, and what the moons look like from the ground."
+              rows={3}
+              value={direction}
+            />
+            <div>
+              <button
+                className="rpg-secondary-button"
+                disabled={isRegenerating || !selectedDetail}
+                onClick={() => { void regenerateSelectedPage(); }}
+                type="button"
+              >
+                {isRegenerating ? 'Generating richer lore…' : 'Regenerate lore'}
+              </button>
+              {selectedRuntimeKind ? (
+                <button
+                  className="rpg-secondary-button"
+                  disabled={isMaterializing || !selectedDetail}
+                  onClick={() => {
+                    void materializeLore(
+                      selectedRuntimeKind,
+                      selectedEntry?.title ?? '',
+                      direction,
+                      selectedDocumentId,
+                    );
+                  }}
+                  type="button"
+                >
+                  {isMaterializing ? 'Compiling rules & lore…' : 'Rebuild rules & lore'}
+                </button>
+              ) : null}
+              <small>Existing canon remains the authority; your direction controls emphasis and descriptive focus.</small>
+            </div>
+          </section>
+        ) : null}
         <div className="rpg-chip-row">
           <span>Canon r{lore.canon_revision}</span>
           <span>{lore.visible_count} known pages</span>
@@ -375,6 +509,49 @@ export function RpgLorePanel({
                 <small>{lore.storage?.error ? `Fallback reason: ${lore.storage.error}` : 'Campaign canon is reusable across sessions.'}</small>
               </article>
             </div>
+            <section aria-label="Materialize runtime lore" className="rpg-lore-materialization">
+              <h4>Create a campaign discovery</h4>
+              <p>Generate structured gameplay rules and matching lore together. The published world remains unchanged.</p>
+              <div>
+                <label htmlFor="rpg-runtime-lore-kind">Type</label>
+                <select
+                  disabled={isMaterializing}
+                  id="rpg-runtime-lore-kind"
+                  onChange={(event) => setNewLoreKind(event.currentTarget.value as RuntimeLoreKind)}
+                  value={newLoreKind}
+                >
+                  <option value="creature">Creature</option>
+                  <option value="location">Location</option>
+                </select>
+                <label htmlFor="rpg-runtime-lore-name">Name</label>
+                <input
+                  disabled={isMaterializing}
+                  id="rpg-runtime-lore-name"
+                  maxLength={120}
+                  onChange={(event) => setNewLoreName(event.currentTarget.value)}
+                  placeholder={newLoreKind === 'creature' ? 'Example: Mireglass Stag' : 'Example: The Bell-Sunk Cloister'}
+                  value={newLoreName}
+                />
+              </div>
+              <label htmlFor="rpg-runtime-lore-direction">Optional direction</label>
+              <textarea
+                disabled={isMaterializing}
+                id="rpg-runtime-lore-direction"
+                maxLength={1000}
+                onChange={(event) => setNewLoreDirection(event.currentTarget.value)}
+                placeholder="Describe the intended role, atmosphere, known abilities, hazards, or constraints."
+                rows={3}
+                value={newLoreDirection}
+              />
+              <button
+                className="rpg-secondary-button"
+                disabled={isMaterializing || !newLoreName.trim()}
+                onClick={() => { void materializeLore(newLoreKind, newLoreName, newLoreDirection); }}
+                type="button"
+              >
+                {isMaterializing ? 'Compiling discovery…' : 'Create rules & lore'}
+              </button>
+            </section>
           </section>
         ) : null}
 
