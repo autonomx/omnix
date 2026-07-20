@@ -6,6 +6,7 @@ import { RpgWorldEntityEditor } from './RpgWorldEntityEditor';
 
 interface RpgWorldEntityCardProps {
   entity: RpgAuthoringEntityCard;
+  imageAssetId?: string;
   topic?: RpgAuthoringTopic;
   worldId: string;
 }
@@ -15,6 +16,10 @@ function humanize(value: string): string {
   return candidate
     .replace(/[_-]+/g, ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function assetUrl(assetId: string): string {
+  return `/api/assets/${encodeURIComponent(assetId)}/file`;
 }
 
 export function formatAuthoringValue(value: unknown): string {
@@ -40,7 +45,7 @@ export function formatAuthoringValue(value: unknown): string {
   return String(value);
 }
 
-export function RpgWorldEntityCard({ entity, topic, worldId }: RpgWorldEntityCardProps) {
+export function RpgWorldEntityCard({ entity, imageAssetId, topic, worldId }: RpgWorldEntityCardProps) {
   const presentation = entity.presentation ?? {
     variant: entity.card_type || entity.kind,
     eyebrow: humanize(entity.card_type || entity.kind),
@@ -50,8 +55,12 @@ export function RpgWorldEntityCard({ entity, topic, worldId }: RpgWorldEntityCar
   };
   return (
     <article className={`rpg-authoring-entity-card is-${presentation.variant}`}>
-      <div className="rpg-authoring-entity-placeholder" aria-hidden="true">
-        {entity.title.slice(0, 1).toUpperCase()}
+      <div
+        className={`rpg-authoring-entity-placeholder${imageAssetId ? ' has-image' : ''}`}
+        aria-hidden="true"
+        style={imageAssetId ? { backgroundImage: `url(${JSON.stringify(assetUrl(imageAssetId))})` } : undefined}
+      >
+        {!imageAssetId ? entity.title.slice(0, 1).toUpperCase() : null}
       </div>
       <div className="rpg-authoring-entity-card-copy">
         <p className="rpg-authoring-card-eyebrow">{presentation.eyebrow}</p>
