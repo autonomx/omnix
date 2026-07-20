@@ -84,3 +84,88 @@ def test_world_metadata_patch_requires_concurrency_token(monkeypatch) -> None:
         "expected_draft_revision": 4,
         "changes": {"title": "Aurelia II"},
     }
+
+
+def test_topic_patch_requires_revision_hash_and_preserves_lock(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_update(world_id: str, topic_id: str, **kwargs):
+        captured.update({"world_id": world_id, "topic_id": topic_id, **kwargs})
+        return {
+            "ok": True,
+            "topic": {"topic_id": topic_id, "content_hash": "sha256:new"},
+            "stale_topic_ids": ["locations"],
+        }
+
+    monkeypatch.setattr(
+        "app.gateway.rpg_world_authoring_routes.update_world_topic",
+        fake_update,
+    )
+    app = FastAPI()
+    register_rpg_world_authoring_routes(app)
+    client = TestClient(app)
+
+    missing = client.patch(
+        "/api/rpg/worlds/world:aurelia/topics/factions",
+        json={"content": {"entities": []}},
+    )
+    updated = client.patch(
+        "/api/rpg/worlds/world:aurelia/topics/factions",
+        json={
+            "expected_draft_revision": 4,
+            "expected_content_hash": "sha256:old",
+            "content": {"entities": []},
+            "generation_lock": True,
+            "approved": True,
+        },
+    )
+
+    assert missing.status_code == 422
+    assert updated.status_code == 200
+    assert captured == {
+        "world_id": "world:aurelia",
+        "topic_id": "factions",
+        "expected_draft_revision": 4,
+        "expected_content_hash": "sha256:old",
+        "content": {"entities": []},
+        "generation_lock": True,
+        "approved": True,
+    }
+
+
+def test_topic_history_restore_uses_dual_concurrency_tokens(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_restore(world_id: str, topic_id: str, **kwargs):
+        captured.update({"world_id": world_id, "topic_id": topic_id, **kwargs})
+        return {
+            "ok": True,
+            "topic": {"topic_id": topic_id, "content_hash": "sha256:restored"},
+            "stale_topic_ids": [],
+        }
+
+    monkeypatch.setattr(
+        "app.gateway.rpg_world_authoring_routes.restore_world_topic",
+        fake_restore,
+    )
+    app = FastAPI()
+    register_rpg_world_authoring_routes(app)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/rpg/worlds/world:aurelia/topics/history/restore",
+        json={
+            "expected_draft_revision": 5,
+            "expected_content_hash": "sha256:current",
+            "history_sequence": 12,
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "world_id": "world:aurelia",
+        "topic_id": "history",
+        "history_sequence": 12,
+        "expected_draft_revision": 5,
+        "expected_content_hash": "sha256:current",
+    }
