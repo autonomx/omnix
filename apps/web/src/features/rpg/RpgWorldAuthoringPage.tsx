@@ -5,6 +5,7 @@ import type {
   RpgAuthoringSection,
 } from '../../api/rpgWorldAuthoringClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+import { RpgWorldEntityEditor } from './RpgWorldEntityEditor';
 import { RpgWorldTopicEditor } from './RpgWorldTopicEditor';
 import './RpgWorldAuthoringPage.css';
 
@@ -123,6 +124,7 @@ export function RpgWorldAuthoringPage({
               <div className="rpg-authoring-entity-placeholder" aria-hidden="true">{entity.title.slice(0, 1).toUpperCase()}</div>
               <div><h3>{entity.title}</h3><p>{entity.summary}</p><small>{entity.kind} · {entity.id}</small></div>
               <details><summary>Structured details</summary><pre>{JSON.stringify(entity.metadata, null, 2)}</pre></details>
+              {page.topic ? <RpgWorldEntityEditor entity={entity} topic={page.topic} worldId={worldId} /> : null}
             </article>
           ))}
         </div>
