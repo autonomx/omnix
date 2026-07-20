@@ -35,9 +35,16 @@ def world_generation_run_id(
     *,
     world_id: str,
     draft_revision: int,
+    scope_hash: str = "",
+    run_nonce: str = "",
 ) -> str:
     safe_world = _SAFE_ID.sub("-", world_id).strip("-")
-    return f"world-generation:{safe_world}:draft:{int(draft_revision)}"
+    scope_digest = str(scope_hash or "full").removeprefix("sha256:")[:12]
+    nonce = _SAFE_ID.sub("-", str(run_nonce or "run")).strip("-")[:16]
+    return (
+        f"world-generation:{safe_world}:draft:{int(draft_revision)}:"
+        f"{scope_digest}:{nonce}"
+    )
 
 
 @dataclass(frozen=True)
@@ -140,6 +147,19 @@ def world_topic_job_id(
     )
 
 
+def generation_topic_ids(
+    graph: CampaignTopicGraph,
+    target_topic_ids: Sequence[str] | None = None,
+) -> tuple[str, ...]:
+    allowed = set(target_topic_ids or ())
+    return tuple(
+        node.topic_id
+        for node in graph.topological_order()
+        if node.category not in _NON_GENERATION_CATEGORIES
+        and (not allowed or node.topic_id in allowed)
+    )
+
+
 def plan_ready_topic_jobs(
     graph: CampaignTopicGraph,
     *,
@@ -152,8 +172,10 @@ def plan_ready_topic_jobs(
     existing_job_ids: Sequence[str],
     entity_manifest_hash: str,
     settings: WorldTopicGenerationSettings,
+    target_topic_ids: Sequence[str] | None = None,
 ) -> tuple[WorldTopicJobPlan, ...]:
     existing = set(existing_job_ids)
+    targets = set(generation_topic_ids(graph, target_topic_ids))
     completed_ids = {
         topic_id
         for topic_id, row in completed_topics.items()
@@ -161,7 +183,7 @@ def plan_ready_topic_jobs(
     }
     plans: list[WorldTopicJobPlan] = []
     for node in graph.topological_order():
-        if node.category in _NON_GENERATION_CATEGORIES:
+        if node.category in _NON_GENERATION_CATEGORIES or node.topic_id not in targets:
             continue
         if node.topic_id in completed_ids:
             continue
@@ -249,20 +271,18 @@ def generation_progress(
     completed_topic_ids: Sequence[str],
     active_topic_ids: Sequence[str],
     failed_topic_ids: Sequence[str] = (),
+    target_topic_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    generation_ids = [
-        node.topic_id
-        for node in graph.topological_order()
-        if node.category not in _NON_GENERATION_CATEGORIES
-    ]
+    generation_ids = list(generation_topic_ids(graph, target_topic_ids))
     completed = set(completed_topic_ids)
-    failed = set(failed_topic_ids)
+    failed = set(failed_topic_ids).intersection(generation_ids)
     total = len(generation_ids)
     complete_count = len(completed.intersection(generation_ids))
     return {
         "total_topics": total,
         "completed_topics": complete_count,
-        "active_topic_ids": sorted(set(active_topic_ids)),
+        "target_topic_ids": generation_ids,
+        "active_topic_ids": sorted(set(active_topic_ids).intersection(generation_ids)),
         "failed_topic_ids": sorted(failed),
         "percent": 100 if total == 0 else round(complete_count / total * 100),
         "generation_complete": complete_count == total and not failed,
