@@ -3,12 +3,15 @@ import type { SpeechPerformancePlan } from './live-speech-performance-contract';
 
 const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 const CALL_STOP_EVENT = 'omnix:assistant-live-voice-stop';
+const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 const BEHAVIOR_EVENT = 'omnix:live-voice-performance-behavior';
 const STATE_HALF_LIFE_MS = 45_000;
 const HABIT_COOLDOWN_OBSERVATIONS = 3;
+const MAX_STATE_SCOPES = 32;
 
 const REFLECTION_PATTERN = /\b(?:i think|let me think|on balance|the tradeoff|looking at this|after considering|my read is)\b/i;
-const SELF_CORRECTION_PATTERN = /(?:^|[\s,—-])(?:actually|rather|more precisely|i mean|correction)\b/i;
+const EXPLICIT_CORRECTION_PATTERN = /(?:^|[\s,—-])(?:rather|more precisely|i mean|correction)\b/i;
+const ACTUALLY_REVISION_PATTERN = /\bactually\b.{0,100}\b(?:not|instead|rather|meant|should be|more accurate)\b|\b(?:not|instead|rather|meant)\b.{0,100}\bactually\b/i;
 const UNCERTAINTY_PATTERN = /\b(?:maybe|perhaps|likely|possibly|might|could|not sure|uncertain|my best estimate)\b/i;
 const PLAYFUL_PATTERN = /\b(?:funny|amusing|hilarious|delightful|nice one|good one|made me laugh)\b/i;
 const SERIOUS_PATTERN = /\b(?:sorry|grief|loss|afraid|hurt|difficult|serious|take your time)\b/i;
@@ -45,7 +48,7 @@ export type HumanizedPerformanceResult = {
   behavior: MeaningfulPerformanceBehavior;
 };
 
-let currentState = createVocalInteractionState();
+const scopedStates = new Map<string, VocalInteractionState>();
 let resetListenersInstalled = false;
 
 export function createVocalInteractionState(now = Date.now()): VocalInteractionState {
@@ -71,7 +74,9 @@ export function planMeaningfulSpeechPerformance(
   const normalized = text.trim();
   const decayed = decayVocalInteractionState(previousState, now);
   const reflective = plan.speech_act === 'reflection' || REFLECTION_PATTERN.test(normalized);
-  const genuineSelfCorrection = previousState.observationCount > 0 && SELF_CORRECTION_PATTERN.test(normalized);
+  const correctionMarker = EXPLICIT_CORRECTION_PATTERN.test(normalized)
+    || ACTUALLY_REVISION_PATTERN.test(normalized);
+  const genuineSelfCorrection = previousState.observationCount > 0 && correctionMarker;
   const calibratedUncertainty = plan.certainty === 'low' || UNCERTAINTY_PATTERN.test(normalized);
   const playful = profile.emotional_attunement === 'expressive' && PLAYFUL_PATTERN.test(normalized);
   const serious = plan.speech_act === 'reassurance' || SERIOUS_PATTERN.test(normalized);
@@ -113,14 +118,19 @@ export function humanizeSpeechPerformance(
   text: string,
   plan: SpeechPerformancePlan,
   profile: LiveConversationProfile,
+  scopeOrNow: string | number = 'default',
   now = Date.now(),
 ): HumanizedPerformanceResult {
   installResetListeners();
-  const result = planMeaningfulSpeechPerformance(text, plan, profile, currentState, now);
-  currentState = result.state;
+  const scopeKey = normalizeScopeKey(typeof scopeOrNow === 'string' ? scopeOrNow : 'default');
+  const observedAt = typeof scopeOrNow === 'number' ? scopeOrNow : now;
+  const previous = scopedStates.get(scopeKey) ?? createVocalInteractionState(observedAt);
+  const result = planMeaningfulSpeechPerformance(text, plan, profile, previous, observedAt);
+  storeScopedState(scopeKey, result.state);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(BEHAVIOR_EVENT, {
       detail: {
+        scope_key: scopeKey,
         reflective: result.behavior.reflective,
         genuine_self_correction: result.behavior.genuineSelfCorrection,
         calibrated_uncertainty: result.behavior.calibratedUncertainty,
@@ -139,12 +149,18 @@ export function humanizeSpeechPerformance(
   return result;
 }
 
-export function readVocalInteractionState(): VocalInteractionState {
-  return { ...currentState };
+export function readVocalInteractionState(scopeKey = 'default'): VocalInteractionState {
+  return {
+    ...(scopedStates.get(normalizeScopeKey(scopeKey)) ?? createVocalInteractionState()),
+  };
 }
 
-export function resetVocalInteractionState(now = Date.now()): void {
-  currentState = createVocalInteractionState(now);
+export function resetVocalInteractionState(scopeKey?: string, now = Date.now()): void {
+  if (scopeKey === undefined) {
+    scopedStates.clear();
+    return;
+  }
+  scopedStates.set(normalizeScopeKey(scopeKey), createVocalInteractionState(now));
 }
 
 export function decayVocalInteractionState(
@@ -270,6 +286,22 @@ function installResetListeners(): void {
   resetListenersInstalled = true;
   window.addEventListener(CALL_START_EVENT, () => resetVocalInteractionState());
   window.addEventListener(CALL_STOP_EVENT, () => resetVocalInteractionState());
+  window.addEventListener(SESSION_CHANGED_EVENT, () => resetVocalInteractionState());
+}
+
+function storeScopedState(scopeKey: string, state: VocalInteractionState): void {
+  if (!scopedStates.has(scopeKey) && scopedStates.size >= MAX_STATE_SCOPES) {
+    const oldest = [...scopedStates.entries()].sort(
+      (left, right) => left[1].updatedAtMs - right[1].updatedAtMs,
+    )[0]?.[0];
+    if (oldest) scopedStates.delete(oldest);
+  }
+  scopedStates.set(scopeKey, state);
+}
+
+function normalizeScopeKey(scopeKey: string): string {
+  const normalized = scopeKey.trim();
+  return normalized ? normalized.slice(0, 160) : 'default';
 }
 
 function levelTarget(level: SpeechPerformancePlan['warmth'] | SpeechPerformancePlan['energy']): number {
