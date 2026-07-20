@@ -1,15 +1,24 @@
-import { cloneCueSamples, type LiveVoiceCueId } from './live-voice-cue-bank';
+import {
+  resolveCueSamples,
+  type CueSampleSource,
+  type LiveVoiceCueId,
+} from './live-voice-cue-bank';
+import { readLiveVoiceHumanizationFlags } from './live-voice-humanization-flags';
 import { createCueSegmentId } from './live-voice-playback-contract';
 
 const CUE_SEGMENT_EVENT = 'omnix:live-voice-cue-segment';
+const CUE_SKIPPED_EVENT = 'omnix:live-voice-cue-skipped';
 const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const STOP_EVENT = 'omnix:assistant-live-voice-stop';
+const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 
 type ActiveCue = {
   source: AudioBufferSourceNode;
   segmentId: string;
   cueId: LiveVoiceCueId;
   variantId: string;
+  cueSource: CueSampleSource;
+  voiceId: string | null;
   terminal: boolean;
 };
 
@@ -22,6 +31,10 @@ export async function playLowLatencyVoiceCue(
   cueId: LiveVoiceCueId,
   variantId: string,
   gainValue = 0.75,
+  options: {
+    voiceId?: string | null;
+    allowProceduralFallback?: boolean;
+  } = {},
 ): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   installCueCancellationListeners();
@@ -35,9 +48,29 @@ export async function playLowLatencyVoiceCue(
   if (context.state !== 'running') return false;
 
   stopLowLatencyVoiceCue('superseded');
-  const samples = cloneCueSamples(cueId, variantId, context.sampleRate);
-  const buffer = context.createBuffer(1, samples.length, context.sampleRate);
-  buffer.copyToChannel(new Float32Array(samples), 0);
+  const flags = readLiveVoiceHumanizationFlags();
+  const voiceId = options.voiceId ?? selectedVoiceId();
+  const allowProceduralFallback = options.allowProceduralFallback
+    ?? flags.proceduralCueFallback;
+  const resolution = resolveCueSamples(cueId, variantId, context.sampleRate, {
+    voiceId,
+    allowProceduralFallback,
+  });
+  if (!resolution) {
+    window.dispatchEvent(new CustomEvent(CUE_SKIPPED_EVENT, {
+      detail: {
+        cue_id: cueId,
+        variant_id: variantId,
+        voice_id: voiceId,
+        reason: 'voice_asset_unavailable',
+        procedural_fallback_allowed: allowProceduralFallback,
+      },
+    }));
+    return false;
+  }
+
+  const buffer = context.createBuffer(1, resolution.samples.length, context.sampleRate);
+  buffer.copyToChannel(new Float32Array(resolution.samples), 0);
   const source = context.createBufferSource();
   const gain = context.createGain();
   gain.gain.value = Math.max(0, Math.min(1, gainValue));
@@ -45,7 +78,15 @@ export async function playLowLatencyVoiceCue(
   source.connect(gain);
   gain.connect(context.destination);
   const segmentId = createCueSegmentId('standalone', cueId, cueSequence++);
-  const active: ActiveCue = { source, segmentId, cueId, variantId, terminal: false };
+  const active: ActiveCue = {
+    source,
+    segmentId,
+    cueId,
+    variantId,
+    cueSource: resolution.source,
+    voiceId: resolution.voiceId,
+    terminal: false,
+  };
   activeCue = active;
   dispatchCueLifecycle('segment_started', active);
   return new Promise<boolean>((resolve) => {
@@ -99,8 +140,23 @@ function dispatchCueLifecycle(
       segment_kind: 'cue',
       cue_id: active.cueId,
       variant_id: active.variantId,
+      cue_source: active.cueSource,
+      voice_id: active.voiceId,
       semantic_speech_samples: 0,
       reason: reason ?? null,
     },
   }));
+}
+
+function selectedVoiceId(): string | null {
+  const liveCallVoice = document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceId?.trim();
+  if (liveCallVoice) return liveCallVoice;
+  const mounted = document.querySelector<HTMLSelectElement>('select[aria-label="Cloned voice"]')?.value.trim();
+  if (mounted) return mounted;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(VOICE_SETTINGS_KEY) || '{}') as { voiceId?: unknown };
+    return typeof parsed.voiceId === 'string' && parsed.voiceId.trim() ? parsed.voiceId.trim() : null;
+  } catch {
+    return null;
+  }
 }
