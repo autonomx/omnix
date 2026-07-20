@@ -21,7 +21,9 @@ export function formatAuthoringValue(value: unknown): string {
   if (value == null || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'number') return new Intl.NumberFormat().format(value);
-  if (typeof value === 'string') return value.includes(':') ? humanize(value) : value;
+  if (typeof value === 'string') {
+    return value.includes(':') || /[_-]/.test(value) ? humanize(value) : value;
+  }
   if (Array.isArray(value)) return value.map(formatAuthoringValue).join(', ');
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>;
@@ -39,7 +41,13 @@ export function formatAuthoringValue(value: unknown): string {
 }
 
 export function RpgWorldEntityCard({ entity, topic, worldId }: RpgWorldEntityCardProps) {
-  const presentation = entity.presentation;
+  const presentation = entity.presentation ?? {
+    variant: entity.card_type || entity.kind,
+    eyebrow: humanize(entity.card_type || entity.kind),
+    badges: [],
+    highlights: [],
+    groups: [],
+  };
   return (
     <article className={`rpg-authoring-entity-card is-${presentation.variant}`}>
       <div className="rpg-authoring-entity-placeholder" aria-hidden="true">
