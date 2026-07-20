@@ -28,6 +28,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [rawEntity, setRawEntity] = useState(JSON.stringify(entity.metadata, null, 2));
+  const [entityDraftDirty, setEntityDraftDirty] = useState(false);
   const [rawDirectives, setRawDirectives] = useState('{}');
   const [feedback, setFeedback] = useState('');
   const queryKey = ['feature', 'rpg', 'world-entity', worldId, topic.topic_id, entity.id];
@@ -38,9 +39,10 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
   });
 
   useEffect(() => {
+    if (entityDraftDirty) return;
     const current = entityQuery.data?.entity ?? entity.metadata;
     setRawEntity(JSON.stringify(current, null, 2));
-  }, [entity.metadata, entityQuery.data?.entity]);
+  }, [entity.metadata, entityDraftDirty, entityQuery.data?.entity]);
 
   const refresh = async () => {
     await Promise.all([
@@ -63,6 +65,8 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
       },
     ),
     onSuccess: async (result) => {
+      setEntityDraftDirty(false);
+      setRawEntity(JSON.stringify(result.entity, null, 2));
       setFeedback(`Saved ${entity.title}. ${result.stale_entity_ids.length} dependent entities need review.`);
       await refresh();
     },
@@ -81,6 +85,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
       },
     ),
     onSuccess: async (result) => {
+      setEntityDraftDirty(false);
       setFeedback(`Regenerated ${entity.title} while preserving ${Math.max(0, ((topic.content.entities as unknown[]) ?? []).length - 1)} sibling entities.`);
       setRawEntity(JSON.stringify(result.entity, null, 2));
       await refresh();
@@ -104,7 +109,10 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
             aria-label={`Entity JSON for ${entity.title}`}
             rows={14}
             value={rawEntity}
-            onChange={(event) => setRawEntity(event.currentTarget.value)}
+            onChange={(event) => {
+              setEntityDraftDirty(true);
+              setRawEntity(event.currentTarget.value);
+            }}
           />
         </label>
         <div className="rpg-authoring-entity-editor-actions">
