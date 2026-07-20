@@ -44,6 +44,26 @@ export interface RpgAuthoringDocumentBlock {
   value?: unknown;
 }
 
+export interface RpgAuthoringTopic {
+  topic_id: string;
+  draft_revision: number;
+  source: string;
+  status: string;
+  content: Record<string, unknown>;
+  directives: Record<string, unknown>;
+  dependency_hashes: Record<string, string>;
+  input_hash: string;
+  content_hash: string;
+  provenance: Record<string, unknown>;
+  updated_at: string;
+}
+
+export interface RpgAuthoringTopicHistory extends RpgAuthoringTopic {
+  history_sequence: number;
+  captured_at: string;
+  topic_updated_at: string;
+}
+
 export interface RpgAuthoringDocumentPage {
   ok: boolean;
   section_id: string;
@@ -52,7 +72,7 @@ export interface RpgAuthoringDocumentPage {
   summary?: string;
   body: RpgAuthoringDocumentBlock[];
   related_entities: Array<Record<string, unknown>>;
-  topic?: Record<string, unknown>;
+  topic?: RpgAuthoringTopic;
 }
 
 export interface RpgAuthoringCollectionPage {
@@ -63,7 +83,7 @@ export interface RpgAuthoringCollectionPage {
   entities: RpgAuthoringEntityCard[];
   filters: Array<Record<string, unknown>>;
   sort_options: string[];
-  topic?: Record<string, unknown>;
+  topic?: RpgAuthoringTopic;
 }
 
 export type RpgAuthoringPage = RpgAuthoringDocumentPage | RpgAuthoringCollectionPage;
@@ -85,6 +105,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (text ? JSON.parse(text) : {}) as T;
 }
 
+function jsonPatch(body: Record<string, unknown>): RequestInit {
+  return {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+}
+
 export const rpgWorldAuthoringClient = {
   manifest(worldId: string): Promise<RpgAuthoringManifestResponse> {
     return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/authoring-manifest`);
@@ -100,10 +128,41 @@ export const rpgWorldAuthoringClient = {
     worldId: string,
     body: Record<string, unknown>,
   ): Promise<{ ok: boolean; world: RpgWorldSummary }> {
-    return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}`, jsonPatch(body));
+  },
+
+  topic(worldId: string, topicId: string): Promise<{
+    ok: boolean;
+    world: RpgWorldSummary;
+    topic: RpgAuthoringTopic;
+    history: RpgAuthoringTopicHistory[];
+  }> {
+    return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/topics/${encodeURIComponent(topicId)}`);
+  },
+
+  updateTopic(
+    worldId: string,
+    topicId: string,
+    body: Record<string, unknown>,
+  ): Promise<{ ok: boolean; topic: RpgAuthoringTopic; stale_topic_ids: string[] }> {
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/topics/${encodeURIComponent(topicId)}`,
+      jsonPatch(body),
+    );
+  },
+
+  restoreTopic(
+    worldId: string,
+    topicId: string,
+    body: Record<string, unknown>,
+  ): Promise<{ ok: boolean; topic: RpgAuthoringTopic; stale_topic_ids: string[] }> {
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/topics/${encodeURIComponent(topicId)}/restore`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
   },
 };
