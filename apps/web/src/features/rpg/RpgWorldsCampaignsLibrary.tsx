@@ -18,6 +18,11 @@ interface RpgWorldsCampaignsLibraryProps {
 
 type LibraryTab = 'worlds' | 'campaigns';
 
+interface WorldLocationOption {
+  id: string;
+  label: string;
+}
+
 const DEFAULT_BLUEPRINT = {
   schema_version: 'rpg_map_blueprint_v1',
   map_id: 'map:rusty_flagon:ground_floor',
@@ -84,6 +89,63 @@ function blueprintFindingLabel(value: Record<string, unknown>): string {
   const target = text(value.target_id);
   const scenario = text(value.scenario_id);
   return [code, target, scenario].filter(Boolean).join(' • ');
+}
+
+function worldLocationOptions(detail: RpgWorldDetailResponse | undefined): WorldLocationOption[] {
+  if (!detail) return [];
+  const revision = record(detail.revisions[0]?.document);
+  const canonEntities = record(record(revision.canon).entities);
+  const manifestEntities = record(record(revision.entity_manifest).entities);
+  const entities = { ...manifestEntities, ...canonEntities };
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  const labels = new Map<string, string>();
+  const add = (value: unknown, label?: unknown) => {
+    const id = text(value);
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+    const resolvedLabel = text(label);
+    if (id && resolvedLabel && !labels.has(id)) labels.set(id, resolvedLabel);
+  };
+
+  for (const value of array(record(revision.topology).locations)) add(value);
+  for (const [entityId, entity] of Object.entries(entities)) {
+    const row = record(entity);
+    if (text(row.kind).toLowerCase() === 'location') {
+      add(entityId, text(row.name, text(row.title)));
+    }
+  }
+  for (const requirement of array(revision.blueprint_requirements)) {
+    add(record(requirement).location_id);
+  }
+  for (const blueprint of detail.map_blueprints) {
+    add(record(blueprint.document).location_id);
+  }
+
+  // Older/provider-authored topics can contain valid location rows even when a
+  // failed canon projection left the published topology empty. Keep their
+  // stable location IDs selectable without permitting arbitrary free text.
+  for (const topicId of ['locations', 'regions']) {
+    for (const topic of detail.topics.filter((candidate) => candidate.topic_id === topicId)) {
+      const content = record(topic.content);
+      for (const value of [...array(content.entities), ...array(content.locations)]) {
+        const row = record(value);
+        const locationId = text(
+          row.location_id,
+          topicId === 'locations' ? text(row.id, text(row.entity_id)) : '',
+        );
+        add(locationId, text(row.name, text(row.title)));
+      }
+    }
+  }
+
+  return ids.map((id) => {
+    const entity = record(entities[id]);
+    const name = labels.get(id) ?? text(entity.name, text(entity.title));
+    return { id, label: name ? `${name} (${id})` : id };
+  });
 }
 
 export function RpgWorldsCampaignsLibrary({
@@ -231,6 +293,23 @@ export function RpgWorldsCampaignsLibrary({
     onError: (cause) => setError(cause instanceof Error ? cause.message : 'World publication failed.'),
   });
 
+  const repairWorldMutation = useMutation({
+    mutationFn: () => rpgWorldLibraryClient.repairWorldForLaunch(selectedWorldId, {
+      scenario_id: scenarioId.trim(),
+      starting_location_id: scenarioLocation,
+    }),
+    onSuccess: async (result) => {
+      setFeedback(
+        `World repaired for launch. Scenario revision ${result.scenario_revision.revision} now uses world revision ${result.scenario_revision.world_revision}.`,
+      );
+      setError(undefined);
+      await refresh();
+    },
+    onError: (cause) => setError(
+      cause instanceof Error ? cause.message : 'World launch repair failed.',
+    ),
+  });
+
   const worldLifecycleMutation = useMutation({
     mutationFn: (status: string) => (
       status === 'archived'
@@ -262,29 +341,68 @@ export function RpgWorldsCampaignsLibrary({
   });
 
   const publishScenarioMutation = useMutation({
-    mutationFn: (values: {
+    mutationFn: async (values: {
       scenarioId: string;
+      scenarioRevision: number;
       worldRevision: number;
       worldRevisionHash: string;
       compatibleRelease: number;
-    }) => rpgWorldLibraryClient.publishScenario(values.scenarioId, {
-      revision: 1,
-      world_id: selectedWorldId,
-      world_revision: values.worldRevision,
-      world_revision_hash: values.worldRevisionHash,
-      compatible_release: values.compatibleRelease,
-      starting_epoch: 'Day 1',
-      starting_location_id: scenarioLocation,
-      activated_conflict_ids: [],
-      initial_npc_ids: [],
-      protagonist_options: [],
-      starting_resources: {},
-      opening_seed_ids: [],
-      map_initialization: [],
-      content_hash: '',
-    }),
+    }) => {
+      const publish = (
+        worldRevision: number,
+        worldRevisionHash: string,
+        compatibleRelease: number,
+      ) => rpgWorldLibraryClient.publishScenario(values.scenarioId, {
+        revision: values.scenarioRevision,
+        world_id: selectedWorldId,
+        world_revision: worldRevision,
+        world_revision_hash: worldRevisionHash,
+        compatible_release: compatibleRelease,
+        starting_epoch: 'Day 1',
+        starting_location_id: scenarioLocation,
+        activated_conflict_ids: [],
+        initial_npc_ids: [],
+        protagonist_options: [],
+        starting_resources: {},
+        opening_seed_ids: [],
+        map_initialization: [],
+        content_hash: '',
+      });
+
+      try {
+        return {
+          result: await publish(
+            values.worldRevision,
+            values.worldRevisionHash,
+            values.compatibleRelease,
+          ),
+          promotedWorldRevision: undefined,
+        };
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        if (!message.includes('scenario_starting_map_missing')) throw cause;
+        const promoted = await rpgWorldLibraryClient.promoteStarterBubble(selectedWorldId, {
+          source_world_revision: values.worldRevision,
+          starting_location_id: scenarioLocation,
+        });
+        const promotion = record(promoted.promotion);
+        const promotedRevision = number(promotion.world_revision);
+        const promotedRelease = number(promotion.world_release);
+        const promotedHash = text(promotion.world_revision_hash);
+        if (!promotedRevision || !promotedRelease || !promotedHash) {
+          throw new Error('Starter-map promotion did not return a publishable world release.');
+        }
+        return {
+          result: await publish(promotedRevision, promotedHash, promotedRelease),
+          promotedWorldRevision: promotedRevision,
+        };
+      }
+    },
     onSuccess: async (result) => {
-      setFeedback(`Scenario revision published: ${result.scenario_revision.revision}`);
+      const promotionNote = result.promotedWorldRevision
+        ? ` after preparing starter maps in world revision ${result.promotedWorldRevision}`
+        : '';
+      setFeedback(`Scenario revision published: ${result.result.scenario_revision.revision}${promotionNote}.`);
       setError(undefined);
       await refresh();
     },
@@ -347,6 +465,30 @@ export function RpgWorldsCampaignsLibrary({
   const selectedWorld = libraryQuery.data?.worlds.find((world) => world.id === selectedWorldId);
   const worldArchived = selectedWorld?.status === 'archived';
   const worldScenarios = detail?.scenarios ?? [];
+  const existingScenario = worldScenarios.find((scenario) => scenario.id === scenarioId.trim());
+  const existingScenarioRevisions = detail?.scenario_revisions[scenarioId.trim()] ?? [];
+  const latestExistingScenarioRevision = [...existingScenarioRevisions]
+    .sort((left, right) => right.revision - left.revision)[0];
+  const selectedScenarioRelease = detail && latestExistingScenarioRevision
+    ? matchingRelease(detail, latestExistingScenarioRevision)
+    : undefined;
+  const selectedScenarioLaunchReady = Boolean(
+    certification(selectedScenarioRelease).launch_ready,
+  );
+  const needsLaunchRepair = Boolean(
+    existingScenario && (!latestExistingScenarioRevision || !selectedScenarioLaunchReady),
+  );
+  const publishedScenarioLocation = text(
+    record(latestExistingScenarioRevision?.document).starting_location_id,
+    text(existingScenario?.metadata.starting_location),
+  );
+  const locationOptions = useMemo(() => worldLocationOptions(detail), [detail]);
+  const scenarioAlreadyPublished = Boolean(
+    existingScenario?.status === 'published'
+    && latestExistingScenarioRevision
+    && publishedScenarioLocation
+    && scenarioLocation === publishedScenarioLocation,
+  );
   const campaignCountByWorld = useMemo(() => {
     const counts = new Map<string, number>();
     for (const campaign of libraryQuery.data?.campaigns ?? []) {
@@ -355,12 +497,34 @@ export function RpgWorldsCampaignsLibrary({
     return counts;
   }, [libraryQuery.data?.campaigns]);
 
+  useEffect(() => {
+    if (!locationOptions.length) {
+      setScenarioLocation('');
+      return;
+    }
+    if (!locationOptions.some((location) => location.id === scenarioLocation)) {
+      const storedLocation = locationOptions.find(
+        (location) => location.id === publishedScenarioLocation,
+      );
+      setScenarioLocation(storedLocation?.id ?? locationOptions[0].id);
+    }
+  }, [locationOptions, publishedScenarioLocation, scenarioLocation]);
+
   const loadBlueprint = (blueprint: RpgMapBlueprintRevision) => {
     setBlueprintMapId(blueprint.map_id);
     setBlueprintExpectedRevision(blueprint.blueprint_revision);
     setBlueprintJson(pretty(blueprint.document));
     setFeedback(`Loaded ${blueprint.map_id} r${blueprint.blueprint_revision} for editing.`);
     setError(undefined);
+  };
+
+  const createOrUseScenario = () => {
+    if (existingScenario) {
+      setError(undefined);
+      setFeedback(`Using existing ${existingScenario.status} scenario: ${existingScenario.title}. Publish its next revision when ready.`);
+      return;
+    }
+    createScenarioMutation.mutate();
   };
 
   return (
@@ -481,13 +645,23 @@ export function RpgWorldsCampaignsLibrary({
 
                   <section className="rpg-world-library-panel">
                     <p className="eyebrow">Certification</p>
-                    <h3>{launchReady ? 'Launch ready' : 'Validation findings'}</h3>
+                    <h3>{needsLaunchRepair && launchReady ? 'Scenario pin needs repair' : launchReady ? 'Launch ready' : 'Validation findings'}</h3>
                     {validationFindings.length ? (
                       <ul>{validationFindings.map((finding) => <li key={finding}>{finding}</li>)}</ul>
                     ) : (
                       <p>{latestRelease ? 'No blocking findings in the latest release.' : 'Publish a release to calculate launch readiness.'}</p>
                     )}
                     <p>Simulation readiness and presentation readiness remain independent.</p>
+                    {!launchReady || needsLaunchRepair ? (
+                      <button
+                        type="button"
+                        disabled={worldArchived || !existingScenario || !scenarioLocation || repairWorldMutation.isPending}
+                        onClick={() => repairWorldMutation.mutate()}
+                      >{repairWorldMutation.isPending ? 'Repairing world…' : 'Repair world for launch'}</button>
+                    ) : null}
+                    {!launchReady && !existingScenario ? (
+                      <small>Create or select the opening scenario before repairing its launch pin.</small>
+                    ) : null}
                   </section>
                 </div>
 
@@ -566,21 +740,39 @@ export function RpgWorldsCampaignsLibrary({
                   <div className="rpg-world-library-inline-form">
                     <label><span>Scenario id</span><input value={scenarioId} onChange={(event) => setScenarioId(event.currentTarget.value)} /></label>
                     <label><span>Title</span><input value={scenarioTitle} onChange={(event) => setScenarioTitle(event.currentTarget.value)} /></label>
-                    <label><span>Starting location</span><input value={scenarioLocation} onChange={(event) => setScenarioLocation(event.currentTarget.value)} /></label>
+                    <label>
+                      <span>Starting location</span>
+                      <select
+                        value={scenarioLocation}
+                        disabled={!locationOptions.length}
+                        onChange={(event) => setScenarioLocation(event.currentTarget.value)}
+                      >
+                        {!locationOptions.length ? <option value="">Generate or publish world locations first</option> : null}
+                        {locationOptions.map((location) => (
+                          <option key={location.id} value={location.id}>{location.label}</option>
+                        ))}
+                      </select>
+                    </label>
                     <label><span>Player name</span><input value={playerName} onChange={(event) => setPlayerName(event.currentTarget.value)} /></label>
                   </div>
                   <div className="rpg-world-library-actions">
-                    <button type="button" disabled={worldArchived || createScenarioMutation.isPending} onClick={() => createScenarioMutation.mutate()}>Create scenario</button>
+                    <button type="button" disabled={worldArchived || !scenarioLocation || createScenarioMutation.isPending} onClick={createOrUseScenario}>
+                      {existingScenario ? 'Use existing scenario' : 'Create scenario'}
+                    </button>
                     <button
                       type="button"
-                      disabled={worldArchived || !latestRevision || !latestRelease || publishScenarioMutation.isPending}
+                      disabled={worldArchived || !scenarioLocation || !latestRevision || !latestRelease || scenarioAlreadyPublished || publishScenarioMutation.isPending}
                       onClick={() => latestRevision && latestRelease && publishScenarioMutation.mutate({
                         scenarioId,
+                        scenarioRevision: Math.max(
+                          0,
+                          ...(detail.scenario_revisions[scenarioId] ?? []).map((revision) => revision.revision),
+                        ) + 1,
                         worldRevision: latestRevision.revision,
                         worldRevisionHash: latestRevision.content_hash,
                         compatibleRelease: latestRelease.release,
                       })}
-                    >Publish scenario revision</button>
+                    >{scenarioAlreadyPublished ? 'Scenario already published' : latestExistingScenarioRevision ? 'Publish new scenario revision' : 'Publish scenario revision'}</button>
                   </div>
                   <div className="rpg-world-library-scenario-list">
                     {worldScenarios.map((scenario) => {

@@ -169,6 +169,10 @@ describe('RpgCreateCampaignWizard', () => {
     const scenarioSelect = screen.getByRole('combobox', { name: 'Published scenario' });
     await waitFor(() => expect(scenarioSelect).toHaveValue(scenario.id));
     expect(await screen.findByText(`Ready: ${world.title} · ${scenario.title}`)).toBeInTheDocument();
+    expect(screen.getByLabelText('Campaign setup summary')).toHaveTextContent(world.title);
+    expect(screen.getByLabelText('Campaign setup summary')).toHaveTextContent('Starfall Grove');
+    expect(screen.getByLabelText('Campaign setup summary')).toHaveTextContent(scenario.title);
+    expect(screen.getByLabelText('Campaign setup summary')).not.toHaveTextContent('Rusty Flagon Tavern');
 
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
 
@@ -176,8 +180,46 @@ describe('RpgCreateCampaignWizard', () => {
       `/api/rpg/scenarios/${encodeURIComponent(scenario.id)}/revisions/1/launch`,
       expect.objectContaining({ method: 'POST' }),
     ));
+    const launchCall = fetchMock.mock.calls.find(([input]) => (
+      requestPath(input) === `/api/rpg/scenarios/${encodeURIComponent(scenario.id)}/revisions/1/launch`
+    ));
+    const launchBody = JSON.parse(String(launchCall?.[1]?.body)) as {
+      gameplay: { genre: string; tone: string };
+    };
+    expect(launchBody.gameplay).toMatchObject({ genre: world.genre, tone: world.tone });
     expect(fetchMock.mock.calls.some(([input]) => requestPath(input) === '/api/rpg/new-game')).toBe(false);
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
     expect(screen.getByText('Session campaign:aurelia:one')).toBeInTheDocument();
+  });
+
+  it('explains the publishing requirement when a world only has a draft opening', async () => {
+    const draftScenario = { ...scenario, status: 'draft' };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/rpg/world-library') {
+        return Response.json({
+          ...libraryPayload(),
+          worlds: [{ ...world, scenario_count: 1 }],
+          scenarios: [draftScenario],
+        });
+      }
+      if (path === `/api/rpg/worlds/${encodeURIComponent(world.id)}/library`) {
+        return Response.json({
+          ...detailPayload(),
+          scenarios: [draftScenario],
+          scenario_revisions: { [scenario.id]: [] },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    }));
+    renderWizard();
+
+    expect(await screen.findByText('0 published openings')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: `New campaign in ${world.title}` }));
+
+    expect(await screen.findByText('This world has no published scenario. Publish an opening before starting a campaign.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Selected campaign world')).toHaveTextContent(world.title);
+    expect(screen.queryByLabelText('Campaign setup summary')).not.toBeInTheDocument();
+    expect(screen.queryByText('Rusty Flagon Tavern')).not.toBeInTheDocument();
   });
 });

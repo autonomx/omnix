@@ -135,25 +135,52 @@ function detailPayload() {
   return {
     ok: true,
     world,
-    topics: [{
-      topic_id: 'realm',
-      draft_revision: 1,
-      source: 'ai',
-      status: 'ready',
-      content: {},
-      directives: {},
-      dependency_hashes: {},
-      input_hash: 'sha256:input',
-      content_hash: 'sha256:topic',
-      provenance: {},
-      updated_at: '2026-07-16T00:00:00Z',
-    }],
+    topics: [
+      {
+        topic_id: 'realm',
+        draft_revision: 1,
+        source: 'ai',
+        status: 'ready',
+        content: {},
+        directives: {},
+        dependency_hashes: {},
+        input_hash: 'sha256:input',
+        content_hash: 'sha256:topic',
+        provenance: {},
+        updated_at: '2026-07-16T00:00:00Z',
+      },
+      {
+        topic_id: 'locations',
+        draft_revision: 1,
+        source: 'ai',
+        status: 'ready',
+        content: {
+          entities: [{ location_id: 'loc:glitch_bar', name: 'The Glitch Bar' }],
+        },
+        directives: {},
+        dependency_hashes: {},
+        input_hash: 'sha256:locations-input',
+        content_hash: 'sha256:locations-topic',
+        provenance: {},
+        updated_at: '2026-07-16T00:00:00Z',
+      },
+    ],
     map_blueprints: [invalidBlueprint],
     revisions: [{
       revision: 1,
       document: {
+        topology: {
+          locations: ['location:harbor', 'location:citadel'],
+        },
+        canon: {
+          entities: {
+            'location:harbor': { kind: 'location', name: 'Storm Harbor' },
+            'location:citadel': { kind: 'location', name: 'High Citadel' },
+          },
+        },
         blueprint_requirements: [{
           map_id: 'map:harbor',
+          location_id: 'location:harbor',
           simulation_readiness: 'semantic',
           presentation_readiness: 'placeholder',
         }],
@@ -174,6 +201,7 @@ afterEach(() => {
 
 describe('RpgWorldsCampaignsLibrary', () => {
   it('surfaces reusable-world authoring, blueprint reconciliation, lifecycle, and launch views', async () => {
+    let scenarioPublishAttempts = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
       if (path === '/api/rpg/world-library') {
@@ -221,6 +249,37 @@ describe('RpgWorldsCampaignsLibrary', () => {
           world_forge_invoked: false,
         });
       }
+      if (
+        path === `/api/rpg/scenarios/${encodeURIComponent(scenario.id)}/revisions`
+        && init?.method === 'POST'
+      ) {
+        scenarioPublishAttempts += 1;
+        if (scenarioPublishAttempts === 1) {
+          return Response.json(
+            { detail: { ok: false, error: 'scenario_starting_map_missing:location:harbor' } },
+            { status: 409 },
+          );
+        }
+        return Response.json({
+          ok: true,
+          scenario_revision: { ...scenarioRevision, revision: 2, world_revision: 2 },
+        });
+      }
+      if (
+        path === `/api/rpg/worlds/${encodeURIComponent(world.id)}/starter-bubble/promote`
+        && init?.method === 'POST'
+      ) {
+        return Response.json({
+          ok: true,
+          status: 'ready',
+          reused: false,
+          promotion: {
+            world_revision: 2,
+            world_revision_hash: 'sha256:promoted-revision',
+            world_release: 1,
+          },
+        });
+      }
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -235,6 +294,24 @@ describe('RpgWorldsCampaignsLibrary', () => {
     expect(screen.getByText(/scenario_spawn_missing/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Published releases' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Campaign openings' })).toBeInTheDocument();
+    const openingLocation = screen.getByRole('combobox', { name: 'Starting location' });
+    expect(openingLocation).toHaveValue('location:harbor');
+    expect(screen.getByRole('option', { name: 'Storm Harbor (location:harbor)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'High Citadel (location:citadel)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'The Glitch Bar (loc:glitch_bar)' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use existing scenario' }));
+    expect(await screen.findByText(/Using existing published scenario: Opening Scenario/)).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => requestPath(input) === '/api/rpg/scenarios')).toBe(false);
+
+    expect(screen.getByRole('button', { name: 'Scenario already published' })).toBeDisabled();
+    fireEvent.change(openingLocation, { target: { value: 'location:citadel' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish new scenario revision' }));
+    expect(await screen.findByText(/Scenario revision published: 2 after preparing starter maps in world revision 2/)).toBeInTheDocument();
+    expect(scenarioPublishAttempts).toBe(2);
+    expect(fetchMock.mock.calls.some(([input]) => (
+      requestPath(input) === `/api/rpg/worlds/${encodeURIComponent(world.id)}/starter-bubble/promote`
+    ))).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit next revision' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save blueprint revision' }));

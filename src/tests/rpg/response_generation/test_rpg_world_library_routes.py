@@ -84,3 +84,66 @@ def test_published_scenario_launch_route_preserves_fast_launch_contract(monkeypa
     assert captured["world_release"] == 1
     assert captured["scenario_id"] == "scenario:opening"
     assert captured["scenario_revision"] == 2
+
+
+def test_duplicate_scenario_create_returns_conflict_instead_of_500(monkeypatch) -> None:
+    def duplicate_scenario(_contract):
+        raise ValueError("scenario_already_exists:scenario:opening")
+
+    monkeypatch.setattr(
+        "app.gateway.rpg_world_routes.create_scenario_project",
+        duplicate_scenario,
+    )
+    app = FastAPI()
+    register_rpg_world_routes(app)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/rpg/scenarios",
+        json={
+            "scenario_id": "scenario:opening",
+            "world_id": "world:test",
+            "title": "Opening",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"] == (
+        "scenario_already_exists:scenario:opening"
+    )
+
+
+def test_repair_world_for_launch_route_passes_scenario_and_location(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_repair(world_id: str, **kwargs):
+        captured.update({"world_id": world_id, **kwargs})
+        return {
+            "ok": True,
+            "status": "ready",
+            "scenario_revision": {"revision": 2, "world_revision": 5},
+        }
+
+    monkeypatch.setattr(
+        "app.gateway.rpg_world_library_routes.repair_world_for_launch",
+        fake_repair,
+    )
+    app = FastAPI()
+    register_rpg_world_routes(app)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/rpg/worlds/world:cyberpunk/repair-for-launch",
+        json={
+            "scenario_id": "scenario:opening",
+            "starting_location_id": "loc:glitch_bar",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert captured == {
+        "world_id": "world:cyberpunk",
+        "scenario_id": "scenario:opening",
+        "starting_location_id": "loc:glitch_bar",
+    }

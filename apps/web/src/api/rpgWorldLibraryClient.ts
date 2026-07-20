@@ -128,6 +128,15 @@ export interface RpgWorldDetailResponse {
   generation_runs: RpgWorldGenerationRun[];
 }
 
+export interface RpgWorldLaunchRepairResponse {
+  ok: boolean;
+  status: string;
+  world: Record<string, unknown>;
+  promotion: Record<string, unknown>;
+  scenario_revision: RpgScenarioRevision;
+  certification: Record<string, unknown>;
+}
+
 export interface RpgPublishedLaunchResponse {
   ok: boolean;
   status?: string;
@@ -275,6 +284,16 @@ export const rpgWorldLibraryClient = {
   ): Promise<RpgStarterBubblePromotionResponse> {
     return request(
       `/api/rpg/worlds/${encodeURIComponent(worldId)}/starter-bubble/promote`,
+      jsonInit(body),
+    );
+  },
+
+  repairWorldForLaunch(
+    worldId: string,
+    body: Record<string, unknown>,
+  ): Promise<RpgWorldLaunchRepairResponse> {
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/repair-for-launch`,
       jsonInit(body),
     );
   },

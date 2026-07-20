@@ -61,7 +61,7 @@ def test_genesis_compiler_embeds_world_forge_policy_and_dependency_graph() -> No
     world_forge = compiled["compiled_world_forge"]
     assert world_forge["enabled"] is True
     assert world_forge["depth_profile"]["depth"] == "epic"
-    assert world_forge["max_parallel_jobs"] == 8
+    assert world_forge["max_parallel_jobs"] == 4
     assert world_forge["topic_graph"]["campaign_template"] == "summoned_heroes"
     assert "opening_materialization" in world_forge["topic_graph"]["launch_required_topic_ids"]
     assert compiled["compiler_version"] == "rpg_genesis_compiler_v2"

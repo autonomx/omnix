@@ -135,7 +135,10 @@ def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any
         background_expansion=contract.world_forge.background_expansion,
     )
     max_parallel_jobs = contract.world_forge.max_parallel_jobs or profile.max_parallel_jobs
-    max_parallel_jobs = max(1, min(int(max_parallel_jobs), profile.max_parallel_jobs))
+    max_parallel_jobs = max(
+        1,
+        min(int(max_parallel_jobs), profile.max_parallel_jobs, 4),
+    )
     return {
         "compiler_version": GENESIS_COMPILER_VERSION,
         "compiled_stats": contract.initial_stats.model_dump(mode="json"),

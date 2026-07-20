@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type {
+  RpgScenarioSummary,
   RpgWorldCampaignSummary,
   RpgWorldSummary,
 } from '../../api/rpgWorldLibraryClient';
@@ -12,6 +13,7 @@ interface RpgWorldCampaignCatalogProps {
   onBack: () => void;
   onContinueCampaign: (campaignId: string) => void;
   onNewCampaign: (worldId: string) => void;
+  scenarios: RpgScenarioSummary[];
   worlds: RpgWorldSummary[];
 }
 
@@ -65,6 +67,7 @@ export function RpgWorldCampaignCatalog({
   onBack,
   onContinueCampaign,
   onNewCampaign,
+  scenarios,
   worlds,
 }: RpgWorldCampaignCatalogProps) {
   const [search, setSearch] = useState('');
@@ -112,7 +115,9 @@ export function RpgWorldCampaignCatalog({
           const worldCampaigns = campaignsForWorld(campaigns, world.id);
           const selectedCampaignId = selectedCampaigns[world.id] || worldCampaigns[0]?.campaign_id || '';
           const image = coverImage(world);
-          const openingCount = world.scenario_count ?? 0;
+          const openingCount = scenarios.filter((scenario) => (
+            scenario.world_id === world.id && scenario.status === 'published'
+          )).length;
           return (
             <article className="rpg-world-card" key={world.id}>
               <div
@@ -172,10 +177,9 @@ export function RpgWorldCampaignCatalog({
                     aria-label={`New campaign in ${world.title}`}
                     className="rpg-primary-button"
                     type="button"
-                    disabled={openingCount < 1}
                     onClick={() => onNewCampaign(world.id)}
                   >
-                    New Campaign
+                    {openingCount < 1 ? 'Review Setup' : 'New Campaign'}
                   </button>
                 </div>
                 {openingCount < 1 ? <small>Publish a scenario before creating a campaign.</small> : null}

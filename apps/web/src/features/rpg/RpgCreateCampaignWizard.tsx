@@ -32,6 +32,42 @@ function number(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+function array(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function humanizeId(value: string): string {
+  const tail = value.split(':').pop() ?? value;
+  return tail.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function scenarioLocationLabel(
+  detail: Awaited<ReturnType<typeof rpgWorldLibraryClient.detail>> | undefined,
+  scenario: RpgScenarioSummary | undefined,
+  revision: RpgScenarioRevision | undefined,
+): string {
+  const locationId = text(record(revision?.document).starting_location_id)
+    || text(record(scenario?.metadata).starting_location);
+  if (!locationId) return 'Published scenario location';
+
+  for (const topic of detail?.topics ?? []) {
+    const content = record(topic.content);
+    for (const value of [...array(content.entities), ...array(content.locations)]) {
+      const row = record(value);
+      const candidateId = text(row.location_id) || text(row.id) || text(row.entity_id);
+      if (candidateId === locationId) {
+        const label = text(row.name) || text(row.title);
+        if (label) return label;
+      }
+    }
+  }
+  return humanizeId(locationId);
+}
+
 function latestScenarioRevision(revisions: RpgScenarioRevision[]): RpgScenarioRevision | undefined {
   return [...revisions].sort((left, right) => right.revision - left.revision)[0];
 }
@@ -128,6 +164,11 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
     detailQuery.data?.scenario_revisions[selectedScenarioId] ?? [],
   );
   const selectedRelease = matchingRelease(detailQuery.data?.releases ?? [], selectedScenarioRevision);
+  const selectedLocationLabel = scenarioLocationLabel(
+    detailQuery.data,
+    selectedScenario,
+    selectedScenarioRevision,
+  );
   const launchReady = Boolean(
     selectedWorld
     && selectedScenario
@@ -182,9 +223,9 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
         world_release: selectedRelease.release,
         player: request.player ?? {},
         gameplay: {
-          campaign_template: request.campaign_template,
-          genre: request.genre,
-          tone: request.tone,
+          campaign_template: text(selectedWorld.metadata.campaign_template) || request.campaign_template,
+          genre: selectedWorld.genre,
+          tone: selectedWorld.tone,
           background: request.background,
           primary_capability: request.primary_capability,
           secondary_capabilities: request.secondary_capabilities,
@@ -243,6 +284,7 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
           onBack={props.onEnterWorld ?? (() => undefined)}
           onContinueCampaign={(campaignId) => void continueCampaign(campaignId)}
           onNewCampaign={openCampaignSetup}
+          scenarios={libraryQuery.data?.scenarios ?? []}
           worlds={availableWorlds}
         />
       </div>
@@ -290,11 +332,21 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
           {sourceStatus}
         </p>
       </section>
-      <LegacyRpgCreateCampaignWizard
-        {...props}
-        onCreateCampaign={launchExistingCampaign}
-        onEnterWorld={enterExistingWorld}
-      />
+      {launchReady && selectedWorld && selectedScenario ? (
+        <LegacyRpgCreateCampaignWizard
+          {...props}
+          onCreateCampaign={launchExistingCampaign}
+          onEnterWorld={enterExistingWorld}
+          publishedWorld={{
+            genre: selectedWorld.genre.replace(/[_-]+/g, ' '),
+            location: selectedLocationLabel,
+            scenarioDescription: selectedScenario.description,
+            scenarioTitle: selectedScenario.title,
+            tone: selectedWorld.tone,
+            worldTitle: selectedWorld.title,
+          }}
+        />
+      ) : null}
     </div>
   );
 }

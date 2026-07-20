@@ -48,6 +48,17 @@ const campaigns = [
   },
 ];
 
+const scenarios = Array.from({ length: 3 }, (_, index) => ({
+  id: `scenario:aurelia:${index}`,
+  world_id: world.id,
+  title: `Opening ${index + 1}`,
+  description: '',
+  status: 'published',
+  metadata: {},
+  created_at: world.created_at,
+  updated_at: world.updated_at,
+}));
+
 describe('RpgWorldCampaignCatalog', () => {
   it('shows one card per world and supports continuing or creating within that world', () => {
     const onContinueCampaign = vi.fn();
@@ -59,6 +70,7 @@ describe('RpgWorldCampaignCatalog', () => {
         onBack={vi.fn()}
         onContinueCampaign={onContinueCampaign}
         onNewCampaign={onNewCampaign}
+        scenarios={scenarios}
         worlds={[world]}
       />,
     );
@@ -93,6 +105,7 @@ describe('RpgWorldCampaignCatalog', () => {
         onBack={vi.fn()}
         onContinueCampaign={vi.fn()}
         onNewCampaign={vi.fn()}
+        scenarios={scenarios}
         worlds={[world]}
       />,
     );

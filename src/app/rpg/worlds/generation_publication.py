@@ -18,6 +18,7 @@ from app.rpg.session.genesis.world_forge_generation import (
 )
 from app.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
 
+from .canon_repair import repair_generation_contracts
 from .contracts import WorldReleaseDocument, WorldRevisionDocument
 from .lifecycle_service import require_world_writable
 from .map_blueprint_authoring import latest_ready_blueprint_requirements
@@ -160,24 +161,30 @@ def compile_world_generation_publication(
     world: Mapping[str, Any],
     topic_rows: list[Mapping[str, Any]],
     revision: int,
+    starting_location_override: str = "",
 ) -> WorldGenerationPublication:
     """Build deterministic immutable publication documents from one completed run."""
 
     graph = _graph_from_payload(dict(run.get("graph") or {}))
     generation = _generation_result(graph, topic_rows)
+    context = dict(run.get("context") or {})
+    generation_context = dict(context.get("generation_context") or {})
+    starting_location = str(
+        starting_location_override
+        or generation_context.get("starting_location")
+        or world.get("metadata", {}).get("starting_location")
+        or ""
+    )
+    generation = repair_generation_contracts(
+        generation,
+        starting_location=starting_location,
+    )
     relationships = compile_cross_domain_relationships(generation.topics)
     audit = audit_generated_canon(
         generation.topics,
         compiled_relationships=relationships,
     )
     audit = apply_world_forge_quality_audit(generation.topics, audit)
-    context = dict(run.get("context") or {})
-    generation_context = dict(context.get("generation_context") or {})
-    starting_location = str(
-        generation_context.get("starting_location")
-        or world.get("metadata", {}).get("starting_location")
-        or ""
-    )
     compilation = compile_campaign_bible(
         generation,
         compiled_relationships=relationships,

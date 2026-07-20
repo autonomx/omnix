@@ -162,8 +162,9 @@ def run_campaign_world_forge(
         world_forge.get("max_parallel_jobs")
         or contract.world_forge.max_parallel_jobs
         or graph.metadata.get("depth_profile", {}).get("max_parallel_jobs")
-        or 6
+        or 4
     )
+    max_parallel_jobs = max(1, min(max_parallel_jobs, 4))
     generation = generate_campaign_topics(
         graph,
         generator=generator or _default_generator(),

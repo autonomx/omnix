@@ -51,7 +51,7 @@ WORLD_FORGE_DEPTH_PROFILES: dict[WorldGenerationDepth, WorldForgeDepthProfile] =
         major_npc_range=(8, 12),
         location_range=(10, 16),
         faction_range=(5, 8),
-        max_parallel_jobs=6,
+        max_parallel_jobs=4,
         background_expansion_allowed=True,
     ),
     "epic": WorldForgeDepthProfile(
@@ -60,7 +60,7 @@ WORLD_FORGE_DEPTH_PROFILES: dict[WorldGenerationDepth, WorldForgeDepthProfile] =
         major_npc_range=(15, 25),
         location_range=(20, 35),
         faction_range=(8, 14),
-        max_parallel_jobs=8,
+        max_parallel_jobs=4,
         background_expansion_allowed=False,
     ),
 }

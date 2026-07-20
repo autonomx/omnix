@@ -170,6 +170,13 @@ def create_scenario_project(
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         require_world_writable(work, context, request.world_id)
+        existing = work.connection.execute(
+            "SELECT 1 FROM omnix_rpg_scenarios "
+            "WHERE workspace_id = %s AND id = %s",
+            (context.workspace_id, request.scenario_id),
+        ).fetchone()
+        if existing is not None:
+            raise ValueError(f"scenario_already_exists:{request.scenario_id}")
         scenario = work.world_scenarios.create_scenario(
             context,
             scenario_id=request.scenario_id,

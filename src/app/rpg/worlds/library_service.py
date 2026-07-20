@@ -34,7 +34,10 @@ def read_world_library(
 
     scenarios_by_world: dict[str, list[dict[str, Any]]] = {}
     for scenario in scenarios:
-        scenarios_by_world.setdefault(str(scenario["world_id"]), []).append(scenario)
+        # This count gates campaign creation and is presented as published
+        # openings. Draft scenario projects are not launchable openings.
+        if str(scenario.get("status") or "").lower() == "published":
+            scenarios_by_world.setdefault(str(scenario["world_id"]), []).append(scenario)
     runs_by_world: dict[str, list[dict[str, Any]]] = {}
     for run in runs:
         runs_by_world.setdefault(str(run["world_id"]), []).append(run)

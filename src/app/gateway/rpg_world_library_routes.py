@@ -6,6 +6,7 @@ from typing import Any, Mapping
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import ValidationError
 
+from app.rpg.worlds.launch_repair_service import repair_world_for_launch
 from app.rpg.worlds.library_service import (
     publish_world_library_generation,
     read_world_detail,
@@ -240,6 +241,25 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
                 )
             ),
         }
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/repair-for-launch",
+        include_in_schema=False,
+    )
+    async def rpg_world_repair_for_launch(
+        world_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        try:
+            return repair_world_for_launch(
+                world_id,
+                scenario_id=str(payload.get("scenario_id") or ""),
+                starting_location_id=str(payload.get("starting_location_id") or ""),
+            )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
 
     @app.post(
         "/api/rpg/worlds/{world_id}/starter-bubble/promote",

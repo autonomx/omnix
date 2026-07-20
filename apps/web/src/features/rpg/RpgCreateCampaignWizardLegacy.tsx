@@ -29,6 +29,14 @@ interface RpgCreateCampaignWizardProps {
     onProgress?: (response: RpgLaunchResponse) => void,
   ) => Promise<RpgLaunchResponse>;
   onEnterWorld?: () => void;
+  publishedWorld?: {
+    genre: string;
+    location: string;
+    scenarioDescription?: string;
+    scenarioTitle: string;
+    tone: string;
+    worldTitle: string;
+  };
 }
 
 interface BackendCreationStage {
@@ -63,7 +71,7 @@ const PENDING_PROGRESS_STEPS = FALLBACK_PROGRESS_STEPS.slice(1, -2);
 const MOTIVATION_OPTIONS = ['survival', 'knowledge', 'freedom', 'family', 'justice', 'renown'];
 const PROFILE_CHALLENGE_OPTIONS = ['cautious', 'restless', 'proud', 'guarded', 'naive', 'impulsive'];
 
-export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgCreateCampaignWizardProps) {
+export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld, publishedWorld }: RpgCreateCampaignWizardProps) {
   const progressTimers = useRef<Array<ReturnType<typeof window.setTimeout>>>([]);
   const [isExpanded, setIsExpanded] = useState(true);
   const [characterName, setCharacterName] = useState('Elara');
@@ -72,7 +80,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgC
   const [buildKey, setBuildKey] = useState<BuildKey>('balanced');
   const [primaryCapability, setPrimaryCapability] = useState('recon');
   const [powerSource, setPowerSource] = useState('mundane');
-  const [origin, setOrigin] = useState('frontier_village');
+  const [origin, setOrigin] = useState(publishedWorld ? '' : 'frontier_village');
   const [motivationPrimary, setMotivationPrimary] = useState('survival');
   const [motivationTarget, setMotivationTarget] = useState('');
   const [flaw, setFlaw] = useState('cautious');
@@ -419,7 +427,14 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgC
         <div className="rpg-create-section rpg-create-section-story">
           <h4>Opening story</h4>
           <div className="rpg-create-field-grid">
-            <OptionSelect label="Opening hook" value={openingHook} onChange={setOpeningHook} options={openingHooks} detail={selectedOpeningHook.detail} />
+            {publishedWorld ? (
+              <div>
+                <strong>{publishedWorld.scenarioTitle}</strong>
+                <small>{publishedWorld.scenarioDescription || `Published opening for ${publishedWorld.worldTitle}.`}</small>
+              </div>
+            ) : (
+              <OptionSelect label="Opening hook" value={openingHook} onChange={setOpeningHook} options={openingHooks} detail={selectedOpeningHook.detail} />
+            )}
             <OptionSelect label="Opening pace" value={openingPace} onChange={setOpeningPace} options={openingPaces} detail={selectedOpeningPace.detail} />
             <OptionSelect label="Relationship preset" value={relationshipPreset} onChange={setRelationshipPreset} options={relationshipPresets} detail={selectedRelationship.detail} />
           </div>
@@ -428,7 +443,14 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgC
         <div className="rpg-create-section rpg-create-section-world">
           <h4>World and rules</h4>
           <div className="rpg-create-field-grid">
-            <OptionSelect label="Starting location" value={startingLocation} onChange={setStartingLocation} options={locations} detail={selectedLocation.detail} />
+            {publishedWorld ? (
+              <div>
+                <strong>Starting location</strong>
+                <small>{publishedWorld.location}</small>
+              </div>
+            ) : (
+              <OptionSelect label="Starting location" value={startingLocation} onChange={setStartingLocation} options={locations} detail={selectedLocation.detail} />
+            )}
             <BasicSelect label="Difficulty" value={difficulty} onChange={setDifficulty} options={['story', 'normal', 'hard']} />
             <BasicSelect label="World activity" value={worldActivity} onChange={setWorldActivity} options={['quiet', 'standard', 'busy']} />
             <BasicSelect label="Economy pressure" value={economyPressure} onChange={setEconomyPressure} options={['low', 'normal', 'tight']} />
@@ -474,8 +496,9 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld }: RpgC
             <SummaryRow label="Origin" value={origin || selectedBackground.label} />
             <SummaryRow label="Driver" value={`${motivationPrimary}${motivationTarget ? ` → ${motivationTarget}` : ''} · ${flaw}`} />
             <SummaryRow label="Values" value={values || 'agency'} />
-            <SummaryRow label="Location" value={selectedLocation.label} />
-            <SummaryRow label="Opening" value={`${selectedOpeningHook.label} · ${selectedOpeningPace.label}`} />
+            {publishedWorld ? <SummaryRow label="World" value={`${publishedWorld.worldTitle} · ${publishedWorld.genre} · ${publishedWorld.tone}`} /> : null}
+            <SummaryRow label="Location" value={publishedWorld?.location ?? selectedLocation.label} />
+            <SummaryRow label="Opening" value={publishedWorld ? `${publishedWorld.scenarioTitle} · ${selectedOpeningPace.label}` : `${selectedOpeningHook.label} · ${selectedOpeningPace.label}`} />
             <SummaryRow label="Relationship" value={selectedRelationship.label} />
             <SummaryRow label="Focus" value={`${selectedPrimary.label} + ${activeCapabilities.join(' + ') || 'None selected'}`} />
             <SummaryRow label="Rules" value={`${difficulty} · ${worldActivity} · ${economyPressure} economy · ${combatLethality} combat`} />

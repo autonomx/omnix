@@ -180,7 +180,10 @@ function normalizeWorldForge(request: LooseRequest): Record<string, unknown> {
     use_hermes: asBoolean(provided.use_hermes, true),
     require_consistency_audit: asBoolean(provided.require_consistency_audit, true),
     require_opening_dossiers: asBoolean(provided.require_opening_dossiers, true),
-    max_parallel_jobs: provided.max_parallel_jobs == null ? null : Math.max(1, asInteger(provided.max_parallel_jobs, 6)),
+    max_parallel_jobs:
+      provided.max_parallel_jobs == null
+        ? null
+        : Math.max(1, Math.min(4, asInteger(provided.max_parallel_jobs, 4))),
     custom_directives: stringList(provided.custom_directives),
   };
 }

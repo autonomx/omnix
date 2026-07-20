@@ -135,7 +135,7 @@ def generate_campaign_topics(
     generator: WorldForgeTopicGenerator | None = None,
     seed: int = 0,
     campaign_context: Mapping[str, Any] | None = None,
-    max_parallel_jobs: int = 6,
+    max_parallel_jobs: int = 4,
     existing_topics: Mapping[str, GeneratedTopic] | None = None,
 ) -> WorldForgeGenerationResult:
     """Generate independent ready topics in parallel while preserving dependencies."""
@@ -162,7 +162,7 @@ def generate_campaign_topics(
         if topic_id in node_map
     }
     batches: list[tuple[str, ...]] = []
-    workers = max(1, min(int(max_parallel_jobs), 12))
+    workers = max(1, min(int(max_parallel_jobs), 4))
     while pending:
         ready = tuple(
             sorted(

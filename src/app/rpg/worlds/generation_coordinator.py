@@ -1,6 +1,7 @@
 """Durable world-owned topic generation using the shared generic job system."""
 from __future__ import annotations
 
+import threading
 from typing import Any, Mapping
 
 from app.rpg.session.genesis.world_forge_contract import (
@@ -25,6 +26,7 @@ from .generation_jobs import (
 _TERMINAL_JOB_STATUSES = {"completed", "failed", "canceled", "stale"}
 _ACTIVE_JOB_STATUSES = {"queued", "leased", "running", "waiting", "retrying"}
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
+_reconcile_lock = threading.Lock()
 
 
 def _database(value: Any | None) -> Any:
@@ -197,6 +199,17 @@ def reconcile_world_generation(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
+    """Reconcile one DAG at a time to avoid duplicate downstream job creation."""
+
+    with _reconcile_lock:
+        return _reconcile_world_generation_unlocked(run_id, database=database)
+
+
+def _reconcile_world_generation_unlocked(
+    run_id: str,
+    *,
+    database: Any | None = None,
+) -> dict[str, Any]:
     db = _database(database)
     from app.persistence.identity_service import bootstrap_local_tenant
     from app.persistence.unit_of_work import unit_of_work
@@ -365,17 +378,20 @@ def execute_claimed_world_topic_job(
             )
 
             selected_generator = build_production_world_forge_generator()
-        generated = selected_generator.generate(
-            node,
-            seed=int(dict(payload.get("settings") or {}).get("seed") or 0),
-            campaign_context={
-                **dict(payload.get("generation_context") or {}),
-                "world_id": world_id,
-                "draft_revision": int(payload.get("draft_revision") or 1),
-                "topic_directives": dict(payload.get("directives") or {}),
-            },
-            dependency_topics=dependency_topics,
-        )
+        from app.rpg.llm_priority import background_rpg_llm_priority
+
+        with background_rpg_llm_priority():
+            generated = selected_generator.generate(
+                node,
+                seed=int(dict(payload.get("settings") or {}).get("seed") or 0),
+                campaign_context={
+                    **dict(payload.get("generation_context") or {}),
+                    "world_id": world_id,
+                    "draft_revision": int(payload.get("draft_revision") or 1),
+                    "topic_directives": dict(payload.get("directives") or {}),
+                },
+                dependency_topics=dependency_topics,
+            )
         if generated.topic_id != topic_id:
             raise RuntimeError(
                 f"world_topic_generator_returned:{generated.topic_id}:expected:{topic_id}"
