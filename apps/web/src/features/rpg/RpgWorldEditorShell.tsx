@@ -144,6 +144,7 @@ export function RpgWorldEditorShell({
               page={pageQuery.data}
               section={selectedSection}
               world={currentWorld}
+              worldId={worldId}
             />
           )}
         </main>
