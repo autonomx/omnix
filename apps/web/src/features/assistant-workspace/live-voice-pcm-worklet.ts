@@ -238,7 +238,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     const minimum = Math.max(0, Number(segment.minimumFollowingSpeechSamples) || 0);
     if (minimum <= 0) return true;
     if (this.bufferedSpeechSamples >= minimum) return true;
-    return this.inputEnded && this.bufferedSpeechSamples > 0;
+    return this.inputEnded;
   }
 
   beginSegment(segment) {
