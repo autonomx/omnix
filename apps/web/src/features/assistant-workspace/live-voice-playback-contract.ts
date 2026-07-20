@@ -14,6 +14,7 @@ export type SilenceSegmentDescriptor = {
   segmentId: string;
   durationSamples: number;
   reason: SilenceReason;
+  minimumFollowingSpeechSamples?: number;
 };
 
 export type CueSegmentDescriptor = {
@@ -40,11 +41,17 @@ export type PlaybackStartPolicy = {
   minimumBufferedSpeechSamples: number;
 };
 
+export type PlaybackStartPolicyMs = {
+  notBeforeMs: number;
+  minimumBufferedSpeechMs: number;
+};
+
 export type PlaybackSegmentEvent = PlaybackCounters & {
-  type: 'segment_started' | 'segment_completed' | 'segment_interrupted';
+  type: 'segment_started' | 'segment_completed' | 'segment_interrupted' | 'segment_cancelled';
   segment_id: string;
   segment_kind: PlaybackSegmentKind;
   phrase_index?: number;
+  reason?: string;
 };
 
 export function createSpeechSegmentId(traceId: string, phraseIndex: number): string {
