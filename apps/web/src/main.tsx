@@ -33,7 +33,6 @@ import { initializeLiveConversationInitiativeController } from './features/assis
 import { initializeLiveConversationRepairController } from './features/assistant-workspace/live-conversation-repair-controller';
 import { initializeLiveConversationStoreBridge } from './features/assistant-workspace/live-conversation-store-bridge';
 import { initializeLivePresencePolicyController } from './features/assistant-workspace/live-presence-policy-controller';
-import { initializeLiveSpeechDeliveryBridge } from './features/assistant-workspace/live-speech-delivery-bridge';
 import { initializeLiveVoiceAudioDuckBridge } from './features/assistant-workspace/live-voice-audio-duck-bridge';
 import { initializeLiveVoiceDuplexGate } from './features/assistant-workspace/live-voice-duplex-gate';
 import './features/assistant-workspace/live-voice-form-sync';
@@ -65,7 +64,6 @@ installRpgTurnUiFetchInterceptor();
 initializeLiveConversationStoreBridge();
 initializeLivePresencePolicyController();
 initializeLiveVoiceDuplexGate();
-initializeLiveSpeechDeliveryBridge();
 initializeLiveVoiceAudioDuckBridge();
 initializeLiveVoiceUnifiedAudioController();
 initializeLiveAvatarPresenceController();
@@ -98,19 +96,6 @@ window.setTimeout(() => {
   initializeChatMessageStreamAudioController();
   void import('./features/assistant-workspace/assistant-context-controller')
     .then(async () => {
-      const companion = await import('./features/assistant-workspace/desktop-companion-watch-controller');
-      const controls = await import('./features/assistant-workspace/desktop-companion-controls');
-      const evaluation = await import('./features/assistant-workspace/desktop-companion-shadow-evaluation-controller');
-      const textSurface = await import('./features/assistant-workspace/desktop-companion-text-surface');
-      const operations = await import('./features/assistant-workspace/desktop-companion-operational-guard');
-      companion.initializeDesktopCompanionWatchController();
-      controls.initializeDesktopCompanionControls();
-      evaluation.initializeDesktopCompanionShadowEvaluationController();
-      textSurface.initializeDesktopCompanionTextSurface();
-      operations.initializeDesktopCompanionOperationalGuard();
-      return import('./features/assistant-workspace/research-release-controller');
-    })
-    .catch((error: unknown) => {
-      console.error('Assistant context controls failed to initialize', error);
+      // Deferred controller initialization remains intentionally best-effort.
     });
 }, 0);
