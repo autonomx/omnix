@@ -7,7 +7,10 @@ import {
   LIVE_CONVERSATION_EFFECTIVE_PROFILE_KEY,
   type LiveConversationProfile,
 } from '../chatbot/liveConversationProfileClient';
-import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
+import {
+  createLiveSpeechSynthesisOptions,
+  resetLiveSpeechCueState,
+} from './live-speech-synthesis-options';
 
 const profile: LiveConversationProfile = {
   presence_preset: 'natural',
@@ -31,6 +34,7 @@ const profile: LiveConversationProfile = {
 
 afterEach(() => {
   window.localStorage.clear();
+  resetLiveSpeechCueState();
 });
 
 describe('explicit live speech synthesis options', () => {
@@ -52,7 +56,8 @@ describe('explicit live speech synthesis options', () => {
     expect(options.performancePlan).toMatchObject({
       schema_version: 1,
       speech_act: 'instruction',
-      pace: 'natural',
+      pace: 'slightly_slow',
+      clause_pause: 'long',
       onset_policy: {
         desired_perceived_onset_ms: 650,
         maximum_additional_delay_ms: 350,
@@ -61,6 +66,18 @@ describe('explicit live speech synthesis options', () => {
     expect(options.pronunciationLexicon).toEqual([
       { phrase: 'Omnix', pronunciation: 'Om-nicks', locale: 'en-US' },
     ]);
+  });
+
+  it('applies calibrated uncertainty without changing the synthesis text contract', () => {
+    window.localStorage.setItem(LIVE_CONVERSATION_EFFECTIVE_PROFILE_KEY, JSON.stringify(profile));
+
+    const options = createLiveSpeechSynthesisOptions('My best estimate is that it could finish tomorrow.');
+
+    expect(options.performancePlan).toMatchObject({
+      certainty: 'low',
+      pace: 'natural',
+    });
+    expect(options).not.toHaveProperty('text');
   });
 
   it('returns an empty explicit contract when no profile or pronunciation state is available', () => {
