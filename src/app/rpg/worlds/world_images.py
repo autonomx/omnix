@@ -1,0 +1,559 @@
+"""Independent image-target planning, generation, and review for authored worlds."""
+from __future__ import annotations
+
+import json
+from typing import Any, Iterable, Mapping, Sequence
+
+from app.jobs import default_job_store
+from app.jobs.adapters import enqueue_image_job
+from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.unit_of_work import unit_of_work
+
+from .generation_jobs import canonical_hash
+from .library_service import read_world_detail
+from .lifecycle_service import require_world_writable
+
+_ROLE_BY_TOPIC: Mapping[str, str] = {
+    "regions": "landscape",
+    "locations": "scene",
+    "points_of_interest": "scene",
+    "npcs": "portrait",
+    "races": "illustration",
+    "classes": "illustration",
+    "factions": "emblem",
+    "monsters": "portrait",
+    "items": "icon",
+    "spells": "illustration",
+    "feats": "illustration",
+    "quests": "cover",
+    "encounter_seeds": "scene",
+    "one_shots": "cover",
+    "opening_scenarios": "cover",
+}
+
+
+def _record(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _text(value: Any, fallback: str = "") -> str:
+    return str(value).strip() if value is not None and str(value).strip() else fallback
+
+
+def _status(value: Any) -> str:
+    raw = getattr(value, "value", value)
+    return str(raw or "").strip().lower()
+
+
+def _target_row(row: Any) -> dict[str, Any]:
+    return {
+        "world_id": str(row[0]),
+        "target_id": str(row[1]),
+        "target_type": str(row[2]),
+        "entity_id": str(row[3]),
+        "role": str(row[4]),
+        "source_content_hash": str(row[5]),
+        "status": str(row[6]),
+        "review_state": str(row[7]),
+        "suggested_prompt": str(row[8]),
+        "active_asset_id": str(row[9]) if row[9] is not None else None,
+        "latest_job_id": str(row[10]) if row[10] is not None else None,
+        "metadata": dict(row[11]),
+        "created_at": row[12].isoformat(),
+        "updated_at": row[13].isoformat(),
+    }
+
+
+def _attempt_row(row: Any) -> dict[str, Any]:
+    return {
+        "job_id": str(row[0]),
+        "prompt": str(row[1]),
+        "source_content_hash": str(row[2]),
+        "status": str(row[3]),
+        "asset_id": str(row[4]) if row[4] is not None else None,
+        "error": dict(row[5]),
+        "created_at": row[6].isoformat(),
+        "updated_at": row[7].isoformat(),
+    }
+
+
+def _entity_rows(content: Mapping[str, Any]) -> Iterable[dict[str, Any]]:
+    values = content.get("entities")
+    if isinstance(values, Sequence) and not isinstance(values, (str, bytes)):
+        for value in values:
+            if isinstance(value, Mapping):
+                yield dict(value)
+
+
+def _prompt(
+    *,
+    world: Mapping[str, Any],
+    target_type: str,
+    role: str,
+    entity: Mapping[str, Any] | None = None,
+) -> str:
+    title = _text(world.get("title"), "Fantasy World")
+    genre = _text(world.get("genre"), "fantasy").replace("_", " ")
+    tone = _text(world.get("tone"), "heroic adventure")
+    if entity is None:
+        subject = title
+        details = _text(world.get("description"), "a reusable campaign setting")
+    else:
+        subject = _text(entity.get("name") or entity.get("title"), "World entity")
+        details = _text(
+            entity.get("description")
+            or entity.get("appearance")
+            or entity.get("sensory_profile")
+            or entity.get("summary"),
+            f"structured {target_type.replace('_', ' ')} canon",
+        )
+    format_hint = {
+        "cover": "cinematic vertical RPG cover art with clear central composition",
+        "banner": "wide cinematic RPG banner art with room for title typography",
+        "portrait": "detailed character portrait, shoulders and face visible",
+        "icon": "clean readable inventory icon on a simple background",
+        "emblem": "distinct heraldic faction emblem, readable silhouette",
+        "landscape": "wide environmental landscape concept art",
+        "scene": "environmental scene concept art with story details",
+        "illustration": "polished RPG sourcebook illustration",
+    }.get(role, "polished RPG concept art")
+    return (
+        f"{format_hint}. Subject: {subject}. World: {title}. Genre: {genre}. "
+        f"Tone: {tone}. Canon details: {details}. Preserve canonical features and "
+        "avoid text, logos, watermarks, UI, or modern photography artifacts."
+    )
+
+
+def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
+    world = _record(detail.get("world"))
+    targets = [
+        {
+            "target_id": "world:cover",
+            "target_type": "world",
+            "entity_id": str(world.get("id") or ""),
+            "role": "cover",
+            "source_content_hash": canonical_hash(
+                {
+                    "title": world.get("title"),
+                    "description": world.get("description"),
+                    "genre": world.get("genre"),
+                    "tone": world.get("tone"),
+                    "role": "cover",
+                }
+            ),
+            "suggested_prompt": _prompt(
+                world=world,
+                target_type="world",
+                role="cover",
+            ),
+            "metadata": {"topic_id": "overview", "aspect": "portrait"},
+        },
+        {
+            "target_id": "world:banner",
+            "target_type": "world",
+            "entity_id": str(world.get("id") or ""),
+            "role": "banner",
+            "source_content_hash": canonical_hash(
+                {
+                    "title": world.get("title"),
+                    "description": world.get("description"),
+                    "genre": world.get("genre"),
+                    "tone": world.get("tone"),
+                    "role": "banner",
+                }
+            ),
+            "suggested_prompt": _prompt(
+                world=world,
+                target_type="world",
+                role="banner",
+            ),
+            "metadata": {"topic_id": "overview", "aspect": "landscape"},
+        },
+    ]
+    for topic in detail.get("topics") or []:
+        topic = _record(topic)
+        topic_id = _text(topic.get("topic_id"))
+        role = _ROLE_BY_TOPIC.get(topic_id)
+        if not role:
+            continue
+        for entity in _entity_rows(_record(topic.get("content"))):
+            entity_id = _text(entity.get("id") or entity.get("entity_id"))
+            if not entity_id:
+                continue
+            entity_type = _text(entity.get("kind"), topic_id.rstrip("s"))
+            targets.append(
+                {
+                    "target_id": f"entity:{entity_id}:{role}",
+                    "target_type": entity_type,
+                    "entity_id": entity_id,
+                    "role": role,
+                    "source_content_hash": canonical_hash(entity),
+                    "suggested_prompt": _prompt(
+                        world=world,
+                        target_type=entity_type,
+                        role=role,
+                        entity=entity,
+                    ),
+                    "metadata": {
+                        "topic_id": topic_id,
+                        "entity_name": _text(
+                            entity.get("name") or entity.get("title"),
+                            entity_id,
+                        ),
+                    },
+                }
+            )
+    return targets
+
+
+def _upsert_targets(
+    work: Any,
+    context: Any,
+    world_id: str,
+    desired: Sequence[Mapping[str, Any]],
+) -> None:
+    for target in desired:
+        work.connection.execute(
+            """
+            INSERT INTO omnix_rpg_world_image_targets (
+                workspace_id, world_id, target_id, target_type, entity_id, role,
+                source_content_hash, status, review_state, suggested_prompt,
+                metadata_jsonb
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'missing', 'pending', %s,
+                      %s::jsonb)
+            ON CONFLICT (workspace_id, world_id, target_id) DO UPDATE
+               SET target_type = EXCLUDED.target_type,
+                   entity_id = EXCLUDED.entity_id,
+                   role = EXCLUDED.role,
+                   status = CASE
+                       WHEN omnix_rpg_world_image_targets.source_content_hash
+                            = EXCLUDED.source_content_hash
+                       THEN omnix_rpg_world_image_targets.status
+                       WHEN omnix_rpg_world_image_targets.active_asset_id IS NOT NULL
+                       THEN 'stale'
+                       ELSE 'missing'
+                   END,
+                   review_state = CASE
+                       WHEN omnix_rpg_world_image_targets.source_content_hash
+                            = EXCLUDED.source_content_hash
+                       THEN omnix_rpg_world_image_targets.review_state
+                       ELSE 'pending'
+                   END,
+                   source_content_hash = EXCLUDED.source_content_hash,
+                   suggested_prompt = EXCLUDED.suggested_prompt,
+                   metadata_jsonb = EXCLUDED.metadata_jsonb,
+                   updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                context.workspace_id,
+                world_id,
+                str(target["target_id"]),
+                str(target["target_type"]),
+                str(target["entity_id"]),
+                str(target["role"]),
+                str(target["source_content_hash"]),
+                str(target["suggested_prompt"]),
+                json.dumps(dict(target.get("metadata") or {}), sort_keys=True),
+            ),
+        )
+
+
+def _job_asset_id(job: Any) -> str | None:
+    for ref in getattr(job, "output_refs", ()) or ():
+        if not isinstance(ref, Mapping):
+            continue
+        asset_id = _text(ref.get("asset_id"))
+        if asset_id:
+            return asset_id
+    return None
+
+
+def _sync_jobs(work: Any, context: Any, world_id: str) -> None:
+    store = default_job_store()
+    rows = work.connection.execute(
+        "SELECT target_id, source_content_hash, latest_job_id, active_asset_id "
+        "FROM omnix_rpg_world_image_targets WHERE workspace_id = %s "
+        "AND world_id = %s AND latest_job_id IS NOT NULL",
+        (context.workspace_id, world_id),
+    ).fetchall()
+    for target_id, source_hash, job_id, active_asset_id in rows:
+        job = store.get_job(str(job_id))
+        if job is None:
+            continue
+        job_status = _status(job.status)
+        asset_id = _job_asset_id(job)
+        mapped = {
+            "queued": "queued",
+            "running": "generating",
+            "completed": "ready",
+            "failed": "failed",
+            "canceled": "failed",
+            "stale": "failed",
+        }.get(job_status, "generating")
+        error = _record(getattr(job, "error", {}))
+        work.connection.execute(
+            "UPDATE omnix_rpg_world_image_attempts SET status = %s, asset_id = %s, "
+            "error_jsonb = %s::jsonb, updated_at = CURRENT_TIMESTAMP "
+            "WHERE workspace_id = %s AND job_id = %s",
+            (
+                job_status,
+                asset_id,
+                json.dumps(error, sort_keys=True),
+                context.workspace_id,
+                str(job_id),
+            ),
+        )
+        if mapped == "ready" and not asset_id:
+            mapped = "failed"
+        work.connection.execute(
+            "UPDATE omnix_rpg_world_image_targets SET status = %s, "
+            "active_asset_id = CASE WHEN %s = 'ready' AND %s IS NOT NULL "
+            "AND review_state = 'approved' THEN %s ELSE active_asset_id END, "
+            "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
+            "AND world_id = %s AND target_id = %s",
+            (
+                mapped,
+                mapped,
+                asset_id,
+                asset_id,
+                context.workspace_id,
+                world_id,
+                str(target_id),
+            ),
+        )
+
+
+def _list_targets(work: Any, context: Any, world_id: str) -> list[dict[str, Any]]:
+    rows = work.connection.execute(
+        "SELECT world_id, target_id, target_type, entity_id, role, "
+        "source_content_hash, status, review_state, suggested_prompt, "
+        "active_asset_id, latest_job_id, metadata_jsonb, created_at, updated_at "
+        "FROM omnix_rpg_world_image_targets WHERE workspace_id = %s "
+        "AND world_id = %s ORDER BY target_type, role, target_id",
+        (context.workspace_id, world_id),
+    ).fetchall()
+    targets = [_target_row(row) for row in rows]
+    for target in targets:
+        attempts = work.connection.execute(
+            "SELECT job_id, prompt, source_content_hash, status, asset_id, "
+            "error_jsonb, created_at, updated_at FROM omnix_rpg_world_image_attempts "
+            "WHERE workspace_id = %s AND world_id = %s AND target_id = %s "
+            "ORDER BY created_at DESC LIMIT 20",
+            (context.workspace_id, world_id, target["target_id"]),
+        ).fetchall()
+        target["attempts"] = [_attempt_row(row) for row in attempts]
+    return targets
+
+
+def read_world_image_targets(
+    world_id: str,
+    *,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    detail = read_world_detail(world_id, database=database)
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        require_world_writable(work, context, world_id)
+        _upsert_targets(work, context, world_id, _desired_targets(detail))
+        _sync_jobs(work, context, world_id)
+        targets = _list_targets(work, context, world_id)
+        work.commit()
+    return {"ok": True, "world": detail["world"], "targets": targets}
+
+
+def _selected_targets(
+    all_targets: Sequence[Mapping[str, Any]],
+    target_ids: Sequence[str],
+) -> list[Mapping[str, Any]]:
+    by_id = {str(target["target_id"]): target for target in all_targets}
+    selected = [by_id[target_id] for target_id in target_ids if target_id in by_id]
+    missing = sorted(set(target_ids) - set(by_id))
+    if missing:
+        raise KeyError("world_image_targets_not_found:" + ",".join(missing))
+    if not selected:
+        raise ValueError("world_image_generation_targets_required")
+    return selected
+
+
+def generate_world_images(
+    world_id: str,
+    *,
+    target_ids: Sequence[str],
+    prompts: Mapping[str, str] | None = None,
+    provider_id: str = "",
+    width: int = 768,
+    height: int = 768,
+    style: str = "",
+    no_cache: bool = False,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    materialized = read_world_image_targets(world_id, database=database)
+    selected = _selected_targets(materialized["targets"], target_ids)
+    context = bootstrap_local_tenant(database)
+    jobs: list[dict[str, Any]] = []
+    with unit_of_work(database) as work:
+        require_world_writable(work, context, world_id)
+        for target in selected:
+            prompt = _text(
+                (prompts or {}).get(str(target["target_id"])),
+                str(target["suggested_prompt"]),
+            )
+            target_width = 1024 if target["role"] == "banner" else width
+            target_height = 576 if target["role"] == "banner" else height
+            job = enqueue_image_job(
+                default_job_store(),
+                owner_id=str(context.workspace_id),
+                module="rpg-world-authoring",
+                payload={
+                    "prompt": prompt,
+                    "provider_id": provider_id,
+                    "width": target_width,
+                    "height": target_height,
+                    "style": style,
+                    "no_cache": no_cache,
+                    "metadata": {
+                        "world_id": world_id,
+                        "target_id": target["target_id"],
+                        "target_type": target["target_type"],
+                        "entity_id": target["entity_id"],
+                        "role": target["role"],
+                        "source_content_hash": target["source_content_hash"],
+                    },
+                },
+            )
+            work.connection.execute(
+                "INSERT INTO omnix_rpg_world_image_attempts (workspace_id, "
+                "world_id, target_id, job_id, prompt, source_content_hash, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s, 'queued')",
+                (
+                    context.workspace_id,
+                    world_id,
+                    target["target_id"],
+                    job.id,
+                    prompt,
+                    target["source_content_hash"],
+                ),
+            )
+            work.connection.execute(
+                "UPDATE omnix_rpg_world_image_targets SET latest_job_id = %s, "
+                "suggested_prompt = %s, status = 'queued', review_state = 'pending', "
+                "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
+                "AND world_id = %s AND target_id = %s",
+                (
+                    job.id,
+                    prompt,
+                    context.workspace_id,
+                    world_id,
+                    target["target_id"],
+                ),
+            )
+            jobs.append(
+                {
+                    "job_id": job.id,
+                    "target_id": target["target_id"],
+                    "status": _status(job.status),
+                }
+            )
+        work.commit()
+    return {"ok": True, "world_id": world_id, "jobs": jobs}
+
+
+def update_world_image_target(
+    world_id: str,
+    target_id: str,
+    *,
+    review_state: str | None = None,
+    active_asset_id: str | None = None,
+    suggested_prompt: str | None = None,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    if review_state is not None and review_state not in {"pending", "approved", "rejected"}:
+        raise ValueError(f"invalid_image_review_state:{review_state}")
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        world = require_world_writable(work, context, world_id)
+        row = work.connection.execute(
+            "SELECT latest_job_id, active_asset_id, role, metadata_jsonb "
+            "FROM omnix_rpg_world_image_targets WHERE workspace_id = %s "
+            "AND world_id = %s AND target_id = %s FOR UPDATE",
+            (context.workspace_id, world_id, target_id),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"world_image_target_not_found:{world_id}:{target_id}")
+        latest_asset = active_asset_id
+        if review_state == "approved" and not latest_asset and row[0]:
+            job = default_job_store().get_job(str(row[0]))
+            latest_asset = _job_asset_id(job) if job is not None else None
+            if not latest_asset:
+                raise ValueError(f"world_image_target_has_no_completed_asset:{target_id}")
+        status = "rejected" if review_state == "rejected" else "ready" if latest_asset else None
+        work.connection.execute(
+            "UPDATE omnix_rpg_world_image_targets SET review_state = COALESCE(%s, "
+            "review_state), active_asset_id = COALESCE(%s, active_asset_id), "
+            "suggested_prompt = COALESCE(%s, suggested_prompt), status = COALESCE(%s, "
+            "status), updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
+            "AND world_id = %s AND target_id = %s",
+            (
+                review_state,
+                latest_asset,
+                suggested_prompt,
+                status,
+                context.workspace_id,
+                world_id,
+                target_id,
+            ),
+        )
+        if review_state == "approved" and latest_asset and target_id == "world:cover":
+            metadata = {
+                **_record(world.get("metadata")),
+                "cover_image_asset_id": latest_asset,
+            }
+            work.connection.execute(
+                "UPDATE omnix_rpg_worlds SET metadata_jsonb = %s::jsonb, "
+                "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND id = %s",
+                (
+                    json.dumps(metadata, sort_keys=True),
+                    context.workspace_id,
+                    world_id,
+                ),
+            )
+        if review_state == "approved" and latest_asset and target_id == "world:banner":
+            metadata = {
+                **_record(world.get("metadata")),
+                "hero_image_asset_id": latest_asset,
+            }
+            work.connection.execute(
+                "UPDATE omnix_rpg_worlds SET metadata_jsonb = %s::jsonb, "
+                "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND id = %s",
+                (
+                    json.dumps(metadata, sort_keys=True),
+                    context.workspace_id,
+                    world_id,
+                ),
+            )
+        work.commit()
+    return read_world_image_targets(world_id, database=database)
+
+
+def approved_world_asset_bindings(
+    work: Any,
+    context: Any,
+    world_id: str,
+) -> dict[str, Any]:
+    rows = work.connection.execute(
+        "SELECT target_id, target_type, entity_id, role, source_content_hash, "
+        "active_asset_id FROM omnix_rpg_world_image_targets WHERE workspace_id = %s "
+        "AND world_id = %s AND review_state = 'approved' "
+        "AND active_asset_id IS NOT NULL ORDER BY target_id",
+        (context.workspace_id, world_id),
+    ).fetchall()
+    return {
+        str(row[0]): {
+            "target_type": str(row[1]),
+            "entity_id": str(row[2]),
+            "role": str(row[3]),
+            "source_content_hash": str(row[4]),
+            "asset_id": str(row[5]),
+        }
+        for row in rows
+    }
