@@ -55,7 +55,11 @@ def register_live_voice_cue_asset_routes(gateway: FastAPI) -> None:
         return
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
-    @gateway.get(LIVE_VOICE_CUE_MANIFEST_PATH, response_model=LiveVoiceCueManifest, tags=["voice"])
+    @gateway.get(
+        LIVE_VOICE_CUE_MANIFEST_PATH,
+        response_model=LiveVoiceCueManifest,
+        include_in_schema=False,
+    )
     def live_voice_cue_manifest(voice_id: str) -> LiveVoiceCueManifest:
         voice_dir = _voice_directory(voice_id)
         assets: list[LiveVoiceCueAsset] = []
