@@ -3,6 +3,7 @@ import {
   type CueSampleSource,
   type LiveVoiceCueId,
 } from './live-voice-cue-bank';
+import { ensureLiveVoiceCuePack } from './live-voice-cue-pack-loader';
 import { readLiveVoiceHumanizationFlags } from './live-voice-humanization-flags';
 import { createCueSegmentId } from './live-voice-playback-contract';
 
@@ -52,6 +53,7 @@ export async function playLowLatencyVoiceCue(
   const voiceId = options.voiceId ?? selectedVoiceId();
   const allowProceduralFallback = options.allowProceduralFallback
     ?? flags.proceduralCueFallback;
+  if (voiceId) await ensureLiveVoiceCuePack(voiceId);
   const resolution = resolveCueSamples(cueId, variantId, context.sampleRate, {
     voiceId,
     allowProceduralFallback,
