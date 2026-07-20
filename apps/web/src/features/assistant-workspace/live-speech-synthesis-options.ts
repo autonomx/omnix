@@ -1,9 +1,11 @@
 import { readEffectiveLiveConversationProfile } from '../chatbot/liveConversationProfileClient';
 import { readActivePronunciations } from '../chatbot/livePronunciationClient';
 import { createSpeechDeliveryPlan } from './live-speech-delivery-plan';
-import type { SpeechSynthesisOptions } from './live-speech-performance-contract';
-import { decideResponseCue } from './live-voice-cue-policy';
-import { playLowLatencyVoiceCue } from './live-voice-cue-player';
+import type {
+  SpeechPerformancePlan,
+  SpeechSynthesisOptions,
+} from './live-speech-performance-contract';
+import { decideResponseCue, type ResponseCueDecision } from './live-voice-cue-policy';
 import {
   humanizeSpeechPerformance,
   resetVocalInteractionState,
@@ -11,6 +13,7 @@ import {
 
 const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 const CALL_STOP_EVENT = 'omnix:assistant-live-voice-stop';
+const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 
 let responseCueSequence = 0;
 let lastResponseCueAt = 0;
@@ -29,24 +32,32 @@ export function createLiveSpeechSynthesisOptions(text: string): SpeechSynthesisO
     pronunciation: entry.pronunciation,
     locale: entry.locale,
   }));
-  const now = Date.now();
-  const cue = decideResponseCue(
-    text,
-    performancePlan,
-    0,
-    responseCueSequence,
-    now,
-    lastResponseCueAt,
-  );
-  if (cue.allowed && cue.cueId && cue.variantId) {
-    responseCueSequence += 1;
-    lastResponseCueAt = now;
-    void playLowLatencyVoiceCue(cue.cueId, cue.variantId, 0.62);
-  }
   return {
     ...(performancePlan ? { performancePlan } : {}),
     ...(pronunciationLexicon.length ? { pronunciationLexicon } : {}),
   };
+}
+
+export function selectLiveResponseCue(
+  text: string,
+  plan: SpeechPerformancePlan | undefined,
+  phraseIndex: number,
+  now = Date.now(),
+): ResponseCueDecision {
+  installResetListeners();
+  const decision = decideResponseCue(
+    text,
+    plan,
+    phraseIndex,
+    responseCueSequence,
+    now,
+    lastResponseCueAt,
+  );
+  if (decision.allowed) {
+    responseCueSequence += 1;
+    lastResponseCueAt = now;
+  }
+  return decision;
 }
 
 export function resetLiveSpeechCueState(): void {
@@ -60,4 +71,5 @@ function installResetListeners(): void {
   resetListenersInstalled = true;
   window.addEventListener(CALL_START_EVENT, resetLiveSpeechCueState);
   window.addEventListener(CALL_STOP_EVENT, resetLiveSpeechCueState);
+  window.addEventListener(SESSION_CHANGED_EVENT, resetLiveSpeechCueState);
 }
