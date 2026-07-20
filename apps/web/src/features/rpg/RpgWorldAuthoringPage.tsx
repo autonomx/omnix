@@ -5,6 +5,7 @@ import type {
   RpgAuthoringSection,
 } from '../../api/rpgWorldAuthoringClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+import { RpgWorldTopicEditor } from './RpgWorldTopicEditor';
 import './RpgWorldAuthoringPage.css';
 
 interface RpgWorldAuthoringPageProps {
@@ -15,6 +16,7 @@ interface RpgWorldAuthoringPageProps {
   page?: RpgAuthoringPage;
   section: RpgAuthoringSection;
   world: RpgWorldSummary;
+  worldId: string;
 }
 
 function displayValue(value: unknown): string {
@@ -65,6 +67,7 @@ export function RpgWorldAuthoringPage({
   page,
   section,
   world,
+  worldId,
 }: RpgWorldAuthoringPageProps) {
   const [isEditingOverview, setIsEditingOverview] = useState(false);
   const [title, setTitle] = useState(world.title);
@@ -123,6 +126,7 @@ export function RpgWorldAuthoringPage({
             </article>
           ))}
         </div>
+        {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
       </section>
     );
   }
@@ -135,6 +139,7 @@ export function RpgWorldAuthoringPage({
       </div>
       {page.summary ? <p className="rpg-authoring-page-summary">{page.summary}</p> : null}
       {page.body.length ? page.body.map((block, index) => <DocumentBlock key={`${block.kind}:${index}`} block={block} />) : <div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This section will populate as world generation completes.</p></div>}
+      {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
     </section>
   );
 }
