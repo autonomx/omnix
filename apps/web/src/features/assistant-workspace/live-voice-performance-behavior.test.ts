@@ -53,7 +53,7 @@ const plan: SpeechPerformancePlan = {
 };
 
 beforeEach(() => {
-  resetVocalInteractionState(0);
+  resetVocalInteractionState();
 });
 
 describe('meaningful live voice performance behavior', () => {
@@ -82,7 +82,7 @@ describe('meaningful live voice performance behavior', () => {
     expect(Math.abs(decayed.warmth - 0.5)).toBeLessThan(Math.abs(observed.state.warmth - 0.5));
   });
 
-  it('recognizes a correction only when prior spoken context exists', () => {
+  it('recognizes a correction only when prior context and a real revision marker exist', () => {
     const initial = createVocalInteractionState(0);
     const opening = planMeaningfulSpeechPerformance(
       'Actually, this is the first point.',
@@ -93,11 +93,20 @@ describe('meaningful live voice performance behavior', () => {
     );
     expect(opening.behavior.genuineSelfCorrection).toBe(false);
 
-    const correction = planMeaningfulSpeechPerformance(
-      'Actually, the second approach is safer.',
+    const conversationalActually = planMeaningfulSpeechPerformance(
+      'Actually, that worked perfectly.',
       plan,
       profile,
       opening.state,
+      1_500,
+    );
+    expect(conversationalActually.behavior.genuineSelfCorrection).toBe(false);
+
+    const correction = planMeaningfulSpeechPerformance(
+      'Actually, not the first approach—the second is safer.',
+      plan,
+      profile,
+      conversationalActually.state,
       2_000,
     );
     expect(correction.behavior.genuineSelfCorrection).toBe(true);
@@ -148,6 +157,20 @@ describe('meaningful live voice performance behavior', () => {
     expect(first.plan.onset_policy.desired_perceived_onset_ms).toBe(320);
   });
 
+  it('keeps unrelated session scopes isolated and resets on session changes', () => {
+    humanizeSpeechPerformance('I think this is safer.', plan, profile, 'chat:one', 1_000);
+    humanizeSpeechPerformance('Maybe it changes.', plan, profile, 'chat:one', 2_000);
+    humanizeSpeechPerformance('A separate answer.', plan, profile, 'chat:two', 2_000);
+
+    expect(readVocalInteractionState('chat:one').observationCount).toBe(2);
+    expect(readVocalInteractionState('chat:two').observationCount).toBe(1);
+    expect(readVocalInteractionState('default').observationCount).toBe(0);
+
+    window.dispatchEvent(new Event('omnix:live-chat-session-changed'));
+    expect(readVocalInteractionState('chat:one').observationCount).toBe(0);
+    expect(readVocalInteractionState('chat:two').observationCount).toBe(0);
+  });
+
   it('publishes content-free diagnostics and resets state at call start', () => {
     const events: Array<Record<string, unknown>> = [];
     const listener: EventListener = (event) => {
@@ -155,16 +178,17 @@ describe('meaningful live voice performance behavior', () => {
     };
     window.addEventListener('omnix:live-voice-performance-behavior', listener);
 
-    humanizeSpeechPerformance('I think this is the safer option.', plan, profile, 1_000);
-    expect(readVocalInteractionState().observationCount).toBe(1);
+    humanizeSpeechPerformance('I think this is the safer option.', plan, profile, 'chat:test', 1_000);
+    expect(readVocalInteractionState('chat:test').observationCount).toBe(1);
     expect(events.at(-1)).toMatchObject({
+      scope_key: 'chat:test',
       reflective: true,
       canonical_text_modified: false,
       observation_count: 1,
     });
 
     window.dispatchEvent(new Event('omnix:assistant-live-voice-call-start'));
-    expect(readVocalInteractionState().observationCount).toBe(0);
+    expect(readVocalInteractionState('chat:test').observationCount).toBe(0);
     window.removeEventListener('omnix:live-voice-performance-behavior', listener);
   });
 });
