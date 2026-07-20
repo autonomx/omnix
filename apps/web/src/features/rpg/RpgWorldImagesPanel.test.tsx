@@ -97,6 +97,7 @@ describe('RpgWorldImagesPanel', () => {
 
     expect(await screen.findByRole('heading', { name: 'Images' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Select Missing & Stale' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Generate Selected (1)' })).toBeEnabled());
     fireEvent.click(screen.getByText('Advanced generation settings'));
     fireEvent.change(screen.getByLabelText('Image provider route'), {
       target: { value: 'image:flux-klein' },
