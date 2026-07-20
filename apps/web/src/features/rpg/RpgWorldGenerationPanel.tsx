@@ -115,6 +115,12 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
     generate.mutate(scope);
   };
 
+  const toggleSelected = (topicId: string, checked: boolean) => {
+    setSelected((current) => checked
+      ? Array.from(new Set([...current, topicId]))
+      : current.filter((value) => value !== topicId));
+  };
+
   return (
     <section className="rpg-authoring-page rpg-generation-panel" aria-label="World generation">
       <div className="rpg-authoring-page-heading">
@@ -159,9 +165,7 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
               <input
                 type="checkbox"
                 checked={selected.includes(section.id)}
-                onChange={(event) => setSelected((current) => event.currentTarget.checked
-                  ? Array.from(new Set([...current, section.id]))
-                  : current.filter((value) => value !== section.id))}
+                onChange={(event) => toggleSelected(section.id, event.currentTarget.checked)}
               />
               <span><strong>{section.label}</strong><small>{statusLabel(section.operational_status)} · {statusLabel(section.editorial_status)}</small></span>
             </label>
