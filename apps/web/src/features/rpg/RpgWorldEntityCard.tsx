@@ -3,6 +3,7 @@ import type {
   RpgAuthoringTopic,
 } from '../../api/rpgWorldAuthoringClient';
 import { RpgWorldEntityEditor } from './RpgWorldEntityEditor';
+import './RpgWorldCollectionToolbar.css';
 
 interface RpgWorldEntityCardProps {
   entity: RpgAuthoringEntityCard;
