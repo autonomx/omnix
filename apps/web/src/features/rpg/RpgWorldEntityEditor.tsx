@@ -47,9 +47,8 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
 
   useEffect(() => {
     if (entityDraftDirty) return;
-    const current = entityQuery.data?.entity ?? entity.metadata;
-    replaceDraft(JSON.stringify(current, null, 2));
-  }, [entity.metadata, entityDraftDirty, entityQuery.data?.entity]);
+    replaceDraft(JSON.stringify(entity.metadata, null, 2));
+  }, [entity.id, entity.metadata, entityDraftDirty, topic.content_hash]);
 
   const refresh = async () => {
     await Promise.all([
