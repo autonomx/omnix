@@ -1,6 +1,9 @@
 name: Apply live voice listening handoff fix
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - agent/live-voice-humanization
