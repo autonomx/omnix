@@ -1,7 +1,7 @@
 import type { LiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
 import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
 import type { SpeechSynthesisOptions } from './live-speech-performance-contract';
-import { cloneCueSamples, type LiveVoiceCueId } from './live-voice-cue-bank';
+import { resolveCueSamples, type LiveVoiceCueId } from './live-voice-cue-bank';
 import {
   createCueSegmentId,
   createSilenceSegmentId,
@@ -23,7 +23,7 @@ const DRAIN_TIMEOUT_MS = 120_000;
 const CHARACTER_AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 const WEBSOCKET_OPEN = 1;
 
- type StreamingAudioWindow = Window & typeof globalThis & {
+type StreamingAudioWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
   webkitAudioContext?: typeof AudioContext;
   AudioWorkletNode?: typeof AudioWorkletNode;
@@ -100,6 +100,7 @@ export type LiveVoicePcmSession = {
     cueId: LiveVoiceCueId,
     variantId: string,
     gainValue?: number,
+    allowProceduralFallback?: boolean,
   ) => Promise<void>;
   setStartPolicy: (policy: Partial<PlaybackStartPolicyMs>) => void;
   finish: () => Promise<void>;
@@ -558,12 +559,30 @@ export async function createLiveVoicePcmSession(
     cueId: LiveVoiceCueId,
     variantId: string,
     gainValue = 0.68,
+    allowProceduralFallback = false,
   ): Promise<void> => {
     if (closed || inputFinished) return Promise.reject(new Error('Live voice input is already closed.'));
     const segmentId = createCueSegmentId(traceId, cueId, cueSequence);
     cueSequence += 1;
     const task = generationQueue.catch(() => undefined).then(() => {
-      const samples = cloneCueSamples(cueId, variantId, audioContext.sampleRate);
+      const resolution = resolveCueSamples(cueId, variantId, audioContext.sampleRate, {
+        voiceId,
+        allowProceduralFallback,
+      });
+      if (!resolution) {
+        reporter.record('cue_segment_skipped', {
+          segment_id: segmentId,
+          segment_kind: 'cue',
+          cue_id: cueId,
+          variant_id: variantId,
+          voice_id: voiceId,
+          reason: 'voice_asset_unavailable',
+          procedural_fallback_allowed: allowProceduralFallback,
+          semantic_speech_samples: 0,
+        }, 'pcm_session');
+        return;
+      }
+      const samples = resolution.samples;
       const gain = Math.max(0, Math.min(1, gainValue));
       if (gain !== 1) {
         for (let index = 0; index < samples.length; index += 1) samples[index] *= gain;
@@ -583,6 +602,9 @@ export async function createLiveVoicePcmSession(
         segment_kind: 'cue',
         cue_id: cueId,
         variant_id: variantId,
+        voice_id: voiceId,
+        cue_source: resolution.source,
+        source_sample_rate: resolution.sourceSampleRate,
         playback_samples: samples.length,
         sample_rate: audioContext.sampleRate,
         semantic_speech_samples: 0,
