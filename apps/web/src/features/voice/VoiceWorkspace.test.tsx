@@ -38,6 +38,7 @@ afterEach(() => {
 
 describe('VoiceWorkspace', () => {
   it('loads central defaults, resets local edits, and queues TTS through the shared jobs API', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
@@ -106,6 +107,10 @@ describe('VoiceWorkspace', () => {
         });
       }
 
+      if (path === '/api/voice-cloning/assets/voice-cloning%3Ajinx2' && init?.method === 'DELETE') {
+        return Response.json({ ok: true, asset_id: 'voice-cloning:jinx2', deleted: true, file_deleted: true });
+      }
+
       if (path === '/api/jobs') {
         return Response.json({
           jobs: [
@@ -134,6 +139,15 @@ describe('VoiceWorkspace', () => {
               mime_type: 'application/octet-stream',
               storage_path: 'resources/voice_clones/Dave.wav',
               created_at: '2026-06-14T00:00:00Z',
+            },
+            {
+              id: 'voice-cloning:jinx2',
+              module: 'voice-cloning',
+              type: 'voice_profile',
+              mime_type: 'audio/wav',
+              storage_path: 'resources/voice_clones/jinx2.wav',
+              metadata: { profile_name: 'jinx2', voice_id: 'jinx2' },
+              created_at: '2026-06-14T00:00:01Z',
             },
             {
               id: 'asset:audio',
@@ -183,6 +197,8 @@ describe('VoiceWorkspace', () => {
     expect(screen.getByLabelText('Quality')).toHaveValue('Standard');
 
     fireEvent.change(screen.getByLabelText('Script'), { target: { value: 'Narrator: A short line for synthesis.' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Use' })[0]);
+    fireEvent.change(screen.getByLabelText('Narrator voice'), { target: { value: 'resources/voice_clones/jinx2.wav' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate Speech/ }));
 
     expect(await screen.findByText('TTS job queued: job:tts')).toBeInTheDocument();
@@ -196,9 +212,99 @@ describe('VoiceWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
       expect(createCall?.[1]?.body).toContain('"provider_id":"faster-qwen3-tts"');
       expect(createCall?.[1]?.body).toContain('"language":"English"');
+      expect(createCall?.[1]?.body).toContain('"voice_id":"resources/voice_clones/jinx2.wav"');
       expect(createCall?.[1]?.body).toContain('"speed":1.25');
       expect(createCall?.[1]?.body).toContain('"audio_effects":["Compression"]');
       expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
     });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete jinx2' }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input, init]) => requestPath(input as RequestInfo | URL) === '/api/voice-cloning/assets/voice-cloning%3Ajinx2' && init?.method === 'DELETE')).toBe(true));
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('permanently removes'));
+    confirmSpy.mockRestore();
+  });
+
+  it('transcribes a clone sample for review before creating the voice', async () => {
+    let cloneRequest: Record<string, unknown> | undefined;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/settings') {
+        return Response.json({
+          success: true,
+          provider: 'lmstudio',
+          audio_provider_tts: 'faster-qwen3-tts',
+          audio_provider_stt: 'parakeet',
+          settings: {
+            settings_control_center: {
+              revision: 'voice-transcript-r1',
+              global: { providers: { tts: 'faster-qwen3-tts', stt: 'parakeet', voiceCloning: 'faster-qwen3-tts' } },
+              voice: { cloningLanguage: 'English', cloningQuality: 'High' },
+            },
+          },
+        });
+      }
+      if (path === '/api/providers') {
+        return Response.json({ providers: [], models: [] });
+      }
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        const request = JSON.parse(String(init.body)) as Record<string, unknown>;
+        if (request.type === 'voice-cloning.transcribe-sample') {
+          return Response.json({
+            id: 'job:transcribe-sample',
+            module: 'voice-cloning',
+            type: 'voice-cloning.transcribe-sample',
+            status: 'completed',
+            resource_class: 'gpu:stt',
+            created_at: '2026-07-20T00:00:00Z',
+            updated_at: '2026-07-20T00:00:01Z',
+            priority: 0,
+            progress: { current: 1, total: 1 },
+            output_refs: [{ type: 'transcript', content: 'Sofia speaks these exact words.' }],
+          });
+        }
+        cloneRequest = request;
+        return Response.json({
+          id: 'job:clone-transcript',
+          module: 'voice-cloning',
+          type: 'voice-cloning.create-profile',
+          status: 'completed',
+          resource_class: 'gpu:tts',
+          created_at: '2026-07-20T00:00:00Z',
+          updated_at: '2026-07-20T00:00:01Z',
+          priority: 0,
+          progress: { current: 5, total: 5 },
+        });
+      }
+      if (path === '/api/jobs') return Response.json({ jobs: [] });
+      if (path === '/api/assets') return Response.json({ assets: [] });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderVoice();
+
+    expect(await screen.findByRole('checkbox', { name: /Generate transcript with STT/ })).toBeChecked();
+    expect(screen.getByLabelText('Reference transcript (optional)')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Voice Name'), { target: { value: 'Maya Transcript' } });
+    fireEvent.change(screen.getByLabelText(/Audio sample/), {
+      target: { files: [new File(['voice sample'], 'maya.wav', { type: 'audio/wav' })] },
+    });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Generate Transcript' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Transcript' }));
+    await waitFor(() => expect(screen.getByLabelText('Reference transcript (optional)')).toHaveValue('Sofia speaks these exact words.'));
+    expect(screen.getByRole('checkbox', { name: /Generate transcript with STT/ })).not.toBeChecked();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Clone' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Create Clone' }));
+
+    await waitFor(() => expect(cloneRequest).toBeDefined());
+    const payload = cloneRequest?.input_payload as Record<string, unknown>;
+    const stages = cloneRequest?.stages as Array<Record<string, unknown>>;
+    expect(payload.reference_text).toBe('Sofia speaks these exact words.');
+    expect(payload.generate_transcript).toBe(false);
+    expect(payload.stt_provider_id).toBe('parakeet');
+    expect(stages.some((stage) => stage.id === 'transcribe-sample')).toBe(false);
   });
 });

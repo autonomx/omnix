@@ -19,6 +19,7 @@ from app.assets import (
     AssetListResponse,
     AssetMigrationPreview,
     AssetRecord,
+    AssetType,
     SharedAssetStore,
     default_asset_store,
 )
@@ -221,6 +222,53 @@ def _text_asset_supported(asset: AssetRecord) -> bool:
 
 def _asset_by_id(asset_store: SharedAssetStore, asset_id: str) -> AssetRecord | None:
     return next((asset for asset in asset_store.list_assets().assets if asset.id == asset_id), None)
+
+
+def _delete_legacy_voice_clone_files(asset: AssetRecord) -> dict[str, Any]:
+    """Remove the local clone source and manifest entry so it cannot reappear."""
+    import app.shared as shared
+
+    clone_dir = Path(str(shared.VOICE_CLONES_DIR)).resolve()
+    manifest_path = Path(str(shared.VOICE_CLONES_FILE)).resolve()
+    metadata = dict(asset.metadata or {})
+    identifiers = {
+        str(value).strip().casefold()
+        for value in (
+            asset.id.removeprefix("voice-cloning:"),
+            metadata.get("profile_name"),
+            metadata.get("voice_id"),
+            metadata.get("voice_clone_id"),
+            metadata.get("speaker"),
+        )
+        if str(value or "").strip()
+    }
+    removed_ids: set[str] = set()
+    manifest_changed = False
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else {}
+    except Exception:
+        manifest = {}
+    if isinstance(manifest, dict):
+        for name, value in list(manifest.items()):
+            row = value if isinstance(value, dict) else {}
+            clone_id = str(row.get("voice_clone_id") or name).strip()
+            if str(name).casefold() in identifiers or clone_id.casefold() in identifiers:
+                manifest.pop(name, None)
+                removed_ids.add(clone_id)
+                manifest_changed = True
+        if manifest_changed:
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    removed_ids.update(str(value) for value in identifiers if value)
+    file_deleted = False
+    for clone_id in removed_ids:
+        for suffix in (".wav", ".mp3", ".mp4", ".m4a", ".webm", ".ogg", ".flac", ".json"):
+            target = (clone_dir / f"{clone_id}{suffix}").resolve()
+            if target.parent != clone_dir or target == manifest_path or not target.is_file():
+                continue
+            target.unlink()
+            file_deleted = True
+    return {"manifest_deleted": manifest_changed, "file_deleted": file_deleted}
 
 
 def _read_text_asset(asset: AssetRecord) -> AssetContentResponse:
@@ -564,6 +612,26 @@ def create_gateway_app(
         if asset is None:
             raise HTTPException(status_code=404, detail="asset_not_found")
         return _read_text_asset(asset)
+
+    @gateway.delete("/api/voice-cloning/assets/{asset_id}", include_in_schema=False)
+    def delete_voice_clone_asset(asset_id: str) -> dict[str, Any]:
+        store = get_asset_store()
+        asset = _asset_by_id(store, asset_id)
+        if asset is None:
+            raise HTTPException(status_code=404, detail="asset_not_found")
+        if asset.type != AssetType.VOICE_PROFILE or asset.module != "voice-cloning":
+            raise HTTPException(status_code=409, detail="asset_not_voice_clone")
+        shared_result = store.delete_asset(asset_id)
+        legacy_result = _delete_legacy_voice_clone_files(asset)
+        deleted = bool(shared_result.get("deleted")) or bool(legacy_result.get("manifest_deleted"))
+        if not deleted:
+            raise HTTPException(status_code=404, detail="asset_not_deletable")
+        return {
+            "ok": True,
+            "asset_id": asset_id,
+            "deleted": True,
+            "file_deleted": bool(shared_result.get("file_deleted")) or bool(legacy_result.get("file_deleted")),
+        }
 
     @gateway.post("/api/assets/story", response_model=SavedStoryAssetResponse, include_in_schema=False)
     async def save_story_asset_endpoint(request: SaveStoryAssetRequest) -> SavedStoryAssetResponse:

@@ -100,6 +100,7 @@ export function speechInputDefaults(document: SettingsDocument = DEFAULT_SETTING
 export function voiceStudioDefaults(document: SettingsDocument = DEFAULT_SETTINGS_DOCUMENT) {
   return {
     providerId: document.global.providers.tts,
+    sttProviderId: document.global.providers.stt,
     voiceCloningProviderId: document.global.providers.voiceCloning || document.global.providers.tts,
     language: document.voice.language,
     stability: document.voice.stability,

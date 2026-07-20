@@ -82,7 +82,7 @@ class FasterQwen3TtsProviderConfig(BaseModel):
 class ParakeetProviderConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    base_url: str = Field("http://localhost:8000", alias="baseUrl")
+    base_url: str = Field("http://127.0.0.1:5201", alias="baseUrl")
 
 
 class FluxKleinProviderConfig(BaseModel):
