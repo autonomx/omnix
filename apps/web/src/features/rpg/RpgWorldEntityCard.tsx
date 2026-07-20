@@ -58,7 +58,12 @@ export function RpgWorldEntityCard({ entity, imageAssetId, topic, worldId }: Rpg
       <div
         className={`rpg-authoring-entity-placeholder${imageAssetId ? ' has-image' : ''}`}
         aria-hidden="true"
-        style={imageAssetId ? { backgroundImage: `url(${JSON.stringify(assetUrl(imageAssetId))})` } : undefined}
+        style={imageAssetId ? {
+          backgroundImage: `url(${JSON.stringify(assetUrl(imageAssetId))})`,
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: 'cover',
+        } : undefined}
       >
         {!imageAssetId ? entity.title.slice(0, 1).toUpperCase() : null}
       </div>
