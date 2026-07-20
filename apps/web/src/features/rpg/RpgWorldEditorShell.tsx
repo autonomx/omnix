@@ -7,6 +7,7 @@ import {
 } from '../../api/rpgWorldAuthoringClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
 import { RpgWorldAuthoringPage } from './RpgWorldAuthoringPage';
+import { RpgWorldGenerationPanel } from './RpgWorldGenerationPanel';
 import { RpgWorldsCampaignsLibrary } from './RpgWorldsCampaignsLibrary';
 
 interface RpgWorldEditorShellProps {
@@ -71,7 +72,7 @@ export function RpgWorldEditorShell({
   const pageQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-authoring-section', worldId, selectedSection.id],
     queryFn: () => rpgWorldAuthoringClient.section(worldId, selectedSection.id),
-    enabled: Boolean(worldId) && selectedSection.id !== 'advanced',
+    enabled: Boolean(worldId) && !['advanced', 'generation'].includes(selectedSection.id),
     refetchInterval: selectedSection.operational_status === 'generating' ? 3000 : false,
   });
 
@@ -135,6 +136,12 @@ export function RpgWorldEditorShell({
         <main>
           {selectedSection.id === 'advanced' ? (
             <RpgWorldsCampaignsLibrary onBack={onBack} onSessionLaunched={onSessionLaunched} />
+          ) : selectedSection.id === 'generation' ? (
+            <RpgWorldGenerationPanel
+              generation={manifestQuery.data?.generation}
+              sections={sections}
+              worldId={worldId}
+            />
           ) : (
             <RpgWorldAuthoringPage
               error={pageQuery.error instanceof Error ? pageQuery.error.message : undefined}
