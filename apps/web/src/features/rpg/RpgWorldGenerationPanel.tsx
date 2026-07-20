@@ -121,6 +121,10 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
       : current.filter((value) => value !== topicId));
   };
 
+  const updateDirection = (topicId: string, value: string) => {
+    setDirections((current) => ({ ...current, [topicId]: value }));
+  };
+
   return (
     <section className="rpg-authoring-page rpg-generation-panel" aria-label="World generation">
       <div className="rpg-authoring-page-heading">
@@ -174,7 +178,7 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
               placeholder="Optional direction for this topic…"
               rows={2}
               value={directions[section.id] ?? ''}
-              onChange={(event) => setDirections((current) => ({ ...current, [section.id]: event.currentTarget.value }))}
+              onChange={(event) => updateDirection(section.id, event.currentTarget.value)}
             />
           </article>
         ))}
