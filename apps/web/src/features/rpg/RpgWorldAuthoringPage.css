@@ -132,6 +132,58 @@
   font-weight: 800;
 }
 
+.rpg-authoring-entity-editor-body {
+  display: grid;
+  gap: 0.8rem;
+  padding-top: 0.8rem;
+}
+
+.rpg-authoring-entity-editor-body label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.rpg-authoring-entity-editor-body label > span {
+  color: #c4b5fd;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rpg-authoring-entity-editor-body textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid rgba(168, 139, 250, 0.24);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.8);
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  padding: 0.7rem;
+}
+
+.rpg-authoring-entity-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rpg-authoring-entity-history > article {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.7rem 0;
+  border: 0;
+  border-bottom: 1px solid rgba(168, 139, 250, 0.14);
+  border-radius: 0;
+  background: transparent;
+}
+
+.rpg-authoring-entity-history time {
+  color: var(--omnix-muted, #a7a4b8);
+  font-size: 0.72rem;
+}
+
 .rpg-authoring-overview-form {
   display: grid;
   max-width: 760px;
