@@ -14,6 +14,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from app.live_speech.performance_contract import apply_performance_plan_to_provider
 from app.shared import get_tts_provider, remove_emojis
 
 from .tts_stream_diagnostics import (
@@ -192,6 +193,9 @@ async def _stream_phrase(
             append_silence=request.append_silence,
             max_new_tokens=request.max_new_tokens,
             parity_mode=request.parity_mode,
+            performance_schema_version=(
+                request.delivery_plan.schema_version if request.delivery_plan else None
+            ),
             log_path=diagnostics_log_path(),
             persistent_connection=True,
         )
@@ -224,6 +228,13 @@ async def _stream_phrase(
             )
             return
 
+        performance_application = apply_performance_plan_to_provider(
+            provider,
+            request.delivery_plan,
+        )
+        capability_payload = performance_application.capabilities.model_dump(mode="json")
+        applied_controls = list(performance_application.applied_controls)
+        ignored_controls = list(performance_application.ignored_controls)
         provider_resolved_at = time.perf_counter()
         stream_log(
             stream_id,
@@ -232,6 +243,9 @@ async def _stream_phrase(
             provider_class=f"{type(provider).__module__}.{type(provider).__qualname__}",
             provider_name=getattr(provider, "provider_name", None),
             provider_object_id=id(provider),
+            provider_capabilities=capability_payload,
+            performance_controls_applied=applied_controls,
+            performance_controls_ignored=ignored_controls,
             request_to_provider_ms=round(
                 (provider_resolved_at - route_started_at) * 1000,
                 3,
@@ -278,11 +292,14 @@ async def _stream_phrase(
                     stream_kwargs["max_new_tokens"] = request.max_new_tokens
                 if request.parity_mode is not None:
                     stream_kwargs["parity_mode"] = request.parity_mode
+                stream_kwargs.update(performance_application.provider_kwargs)
                 stream_log(
                     stream_id,
                     "provider",
                     "generation_started",
                     stream_kwargs=stream_kwargs,
+                    performance_controls_applied=applied_controls,
+                    performance_controls_ignored=ignored_controls,
                 )
 
                 def raw_chunks():
@@ -325,7 +342,10 @@ async def _stream_phrase(
                             sample_rate=resolved_rate,
                             samples=sample_count,
                             bytes=len(pcm_bytes),
-                            interval_ms=round((raw_chunk_ready_at - last_raw_chunk_at) * 1000, 3),
+                            interval_ms=round(
+                                (raw_chunk_ready_at - last_raw_chunk_at) * 1000,
+                                3,
+                            ),
                             generation_elapsed_ms=round(elapsed_ms, 3),
                             pcm_conversion_ms=round(
                                 (conversion_finished_at - conversion_started_at) * 1000,
@@ -484,6 +504,9 @@ async def _stream_phrase(
                                 "channels": 1,
                                 "frame_samples": TTS_PCM_FRAME_SAMPLES,
                                 "diagnostics_log": diagnostics_log_path(),
+                                "provider_capabilities": capability_payload,
+                                "performance_controls_applied": applied_controls,
+                                "performance_controls_ignored": ignored_controls,
                             }
                         )
                         control_sent_at = time.perf_counter()
