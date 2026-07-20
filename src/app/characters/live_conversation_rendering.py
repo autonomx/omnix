@@ -12,7 +12,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from app.gateway.tts_performance_contract import SpeechPerformancePlan
+from app.live_speech.performance_contract import SpeechPerformancePlan
 
 SpeechDeliveryPlan = SpeechPerformancePlan
 
