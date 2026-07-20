@@ -173,6 +173,8 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
                 topic_directives=(
                     payload.get("topic_directives")
                     if isinstance(payload.get("topic_directives"), Mapping)
+                    else payload.get("directives")
+                    if isinstance(payload.get("directives"), Mapping)
                     else {}
                 ),
                 entity_manifest=(
@@ -180,6 +182,13 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
                     if isinstance(payload.get("entity_manifest"), Mapping)
                     else {}
                 ),
+                scope=(
+                    payload.get("scope")
+                    if isinstance(payload.get("scope"), Mapping)
+                    else {}
+                ),
+                strategy=str(payload.get("strategy") or "reuse_unchanged"),
+                replace_locked=bool(payload.get("replace_locked", False)),
                 generator_version=str(
                     payload.get("generator_version") or "world-generator-v1"
                 ),
