@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS omnix_rpg_world_image_targets (
-    workspace_id UUID NOT NULL,
+    workspace_id TEXT NOT NULL,
     world_id TEXT NOT NULL,
     target_id TEXT NOT NULL,
     target_type TEXT NOT NULL,
@@ -28,7 +28,7 @@ CREATE INDEX IF NOT EXISTS omnix_rpg_world_image_targets_world_idx
     );
 
 CREATE TABLE IF NOT EXISTS omnix_rpg_world_image_attempts (
-    workspace_id UUID NOT NULL,
+    workspace_id TEXT NOT NULL,
     world_id TEXT NOT NULL,
     target_id TEXT NOT NULL,
     job_id TEXT NOT NULL,
