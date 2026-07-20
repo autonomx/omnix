@@ -5,12 +5,12 @@ import pytest
 from pydantic import ValidationError
 
 from app.gateway import tts_stream_contract
-from app.gateway.tts_performance_contract import FASTER_QWEN3_TTS_CAPABILITIES
 from app.gateway.tts_stream_contract import (
     TtsStreamRequest,
     audio_chunk_to_pcm16_bytes,
     initial_speech_start_byte,
 )
+from app.live_speech.performance_contract import FASTER_QWEN3_TTS_CAPABILITIES
 
 
 def _decode_pcm16(payload: bytes) -> list[int]:
