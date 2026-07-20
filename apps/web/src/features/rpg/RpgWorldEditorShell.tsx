@@ -8,6 +8,7 @@ import {
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
 import { RpgWorldAuthoringPage } from './RpgWorldAuthoringPage';
 import { RpgWorldGenerationPanel } from './RpgWorldGenerationPanel';
+import { RpgWorldImagesPanel } from './RpgWorldImagesPanel';
 import { RpgWorldsCampaignsLibrary } from './RpgWorldsCampaignsLibrary';
 
 interface RpgWorldEditorShellProps {
@@ -72,7 +73,7 @@ export function RpgWorldEditorShell({
   const pageQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-authoring-section', worldId, selectedSection.id],
     queryFn: () => rpgWorldAuthoringClient.section(worldId, selectedSection.id),
-    enabled: Boolean(worldId) && !['advanced', 'generation'].includes(selectedSection.id),
+    enabled: Boolean(worldId) && !['advanced', 'generation', 'images'].includes(selectedSection.id),
     refetchInterval: selectedSection.operational_status === 'generating' ? 3000 : false,
   });
 
@@ -142,6 +143,8 @@ export function RpgWorldEditorShell({
               sections={sections}
               worldId={worldId}
             />
+          ) : selectedSection.id === 'images' ? (
+            <RpgWorldImagesPanel worldId={worldId} />
           ) : (
             <RpgWorldAuthoringPage
               error={pageQuery.error instanceof Error ? pageQuery.error.message : undefined}
