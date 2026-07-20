@@ -28,6 +28,10 @@ function displayValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function humanize(value: string): string {
+  return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function FactBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
   const items = block.items ?? [];
   return (
@@ -78,6 +82,9 @@ export function RpgWorldAuthoringPage({
   const [genre, setGenre] = useState(world.genre);
   const [tone, setTone] = useState(world.tone);
   const [seed, setSeed] = useState(world.seed);
+  const [collectionSearch, setCollectionSearch] = useState('');
+  const [collectionKind, setCollectionKind] = useState('all');
+  const [collectionSort, setCollectionSort] = useState('name');
   const imagesQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-image-targets', worldId],
     queryFn: () => rpgWorldImageClient.list(worldId),
@@ -89,6 +96,25 @@ export function RpgWorldAuthoringPage({
       .filter((target) => target.review_state === 'approved' && target.active_asset_id)
       .map((target) => [target.entity_id, String(target.active_asset_id)]),
   ), [imagesQuery.data?.targets]);
+  const collectionEntities = page?.page_kind === 'collection' ? page.entities : [];
+  const collectionKinds = useMemo(
+    () => Array.from(new Set(collectionEntities.map((entity) => entity.kind))).sort(),
+    [collectionEntities],
+  );
+  const visibleEntities = useMemo(() => {
+    const query = collectionSearch.trim().toLowerCase();
+    return [...collectionEntities]
+      .filter((entity) => collectionKind === 'all' || entity.kind === collectionKind)
+      .filter((entity) => !query || [entity.title, entity.summary, entity.kind, entity.id]
+        .some((value) => value.toLowerCase().includes(query)))
+      .sort((left, right) => {
+        if (collectionSort === 'type') {
+          const kindOrder = left.kind.localeCompare(right.kind);
+          if (kindOrder) return kindOrder;
+        }
+        return left.title.localeCompare(right.title);
+      });
+  }, [collectionEntities, collectionKind, collectionSearch, collectionSort]);
 
   useEffect(() => {
     setTitle(world.title);
@@ -97,6 +123,12 @@ export function RpgWorldAuthoringPage({
     setTone(world.tone);
     setSeed(world.seed);
   }, [world]);
+
+  useEffect(() => {
+    setCollectionSearch('');
+    setCollectionKind('all');
+    setCollectionSort('name');
+  }, [section.id]);
 
   if (isLoading) return <section className="rpg-authoring-page"><h2>{section.label}</h2><p>Loading world content…</p></section>;
   if (error) return <section className="rpg-authoring-page"><h2>{section.label}</h2><p className="rpg-world-catalog-error">{error}</p></section>;
@@ -129,10 +161,24 @@ export function RpgWorldAuthoringPage({
   if (page.page_kind === 'collection') {
     return (
       <section className="rpg-authoring-page">
-        <div className="rpg-authoring-page-heading"><div><p className="eyebrow">{section.group}</p><h2>{page.title || section.label}</h2></div><span>{page.entities.length} entr{page.entities.length === 1 ? 'y' : 'ies'}</span></div>
+        <div className="rpg-authoring-page-heading"><div><p className="eyebrow">{section.group}</p><h2>{page.title || section.label}</h2></div><span>{visibleEntities.length === page.entities.length ? page.entities.length : `${visibleEntities.length} of ${page.entities.length}`} entr{page.entities.length === 1 ? 'y' : 'ies'}</span></div>
+        {page.entities.length ? (
+          <div className="rpg-authoring-collection-toolbar">
+            <input aria-label={`Search ${page.title || section.label}`} placeholder={`Search ${page.title || section.label.toLowerCase()}…`} value={collectionSearch} onChange={(event) => setCollectionSearch(event.currentTarget.value)} />
+            <select aria-label={`Filter ${page.title || section.label} by type`} value={collectionKind} onChange={(event) => setCollectionKind(event.currentTarget.value)}>
+              <option value="all">All types</option>
+              {collectionKinds.map((kind) => <option key={kind} value={kind}>{humanize(kind)}</option>)}
+            </select>
+            <select aria-label={`Sort ${page.title || section.label}`} value={collectionSort} onChange={(event) => setCollectionSort(event.currentTarget.value)}>
+              <option value="name">Sort by name</option>
+              <option value="type">Sort by type</option>
+            </select>
+          </div>
+        ) : null}
         {!page.entities.length ? <div className="rpg-authoring-empty"><h3>No entries yet</h3><p>Generate this section to add structured world entities.</p></div> : null}
+        {page.entities.length && !visibleEntities.length ? <div className="rpg-authoring-empty"><h3>No matching entries</h3><p>Clear the search or choose a different type.</p></div> : null}
         <div className="rpg-authoring-entity-grid">
-          {page.entities.map((entity) => (
+          {visibleEntities.map((entity) => (
             <RpgWorldEntityCard
               entity={entity}
               imageAssetId={approvedAssets.get(entity.id)}
