@@ -64,6 +64,16 @@ export interface RpgAuthoringTopicHistory extends RpgAuthoringTopic {
   topic_updated_at: string;
 }
 
+export interface RpgAuthoringEntityHistory {
+  history_sequence: number;
+  operation: 'manual_edit' | 'regenerate' | 'restore' | string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  topic_content_hash: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface RpgAuthoringDocumentPage {
   ok: boolean;
   section_id: string;
@@ -113,6 +123,18 @@ function jsonPatch(body: Record<string, unknown>): RequestInit {
   };
 }
 
+function jsonPost(body: Record<string, unknown>): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+}
+
+function entityPath(worldId: string, topicId: string, entityId: string): string {
+  return `/api/rpg/worlds/${encodeURIComponent(worldId)}/topics/${encodeURIComponent(topicId)}/entities/${encodeURIComponent(entityId)}`;
+}
+
 export const rpgWorldAuthoringClient = {
   manifest(worldId: string): Promise<RpgAuthoringManifestResponse> {
     return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/authoring-manifest`);
@@ -158,11 +180,47 @@ export const rpgWorldAuthoringClient = {
   ): Promise<{ ok: boolean; topic: RpgAuthoringTopic; stale_topic_ids: string[] }> {
     return request(
       `/api/rpg/worlds/${encodeURIComponent(worldId)}/topics/${encodeURIComponent(topicId)}/restore`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      },
+      jsonPost(body),
     );
+  },
+
+  entity(worldId: string, topicId: string, entityId: string): Promise<{
+    ok: boolean;
+    world: RpgWorldSummary;
+    topic: RpgAuthoringTopic;
+    entity: Record<string, unknown>;
+    history: RpgAuthoringEntityHistory[];
+  }> {
+    return request(entityPath(worldId, topicId, entityId));
+  },
+
+  updateEntity(
+    worldId: string,
+    topicId: string,
+    entityId: string,
+    body: Record<string, unknown>,
+  ): Promise<{
+    ok: boolean;
+    topic: RpgAuthoringTopic;
+    entity: Record<string, unknown>;
+    stale_topic_ids: string[];
+    stale_entity_ids: string[];
+  }> {
+    return request(entityPath(worldId, topicId, entityId), jsonPatch(body));
+  },
+
+  regenerateEntity(
+    worldId: string,
+    topicId: string,
+    entityId: string,
+    body: Record<string, unknown>,
+  ): Promise<{
+    ok: boolean;
+    topic: RpgAuthoringTopic;
+    entity: Record<string, unknown>;
+    stale_topic_ids: string[];
+    stale_entity_ids: string[];
+  }> {
+    return request(`${entityPath(worldId, topicId, entityId)}/regenerate`, jsonPost(body));
   },
 };
