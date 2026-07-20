@@ -93,8 +93,28 @@ describe('RpgWorldEntityCard', () => {
     expect(screen.getByText('Ward key')).toBeInTheDocument();
   });
 
-  it('formats references, numbers, booleans, and structured resources for cards', () => {
+  it('uses approved generated artwork instead of a letter placeholder', () => {
+    const { container } = render(
+      <RpgWorldEntityCard
+        entity={pointOfInterest}
+        imageAssetId="image:glass-well"
+        worldId="world:aurelia"
+      />,
+    );
+
+    const preview = container.querySelector('.rpg-authoring-entity-placeholder');
+    expect(preview).toHaveClass('has-image');
+    expect(preview).toHaveStyle({
+      backgroundImage: 'url("/api/assets/image%3Aglass-well/file")',
+      backgroundPosition: 'center',
+      backgroundSize: 'cover',
+    });
+    expect(preview).toHaveTextContent('');
+  });
+
+  it('formats references, states, numbers, booleans, and structured resources for cards', () => {
     expect(formatAuthoringValue('location:moon_market')).toBe('Moon Market');
+    expect(formatAuthoringValue('partially_known')).toBe('Partially Known');
     expect(formatAuthoringValue(2500)).toBe('2,500');
     expect(formatAuthoringValue(true)).toBe('Yes');
     expect(formatAuthoringValue({ resource: 'currency', amount: 25 })).toBe('currency: 25');
