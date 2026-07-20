@@ -1,4 +1,5 @@
 import {
+  hasVoiceCueSamples,
   resolveCueSamples,
   type CueSampleSource,
   type LiveVoiceCueId,
@@ -53,7 +54,9 @@ export async function playLowLatencyVoiceCue(
   const voiceId = options.voiceId ?? selectedVoiceId();
   const allowProceduralFallback = options.allowProceduralFallback
     ?? flags.proceduralCueFallback;
-  if (voiceId) await ensureLiveVoiceCuePack(voiceId);
+  if (voiceId && !hasVoiceCueSamples(voiceId, cueId, variantId)) {
+    await ensureLiveVoiceCuePack(voiceId);
+  }
   const resolution = resolveCueSamples(cueId, variantId, context.sampleRate, {
     voiceId,
     allowProceduralFallback,
