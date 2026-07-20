@@ -4,6 +4,7 @@ import type {
   RpgWorldCampaignSummary,
   RpgWorldSummary,
 } from '../../api/rpgWorldLibraryClient';
+import { RpgWorldCard } from './RpgWorldCard';
 import './RpgWorldCampaignCatalog.css';
 
 interface RpgWorldCampaignCatalogProps {
@@ -15,38 +16,6 @@ interface RpgWorldCampaignCatalogProps {
   onNewCampaign: (worldId: string) => void;
   scenarios: RpgScenarioSummary[];
   worlds: RpgWorldSummary[];
-}
-
-function text(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function assetImageUrl(value: unknown): string | undefined {
-  const assetId = text(value);
-  return assetId ? `/api/assets/${encodeURIComponent(assetId)}/file` : undefined;
-}
-
-function coverImage(world: RpgWorldSummary): string | undefined {
-  const metadata = world.metadata ?? {};
-  const candidate = [
-    metadata.cover_image_url,
-    metadata.cover_url,
-    metadata.hero_image_url,
-    metadata.banner_url,
-    metadata.image_url,
-  ].map(text).find(Boolean);
-  if (candidate && /^(?:https?:\/\/|\/|data:image\/)/i.test(candidate)) return candidate;
-  return [
-    metadata.cover_image_asset_id,
-    metadata.hero_image_asset_id,
-    metadata.thumbnail_asset_id,
-  ].map(assetImageUrl).find(Boolean);
-}
-
-function displayGenre(value: string): string {
-  return value
-    .replace(/[_-]+/g, ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function timestamp(value: string): number {
@@ -114,56 +83,21 @@ export function RpgWorldCampaignCatalog({
         {visibleWorlds.map((world) => {
           const worldCampaigns = campaignsForWorld(campaigns, world.id);
           const selectedCampaignId = selectedCampaigns[world.id] || worldCampaigns[0]?.campaign_id || '';
-          const image = coverImage(world);
           const openingCount = scenarios.filter((scenario) => (
             scenario.world_id === world.id && scenario.status === 'published'
           )).length;
           return (
-            <article className="rpg-world-card" key={world.id}>
-              <div
-                className={image ? 'rpg-world-card-cover rpg-world-card-cover-image' : 'rpg-world-card-cover'}
-                style={image ? { backgroundImage: `linear-gradient(180deg, rgba(3, 7, 18, .04), rgba(3, 7, 18, .88)), url(${JSON.stringify(image)})` } : undefined}
-              >
-                <span className="rpg-world-card-genre">{displayGenre(world.genre || 'World')}</span>
-                <div className="rpg-world-card-cover-copy">
-                  <strong>{world.title}</strong>
-                  <span>{world.tone || 'Reusable campaign world'}</span>
-                </div>
-              </div>
-
-              <div className="rpg-world-card-body">
-                <div>
-                  <h5>{world.title}</h5>
-                  <p>{world.description || 'A reusable world ready for campaign play.'}</p>
-                </div>
-                <div className="rpg-world-card-facts">
+            <RpgWorldCard
+              key={world.id}
+              world={world}
+              facts={(
+                <>
                   <span>{openingCount} published opening{openingCount === 1 ? '' : 's'}</span>
                   <span>{worldCampaigns.length} campaign{worldCampaigns.length === 1 ? '' : 's'}</span>
-                </div>
-
-                {worldCampaigns.length ? (
-                  <label className="rpg-world-card-campaign-select">
-                    <span>Existing campaign</span>
-                    <select
-                      aria-label={`Existing campaigns for ${world.title}`}
-                      value={selectedCampaignId}
-                      onChange={(event) => setSelectedCampaigns((current) => ({
-                        ...current,
-                        [world.id]: event.currentTarget.value,
-                      }))}
-                    >
-                      {worldCampaigns.map((campaign) => (
-                        <option key={campaign.campaign_id} value={campaign.campaign_id}>
-                          {campaign.title} · {campaign.status}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : (
-                  <p className="rpg-world-card-empty">No campaigns have started in this world.</p>
-                )}
-
-                <div className="rpg-world-card-actions">
+                </>
+              )}
+              actions={(
+                <>
                   <button
                     aria-label={`Continue campaign in ${world.title}`}
                     className="rpg-secondary-button"
@@ -181,10 +115,32 @@ export function RpgWorldCampaignCatalog({
                   >
                     {openingCount < 1 ? 'Review Setup' : 'New Campaign'}
                   </button>
-                </div>
-                {openingCount < 1 ? <small>Publish a scenario before creating a campaign.</small> : null}
-              </div>
-            </article>
+                </>
+              )}
+              footer={openingCount < 1 ? <small>Publish a scenario before creating a campaign.</small> : null}
+            >
+              {worldCampaigns.length ? (
+                <label className="rpg-world-card-campaign-select">
+                  <span>Existing campaign</span>
+                  <select
+                    aria-label={`Existing campaigns for ${world.title}`}
+                    value={selectedCampaignId}
+                    onChange={(event) => setSelectedCampaigns((current) => ({
+                      ...current,
+                      [world.id]: event.currentTarget.value,
+                    }))}
+                  >
+                    {worldCampaigns.map((campaign) => (
+                      <option key={campaign.campaign_id} value={campaign.campaign_id}>
+                        {campaign.title} · {campaign.status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <p className="rpg-world-card-empty">No campaigns have started in this world.</p>
+              )}
+            </RpgWorldCard>
           );
         })}
       </div>
