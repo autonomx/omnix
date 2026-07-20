@@ -205,7 +205,20 @@ jobs:
             live-chat-durable-evaluation-output.txt
 
       - name: Web typecheck
-        run: npm --workspace @omnix/web run typecheck
+        run: |
+          set -o pipefail
+          npm --workspace @omnix/web run typecheck 2>&1 | tee web-typecheck-output.txt
 
       - name: Web unit tests
-        run: npm --workspace @omnix/web run test -- --run
+        run: |
+          set -o pipefail
+          npm --workspace @omnix/web run test -- --run 2>&1 | tee web-unit-test-output.txt
+
+      - name: Upload web diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-chat-web-output
+          path: |
+            web-typecheck-output.txt
+            web-unit-test-output.txt
