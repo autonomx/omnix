@@ -4,6 +4,7 @@ import { INITIAL_LIVE_CONVERSATION_STATE, reduceLiveConversationState } from './
 import { deriveAvatarPresenceCue } from './live-avatar-presence';
 
 const restrainedPlan = {
+  schema_version: 1 as const,
   speech_act: 'reassurance' as const,
   energy: 'low' as const,
   warmth: 'high' as const,
@@ -11,6 +12,16 @@ const restrainedPlan = {
   pace: 'slightly_slow' as const,
   clause_pause: 'long' as const,
   emphasis: [],
+  onset_policy: {
+    desired_perceived_onset_ms: 650,
+    maximum_additional_delay_ms: 350,
+  },
+  nonverbal_eligibility: {
+    breath: true,
+    acknowledgement: true,
+    amused_exhale: false,
+    sigh: true,
+  },
 };
 
 describe('deriveAvatarPresenceCue', () => {

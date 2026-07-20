@@ -1,6 +1,6 @@
 import type { LiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
 
-const PCM_SAMPLES_PER_MS = 24;
+const DEFAULT_PLAYBACK_SAMPLE_RATE = 24_000;
 const DELIVERY_ROW_ATTRIBUTE = 'data-omnix-live-delivery';
 
 export type LiveVoiceDeliveryPhrase = {
@@ -16,6 +16,8 @@ export type LiveVoiceDeliveryLedger = {
   assistantTurnId: string | null;
   generatedText: string;
   phrases: LiveVoiceDeliveryPhrase[];
+  playbackSampleRate: number;
+  semanticSpeechSamples: number;
   audioPlayedSamples: number;
   audioDeliveredPhraseCount: number;
   activePhraseIndex: number | null;
@@ -23,11 +25,15 @@ export type LiveVoiceDeliveryLedger = {
   contextDeliveredTextEnd: number;
 };
 
-export function createLiveVoiceDeliveryLedger(): LiveVoiceDeliveryLedger {
+export function createLiveVoiceDeliveryLedger(
+  playbackSampleRate = DEFAULT_PLAYBACK_SAMPLE_RATE,
+): LiveVoiceDeliveryLedger {
   return {
     assistantTurnId: null,
     generatedText: '',
     phrases: [],
+    playbackSampleRate: positiveInteger(playbackSampleRate, DEFAULT_PLAYBACK_SAMPLE_RATE),
+    semanticSpeechSamples: 0,
     audioPlayedSamples: 0,
     audioDeliveredPhraseCount: 0,
     activePhraseIndex: null,
@@ -60,42 +66,58 @@ export function handleDeliveryDiagnostic(
   event: string,
   details: Record<string, unknown>,
 ): boolean {
+  const reportedSampleRate = finiteNumber(details.sample_rate, 0);
+  if (reportedSampleRate > 0) ledger.playbackSampleRate = Math.round(reportedSampleRate);
+
   if (event === 'phrase_buffered') {
     const phraseIndex = finiteNumber(details.phrase_index, -1);
     const phrase = ledger.phrases.find((item) => item.phraseIndex === phraseIndex);
     if (!phrase) return false;
-    phrase.audioSampleStart = ledger.phrases[phraseIndex - 1]?.audioSampleEnd ?? 0;
-    phrase.audioSampleEnd = phrase.audioSampleStart
-      + Math.max(1, Math.round(finiteNumber(details.audio_ms, 0) * PCM_SAMPLES_PER_MS));
-    return advanceDeliveryLedger(ledger, ledger.audioPlayedSamples);
+    const precedingPhrase = ledger.phrases
+      .filter((item) => item.phraseIndex < phraseIndex)
+      .sort((left, right) => right.phraseIndex - left.phraseIndex)[0];
+    phrase.audioSampleStart = precedingPhrase?.audioSampleEnd ?? 0;
+    const playbackSamples = finiteNumber(details.playback_samples, -1);
+    const sampleLength = playbackSamples >= 0
+      ? Math.max(1, Math.round(playbackSamples))
+      : Math.max(
+        1,
+        Math.round(
+          finiteNumber(details.audio_ms, 0) * ledger.playbackSampleRate / 1000,
+        ),
+      );
+    phrase.audioSampleEnd = phrase.audioSampleStart + sampleLength;
+    return advanceDeliveryLedger(ledger, ledger.semanticSpeechSamples);
   }
   if (!event.startsWith('worklet_')) return false;
-  return advanceDeliveryLedger(
-    ledger,
-    finiteNumber(details.played_samples, ledger.audioPlayedSamples),
+  const semanticSamples = finiteNumber(
+    details.semantic_speech_samples,
+    finiteNumber(details.played_samples, ledger.semanticSpeechSamples),
   );
+  return advanceDeliveryLedger(ledger, semanticSamples);
 }
 
 export function advanceDeliveryLedger(
   ledger: LiveVoiceDeliveryLedger,
-  playedSamples: number,
+  semanticSpeechSamples: number,
 ): boolean {
-  const finalSample = ledger.phrases.at(-1)?.audioSampleEnd ?? ledger.audioPlayedSamples;
-  const boundedSamples = playedSamples === Number.MAX_SAFE_INTEGER
+  const finalSample = ledger.phrases.at(-1)?.audioSampleEnd ?? ledger.semanticSpeechSamples;
+  const boundedSamples = semanticSpeechSamples === Number.MAX_SAFE_INTEGER
     ? finalSample
-    : playedSamples;
-  ledger.audioPlayedSamples = Number.isFinite(boundedSamples)
-    ? Math.max(ledger.audioPlayedSamples, boundedSamples)
-    : ledger.audioPlayedSamples;
+    : semanticSpeechSamples;
+  ledger.semanticSpeechSamples = Number.isFinite(boundedSamples)
+    ? Math.max(ledger.semanticSpeechSamples, boundedSamples)
+    : ledger.semanticSpeechSamples;
+  ledger.audioPlayedSamples = ledger.semanticSpeechSamples;
   let changed = false;
   for (const phrase of ledger.phrases) {
     if (phrase.audioSampleStart === null || phrase.audioSampleEnd === null) continue;
-    if (ledger.audioPlayedSamples > phrase.audioSampleStart && ledger.visualDeliveredTextEnd < phrase.textEnd) {
+    if (ledger.semanticSpeechSamples > phrase.audioSampleStart && ledger.visualDeliveredTextEnd < phrase.textEnd) {
       ledger.visualDeliveredTextEnd = phrase.textEnd;
       ledger.activePhraseIndex = phrase.phraseIndex;
       changed = true;
     }
-    if (ledger.audioPlayedSamples >= phrase.audioSampleEnd && ledger.contextDeliveredTextEnd < phrase.textEnd) {
+    if (ledger.semanticSpeechSamples >= phrase.audioSampleEnd && ledger.contextDeliveredTextEnd < phrase.textEnd) {
       ledger.contextDeliveredTextEnd = phrase.textEnd;
       ledger.audioDeliveredPhraseCount = Math.max(ledger.audioDeliveredPhraseCount, phrase.phraseIndex + 1);
       ledger.activePhraseIndex = null;
@@ -142,4 +164,8 @@ export function instrumentDeliveryReporter(
 
 function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function positiveInteger(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
 }

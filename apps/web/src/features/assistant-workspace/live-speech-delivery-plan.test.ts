@@ -14,13 +14,15 @@ const profile: LiveConversationProfile = {
 describe('live speech delivery plan', () => {
   it('creates a restrained, warm plan for serious listening', () => {
     const plan = createSpeechDeliveryPlan("I'm sorry. Take your time.", profile, true);
+    expect(plan.schema_version).toBe(1);
     expect(plan.speech_act).toBe('reassurance');
     expect(plan.energy).toBe('low');
     expect(plan.warmth).toBe('high');
     expect(plan.pace).toBe('slightly_slow');
+    expect(plan.nonverbal_eligibility.sigh).toBe(true);
   });
 
-  it('tunes bounded TTS sampling without rewriting text', () => {
+  it('attaches the plan without using sampling controls as emotion proxies', () => {
     const engagedProfile: LiveConversationProfile = { ...profile, conversation_stance: 'discuss' };
     const plan = createSpeechDeliveryPlan('That is GREAT news!', engagedProfile, false);
     const request = applyDeliveryPlanToTtsRequest({
@@ -28,9 +30,9 @@ describe('live speech delivery plan', () => {
     }, plan);
     expect(request.text).toBe('That is GREAT news!');
     expect(plan.energy).toBe('high');
-    expect(request.temperature).toBeGreaterThan(0.6);
-    expect(request.top_p).toBeGreaterThanOrEqual(0.85);
-    expect(request.repetition_penalty).toBe(1.05);
+    expect(request.temperature).toBe(0.6);
+    expect(request.top_p).toBe(0.85);
+    expect(request.repetition_penalty).toBe(1);
     expect(request.delivery_plan).toEqual(plan);
   });
 });

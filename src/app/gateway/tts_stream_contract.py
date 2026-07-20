@@ -8,6 +8,7 @@ from typing import Any, Iterator
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.live_speech.performance_contract import SpeechPerformancePlan
 from app.shared import remove_emojis
 
 try:
@@ -75,7 +76,7 @@ class TtsStreamRequest(BaseModel):
     parity_mode: bool | None = None
     request_id: str | None = None
     diagnostics_stream_id: str | None = None
-    delivery_plan: dict[str, Any] | None = None
+    delivery_plan: SpeechPerformancePlan | None = None
     pronunciation_lexicon: list[TtsPronunciationEntry] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
