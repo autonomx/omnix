@@ -56,7 +56,9 @@ afterEach(async () => {
 describe('low-latency cue player', () => {
   it('publishes cue lifecycle without canonical speech progress', async () => {
     const events: Array<Record<string, unknown>> = [];
-    const listener = ((event: CustomEvent<Record<string, unknown>>) => events.push(event.detail)) as EventListener;
+    const listener: EventListener = (event) => {
+      events.push((event as CustomEvent<Record<string, unknown>>).detail);
+    };
     window.addEventListener('omnix:live-voice-cue-segment', listener);
 
     const played = playLowLatencyVoiceCue('mhm', 'mhm-v1');
@@ -72,9 +74,10 @@ describe('low-latency cue player', () => {
 
   it('reports interruption exactly once', async () => {
     const events: Array<Record<string, unknown>> = [];
-    window.addEventListener('omnix:live-voice-cue-segment', ((event: CustomEvent<Record<string, unknown>>) => {
-      events.push(event.detail);
-    }) as EventListener);
+    const listener: EventListener = (event) => {
+      events.push((event as CustomEvent<Record<string, unknown>>).detail);
+    };
+    window.addEventListener('omnix:live-voice-cue-segment', listener);
 
     void playLowLatencyVoiceCue('inhale', 'inhale-v1');
     await vi.waitFor(() => expect(FakeAudioContext.sources).toHaveLength(1));
@@ -82,5 +85,6 @@ describe('low-latency cue player', () => {
 
     expect(events.map((event) => event.type)).toEqual(['segment_started', 'segment_interrupted']);
     expect(events.at(-1)?.reason).toBe('test_interrupt');
+    window.removeEventListener('omnix:live-voice-cue-segment', listener);
   });
 });
