@@ -9,6 +9,7 @@ import './RpgWorldGenerationPanel.css';
 
 interface RpgWorldGenerationPanelProps {
   generation?: RpgWorldGenerationRun | Record<string, never>;
+  onOpenImages?: () => void;
   sections: RpgAuthoringSection[];
   worldId: string;
 }
@@ -31,7 +32,7 @@ function parseEntityManifest(value: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-export function RpgWorldGenerationPanel({ generation, sections, worldId }: RpgWorldGenerationPanelProps) {
+export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, worldId }: RpgWorldGenerationPanelProps) {
   const queryClient = useQueryClient();
   const [depth, setDepth] = useState('standard');
   const [startingLocation, setStartingLocation] = useState('');
@@ -146,6 +147,7 @@ export function RpgWorldGenerationPanel({ generation, sections, worldId }: RpgWo
         <button className="rpg-secondary-button" type="button" disabled={generate.isPending} onClick={() => start('stale')}>Regenerate Stale</button>
         <button className="rpg-secondary-button" type="button" disabled={generate.isPending} onClick={() => start('failed')}>Retry Failed</button>
         <button type="button" disabled={publish.isPending || currentRun?.status !== 'review'} onClick={() => publish.mutate()}>{publish.isPending ? 'Publishing…' : 'Publish World'}</button>
+        {onOpenImages ? <button className="rpg-secondary-button" type="button" onClick={onOpenImages}>Generate Images</button> : null}
       </div>
       {currentRun && currentRun.status !== 'review' ? <small>Publishing becomes available when generation reaches Review.</small> : null}
       {feedback ? <p className="rpg-authoring-feedback" aria-live="polite">{feedback}</p> : null}
