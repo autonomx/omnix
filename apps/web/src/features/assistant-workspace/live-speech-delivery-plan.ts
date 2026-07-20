@@ -1,14 +1,10 @@
 import type { LiveConversationProfile } from '../chatbot/liveConversationProfileClient';
+import {
+  SPEECH_PERFORMANCE_SCHEMA_VERSION,
+  type SpeechPerformancePlan,
+} from './live-speech-performance-contract';
 
-export type SpeechDeliveryPlan = {
-  speech_act: 'acknowledgement' | 'answer' | 'question' | 'reassurance' | 'reflection' | 'instruction';
-  energy: 'low' | 'moderate' | 'high';
-  warmth: 'low' | 'moderate' | 'high';
-  certainty: 'low' | 'moderate' | 'high';
-  pace: 'slightly_slow' | 'natural' | 'slightly_fast';
-  clause_pause: 'short' | 'medium' | 'long';
-  emphasis: string[];
-};
+export type SpeechDeliveryPlan = SpeechPerformancePlan;
 
 export function createSpeechDeliveryPlan(
   text: string,
@@ -23,14 +19,28 @@ export function createSpeechDeliveryPlan(
   else if (profile.conversation_stance === 'teach' || profile.conversation_stance === 'advise') speechAct = 'instruction';
   else if (normalized.split(/\s+/).filter(Boolean).length <= 4) speechAct = 'acknowledgement';
 
+  const reflective = serious || speechAct === 'reassurance' || speechAct === 'reflection';
   return {
+    schema_version: SPEECH_PERFORMANCE_SCHEMA_VERSION,
     speech_act: speechAct,
-    energy: serious || speechAct === 'reassurance' || speechAct === 'reflection' ? 'low' : profile.presence_preset === 'engaged' ? 'high' : 'moderate',
+    energy: reflective ? 'low' : profile.presence_preset === 'engaged' ? 'high' : 'moderate',
     warmth: serious || profile.emotional_attunement === 'expressive' ? 'high' : profile.emotional_attunement === 'off' ? 'low' : 'moderate',
     certainty: /\b(?:maybe|perhaps|might|not sure|uncertain)\b/.test(lower) ? 'low' : speechAct === 'answer' || speechAct === 'instruction' ? 'high' : 'moderate',
     pace: serious || profile.response_length === 'detailed' ? 'slightly_slow' : profile.conversation_pace === 'quick' ? 'slightly_fast' : 'natural',
     clause_pause: serious ? 'long' : speechAct === 'acknowledgement' ? 'short' : 'medium',
     emphasis: normalized.split(/\s+/).map((word) => word.replace(/[.,!?;:]/g, '')).filter((word) => word.length > 1 && word === word.toLocaleUpperCase()).slice(0, 6),
+    onset_policy: {
+      desired_perceived_onset_ms: profile.response_onset_style === 'immediate'
+        ? 220
+        : profile.response_onset_style === 'reflective' ? 650 : 450,
+      maximum_additional_delay_ms: profile.response_onset_style === 'immediate' ? 120 : 350,
+    },
+    nonverbal_eligibility: {
+      breath: profile.emotional_attunement !== 'off',
+      acknowledgement: profile.assistant_backchannel_mode !== 'off',
+      amused_exhale: profile.emotional_attunement === 'expressive' && !serious,
+      sigh: profile.emotional_attunement === 'expressive' && serious,
+    },
   };
 }
 
@@ -38,19 +48,8 @@ export function applyDeliveryPlanToTtsRequest(
   payload: Record<string, unknown>,
   plan: SpeechDeliveryPlan,
 ): Record<string, unknown> {
-  const temperature = typeof payload.temperature === 'number' ? payload.temperature : 0.6;
-  const topP = typeof payload.top_p === 'number' ? payload.top_p : 0.85;
-  const temperatureDelta = plan.energy === 'high' ? 0.05 : plan.energy === 'low' ? -0.04 : 0;
-  const warmthDelta = plan.warmth === 'high' ? 0.02 : plan.warmth === 'low' ? -0.01 : 0;
   return {
     ...payload,
-    temperature: clamp(temperature + temperatureDelta + warmthDelta, 0.45, 0.8),
-    top_p: clamp(topP + (plan.energy === 'high' ? 0.03 : plan.energy === 'low' ? -0.02 : 0), 0.75, 0.95),
-    repetition_penalty: Math.max(typeof payload.repetition_penalty === 'number' ? payload.repetition_penalty : 1, 1.05),
     delivery_plan: plan,
   };
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, Number(value.toFixed(3))));
 }
