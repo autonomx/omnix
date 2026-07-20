@@ -13,53 +13,20 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
 
+from .authoring_presentations import (
+    COLLECTION_CATEGORIES as _COLLECTION_CATEGORIES,
+    PIPELINE_CATEGORIES as _PIPELINE_CATEGORIES,
+    SYSTEM_SECTIONS as _SYSTEM_SECTIONS,
+    entity_card,
+    rows as _rows,
+    section_group,
+    section_label,
+    section_page_kind,
+    text as _text,
+)
 from .library_service import read_world_detail
 from .lifecycle_service import require_world_writable
 
-_SYSTEM_SECTIONS: tuple[dict[str, Any], ...] = (
-    {"id": "overview", "label": "Overview", "group": "workspace", "page_kind": "document"},
-    {"id": "generation", "label": "World Generation", "group": "workspace", "page_kind": "document"},
-    {"id": "images", "label": "Images", "group": "workspace", "page_kind": "collection"},
-    {"id": "map", "label": "Map", "group": "world", "page_kind": "document"},
-    {"id": "areas", "label": "Areas", "group": "world", "page_kind": "collection"},
-    {"id": "points_of_interest", "label": "Points of Interest", "group": "world", "page_kind": "collection"},
-    {"id": "races", "label": "Races", "group": "world", "page_kind": "collection"},
-    {"id": "classes", "label": "Classes", "group": "world", "page_kind": "collection"},
-    {"id": "monsters", "label": "Monsters", "group": "world", "page_kind": "collection"},
-    {"id": "items", "label": "Items", "group": "world", "page_kind": "collection"},
-    {"id": "spells", "label": "Spells", "group": "world", "page_kind": "collection"},
-    {"id": "feats", "label": "Feats", "group": "world", "page_kind": "collection"},
-    {"id": "quests", "label": "Quests", "group": "world", "page_kind": "collection"},
-    {"id": "scenarios", "label": "Scenarios", "group": "game-master", "page_kind": "collection"},
-    {"id": "map_blueprints", "label": "Map Blueprints", "group": "game-master", "page_kind": "collection"},
-    {"id": "validation", "label": "Validation", "group": "game-master", "page_kind": "document"},
-    {"id": "releases", "label": "Releases", "group": "game-master", "page_kind": "collection"},
-    {"id": "history_revisions", "label": "Revision History", "group": "game-master", "page_kind": "collection"},
-    {"id": "advanced", "label": "Advanced", "group": "game-master", "page_kind": "document"},
-)
-
-_WORLD_COLLECTION_CATEGORIES = {
-    "regions",
-    "factions",
-    "locations",
-    "npcs",
-    "points_of_interest",
-    "races",
-    "classes",
-    "monsters",
-    "items",
-    "spells",
-    "feats",
-    "quests",
-}
-_GAME_MASTER_COLLECTION_CATEGORIES = {
-    "story",
-    "encounter_seeds",
-    "one_shots",
-    "opening_scenarios",
-}
-_COLLECTION_CATEGORIES = _WORLD_COLLECTION_CATEGORIES | _GAME_MASTER_COLLECTION_CATEGORIES
-_PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 _ENTITY_KEYS = (
     "entities",
     "regions",
@@ -84,16 +51,6 @@ _ENTITY_KEYS = (
 
 def _record(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> list[dict[str, Any]]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return []
-    return [dict(row) for row in value if isinstance(row, Mapping)]
-
-
-def _text(value: Any, fallback: str = "") -> str:
-    return str(value).strip() if value is not None and str(value).strip() else fallback
 
 
 def _topic_entity_rows(content: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -187,6 +144,9 @@ def _system_status(section_id: str, detail: Mapping[str, Any]) -> tuple[str, int
             return "empty", 0
         status = _text(_record(runs[0]).get("status"), "empty")
         return ("generating" if status in {"planned", "running"} else status), 1
+    if section_id == "map":
+        blueprints = list(detail.get("map_blueprints") or [])
+        return ("complete" if blueprints else "empty"), len(blueprints)
     collections = {
         "map_blueprints": list(detail.get("map_blueprints") or []),
         "scenarios": list(detail.get("scenarios") or []),
@@ -200,14 +160,6 @@ def _system_status(section_id: str, detail: Mapping[str, Any]) -> tuple[str, int
         releases = list(detail.get("releases") or [])
         return ("complete" if releases else "waiting"), len(releases)
     return "empty", 0
-
-
-def _section_group(category: str) -> str:
-    if category in _PIPELINE_CATEGORIES or category in _GAME_MASTER_COLLECTION_CATEGORIES:
-        return "game-master"
-    if category in _WORLD_COLLECTION_CATEGORIES:
-        return "world"
-    return "lore"
 
 
 def read_authoring_manifest(
@@ -227,23 +179,22 @@ def read_authoring_manifest(
         topic_id = _text(node.get("topic_id"))
         if not topic_id:
             continue
+        category = _text(node.get("category"), "lore")
+        if category in _PIPELINE_CATEGORIES:
+            continue
         graph_ids.add(topic_id)
         topic = topics.get(topic_id)
         dependencies = [
             _text(value) for value in node.get("dependencies") or [] if _text(value)
         ]
-        category = _text(node.get("category"), "lore")
         metadata = _record(node.get("metadata"))
-        is_collection = category in _COLLECTION_CATEGORIES
+        page_kind = section_page_kind(category)
         sections.append(
             {
                 "id": topic_id,
-                "label": _text(
-                    node.get("title"),
-                    topic_id.replace("_", " ").title(),
-                ),
-                "group": _section_group(category),
-                "page_kind": "collection" if is_collection else "document",
+                "label": section_label(topic_id, _text(node.get("title"))),
+                "group": "game-master" if category == "story" else section_group(category),
+                "page_kind": page_kind,
                 "topic_ids": [topic_id],
                 "entity_kind": _text(
                     metadata.get("entity_kind"),
@@ -253,13 +204,13 @@ def read_authoring_manifest(
                 "required_before_launch": bool(
                     node.get("required_before_launch", True)
                 ),
-                "supports_generation": category not in _PIPELINE_CATEGORIES,
-                "supports_images": is_collection or topic_id in {
+                "supports_generation": True,
+                "supports_images": page_kind == "collection" or topic_id in {
                     "realm",
                     "regions",
                     "locations",
                 },
-                "supports_entity_editing": is_collection,
+                "supports_entity_editing": page_kind == "collection",
                 "operational_status": _operational_status(
                     topic_id,
                     topic=topic,
@@ -300,42 +251,6 @@ def read_authoring_manifest(
     }
 
 
-def _entity_card(
-    row: Mapping[str, Any],
-    *,
-    kind: str,
-    index: int,
-) -> dict[str, Any]:
-    entity_id = _text(
-        row.get("id")
-        or row.get("entity_id")
-        or row.get("location_id")
-        or row.get("npc_id")
-        or row.get("faction_id"),
-        f"{kind}:{index + 1}",
-    )
-    title = _text(
-        row.get("name") or row.get("title") or row.get("label"),
-        entity_id.replace("_", " ").title(),
-    )
-    summary = _text(
-        row.get("summary")
-        or row.get("description")
-        or row.get("role")
-        or row.get("personality")
-        or row.get("sensory_profile"),
-        "No summary yet.",
-    )
-    return {
-        "id": entity_id,
-        "title": title,
-        "summary": summary,
-        "kind": kind,
-        "image_target_id": f"{kind}:{entity_id}",
-        "metadata": dict(row),
-    }
-
-
 def _document_blocks(content: Mapping[str, Any]) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = []
     for document in _rows(content.get("documents")):
@@ -358,6 +273,72 @@ def _document_blocks(content: Mapping[str, Any]) -> list[dict[str, Any]]:
     return blocks
 
 
+def _map_page(detail: Mapping[str, Any]) -> dict[str, Any]:
+    blueprints = [_record(row) for row in detail.get("map_blueprints") or ()]
+    ready = sum(1 for row in blueprints if _text(row.get("status")) == "ready")
+    invalid = sum(1 for row in blueprints if _text(row.get("status")) == "invalid")
+    return {
+        "ok": True,
+        "section_id": "map",
+        "page_kind": "document",
+        "title": "Map",
+        "summary": (
+            "World map presentation is backed by authored semantic map blueprints."
+            if blueprints
+            else "No map blueprints have been authored yet."
+        ),
+        "body": [
+            {
+                "kind": "facts",
+                "title": "Map readiness",
+                "items": [
+                    {"label": "Blueprints", "value": len(blueprints)},
+                    {"label": "Ready", "value": ready},
+                    {"label": "Invalid", "value": invalid},
+                ],
+            }
+        ],
+        "related_entities": [],
+    }
+
+
+def _validation_page(detail: Mapping[str, Any]) -> dict[str, Any]:
+    releases = [_record(row) for row in detail.get("releases") or ()]
+    latest = releases[0] if releases else {}
+    document = _record(latest.get("document"))
+    certification = _record(document.get("certification"))
+    missing = certification.get("missing_requirements") or []
+    return {
+        "ok": True,
+        "section_id": "validation",
+        "page_kind": "document",
+        "title": "Validation",
+        "summary": (
+            "Latest published release certification and launch readiness."
+            if latest
+            else "Publish a world release to produce launch certification."
+        ),
+        "body": [
+            {
+                "kind": "facts",
+                "title": "Release readiness",
+                "items": [
+                    {"label": "Launch ready", "value": certification.get("launch_ready", False)},
+                    {"label": "Missing requirements", "value": missing},
+                    {"label": "World revision", "value": latest.get("world_revision")},
+                    {"label": "Release", "value": latest.get("release")},
+                ],
+            },
+            {
+                "kind": "json",
+                "title": "Certification details",
+                "value": certification,
+            },
+        ],
+        "related_entities": [],
+    }
+
+
 def read_authoring_section(
     world_id: str,
     section_id: str,
@@ -365,6 +346,14 @@ def read_authoring_section(
     database: Any | None = None,
 ) -> dict[str, Any]:
     detail = read_world_detail(world_id, database=database)
+    graph_node = next(
+        (
+            row
+            for row in _graph_nodes(detail)
+            if _text(row.get("topic_id")) == section_id
+        ),
+        None,
+    )
     topic = next(
         (
             row
@@ -375,16 +364,33 @@ def read_authoring_section(
     )
     if topic is not None:
         content = _record(topic.get("content"))
-        entities = _topic_entity_rows(content)
-        if entities:
-            kind = _text(entities[0].get("kind"), section_id.rstrip("s"))
+        category = _text(_record(graph_node).get("category"), "lore")
+        page_kind = section_page_kind(category)
+        title = section_label(
+            section_id,
+            _text(_record(graph_node).get("title"), section_id.replace("_", " ").title()),
+        )
+        if page_kind == "collection":
+            entities = _topic_entity_rows(content)
+            metadata = _record(_record(graph_node).get("metadata"))
+            kind = _text(
+                metadata.get("entity_kind")
+                or (entities[0].get("kind") if entities else None),
+                section_id.rstrip("s"),
+            )
             return {
                 "ok": True,
                 "section_id": section_id,
                 "page_kind": "collection",
-                "title": section_id.replace("_", " ").title(),
+                "title": title,
                 "entities": [
-                    _entity_card(row, kind=kind, index=index)
+                    entity_card(
+                        row,
+                        card_type=section_id,
+                        kind=_text(row.get("kind"), kind),
+                        index=index,
+                        content=content,
+                    )
                     for index, row in enumerate(entities)
                 ],
                 "filters": [],
@@ -395,7 +401,7 @@ def read_authoring_section(
             "ok": True,
             "section_id": section_id,
             "page_kind": "document",
-            "title": section_id.replace("_", " ").title(),
+            "title": title,
             "summary": _text(
                 content.get("summary") or content.get("description")
             ),
@@ -427,6 +433,10 @@ def read_authoring_section(
             ],
             "related_entities": [],
         }
+    if section_id == "map":
+        return _map_page(detail)
+    if section_id == "validation":
+        return _validation_page(detail)
     collection_map = {
         "scenarios": detail["scenarios"],
         "map_blueprints": detail["map_blueprints"],
@@ -439,9 +449,14 @@ def read_authoring_section(
             "ok": True,
             "section_id": section_id,
             "page_kind": "collection",
-            "title": section_id.replace("_", " ").title(),
+            "title": section_label(section_id),
             "entities": [
-                _entity_card(row, kind=section_id.rstrip("s"), index=index)
+                entity_card(
+                    row,
+                    card_type=section_id,
+                    kind=section_id.rstrip("s"),
+                    index=index,
+                )
                 for index, row in enumerate(rows)
             ],
             "filters": [],
@@ -451,7 +466,7 @@ def read_authoring_section(
         "ok": True,
         "section_id": section_id,
         "page_kind": "document",
-        "title": section_id.replace("_", " ").title(),
+        "title": section_label(section_id),
         "summary": "This section has not been generated yet.",
         "body": [],
         "related_entities": [],
