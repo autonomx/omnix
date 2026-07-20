@@ -35,6 +35,7 @@ import { initializeLiveConversationStoreBridge } from './features/assistant-work
 import { initializeLivePresencePolicyController } from './features/assistant-workspace/live-presence-policy-controller';
 import { initializeLiveVoiceAudioDuckBridge } from './features/assistant-workspace/live-voice-audio-duck-bridge';
 import { initializeLiveVoiceCueAssetBridge } from './features/assistant-workspace/live-voice-cue-asset-bridge';
+import { initializeLiveVoiceCuePackLoader } from './features/assistant-workspace/live-voice-cue-pack-loader';
 import { initializeLiveVoiceDuplexGate } from './features/assistant-workspace/live-voice-duplex-gate';
 import './features/assistant-workspace/live-voice-form-sync';
 import './features/assistant-workspace/live-voice-controller';
@@ -67,6 +68,7 @@ initializeLivePresencePolicyController();
 initializeLiveVoiceDuplexGate();
 initializeLiveVoiceAudioDuckBridge();
 initializeLiveVoiceCueAssetBridge();
+initializeLiveVoiceCuePackLoader();
 initializeLiveVoiceUnifiedAudioController();
 initializeLiveAvatarPresenceController();
 initializeLiveConversationInitiativeController();
