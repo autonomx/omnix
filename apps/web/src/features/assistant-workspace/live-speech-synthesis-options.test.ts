@@ -117,6 +117,23 @@ describe('explicit live speech synthesis options', () => {
     expect(readVocalInteractionState('chat:stateless').observationCount).toBe(0);
   });
 
+  it('creates a fallback plan for canonical Chat sessions before the profile cache is mirrored', () => {
+    const options = createLiveSpeechSynthesisOptions(
+      'I think we should take a moment and look at this carefully.',
+      { scopeKey: 'chat:profile-cache-miss' },
+    );
+
+    expect(options.performancePlan).toMatchObject({
+      schema_version: 1,
+      speech_act: 'answer',
+      energy: 'moderate',
+      warmth: 'moderate',
+      pace: 'natural',
+      clause_pause: 'medium',
+    });
+    expect(readVocalInteractionState('chat:profile-cache-miss').observationCount).toBe(1);
+  });
+
   it('returns an empty explicit contract when no profile or pronunciation state is available', () => {
     expect(createLiveSpeechSynthesisOptions('Hello.')).toEqual({});
   });
