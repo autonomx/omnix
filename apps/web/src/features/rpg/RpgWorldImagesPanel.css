@@ -4,18 +4,39 @@
 }
 
 .rpg-world-images-toolbar {
-  align-items: end;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(220px, 1fr) auto auto;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.rpg-world-images-toolbar label {
+.rpg-world-images-advanced {
+  background: rgba(15, 23, 42, .45);
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.rpg-world-images-advanced summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.rpg-world-images-advanced > div {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 2fr) minmax(180px, 1fr) minmax(110px, .5fr) minmax(110px, .5fr);
+  padding-top: 14px;
+}
+
+.rpg-world-images-advanced label,
+.rpg-world-image-prompt {
   display: grid;
   gap: 6px;
 }
 
-.rpg-world-images-toolbar label > span {
+.rpg-world-images-advanced label > span,
+.rpg-world-image-prompt > span {
   color: var(--text-muted, #94a3b8);
   font-size: 12px;
   font-weight: 700;
@@ -23,7 +44,7 @@
   text-transform: uppercase;
 }
 
-.rpg-world-images-toolbar input,
+.rpg-world-images-advanced input,
 .rpg-world-image-copy textarea {
   background: rgba(15, 23, 42, .72);
   border: 1px solid rgba(148, 163, 184, .24);
@@ -113,15 +134,41 @@
 
 .rpg-world-image-copy details > div {
   align-items: center;
-  display: flex;
+  display: grid;
   font-size: 13px;
-  justify-content: space-between;
-  padding: 6px 0;
+  gap: 8px;
+  grid-template-columns: minmax(80px, 1fr) auto auto;
+  padding: 8px 0;
+}
+
+.rpg-world-image-copy details small {
+  color: #fca5a5;
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+
+.rpg-link-button {
+  background: transparent;
+  border: 0;
+  color: #93c5fd;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.rpg-link-button:disabled {
+  cursor: default;
+  opacity: .45;
 }
 
 @media (max-width: 900px) {
-  .rpg-world-images-toolbar {
-    align-items: stretch;
+  .rpg-world-images-advanced > div {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .rpg-world-images-advanced > div {
     grid-template-columns: 1fr;
   }
 }
