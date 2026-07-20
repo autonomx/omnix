@@ -128,8 +128,8 @@ describe('explicit live speech synthesis options', () => {
       speech_act: 'answer',
       energy: 'moderate',
       warmth: 'moderate',
-      pace: 'natural',
-      clause_pause: 'medium',
+      pace: 'slightly_slow',
+      clause_pause: 'long',
     });
     expect(readVocalInteractionState('chat:profile-cache-miss').observationCount).toBe(1);
   });
