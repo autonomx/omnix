@@ -668,7 +668,19 @@ export async function createLiveVoicePcmSession(
     if (!drained) drainResolve?.();
   };
 
+  const waitForGenerationQueueToSettle = async (): Promise<void> => {
+    let observedQueue = generationQueue;
+    while (true) {
+      await observedQueue.catch(() => undefined);
+      await Promise.resolve();
+      if (generationQueue === observedQueue) return;
+      observedQueue = generationQueue;
+    }
+  };
+
   const finish = async (): Promise<void> => {
+    if (closed || inputFinished) return;
+    await waitForGenerationQueueToSettle();
     if (closed || inputFinished) return;
     inputFinished = true;
     reporter.record('turn_input_finished', {}, 'pcm_session');
