@@ -38,7 +38,28 @@ _SYSTEM_SECTIONS: tuple[dict[str, Any], ...] = (
     {"id": "advanced", "label": "Advanced", "group": "game-master", "page_kind": "document"},
 )
 
-_COLLECTION_CATEGORIES = {"regions", "factions", "locations", "npcs", "story"}
+_WORLD_COLLECTION_CATEGORIES = {
+    "regions",
+    "factions",
+    "locations",
+    "npcs",
+    "points_of_interest",
+    "races",
+    "classes",
+    "monsters",
+    "items",
+    "spells",
+    "feats",
+    "quests",
+}
+_GAME_MASTER_COLLECTION_CATEGORIES = {
+    "story",
+    "encounter_seeds",
+    "one_shots",
+    "opening_scenarios",
+}
+_COLLECTION_CATEGORIES = _WORLD_COLLECTION_CATEGORIES | _GAME_MASTER_COLLECTION_CATEGORIES
+_PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 _ENTITY_KEYS = (
     "entities",
     "regions",
@@ -55,7 +76,9 @@ _ENTITY_KEYS = (
     "spells",
     "feats",
     "quests",
+    "encounter_seeds",
     "one_shots",
+    "opening_scenarios",
 )
 
 
@@ -64,7 +87,9 @@ def _record(value: Any) -> dict[str, Any]:
 
 
 def _rows(value: Any) -> list[dict[str, Any]]:
-    return [dict(row) for row in value if isinstance(row, Mapping)] if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else []
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    return [dict(row) for row in value if isinstance(row, Mapping)]
 
 
 def _text(value: Any, fallback: str = "") -> str:
@@ -122,11 +147,13 @@ def _operational_status(
 def _editorial_status(topic: Mapping[str, Any] | None) -> str:
     if topic is None:
         return "unreviewed"
-    provenance = _record(topic.get("provenance"))
-    authoring = _record(provenance.get("authoring"))
+    authoring = _record(_record(topic.get("provenance")).get("authoring"))
     if bool(authoring.get("generation_lock")):
         return "locked"
-    if _text(authoring.get("edit_state")) == "manually_edited" or _text(topic.get("source")) == "manual":
+    if (
+        _text(authoring.get("edit_state")) == "manually_edited"
+        or _text(topic.get("source")) == "manual"
+    ):
         return "manually_edited"
     if authoring.get("approved_at"):
         return "approved"
@@ -136,8 +163,7 @@ def _editorial_status(topic: Mapping[str, Any] | None) -> str:
 def _graph_nodes(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
     runs = list(detail.get("generation_runs") or [])
     latest_run = _record(runs[0]) if runs else {}
-    stored_graph = _record(latest_run.get("graph"))
-    nodes = _rows(stored_graph.get("nodes"))
+    nodes = _rows(_record(latest_run.get("graph")).get("nodes"))
     if nodes:
         return nodes
     world = _record(detail.get("world"))
@@ -176,7 +202,19 @@ def _system_status(section_id: str, detail: Mapping[str, Any]) -> tuple[str, int
     return "empty", 0
 
 
-def read_authoring_manifest(world_id: str, *, database: Any | None = None) -> dict[str, Any]:
+def _section_group(category: str) -> str:
+    if category in _PIPELINE_CATEGORIES or category in _GAME_MASTER_COLLECTION_CATEGORIES:
+        return "game-master"
+    if category in _WORLD_COLLECTION_CATEGORIES:
+        return "world"
+    return "lore"
+
+
+def read_authoring_manifest(
+    world_id: str,
+    *,
+    database: Any | None = None,
+) -> dict[str, Any]:
     detail = read_world_detail(world_id, database=database)
     topics = {str(row["topic_id"]): row for row in detail["topics"]}
     latest_run = _record(detail["generation_runs"][0]) if detail["generation_runs"] else {}
@@ -191,25 +229,49 @@ def read_authoring_manifest(world_id: str, *, database: Any | None = None) -> di
             continue
         graph_ids.add(topic_id)
         topic = topics.get(topic_id)
-        dependencies = [_text(value) for value in node.get("dependencies") or [] if _text(value)]
+        dependencies = [
+            _text(value) for value in node.get("dependencies") or [] if _text(value)
+        ]
         category = _text(node.get("category"), "lore")
-        group = "game-master" if category in {"compiler", "audit", "index", "bootstrap", "story"} else ("world" if category in _COLLECTION_CATEGORIES else "lore")
+        metadata = _record(node.get("metadata"))
+        is_collection = category in _COLLECTION_CATEGORIES
         sections.append(
             {
                 "id": topic_id,
-                "label": _text(node.get("title"), topic_id.replace("_", " ").title()),
-                "group": group,
-                "page_kind": "collection" if category in _COLLECTION_CATEGORIES else "document",
+                "label": _text(
+                    node.get("title"),
+                    topic_id.replace("_", " ").title(),
+                ),
+                "group": _section_group(category),
+                "page_kind": "collection" if is_collection else "document",
                 "topic_ids": [topic_id],
-                "entity_kind": category[:-1] if category.endswith("s") else category,
+                "entity_kind": _text(
+                    metadata.get("entity_kind"),
+                    category[:-1] if category.endswith("s") else category,
+                ),
                 "dependencies": dependencies,
-                "required_before_launch": bool(node.get("required_before_launch", True)),
-                "supports_generation": category not in {"compiler", "audit", "index", "bootstrap"},
-                "supports_images": category in _COLLECTION_CATEGORIES or topic_id in {"realm", "regions", "locations"},
-                "supports_entity_editing": False,
-                "operational_status": _operational_status(topic_id, topic=topic, dependencies=dependencies, topics=topics, active=active, failed=failed),
+                "required_before_launch": bool(
+                    node.get("required_before_launch", True)
+                ),
+                "supports_generation": category not in _PIPELINE_CATEGORIES,
+                "supports_images": is_collection or topic_id in {
+                    "realm",
+                    "regions",
+                    "locations",
+                },
+                "supports_entity_editing": is_collection,
+                "operational_status": _operational_status(
+                    topic_id,
+                    topic=topic,
+                    dependencies=dependencies,
+                    topics=topics,
+                    active=active,
+                    failed=failed,
+                ),
                 "editorial_status": _editorial_status(topic),
-                "entity_count": _entity_count(_record(topic.get("content"))) if topic else 0,
+                "entity_count": (
+                    _entity_count(_record(topic.get("content"))) if topic else 0
+                ),
             }
         )
     for section in _SYSTEM_SECTIONS:
@@ -230,48 +292,170 @@ def read_authoring_manifest(world_id: str, *, database: Any | None = None) -> di
                 "entity_count": count,
             }
         )
-    return {"ok": True, "world": detail["world"], "sections": sections, "generation": latest_run}
+    return {
+        "ok": True,
+        "world": detail["world"],
+        "sections": sections,
+        "generation": latest_run,
+    }
 
 
-def _entity_card(row: Mapping[str, Any], *, kind: str, index: int) -> dict[str, Any]:
-    entity_id = _text(row.get("id") or row.get("entity_id") or row.get("location_id") or row.get("npc_id") or row.get("faction_id"), f"{kind}:{index + 1}")
-    title = _text(row.get("name") or row.get("title") or row.get("label"), entity_id.replace("_", " ").title())
-    summary = _text(row.get("summary") or row.get("description") or row.get("role") or row.get("personality") or row.get("sensory_profile"), "No summary yet.")
-    return {"id": entity_id, "title": title, "summary": summary, "kind": kind, "image_target_id": f"{kind}:{entity_id}", "metadata": dict(row)}
+def _entity_card(
+    row: Mapping[str, Any],
+    *,
+    kind: str,
+    index: int,
+) -> dict[str, Any]:
+    entity_id = _text(
+        row.get("id")
+        or row.get("entity_id")
+        or row.get("location_id")
+        or row.get("npc_id")
+        or row.get("faction_id"),
+        f"{kind}:{index + 1}",
+    )
+    title = _text(
+        row.get("name") or row.get("title") or row.get("label"),
+        entity_id.replace("_", " ").title(),
+    )
+    summary = _text(
+        row.get("summary")
+        or row.get("description")
+        or row.get("role")
+        or row.get("personality")
+        or row.get("sensory_profile"),
+        "No summary yet.",
+    )
+    return {
+        "id": entity_id,
+        "title": title,
+        "summary": summary,
+        "kind": kind,
+        "image_target_id": f"{kind}:{entity_id}",
+        "metadata": dict(row),
+    }
 
 
 def _document_blocks(content: Mapping[str, Any]) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = []
     for document in _rows(content.get("documents")):
         title = _text(document.get("title") or document.get("name"), "Lore")
-        body = _text(document.get("full_text") or document.get("body") or document.get("text") or document.get("summary"))
+        body = _text(
+            document.get("full_text")
+            or document.get("body")
+            or document.get("text")
+            or document.get("summary")
+        )
         if body:
             blocks.append({"kind": "section", "title": title, "body": body})
     facts = _rows(content.get("facts"))
     if facts:
         blocks.append({"kind": "facts", "title": "Canon facts", "items": facts})
     if not blocks:
-        blocks.append({"kind": "json", "title": "Structured canon", "value": dict(content)})
+        blocks.append(
+            {"kind": "json", "title": "Structured canon", "value": dict(content)}
+        )
     return blocks
 
 
-def read_authoring_section(world_id: str, section_id: str, *, database: Any | None = None) -> dict[str, Any]:
+def read_authoring_section(
+    world_id: str,
+    section_id: str,
+    *,
+    database: Any | None = None,
+) -> dict[str, Any]:
     detail = read_world_detail(world_id, database=database)
-    topic = next((row for row in detail["topics"] if str(row["topic_id"]) == section_id), None)
+    topic = next(
+        (
+            row
+            for row in detail["topics"]
+            if str(row["topic_id"]) == section_id
+        ),
+        None,
+    )
     if topic is not None:
         content = _record(topic.get("content"))
         entities = _topic_entity_rows(content)
         if entities:
-            return {"ok": True, "section_id": section_id, "page_kind": "collection", "title": section_id.replace("_", " ").title(), "entities": [_entity_card(row, kind=section_id.rstrip("s"), index=index) for index, row in enumerate(entities)], "filters": [], "sort_options": ["name"], "topic": topic}
-        return {"ok": True, "section_id": section_id, "page_kind": "document", "title": section_id.replace("_", " ").title(), "summary": _text(content.get("summary") or content.get("description")), "body": _document_blocks(content), "related_entities": [], "topic": topic}
+            kind = _text(entities[0].get("kind"), section_id.rstrip("s"))
+            return {
+                "ok": True,
+                "section_id": section_id,
+                "page_kind": "collection",
+                "title": section_id.replace("_", " ").title(),
+                "entities": [
+                    _entity_card(row, kind=kind, index=index)
+                    for index, row in enumerate(entities)
+                ],
+                "filters": [],
+                "sort_options": ["name"],
+                "topic": topic,
+            }
+        return {
+            "ok": True,
+            "section_id": section_id,
+            "page_kind": "document",
+            "title": section_id.replace("_", " ").title(),
+            "summary": _text(
+                content.get("summary") or content.get("description")
+            ),
+            "body": _document_blocks(content),
+            "related_entities": [],
+            "topic": topic,
+        }
     if section_id == "overview":
         world = detail["world"]
-        return {"ok": True, "section_id": section_id, "page_kind": "document", "title": world["title"], "summary": world.get("description") or "No description yet.", "body": [{"kind": "facts", "title": "World settings", "items": [{"label": "Genre", "value": world.get("genre")}, {"label": "Tone", "value": world.get("tone")}, {"label": "Draft revision", "value": world.get("draft_revision")}]}], "related_entities": []}
-    collection_map = {"scenarios": detail["scenarios"], "map_blueprints": detail["map_blueprints"], "releases": detail["releases"], "history_revisions": detail["revisions"]}
+        return {
+            "ok": True,
+            "section_id": section_id,
+            "page_kind": "document",
+            "title": world["title"],
+            "summary": world.get("description") or "No description yet.",
+            "body": [
+                {
+                    "kind": "facts",
+                    "title": "World settings",
+                    "items": [
+                        {"label": "Genre", "value": world.get("genre")},
+                        {"label": "Tone", "value": world.get("tone")},
+                        {
+                            "label": "Draft revision",
+                            "value": world.get("draft_revision"),
+                        },
+                    ],
+                }
+            ],
+            "related_entities": [],
+        }
+    collection_map = {
+        "scenarios": detail["scenarios"],
+        "map_blueprints": detail["map_blueprints"],
+        "releases": detail["releases"],
+        "history_revisions": detail["revisions"],
+    }
     if section_id in collection_map:
         rows = [_record(row) for row in collection_map[section_id]]
-        return {"ok": True, "section_id": section_id, "page_kind": "collection", "title": section_id.replace("_", " ").title(), "entities": [_entity_card(row, kind=section_id.rstrip("s"), index=index) for index, row in enumerate(rows)], "filters": [], "sort_options": ["name"]}
-    return {"ok": True, "section_id": section_id, "page_kind": "document", "title": section_id.replace("_", " ").title(), "summary": "This section has not been generated yet.", "body": [], "related_entities": []}
+        return {
+            "ok": True,
+            "section_id": section_id,
+            "page_kind": "collection",
+            "title": section_id.replace("_", " ").title(),
+            "entities": [
+                _entity_card(row, kind=section_id.rstrip("s"), index=index)
+                for index, row in enumerate(rows)
+            ],
+            "filters": [],
+            "sort_options": ["name"],
+        }
+    return {
+        "ok": True,
+        "section_id": section_id,
+        "page_kind": "document",
+        "title": section_id.replace("_", " ").title(),
+        "summary": "This section has not been generated yet.",
+        "body": [],
+        "related_entities": [],
+    }
 
 
 def update_world_metadata(
@@ -286,18 +470,45 @@ def update_world_metadata(
         world = require_world_writable(work, context, world_id)
         current_revision = int(world["draft_revision"])
         if current_revision != int(expected_draft_revision):
-            raise ValueError(f"world_draft_revision_conflict:expected={expected_draft_revision}:current={current_revision}")
-        metadata = {**_record(world.get("metadata")), **_record(changes.get("metadata"))}
+            raise ValueError(
+                "world_draft_revision_conflict:"
+                f"expected={expected_draft_revision}:current={current_revision}"
+            )
+        metadata = {
+            **_record(world.get("metadata")),
+            **_record(changes.get("metadata")),
+        }
         values = {
             "title": _text(changes.get("title"), _text(world.get("title"))),
-            "description": _text(changes.get("description"), _text(world.get("description"))),
-            "genre": _text(changes.get("genre"), _text(world.get("genre"), "classic_fantasy")),
-            "tone": _text(changes.get("tone"), _text(world.get("tone"), "heroic adventure")),
+            "description": _text(
+                changes.get("description"), _text(world.get("description"))
+            ),
+            "genre": _text(
+                changes.get("genre"),
+                _text(world.get("genre"), "classic_fantasy"),
+            ),
+            "tone": _text(
+                changes.get("tone"),
+                _text(world.get("tone"), "heroic adventure"),
+            ),
             "seed": int(changes.get("seed", world.get("seed") or 0)),
         }
         updated = work.connection.execute(
-            "UPDATE omnix_rpg_worlds SET title = %s, description = %s, genre = %s, tone = %s, seed = %s, metadata_jsonb = %s::jsonb, updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND id = %s AND draft_revision = %s RETURNING id",
-            (values["title"], values["description"], values["genre"], values["tone"], values["seed"], json.dumps(metadata, sort_keys=True), context.workspace_id, world_id, current_revision),
+            "UPDATE omnix_rpg_worlds SET title = %s, description = %s, "
+            "genre = %s, tone = %s, seed = %s, metadata_jsonb = %s::jsonb, "
+            "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND id = %s "
+            "AND draft_revision = %s RETURNING id",
+            (
+                values["title"],
+                values["description"],
+                values["genre"],
+                values["tone"],
+                values["seed"],
+                json.dumps(metadata, sort_keys=True),
+                context.workspace_id,
+                world_id,
+                current_revision,
+            ),
         ).fetchone()
         if updated is None:
             raise ValueError("world_metadata_compare_and_swap_failed")
