@@ -24,7 +24,7 @@ from .lifecycle_service import require_world_writable
 from .map_blueprint_authoring import latest_ready_blueprint_requirements
 from .map_blueprint_publication import merge_authored_blueprints
 from .service import compile_world_release, compile_world_revision
-from .world_images import approved_world_asset_bindings
+from .world_image_bindings import approved_world_asset_bindings
 
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 
