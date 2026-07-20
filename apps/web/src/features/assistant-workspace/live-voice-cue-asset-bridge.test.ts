@@ -96,7 +96,12 @@ describe('live voice cue asset bridge', () => {
       },
     }));
 
-    const detail = (registered.mock.calls[0]?.[0] as CustomEvent).detail as Record<string, unknown>;
+    const detail = (registered.mock.calls[0]?.[0] as CustomEvent).detail as {
+      received_count: number;
+      registered_count: number;
+      rejected_count: number;
+      failures: Array<{ index: number; reason: string }>;
+    };
     expect(detail).toEqual({
       received_count: 3,
       registered_count: 0,
@@ -107,7 +112,17 @@ describe('live voice cue asset bridge', () => {
         { index: 2, reason: 'invalid_samples' },
       ],
     });
-    expect(JSON.stringify(detail)).not.toContain('samples');
+    expect(Object.keys(detail).sort()).toEqual([
+      'failures',
+      'received_count',
+      'registered_count',
+      'rejected_count',
+    ]);
+    expect(detail.failures.every((failure) => (
+      Object.keys(failure).length === 2
+      && Object.hasOwn(failure, 'index')
+      && Object.hasOwn(failure, 'reason')
+    ))).toBe(true);
     window.removeEventListener(VOICE_CUE_ASSETS_REGISTERED_EVENT, registered);
   });
 
