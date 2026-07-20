@@ -95,7 +95,7 @@ describe('RpgWorldImagesPanel', () => {
   it('bulk selects missing targets and queues independent image jobs', async () => {
     renderPanel();
 
-    expect(await screen.findByRole('heading', { name: 'Images' })).toBeInTheDocument();
+    expect(await screen.findByText('Aurelia cover')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Select Missing & Stale' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Generate Selected (1)' })).toBeEnabled());
     fireEvent.click(screen.getByText('Advanced generation settings'));
