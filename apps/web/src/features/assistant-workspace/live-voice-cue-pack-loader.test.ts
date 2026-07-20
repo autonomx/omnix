@@ -25,7 +25,7 @@ class FakeAudioContext {
       numberOfChannels: 1,
       sampleRate: 24_000,
       getChannelData: () => new Float32Array([0, 0.25, -0.25, 0]),
-    } as AudioBuffer;
+    } as unknown as AudioBuffer;
   });
 }
 
