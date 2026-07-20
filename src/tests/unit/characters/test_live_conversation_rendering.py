@@ -39,7 +39,7 @@ def test_delivery_plan_is_bounded_and_contextual() -> None:
 def test_delivery_plan_matches_browser_engaged_quick_uncertainty_policy() -> None:
     plan = create_speech_delivery_plan(
         SpeechDeliveryPlanRequest(
-            text="Perhaps this might work.",
+            text="Perhaps this approach might work tomorrow.",
             stance="discuss",
             presence_preset="engaged",
             conversation_pace="quick",
