@@ -1,7 +1,30 @@
 export type LiveVoiceCueId = 'mhm' | 'hmm' | 'inhale' | 'amused_exhale';
+export type CueSampleSource = 'voice_asset' | 'procedural_fallback';
+
+export type CueSampleResolution = {
+  samples: Float32Array;
+  source: CueSampleSource;
+  voiceId: string | null;
+  sourceSampleRate: number;
+  playbackSampleRate: number;
+};
+
+export type RegisterVoiceCueSamplesInput = {
+  voiceId: string;
+  cueId: LiveVoiceCueId;
+  variantId: string;
+  samples: Float32Array;
+  sampleRate: number;
+};
+
+type RegisteredVoiceCue = {
+  samples: Float32Array;
+  sampleRate: number;
+};
 
 const VARIANT_COUNT = 4;
-const cache = new Map<string, Float32Array>();
+const proceduralCache = new Map<string, Float32Array>();
+const voiceCueAssets = new Map<string, RegisteredVoiceCue>();
 
 export function cueVariantId(cueId: LiveVoiceCueId, sequence: number): string {
   const bounded = Math.abs(Math.trunc(sequence)) % VARIANT_COUNT;
@@ -12,20 +35,96 @@ export function cueVariantCount(): number {
   return VARIANT_COUNT;
 }
 
+export function registerVoiceCueSamples(input: RegisterVoiceCueSamplesInput): boolean {
+  const voiceId = normalizeVoiceId(input.voiceId);
+  const sampleRate = normalizeSampleRate(input.sampleRate);
+  if (!voiceId || input.samples.length <= 0 || sampleRate <= 0) return false;
+  const key = voiceCueKey(voiceId, input.cueId, input.variantId);
+  voiceCueAssets.set(key, {
+    samples: new Float32Array(input.samples),
+    sampleRate,
+  });
+  return true;
+}
+
+export function unregisterVoiceCueSamples(
+  voiceId: string,
+  cueId?: LiveVoiceCueId,
+  variantId?: string,
+): number {
+  const normalizedVoice = normalizeVoiceId(voiceId);
+  if (!normalizedVoice) return 0;
+  let removed = 0;
+  for (const key of [...voiceCueAssets.keys()]) {
+    const [storedVoice, storedCue, storedVariant] = key.split('\u0000');
+    if (storedVoice !== normalizedVoice) continue;
+    if (cueId && storedCue !== cueId) continue;
+    if (variantId && storedVariant !== normalizeVariantId(variantId)) continue;
+    voiceCueAssets.delete(key);
+    removed += 1;
+  }
+  return removed;
+}
+
+export function hasVoiceCueSamples(
+  voiceId: string | null | undefined,
+  cueId: LiveVoiceCueId,
+  variantId: string,
+): boolean {
+  const normalizedVoice = normalizeVoiceId(voiceId);
+  return Boolean(
+    normalizedVoice
+    && voiceCueAssets.has(voiceCueKey(normalizedVoice, cueId, variantId)),
+  );
+}
+
+export function resolveCueSamples(
+  cueId: LiveVoiceCueId,
+  variantId: string,
+  sampleRate: number,
+  options: {
+    voiceId?: string | null;
+    allowProceduralFallback?: boolean;
+  } = {},
+): CueSampleResolution | null {
+  const playbackSampleRate = normalizeSampleRate(sampleRate);
+  const voiceId = normalizeVoiceId(options.voiceId);
+  if (voiceId) {
+    const asset = voiceCueAssets.get(voiceCueKey(voiceId, cueId, variantId));
+    if (asset) {
+      return {
+        samples: resampleFloat32(asset.samples, asset.sampleRate, playbackSampleRate),
+        source: 'voice_asset',
+        voiceId,
+        sourceSampleRate: asset.sampleRate,
+        playbackSampleRate,
+      };
+    }
+  }
+  if (!(options.allowProceduralFallback ?? true)) return null;
+  return {
+    samples: getCachedCueSamples(cueId, variantId, playbackSampleRate).slice(),
+    source: 'procedural_fallback',
+    voiceId,
+    sourceSampleRate: playbackSampleRate,
+    playbackSampleRate,
+  };
+}
+
 export function getCachedCueSamples(
   cueId: LiveVoiceCueId,
   variantId: string,
   sampleRate: number,
 ): Float32Array {
-  const rate = Math.max(8_000, Math.round(sampleRate));
+  const rate = normalizeSampleRate(sampleRate);
   const variant = parseVariant(variantId);
   const key = `${cueId}:${variant}:${rate}`;
-  const existing = cache.get(key);
+  const existing = proceduralCache.get(key);
   if (existing) return existing;
   const samples = cueId === 'mhm' || cueId === 'hmm'
     ? createHum(cueId, variant, rate)
     : createBreath(cueId, variant, rate);
-  cache.set(key, samples);
+  proceduralCache.set(key, samples);
   return samples;
 }
 
@@ -38,7 +137,46 @@ export function cloneCueSamples(
 }
 
 export function clearCueSampleCache(): void {
-  cache.clear();
+  proceduralCache.clear();
+}
+
+export function clearVoiceCueAssets(): void {
+  voiceCueAssets.clear();
+}
+
+function voiceCueKey(voiceId: string, cueId: LiveVoiceCueId, variantId: string): string {
+  return `${voiceId}\u0000${cueId}\u0000${normalizeVariantId(variantId)}`;
+}
+
+function normalizeVoiceId(voiceId: string | null | undefined): string {
+  return typeof voiceId === 'string' ? voiceId.trim().toLocaleLowerCase().slice(0, 120) : '';
+}
+
+function normalizeVariantId(variantId: string): string {
+  return variantId.trim().toLocaleLowerCase().slice(0, 64);
+}
+
+function normalizeSampleRate(sampleRate: number): number {
+  return Math.max(8_000, Math.round(Number.isFinite(sampleRate) ? sampleRate : 24_000));
+}
+
+function resampleFloat32(
+  input: Float32Array,
+  sourceRate: number,
+  targetRate: number,
+): Float32Array {
+  if (sourceRate === targetRate) return new Float32Array(input);
+  const outputLength = Math.max(1, Math.round(input.length * targetRate / sourceRate));
+  const output = new Float32Array(outputLength);
+  const sourceStep = sourceRate / targetRate;
+  for (let index = 0; index < outputLength; index += 1) {
+    const sourcePosition = Math.min(input.length - 1, index * sourceStep);
+    const leftIndex = Math.floor(sourcePosition);
+    const rightIndex = Math.min(input.length - 1, leftIndex + 1);
+    const fraction = sourcePosition - leftIndex;
+    output[index] = input[leftIndex] + ((input[rightIndex] - input[leftIndex]) * fraction);
+  }
+  return output;
 }
 
 function createHum(cueId: 'mhm' | 'hmm', variant: number, sampleRate: number): Float32Array {
