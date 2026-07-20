@@ -4,7 +4,11 @@ from app.rpg.worlds.authoring_service import (
     read_authoring_manifest,
     read_authoring_section,
 )
-from app.rpg.worlds.authoring_presentations import entity_card
+from app.rpg.worlds.authoring_presentations import (
+    COLLECTION_CATEGORIES,
+    SYSTEM_SECTIONS,
+    entity_card,
+)
 
 
 def _detail() -> dict[str, object]:
@@ -216,3 +220,94 @@ def test_system_collection_cards_receive_typed_presentations() -> None:
         {"label": "Map", "value": "map:market"},
         {"label": "Revision", "value": 3},
     ]
+
+
+def test_every_collection_section_has_a_non_generic_card_schema() -> None:
+    system_collections = {
+        str(section["id"])
+        for section in SYSTEM_SECTIONS
+        if section["page_kind"] == "collection" and section["id"] != "images"
+    }
+    card_types = COLLECTION_CATEGORIES | system_collections
+    sample = {
+        "id": "entity:sample",
+        "name": "Sample",
+        "description": "A formatted sample card.",
+        "visibility": "public",
+        "status": "ready",
+        "dossier_status": "complete",
+        "realm_id": "realm:aurelia",
+        "region_id": "region:central_reach",
+        "region_ids": ["region:central_reach"],
+        "location_id": "location:market",
+        "location_ids": ["location:market"],
+        "faction_ids": ["faction:wardens"],
+        "institution_ids": ["institution:wayfinders"],
+        "class_ids": ["class:ward_runner"],
+        "actor_ids": ["npc:bran"],
+        "initial_npc_ids": ["npc:bran"],
+        "threat_ids": ["monster:glass_hound"],
+        "quest_ids": ["quest:glass_well"],
+        "opening_seed_ids": ["quest:glass_well"],
+        "giver_id": "npc:bran",
+        "starting_location_id": "location:market",
+        "mobility_status": "itinerant",
+        "speech_style": "plainspoken",
+        "lifespan": "roughly one century",
+        "threat_level": "dangerous",
+        "item_type": "relic",
+        "rarity": "rare",
+        "value": 250,
+        "school": "warding",
+        "tier": 2,
+        "range": "near",
+        "release": 1,
+        "world_revision": 2,
+        "revision": 2,
+        "content_hash": "sha256:sample",
+        "map_id": "map:market",
+        "blueprint_revision": 1,
+        "world_id": "world:aurelia",
+        "hooks": ["A hook"],
+        "goals": ["A goal"],
+        "motives": ["Duty"],
+        "homelands": ["Central Reach"],
+        "cultures": ["Market folk"],
+        "traits": ["A trait"],
+        "languages": ["Common"],
+        "capabilities": ["A capability"],
+        "progression": ["Initiate"],
+        "equipment": ["A tool"],
+        "values": ["Duty"],
+        "habitats": ["Old roads"],
+        "abilities": ["A signature move"],
+        "weaknesses": ["A weakness"],
+        "effects": ["A bounded effect"],
+        "origin_ids": ["faction:wardens"],
+        "costs": ["Focus"],
+        "prerequisites": ["Training"],
+        "benefits": ["A benefit"],
+        "limitations": ["A limitation"],
+        "objectives": ["Investigate"],
+        "rewards": ["Reputation"],
+        "complications": ["A rival intervenes"],
+        "outcomes": ["The district changes"],
+        "beats": ["Hook", "Climax"],
+        "starting_resources": [{"resource": "currency", "amount": 25}],
+    }
+
+    for index, card_type in enumerate(sorted(card_types)):
+        card = entity_card(
+            sample,
+            card_type=card_type,
+            kind=card_type.rstrip("s"),
+            index=index,
+        )
+        presentation = card["presentation"]
+        assert presentation["variant"] == card_type
+        assert presentation["eyebrow"]
+        assert (
+            presentation["badges"]
+            or presentation["highlights"]
+            or presentation["groups"]
+        ), card_type
