@@ -5,6 +5,7 @@ import type {
   RpgAuthoringSection,
 } from '../../api/rpgWorldAuthoringClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+import './RpgWorldAuthoringPage.css';
 
 interface RpgWorldAuthoringPageProps {
   error?: string;
