@@ -5,7 +5,7 @@ import type {
   RpgAuthoringSection,
 } from '../../api/rpgWorldAuthoringClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
-import { RpgWorldEntityEditor } from './RpgWorldEntityEditor';
+import { RpgWorldEntityCard } from './RpgWorldEntityCard';
 import { RpgWorldTopicEditor } from './RpgWorldTopicEditor';
 import './RpgWorldAuthoringPage.css';
 
@@ -120,12 +120,12 @@ export function RpgWorldAuthoringPage({
         {!page.entities.length ? <div className="rpg-authoring-empty"><h3>No entries yet</h3><p>Generate this section to add structured world entities.</p></div> : null}
         <div className="rpg-authoring-entity-grid">
           {page.entities.map((entity) => (
-            <article key={entity.id}>
-              <div className="rpg-authoring-entity-placeholder" aria-hidden="true">{entity.title.slice(0, 1).toUpperCase()}</div>
-              <div><h3>{entity.title}</h3><p>{entity.summary}</p><small>{entity.kind} · {entity.id}</small></div>
-              <details><summary>Structured details</summary><pre>{JSON.stringify(entity.metadata, null, 2)}</pre></details>
-              {page.topic ? <RpgWorldEntityEditor entity={entity} topic={page.topic} worldId={worldId} /> : null}
-            </article>
+            <RpgWorldEntityCard
+              entity={entity}
+              key={entity.id}
+              topic={page.topic}
+              worldId={worldId}
+            />
           ))}
         </div>
         {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
