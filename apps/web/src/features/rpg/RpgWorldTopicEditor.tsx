@@ -4,6 +4,7 @@ import {
   rpgWorldAuthoringClient,
   type RpgAuthoringTopic,
 } from '../../api/rpgWorldAuthoringClient';
+import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
 import './RpgWorldTopicEditor.css';
 
 interface RpgWorldTopicEditorProps {
@@ -24,13 +25,17 @@ export function RpgWorldTopicEditor({ topic, worldId }: RpgWorldTopicEditorProps
   const authoring = record(record(topic.provenance).authoring);
   const [generationLock, setGenerationLock] = useState(Boolean(authoring.generation_lock));
   const [approved, setApproved] = useState(Boolean(authoring.approved_at));
+  const [regenerationDirection, setRegenerationDirection] = useState('');
+  const [replaceProtected, setReplaceProtected] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     setContentJson(JSON.stringify(topic.content, null, 2));
     const nextAuthoring = record(record(topic.provenance).authoring);
     setGenerationLock(Boolean(nextAuthoring.generation_lock));
     setApproved(Boolean(nextAuthoring.approved_at));
+    setReplaceProtected(false);
   }, [topic]);
 
   const detailQuery = useQuery({
@@ -40,12 +45,15 @@ export function RpgWorldTopicEditor({ topic, worldId }: RpgWorldTopicEditorProps
   });
   const current = detailQuery.data?.topic ?? topic;
   const history = detailQuery.data?.history ?? [];
+  const currentAuthoring = record(record(current.provenance).authoring);
+  const protectedTopic = Boolean(currentAuthoring.generation_lock) || current.source === 'manual';
 
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-topic', worldId, topic.topic_id] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-section', worldId] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-manifest', worldId] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-workspace'] }),
     ]);
   };
 
@@ -62,6 +70,7 @@ export function RpgWorldTopicEditor({ topic, worldId }: RpgWorldTopicEditorProps
     },
     onSuccess: async () => {
       setError('');
+      setNotice('Topic saved.');
       setIsEditing(false);
       await refresh();
     },
@@ -80,17 +89,35 @@ export function RpgWorldTopicEditor({ topic, worldId }: RpgWorldTopicEditorProps
     ),
     onSuccess: async () => {
       setError('');
+      setNotice('Topic version restored.');
       await refresh();
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : 'Topic could not be restored.'),
   });
 
+  const regenerateMutation = useMutation({
+    mutationFn: () => rpgWorldLibraryClient.startGeneration(worldId, {
+      scope: { mode: 'selected', topic_ids: [topic.topic_id] },
+      strategy: 'force',
+      replace_locked: replaceProtected,
+      directives: regenerationDirection.trim()
+        ? { [topic.topic_id]: { direction: regenerationDirection.trim() } }
+        : {},
+      entity_manifest: {},
+    }),
+    onSuccess: async (result) => {
+      setError('');
+      setNotice(`Regeneration started: ${result.run.run_id}`);
+      await refresh();
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : 'Topic regeneration could not be started.'),
+  });
+
   const state = useMemo(() => {
-    const currentAuthoring = record(record(current.provenance).authoring);
     if (currentAuthoring.generation_lock) return 'Locked from bulk generation';
     if (currentAuthoring.approved_at) return 'Approved';
     return current.source === 'manual' ? 'Manually edited' : 'Generated';
-  }, [current]);
+  }, [current.source, currentAuthoring.approved_at, currentAuthoring.generation_lock]);
 
   return (
     <section className="rpg-authoring-topic-editor" aria-label="Topic editing and history">
@@ -101,6 +128,16 @@ export function RpgWorldTopicEditor({ topic, worldId }: RpgWorldTopicEditorProps
         </button>
       </div>
       {error ? <p className="rpg-world-catalog-error">{error}</p> : null}
+      {notice ? <p className="rpg-authoring-feedback" aria-live="polite">{notice}</p> : null}
+      <details className="rpg-authoring-topic-regeneration">
+        <summary>Regenerate this page</summary>
+        <div>
+          <label><span>Regeneration direction</span><textarea aria-label={`Regeneration direction for ${topic.topic_id}`} rows={3} placeholder="Optional instructions that apply only to this topic…" value={regenerationDirection} onChange={(event) => setRegenerationDirection(event.currentTarget.value)} /></label>
+          {protectedTopic ? <label className="rpg-authoring-checkbox"><input type="checkbox" checked={replaceProtected} onChange={(event) => setReplaceProtected(event.currentTarget.checked)} /><span>Replace this protected manual or locked topic</span></label> : null}
+          <button type="button" disabled={regenerateMutation.isPending || (protectedTopic && !replaceProtected)} onClick={() => regenerateMutation.mutate()}>{regenerateMutation.isPending ? 'Regenerating…' : 'Regenerate Topic'}</button>
+          <small>Only this topic and its required dependencies are targeted. Dependent topics are marked for review when canon changes.</small>
+        </div>
+      </details>
       {isEditing ? (
         <div className="rpg-authoring-topic-editor-grid">
           <form onSubmit={(event) => { event.preventDefault(); saveMutation.mutate(); }}>
