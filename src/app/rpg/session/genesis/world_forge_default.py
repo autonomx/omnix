@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_deterministic import DeterministicWorldForgeGenerator
+from .world_forge_domains import normalize_structured_domain
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 
 
@@ -32,6 +33,7 @@ class ReferenceSafeWorldForgeGenerator:
             campaign_context=campaign_context,
             dependency_topics=dependency_topics,
         )
+        topic = normalize_structured_domain(node, topic, dependency_topics)
         if node.category == "locations":
             return self._normalize_location_regions(topic, dependency_topics)
         if node.category == "npcs":
