@@ -11,6 +11,7 @@ import {
   createLiveSpeechSynthesisOptions,
   resetLiveSpeechCueState,
 } from './live-speech-synthesis-options';
+import { readVocalInteractionState } from './live-voice-performance-behavior';
 
 const profile: LiveConversationProfile = {
   presence_preset: 'natural',
@@ -51,7 +52,9 @@ describe('explicit live speech synthesis options', () => {
       },
     ]));
 
-    const options = createLiveSpeechSynthesisOptions('I think Omnix should wait.');
+    const options = createLiveSpeechSynthesisOptions('I think Omnix should wait.', {
+      scopeKey: 'chat:one',
+    });
 
     expect(options.performancePlan).toMatchObject({
       schema_version: 1,
@@ -66,6 +69,8 @@ describe('explicit live speech synthesis options', () => {
     expect(options.pronunciationLexicon).toEqual([
       { phrase: 'Omnix', pronunciation: 'Om-nicks', locale: 'en-US' },
     ]);
+    expect(readVocalInteractionState('chat:one').observationCount).toBe(1);
+    expect(readVocalInteractionState('chat:two').observationCount).toBe(0);
   });
 
   it('applies calibrated uncertainty without changing the synthesis text contract', () => {
@@ -78,6 +83,38 @@ describe('explicit live speech synthesis options', () => {
       pace: 'natural',
     });
     expect(options).not.toHaveProperty('text');
+  });
+
+  it('can disable performance and continuity independently while retaining pronunciation hints', () => {
+    window.localStorage.setItem(LIVE_CONVERSATION_EFFECTIVE_PROFILE_KEY, JSON.stringify(profile));
+    window.localStorage.setItem(ACTIVE_PRONUNCIATIONS_KEY, JSON.stringify([
+      {
+        id: 'p1',
+        phrase: 'Omnix',
+        pronunciation: 'Om-nicks',
+        locale: 'en-US',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    ]));
+
+    const disabled = createLiveSpeechSynthesisOptions('Omnix should wait.', {
+      scopeKey: 'chat:disabled',
+      enablePerformancePlan: false,
+      enableVocalContinuity: false,
+    });
+    expect(disabled.performancePlan).toBeUndefined();
+    expect(disabled.pronunciationLexicon).toEqual([
+      { phrase: 'Omnix', pronunciation: 'Om-nicks', locale: 'en-US' },
+    ]);
+    expect(readVocalInteractionState('chat:disabled').observationCount).toBe(0);
+
+    const stateless = createLiveSpeechSynthesisOptions('I think Omnix should wait.', {
+      scopeKey: 'chat:stateless',
+      enableVocalContinuity: false,
+    });
+    expect(stateless.performancePlan).toMatchObject({ speech_act: 'instruction' });
+    expect(readVocalInteractionState('chat:stateless').observationCount).toBe(0);
   });
 
   it('returns an empty explicit contract when no profile or pronunciation state is available', () => {
