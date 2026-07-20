@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
+from pydantic import ValidationError
 
 from app.gateway import tts_stream_contract
+from app.gateway.tts_performance_contract import FASTER_QWEN3_TTS_CAPABILITIES
 from app.gateway.tts_stream_contract import (
+    TtsStreamRequest,
     audio_chunk_to_pcm16_bytes,
     initial_speech_start_byte,
 )
@@ -11,6 +15,56 @@ from app.gateway.tts_stream_contract import (
 
 def _decode_pcm16(payload: bytes) -> list[int]:
     return np.frombuffer(payload, dtype="<i2").astype(np.int32).tolist()
+
+
+def test_typed_performance_plan_is_preserved_without_claiming_unsupported_provider_controls() -> None:
+    request = TtsStreamRequest.model_validate(
+        {
+            "text": "Take your time.",
+            "delivery_plan": {
+                "schema_version": 1,
+                "speech_act": "reassurance",
+                "energy": "low",
+                "warmth": "high",
+                "certainty": "moderate",
+                "pace": "slightly_slow",
+                "clause_pause": "long",
+                "emphasis": [],
+                "onset_policy": {
+                    "desired_perceived_onset_ms": 650,
+                    "maximum_additional_delay_ms": 350,
+                },
+                "nonverbal_eligibility": {
+                    "breath": True,
+                    "acknowledgement": True,
+                    "amused_exhale": False,
+                    "sigh": True,
+                },
+            },
+        }
+    )
+
+    assert request.delivery_plan is not None
+    assert request.delivery_plan.schema_version == 1
+    assert request.delivery_plan.speech_act == "reassurance"
+    assert FASTER_QWEN3_TTS_CAPABILITIES.supports_streaming is True
+    assert FASTER_QWEN3_TTS_CAPABILITIES.supports_emotion is False
+    assert FASTER_QWEN3_TTS_CAPABILITIES.supports_speaking_rate is False
+    assert FASTER_QWEN3_TTS_CAPABILITIES.supports_word_timestamps is False
+
+
+def test_malformed_or_future_performance_plan_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        TtsStreamRequest.model_validate(
+            {
+                "text": "Hello.",
+                "delivery_plan": {
+                    "schema_version": 2,
+                    "speech_act": "answer",
+                    "unexpected": True,
+                },
+            }
+        )
 
 
 def test_audio_chunk_to_pcm16_bytes_vectorizes_clipping_and_non_finite_values() -> None:
@@ -78,7 +132,6 @@ def test_pcm_helpers_fall_back_when_numpy_is_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(tts_stream_contract, "np", None)
 
     assert _decode_pcm16(audio_chunk_to_pcm16_bytes([0.5, -0.5])) == [16383, -16383]
-
     samples = np.asarray([0, 20_000], dtype="<i2")
     assert initial_speech_start_byte(
         samples.tobytes(),
