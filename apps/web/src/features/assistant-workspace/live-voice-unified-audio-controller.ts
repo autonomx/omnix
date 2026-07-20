@@ -12,7 +12,11 @@ import type {
   SpeechPerformancePlan,
   SpeechSynthesisOptions,
 } from './live-speech-performance-contract';
-import { StableClauseAccumulator, type StableClause } from './live-voice-clause-stabilizer';
+import {
+  StableClauseAccumulator,
+  mergeStreamText,
+  type StableClause,
+} from './live-voice-clause-stabilizer';
 import {
   advanceDeliveryLedger,
   appendDeliveryPhrase,
@@ -22,6 +26,10 @@ import {
   renderDeliveryLedger,
   type LiveVoiceDeliveryLedger,
 } from './live-voice-delivery-ledger';
+import {
+  readLiveVoiceHumanizationFlags,
+  type LiveVoiceHumanizationFlags,
+} from './live-voice-humanization-flags';
 import { createOnsetTimingPlan, naturalPauseAfterClause } from './live-voice-natural-timing';
 import {
   createLiveVoicePcmSession,
@@ -61,6 +69,8 @@ type LiveTurnKind = 'greeting' | 'response';
 type ActiveLiveTurn = {
   generation: number;
   kind: LiveTurnKind;
+  sessionId: string;
+  flags: LiveVoiceHumanizationFlags;
   traceId: string;
   startedAtMs: number;
   reporter: LiveCallDiagnosticsReporter;
@@ -119,6 +129,7 @@ export function initializeLiveVoiceUnifiedAudioController(): () => void {
   installedReporter.record('controller_installed', {
     location: window.location.href,
     fetch_wrapped: window.fetch === interceptLiveVoiceFetch,
+    humanization_flags: readLiveVoiceHumanizationFlags(),
   }, 'controller');
   void installedReporter.close('controller_install_confirmed');
 
@@ -151,7 +162,10 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
 
   const responseMatch = method === 'POST' ? CHAT_STREAM_PATH.exec(url.pathname) : null;
   const greetingMatch = method === 'POST' ? LIVE_CALL_GREETING_STREAM_PATH.exec(url.pathname) : null;
-  if ((!responseMatch && !greetingMatch) || !isAutoSpeakEnabled()) return fetchImpl(input, init);
+  const flags = readLiveVoiceHumanizationFlags();
+  if ((!responseMatch && !greetingMatch) || !isAutoSpeakEnabled() || !flags.master) {
+    return fetchImpl(input, init);
+  }
 
   const kind: LiveTurnKind = greetingMatch ? 'greeting' : 'response';
   if (kind === 'response') cancelGreetingStartup('real-response-started', true);
@@ -185,6 +199,8 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
   const turn: ActiveLiveTurn = {
     generation,
     kind,
+    sessionId,
+    flags,
     traceId,
     startedAtMs,
     reporter,
@@ -206,6 +222,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
     turn_kind: kind,
     voice_id: voiceId,
     auto_speak: true,
+    humanization_flags: flags,
     user_turn_id: kind === 'response' ? ids.userTurnId : null,
     speech_segment_id: kind === 'response' ? ids.speechSegmentId : null,
     voice_turn_id: voiceTurnId,
@@ -240,7 +257,8 @@ export function shouldUseUnifiedLiveVoiceAudio(input: RequestInfo | URL, init?: 
   if (method !== 'POST') return false;
   const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
   const url = new URL(rawUrl, window.location.origin);
-  return (CHAT_STREAM_PATH.test(url.pathname) || LIVE_CALL_GREETING_STREAM_PATH.test(url.pathname))
+  return readLiveVoiceHumanizationFlags().master
+    && (CHAT_STREAM_PATH.test(url.pathname) || LIVE_CALL_GREETING_STREAM_PATH.test(url.pathname))
     && isAutoSpeakEnabled();
 }
 
@@ -286,6 +304,7 @@ function maybeStartGeneratedGreeting(): void {
     || !startup.connected
     || !startup.sessionId
     || !isAutoSpeakEnabled()
+    || !readLiveVoiceHumanizationFlags().master
   ) return;
   startup.started = true;
   const abortController = new AbortController();
@@ -320,6 +339,7 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   const clauses = new StableClauseAccumulator();
+  let fallbackText = '';
   let pending = '';
   let deadlineTimer: ReturnType<typeof window.setTimeout> | null = null;
 
@@ -330,8 +350,17 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
   const commit = (ready: StableClause[]): void => {
     ready.forEach((clause) => queuePhrase(clause.text, turn, clause.reason));
   };
+  const ingestText = (text: string): void => {
+    if (turn.flags.stableClauses) {
+      commit(clauses.append(text, performance.now()));
+      scheduleDeadline();
+    } else {
+      fallbackText = mergeStreamText(fallbackText, text.trim());
+    }
+  };
   const scheduleDeadline = (): void => {
     clearDeadlineTimer();
+    if (!turn.flags.stableClauses) return;
     const remaining = clauses.deadlineRemainingMs();
     if (remaining === null) return;
     deadlineTimer = window.setTimeout(() => {
@@ -361,8 +390,7 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
           elapsed_ms: performance.now() - turn.startedAtMs,
           turn_kind: turn.kind,
         }, 'controller');
-        commit(clauses.append(event.text, performance.now()));
-        scheduleDeadline();
+        ingestText(event.text);
       }
     }
 
@@ -376,10 +404,11 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
       captureAssistantTurnId(turn, event);
       if (event?.type === 'text_chunk' && typeof event.text === 'string') {
         turn.textChunkCount += 1;
-        commit(clauses.append(event.text, performance.now()));
+        ingestText(event.text);
       }
     }
-    commit(clauses.flush());
+    if (turn.flags.stableClauses) commit(clauses.flush());
+    else if (fallbackText.trim()) queuePhrase(fallbackText, turn, 'stream-end');
   } finally {
     clearDeadlineTimer();
   }
@@ -447,16 +476,22 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
   }
 
   const phraseIndex = turn.phraseCount;
-  const synthesisOptions: SpeechSynthesisOptions = createLiveSpeechSynthesisOptions(phrase);
+  const synthesisOptions: SpeechSynthesisOptions = createLiveSpeechSynthesisOptions(phrase, {
+    scopeKey: turn.sessionId,
+    enablePerformancePlan: turn.flags.performancePlans,
+    enableVocalContinuity: turn.flags.vocalContinuity,
+  });
   const performancePlan = synthesisOptions.performancePlan;
-  const precedingPause = turn.previousClause === null
-    ? null
-    : naturalPauseAfterClause(
+  const precedingPause = turn.flags.naturalTiming && turn.previousClause !== null
+    ? naturalPauseAfterClause(
       turn.previousClause,
       phraseIndex - 1,
       turn.previousPerformancePlan ?? undefined,
-    );
-  const cue = selectLiveResponseCue(phrase, performancePlan, phraseIndex);
+    )
+    : null;
+  const cue = turn.flags.responseCues
+    ? selectLiveResponseCue(phrase, performancePlan, phraseIndex)
+    : { allowed: false, cueId: null, variantId: null, reason: 'rollout_disabled' };
 
   appendDeliveryPhrase(turn.delivery, phraseIndex, phrase);
   turn.phraseCount += 1;
@@ -484,11 +519,16 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
   void turn.sessionPromise.then(async (session) => {
     if (phraseIndex === 0) {
       const onsetPolicy = performancePlan?.onset_policy;
-      const onset = createOnsetTimingPlan(performance.now() - turn.startedAtMs, {
-        desiredPerceivedOnsetMs: onsetPolicy?.desired_perceived_onset_ms
-          ?? (turn.kind === 'greeting' ? 320 : 450),
-        maximumAdditionalDelayMs: onsetPolicy?.maximum_additional_delay_ms ?? 350,
-      });
+      const onset = turn.flags.naturalTiming
+        ? createOnsetTimingPlan(performance.now() - turn.startedAtMs, {
+          desiredPerceivedOnsetMs: onsetPolicy?.desired_perceived_onset_ms
+            ?? (turn.kind === 'greeting' ? 320 : 450),
+          maximumAdditionalDelayMs: onsetPolicy?.maximum_additional_delay_ms ?? 350,
+        })
+        : createOnsetTimingPlan(performance.now() - turn.startedAtMs, {
+          desiredPerceivedOnsetMs: 0,
+          maximumAdditionalDelayMs: 0,
+        });
       session.setStartPolicy({
         notBeforeMs: onset.extraDelayMs,
         minimumBufferedSpeechMs: START_BUFFER_MS,
@@ -498,7 +538,9 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
         elapsed_ms: onset.elapsedMs,
         extra_delay_ms: onset.extraDelayMs,
         sample_rate: session.sampleRate,
-        source: performancePlan ? 'performance_plan' : 'fallback',
+        source: !turn.flags.naturalTiming
+          ? 'rollout_disabled'
+          : performancePlan ? 'performance_plan' : 'fallback',
       }, 'controller');
     }
     if (precedingPause) {
