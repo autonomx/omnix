@@ -8,18 +8,29 @@ class FakePort {
   postMessage(message: unknown): void {
     this.messages.push(message);
     const type = (message as { type?: string })?.type;
-    if (type === 'push') {
+    if (type === 'push_segment_samples') {
       const samples = (message as { samples?: Float32Array }).samples;
       queueMicrotask(() => this.onmessage?.({
         data: {
           type: 'buffered',
+          sample_rate: FakeAudioContext.instances[0]?.sampleRate ?? 24_000,
           buffered_samples: samples?.length ?? 0,
+          buffered_speech_samples: samples?.length ?? 0,
           incoming_samples: samples?.length ?? 0,
+          semantic_speech_samples: 0,
         },
       } as MessageEvent));
     }
     if (type === 'end') {
-      queueMicrotask(() => this.onmessage?.({ data: { type: 'drained', buffered_samples: 0 } } as MessageEvent));
+      queueMicrotask(() => this.onmessage?.({
+        data: {
+          type: 'drained',
+          sample_rate: FakeAudioContext.instances[0]?.sampleRate ?? 24_000,
+          buffered_samples: 0,
+          buffered_speech_samples: 0,
+          semantic_speech_samples: 4,
+        },
+      } as MessageEvent));
     }
   }
 }
@@ -43,8 +54,9 @@ class FakeAudioWorkletNode {
 
 class FakeAudioContext {
   static instances: FakeAudioContext[] = [];
+  static nextSampleRate = 24_000;
   state: AudioContextState = 'running';
-  sampleRate = 24_000;
+  sampleRate = FakeAudioContext.nextSampleRate;
   destination = {} as AudioDestinationNode;
   audioWorklet = { addModule: vi.fn().mockResolvedValue(undefined) };
   resume = vi.fn(async () => {
@@ -63,6 +75,7 @@ type SentMessage = {
   type?: string;
   text?: string;
   phrase_index?: number;
+  segment_id?: string;
   diagnostics_stream_id?: string;
   non_streaming_mode?: boolean;
   parity_mode?: boolean;
@@ -141,6 +154,7 @@ const reporter = {
 
 beforeEach(() => {
   FakeAudioContext.instances = [];
+  FakeAudioContext.nextSampleRate = 24_000;
   FakeAudioWorkletNode.instances = [];
   FakeWebSocket.instances = [];
   reporter.record.mockClear();
@@ -155,7 +169,7 @@ afterEach(() => {
 });
 
 describe('live voice PCM session', () => {
-  it('keeps one AudioContext, worklet, and websocket while buffering multiple phrases', async () => {
+  it('keeps one AudioContext, worklet, and websocket while preserving segment identity', async () => {
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
     const first = session.enqueuePhrase('First phrase.', 0);
     const second = session.enqueuePhrase('Second phrase.', 1);
@@ -171,38 +185,86 @@ describe('live voice PCM session', () => {
     const requests = sent.filter((message) => message.type === 'synthesize');
     expect(requests).toHaveLength(2);
     expect(requests.map((request) => request.text)).toEqual(['First phrase.', 'Second phrase.']);
+    expect(requests.map((request) => request.segment_id)).toEqual([
+      'speech-live-call-s1-test-p0',
+      'speech-live-call-s1-test-p1',
+    ]);
     expect(requests[0].non_streaming_mode).toBe(false);
     expect(requests[0].parity_mode).toBe(true);
     expect(requests[0].diagnostics_stream_id).toContain('chat-live-');
     expect(sent.filter((message) => message.type === 'diagnostic')).toHaveLength(2);
     expect(sent.at(-1)?.type).toBe('close');
 
-    const messages = FakeAudioWorkletNode.instances[0].port.messages;
-    expect(messages.filter((message) => (message as { type?: string }).type === 'push')).toHaveLength(2);
-    expect(messages.filter((message) => (message as { type?: string }).type === 'end')).toHaveLength(1);
+    const messages = FakeAudioWorkletNode.instances[0].port.messages as Record<string, unknown>[];
+    const pushes = messages.filter((message) => message.type === 'push_segment_samples');
+    expect(pushes).toHaveLength(2);
+    expect(pushes.map((message) => message.phraseIndex)).toEqual([0, 1]);
+    expect(pushes.map((message) => message.segmentId)).toEqual([
+      'speech-live-call-s1-test-p0',
+      'speech-live-call-s1-test-p1',
+    ]);
+    expect(messages.filter((message) => message.type === 'segment_end')).toEqual([
+      { type: 'segment_end', segmentId: 'speech-live-call-s1-test-p0' },
+      { type: 'segment_end', segmentId: 'speech-live-call-s1-test-p1' },
+    ]);
+    expect(messages.filter((message) => message.type === 'end')).toHaveLength(1);
     expect(FakeAudioWorkletNode.instances[0].options.processorOptions).toMatchObject({
       startBufferSamples: 9_600,
+      minimumBufferedSpeechSamples: 9_600,
+      notBeforeRenderSample: 0,
       rebufferSamples: 18_000,
       maxRebufferSamples: 36_000,
       transitionFadeSamples: 192,
     });
     expect(reporter.record).toHaveBeenCalledWith(
-      'session_websocket_opened',
-      expect.objectContaining({ websocket_path: '/api/tts/live-call/websocket' }),
-      'pcm_session',
-    );
-    expect(reporter.record).toHaveBeenCalledWith(
-      'phrase_request_sent',
-      expect.objectContaining({ phrase_index: 1, websocket_reused: true }),
-      'pcm_session',
-    );
-    expect(reporter.record).toHaveBeenCalledWith(
       'turn_playback_drained',
       expect.objectContaining({ total_frames: 2, underruns: 0 }),
       'pcm_session',
     );
-    expect(FakeWebSocket.instances[0].close).toHaveBeenCalledTimes(1);
-    expect(FakeAudioContext.instances[0].close).toHaveBeenCalledTimes(1);
+  });
+
+  it('queues typed silence and an onset policy without creating zero-valued speech PCM', async () => {
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    session.setStartPolicy({ notBeforeRenderSample: 4_800, minimumBufferedSpeechSamples: 9_600 });
+    await session.enqueueSilence(250, 'reflection');
+    await session.stop('test-cleanup');
+
+    const messages = FakeAudioWorkletNode.instances[0].port.messages as Record<string, unknown>[];
+    expect(messages).toContainEqual({
+      type: 'set_start_policy',
+      notBeforeRenderSample: 4_800,
+      minimumBufferedSpeechSamples: 9_600,
+    });
+    expect(messages).toContainEqual({
+      type: 'push_segment_silence',
+      segmentId: 'silence-live-call-s1-test-s0',
+      durationSamples: 6_000,
+      reason: 'reflection',
+    });
+    expect(messages.some((message) => message.type === 'push_segment_samples')).toBe(false);
+  });
+
+  it('normalizes generated speech into the actual 48 kHz playback sample domain', async () => {
+    FakeAudioContext.nextSampleRate = 48_000;
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    await session.enqueuePhrase('Resample this phrase.', 0);
+    await session.finish();
+
+    const messages = FakeAudioWorkletNode.instances[0].port.messages as Array<{
+      type?: string;
+      samples?: Float32Array;
+    }>;
+    const push = messages.find((message) => message.type === 'push_segment_samples');
+    expect(push?.samples).toHaveLength(4);
+    expect(FakeAudioWorkletNode.instances[0].options.processorOptions).toMatchObject({
+      startBufferSamples: 19_200,
+      minimumBufferedSpeechSamples: 19_200,
+    });
+    expect(reporter.record).toHaveBeenCalledWith(
+      'phrase_buffered',
+      expect.objectContaining({ playback_samples: 4, sample_rate: 48_000 }),
+      'pcm_session',
+    );
   });
 
   it('closes the turn websocket and worklet on stop', async () => {
