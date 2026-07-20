@@ -1,4 +1,4 @@
-"""World-authoring projections and metadata routes."""
+"""World-authoring projections, metadata, and safe topic routes."""
 from __future__ import annotations
 
 from functools import wraps
@@ -10,6 +10,11 @@ from app.rpg.worlds.authoring_service import (
     read_authoring_manifest,
     read_authoring_section,
     update_world_metadata,
+)
+from app.rpg.worlds.topic_authoring import (
+    read_world_topic,
+    restore_world_topic,
+    update_world_topic,
 )
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_authoring_routes_registered"
@@ -37,6 +42,20 @@ def _raise_domain_error(exc: Exception) -> None:
             detail={"ok": False, "error": str(exc)},
         ) from exc
     raise exc
+
+
+def _expected(payload: Mapping[str, Any]) -> tuple[int, str]:
+    revision = int(payload.get("expected_draft_revision") or 0)
+    content_hash = str(payload.get("expected_content_hash") or "").strip()
+    if revision < 1 or not content_hash:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "ok": False,
+                "error": "expected_draft_revision_and_content_hash_required",
+            },
+        )
+    return revision, content_hash
 
 
 def register_rpg_world_authoring_routes(app: FastAPI) -> None:
@@ -92,6 +111,80 @@ def register_rpg_world_authoring_routes(app: FastAPI) -> None:
                 world_id,
                 expected_draft_revision=expected_revision,
                 changes=payload,
+            )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.get(
+        "/api/rpg/worlds/{world_id}/topics/{topic_id}",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    def rpg_read_world_topic(world_id: str, topic_id: str) -> dict[str, Any]:
+        try:
+            return read_world_topic(world_id, topic_id)
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.patch(
+        "/api/rpg/worlds/{world_id}/topics/{topic_id}",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    async def rpg_update_world_topic(
+        world_id: str,
+        topic_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        revision, content_hash = _expected(payload)
+        content = payload.get("content")
+        if not isinstance(content, Mapping):
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "topic_content_required"},
+            )
+        try:
+            return update_world_topic(
+                world_id,
+                topic_id,
+                expected_draft_revision=revision,
+                expected_content_hash=content_hash,
+                content=content,
+                generation_lock=bool(payload.get("generation_lock", True)),
+                approved=bool(payload.get("approved", False)),
+            )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/topics/{topic_id}/restore",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    async def rpg_restore_world_topic(
+        world_id: str,
+        topic_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        revision, content_hash = _expected(payload)
+        history_sequence = int(payload.get("history_sequence") or 0)
+        if history_sequence < 1:
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "history_sequence_required"},
+            )
+        try:
+            return restore_world_topic(
+                world_id,
+                topic_id,
+                history_sequence=history_sequence,
+                expected_draft_revision=revision,
+                expected_content_hash=content_hash,
             )
         except Exception as exc:
             _raise_domain_error(exc)
