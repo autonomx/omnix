@@ -4,6 +4,14 @@ import {
   createLiveCallTraceId,
   type LiveCallDiagnosticsReporter,
 } from './live-call-diagnostics-client';
+import {
+  createLiveSpeechSynthesisOptions,
+  selectLiveResponseCue,
+} from './live-speech-synthesis-options';
+import type {
+  SpeechPerformancePlan,
+  SpeechSynthesisOptions,
+} from './live-speech-performance-contract';
 import { StableClauseAccumulator, type StableClause } from './live-voice-clause-stabilizer';
 import {
   advanceDeliveryLedger,
@@ -15,7 +23,6 @@ import {
   type LiveVoiceDeliveryLedger,
 } from './live-voice-delivery-ledger';
 import { createOnsetTimingPlan, naturalPauseAfterClause } from './live-voice-natural-timing';
-import { millisecondsToPlaybackSamples } from './live-voice-playback-contract';
 import {
   createLiveVoicePcmSession,
   type LiveVoicePcmSession,
@@ -33,6 +40,7 @@ const AUDIO_PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const REQUESTED_PLAYBACK_SAMPLE_RATE = 24_000;
 const START_BUFFER_MS = 400;
+const PAUSE_FOLLOWING_SPEECH_BUFFER_MS = 120;
 const AUDIO_COMPLETION_TIMEOUT_MS = 60_000;
 const SPEAKABLE_TEXT_PATTERN = /[\p{L}\p{N}]/u;
 
@@ -65,6 +73,7 @@ type ActiveLiveTurn = {
   textChunkCount: number;
   delivery: LiveVoiceDeliveryLedger;
   previousClause: string | null;
+  previousPerformancePlan: SpeechPerformancePlan | null;
 };
 
 type LiveTurnIds = {
@@ -188,6 +197,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
     textChunkCount: 0,
     delivery,
     previousClause: null,
+    previousPerformancePlan: null,
   };
   activeTurn = turn;
   reporter.record('turn_intercepted', {
@@ -435,13 +445,23 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
     }, 'controller');
     return;
   }
+
   const phraseIndex = turn.phraseCount;
+  const synthesisOptions: SpeechSynthesisOptions = createLiveSpeechSynthesisOptions(phrase);
+  const performancePlan = synthesisOptions.performancePlan;
   const precedingPause = turn.previousClause === null
     ? null
-    : naturalPauseAfterClause(turn.previousClause, phraseIndex - 1);
+    : naturalPauseAfterClause(
+      turn.previousClause,
+      phraseIndex - 1,
+      turn.previousPerformancePlan ?? undefined,
+    );
+  const cue = selectLiveResponseCue(phrase, performancePlan, phraseIndex);
+
   appendDeliveryPhrase(turn.delivery, phraseIndex, phrase);
   turn.phraseCount += 1;
   turn.previousClause = phrase;
+  turn.previousPerformancePlan = performancePlan ?? null;
   setVoiceSpeaking(true, turn.kind);
   setInlineStatus(turn.kind === 'greeting' ? 'Buffering generated greeting…' : 'Buffering live response audio…');
   turn.reporter.record('phrase_queued', {
@@ -451,36 +471,47 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
     text_length: phrase.length,
     preceding_pause_ms: precedingPause?.durationMs ?? 0,
     preceding_pause_reason: precedingPause?.reason ?? null,
+    performance_schema_version: performancePlan?.schema_version ?? null,
+    performance_speech_act: performancePlan?.speech_act ?? null,
+    performance_pace: performancePlan?.pace ?? null,
+    performance_pause: performancePlan?.clause_pause ?? null,
+    response_cue: cue.allowed ? cue.cueId : null,
+    response_cue_reason: cue.reason,
     elapsed_ms: performance.now() - turn.startedAtMs,
     turn_kind: turn.kind,
   }, 'controller');
+
   void turn.sessionPromise.then(async (session) => {
     if (phraseIndex === 0) {
+      const onsetPolicy = performancePlan?.onset_policy;
       const onset = createOnsetTimingPlan(performance.now() - turn.startedAtMs, {
-        desiredPerceivedOnsetMs: turn.kind === 'greeting' ? 320 : 450,
-        maximumAdditionalDelayMs: 350,
+        desiredPerceivedOnsetMs: onsetPolicy?.desired_perceived_onset_ms
+          ?? (turn.kind === 'greeting' ? 320 : 450),
+        maximumAdditionalDelayMs: onsetPolicy?.maximum_additional_delay_ms ?? 350,
       });
       session.setStartPolicy({
-        notBeforeRenderSample: millisecondsToPlaybackSamples(
-          onset.extraDelayMs,
-          REQUESTED_PLAYBACK_SAMPLE_RATE,
-        ),
-        minimumBufferedSpeechSamples: millisecondsToPlaybackSamples(
-          START_BUFFER_MS,
-          REQUESTED_PLAYBACK_SAMPLE_RATE,
-        ),
+        notBeforeMs: onset.extraDelayMs,
+        minimumBufferedSpeechMs: START_BUFFER_MS,
       });
       turn.reporter.record('perceived_onset_planned', {
         desired_perceived_onset_ms: onset.desiredPerceivedOnsetMs,
         elapsed_ms: onset.elapsedMs,
         extra_delay_ms: onset.extraDelayMs,
-        sample_rate: REQUESTED_PLAYBACK_SAMPLE_RATE,
+        sample_rate: session.sampleRate,
+        source: performancePlan ? 'performance_plan' : 'fallback',
       }, 'controller');
     }
     if (precedingPause) {
-      await session.enqueueSilence(precedingPause.durationMs, precedingPause.reason);
+      await session.enqueueSilence(
+        precedingPause.durationMs,
+        precedingPause.reason,
+        PAUSE_FOLLOWING_SPEECH_BUFFER_MS,
+      );
     }
-    await session.enqueuePhrase(phrase, phraseIndex);
+    if (cue.allowed && cue.cueId && cue.variantId) {
+      await session.enqueueCue(cue.cueId, cue.variantId, 0.62);
+    }
+    await session.enqueuePhrase(phrase, phraseIndex, synthesisOptions);
   }).catch((error: unknown) => {
     if (turn.abortController.signal.aborted) return;
     turn.reporter.record('phrase_queue_failed', {
