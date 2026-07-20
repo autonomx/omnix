@@ -15,7 +15,9 @@ class FakePort {
           type: 'buffered',
           sample_rate: FakeAudioContext.instances[0]?.sampleRate ?? 24_000,
           buffered_samples: samples?.length ?? 0,
-          buffered_speech_samples: samples?.length ?? 0,
+          buffered_speech_samples: (message as { segmentKind?: string }).segmentKind === 'speech'
+            ? samples?.length ?? 0
+            : 0,
           incoming_samples: samples?.length ?? 0,
           semantic_speech_samples: 0,
         },
@@ -79,6 +81,7 @@ type SentMessage = {
   diagnostics_stream_id?: string;
   non_streaming_mode?: boolean;
   parity_mode?: boolean;
+  delivery_plan?: unknown;
 };
 
 class FakeWebSocket {
@@ -177,6 +180,7 @@ describe('live voice PCM session', () => {
     await Promise.all([first, second]);
     await session.finish();
 
+    expect(session.sampleRate).toBe(24_000);
     expect(FakeAudioContext.instances).toHaveLength(1);
     expect(FakeAudioWorkletNode.instances).toHaveLength(1);
     expect(FakeWebSocket.instances).toHaveLength(1);
@@ -223,10 +227,11 @@ describe('live voice PCM session', () => {
     );
   });
 
-  it('queues typed silence and an onset policy without creating zero-valued speech PCM', async () => {
+  it('converts onset and pause readiness from milliseconds in the actual playback domain', async () => {
+    FakeAudioContext.nextSampleRate = 48_000;
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
-    session.setStartPolicy({ notBeforeRenderSample: 4_800, minimumBufferedSpeechSamples: 9_600 });
-    await session.enqueueSilence(250, 'reflection');
+    session.setStartPolicy({ notBeforeMs: 100, minimumBufferedSpeechMs: 200 });
+    await session.enqueueSilence(250, 'reflection', 120);
     await session.stop('test-cleanup');
 
     const messages = FakeAudioWorkletNode.instances[0].port.messages as Record<string, unknown>[];
@@ -238,10 +243,36 @@ describe('live voice PCM session', () => {
     expect(messages).toContainEqual({
       type: 'push_segment_silence',
       segmentId: 'silence-live-call-s1-test-s0',
-      durationSamples: 6_000,
+      durationSamples: 12_000,
+      minimumFollowingSpeechSamples: 5_760,
       reason: 'reflection',
     });
     expect(messages.some((message) => message.type === 'push_segment_samples')).toBe(false);
+  });
+
+  it('queues nonverbal cues in the worklet without canonical phrase identity', async () => {
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    await session.enqueueCue('hmm', 'hmm-v2', 0.5);
+    await session.stop('test-cleanup');
+
+    const messages = FakeAudioWorkletNode.instances[0].port.messages as Record<string, unknown>[];
+    const cuePush = messages.find((message) => message.type === 'push_segment_samples');
+    expect(cuePush).toMatchObject({
+      segmentId: 'cue-live-call-s1-test-hmm-c0',
+      segmentKind: 'cue',
+      cueId: 'hmm',
+      variantId: 'hmm-v2',
+    });
+    expect(cuePush).not.toHaveProperty('phraseIndex');
+    expect(messages).toContainEqual({
+      type: 'segment_end',
+      segmentId: 'cue-live-call-s1-test-hmm-c0',
+    });
+    expect(reporter.record).toHaveBeenCalledWith(
+      'cue_segment_queued',
+      expect.objectContaining({ segment_kind: 'cue', semantic_speech_samples: 0 }),
+      'pcm_session',
+    );
   });
 
   it('normalizes generated speech into the actual 48 kHz playback sample domain', async () => {
@@ -267,7 +298,7 @@ describe('live voice PCM session', () => {
     );
   });
 
-  it('closes the turn websocket and worklet on stop', async () => {
+  it('closes the turn websocket and sends a cancellation reason to the worklet', async () => {
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
     const phrase = session.enqueuePhrase('Interrupt this phrase.', 0);
     await phrase;
@@ -276,7 +307,10 @@ describe('live voice PCM session', () => {
     expect(session.isClosed()).toBe(true);
     expect(FakeWebSocket.instances).toHaveLength(1);
     expect(FakeWebSocket.instances[0].close).toHaveBeenCalledWith(1000, 'barge-in');
-    expect(FakeAudioWorkletNode.instances[0].port.messages).toContainEqual({ type: 'stop' });
+    expect(FakeAudioWorkletNode.instances[0].port.messages).toContainEqual({
+      type: 'stop',
+      reason: 'barge-in',
+    });
     expect(FakeAudioWorkletNode.instances[0].disconnect).toHaveBeenCalledTimes(1);
     expect(FakeAudioContext.instances[0].close).toHaveBeenCalledTimes(1);
   });
