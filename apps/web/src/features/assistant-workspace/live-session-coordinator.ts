@@ -2,7 +2,6 @@ import { liveConversationStore, type LiveConversationStore } from './live-conver
 import {
   classifyLiveInput,
   type LiveAcousticClass,
-  type LiveCoordinationAction,
   type LiveInputCoordination,
 } from './live-input-coordination';
 import {
@@ -24,6 +23,7 @@ import {
 
 export const LIVE_COORDINATION_SUBMIT_EVENT = 'omnix:live-coordination-submit';
 export const LIVE_OBSERVATION_CANDIDATE_EVENT = 'omnix:live-observation-candidate';
+export const LIVE_OBSERVATION_SUPERSEDED_EVENT = 'omnix:live-observation-superseded';
 export const LIVE_TASK_CONTRACT_EVENT = 'omnix:live-task-contract';
 export const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 
@@ -66,7 +66,10 @@ export class LiveSessionCoordinator {
     const previous = this.dependencies.store.getState().coordination.taskContract;
     const transition = decideLiveTaskTransition(previous, contract);
     this.dependencies.store.dispatch({ type: 'task_contract', contract });
-    if (transition.invalidatePendingObservations) this.observations.invalidateTaskContract(contract);
+    const superseded = transition.invalidatePendingObservations
+      ? this.observations.invalidateTaskContract(contract)
+      : [];
+    if (superseded.length) this.dispatchSuperseded(superseded, 'task_contract_changed');
     this.publishObservationQueue();
     if (transition.cancelSpeakingOutput) {
       this.dependencies.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
@@ -175,6 +178,7 @@ export class LiveSessionCoordinator {
 
   markSelfCorrected(anchorId: string): string[] {
     const superseded = this.observations.markAnchorState(anchorId, 'self_corrected');
+    if (superseded.length) this.dispatchSuperseded(superseded, 'source_self_corrected');
     this.publishObservationQueue();
     return superseded;
   }
@@ -218,6 +222,12 @@ export class LiveSessionCoordinator {
   private dispatchInterrupt(intent: string, confidence: number): void {
     this.dependencies.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
       detail: { source: 'live-session-coordinator', intent, confidence },
+    }));
+  }
+
+  private dispatchSuperseded(observationIds: string[], reason: string): void {
+    this.dependencies.dispatchEvent(new CustomEvent(LIVE_OBSERVATION_SUPERSEDED_EVENT, {
+      detail: { observationIds, reason },
     }));
   }
 
