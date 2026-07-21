@@ -16,6 +16,7 @@ from .campaign_bible_runtime import load_campaign_bible_snapshot
 from .hermes_campaign_research import CampaignResearchPacket, research_campaign_turn
 from .npc_lore_sync import sync_encountered_npc_lore
 from .runtime_lore_store import ensure_turn_scene_lore
+from .turn_canon_snapshot import select_complete_turn_snapshot
 
 
 _LORE_QUERY_PREFIXES = (
@@ -160,57 +161,6 @@ def _entity_ids(
     return tuple(dict.fromkeys(values))
 
 
-def _missing_materialized_evidence(
-    evidence: Sequence[EvidenceRecord],
-    target_entity_ids: Sequence[str],
-) -> tuple[str, ...]:
-    referenced = {
-        entity_id.casefold()
-        for record in evidence
-        for entity_id in record.entity_refs
-        if str(entity_id).strip()
-    }
-    return tuple(
-        entity_id
-        for entity_id in target_entity_ids
-        if entity_id and entity_id.casefold() not in referenced
-    )
-
-
-def _snapshot_with_complete_scene_canon(
-    loaded: CampaignBibleSnapshot | None,
-    portable: CampaignBibleSnapshot | None,
-    target_entity_ids: Sequence[str],
-) -> tuple[CampaignBibleSnapshot | None, tuple[EvidenceRecord, ...], tuple[str, ...]]:
-    """Choose the authority that actually contains the just-materialized scene canon."""
-
-    candidates: list[CampaignBibleSnapshot] = []
-    for snapshot in (loaded, portable):
-        if snapshot is None:
-            continue
-        identity = (snapshot.content_hash, snapshot.revision, id(snapshot.document))
-        if any(
-            (row.content_hash, row.revision, id(row.document)) == identity
-            for row in candidates
-        ):
-            continue
-        candidates.append(snapshot)
-
-    best_snapshot: CampaignBibleSnapshot | None = None
-    best_evidence: tuple[EvidenceRecord, ...] = ()
-    best_missing = tuple(str(value) for value in target_entity_ids if str(value))
-    for snapshot in candidates:
-        evidence = tuple(campaign_bible_evidence(snapshot))
-        missing = _missing_materialized_evidence(evidence, target_entity_ids)
-        if best_snapshot is None or len(missing) < len(best_missing):
-            best_snapshot = snapshot
-            best_evidence = evidence
-            best_missing = missing
-        if not missing:
-            return snapshot, evidence, ()
-    return best_snapshot, best_evidence, best_missing
-
-
 def campaign_lore_research_required(
     player_input: str,
     result: Mapping[str, Any] | None = None,
@@ -306,7 +256,7 @@ def build_turn_grounding_packet(
     snapshot, bible_evidence, missing_materialized = (
         (None, (), ())
         if runtime_only
-        else _snapshot_with_complete_scene_canon(
+        else select_complete_turn_snapshot(
             loaded_snapshot,
             portable_snapshot,
             target_entity_ids,
