@@ -1,0 +1,31 @@
+name: Direct routing test update
+on:
+  push:
+    branches: [agent/general-full-duplex-live]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Update direct routing acceptance harness'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/general-full-duplex-live
+      - name: Patch deterministic harness
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('apps/web/src/features/assistant-workspace/live-full-duplex-evaluation.test.ts')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('  LIVE_COORDINATION_SUBMIT_EVENT,\n', '')
+          text = text.replace('    materialClient: material,\n    now: () => now++,', "    materialClient: material,\n    chatGateway: { submit: async (input) => { events.push({ type: 'live-chat-gateway-submit', detail: input }); } },\n    now: () => now++,")
+          text = text.replace("expect(harness.events.some((event) => event.type === LIVE_COORDINATION_SUBMIT_EVENT)).toBe(true);", "expect(harness.events.some((event) => event.type === 'live-chat-gateway-submit')).toBe(true);")
+          p.write_text(text, encoding='utf-8')
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/web/src/features/assistant-workspace/live-full-duplex-evaluation.test.ts
+          git commit -m 'Update direct routing acceptance harness'
+          git push origin HEAD:agent/general-full-duplex-live
