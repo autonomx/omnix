@@ -10,6 +10,7 @@ from typing import Any, Mapping
 from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
 
 from .generation_coordinator import execute_claimed_world_topic_job
+from .generation_diagnostics import log_world_generation_event
 from .generation_jobs import WORLD_TOPIC_RESOURCE_CLASS
 
 _DEFAULT_LEASE_SECONDS = 3600
@@ -94,6 +95,23 @@ def world_generation_worker_limit(
     return _DEFAULT_MAX_WORLD_GENERATION_WORKERS
 
 
+def _job_fields(job: Mapping[str, Any], *, worker_id: str) -> dict[str, Any]:
+    payload = dict(job.get("input_payload") or {})
+    settings = dict(payload.get("settings") or {})
+    metadata = dict(job.get("metadata") or {})
+    return {
+        "worker_id": worker_id,
+        "attempt_count": job.get("attempt_count"),
+        "max_attempts": job.get("max_attempts"),
+        "status": job.get("status"),
+        "provider_route": settings.get("provider_route"),
+        "model": settings.get("model"),
+        "generator_version": settings.get("generator_version"),
+        "prompt_version": settings.get("prompt_version"),
+        "dependency_ids": metadata.get("dependency_ids") or [],
+    }
+
+
 def run_world_generation_worker_once(
     *,
     worker_id: str = "rpg-world-generation:local",
@@ -124,12 +142,43 @@ def run_world_generation_worker_once(
             lease_token=str(job["lease_token"]),
         )
         work.commit()
-    return execute_claimed_world_topic_job(
+
+    metadata = dict(job.get("metadata") or {})
+    run_id = str(metadata.get("run_id") or "")
+    world_id = str(metadata.get("world_id") or "")
+    topic_id = str(metadata.get("topic_id") or "")
+    log_world_generation_event(
+        "world_generation.job_started",
+        world_id=world_id,
+        run_id=run_id,
+        topic_id=topic_id,
+        job_id=str(job.get("id") or ""),
+        fields=_job_fields(job, worker_id=worker_id),
+    )
+    result = execute_claimed_world_topic_job(
         job=job,
         worker_id=worker_id,
         generator=generator,
         database=db,
     )
+    status = str(result.get("status") or "unknown")
+    ok = bool(result.get("ok"))
+    fields = {
+        **_job_fields(dict(result.get("job") or job), worker_id=worker_id),
+        "result_status": status,
+        "detail": result.get("detail"),
+    }
+    log_world_generation_event(
+        "world_generation.job_completed" if ok else "world_generation.job_attempt_failed",
+        level="info" if ok else "error" if status == "failed" else "warning",
+        world_id=world_id,
+        run_id=run_id,
+        topic_id=topic_id,
+        job_id=str(job.get("id") or ""),
+        fields=fields,
+        error=result.get("detail") if not ok else None,
+    )
+    return result
 
 
 def _worker_loop(
@@ -148,8 +197,14 @@ def _worker_loop(
                 worker_id=worker_id,
                 database=database,
             )
-        except Exception:
+        except Exception as exc:
             _LOGGER.exception("RPG world-generation worker slot failed")
+            log_world_generation_event(
+                "world_generation.worker_slot_failed",
+                level="error",
+                fields={"slot": slot, "worker_id": worker_id},
+                error=exc,
+            )
             result = None
         with state.condition:
             state.calls_in_progress -= 1
@@ -173,12 +228,19 @@ def _worker_loop(
 
 def _worker_pool_loop(database: Any | None) -> None:
     global _worker_active
+    worker_limit = world_generation_worker_limit()
     try:
         state = _WorkerPoolState()
-        worker_limit = world_generation_worker_limit()
         _LOGGER.info(
             "Starting RPG world-generation worker pool with %s slot(s)",
             worker_limit,
+        )
+        log_world_generation_event(
+            "world_generation.worker_pool_started",
+            fields={
+                "worker_limit": worker_limit,
+                "configured_provider": _configured_world_forge_provider(),
+            },
         )
         workers = [
             threading.Thread(
@@ -193,7 +255,19 @@ def _worker_pool_loop(database: Any | None) -> None:
             worker.start()
         for worker in workers:
             worker.join()
+    except Exception as exc:
+        log_world_generation_event(
+            "world_generation.worker_pool_failed",
+            level="error",
+            fields={"worker_limit": worker_limit},
+            error=exc,
+        )
+        raise
     finally:
+        log_world_generation_event(
+            "world_generation.worker_pool_stopped",
+            fields={"worker_limit": worker_limit},
+        )
         with _worker_lock:
             _worker_active = False
 
@@ -204,6 +278,10 @@ def kick_world_generation_worker(*, database: Any | None = None) -> bool:
     global _worker_active
     with _worker_lock:
         if _worker_active:
+            log_world_generation_event(
+                "world_generation.worker_pool_already_active",
+                fields={"worker_limit": world_generation_worker_limit()},
+            )
             return False
         _worker_active = True
     thread = threading.Thread(
