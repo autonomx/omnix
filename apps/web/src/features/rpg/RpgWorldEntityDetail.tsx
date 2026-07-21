@@ -4,6 +4,7 @@ import type {
 } from '../../api/rpgWorldAuthoringClient';
 import { RpgWorldEntityEditor } from './RpgWorldEntityEditor';
 import { formatAuthoringValue } from './RpgWorldEntityCard';
+import './RpgWorldRichPresentation.css';
 
 interface RpgWorldEntityDetailProps {
   entity: RpgAuthoringEntityCard;
