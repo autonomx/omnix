@@ -7,6 +7,10 @@ import {
 
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 
+type LiveSegmentSubmitWindow = Window & typeof globalThis & {
+  __omnixLiveSegmentSubmitInterceptorInstalled?: boolean;
+};
+
 export type LiveSegmentSubmitDependencies = {
   coordinate: (input: CoordinateLiveTranscriptInput) => Promise<unknown>;
   assistantSpeaking: () => boolean;
@@ -25,7 +29,11 @@ export class LiveSegmentSubmitInterceptor {
       this.segmentedActive = detail.protocol === 'segmented-v1';
       return;
     }
-    if (detail.stage === 'stt_final_received' && this.segmentedActive) {
+    if (detail.stage === 'stt_final_received') {
+      // Semantic routing must not depend on protocol negotiation. A stale or
+      // compatibility STT process may use the legacy wire format, but its Live
+      // finals still represent voice input and must not silently become ordinary
+      // composer turns that supersede active translation output.
       this.pendingVoiceFinal = true;
     }
   }
@@ -39,7 +47,7 @@ export class LiveSegmentSubmitInterceptor {
       this.allowCoordinatedSubmit = false;
       return false;
     }
-    if (!this.segmentedActive || !this.pendingVoiceFinal) return false;
+    if (!this.pendingVoiceFinal) return false;
     this.pendingVoiceFinal = false;
     const normalized = text.trim();
     if (!normalized) return true;
@@ -61,6 +69,10 @@ export class LiveSegmentSubmitInterceptor {
     this.allowCoordinatedSubmit = false;
     this.sourceSequence = 0;
   }
+
+  get protocol(): 'legacy' | 'segmented-v1' {
+    return this.segmentedActive ? 'segmented-v1' : 'legacy';
+  }
 }
 
 export const liveSegmentSubmitInterceptor = new LiveSegmentSubmitInterceptor({
@@ -72,7 +84,10 @@ let initialized = false;
 
 export function initializeLiveSegmentSubmitInterceptor(): void {
   if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return;
+  const liveWindow = window as LiveSegmentSubmitWindow;
+  if (liveWindow.__omnixLiveSegmentSubmitInterceptorInstalled) return;
   initialized = true;
+  liveWindow.__omnixLiveSegmentSubmitInterceptorInstalled = true;
   window.addEventListener(LIVE_VOICE_PERF_EVENT, (event) => {
     const detail = (event as CustomEvent<Record<string, unknown>>).detail;
     if (!detail) return;
