@@ -98,6 +98,24 @@ export function RpgWorldEntityCard({
             ))}
           </dl>
         ) : null}
+        {!onOpen ? presentation.groups.map((group) => (
+          <section className={`rpg-authoring-card-group is-${group.style}`} key={group.label}>
+            <h4>{group.label}</h4>
+            {group.style === 'chips' ? (
+              <div className="rpg-authoring-card-chip-list">
+                {group.items.map((item, index) => (
+                  <span key={`${formatAuthoringValue(item)}:${index}`}>{formatAuthoringValue(item)}</span>
+                ))}
+              </div>
+            ) : (
+              <ul>
+                {group.items.map((item, index) => (
+                  <li key={`${formatAuthoringValue(item)}:${index}`}>{formatAuthoringValue(item)}</li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )) : null}
         <div className="rpg-authoring-card-footer">
           <small>{humanize(entity.kind)}</small>
           {onOpen ? <button type="button" onClick={onOpen}>View details</button> : null}
