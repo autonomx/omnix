@@ -75,7 +75,19 @@ export function initializeLiveSegmentSubmitInterceptor(): void {
   initialized = true;
   window.addEventListener(LIVE_VOICE_PERF_EVENT, (event) => {
     const detail = (event as CustomEvent<Record<string, unknown>>).detail;
-    if (detail) liveSegmentSubmitInterceptor.observePerformanceEvent(detail);
+    if (!detail) return;
+    liveSegmentSubmitInterceptor.observePerformanceEvent(detail);
+    if (detail.stage === 'stt_segment_state') {
+      const pendingSegments = typeof detail.pendingSegments === 'number' ? detail.pendingSegments : 0;
+      liveConversationStore.dispatch({ type: 'pending_segments', count: pendingSegments });
+      liveConversationStore.dispatch({
+        type: 'capture_activity',
+        activity: detail.protocol === 'segmented-v1' ? 'capturing' : 'idle',
+      });
+    }
+    if (detail.stage === 'stt_finalization_buffer_overflow') {
+      liveConversationStore.dispatch({ type: 'capture_activity', activity: 'degraded' });
+    }
   });
   window.addEventListener(LIVE_COORDINATION_SUBMIT_EVENT, () => {
     liveSegmentSubmitInterceptor.permitNextCoordinatedSubmit();
