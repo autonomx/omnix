@@ -19,11 +19,11 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Apply, capture failure, and restore workflow
+      - name: Apply patch or persist exact exception
         shell: bash
         run: |
-          set -uo pipefail
-          python - <<'PY' 2>&1 | tee /tmp/live-physical-patch.log
+          set +e
+          python - <<'PY' >/tmp/live-physical-patch.log 2>&1
           from pathlib import Path
           from textwrap import dedent
 
@@ -33,18 +33,22 @@ jobs:
           end = workflow.index("\n          PY", start)
           exec(compile(dedent(workflow[start:end]), 'live-physical-patch', 'exec'))
           PY
-          status=${PIPESTATUS[0]}
-          git fetch origin main
-          git checkout origin/main -- .github/workflows/live-chat-hardening.yml
+          status=$?
+          set -e
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git fetch origin main
           if [ "$status" -ne 0 ]; then
-            cp /tmp/live-physical-patch.log .github/live-physical-patch-error.txt
+            log_contents="$(cat /tmp/live-physical-patch.log)"
+            git reset --hard HEAD
+            git checkout origin/main -- .github/workflows/live-chat-hardening.yml
+            printf '%s\n' "$log_contents" > .github/live-physical-patch-error.txt
             git add .github/workflows/live-chat-hardening.yml .github/live-physical-patch-error.txt
             git commit -m 'Capture physical Live patch failure'
-            git push origin HEAD:${{ github.head_ref }}
-            exit "$status"
+            git push origin HEAD:agent/general-full-duplex-live
+            exit 0
           fi
+          git checkout origin/main -- .github/workflows/live-chat-hardening.yml
           rm -f \
             .github/workflows/apply-live-physical-acceptance-fixes.yml \
             .github/workflows/apply-live-physical-patch-only.yml \
@@ -53,4 +57,4 @@ jobs:
             .github/live-physical-patch-error.txt
           git add -A
           git commit -m 'Fix physical Live acceptance ownership'
-          git push origin HEAD:${{ github.head_ref }}
+          git push origin HEAD:agent/general-full-duplex-live
