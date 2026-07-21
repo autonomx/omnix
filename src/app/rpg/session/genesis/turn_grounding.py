@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from app.rpg.narrative_engine import (
+    CampaignBibleSnapshot,
     EvidenceRecord,
     campaign_bible_evidence,
 )
@@ -102,6 +103,24 @@ def _session(result: Mapping[str, Any], campaign_id: str) -> Mapping[str, Any]:
         return loaded if isinstance(loaded, Mapping) else {}
     except Exception:
         return {}
+
+
+def _portable_materialized_snapshot(
+    session: Mapping[str, Any],
+    campaign_id: str,
+) -> CampaignBibleSnapshot | None:
+    projection = _mapping(session.get("campaign_bible_projection"))
+    if not projection:
+        return None
+    return CampaignBibleSnapshot(
+        campaign_id=campaign_id,
+        revision=int(projection.get("canon_revision") or 0),
+        content_hash=str(projection.get("content_hash") or ""),
+        document=projection,
+        provenance={"source": "portable_materialized_turn_authority"},
+        consistency_report={},
+        completeness=_mapping(projection.get("completeness")),
+    )
 
 
 def _faction_ids(session: Mapping[str, Any], speaker_id: str | None) -> tuple[str, ...]:
@@ -241,16 +260,18 @@ def build_turn_grounding_packet(
         result,
         explicit_entity_ids=explicit_entity_ids,
     )
+    portable_snapshot = _portable_materialized_snapshot(session, campaign_id)
     prefer_postgresql = scene_lore.get("postgresql_persisted") is not False
-    snapshot = (
-        None
-        if runtime_only
-        else load_campaign_bible_snapshot(
-            campaign_id,
-            session=session,
-            prefer_postgresql=prefer_postgresql,
-        )
-    )
+    snapshot = None
+    if not runtime_only:
+        if not prefer_postgresql and portable_snapshot is not None:
+            snapshot = portable_snapshot
+        else:
+            snapshot = load_campaign_bible_snapshot(
+                campaign_id,
+                session=session,
+                prefer_postgresql=prefer_postgresql,
+            ) or portable_snapshot
     bible_evidence = (
         campaign_bible_evidence(snapshot) if snapshot is not None else ()
     )
@@ -259,15 +280,17 @@ def build_turn_grounding_packet(
         bible_evidence,
         target_entity_ids,
     )
-    if not runtime_only and (snapshot is None or missing_materialized):
-        missing = ",".join(missing_materialized or target_entity_ids or ("campaign_bible",))
+    if target_entity_ids and not runtime_only and (
+        snapshot is None or missing_materialized
+    ):
+        missing = ",".join(missing_materialized or target_entity_ids)
         raise RuntimeError(f"turn_lore_source_of_truth_unavailable:{missing}")
 
     entity_ids = _entity_ids(result, session, speaker_id, actor_ids)
     factions = _faction_ids(session, speaker_id)
     research = (
         None
-        if runtime_only
+        if runtime_only or snapshot is None
         else research_campaign_turn(
             campaign_id=campaign_id,
             query=player_input,
