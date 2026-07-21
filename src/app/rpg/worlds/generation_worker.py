@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
 
@@ -12,7 +13,8 @@ from .generation_coordinator import execute_claimed_world_topic_job
 from .generation_jobs import WORLD_TOPIC_RESOURCE_CLASS
 
 _DEFAULT_LEASE_SECONDS = 3600
-_MAX_WORLD_GENERATION_WORKERS = 4
+_DEFAULT_MAX_WORLD_GENERATION_WORKERS = 4
+_LMSTUDIO_MAX_WORLD_GENERATION_WORKERS = 1
 _LOGGER = logging.getLogger(__name__)
 _worker_lock = threading.Lock()
 _worker_active = False
@@ -32,6 +34,64 @@ def _database(value: Any | None) -> Any:
     from app.persistence.database import default_database
 
     return default_database()
+
+
+def _provider_key(value: Any) -> str:
+    provider = str(value or "").strip().casefold()
+    if provider.startswith("llm:"):
+        provider = provider.split(":", 1)[1]
+    return provider
+
+
+def _configured_world_forge_provider(
+    environ: Mapping[str, str] | None = None,
+) -> str:
+    env = environ or os.environ
+    dedicated = _provider_key(env.get("OMNIX_RPG_WORLD_FORGE_PROVIDER"))
+    if dedicated:
+        return dedicated
+    try:
+        from app.platform.effective_defaults import (
+            effective_llm_route,
+            load_effective_profile,
+        )
+
+        profile = load_effective_profile()
+        provider_id, _model_id = effective_llm_route(
+            profile,
+            "rpg",
+            "rpg.world_forge.generate",
+        )
+        return _provider_key(provider_id)
+    except Exception:
+        return ""
+
+
+def world_generation_worker_limit(
+    environ: Mapping[str, str] | None = None,
+) -> int:
+    """Return a safe worker count for the configured World Forge provider.
+
+    LM Studio commonly exposes one model channel even when the application can queue
+    several jobs. Serializing provider calls avoids the channel resets that otherwise
+    turn healthy topic jobs into repeated transient failures. Operators with an LM
+    Studio deployment configured for parallel inference can explicitly raise the
+    worker count through ``OMNIX_RPG_WORLD_GENERATION_WORKERS``.
+    """
+
+    env = environ or os.environ
+    override = str(env.get("OMNIX_RPG_WORLD_GENERATION_WORKERS") or "").strip()
+    if override:
+        try:
+            return max(1, min(int(override), _DEFAULT_MAX_WORLD_GENERATION_WORKERS))
+        except ValueError:
+            _LOGGER.warning(
+                "Ignoring invalid OMNIX_RPG_WORLD_GENERATION_WORKERS=%r",
+                override,
+            )
+    if _configured_world_forge_provider(env) == "lmstudio":
+        return _LMSTUDIO_MAX_WORLD_GENERATION_WORKERS
+    return _DEFAULT_MAX_WORLD_GENERATION_WORKERS
 
 
 def run_world_generation_worker_once(
@@ -115,6 +175,11 @@ def _worker_pool_loop(database: Any | None) -> None:
     global _worker_active
     try:
         state = _WorkerPoolState()
+        worker_limit = world_generation_worker_limit()
+        _LOGGER.info(
+            "Starting RPG world-generation worker pool with %s slot(s)",
+            worker_limit,
+        )
         workers = [
             threading.Thread(
                 target=_worker_loop,
@@ -122,7 +187,7 @@ def _worker_pool_loop(database: Any | None) -> None:
                 daemon=True,
                 name=f"omnix-rpg-world-generation-{slot}",
             )
-            for slot in range(1, _MAX_WORLD_GENERATION_WORKERS + 1)
+            for slot in range(1, worker_limit + 1)
         ]
         for worker in workers:
             worker.start()
@@ -134,7 +199,7 @@ def _worker_pool_loop(database: Any | None) -> None:
 
 
 def kick_world_generation_worker(*, database: Any | None = None) -> bool:
-    """Start one bounded four-thread worker pool when none is already active."""
+    """Start one bounded provider-aware worker pool when none is already active."""
 
     global _worker_active
     with _worker_lock:
