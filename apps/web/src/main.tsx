@@ -32,6 +32,7 @@ import { initializeLiveConversationEvaluationController } from './features/assis
 import { initializeLiveConversationInitiativeController } from './features/assistant-workspace/live-conversation-initiative-controller';
 import { initializeLiveConversationRepairController } from './features/assistant-workspace/live-conversation-repair-controller';
 import { initializeLiveConversationStoreBridge } from './features/assistant-workspace/live-conversation-store-bridge';
+import { initializeLiveOutputCoordinator } from './features/assistant-workspace/live-output-coordinator';
 import { initializeLivePresencePolicyController } from './features/assistant-workspace/live-presence-policy-controller';
 import { initializeLiveSegmentSubmitInterceptor } from './features/assistant-workspace/live-segment-submit-interceptor';
 import { initializeLiveSessionCoordinator } from './features/assistant-workspace/live-session-coordinator';
@@ -68,6 +69,7 @@ installRpgTurnUiFetchInterceptor();
 initializeLiveConversationStoreBridge();
 initializeLiveSegmentSubmitInterceptor();
 initializeLiveSessionCoordinator();
+initializeLiveOutputCoordinator();
 initializeLivePresencePolicyController();
 initializeLiveVoiceDuplexGate();
 initializeLiveVoiceAudioDuckBridge();
