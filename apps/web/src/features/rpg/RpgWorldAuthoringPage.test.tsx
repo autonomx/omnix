@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   RpgAuthoringCollectionPage,
@@ -150,7 +150,9 @@ describe('RpgWorldAuthoringPage collections', () => {
     renderPage();
 
     expect(screen.queryByText('Cross active wards')).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: 'View details' })[0]);
+    const wardRunnerCard = screen.getByRole('heading', { name: 'Ward Runner' }).closest('article');
+    expect(wardRunnerCard).not.toBeNull();
+    fireEvent.click(within(wardRunnerCard as HTMLElement).getByRole('button', { name: 'View details' }));
 
     expect(screen.getByRole('dialog', { name: 'Ward Runner details' })).toBeInTheDocument();
     expect(screen.getByText('Cross active wards')).toBeInTheDocument();
