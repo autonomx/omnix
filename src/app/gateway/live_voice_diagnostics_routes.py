@@ -7,6 +7,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
 
+from .content_free_diagnostics import sanitize_content_free_details
 from .live_chat_evaluation_routes import register_live_chat_evaluation_routes
 from .live_chat_release_gate import (
     LiveChatReleaseGateEvaluationRequest,
@@ -53,7 +54,12 @@ def register_live_voice_diagnostics_routes(gateway: FastAPI) -> None:
     async def ingest_live_voice_diagnostics(batch: LiveVoiceDiagnosticBatch) -> dict[str, Any]:
         trace_id = normalize_trace_id(batch.trace_id)
         for item in batch.events:
-            live_voice_log(trace_id, item.source, item.event, **item.details)
+            live_voice_log(
+                trace_id,
+                item.source,
+                item.event,
+                **sanitize_content_free_details(item.details),
+            )
         return {
             "accepted": len(batch.events),
             "trace_id": trace_id,
