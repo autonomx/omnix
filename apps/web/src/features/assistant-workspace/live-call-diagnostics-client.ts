@@ -66,15 +66,22 @@ export function createLiveCallDiagnosticsReporter(traceId: string): LiveCallDiag
   ): void => {
     if (closed) return;
     observeAssistantDiagnostic(traceId, event, details);
-    const sanitizedDetails = {
+    const mode = readTranscriptLoggingMode();
+    const commonDetails = {
       client_wall_time_ms: Date.now(),
       client_monotonic_ms: performance.now(),
       document_visibility: document.visibilityState,
-      ...sanitizeDiagnosticDetails(details, readTranscriptLoggingMode()),
     };
-    queue.push({ source, event, details: sanitizedDetails });
+    const persistedDetails = {
+      ...commonDetails,
+      ...sanitizeDiagnosticDetails(details, mode === 'full_local_debug' ? 'lengths_only' : mode),
+    };
+    const localDetails = mode === 'full_local_debug'
+      ? { ...commonDetails, ...details }
+      : persistedDetails;
+    queue.push({ source, event, details: persistedDetails });
     window.dispatchEvent(new CustomEvent(LIVE_CALL_DIAGNOSTIC_EVENT, {
-      detail: { traceId, source, event, details: sanitizedDetails },
+      detail: { traceId, source, event, details: localDetails },
     }));
     if (queue.length >= MAX_BATCH_EVENTS) void flush();
     else scheduleFlush();
