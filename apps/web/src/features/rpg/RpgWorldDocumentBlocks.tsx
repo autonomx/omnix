@@ -45,7 +45,7 @@ function meaningful(value: unknown): boolean {
 }
 
 function recordLabel(item: Record<string, unknown>, index: number, fallback: string): string {
-  const value = item.label ?? item.name ?? item.title ?? item.key;
+  const value = item.label ?? item.name ?? item.title ?? item.key ?? item.era ?? item.date;
   return value == null || String(value).trim() === ''
     ? `${fallback} ${index + 1}`
     : humanize(String(value));
@@ -58,6 +58,7 @@ function recordValue(item: Record<string, unknown>): unknown {
     ?? item.fact
     ?? item.description
     ?? item.summary
+    ?? item.body
     ?? item.object
     ?? 'No description was provided.';
 }
@@ -73,6 +74,8 @@ function recordBadges(item: Record<string, unknown>): unknown[] {
   const authority = visibleBadge(item.approved_authority ?? item.authority);
   return [
     ...explicit,
+    item.era,
+    item.date,
     item.visibility,
     authority,
     item.status,
@@ -168,11 +171,18 @@ function StructuredRecord({
   );
 }
 
+function timelineItems(block: RpgAuthoringDocumentBlock): Array<Record<string, unknown>> {
+  if (block.items?.length) return block.items;
+  if (block.body) return [{ title: block.title ?? 'Chronicle entry', body: block.body }];
+  return [];
+}
+
 function RecordBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
-  const items = block.items ?? [];
-  const fallback = block.kind === 'facts' ? 'Fact' : 'Entry';
+  const isTimeline = block.kind === 'timeline';
+  const items = isTimeline ? timelineItems(block) : block.items ?? [];
+  const fallback = isTimeline ? 'Era' : block.kind === 'facts' ? 'Fact' : 'Entry';
   return (
-    <section className="rpg-authoring-document-block is-record-collection">
+    <section className={`rpg-authoring-document-block is-record-collection${isTimeline ? ' is-timeline' : ''}`}>
       {block.title ? <h3>{block.title}</h3> : null}
       <div className="rpg-authoring-record-grid">
         {items.map((item, index) => (
@@ -185,8 +195,9 @@ function RecordBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
 
 function SectionBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
   const metadata = (block.items ?? []).filter((item) => meaningful(item.value));
+  const realmSummary = block.kind === 'realm-summary';
   return (
-    <section className="rpg-authoring-document-block is-prose">
+    <section className={`rpg-authoring-document-block is-prose${realmSummary ? ' is-realm-summary' : ''}`}>
       {block.title ? <h3>{block.title}</h3> : null}
       <div className="rpg-authoring-prose" style={{ whiteSpace: 'pre-line' }}>{block.body || ''}</div>
       {metadata.length ? (
@@ -204,7 +215,7 @@ function SectionBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
 }
 
 export function RpgWorldDocumentBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
-  if (block.kind === 'facts' || block.kind === 'records') return <RecordBlock block={block} />;
+  if (block.kind === 'facts' || block.kind === 'records' || block.kind === 'timeline') return <RecordBlock block={block} />;
   if (block.kind === 'json') {
     return (
       <details className="rpg-authoring-structured-data">
