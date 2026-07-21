@@ -1,79 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { LiveSegmentSubmitInterceptor } from './live-segment-submit-interceptor';
+import { LiveSegmentStateObserver } from './live-segment-submit-interceptor';
 
-describe('LiveSegmentSubmitInterceptor', () => {
-  it('routes a submitted voice final through coordination before segmented negotiation', () => {
-    const coordinate = vi.fn(async () => undefined);
-    const interceptor = new LiveSegmentSubmitInterceptor({
-      coordinate,
-      assistantSpeaking: () => true,
-    });
+describe('LiveSegmentStateObserver', () => {
+  it('records segmented protocol state without owning submission behavior', () => {
+    const observer = new LiveSegmentStateObserver();
 
-    interceptor.observePerformanceEvent({ stage: 'stt_final_submit_requested' });
+    expect(observer.protocol).toBe('legacy');
+    observer.observePerformanceEvent({ stage: 'stt_segment_state', protocol: 'segmented-v1' });
+    expect(observer.protocol).toBe('segmented-v1');
 
-    expect(interceptor.protocol).toBe('legacy');
-    expect(interceptor.intercept('Translate this continuously.')).toBe(true);
-    expect(coordinate).toHaveBeenCalledWith({
-      text: 'Translate this continuously.',
-      segmentId: 'stt-segment-0',
-      sourceSequence: 0,
-      assistantSpeaking: true,
-      acousticClass: 'speech',
-    });
-  });
+    observer.observePerformanceEvent({ stage: 'stt_final_received' });
+    expect(observer.protocol).toBe('segmented-v1');
 
-  it('does not mark a received but suppressed final as a pending submit', () => {
-    const coordinate = vi.fn(async () => undefined);
-    const interceptor = new LiveSegmentSubmitInterceptor({
-      coordinate,
-      assistantSpeaking: () => false,
-    });
-
-    interceptor.observePerformanceEvent({ stage: 'stt_final_received' });
-
-    expect(interceptor.intercept('Typed after a suppressed backchannel')).toBe(false);
-    expect(coordinate).not.toHaveBeenCalled();
-  });
-
-  it('keeps ordinary typed composer submissions outside the voice coordinator', () => {
-    const coordinate = vi.fn(async () => undefined);
-    const interceptor = new LiveSegmentSubmitInterceptor({
-      coordinate,
-      assistantSpeaking: () => false,
-    });
-
-    expect(interceptor.intercept('Typed message')).toBe(false);
-    expect(coordinate).not.toHaveBeenCalled();
-  });
-
-  it('permits the coordinator to submit a conversational response exactly once', () => {
-    const coordinate = vi.fn(async () => undefined);
-    const interceptor = new LiveSegmentSubmitInterceptor({
-      coordinate,
-      assistantSpeaking: () => false,
-    });
-
-    interceptor.observePerformanceEvent({ stage: 'stt_final_submit_requested' });
-    interceptor.permitNextCoordinatedSubmit();
-
-    expect(interceptor.intercept('Question for Maya')).toBe(false);
-    expect(interceptor.intercept('Question for Maya')).toBe(true);
-    expect(coordinate).toHaveBeenCalledTimes(1);
-  });
-
-  it('records segmented protocol state without making routing depend on it', () => {
-    const coordinate = vi.fn(async () => undefined);
-    const interceptor = new LiveSegmentSubmitInterceptor({
-      coordinate,
-      assistantSpeaking: () => false,
-    });
-
-    interceptor.observePerformanceEvent({ stage: 'stt_segment_state', protocol: 'segmented-v1' });
-    interceptor.observePerformanceEvent({ stage: 'stt_final_submit_requested' });
-
-    expect(interceptor.protocol).toBe('segmented-v1');
-    expect(interceptor.intercept('Ongoing material')).toBe(true);
-    expect(coordinate).toHaveBeenCalledTimes(1);
+    observer.reset();
+    expect(observer.protocol).toBe('legacy');
   });
 });
