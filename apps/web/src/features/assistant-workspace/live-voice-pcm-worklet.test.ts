@@ -235,4 +235,60 @@ describe('live voice PCM worklet state machine', () => {
     ]);
     expect(events(processor, 'segment_completed')).toHaveLength(0);
   });
+
+  it('selectively cancels one output, preserves following output, and rejects late frames', () => {
+    const processor = createProcessor({ transitionFadeSamples: 4 });
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-a',
+      segmentKind: 'speech',
+      phraseIndex: 0,
+      outputId: 'output-a',
+      generationEpoch: 1,
+      outputOrder: 0,
+      samples: new Float32Array(256).fill(0.4),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'speech-a' });
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-b',
+      segmentKind: 'speech',
+      phraseIndex: 1,
+      outputId: 'output-b',
+      generationEpoch: 1,
+      outputOrder: 1,
+      samples: new Float32Array([0.2, 0.2, 0.2, 0.2]),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'speech-b' });
+
+    render(processor);
+    send(processor, {
+      type: 'cancel_output',
+      outputId: 'output-a',
+      generationEpoch: 1,
+      reason: 'self_corrected',
+    });
+    const afterCancel = render(processor, 16);
+
+    expect(events(processor, 'segment_interrupted')).toContainEqual(expect.objectContaining({
+      segment_id: 'speech-a', output_id: 'output-a', generation_epoch: 1, reason: 'self_corrected',
+    }));
+    expect(events(processor, 'segment_completed')).toContainEqual(expect.objectContaining({
+      segment_id: 'speech-b', output_id: 'output-b', generation_epoch: 1,
+    }));
+    expect(afterCancel.slice(0, 4).some((sample) => sample !== 0)).toBe(true);
+
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-a-late',
+      segmentKind: 'speech',
+      outputId: 'output-a',
+      generationEpoch: 1,
+      outputOrder: 0,
+      samples: new Float32Array([0.9, 0.9]),
+    });
+    expect(events(processor, 'late_segment_rejected')).toContainEqual(expect.objectContaining({
+      output_id: 'output-a', generation_epoch: 1,
+    }));
+  });
 });
