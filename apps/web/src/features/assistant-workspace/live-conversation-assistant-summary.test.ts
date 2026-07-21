@@ -3,12 +3,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   LIVE_ASSISTANT_TURN_SUMMARY_EVENT,
   observeAssistantDiagnostic,
+  pendingAssistantDiagnosticCount,
+  readCurrentAssistantDiagnosticText,
   resetAssistantDiagnosticSummaries,
   summarizeAssistantTurn,
   type LiveAssistantTurnSummary,
 } from './live-conversation-assistant-summary';
 
-afterEach(() => resetAssistantDiagnosticSummaries());
+afterEach(() => {
+  resetAssistantDiagnosticSummaries();
+  vi.restoreAllMocks();
+});
 
 describe('assistant turn summaries', () => {
   it('derives only bounded content-free features', () => {
@@ -40,6 +45,7 @@ describe('assistant turn summaries', () => {
     observeAssistantDiagnostic('trace-one', 'assistant_turn_linked', { assistant_turn_id: 'assistant-one' });
     observeAssistantDiagnostic('trace-one', 'llm_text_chunk_received', { text: 'Should we revisit ' });
     observeAssistantDiagnostic('trace-one', 'llm_text_chunk_received', { text: 'the launch schedule?' });
+    expect(readCurrentAssistantDiagnosticText()).toBe('Should we revisit the launch schedule?');
     observeAssistantDiagnostic('trace-one', 'llm_stream_finished', {});
 
     expect(received).toHaveLength(1);
@@ -47,16 +53,31 @@ describe('assistant turn summaries', () => {
       turnId: 'assistant-one', questionCount: 1, createsObligation: true,
     });
     expect(JSON.stringify(received[0])).not.toContain('launch schedule');
+    expect(pendingAssistantDiagnosticCount()).toBe(0);
     window.removeEventListener(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, listener);
   });
 
-  it('drops interrupted text without emitting a summary', () => {
+  it('drops interrupted and closed text without emitting a summary', () => {
     const listener = vi.fn();
     window.addEventListener(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, listener);
     observeAssistantDiagnostic('trace-two', 'turn_intercepted', { turn_kind: 'response' });
     observeAssistantDiagnostic('trace-two', 'llm_text_chunk_received', { text: 'private text' });
     observeAssistantDiagnostic('trace-two', 'turn_stopped', {});
+    observeAssistantDiagnostic('trace-three', 'turn_intercepted', { turn_kind: 'response' });
+    observeAssistantDiagnostic('trace-three', 'llm_text_chunk_received', { text: 'another private text' });
+    observeAssistantDiagnostic('trace-three', 'reporter_closed', {});
+
     expect(listener).not.toHaveBeenCalled();
+    expect(pendingAssistantDiagnosticCount()).toBe(0);
+    expect(readCurrentAssistantDiagnosticText()).toBe('');
     window.removeEventListener(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, listener);
+  });
+
+  it('bounds abandoned pending traces', () => {
+    for (let index = 0; index < 24; index += 1) {
+      observeAssistantDiagnostic(`trace-${index}`, 'turn_intercepted', { turn_kind: 'response' });
+      observeAssistantDiagnostic(`trace-${index}`, 'llm_text_chunk_received', { text: `text-${index}` });
+    }
+    expect(pendingAssistantDiagnosticCount()).toBeLessThanOrEqual(16);
   });
 });
