@@ -32,6 +32,19 @@ export type LiveMaterialAcknowledgement = {
   };
 };
 
+export type LiveTaskContractAcknowledgementRequest = {
+  task_contract_id: string;
+  task_contract_version: number;
+};
+
+export type LiveTaskContractAcknowledgement = {
+  session_id: string;
+  task_contract_id: string;
+  task_contract_version: number;
+  context_version: number;
+  idempotent: boolean;
+};
+
 export type LiveMaterialSnapshot = {
   session_id: string;
   context_version: number;
@@ -62,6 +75,16 @@ export class LiveMaterialClient {
         task_contract_version: 1,
         ...request,
       }),
+    });
+  }
+
+  async acknowledgeTaskContract(
+    sessionId: string,
+    request: LiveTaskContractAcknowledgementRequest,
+  ): Promise<LiveTaskContractAcknowledgement> {
+    return this.request<LiveTaskContractAcknowledgement>(`${this.path(sessionId)}/task-contract`, {
+      method: 'POST',
+      body: JSON.stringify(request),
     });
   }
 
