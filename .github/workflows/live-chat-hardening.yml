@@ -19,7 +19,7 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Apply or persist transformation mismatch
+      - name: Apply patch or persist exact mismatch
         shell: bash
         run: |
           set +e
@@ -41,20 +41,19 @@ jobs:
           if [ "$status" -ne 0 ]; then
             log_contents="$(cat /tmp/live-physical-patch.log)"
             git reset --hard HEAD
-            git checkout 4936c00b083e74609d1f7ae6a9802bb5a89ee2da -- .github/workflows/live-chat-hardening.yml
             printf '%s\n' "$log_contents" > .github/live-physical-patch-error.txt
-            git add .github/workflows/live-chat-hardening.yml .github/live-physical-patch-error.txt
+            git add .github/live-physical-patch-error.txt
             git commit -m 'Capture physical Live source mismatch'
             git push origin HEAD:agent/general-full-duplex-live
             exit 0
           fi
-          git checkout 4936c00b083e74609d1f7ae6a9802bb5a89ee2da -- .github/workflows/live-chat-hardening.yml
-          rm -f \
-            .github/workflows/apply-live-physical-acceptance-fixes.yml \
-            .github/workflows/apply-live-physical-patch-only.yml \
-            .github/live-physical-fix-trigger \
-            .github/live-physical-patch-trigger-2 \
-            .github/live-physical-patch-error.txt
-          git add -A
+          rm -f .github/live-physical-patch-error.txt
+          git add apps/web/vite.config.ts \
+            apps/web/src/features/chatbot/ChatbotWorkspace.tsx \
+            apps/web/src/features/assistant-workspace/live-voice-controller.ts \
+            apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts \
+            apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts \
+            apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts \
+            src/tests/app/test_live_chat_authoritative_state_source.py
           git commit -m 'Fix physical Live acceptance ownership'
           git push origin HEAD:agent/general-full-duplex-live
