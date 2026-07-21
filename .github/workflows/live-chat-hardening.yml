@@ -30,44 +30,128 @@ jobs:
           path = Path('apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts')
           text = path.read_text(encoding='utf-8')
 
-          def replace(old: str, new: str) -> None:
-              global text
-              if old not in text:
-                  raise SystemExit(f'missing lifecycle test pattern: {old[:120]!r}')
-              text = text.replace(old, new, 1)
+          def section(title: str, following_title: str | None = None) -> tuple[int, int]:
+              start = text.index(title)
+              if following_title is None:
+                  return start, len(text)
+              return start, text.index(following_title, start)
 
-          replace(
-              "  mocks.session.enqueueCue.mockReset().mockResolvedValue(undefined);\n  mocks.session.setStartPolicy.mockReset();",
-              "  mocks.session.enqueueCue.mockReset().mockResolvedValue(undefined);\n  mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);\n  mocks.session.waitForOutputItem.mockReset().mockResolvedValue(undefined);\n  mocks.session.setStartPolicy.mockReset();",
+          if 'mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);' not in text:
+              marker = '  mocks.session.enqueueCue.mockReset().mockResolvedValue(undefined);\n'
+              text = text.replace(
+                  marker,
+                  marker
+                  + '  mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);\n'
+                  + '  mocks.session.waitForOutputItem.mockReset().mockResolvedValue(undefined);\n',
+                  1,
+              )
+
+          if 'afterEach(async () => {' not in text:
+              start = text.index('afterEach(() => {')
+              end = text.index('\n});', start) + len('\n});')
+              text = text[:start] + (
+                  "afterEach(async () => {\n"
+                  "  const hadSharedSession = mocks.createSession.mock.calls.length > 0;\n"
+                  "  cleanup?.();\n"
+                  "  cleanup = null;\n"
+                  "  if (hadSharedSession) {\n"
+                  "    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalled());\n"
+                  "  }\n"
+                  "  document.body.innerHTML = '';\n"
+                  "  vi.restoreAllMocks();\n"
+                  "  vi.unstubAllGlobals();\n"
+                  "});"
+              ) + text[end:]
+
+          greeting_start, greeting_end = section(
+              "  it('generates one transient greeting only after runtime and microphone connection are ready'",
+              "  it('does not generate a greeting when the user speaks before startup is ready'",
           )
-          replace(
-              "afterEach(() => {\n  cleanup?.();\n  cleanup = null;\n  document.body.innerHTML = '';\n  vi.restoreAllMocks();\n  vi.unstubAllGlobals();\n});",
-              "afterEach(async () => {\n  const hadSharedSession = mocks.createSession.mock.calls.length > 0;\n  cleanup?.();\n  cleanup = null;\n  if (hadSharedSession) {\n    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalled());\n  }\n  document.body.innerHTML = '';\n  vi.restoreAllMocks();\n  vi.unstubAllGlobals();\n});",
+          greeting = text[greeting_start:greeting_end]
+          if "expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 })" not in greeting:
+              greeting = greeting.replace(
+                  "      0,\n      {},\n    ));",
+                  "      0,\n      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),\n      {},\n    ));",
+                  1,
+              )
+              text = text[:greeting_start] + greeting + text[greeting_end:]
+
+          interrupt_greeting_start, interrupt_greeting_end = section(
+              "  it('aborts greeting generation and playback when the user begins speaking'",
+              "  it('uses the authoritative live-call voice instead of the chat voice setting'",
           )
-          replace(
-              "    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(\n      'Hey there! How is your day going?',\n      0,\n      {},\n    ));",
-              "    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(\n      'Hey there! How is your day going?',\n      0,\n      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),\n      {},\n    ));",
-          )
-          replace(
-              "  it('aborts greeting generation and playback when the user begins speaking', async () => {\n    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));",
-              "  it('aborts greeting generation and playback when the user begins speaking', async () => {\n    let resolveOutput: () => void = () => undefined;\n    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {\n      resolveOutput = resolve;\n    }));\n    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));",
-          )
-          replace(
-              "    expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBeUndefined();\n    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n  });",
-              "    expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBeUndefined();\n    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n    resolveOutput();\n  });",
-          )
-          replace(
+          greeting_interrupt = text[interrupt_greeting_start:interrupt_greeting_end]
+          if 'let resolveOutput: () => void' not in greeting_interrupt:
+              opening = "  it('aborts greeting generation and playback when the user begins speaking', async () => {\n"
+              greeting_interrupt = greeting_interrupt.replace(
+                  opening,
+                  opening
+                  + "    let resolveOutput: () => void = () => undefined;\n"
+                  + "    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {\n"
+                  + "      resolveOutput = resolve;\n"
+                  + "    }));\n",
+                  1,
+              )
+          if '    resolveOutput();\n' not in greeting_interrupt:
+              closing = "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n  });"
+              greeting_interrupt = greeting_interrupt.replace(
+                  closing,
+                  "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n"
+                  + "    resolveOutput();\n"
+                  + "  });",
+                  1,
+              )
+          text = text[:interrupt_greeting_start] + greeting_interrupt + text[interrupt_greeting_end:]
+
+          text = text.replace(
               "    expect(mocks.createTraceId).not.toHaveBeenCalled();",
               "    expect(mocks.createTraceId).toHaveBeenCalledWith('s1:audio-session');",
+              1,
           )
-          replace(
-              "  it('aborts the active request and stops the persistent session on interruption', async () => {\n    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });",
-              "  it('aborts the active request and cancels owned output on interruption', async () => {\n    let resolveOutput: () => void = () => undefined;\n    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {\n      resolveOutput = resolve;\n    }));\n    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });",
+
+          final_start, final_end = section(
+              "  it('aborts the active request and stops the persistent session on interruption'",
+              None,
           )
-          replace(
-              "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n  });\n});",
-              "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n    resolveOutput();\n  });\n});",
+          final_test = text[final_start:final_end]
+          final_test = final_test.replace(
+              "  it('aborts the active request and stops the persistent session on interruption', async () => {",
+              "  it('aborts the active request and cancels owned output on interruption', async () => {",
+              1,
           )
+          if 'let resolveOutput: () => void' not in final_test:
+              opening = "  it('aborts the active request and cancels owned output on interruption', async () => {\n"
+              final_test = final_test.replace(
+                  opening,
+                  opening
+                  + "    let resolveOutput: () => void = () => undefined;\n"
+                  + "    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {\n"
+                  + "      resolveOutput = resolve;\n"
+                  + "    }));\n",
+                  1,
+              )
+          if '    resolveOutput();\n' not in final_test:
+              closing = "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n  });\n});"
+              final_test = final_test.replace(
+                  closing,
+                  "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n"
+                  + "    resolveOutput();\n"
+                  + "  });\n"
+                  + "});",
+                  1,
+              )
+          text = text[:final_start] + final_test
+
+          required = (
+              'afterEach(async () => {',
+              'cancelOutputItem.mockReset()',
+              'waitForOutputItem.mockReset()',
+              "toHaveBeenCalledWith('s1:audio-session')",
+              "aborts the active request and cancels owned output on interruption",
+          )
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit(f'patched lifecycle test is missing: {missing}')
           path.write_text(text, encoding='utf-8')
           PY
           git config user.name github-actions[bot]
