@@ -59,9 +59,19 @@ const page: RpgAuthoringCollectionPage = {
         eyebrow: 'Class / Discipline',
         badges: [],
         highlights: [],
-        groups: [],
+        groups: [
+          {
+            label: 'Capabilities',
+            items: ['Cross active wards'],
+            style: 'list',
+          },
+        ],
       },
-      metadata: {},
+      metadata: {
+        id: 'class:ward_runner',
+        name: 'Ward Runner',
+        capabilities: ['Cross active wards'],
+      },
     },
     {
       id: 'discipline:glass_reader',
@@ -134,5 +144,15 @@ describe('RpgWorldAuthoringPage collections', () => {
     });
     expect(screen.getByRole('heading', { name: 'Ward Runner' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Glass Reader' })).not.toBeInTheDocument();
+  });
+
+  it('opens a compact class card into its complete dossier', () => {
+    renderPage();
+
+    expect(screen.queryByText('Cross active wards')).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'View details' })[0]);
+
+    expect(screen.getByRole('dialog', { name: 'Ward Runner details' })).toBeInTheDocument();
+    expect(screen.getByText('Cross active wards')).toBeInTheDocument();
   });
 });
