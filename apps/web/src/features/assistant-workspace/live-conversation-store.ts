@@ -9,6 +9,11 @@ import {
   type LiveConversationState,
   type LiveConversationStateEvent,
 } from './live-conversation-state';
+import {
+  DEFAULT_LIVE_TASK_CONTRACT,
+  normalizeLiveTaskContract,
+  type LiveTaskContract,
+} from './live-task-contract';
 import type { LiveVoiceCalibrationRecord } from './live-voice-calibration';
 import type { SpeechDeliveryPlan } from './live-speech-delivery-plan';
 
@@ -35,6 +40,17 @@ export type LiveConversationTranscriptState = {
   recentFinals: string[];
 };
 
+export type LiveCoordinationRuntimeState = {
+  taskContract: LiveTaskContract;
+  contextVersion: number;
+  acceptedSequence: number;
+  captureActivity: 'idle' | 'capturing' | 'degraded';
+  pendingSegmentCount: number;
+  queuedObservationCount: number;
+  queuedObservationSpeechMs: number;
+  lastAction: string | null;
+};
+
 export type LiveConversationRuntimeState = {
   conversation: LiveConversationState;
   sessionId: string | null;
@@ -46,6 +62,7 @@ export type LiveConversationRuntimeState = {
   pronunciationRevision: number;
   qualitySummary: Record<string, unknown> | null;
   transcript: LiveConversationTranscriptState;
+  coordination: LiveCoordinationRuntimeState;
 };
 
 export type LiveConversationStoreAction =
@@ -60,6 +77,12 @@ export type LiveConversationStoreAction =
   | { type: 'quality'; summary: Record<string, unknown> | null }
   | { type: 'transcript_partial'; text: string }
   | { type: 'transcript_final'; text: string }
+  | { type: 'task_contract'; contract: LiveTaskContract }
+  | { type: 'material_ack'; acceptedSequence: number; contextVersion: number }
+  | { type: 'capture_activity'; activity: LiveCoordinationRuntimeState['captureActivity'] }
+  | { type: 'pending_segments'; count: number }
+  | { type: 'observation_queue'; count: number; speechMs: number }
+  | { type: 'coordination_action'; action: string | null }
   | { type: 'reset_conversation' }
   | { type: 'reset_all' };
 
@@ -85,6 +108,16 @@ export const INITIAL_LIVE_CONVERSATION_RUNTIME_STATE: LiveConversationRuntimeSta
   pronunciationRevision: 0,
   qualitySummary: null,
   transcript: { partial: '', lastFinal: '', recentFinals: [] },
+  coordination: {
+    taskContract: DEFAULT_LIVE_TASK_CONTRACT,
+    contextVersion: 0,
+    acceptedSequence: -1,
+    captureActivity: 'idle',
+    pendingSegmentCount: 0,
+    queuedObservationCount: 0,
+    queuedObservationSpeechMs: 0,
+    lastAction: null,
+  },
 };
 
 export function reduceLiveConversationRuntimeState(
@@ -95,7 +128,21 @@ export function reduceLiveConversationRuntimeState(
     case 'conversation':
       return { ...state, conversation: reduceLiveConversationState(state.conversation, action.event) };
     case 'session':
-      return { ...state, sessionId: action.sessionId };
+      return action.sessionId === state.sessionId
+        ? state
+        : {
+            ...state,
+            sessionId: action.sessionId,
+            coordination: {
+              ...state.coordination,
+              contextVersion: 0,
+              acceptedSequence: -1,
+              pendingSegmentCount: 0,
+              queuedObservationCount: 0,
+              queuedObservationSpeechMs: 0,
+              lastAction: null,
+            },
+          };
     case 'identity':
       return { ...state, identity: { ...state.identity, ...action.identity } };
     case 'profile':
@@ -131,12 +178,53 @@ export function reduceLiveConversationRuntimeState(
         transcript: { partial: '', lastFinal: text, recentFinals },
       };
     }
+    case 'task_contract':
+      return {
+        ...state,
+        coordination: {
+          ...state.coordination,
+          taskContract: normalizeLiveTaskContract(action.contract),
+          lastAction: 'task_contract_changed',
+        },
+      };
+    case 'material_ack':
+      return {
+        ...state,
+        coordination: {
+          ...state.coordination,
+          acceptedSequence: Math.max(state.coordination.acceptedSequence, action.acceptedSequence),
+          contextVersion: Math.max(state.coordination.contextVersion, action.contextVersion),
+        },
+      };
+    case 'capture_activity':
+      return { ...state, coordination: { ...state.coordination, captureActivity: action.activity } };
+    case 'pending_segments':
+      return { ...state, coordination: { ...state.coordination, pendingSegmentCount: Math.max(0, action.count) } };
+    case 'observation_queue':
+      return {
+        ...state,
+        coordination: {
+          ...state.coordination,
+          queuedObservationCount: Math.max(0, action.count),
+          queuedObservationSpeechMs: Math.max(0, action.speechMs),
+        },
+      };
+    case 'coordination_action':
+      return { ...state, coordination: { ...state.coordination, lastAction: action.action } };
     case 'reset_conversation':
       return {
         ...state,
         conversation: INITIAL_LIVE_CONVERSATION_STATE,
         deliveryPlan: null,
         transcript: { partial: '', lastFinal: '', recentFinals: [] },
+        coordination: {
+          ...state.coordination,
+          captureActivity: 'idle',
+          pendingSegmentCount: 0,
+          queuedObservationCount: 0,
+          queuedObservationSpeechMs: 0,
+          lastAction: null,
+        },
       };
     case 'reset_all':
       return INITIAL_LIVE_CONVERSATION_RUNTIME_STATE;
@@ -214,5 +302,9 @@ export function selectLiveChatSnapshot(state: LiveConversationRuntimeState) {
     duplexReason: state.duplex.reason,
     calibrationConfidence: state.duplex.confidence,
     presencePolicyVersion: state.presencePolicy?.version ?? null,
+    taskContractId: state.coordination.taskContract.taskContractId,
+    taskContractVersion: state.coordination.taskContract.version,
+    contextVersion: state.coordination.contextVersion,
+    acceptedSequence: state.coordination.acceptedSequence,
   };
 }
