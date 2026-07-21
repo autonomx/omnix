@@ -1,0 +1,36 @@
+name: Apply Live physical patch only
+on:
+  push:
+    branches: [agent/general-full-duplex-live]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Fix physical Live acceptance ownership'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/general-full-duplex-live
+      - name: Execute canonical patch script
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+
+          workflow = Path('.github/workflows/apply-live-physical-acceptance-fixes.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY", start)
+          script = dedent(workflow[start:end])
+          exec(compile(script, 'live-physical-patch', 'exec'))
+          PY
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/web/vite.config.ts apps/web/src/features/chatbot/ChatbotWorkspace.tsx apps/web/src/features/assistant-workspace/live-voice-controller.ts apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts src/tests/app/test_live_chat_authoritative_state_source.py
+          git commit -m 'Fix physical Live acceptance ownership'
+          git push origin HEAD:agent/general-full-duplex-live
