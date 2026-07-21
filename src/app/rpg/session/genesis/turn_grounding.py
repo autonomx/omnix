@@ -241,12 +241,14 @@ def build_turn_grounding_packet(
         result,
         explicit_entity_ids=explicit_entity_ids,
     )
+    prefer_postgresql = scene_lore.get("postgresql_persisted") is not False
     snapshot = (
         None
         if runtime_only
         else load_campaign_bible_snapshot(
             campaign_id,
             session=session,
+            prefer_postgresql=prefer_postgresql,
         )
     )
     bible_evidence = (
@@ -276,6 +278,7 @@ def build_turn_grounding_packet(
             entity_ids=entity_ids,
             research_id=f"research:{campaign_id}:{result.get('turn_id') or result.get('tick') or 0}",
             max_topics=max_topics,
+            snapshot=snapshot,
         )
     )
     hermes_evidence = research.result.evidence() if research else ()
@@ -323,6 +326,7 @@ def build_turn_grounding_packet(
         "created_npc_lore_ids": list(npc_lore_sync.get("created_npc_ids") or ()),
         "scene_lore_materialization_mode": str(scene_lore.get("mode") or ""),
         "scene_lore_persisted": scene_lore.get("persisted") is True,
+        "scene_lore_postgresql_persisted": scene_lore.get("postgresql_persisted") is not False,
         "scene_lore_changed": scene_lore.get("changed") is True,
         "scene_lore_target_entity_ids": list(target_entity_ids),
         "scene_lore_created_entity_ids": list(scene_lore.get("created_entity_ids") or ()),
