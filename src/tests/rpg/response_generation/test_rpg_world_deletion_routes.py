@@ -23,7 +23,8 @@ def test_world_deletion_route_requires_typed_confirmation(monkeypatch) -> None:
     rpg_world_deletion_routes.register_rpg_world_deletion_routes(app)
     client = TestClient(app)
 
-    response = client.delete(
+    response = client.request(
+        "DELETE",
         "/api/rpg/worlds/world:draft",
         json={"acknowledge_permanent": True},
     )
@@ -58,7 +59,8 @@ def test_world_deletion_route_passes_explicit_decision(monkeypatch) -> None:
     rpg_world_deletion_routes.register_rpg_world_deletion_routes(app)
     client = TestClient(app)
 
-    response = client.delete(
+    response = client.request(
+        "DELETE",
         "/api/rpg/worlds/world:draft",
         json={
             "confirmation_title": "Disposable Draft",
