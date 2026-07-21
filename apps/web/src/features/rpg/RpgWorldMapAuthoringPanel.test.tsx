@@ -121,7 +121,7 @@ describe('RpgWorldMapAuthoringPanel', () => {
     renderPanel();
 
     expect(await screen.findByRole('heading', { name: 'Map' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Moon Market/ })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /Moon Market/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Edit Next Revision' }));
     expect(screen.getByDisplayValue('2')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Structured blueprint JSON'), {
