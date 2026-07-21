@@ -1,0 +1,41 @@
+name: Apply Live PCM syntax patch
+
+on:
+  push:
+    branches:
+      - agent/general-full-duplex-live
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/general-full-duplex-live
+          fetch-depth: 0
+
+      - name: Apply exact TypeScript syntax correction
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts')
+          source = path.read_text(encoding='utf-8')
+          old = "const terminateSession = async (reason: string, *, workletAlreadyDrained = false): Promise<void> => {"
+          new = "const terminateSession = async (reason: string, workletAlreadyDrained = false): Promise<void> => {"
+          if old not in source:
+              raise SystemExit('Expected invalid TypeScript parameter sequence was not found.')
+          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Commit branch patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts
+          git commit -m "Fix Live PCM session TypeScript syntax"
+          git push origin HEAD:agent/general-full-duplex-live
