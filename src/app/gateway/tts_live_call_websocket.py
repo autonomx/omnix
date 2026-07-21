@@ -94,6 +94,24 @@ def _output_identity(payload: dict[str, Any]) -> tuple[str, int, str]:
     return output_id, generation_epoch, segment_id
 
 
+def _ownership_fields(
+    payload: dict[str, Any],
+    output_id: str,
+    generation_epoch: int,
+    segment_id: str,
+    output_order: Any = None,
+) -> dict[str, Any]:
+    """Expose ownership fields only to item-aware clients, preserving legacy controls."""
+    if not str(payload.get("output_id") or "").strip():
+        return {}
+    return {
+        "output_id": output_id,
+        "generation_epoch": generation_epoch,
+        "segment_id": segment_id,
+        "output_order": output_order,
+    }
+
+
 def _stop_connection(state: ConnectionState, reason: str) -> None:
     if state.stop_event.is_set():
         return
@@ -200,6 +218,13 @@ async def _stream_phrase(
     stream_id = normalize_stream_id(payload.get("diagnostics_stream_id"))
     output_id, generation_epoch, segment_id = _output_identity(payload)
     output_order = payload.get("output_order")
+    ownership_fields = _ownership_fields(
+        payload,
+        output_id,
+        generation_epoch,
+        segment_id,
+        output_order,
+    )
     route_started_at = time.perf_counter()
     registered = False
     producer: threading.Thread | None = None
@@ -213,9 +238,7 @@ async def _stream_phrase(
             {
                 "type": "cancelled",
                 "stream_id": stream_id,
-                "output_id": output_id,
-                "generation_epoch": generation_epoch,
-                "segment_id": segment_id,
+                **ownership_fields,
                 "generated_through_frame": -1,
             }
         )
@@ -239,9 +262,7 @@ async def _stream_phrase(
                 {
                     "type": "error",
                     "stream_id": stream_id,
-                    "output_id": output_id,
-                    "generation_epoch": generation_epoch,
-                    "segment_id": segment_id,
+                    **ownership_fields,
                     "phrase_index": phrase_index,
                     "message": f"Invalid TTS request: {exc}",
                 }
@@ -287,9 +308,7 @@ async def _stream_phrase(
                 {
                     "type": "error",
                     "stream_id": stream_id,
-                    "output_id": output_id,
-                    "generation_epoch": generation_epoch,
-                    "segment_id": segment_id,
+                    **ownership_fields,
                     "phrase_index": phrase_index,
                     "message": "text_required",
                 }
@@ -304,9 +323,7 @@ async def _stream_phrase(
                 {
                     "type": "error",
                     "stream_id": stream_id,
-                    "output_id": output_id,
-                    "generation_epoch": generation_epoch,
-                    "segment_id": segment_id,
+                    **ownership_fields,
                     "phrase_index": phrase_index,
                     "message": message,
                 }
@@ -392,6 +409,24 @@ async def _stream_phrase(
                         raw_chunk_count += 1
                         produced_samples += sample_count
                         last_raw_chunk_at = raw_chunk_ready_at
+                        if raw_chunk_count == 1:
+                            stream_log(
+                                stream_id,
+                                "provider",
+                                "first_raw_chunk_ready",
+                                provider_to_first_raw_ms=round(
+                                    (raw_chunk_ready_at - provider_resolved_at) * 1000,
+                                    3,
+                                ),
+                                route_to_first_raw_ms=round(
+                                    (raw_chunk_ready_at - route_started_at) * 1000,
+                                    3,
+                                ),
+                                raw_chunk_samples=sample_count,
+                                sample_rate=resolved_rate,
+                                output_id=output_id,
+                                generation_epoch=generation_epoch,
+                            )
                         yield pcm_bytes, resolved_rate, timing
 
                 for pcm_bytes, sample_rate, timing in _stream_pcm16_blocks(
@@ -422,7 +457,17 @@ async def _stream_phrase(
                         )
                     )
                     if first_frame_ack is not None:
+                        wait_started_at = time.perf_counter()
                         first_frame_ack.wait(timeout=FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS)
+                        stream_log(
+                            stream_id,
+                            "provider",
+                            "first_frame_handoff_completed",
+                            acknowledged=first_frame_ack.is_set(),
+                            wait_ms=round((time.perf_counter() - wait_started_at) * 1000, 3),
+                            output_id=output_id,
+                            generation_epoch=generation_epoch,
+                        )
                         if stopped():
                             return
                 if stopped():
@@ -446,6 +491,7 @@ async def _stream_phrase(
                     raw_chunk_count=raw_chunk_count,
                     queued_frame_count=queued_frame_count,
                     produced_samples=produced_samples,
+                    last_raw_chunk_age_ms=round((time.perf_counter() - last_raw_chunk_at) * 1000, 3),
                     stop_requested=stopped(),
                     output_id=output_id,
                     generation_epoch=generation_epoch,
@@ -473,9 +519,7 @@ async def _stream_phrase(
                     {
                         "type": "cancelled",
                         "stream_id": stream_id,
-                        "output_id": output_id,
-                        "generation_epoch": generation_epoch,
-                        "segment_id": segment_id,
+                        **ownership_fields,
                         "generated_through_frame": sent_frames - 1,
                         "reason": metadata.get("reason") or "cancelled",
                     }
@@ -486,15 +530,13 @@ async def _stream_phrase(
                     if stopped():
                         continue
                     if not started or sample_rate != current_sample_rate:
+                        first_start_control = not started
                         current_sample_rate = sample_rate
                         await websocket.send_json(
                             {
-                                "type": "start" if not started else "format",
+                                "type": "start" if first_start_control else "format",
                                 "stream_id": stream_id,
-                                "output_id": output_id,
-                                "generation_epoch": generation_epoch,
-                                "segment_id": segment_id,
-                                "output_order": output_order,
+                                **ownership_fields,
                                 "phrase_index": phrase_index,
                                 "sample_rate": current_sample_rate,
                                 "sample_format": "pcm_s16le",
@@ -506,8 +548,38 @@ async def _stream_phrase(
                                 "performance_controls_ignored": ignored_controls,
                             }
                         )
+                        if first_start_control:
+                            stream_log(
+                                stream_id,
+                                "server",
+                                "first_start_control_sent",
+                                route_to_start_control_ms=round(
+                                    (time.perf_counter() - route_started_at) * 1000,
+                                    3,
+                                ),
+                                output_id=output_id,
+                                generation_epoch=generation_epoch,
+                            )
                         started = True
+                    first_pcm_frame = sent_frames == 0
                     await websocket.send_bytes(pcm_bytes)
+                    if first_pcm_frame:
+                        now = time.perf_counter()
+                        stream_log(
+                            stream_id,
+                            "server",
+                            "first_pcm_frame_sent",
+                            frame_queue_wait_ms=(
+                                round((now - message.queued_at) * 1000, 3)
+                                if message.queued_at is not None
+                                else None
+                            ),
+                            route_to_first_frame_ms=round((now - route_started_at) * 1000, 3),
+                            frame_samples=len(pcm_bytes) // 2,
+                            sample_rate=sample_rate,
+                            output_id=output_id,
+                            generation_epoch=generation_epoch,
+                        )
                 finally:
                     if message.sent_ack is not None:
                         message.sent_ack.set()
@@ -521,10 +593,7 @@ async def _stream_phrase(
                     {
                         "type": "done",
                         "stream_id": stream_id,
-                        "output_id": output_id,
-                        "generation_epoch": generation_epoch,
-                        "segment_id": segment_id,
-                        "output_order": output_order,
+                        **ownership_fields,
                         "phrase_index": phrase_index,
                         "last_frame_index": sent_frames - 1,
                         "partial": False,
@@ -535,9 +604,7 @@ async def _stream_phrase(
                 {
                     "type": "error",
                     "stream_id": stream_id,
-                    "output_id": output_id,
-                    "generation_epoch": generation_epoch,
-                    "segment_id": segment_id,
+                    **ownership_fields,
                     "phrase_index": phrase_index,
                     "message": metadata.get("message") or "TTS stream failed.",
                 }
@@ -599,12 +666,17 @@ def register_tts_live_call_websocket(gateway: FastAPI) -> None:
                     return
                 output_id, generation_epoch, segment_id = _output_identity(payload)
                 if (output_id, generation_epoch) in state.cancelled_outputs:
+                    ownership_fields = _ownership_fields(
+                        payload,
+                        output_id,
+                        generation_epoch,
+                        segment_id,
+                        payload.get("output_order"),
+                    )
                     await websocket.send_json(
                         {
                             "type": "cancelled",
-                            "output_id": output_id,
-                            "generation_epoch": generation_epoch,
-                            "segment_id": segment_id,
+                            **ownership_fields,
                             "generated_through_frame": -1,
                         }
                     )
