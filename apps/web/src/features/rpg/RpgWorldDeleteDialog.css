@@ -1,0 +1,121 @@
+.rpg-danger-button {
+  border-color: rgba(248, 113, 113, 0.6) !important;
+  background: linear-gradient(135deg, #7f1d1d, #b91c1c) !important;
+  color: #fff7ed !important;
+}
+
+.rpg-danger-button:hover:not(:disabled) {
+  border-color: rgba(254, 202, 202, 0.9) !important;
+  box-shadow: 0 12px 30px rgba(127, 29, 29, 0.35);
+}
+
+.rpg-danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.rpg-world-delete-modal form {
+  width: min(650px, 100%);
+}
+
+.rpg-world-delete-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rpg-world-delete-heading h3,
+.rpg-world-delete-heading p {
+  margin: 0;
+}
+
+.rpg-world-delete-heading > span {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  border-radius: 999px;
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.rpg-world-delete-blocked,
+.rpg-world-delete-preview {
+  padding: 0.9rem;
+  border-radius: 14px;
+}
+
+.rpg-world-delete-blocked {
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(120, 53, 15, 0.18);
+}
+
+.rpg-world-delete-preview {
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  background: rgba(69, 10, 10, 0.22);
+}
+
+.rpg-world-delete-blocked h4,
+.rpg-world-delete-preview h4,
+.rpg-world-delete-blocked p,
+.rpg-world-delete-preview p {
+  margin: 0;
+}
+
+.rpg-world-delete-blocked ul {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rpg-world-delete-blocked li {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.65rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.rpg-world-delete-blocked li span,
+.rpg-world-delete-preview small {
+  color: var(--omnix-muted, #a7a4b8);
+}
+
+.rpg-world-delete-preview dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+}
+
+.rpg-world-delete-preview dl div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.rpg-world-delete-preview dt {
+  color: #cbd5e1;
+}
+
+.rpg-world-delete-preview dd {
+  margin: 0;
+  color: #fecaca;
+  font-weight: 800;
+}
+
+@media (max-width: 560px) {
+  .rpg-world-delete-preview dl {
+    grid-template-columns: 1fr;
+  }
+}
