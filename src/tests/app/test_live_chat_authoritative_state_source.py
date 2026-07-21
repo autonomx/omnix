@@ -36,6 +36,7 @@ def test_microphone_capture_policy_is_store_derived_and_buffers_finalization() -
     policy = source[source.index("function processAudioFrame"):source.index("function updateVoiceVisualizer")]
     assert "if (session.finalRequested) return" not in source
     assert "FinalizationAudioBuffer" in source
+    assert "segmentedProtocolActive" in policy
     assert "stt_finalization_buffer_overflow" in source
     assert "stt_finalization_buffer_replayed" in source
     assert "liveConversationStore.getState" in source
@@ -43,6 +44,29 @@ def test_microphone_capture_policy_is_store_derived_and_buffers_finalization() -
     assert ".querySelector" not in policy
     assert ".dataset" not in policy
     assert "readCurrentAssistantDiagnosticText" in source
+
+
+def test_segmented_stt_has_acknowledged_bounded_provider_owned_protocol() -> None:
+    browser = _source("apps/web/src/features/assistant-workspace/live-voice-websocket.ts")
+    server = _source("src/app/providers/stt_live_websocket.py")
+    scheduler = _source("src/app/providers/stt_segment_scheduler.py")
+
+    for event in ("audio_buffered", "finalize_queued", "result_available"):
+        assert event in browser
+        assert event in server
+    assert "captureStartSample" in browser
+    assert "primaryStartSample" in browser
+    assert "absoluteSample" in browser
+    assert "deduplicateSegmentBoundary" in browser
+    assert "replayPendingSegments" in browser
+    assert "ProviderSegmentScheduler" in server
+    assert "MAX_SEGMENT_AUDIO_MS" in server
+    assert "MAX_OPEN_SEGMENTS" in server
+    assert "max_queued_jobs" in scheduler
+    assert "max_session_jobs" in scheduler
+    assert "await _scheduler_for(legacy).submit" in server
+    receive_loop = server[server.index("while True:"):]
+    assert "await _run_transcription" not in receive_loop
 
 
 def test_initiative_policy_no_longer_reads_visible_voice_state() -> None:
