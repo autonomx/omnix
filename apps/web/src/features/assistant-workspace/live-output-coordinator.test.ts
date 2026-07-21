@@ -62,6 +62,7 @@ function createHarness() {
     cancelSegment: vi.fn(),
     cancelOutputItem,
     cancelAllAfter: vi.fn(),
+    waitForOutputItem: vi.fn(async () => undefined),
     setStartPolicy: vi.fn(),
     finish: vi.fn(async () => undefined),
     stop,
