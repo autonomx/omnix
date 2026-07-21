@@ -146,7 +146,7 @@ describe('RpgWorldAuthoringPage collections', () => {
     expect(screen.queryByRole('heading', { name: 'Glass Reader' })).not.toBeInTheDocument();
   });
 
-  it('opens a compact class card into its complete dossier', () => {
+  it('opens a compact class card into its complete routed dossier', () => {
     renderPage();
 
     expect(screen.queryByText('Cross active wards')).not.toBeInTheDocument();
@@ -154,7 +154,7 @@ describe('RpgWorldAuthoringPage collections', () => {
     expect(wardRunnerCard).not.toBeNull();
     fireEvent.click(within(wardRunnerCard as HTMLElement).getByRole('button', { name: 'View details' }));
 
-    expect(screen.getByRole('dialog', { name: 'Ward Runner details' })).toBeInTheDocument();
+    expect(screen.getByRole('main', { name: 'Ward Runner details' })).toBeInTheDocument();
     expect(screen.getByText('Cross active wards')).toBeInTheDocument();
   });
 });
