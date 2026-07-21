@@ -5,6 +5,10 @@ import {
   sanitizeDiagnosticDetails,
 } from './live-call-diagnostics-client';
 
+function successfulFetch(_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> {
+  return Promise.resolve(new Response(null, { status: 200 }));
+}
+
 describe('live call diagnostics client', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -13,7 +17,7 @@ describe('live call diagnostics client', () => {
   });
 
   it('emits a sanitized local diagnostic event before nonblocking upload', async () => {
-    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchMock = vi.fn(successfulFetch);
     vi.stubGlobal('fetch', fetchMock);
     const listener = vi.fn();
     window.addEventListener('omnix:live-call-diagnostic', listener);
@@ -47,7 +51,7 @@ describe('live call diagnostics client', () => {
 
   it('keeps full debug content in the local event but never uploads it', async () => {
     window.localStorage.setItem('omnix.liveCall.transcriptLogging', 'full_local_debug');
-    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchMock = vi.fn(successfulFetch);
     vi.stubGlobal('fetch', fetchMock);
     const listener = vi.fn();
     window.addEventListener('omnix:live-call-diagnostic', listener);
@@ -61,7 +65,8 @@ describe('live call diagnostics client', () => {
       .find((candidate) => candidate.detail.event === 'llm_text_chunk_received');
     expect(local?.detail.details.text).toBe('local secret');
 
-    const uploadedBody = JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body)) as {
+    const lastCall = fetchMock.mock.calls.at(-1);
+    const uploadedBody = JSON.parse(String(lastCall?.[1]?.body)) as {
       events: Array<{ event: string; details: Record<string, unknown> }>;
     };
     const uploaded = uploadedBody.events.find((event) => event.event === 'llm_text_chunk_received');
