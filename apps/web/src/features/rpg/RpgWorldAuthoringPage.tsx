@@ -40,6 +40,15 @@ function meaningful(value: unknown): boolean {
   return true;
 }
 
+function slug(value: string, fallback: string): string {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return normalized || fallback;
+}
+
+function isChronicle(sectionId: string): boolean {
+  return ['history', 'calendar', 'calendar_and_eras', 'current_conflicts'].includes(sectionId);
+}
+
 function relatedEntityCards(page: RpgAuthoringDocumentPage): RpgAuthoringEntityCard[] {
   const projected = page.related_entities
     .filter((row) => (
@@ -206,7 +215,7 @@ export function RpgWorldAuthoringPage({
   if (page.page_kind === 'collection') {
     return (
       <section className="rpg-authoring-page">
-        <div className="rpg-authoring-page-heading"><div><p className="eyebrow">{section.group}</p><h2>{page.title || section.label}</h2><p className="rpg-authoring-page-summary">Browse the collection, then open an entry for its full structured dossier.</p></div><span>{visibleEntities.length === page.entities.length ? page.entities.length : `${visibleEntities.length} of ${page.entities.length}`} entr{page.entities.length === 1 ? 'y' : 'ies'}</span></div>
+        <div className="rpg-authoring-page-heading"><div><p className="eyebrow">{section.group}</p><h2>{page.title || section.label}</h2><p className="rpg-authoring-page-summary">Browse the collection, then open an entry for its complete illustrated dossier.</p></div><span>{visibleEntities.length === page.entities.length ? page.entities.length : `${visibleEntities.length} of ${page.entities.length}`} entr{page.entities.length === 1 ? 'y' : 'ies'}</span></div>
         {page.entities.length ? (
           <div className="rpg-authoring-collection-toolbar">
             <input aria-label={`Search ${page.title || section.label}`} placeholder={`Search ${page.title || section.label.toLowerCase()}…`} value={collectionSearch} onChange={(event) => setCollectionSearch(event.currentTarget.value)} />
@@ -248,32 +257,54 @@ export function RpgWorldAuthoringPage({
     );
   }
 
+  const toc = page.body.map((block, index) => ({
+    id: slug(block.title || `${block.kind}-${index + 1}`, `section-${index + 1}`),
+    label: block.title || humanize(block.kind),
+  }));
+  const chronicle = isChronicle(section.id);
+
   return (
     <section className="rpg-authoring-page">
       <div className="rpg-authoring-page-heading">
         <div><p className="eyebrow">{section.group}</p><h2>{page.title || section.label}</h2></div>
         {section.id === 'overview' ? <button className="rpg-secondary-button" type="button" onClick={() => setIsEditingOverview(true)}>Edit</button> : null}
       </div>
-      {page.summary ? <p className="rpg-authoring-page-summary">{page.summary}</p> : null}
-      {page.body.length ? page.body.map((block, index) => <RpgWorldDocumentBlock key={`${block.kind}:${index}`} block={block} />) : <div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This section will populate as world generation completes.</p></div>}
-      {documentEntities.length ? (
-        <section className="rpg-authoring-related-entities">
-          <div className="rpg-authoring-page-heading"><div><p className="eyebrow">Connected canon</p><h3>Related entries</h3></div><span>{documentEntities.length}</span></div>
-          <div className="rpg-authoring-entity-grid">
-            {documentEntities.map((entity) => (
-              <RpgWorldEntityCard
-                entity={entity}
-                imageAssetId={approvedAssets.get(entity.id)}
-                key={entity.id}
-                onOpen={() => setSelectedEntityId(entity.id)}
-                topic={page.topic}
-                worldId={worldId}
-              />
-            ))}
+      <div className={`rpg-authoring-document-shell${chronicle ? ' is-chronicle' : ''}`}>
+        <article className="rpg-authoring-document-stream">
+          <div className="rpg-authoring-document-hero">
+            <p>{page.summary || `${section.label} is presented as a readable, vertically scrolling lore document.`}</p>
           </div>
-        </section>
-      ) : null}
-      {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
+          {page.body.length ? page.body.map((block, index) => (
+            <div id={toc[index].id} key={`${block.kind}:${index}`}>
+              <RpgWorldDocumentBlock block={block} />
+            </div>
+          )) : <div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This section will populate as world generation completes.</p></div>}
+          {documentEntities.length ? (
+            <section className="rpg-authoring-related-entities">
+              <div className="rpg-authoring-page-heading"><div><p className="eyebrow">Connected canon</p><h3>Related entries</h3></div><span>{documentEntities.length}</span></div>
+              <div className="rpg-authoring-entity-grid">
+                {documentEntities.map((entity) => (
+                  <RpgWorldEntityCard
+                    entity={entity}
+                    imageAssetId={approvedAssets.get(entity.id)}
+                    key={entity.id}
+                    onOpen={() => setSelectedEntityId(entity.id)}
+                    topic={page.topic}
+                    worldId={worldId}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+          {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
+        </article>
+        {toc.length ? (
+          <nav className="rpg-authoring-document-toc" aria-label={`${section.label} sections`}>
+            <strong>On this page</strong>
+            {toc.map((item) => <a href={`#${item.id}`} key={item.id}>{item.label}</a>)}
+          </nav>
+        ) : null}
+      </div>
       {selectedEntity ? (
         <RpgWorldEntityDetail
           entity={selectedEntity}
