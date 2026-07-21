@@ -1,0 +1,12 @@
+file:///home/runner/work/omnix/omnix/.github/scripts/patch-shared-audio-tests.mjs:15
+  if (start < 0) throw new Error(`Missing section start: ${startMarker}`);
+                       ^
+
+Error: Missing section start:   it('aborts the active request and stops the persistent session on interruption'
+    at transformSection (file:///home/runner/work/omnix/omnix/.github/scripts/patch-shared-audio-tests.mjs:15:24)
+    at file:///home/runner/work/omnix/omnix/.github/scripts/patch-shared-audio-tests.mjs:91:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+
+Node.js v22.23.1
