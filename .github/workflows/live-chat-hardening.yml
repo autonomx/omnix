@@ -64,6 +64,7 @@ jobs:
             src/app/chat/provider_metrics.py \
             src/app/chat/retention_policy.py \
             src/app/gateway/blocking_route_offload.py \
+            src/app/gateway/content_free_diagnostics.py \
             src/app/gateway/event_loop_lag_monitor.py \
             src/app/gateway/live_chat_companion_context.py \
             src/app/gateway/live_chat_live_voice_profile.py \
@@ -72,6 +73,7 @@ jobs:
             src/app/gateway/live_chat_provider_metrics.py \
             src/app/gateway/live_chat_provider_routing.py \
             src/app/gateway/live_chat_stream_retry.py \
+            src/app/gateway/live_material_context.py \
             src/app/gateway/live_voice_cue_asset_routes.py \
             src/app/gateway/live_voice_runtime_offload.py \
             src/app/gateway/live_voice_release_gate.py \
@@ -89,6 +91,7 @@ jobs:
             src/app/providers/lmstudio_provider.py \
             src/app/providers/stt_live_runtime_support.py \
             src/app/providers/stt_live_websocket.py \
+            src/app/providers/stt_segment_scheduler.py \
             src/app/providers/stt_streaming_audio.py \
             src/parakeet_stt_runtime.py \
             src/parakeet_stt_server.py \
@@ -101,6 +104,7 @@ jobs:
             src/tests/app/test_live_chat_postgres_fast_path.py \
             src/tests/app/test_live_chat_provider_routing.py \
             src/tests/app/test_live_chat_stream_retry.py \
+            src/tests/app/test_live_material_context.py \
             src/tests/app/test_live_voice_runtime_offload.py \
             src/tests/app/test_live_voice_release_gate.py \
             src/tests/app/test_live_chat_release_gate.py \
@@ -142,11 +146,17 @@ jobs:
             src/tests/app/test_tts_stream_contract_performance.py \
             -q --tb=short 2>&1 | tee live-tts-response-onset-output.txt
 
-      - name: Live STT finalization regression
+      - name: Live segmented STT regression
         run: |
           set -o pipefail
           python -m pytest src/tests/app/test_stt_streaming_audio.py -q --tb=short \
             2>&1 | tee live-stt-finalization-output.txt
+
+      - name: Live material context regression
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_live_material_context.py -q --tb=short \
+            2>&1 | tee live-material-context-output.txt
 
       - name: Companion memory completion evaluation
         run: |
@@ -202,6 +212,7 @@ jobs:
             live-voice-release-gate-output.txt
             live-tts-response-onset-output.txt
             live-stt-finalization-output.txt
+            live-material-context-output.txt
             companion-memory-completion-output.txt
             live-chat-release-gate-output.txt
             live-chat-authoritative-state-output.txt
