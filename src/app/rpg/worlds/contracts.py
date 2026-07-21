@@ -47,7 +47,7 @@ class WorldTopicDraft(FrozenContract):
 
 class WorldProjectCreate(FrozenContract):
     contract_version: Literal["rpg_world_contract_v1"] = WORLD_CONTRACT_VERSION
-    world_id: str = Field(min_length=1)
+    world_id: str | None = Field(default=None, min_length=1)
     title: str = Field(min_length=1)
     description: str = ""
     source_mode: Literal["manual", "ai", "hybrid", "imported"] = "manual"
@@ -129,7 +129,7 @@ class MapInitializationOperation(FrozenContract):
 
 class ScenarioProjectCreate(FrozenContract):
     contract_version: Literal["rpg_scenario_contract_v1"] = SCENARIO_CONTRACT_VERSION
-    scenario_id: str = Field(min_length=1)
+    scenario_id: str | None = Field(default=None, min_length=1)
     world_id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     description: str = ""
