@@ -175,11 +175,11 @@ describe('Live observation admission', () => {
 });
 
 describe('LiveSegmentSubmitInterceptor', () => {
-  it('intercepts only the next segmented voice submit and allows coordinator resubmission', () => {
+  it('intercepts only the next accepted voice submit and allows coordinator resubmission', () => {
     const coordinate = vi.fn(async () => undefined);
     const interceptor = new LiveSegmentSubmitInterceptor({ coordinate, assistantSpeaking: () => true });
     interceptor.observePerformanceEvent({ stage: 'stt_segment_state', protocol: 'segmented-v1' });
-    interceptor.observePerformanceEvent({ stage: 'stt_final_received' });
+    interceptor.observePerformanceEvent({ stage: 'stt_final_submit_requested' });
 
     expect(interceptor.intercept('source phrase')).toBe(true);
     expect(coordinate).toHaveBeenCalledWith(expect.objectContaining({ text: 'source phrase', sourceSequence: 0, assistantSpeaking: true }));
