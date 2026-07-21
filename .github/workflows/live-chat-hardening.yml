@@ -74,6 +74,7 @@ jobs:
             src/app/gateway/live_chat_provider_routing.py \
             src/app/gateway/live_chat_stream_retry.py \
             src/app/gateway/live_material_context.py \
+            src/app/gateway/live_observation_generation.py \
             src/app/gateway/live_voice_cue_asset_routes.py \
             src/app/gateway/live_voice_runtime_offload.py \
             src/app/gateway/live_voice_release_gate.py \
@@ -105,6 +106,7 @@ jobs:
             src/tests/app/test_live_chat_provider_routing.py \
             src/tests/app/test_live_chat_stream_retry.py \
             src/tests/app/test_live_material_context.py \
+            src/tests/app/test_live_observation_generation.py \
             src/tests/app/test_live_voice_runtime_offload.py \
             src/tests/app/test_live_voice_release_gate.py \
             src/tests/app/test_live_chat_release_gate.py \
@@ -152,11 +154,13 @@ jobs:
           python -m pytest src/tests/app/test_stt_streaming_audio.py -q --tb=short \
             2>&1 | tee live-stt-finalization-output.txt
 
-      - name: Live material context regression
+      - name: Live material and observation regression
         run: |
           set -o pipefail
-          python -m pytest src/tests/app/test_live_material_context.py -q --tb=short \
-            2>&1 | tee live-material-context-output.txt
+          python -m pytest \
+            src/tests/app/test_live_material_context.py \
+            src/tests/app/test_live_observation_generation.py \
+            -q --tb=short 2>&1 | tee live-material-context-output.txt
 
       - name: Companion memory completion evaluation
         run: |
@@ -236,3 +240,6 @@ jobs:
           path: |
             web-typecheck-output.txt
             web-unit-test-output.txt
+            apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts
+            apps/web/src/features/assistant-workspace/live-output-coordinator.ts
+            apps/web/src/features/assistant-workspace/live-output-coordinator.test.ts
