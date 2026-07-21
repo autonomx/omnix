@@ -208,12 +208,14 @@ def test_live_call_websocket_reuses_one_connection_for_multiple_phrases(monkeypa
         "type": "done",
         "stream_id": "chat-live-test-p0",
         "phrase_index": 0,
+        "last_frame_index": 0,
         "partial": False,
     }
     assert second_done == {
         "type": "done",
         "stream_id": "chat-live-test-p1",
         "phrase_index": 1,
+        "last_frame_index": 0,
         "partial": False,
     }
 
