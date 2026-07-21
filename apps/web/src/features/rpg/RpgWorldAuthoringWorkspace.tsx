@@ -154,7 +154,6 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
     <RpgWorldEditorShell
       onBack={() => setView({ kind: 'library' })}
       onPlay={() => setView({ kind: 'campaignSetup', worldId: view.worldId })}
-      onSessionLaunched={onSessionLaunched}
       world={world}
       worldId={view.worldId}
     />
