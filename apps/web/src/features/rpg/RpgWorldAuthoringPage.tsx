@@ -41,13 +41,15 @@ function meaningful(value: unknown): boolean {
 }
 
 function relatedEntityCards(page: RpgAuthoringDocumentPage): RpgAuthoringEntityCard[] {
-  const projected = page.related_entities.filter((row): row is RpgAuthoringEntityCard => (
-    Boolean(row)
-    && typeof row === 'object'
-    && typeof row.id === 'string'
-    && typeof row.title === 'string'
-    && typeof row.presentation === 'object'
-  ));
+  const projected = page.related_entities
+    .filter((row) => (
+      Boolean(row)
+      && typeof row === 'object'
+      && typeof row.id === 'string'
+      && typeof row.title === 'string'
+      && typeof row.presentation === 'object'
+    ))
+    .map((row) => row as unknown as RpgAuthoringEntityCard);
   if (projected.length) return projected;
 
   const content = page.topic?.content ?? {};
@@ -57,7 +59,8 @@ function relatedEntityCards(page: RpgAuthoringDocumentPage): RpgAuthoringEntityC
   return entities.map((metadata, index) => {
     const kind = text(metadata.kind, page.section_id.replace(/s$/, '') || 'entity');
     const id = text(metadata.id ?? metadata.entity_id, `${kind}:${index + 1}`);
-    const title = text(metadata.name ?? metadata.title ?? metadata.label, humanize(id.split(':').at(-1) ?? id));
+    const idParts = id.split(':');
+    const title = text(metadata.name ?? metadata.title ?? metadata.label, humanize(idParts[idParts.length - 1] || id));
     const summary = text(
       metadata.summary
       ?? metadata.description
