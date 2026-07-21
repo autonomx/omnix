@@ -599,6 +599,20 @@ async def _stream_phrase(
                         "partial": False,
                     }
                 )
+                stream_log(
+                    stream_id,
+                    "server",
+                    "done_control_sent",
+                    route_to_done_control_ms=round(
+                        (time.perf_counter() - route_started_at) * 1000,
+                        3,
+                    ),
+                    sent_frames=sent_frames,
+                    sent_samples=sent_samples,
+                    last_frame_index=sent_frames - 1,
+                    output_id=output_id,
+                    generation_epoch=generation_epoch,
+                )
                 return
             await websocket.send_json(
                 {
