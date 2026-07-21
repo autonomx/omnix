@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { LiveSegmentSubmitInterceptor } from './live-segment-submit-interceptor';
 
 describe('LiveSegmentSubmitInterceptor', () => {
-  it('routes a voice final through coordination even before segmented negotiation', () => {
+  it('routes a submitted voice final through coordination before segmented negotiation', () => {
     const coordinate = vi.fn(async () => undefined);
     const interceptor = new LiveSegmentSubmitInterceptor({
       coordinate,
       assistantSpeaking: () => true,
     });
 
-    interceptor.observePerformanceEvent({ stage: 'stt_final_received' });
+    interceptor.observePerformanceEvent({ stage: 'stt_final_submit_requested' });
 
     expect(interceptor.protocol).toBe('legacy');
     expect(interceptor.intercept('Translate this continuously.')).toBe(true);
@@ -21,6 +21,19 @@ describe('LiveSegmentSubmitInterceptor', () => {
       assistantSpeaking: true,
       acousticClass: 'speech',
     });
+  });
+
+  it('does not mark a received but suppressed final as a pending submit', () => {
+    const coordinate = vi.fn(async () => undefined);
+    const interceptor = new LiveSegmentSubmitInterceptor({
+      coordinate,
+      assistantSpeaking: () => false,
+    });
+
+    interceptor.observePerformanceEvent({ stage: 'stt_final_received' });
+
+    expect(interceptor.intercept('Typed after a suppressed backchannel')).toBe(false);
+    expect(coordinate).not.toHaveBeenCalled();
   });
 
   it('keeps ordinary typed composer submissions outside the voice coordinator', () => {
@@ -41,7 +54,7 @@ describe('LiveSegmentSubmitInterceptor', () => {
       assistantSpeaking: () => false,
     });
 
-    interceptor.observePerformanceEvent({ stage: 'stt_final_received' });
+    interceptor.observePerformanceEvent({ stage: 'stt_final_submit_requested' });
     interceptor.permitNextCoordinatedSubmit();
 
     expect(interceptor.intercept('Question for Maya')).toBe(false);
@@ -57,7 +70,7 @@ describe('LiveSegmentSubmitInterceptor', () => {
     });
 
     interceptor.observePerformanceEvent({ stage: 'stt_segment_state', protocol: 'segmented-v1' });
-    interceptor.observePerformanceEvent({ stage: 'stt_final_received' });
+    interceptor.observePerformanceEvent({ stage: 'stt_final_submit_requested' });
 
     expect(interceptor.protocol).toBe('segmented-v1');
     expect(interceptor.intercept('Ongoing material')).toBe(true);
