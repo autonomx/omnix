@@ -23,7 +23,12 @@ from .campaign_lore_store import (
 from .runtime_lore_materialization import materialize_scene_lore, scene_lore_targets
 
 
-def _campaign_exists(work: Any, context: Any, campaign_id: str, session: Mapping[str, Any]) -> None:
+def _campaign_exists(
+    work: Any,
+    context: Any,
+    campaign_id: str,
+    session: Mapping[str, Any],
+) -> None:
     campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
     if campaign is not None:
         return
@@ -41,7 +46,11 @@ def _campaign_exists(work: Any, context: Any, campaign_id: str, session: Mapping
     )
 
 
-def _pinned_world_canon(work: Any, context: Any, campaign_id: str) -> dict[str, Any]:
+def _pinned_world_canon(
+    work: Any,
+    context: Any,
+    campaign_id: str,
+) -> dict[str, Any]:
     binding = work.world_scenarios.get_campaign_binding(context, campaign_id)
     if binding is None:
         return {}
@@ -61,7 +70,10 @@ def _pinned_world_canon(work: Any, context: Any, campaign_id: str) -> dict[str, 
     )
 
 
-def _has_dossier_and_document(bible: Mapping[str, Any], entity_id: str) -> bool:
+def _has_dossier_and_document(
+    bible: Mapping[str, Any],
+    entity_id: str,
+) -> bool:
     entity = _mapping(_mapping(bible.get("entities")).get(entity_id))
     rich = bool(
         _text(entity.get("name") or entity.get("title"))
@@ -78,7 +90,10 @@ def _has_dossier_and_document(bible: Mapping[str, Any], entity_id: str) -> bool:
         target
         in {
             _text(value).casefold()
-            for value in (*list(row.get("entity_refs") or ()), *list(row.get("entities") or ()))
+            for value in (
+                *list(row.get("entity_refs") or ()),
+                *list(row.get("entities") or ()),
+            )
         }
         for row in bible.get("documents") or ()
         if isinstance(row, Mapping)
@@ -107,6 +122,20 @@ def _assert_materialized(
             "runtime_scene_lore_materialization_incomplete:" + ",".join(missing)
         )
     return tuple(target.entity_id for target in targets)
+
+
+def _persist_portable_without_replacing(
+    hydrated: dict[str, Any],
+) -> dict[str, Any]:
+    """Save as a side effect while preserving the exact current-turn projection.
+
+    Some compact session-store adapters return a compatibility projection that can
+    omit newly attached top-level fields. Grounding must continue with the exact
+    hydrated Campaign Bible that was just validated, not that lossy return value.
+    """
+
+    _save_portable_projection(hydrated)
+    return hydrated
 
 
 def ensure_turn_scene_lore(
@@ -169,7 +198,8 @@ def ensure_turn_scene_lore(
             _assert_materialized(bible, session, result, explicit_entity_ids)
             should_write = (
                 stored is None
-                or campaign_bible_hash(bible) != str(stored.get("content_hash") or "")
+                or campaign_bible_hash(bible)
+                != str(stored.get("content_hash") or "")
             )
             if should_write:
                 bible["canon_revision"] = max(
@@ -180,19 +210,35 @@ def ensure_turn_scene_lore(
                     context,
                     campaign_id=campaign_id,
                     document=bible,
-                    expected_revision=(int(stored["revision"]) if stored is not None else 0),
+                    expected_revision=(
+                        int(stored["revision"]) if stored is not None else 0
+                    ),
                     provenance={
-                        **(_mapping(stored.get("provenance")) if stored is not None else {}),
+                        **(
+                            _mapping(stored.get("provenance"))
+                            if stored is not None
+                            else {}
+                        ),
                         "last_source": "runtime_scene_materialization_v1",
-                        "target_entity_ids": [target.entity_id for target in targets],
-                        "created_entity_ids": list(report.get("created_entity_ids") or ()),
-                        "created_document_ids": list(report.get("created_document_ids") or ()),
+                        "target_entity_ids": [
+                            target.entity_id for target in targets
+                        ],
+                        "created_entity_ids": list(
+                            report.get("created_entity_ids") or ()
+                        ),
+                        "created_document_ids": list(
+                            report.get("created_document_ids") or ()
+                        ),
                     },
                     consistency_report=(
-                        _mapping(stored.get("consistency_report")) if stored is not None else {}
+                        _mapping(stored.get("consistency_report"))
+                        if stored is not None
+                        else {}
                     ),
                     completeness=(
-                        _mapping(stored.get("completeness")) if stored is not None else {}
+                        _mapping(stored.get("completeness"))
+                        if stored is not None
+                        else {}
                     ),
                 )
             work.commit()
@@ -206,8 +252,11 @@ def ensure_turn_scene_lore(
         previous_hash = _text(
             _mapping(session.get("campaign_bible_projection")).get("content_hash")
         )
-        if report.get("changed") is True or previous_hash != str(stored["content_hash"]):
-            hydrated = _save_portable_projection(hydrated)
+        if (
+            report.get("changed") is True
+            or previous_hash != str(stored["content_hash"])
+        ):
+            hydrated = _persist_portable_without_replacing(hydrated)
         return hydrated, {
             **report,
             "mode": "postgresql_authority",
@@ -240,7 +289,7 @@ def ensure_turn_scene_lore(
             revision=int(bible.get("canon_revision") or 0),
             content_hash=digest,
         )
-        fallback = _save_portable_projection(fallback)
+        fallback = _persist_portable_without_replacing(fallback)
         return fallback, {
             **report,
             "mode": "portable_projection_authority",
