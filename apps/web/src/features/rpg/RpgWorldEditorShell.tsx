@@ -12,6 +12,7 @@ import { RpgWorldGenerationPanel } from './RpgWorldGenerationPanel';
 import { RpgWorldImagesPanel } from './RpgWorldImagesPanel';
 import { RpgWorldMapAuthoringPanel } from './RpgWorldMapAuthoringPanel';
 import { RpgWorldScenarioAuthoringPanel } from './RpgWorldScenarioAuthoringPanel';
+import './RpgWorldFinalizedDesign.css';
 
 interface RpgWorldEditorShellProps {
   onBack: () => void;
