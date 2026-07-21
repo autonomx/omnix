@@ -127,12 +127,21 @@ describe('live voice websocket helpers', () => {
     await connected;
     sockets[0].receive({ type: 'ready', protocol: 'segmented-v1' });
 
+    client.sendAudio(new Float32Array([0.1, 0.2]), 16_000);
+    client.sendFinal();
+    client.sendAudio(new Float32Array([0.3, 0.4]), 16_000);
+    client.sendFinal();
+    const finalizes = sockets[0].sentJson().filter((message) => message.type === 'finalize');
+    expect(finalizes).toHaveLength(2);
+    const first = finalizes[0];
+    const second = finalizes[1];
+
     sockets[0].receive({
-      type: 'result_available', sessionId: 'stt-session', captureEpoch: client.segmentState.captureEpoch, segmentId: 's1', sequence: 1, resultId: 'r1', finalizeRequestId: 'f1', startSample: 2, endSample: 4, text: 'brown fox jumps',
+      type: 'result_available', sessionId: client.segmentState.sessionId, captureEpoch: client.segmentState.captureEpoch, segmentId: second.segmentId, sequence: second.sequence, resultId: 'r1', finalizeRequestId: second.finalizeRequestId, startSample: second.primaryStartSample, endSample: second.endSample, text: 'brown fox jumps',
     });
     expect(finals).toEqual([]);
     sockets[0].receive({
-      type: 'result_available', sessionId: 'stt-session', captureEpoch: client.segmentState.captureEpoch, segmentId: 's0', sequence: 0, resultId: 'r0', finalizeRequestId: 'f0', startSample: 0, endSample: 2, text: 'the brown fox',
+      type: 'result_available', sessionId: client.segmentState.sessionId, captureEpoch: client.segmentState.captureEpoch, segmentId: first.segmentId, sequence: first.sequence, resultId: 'r0', finalizeRequestId: first.finalizeRequestId, startSample: first.primaryStartSample, endSample: first.endSample, text: 'the brown fox',
     });
     await vi.waitFor(() => expect(finals).toEqual(['the brown fox', 'jumps']));
   });
