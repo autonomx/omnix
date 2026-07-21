@@ -175,7 +175,7 @@ def test_material_reconnect_is_ordered_idempotent_and_rejects_gaps() -> None:
             },
         )
         assert gap.status_code == 409
-        assert gap.json()["detail"] == "segment_sequence_gap"
+        assert gap.json()["detail"].startswith("segment_sequence_gap:expected=")
 
         snapshot = reconnected_client.get(
             f"/api/chat/sessions/{session_id}/live/material"
