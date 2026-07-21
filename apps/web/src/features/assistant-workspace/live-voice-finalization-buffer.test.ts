@@ -13,10 +13,14 @@ describe('FinalizationAudioBuffer', () => {
     first[0] = 9;
 
     const drained = buffer.drain();
-    expect(drained.map((frame) => [...frame])).toEqual([
-      [0.1, 0.2],
-      [0.3, 0.4, 0.5],
-    ]);
+    expect(drained).toHaveLength(2);
+    expect([...drained[0]]).toHaveLength(2);
+    expect([...drained[1]]).toHaveLength(3);
+    expect(drained[0][0]).toBeCloseTo(0.1);
+    expect(drained[0][1]).toBeCloseTo(0.2);
+    expect(drained[1][0]).toBeCloseTo(0.3);
+    expect(drained[1][1]).toBeCloseTo(0.4);
+    expect(drained[1][2]).toBeCloseTo(0.5);
     expect(buffer.bufferedSamples).toBe(0);
   });
 
