@@ -871,6 +871,14 @@ export async function createLiveVoicePcmSession(
 
   const finish = async (): Promise<void> => {
     if (closed || inputFinished) return;
+    let observedQueue = generationQueue;
+    while (true) {
+      await observedQueue.catch(() => undefined);
+      await Promise.resolve();
+      if (generationQueue === observedQueue) break;
+      observedQueue = generationQueue;
+    }
+    if (closed || inputFinished) return;
     inputFinished = true;
     await generationQueue.catch(() => undefined);
     if (closed) return;
