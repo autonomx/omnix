@@ -186,6 +186,15 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       onPartialTranscript: (text) => handlePartialTranscript(card, text),
       onFinalTranscript: (text) => handleFinalTranscript(card, text),
       onError: (message) => showLiveVoiceError(card, message),
+      onSegmentStateChange: (state) => dispatchLiveVoicePerfEvent({
+        stage: 'stt_segment_state',
+        timestamp: new Date().toISOString(),
+        protocol: state.protocol,
+        activeSequence: state.activeSequence,
+        pendingSegments: state.pendingSegments,
+        queuedSegments: state.queuedSegments,
+        absoluteSample: state.absoluteSample,
+      }),
     });
     const shell = {
       card,
@@ -315,6 +324,10 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
   const rms = calculateRms(audio);
   updateVoiceVisualizer(session, rms);
   if (session.finalRequested) {
+    if (session.client.segmentedProtocolActive) {
+      session.client.sendAudio(audio, session.audioContext.sampleRate);
+      return;
+    }
     const buffered = session.finalizationBuffer.push(audio);
     if (!buffered.accepted) handleFinalizationBufferOverflow(session, buffered.bufferedSamples, buffered.maxSamples);
     return;
