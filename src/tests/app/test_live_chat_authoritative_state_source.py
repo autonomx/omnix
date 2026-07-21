@@ -211,3 +211,29 @@ def test_live_voice_final_routing_has_no_composer_dependency() -> None:
     assert "onAcceptedFinal" in controller
     assert "routeAcceptedFinal" in controller
     assert "direct_final_routing: true" in _source("apps/web/src/features/assistant-workspace/live-runtime-provenance.ts")
+
+
+
+def test_stt_final_does_not_preempt_audio_before_coordination() -> None:
+    source = _source("apps/web/src/features/chatbot/ChatbotWorkspace.tsx")
+    marker = "if (detail.stage !== 'stt_final_received') return;"
+    handler = source[source.index(marker):source.index("window.addEventListener(LIVE_VOICE_PERF_EVENT", source.index(marker))]
+    assert "stopAssistantResponseAudio" not in handler
+
+
+def test_live_response_audio_is_call_scoped_and_owned() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts")
+    assert "sessionScoped: true" in source
+    assert "enqueueOutputPhrase" in source
+    assert "waitForOutputItem" in source
+    assert "cancelOutputItem" in source
+    assert "session.finish()" not in source
+
+
+def test_capture_owner_persists_direct_routing_provenance() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-voice-controller.ts")
+    assert "live_runtime_provenance" in source
+    assert "live_task_contract_acknowledged" in source
+    assert "coordination_started" in source
+    assert "coordination_completed" in source
+    assert "currentLiveRuntimeProvenance()" in source

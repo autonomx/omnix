@@ -520,7 +520,6 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       if (!voiceTurnDiagnosticsRef.current) {
         voiceTurnDiagnosticsRef.current = createLiveCallDiagnosticsReporter(`live-call:${detail.turnId}`);
       }
-      stopAssistantResponseAudio(undefined);
       voiceTurnPerformanceRef.current = {
         turnId: detail.turnId,
         sttFinalReceivedAt: performance.now(),

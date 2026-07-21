@@ -33,6 +33,7 @@ import {
 import { createOnsetTimingPlan, naturalPauseAfterClause } from './live-voice-natural-timing';
 import {
   createLiveVoicePcmSession,
+  type LiveOutputOwnership,
   type LiveVoicePcmSession,
 } from './live-voice-pcm-session';
 
@@ -75,6 +76,8 @@ type ActiveLiveTurn = {
   startedAtMs: number;
   reporter: LiveCallDiagnosticsReporter;
   sessionPromise: Promise<LiveVoicePcmSession>;
+  audioTasks: Promise<void>[];
+  outputOwnerships: LiveOutputOwnership[];
   abortController: AbortController;
   userTurnId: string;
   speechSegmentId: string;
@@ -89,6 +92,17 @@ type ActiveLiveTurn = {
 type LiveTurnIds = {
   userTurnId: string;
   speechSegmentId: string;
+};
+
+type SharedLiveAudioSession = {
+  sessionId: string;
+  voiceId: string | null;
+  traceId: string;
+  reporter: LiveCallDiagnosticsReporter;
+  sessionPromise: Promise<LiveVoicePcmSession>;
+  session: LiveVoicePcmSession | null;
+  nextPhraseIndex: number;
+  nextOutputOrder: number;
 };
 
 type LiveVoiceRequestPayload = Record<string, unknown> & {
@@ -107,6 +121,7 @@ type GreetingStartup = {
 let originalFetch: typeof window.fetch | null = null;
 let playbackGeneration = 0;
 let activeTurn: ActiveLiveTurn | null = null;
+let sharedAudioSession: SharedLiveAudioSession | null = null;
 let greetingStartup: GreetingStartup | null = null;
 let greetingStartupToken = 0;
 let reportedSpeaking = false;
@@ -169,7 +184,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
 
   const kind: LiveTurnKind = greetingMatch ? 'greeting' : 'response';
   if (kind === 'response') cancelGreetingStartup('real-response-started', true);
-  void stopActiveTurn(kind === 'response' ? 'superseded-by-real-response' : 'superseded-by-greeting');
+  await stopActiveTurn(kind === 'response' ? 'superseded-by-real-response' : 'superseded-by-greeting');
   stopAssistantPcmStream(document);
 
   const sessionId = decodeURIComponent((responseMatch ?? greetingMatch)?.[1] ?? 'unknown');
@@ -195,7 +210,8 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
   });
   const voiceId = selectedVoiceId();
   const startedAtMs = performance.now();
-  const sessionPromise = createLiveVoicePcmSession(traceId, voiceId, reporter);
+  const sharedAudio = await ensureSharedAudioSession(sessionId, voiceId);
+  const sessionPromise = sharedAudio.sessionPromise;
   const turn: ActiveLiveTurn = {
     generation,
     kind,
@@ -205,6 +221,8 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
     startedAtMs,
     reporter,
     sessionPromise,
+    audioTasks: [],
+    outputOwnerships: [],
     abortController,
     userTurnId: ids.userTurnId,
     speechSegmentId: ids.speechSegmentId,
@@ -236,7 +254,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestI
     setInlineStatus(message);
     setVoiceSpeaking(false);
     const session = await sessionPromise.catch(() => null);
-    await session?.stop('turn-failed');
+    if (session) await cancelTurnOutputs(turn, 'turn-failed', session);
     recordDeliveryCheckpoint(reporter, delivery);
     await reporter.close('turn_failed_final', { error: message, turn_kind: kind });
     removeDeliveryLedgerRow();
@@ -429,18 +447,24 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
   });
   if (session) {
     try {
-      await withTimeout(session.finish(), AUDIO_COMPLETION_TIMEOUT_MS, 'Live audio completion timed out.');
+      const generationResults = await Promise.allSettled(turn.audioTasks);
+      const rejected = generationResults.find((result) => result.status === 'rejected');
+      if (rejected?.status === 'rejected') throw rejected.reason;
+      await withTimeout(
+        Promise.all(turn.outputOwnerships.map((ownership) => session.waitForOutputItem(
+ownership.outputId,
+ownership.generationEpoch,
+        ))).then(() => undefined),
+        AUDIO_COMPLETION_TIMEOUT_MS,
+        'Live audio completion timed out.',
+      );
     } catch (error: unknown) {
       audioIssue = error instanceof Error ? error.message : 'Live audio completion failed.';
       turn.reporter.record('turn_audio_recovered', {
         error: audioIssue,
         elapsed_ms: performance.now() - turn.startedAtMs,
       }, 'controller');
-      await session.stop('audio-recovery').catch((cleanupError: unknown) => {
-        turn.reporter.record('turn_audio_cleanup_failed', {
-          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-        }, 'controller');
-      });
+      await cancelTurnOutputs(turn, 'audio-recovery', session);
     }
   }
   if (turn.generation !== playbackGeneration) return;
@@ -476,6 +500,22 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
   }
 
   const phraseIndex = turn.phraseCount;
+  const sharedAudio = sharedAudioSession;
+  if (!sharedAudio || sharedAudio.sessionId !== turn.sessionId) {
+    turn.reporter.record('phrase_queue_failed', {
+      phrase_index: phraseIndex,
+      error: 'live_audio_session_unavailable',
+      continuing: false,
+    }, 'controller');
+    return;
+  }
+  const sessionPhraseIndex = sharedAudio.nextPhraseIndex++;
+  const ownership: LiveOutputOwnership = {
+    outputId: conversationOutputId(turn, phraseIndex),
+    generationEpoch: turn.generation,
+    outputOrder: sharedAudio.nextOutputOrder++,
+  };
+  turn.outputOwnerships.push(ownership);
   const synthesisOptions: SpeechSynthesisOptions = createLiveSpeechSynthesisOptions(phrase, {
     scopeKey: turn.sessionId,
     enablePerformancePlan: turn.flags.performancePlans,
@@ -514,9 +554,12 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
     response_cue_reason: cue.reason,
     elapsed_ms: performance.now() - turn.startedAtMs,
     turn_kind: turn.kind,
+    output_id: ownership.outputId,
+    generation_epoch: ownership.generationEpoch,
+    output_order: ownership.outputOrder,
   }, 'controller');
 
-  void turn.sessionPromise.then(async (session) => {
+  const audioTask = turn.sessionPromise.then(async (session) => {
     if (phraseIndex === 0) {
       const onsetPolicy = performancePlan?.onset_policy;
       const onset = turn.flags.naturalTiming
@@ -553,8 +596,10 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
     if (cue.allowed && cue.cueId && cue.variantId) {
       await session.enqueueCue(cue.cueId, cue.variantId, 0.62);
     }
-    await session.enqueuePhrase(phrase, phraseIndex, synthesisOptions);
-  }).catch((error: unknown) => {
+    await session.enqueueOutputPhrase(phrase, sessionPhraseIndex, ownership, synthesisOptions);
+  });
+  turn.audioTasks.push(audioTask);
+  void audioTask.catch((error: unknown) => {
     if (turn.abortController.signal.aborted) return;
     turn.reporter.record('phrase_queue_failed', {
       phrase_index: phraseIndex,
@@ -587,7 +632,9 @@ function stopLiveVoiceUnifiedAudio(event?: Event): void {
   const reason = event?.type === LIVE_VOICE_INTERRUPT_EVENT ? 'voice-interrupt' : 'live-call-stop';
   cancelGreetingStartup(reason);
   playbackGeneration += 1;
-  void stopActiveTurn(reason);
+  void stopActiveTurn(reason).finally(() => {
+    if (reason !== 'voice-interrupt') void stopSharedAudioSession(reason);
+  });
   stopAssistantPcmStream(document);
   setVoiceSpeaking(false);
 }
@@ -608,7 +655,7 @@ async function stopActiveTurn(reason: string): Promise<void> {
   renderDeliveryLedger(turn.delivery, true);
   turn.abortController.abort(reason);
   const session = await turn.sessionPromise.catch(() => null);
-  await session?.stop(reason);
+  if (session) await cancelTurnOutputs(turn, reason, session);
   await turn.reporter.close('turn_stopped', {
     reason,
     assistant_turn_id: turn.assistantTurnId,
@@ -616,6 +663,78 @@ async function stopActiveTurn(reason: string): Promise<void> {
     context_delivered_text_end: turn.delivery.contextDeliveredTextEnd,
     turn_kind: turn.kind,
   });
+}
+
+async function ensureSharedAudioSession(
+  sessionId: string,
+  voiceId: string | null,
+): Promise<SharedLiveAudioSession> {
+  const current = sharedAudioSession;
+  if (current && current.sessionId === sessionId && current.voiceId === voiceId) {
+    const session = current.session ?? await current.sessionPromise;
+    if (!session.isClosed()) return current;
+  }
+  if (current) await stopSharedAudioSession('live_audio_session_replaced');
+  const traceId = createLiveCallTraceId(`${sessionId}:audio-session`);
+  const reporter = createLiveCallDiagnosticsReporter(traceId);
+  reporter.record('live_audio_session_created', {
+    session_id: sessionId,
+    voice_id: voiceId,
+    websocket_scope: 'live_session',
+  }, 'controller');
+  const sessionPromise = createLiveVoicePcmSession(traceId, voiceId, reporter, {
+    sessionScoped: true,
+  });
+  const state: SharedLiveAudioSession = {
+    sessionId,
+    voiceId,
+    traceId,
+    reporter,
+    sessionPromise,
+    session: null,
+    nextPhraseIndex: 0,
+    nextOutputOrder: 0,
+  };
+  sharedAudioSession = state;
+  void sessionPromise.then((session) => {
+    state.session = session;
+  }).catch(async (error: unknown) => {
+    if (sharedAudioSession === state) sharedAudioSession = null;
+    await reporter.close('live_audio_session_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+  return state;
+}
+
+async function stopSharedAudioSession(reason: string): Promise<void> {
+  const state = sharedAudioSession;
+  sharedAudioSession = null;
+  if (!state) return;
+  const session = state.session ?? await state.sessionPromise.catch(() => null);
+  if (session && !session.isClosed()) await session.stop(reason);
+  await state.reporter.close('live_audio_session_closed', {
+    reason,
+    session_id: state.sessionId,
+    phrase_count: state.nextPhraseIndex,
+  });
+}
+
+async function cancelTurnOutputs(
+  turn: ActiveLiveTurn,
+  reason: string,
+  session: LiveVoicePcmSession,
+): Promise<void> {
+  await Promise.all(turn.outputOwnerships.map((ownership) => session.cancelOutputItem(
+    ownership.outputId,
+    ownership.generationEpoch,
+    reason,
+  )));
+}
+
+function conversationOutputId(turn: ActiveLiveTurn, phraseIndex: number): string {
+  const session = turn.sessionId.replace(/[^A-Za-z0-9_.-]+/g, '-').slice(-40);
+  return `conversation-${session}-g${turn.generation}-p${phraseIndex}`.slice(0, 120);
 }
 
 function createLiveTurnIds(): LiveTurnIds {

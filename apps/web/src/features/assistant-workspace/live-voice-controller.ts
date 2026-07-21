@@ -1,5 +1,10 @@
 import { readCurrentAssistantDiagnosticText } from './live-conversation-assistant-summary';
 import type { AcceptedVoiceFinal, LiveFinalRoutingResult } from './live-accepted-final';
+import {
+  createLiveCallDiagnosticsReporter,
+  createLiveCallTraceId,
+  type LiveCallDiagnosticsReporter,
+} from './live-call-diagnostics-client';
 import { liveConversationStore } from './live-conversation-store';
 import { currentLiveRuntimeProvenance } from './live-runtime-provenance';
 import { liveSessionCoordinator } from './live-session-coordinator';
@@ -42,6 +47,7 @@ type LiveVoiceSession = {
   audioPipeline: LiveVoiceAudioPipeline;
   client: StreamingSttWebSocketClient;
   finalizationBuffer: FinalizationAudioBuffer;
+  reporter: LiveCallDiagnosticsReporter;
   speechDetected: boolean;
   finalRequested: boolean;
   silenceTimer: ReturnType<typeof setTimeout> | null;
@@ -163,19 +169,32 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
     timestamp: new Date().toISOString(),
   });
   let audioContext: AudioContext | null = null;
+  let sessionReporter: LiveCallDiagnosticsReporter | null = null;
   let stream: MediaStream | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
   let audioPipeline: LiveVoiceAudioPipeline | null = null;
   try {
     const sessionId = liveConversationStore.getState().sessionId;
     if (!sessionId) throw new Error('Select or create a chat session before starting Live voice.');
+    const reporter = createLiveCallDiagnosticsReporter(createLiveCallTraceId(`${sessionId}:capture`));
+    sessionReporter = reporter;
+    const provenance = currentLiveRuntimeProvenance();
+    reporter.record('live_runtime_provenance', provenance, 'live_voice_controller');
     const taskInstruction = readLiveTaskInstruction(card);
     await liveSessionCoordinator.prepareTaskContract(sessionId, taskInstruction);
+    const coordination = liveConversationStore.getState().coordination;
+    reporter.record('live_task_contract_acknowledged', {
+      ...provenance,
+      task_instruction_configured: Boolean(taskInstruction),
+      task_contract_id: coordination.taskContract.taskContractId,
+      task_contract_version: coordination.taskContract.version,
+      context_version: coordination.contextVersion,
+    }, 'live_voice_controller');
     dispatchLiveVoicePerfEvent({
       stage: 'live_task_contract_acknowledged',
       timestamp: new Date().toISOString(),
       taskInstructionConfigured: Boolean(taskInstruction),
-      ...currentLiveRuntimeProvenance(),
+      ...provenance,
     });
     const liveWindow = window as LiveVoiceWindow;
     const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
@@ -204,6 +223,14 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       onPartialTranscript: (text) => handlePartialTranscript(card, text),
       onAcceptedFinal: (final) => handleAcceptedFinal(card, final),
       onFinalRejected: (reason, identity) => {
+        reporter.record('stt_final_rejected', {
+reason,
+segment_id: identity.segmentId,
+result_id: identity.resultId,
+finalize_request_id: identity.finalizeRequestId,
+source_sequence: identity.sourceSequence,
+capture_epoch: identity.captureEpoch,
+        }, 'live_voice_controller');
         dispatchLiveVoicePerfEvent({ stage: 'stt_final_rejected', timestamp: new Date().toISOString(), reason, segmentId: identity.segmentId, sourceSequence: identity.sourceSequence });
         setPanelStatus(card, 'error');
       },
@@ -227,6 +254,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       finalizationBuffer: new FinalizationAudioBuffer(
         Math.max(1, Math.round(audioContext.sampleRate * FINALIZATION_BUFFER_MS / 1_000)),
       ),
+      reporter,
       speechDetected: false,
       finalRequested: false,
       silenceTimer: null,
@@ -266,6 +294,11 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       cleanupSession(session);
     } else closePendingResources(stream, audioContext, source, audioPipeline);
     if (pendingStart?.token === token) pendingStart = null;
+    if (sessionReporter) {
+      void sessionReporter.close('live_capture_start_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     showLiveVoiceError(card, error instanceof Error ? error.message : 'Could not start live voice.');
   }
 }
@@ -543,6 +576,21 @@ async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal)
     sourceSequence: final.sourceSequence,
     captureEpoch: final.captureEpoch,
   });
+  session.reporter.record('stt_final_received', {
+    ...currentLiveRuntimeProvenance(),
+    chat_session_id: final.chatSessionId,
+    stt_session_id: final.sttSessionId,
+    capture_epoch: final.captureEpoch,
+    segment_id: final.segmentId,
+    result_id: final.resultId,
+    finalize_request_id: final.finalizeRequestId,
+    source_sequence: final.sourceSequence,
+    start_sample: final.startSample,
+    end_sample: final.endSample,
+    protocol: final.protocol,
+    transcript_chars: final.text.trim().length,
+    stt_finalize_ms: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),
+  }, 'live_voice_controller');
   const suppressTurn = Boolean(
     overlapIntent === 'hard_stop'
     || overlapIntent === 'backchannel'
@@ -552,9 +600,24 @@ async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal)
   resetTurnState(session);
   try {
     if (suppressTurn || !final.text.trim()) {
-      return ignoredRoutingResult(final);
+      const result = ignoredRoutingResult(final);
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        result_id: final.resultId,
+        source_sequence: final.sourceSequence,
+        outcome: result.outcome,
+        suppression_reason: suppressTurn ? overlapIntent ?? 'suppressed_overlap' : 'empty_transcript',
+      }, 'live_voice_controller');
+      return result;
     }
     renderTranscript(card, 'You', final.text, 'final');
+    session.reporter.record('coordination_started', {
+      segment_id: final.segmentId,
+      result_id: final.resultId,
+      finalize_request_id: final.finalizeRequestId,
+      source_sequence: final.sourceSequence,
+      capture_epoch: final.captureEpoch,
+    }, 'live_voice_controller');
     dispatchLiveVoicePerfEvent({
       stage: 'coordination_started',
       timestamp: new Date().toISOString(),
@@ -562,18 +625,41 @@ async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal)
       sourceSequence: final.sourceSequence,
       captureEpoch: final.captureEpoch,
     });
-    const result = await liveSessionCoordinator.routeAcceptedFinal(final);
-    dispatchLiveVoicePerfEvent({
-      stage: 'coordination_completed',
-      timestamp: new Date().toISOString(),
-      segmentId: final.segmentId,
-      sourceSequence: final.sourceSequence,
-      outcome: result.outcome,
-      errorCode: result.errorCode,
-    });
-    if (result.outcome === 'failed') setPanelStatus(card, 'error');
-    else setPanelStatus(card, 'connected');
-    return result;
+    try {
+      const result = await liveSessionCoordinator.routeAcceptedFinal(final);
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        result_id: final.resultId,
+        source_sequence: final.sourceSequence,
+        outcome: result.outcome,
+        task_contract_id: result.taskContractId,
+        task_contract_version: result.taskContractVersion,
+        error_code: result.errorCode,
+      }, 'live_voice_controller');
+      dispatchLiveVoicePerfEvent({
+        stage: 'coordination_completed',
+        timestamp: new Date().toISOString(),
+        segmentId: final.segmentId,
+        sourceSequence: final.sourceSequence,
+        outcome: result.outcome,
+        errorCode: result.errorCode,
+      });
+      if (result.outcome === 'failed') setPanelStatus(card, 'error');
+      else setPanelStatus(card, 'connected');
+      return result;
+    } catch (error) {
+      const result = failedRoutingResult(final, 'live_coordination_failed');
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        result_id: final.resultId,
+        source_sequence: final.sourceSequence,
+        outcome: result.outcome,
+        error_code: result.errorCode,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'live_voice_controller');
+      setPanelStatus(card, 'error');
+      return result;
+    }
   } finally {
     replayFinalizationBuffer(session, continuation);
   }
@@ -705,6 +791,9 @@ function cleanupSession(session: LiveVoiceSession): void {
   session.stream.getTracks().forEach((track) => track.stop());
   session.client.disconnect();
   void session.audioContext.close().catch(() => undefined);
+  void session.reporter.close('live_capture_session_closed', {
+    session_id: liveConversationStore.getState().sessionId,
+  });
 }
 
 function closePendingResources(

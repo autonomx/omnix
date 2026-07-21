@@ -141,6 +141,7 @@ export type LiveVoicePcmSession = {
   cancelSegment: (segmentId: string, reason?: string) => void;
   cancelOutputItem: (outputId: string, generationEpoch: number, reason?: string) => Promise<void>;
   cancelAllAfter: (outputOrder: number, reason?: string) => void;
+  waitForOutputItem: (outputId: string, generationEpoch: number) => Promise<void>;
   setStartPolicy: (policy: Partial<PlaybackStartPolicyMs>) => void;
   finish: () => Promise<void>;
   stop: (reason?: string) => Promise<void>;
@@ -188,11 +189,20 @@ export async function createLiveVoicePcmSession(
   let cueSequence = 0;
   const queuedOutputs = new Map<string, QueuedOutput>();
   const cancelledOutputKeys = new Set<string>();
+  const terminalOutputKeys = new Set<string>();
+  const outputWaiters = new Map<string, Set<() => void>>();
   const drainPromise = new Promise<void>((resolve) => {
     drainResolve = resolve;
   });
 
   const outputKey = (outputId: string, generationEpoch: number): string => `${outputId}:${generationEpoch}`;
+  const settleOutput = (key: string): void => {
+    terminalOutputKeys.add(key);
+    while (terminalOutputKeys.size > 512) terminalOutputKeys.delete(terminalOutputKeys.values().next().value as string);
+    const waiters = outputWaiters.get(key);
+    outputWaiters.delete(key);
+    waiters?.forEach((resolve) => resolve());
+  };
 
   const resumeAudioContext = async (reason: string): Promise<void> => {
     const before = audioContext.state;
@@ -258,6 +268,12 @@ export async function createLiveVoicePcmSession(
     };
     reporter.record(`worklet_${eventType}`, details, 'audio_worklet');
     options.onWorkletEvent?.(details);
+    const outputId = event.data?.output_id;
+    const generationEpoch = event.data?.generation_epoch;
+    if (outputId && typeof generationEpoch === 'number'
+      && (eventType === 'segment_completed' || eventType === 'segment_cancelled' || eventType === 'segment_interrupted')) {
+      settleOutput(outputKey(outputId, generationEpoch));
+    }
     if (eventType === 'drained') {
       drained = true;
       drainResolve?.();
@@ -802,6 +818,7 @@ export async function createLiveVoicePcmSession(
       && phrase.ownership.generationEpoch === generationEpoch) {
       settleCancelledPhrase(phrase, reason);
     }
+    settleOutput(key);
   };
 
   const cancelAllAfter = (outputOrder: number, reason = 'cancelled_after'): void => {
@@ -820,6 +837,16 @@ export async function createLiveVoicePcmSession(
       }
     }
     node.port.postMessage({ type: 'cancel_all_after', outputOrder, reason });
+  };
+
+  const waitForOutputItem = (outputId: string, generationEpoch: number): Promise<void> => {
+    const key = outputKey(outputId, generationEpoch);
+    if (terminalOutputKeys.has(key) || cancelledOutputKeys.has(key)) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const waiters = outputWaiters.get(key) ?? new Set<() => void>();
+      waiters.add(resolve);
+      outputWaiters.set(key, waiters);
+    });
   };
 
   const setStartPolicy = (policy: Partial<PlaybackStartPolicyMs>): void => {
@@ -850,6 +877,7 @@ export async function createLiveVoicePcmSession(
   const terminateSession = async (reason: string, workletAlreadyDrained = false): Promise<void> => {
     if (closed) return;
     closed = true;
+    [...outputWaiters.keys()].forEach(settleOutput);
     document.removeEventListener('visibilitychange', handlePlaybackResumeSignal);
     window.removeEventListener('focus', handlePlaybackResumeSignal);
     window.removeEventListener('pageshow', handlePlaybackResumeSignal);
@@ -913,6 +941,7 @@ export async function createLiveVoicePcmSession(
     cancelSegment,
     cancelOutputItem,
     cancelAllAfter,
+    waitForOutputItem,
     setStartPolicy,
     finish,
     stop,

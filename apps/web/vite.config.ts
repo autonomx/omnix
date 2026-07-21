@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+
 import { defineConfig, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -16,7 +18,21 @@ function reactDevtoolsStandalonePlugin(): PluginOption {
   };
 }
 
-export default defineConfig(({ command, mode }) => ({
+function resolveGitSha(): string {
+  const configured = process.env.VITE_GIT_SHA?.trim();
+  if (configured) return configured;
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+export default defineConfig(({ command, mode }) => {
+  const gitSha = resolveGitSha();
+  process.env.VITE_GIT_SHA ??= gitSha;
+  process.env.VITE_BUILD_ID ??= `${command}-${mode}-${gitSha.slice(0, 12)}`;
+  return ({
   plugins: [
     ...(command === 'serve' && mode === 'devtools'
       ? [reactDevtoolsStandalonePlugin()]
@@ -40,4 +56,5 @@ export default defineConfig(({ command, mode }) => ({
   preview: {
     port: 4173,
   },
-}));
+  });
+});
