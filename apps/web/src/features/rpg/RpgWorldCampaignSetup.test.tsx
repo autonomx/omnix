@@ -120,7 +120,7 @@ describe('RpgWorldCampaignSetup', () => {
     fireEvent.change(screen.getByLabelText('Difficulty'), { target: { value: 'harsh' } });
     fireEvent.change(screen.getByLabelText('Economy pressure'), { target: { value: 'strict' } });
     fireEvent.click(screen.getByLabelText('Permadeath'));
-    fireEvent.click(screen.getByLabelText('Text To Speech'));
+    fireEvent.click(screen.getByLabelText('Tts'));
 
     expect(screen.getByRole('region', { name: 'Campaign launch review' })).toHaveTextContent('Mira');
     fireEvent.click(screen.getByRole('button', { name: 'Launch Campaign' }));
