@@ -51,6 +51,9 @@ class SegmentBuffer:
     accepted_through_sample: int = 0
     audio: bytearray = field(default_factory=bytearray)
     finalize_queued: bool = False
+    capture_epoch: str = ""
+    finalize_request_id: str = ""
+    end_sample: int = 0
 
     def append(self, sample_start: int, payload: bytes) -> int:
         sample_count = len(payload) // 2
@@ -254,16 +257,20 @@ def install_live_stt_websocket(legacy: Any) -> None:
                 payload = {
                     "type": "result_available",
                     "sessionId": state.session_id,
+                    "captureEpoch": segment.capture_epoch,
                     "segmentId": segment.segment_id,
                     "sequence": segment.sequence,
                     "resultId": uuid.uuid4().hex,
+                    "finalizeRequestId": segment.finalize_request_id,
+                    "startSample": segment.primary_start_sample,
+                    "endSample": segment.end_sample or segment.accepted_through_sample,
                     "text": text,
                     "acceptedThroughSample": segment.accepted_through_sample,
                 }
                 state.results[segment.sequence] = payload
                 state.last_seen = time.monotonic()
                 if legacy_mode:
-                    await _safe_send(websocket, send_lock, {"type": "done", "text": text})
+                    await _safe_send(websocket, send_lock, {**payload, "type": "done"})
                 else:
                     await _safe_send(websocket, send_lock, payload)
                 metric(
@@ -324,7 +331,7 @@ def install_live_stt_websocket(legacy: Any) -> None:
                 return
             cached = state.results.get(sequence)
             if cached is not None:
-                await _safe_send(websocket, send_lock, cached if not legacy_mode else {"type": "done", "text": cached["text"]})
+                await _safe_send(websocket, send_lock, cached if not legacy_mode else {**cached, "type": "done"})
                 return
             existing = state.inflight.get(segment_id)
             if existing is not None:
@@ -453,6 +460,7 @@ def install_live_stt_websocket(legacy: Any) -> None:
                             sequence=sequence,
                             capture_start_sample=capture_start,
                             primary_start_sample=primary_start,
+                            capture_epoch=str(_field(data, "captureEpoch", "capture_epoch", ""))[:160],
                         )
                     segment = state.segments[segment_id]
                     try:
@@ -492,6 +500,11 @@ def install_live_stt_websocket(legacy: Any) -> None:
                         segment_id = f"legacy-{legacy_segment_sequence}"
                         sequence = legacy_segment_sequence
                         legacy_segment_sequence += 1
+                    segment = state.segments.get(segment_id)
+                    if segment is not None:
+                        segment.capture_epoch = str(_field(data, "captureEpoch", "capture_epoch", segment.capture_epoch))[:160]
+                        segment.finalize_request_id = str(_field(data, "finalizeRequestId", "finalize_request_id", ""))[:160]
+                        segment.end_sample = int(_field(data, "endSample", "end_sample", segment.accepted_through_sample))
                     await finalize_segment(state, segment_id, sequence, legacy_mode=not segmented)
                     continue
         except WebSocketDisconnect:

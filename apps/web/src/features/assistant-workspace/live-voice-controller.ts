@@ -1,5 +1,8 @@
 import { readCurrentAssistantDiagnosticText } from './live-conversation-assistant-summary';
+import type { AcceptedVoiceFinal, LiveFinalRoutingResult } from './live-accepted-final';
 import { liveConversationStore } from './live-conversation-store';
+import { currentLiveRuntimeProvenance } from './live-runtime-provenance';
+import { liveSessionCoordinator } from './live-session-coordinator';
 import {
   type ConversationPace,
   type UserFloorState,
@@ -56,6 +59,7 @@ type LiveVoiceSession = {
 type PendingStart = { card: HTMLElement; token: number };
 
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
+const LIVE_TASK_INSTRUCTION_STORAGE_KEY = 'omnix.live.taskInstruction';
 const DEFAULT_LIVE_VOICE_SENSITIVITY = 55;
 const DEFAULT_CONVERSATION_PACE: ConversationPace = 'balanced';
 const MIN_SPEECH_RMS_THRESHOLD = 0.012;
@@ -107,6 +111,7 @@ function prepareCards(root: ParentNode): void {
         event.preventDefault();
         if (!isCardStartingOrActive(card)) void startLiveVoice(card);
       });
+      ensureLiveTaskPreset(card);
       panelStatuses.set(card, 'idle');
     }
     renderPanelStatus(card, panelStatuses.get(card) ?? 'idle');
@@ -162,6 +167,16 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
   let source: MediaStreamAudioSourceNode | null = null;
   let audioPipeline: LiveVoiceAudioPipeline | null = null;
   try {
+    const sessionId = liveConversationStore.getState().sessionId;
+    if (!sessionId) throw new Error('Select or create a chat session before starting Live voice.');
+    const taskInstruction = readLiveTaskInstruction(card);
+    await liveSessionCoordinator.prepareTaskContract(sessionId, taskInstruction);
+    dispatchLiveVoicePerfEvent({
+      stage: 'live_task_contract_acknowledged',
+      timestamp: new Date().toISOString(),
+      taskInstructionConfigured: Boolean(taskInstruction),
+      ...currentLiveRuntimeProvenance(),
+    });
     const liveWindow = window as LiveVoiceWindow;
     const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
     const WebSocketCtor = liveWindow.WebSocket as unknown as StreamingSttWebSocketCtor | undefined;
@@ -182,11 +197,16 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
     const client = new StreamingSttWebSocketClient({
       url: getDefaultStreamingSttWebSocketUrl(window.location, runtimeConfig.sttServiceUrl),
       webSocketCtor: WebSocketCtor,
+      chatSessionId: sessionId,
       onStatusChange: (status) => {
         if (activeSession?.card === card || pendingStart?.card === card) setPanelStatus(card, status);
       },
       onPartialTranscript: (text) => handlePartialTranscript(card, text),
-      onFinalTranscript: (text) => handleFinalTranscript(card, text),
+      onAcceptedFinal: (final) => handleAcceptedFinal(card, final),
+      onFinalRejected: (reason, identity) => {
+        dispatchLiveVoicePerfEvent({ stage: 'stt_final_rejected', timestamp: new Date().toISOString(), reason, segmentId: identity.segmentId, sourceSequence: identity.sourceSequence });
+        setPanelStatus(card, 'error');
+      },
       onError: (message) => showLiveVoiceError(card, message),
       onSegmentStateChange: (state) => dispatchLiveVoicePerfEvent({
         stage: 'stt_segment_state',
@@ -504,23 +524,25 @@ function updateVoiceVisualizer(session: LiveVoiceSession, rms: number): void {
   if (orb?.dataset.voiceMode !== 'speaking') orb?.setAttribute('data-voice-mode', 'listening');
 }
 
-function handleFinalTranscript(card: HTMLElement, text: string): void {
+async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal): Promise<LiveFinalRoutingResult> {
   const session = activeSession;
-  if (!session || session.card !== card) return;
+  if (!session || session.card !== card) {
+    return failedRoutingResult(final, 'live_capture_session_inactive');
+  }
   const receivedAt = performance.now();
-  const transcript = text.trim();
   const overlapIntent = session.overlapIntent;
   const interruptionDispatched = session.interruptionDispatched;
   const continuation = session.finalizationBuffer.drain();
-  if (transcript) {
-    dispatchLiveVoicePerfEvent({
-      stage: 'stt_final_received',
-      turnId: session.perfTurnId ?? `voice-turn:${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      transcriptChars: transcript.length,
-      sttFinalizeMs: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),
-    });
-  }
+  dispatchLiveVoicePerfEvent({
+    stage: 'stt_final_received',
+    turnId: session.perfTurnId ?? `voice-turn:${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    transcriptChars: final.text.trim().length,
+    sttFinalizeMs: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),
+    segmentId: final.segmentId,
+    sourceSequence: final.sourceSequence,
+    captureEpoch: final.captureEpoch,
+  });
   const suppressTurn = Boolean(
     overlapIntent === 'hard_stop'
     || overlapIntent === 'backchannel'
@@ -528,19 +550,69 @@ function handleFinalTranscript(card: HTMLElement, text: string): void {
     || (overlapIntent === 'uncertain' && !interruptionDispatched),
   );
   resetTurnState(session);
-  if (transcript && !suppressTurn) {
+  try {
+    if (suppressTurn || !final.text.trim()) {
+      return ignoredRoutingResult(final);
+    }
+    renderTranscript(card, 'You', final.text, 'final');
     dispatchLiveVoicePerfEvent({
-      stage: 'stt_final_submit_requested',
+      stage: 'coordination_started',
       timestamp: new Date().toISOString(),
-      transcriptChars: transcript.length,
-      protocol: session.client.segmentedProtocolActive ? 'segmented-v1' : 'legacy',
+      segmentId: final.segmentId,
+      sourceSequence: final.sourceSequence,
+      captureEpoch: final.captureEpoch,
     });
-    renderTranscript(card, 'You', transcript, 'final');
-    populateComposer(transcript);
-    submitComposer();
+    const result = await liveSessionCoordinator.routeAcceptedFinal(final);
+    dispatchLiveVoicePerfEvent({
+      stage: 'coordination_completed',
+      timestamp: new Date().toISOString(),
+      segmentId: final.segmentId,
+      sourceSequence: final.sourceSequence,
+      outcome: result.outcome,
+      errorCode: result.errorCode,
+    });
+    if (result.outcome === 'failed') setPanelStatus(card, 'error');
+    else setPanelStatus(card, 'connected');
+    return result;
+  } finally {
+    replayFinalizationBuffer(session, continuation);
   }
-  setPanelStatus(card, 'connected');
-  replayFinalizationBuffer(session, continuation);
+}
+
+function ignoredRoutingResult(final: AcceptedVoiceFinal): LiveFinalRoutingResult {
+  const task = liveConversationStore.getState().coordination.taskContract;
+  return { outcome: 'ignored', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: task.taskContractId, taskContractVersion: task.version };
+}
+
+function failedRoutingResult(final: AcceptedVoiceFinal, errorCode: string): LiveFinalRoutingResult {
+  const task = liveConversationStore.getState().coordination.taskContract;
+  return { outcome: 'failed', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: task.taskContractId, taskContractVersion: task.version, errorCode };
+}
+
+function ensureLiveTaskPreset(card: HTMLElement): void {
+  if (card.querySelector('[data-live-task-instruction]')) return;
+  const select = document.createElement('select');
+  select.dataset.liveTaskInstruction = 'true';
+  select.setAttribute('aria-label', 'Live task');
+  for (const [label, value] of [
+    ['Conversation', ''],
+    ['Translate Japanese to English', 'Translate Japanese speech into concise English continuously. Keep listening while speaking.'],
+    ['Live grammar correction', 'Correct my grammar continuously while I speak.'],
+  ] as const) {
+    const option = document.createElement('option');
+    option.textContent = label;
+    option.value = value;
+    select.append(option);
+  }
+  select.value = window.localStorage.getItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY) ?? '';
+  select.addEventListener('change', () => window.localStorage.setItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY, select.value));
+  card.querySelector('header')?.append(select);
+}
+
+function readLiveTaskInstruction(card: HTMLElement): string | undefined {
+  const selected = card.querySelector<HTMLSelectElement>('[data-live-task-instruction]')?.value.trim();
+  const stored = window.localStorage.getItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY)?.trim();
+  return selected || stored || undefined;
 }
 
 function replayFinalizationBuffer(session: LiveVoiceSession, frames: Float32Array[]): void {
@@ -729,20 +801,6 @@ function showLiveVoiceError(card: HTMLElement, message: string): void {
   setPanelStatus(card, 'error');
 }
 
-function populateComposer(text: string): void {
-  const textarea = document.querySelector<HTMLTextAreaElement>('.assistant-message-input textarea');
-  if (!textarea) return;
-  textarea.value = text;
-  textarea.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-function submitComposer(): void {
-  const form = document.querySelector<HTMLFormElement>('.assistant-composer');
-  if (!form) return;
-  if (typeof form.requestSubmit === 'function') form.requestSubmit();
-  else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-}
-
 function dispatchLiveVoiceLifecycleEvent(type: string, detail: Record<string, unknown>): void {
   window.dispatchEvent(new CustomEvent(type, { detail }));
 }
@@ -758,10 +816,4 @@ function setText(element: Element | null, value: string): void {
 
 function setDataAttribute(element: HTMLElement, key: string, value: string): void {
   if (element.dataset[key] !== value) element.dataset[key] = value;
-}
-
-if (typeof window !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => initializeLiveVoiceController(), { once: true });
-  } else initializeLiveVoiceController();
 }

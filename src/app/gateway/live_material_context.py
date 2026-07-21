@@ -76,6 +76,23 @@ class LiveMaterialSnapshot(BaseModel):
     security: LiveMaterialSecurityPolicy = Field(default_factory=LiveMaterialSecurityPolicy)
 
 
+class LiveTaskContractAcknowledgementRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_contract_id: str = Field(min_length=1, max_length=160)
+    task_contract_version: int = Field(ge=1)
+
+
+class LiveTaskContractAcknowledgement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    task_contract_id: str
+    task_contract_version: int
+    context_version: int
+    idempotent: bool
+
+
 class LiveMaterialPromotionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -191,6 +208,31 @@ class LiveMaterialStore:
             session.task_contract_version = segment.task_contract_version
             self._compact_locked(session)
             return self._ack(session, segment, idempotent=False)
+
+
+    def acknowledge_task_contract(
+        self, session_id: str, request: LiveTaskContractAcknowledgementRequest
+    ) -> LiveTaskContractAcknowledgement:
+        normalized_session = _identifier(session_id, "session_id")
+        with self._lock:
+            self._prune_locked()
+            session = self._sessions.setdefault(normalized_session, LiveMaterialSession(session_id=normalized_session))
+            idempotent = (
+                session.task_contract_id == request.task_contract_id
+                and session.task_contract_version == request.task_contract_version
+            )
+            if not idempotent:
+                session.task_contract_id = request.task_contract_id
+                session.task_contract_version = request.task_contract_version
+                session.context_version += 1
+            session.last_seen = time.monotonic()
+            return LiveTaskContractAcknowledgement(
+                session_id=session.session_id,
+                task_contract_id=session.task_contract_id,
+                task_contract_version=session.task_contract_version,
+                context_version=session.context_version,
+                idempotent=idempotent,
+            )
 
     def snapshot(self, session_id: str) -> LiveMaterialSnapshot | None:
         normalized_session = _identifier(session_id, "session_id")
@@ -368,6 +410,20 @@ def register_live_material_context_routes(gateway: FastAPI) -> None:
     ) -> LiveMaterialAcknowledgement:
         try:
             return live_material_store.append(session_id, request)
+        except LiveMaterialConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+    @gateway.post(
+        f"{LIVE_MATERIAL_PATH}/task-contract",
+        response_model=LiveTaskContractAcknowledgement,
+        include_in_schema=False,
+    )
+    async def acknowledge_live_task_contract(
+        session_id: str, request: LiveTaskContractAcknowledgementRequest
+    ) -> LiveTaskContractAcknowledgement:
+        try:
+            return live_material_store.acknowledge_task_contract(session_id, request)
         except LiveMaterialConflictError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 

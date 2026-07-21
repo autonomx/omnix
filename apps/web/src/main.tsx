@@ -34,14 +34,14 @@ import { initializeLiveConversationRepairController } from './features/assistant
 import { initializeLiveConversationStoreBridge } from './features/assistant-workspace/live-conversation-store-bridge';
 import { initializeLiveOutputCoordinator } from './features/assistant-workspace/live-output-coordinator';
 import { initializeLivePresencePolicyController } from './features/assistant-workspace/live-presence-policy-controller';
-import { initializeLiveSegmentSubmitInterceptor } from './features/assistant-workspace/live-segment-submit-interceptor';
 import { initializeLiveSessionCoordinator } from './features/assistant-workspace/live-session-coordinator';
 import { initializeLiveVoiceAudioDuckBridge } from './features/assistant-workspace/live-voice-audio-duck-bridge';
 import { initializeLiveVoiceCueAssetBridge } from './features/assistant-workspace/live-voice-cue-asset-bridge';
 import { initializeLiveVoiceCuePackLoader } from './features/assistant-workspace/live-voice-cue-pack-loader';
 import { initializeLiveVoiceDuplexGate } from './features/assistant-workspace/live-voice-duplex-gate';
 import './features/assistant-workspace/live-voice-form-sync';
-import './features/assistant-workspace/live-voice-controller';
+import { initializeLiveVoiceController } from './features/assistant-workspace/live-voice-controller';
+import { emitLiveRuntimeProvenance } from './features/assistant-workspace/live-runtime-provenance';
 import './features/assistant-workspace/live-voice-transcript-autoscroll';
 import { initializeLiveVoiceUnifiedAudioController } from './features/assistant-workspace/live-voice-unified-audio-controller';
 import './features/storyteller/StorytellerWorkspace.css';
@@ -67,8 +67,9 @@ const queryClient = new QueryClient({
 
 installRpgTurnUiFetchInterceptor();
 initializeLiveConversationStoreBridge();
-initializeLiveSegmentSubmitInterceptor();
 initializeLiveSessionCoordinator();
+emitLiveRuntimeProvenance();
+initializeLiveVoiceController();
 initializeLiveOutputCoordinator();
 initializeLivePresencePolicyController();
 initializeLiveVoiceDuplexGate();

@@ -34,6 +34,7 @@ import {
   createLiveCallDiagnosticsReporter,
   type LiveCallDiagnosticsReporter,
 } from '../assistant-workspace/live-call-diagnostics-client';
+import { liveChatSubmissionGateway } from '../assistant-workspace/live-chat-submission-gateway';
 import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
 import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
@@ -900,6 +901,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     }
     sendMutation.mutate({ content: trimmed, providerId: selectedProviderId, modelId: selectedModelId });
   }
+
+  useEffect(() => liveChatSubmissionGateway.register(async (input) => {
+    if (input.sessionId !== selectedSessionId) throw new Error('live_chat_session_mismatch');
+    await sendStreamingVoiceTranscript(input.text);
+  }), [selectedSessionId, selectedProviderId, selectedModelId, assistantSettings, autoSpeakResponses]);
 
   function scheduleLiveVoiceAutoSend(content: string): void {
     if (!liveVoiceActiveRef.current) return;

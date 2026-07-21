@@ -196,3 +196,18 @@ def test_fullscreen_shell_reuses_existing_runtime_owners() -> None:
     assert ".assistant-live-character-avatar" in adapters
     assert "requestFullscreen" in controller
     assert "exitFullscreen" in controller
+
+
+def test_live_voice_final_routing_has_no_composer_dependency() -> None:
+    controller = _source("apps/web/src/features/assistant-workspace/live-voice-controller.ts")
+    coordinator = _source("apps/web/src/features/assistant-workspace/live-session-coordinator.ts")
+    interceptor = _source("apps/web/src/features/assistant-workspace/live-segment-submit-interceptor.ts")
+    assert "requestSubmit" not in controller
+    assert ".assistant-composer" not in controller
+    assert "populateComposer" not in controller
+    assert "querySelector" not in coordinator
+    assert "requestSubmit" not in coordinator
+    assert "document.addEventListener('submit'" not in interceptor
+    assert "onAcceptedFinal" in controller
+    assert "routeAcceptedFinal" in controller
+    assert "direct_final_routing: true" in _source("apps/web/src/features/assistant-workspace/live-runtime-provenance.ts")
