@@ -361,7 +361,7 @@ def register_live_material_context_routes(gateway: FastAPI) -> None:
         return
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
-    @gateway.post(LIVE_MATERIAL_PATH, response_model=LiveMaterialAcknowledgement)
+    @gateway.post(LIVE_MATERIAL_PATH, response_model=LiveMaterialAcknowledgement, include_in_schema=False)
     async def append_live_material(
         session_id: str,
         request: LiveMaterialAppendRequest,
@@ -371,18 +371,22 @@ def register_live_material_context_routes(gateway: FastAPI) -> None:
         except LiveMaterialConflictError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @gateway.get(LIVE_MATERIAL_PATH, response_model=LiveMaterialSnapshot)
+    @gateway.get(LIVE_MATERIAL_PATH, response_model=LiveMaterialSnapshot, include_in_schema=False)
     async def get_live_material(session_id: str) -> LiveMaterialSnapshot:
         snapshot = live_material_store.snapshot(session_id)
         if snapshot is None:
             raise HTTPException(status_code=404, detail="live_material_not_found")
         return snapshot
 
-    @gateway.delete(LIVE_MATERIAL_PATH)
+    @gateway.delete(LIVE_MATERIAL_PATH, include_in_schema=False)
     async def clear_live_material(session_id: str) -> dict[str, Any]:
         return {"ok": True, "cleared": live_material_store.clear(session_id)}
 
-    @gateway.post(f"{LIVE_MATERIAL_PATH}/promote", response_model=LiveMaterialPromotionResponse)
+    @gateway.post(
+        f"{LIVE_MATERIAL_PATH}/promote",
+        response_model=LiveMaterialPromotionResponse,
+        include_in_schema=False,
+    )
     async def promote_live_material(
         session_id: str,
         request: LiveMaterialPromotionRequest,
