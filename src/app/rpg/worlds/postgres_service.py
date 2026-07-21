@@ -1,7 +1,9 @@
 """Transactional services for reusable RPG world and scenario resources."""
 from __future__ import annotations
 
+import re
 from typing import Any, TypeVar
+from uuid import uuid4
 
 from pydantic import BaseModel
 
@@ -37,6 +39,33 @@ def _ensure_hash(document: _HashedContract, field: str) -> _HashedContract:
     payload[field] = ""
     payload[field] = canonical_content_hash(payload)
     return type(document).model_validate(payload)
+
+
+def _resource_slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().casefold()).strip("-")
+    return (slug or "untitled")[:48]
+
+
+def _allocate_resource_id(
+    work: Any,
+    context: Any,
+    *,
+    prefix: str,
+    title: str,
+    exists_sql: str,
+) -> str:
+    """Allocate a friendly, collision-safe technical id inside the write transaction."""
+
+    slug = _resource_slug(title)
+    for _ in range(16):
+        candidate = f"{prefix}:{slug}:{uuid4().hex[:12]}"
+        existing = work.connection.execute(
+            exists_sql,
+            (context.workspace_id, candidate),
+        ).fetchone()
+        if existing is None:
+            return candidate
+    raise RuntimeError(f"{prefix}_id_allocation_exhausted")
 
 
 def _definitions_from_work(
@@ -76,9 +105,24 @@ def create_world_project(
 ) -> dict[str, Any]:
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
+        world_id = str(request.world_id or "").strip()
+        if world_id:
+            if work.world_scenarios.get_world(context, world_id) is not None:
+                raise ValueError(f"world_already_exists:{world_id}")
+        else:
+            world_id = _allocate_resource_id(
+                work,
+                context,
+                prefix="world",
+                title=request.title,
+                exists_sql=(
+                    "SELECT 1 FROM omnix_rpg_worlds "
+                    "WHERE workspace_id = %s AND id = %s"
+                ),
+            )
         world = work.world_scenarios.create_world(
             context,
-            world_id=request.world_id,
+            world_id=world_id,
             title=request.title,
             description=request.description,
             source_mode=request.source_mode,
@@ -170,16 +214,29 @@ def create_scenario_project(
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         require_world_writable(work, context, request.world_id)
-        existing = work.connection.execute(
-            "SELECT 1 FROM omnix_rpg_scenarios "
-            "WHERE workspace_id = %s AND id = %s",
-            (context.workspace_id, request.scenario_id),
-        ).fetchone()
-        if existing is not None:
-            raise ValueError(f"scenario_already_exists:{request.scenario_id}")
+        scenario_id = str(request.scenario_id or "").strip()
+        if scenario_id:
+            existing = work.connection.execute(
+                "SELECT 1 FROM omnix_rpg_scenarios "
+                "WHERE workspace_id = %s AND id = %s",
+                (context.workspace_id, scenario_id),
+            ).fetchone()
+            if existing is not None:
+                raise ValueError(f"scenario_already_exists:{scenario_id}")
+        else:
+            scenario_id = _allocate_resource_id(
+                work,
+                context,
+                prefix="scenario",
+                title=request.title,
+                exists_sql=(
+                    "SELECT 1 FROM omnix_rpg_scenarios "
+                    "WHERE workspace_id = %s AND id = %s"
+                ),
+            )
         scenario = work.world_scenarios.create_scenario(
             context,
-            scenario_id=request.scenario_id,
+            scenario_id=scenario_id,
             world_id=request.world_id,
             title=request.title,
             description=request.description,

@@ -1,0 +1,151 @@
+.rpg-campaign-setup-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.rpg-campaign-continue-panel,
+.rpg-campaign-new-panel {
+  border: 1px solid rgba(168, 139, 250, 0.2);
+  border-radius: 16px;
+  background: rgba(7, 12, 28, 0.76);
+  padding: 1rem;
+}
+
+.rpg-campaign-continue-panel h3,
+.rpg-campaign-new-panel h3,
+.rpg-campaign-new-panel h4 {
+  margin-top: 0;
+}
+
+.rpg-campaign-continue-panel article {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.8rem;
+  border: 1px solid rgba(168, 139, 250, 0.16);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.54);
+}
+
+.rpg-campaign-continue-panel article p {
+  margin: 0.25rem 0 0;
+  color: var(--omnix-muted, #a7a4b8);
+  font-size: 0.8rem;
+}
+
+.rpg-campaign-setup-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.rpg-campaign-setup-section-heading p,
+.rpg-campaign-setup-section-heading h3 {
+  margin: 0;
+}
+
+.rpg-campaign-setup-section-heading > span {
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #a7f3d0;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.rpg-campaign-new-panel form {
+  display: grid;
+  gap: 1rem;
+}
+
+.rpg-campaign-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.rpg-campaign-form-grid label,
+.rpg-campaign-feature-grid label,
+.rpg-campaign-toggle-row label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.rpg-campaign-form-grid label > span,
+.rpg-campaign-feature-grid label > span,
+.rpg-campaign-toggle-row label > span {
+  color: #c4b5fd;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rpg-campaign-form-grid input,
+.rpg-campaign-form-grid select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(168, 139, 250, 0.24);
+  border-radius: 10px;
+  background: rgba(8, 13, 30, 0.88);
+  color: #f8fafc;
+  padding: 0.7rem 0.8rem;
+}
+
+.rpg-campaign-toggle-row,
+.rpg-campaign-feature-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.rpg-campaign-toggle-row label,
+.rpg-campaign-feature-grid label {
+  display: flex;
+  align-items: center;
+  grid-template-columns: auto 1fr;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(168, 139, 250, 0.16);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.rpg-campaign-launch-review {
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.66);
+  padding: 0.9rem;
+}
+
+.rpg-campaign-launch-review dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.rpg-campaign-launch-review dl > div {
+  padding: 0.7rem;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.54);
+}
+
+.rpg-campaign-launch-review dt {
+  color: var(--omnix-muted, #a7a4b8);
+  font-size: 0.72rem;
+}
+
+.rpg-campaign-launch-review dd {
+  margin: 0.25rem 0 0;
+}
+
+@media (max-width: 920px) {
+  .rpg-campaign-setup-layout,
+  .rpg-campaign-form-grid,
+  .rpg-campaign-launch-review dl {
+    grid-template-columns: 1fr;
+  }
+}

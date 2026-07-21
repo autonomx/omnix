@@ -1,12 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { omnixApiClient } from '../../api/client';
 import {
   rpgWorldLibraryClient,
-  type RpgScenarioRevision,
-  type RpgWorldRelease,
   type RpgWorldSummary,
 } from '../../api/rpgWorldLibraryClient';
+import { RpgWorldCampaignSetup } from './RpgWorldCampaignSetup';
 import { RpgWorldCard } from './RpgWorldCard';
 import { RpgWorldEditorShell } from './RpgWorldEditorShell';
 import './RpgWorldAuthoringWorkspace.css';
@@ -21,29 +19,9 @@ type WorldWorkspaceView =
   | { kind: 'editor'; worldId: string }
   | { kind: 'campaignSetup'; worldId: string };
 
-function slug(value: string): string {
-  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  return normalized || 'new-world';
-}
-
 function timestamp(value: string): number {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-function matchingRelease(releases: RpgWorldRelease[], revision: RpgScenarioRevision | undefined) {
-  if (!revision) return undefined;
-  const compatibleRelease = Number(record(revision.document).compatible_release || 0);
-  return releases.find((release) => (
-    release.world_revision === revision.world_revision
-    && (!compatibleRelease || release.release === compatibleRelease)
-  ));
 }
 
 function worldState(world: RpgWorldSummary): string {
@@ -71,18 +49,10 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
     queryFn: () => rpgWorldLibraryClient.list(),
     refetchInterval: 5000,
   });
-  const selectedWorldId = view.kind === 'editor' || view.kind === 'campaignSetup' ? view.worldId : '';
-  const detailQuery = useQuery({
-    queryKey: ['feature', 'rpg', 'world-authoring-workspace', selectedWorldId],
-    queryFn: () => rpgWorldLibraryClient.detail(selectedWorldId),
-    enabled: Boolean(selectedWorldId),
-    refetchInterval: 5000,
-  });
 
   const refresh = async () => queryClient.invalidateQueries({ queryKey: ['feature', 'rpg'] });
   const createWorld = useMutation({
     mutationFn: () => rpgWorldLibraryClient.createWorld({
-      world_id: `world:${slug(title)}:${Date.now().toString(36)}`,
       title: title.trim(),
       description: description.trim(),
       source_mode: 'hybrid',
@@ -99,41 +69,14 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
       await refresh();
       setView({ kind: 'editor', worldId: result.world.id });
     },
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'World could not be created.'),
   });
   const lifecycle = useMutation({
     mutationFn: (world: RpgWorldSummary) => world.status === 'archived'
       ? rpgWorldLibraryClient.restoreWorld(world.id)
       : rpgWorldLibraryClient.archiveWorld(world.id),
     onSuccess: async () => refresh(),
-  });
-  const continueCampaign = useMutation({
-    mutationFn: (campaignId: string) => omnixApiClient.continueRpgSession(campaignId),
-    onSuccess: (result) => {
-      if (!result.ok || !result.session_id) throw new Error(result.error ?? 'Campaign could not be continued.');
-      onSessionLaunched(result.session_id);
-    },
-  });
-  const launchScenario = useMutation({
-    mutationFn: async (scenarioId: string) => {
-      const detail = detailQuery.data;
-      if (!detail) throw new Error('World detail is not available.');
-      const revision = [...(detail.scenario_revisions[scenarioId] ?? [])]
-        .sort((left, right) => right.revision - left.revision)[0];
-      const release = matchingRelease(detail.releases, revision);
-      if (!revision || !release) throw new Error('This opening does not have a compatible published release.');
-      return rpgWorldLibraryClient.launchScenario(scenarioId, revision.revision, {
-        world_id: detail.world.id,
-        world_revision: revision.world_revision,
-        world_release: release.release,
-        player: { name: 'Alyndra', pronouns: 'they/them', background: 'World Traveler', build: 'balanced_adventurer' },
-        gameplay: {},
-        features: {},
-      });
-    },
-    onSuccess: (result) => {
-      if (!result.ok || !result.session_id) throw new Error(result.error ?? 'Campaign launch failed.');
-      onSessionLaunched(result.session_id);
-    },
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'World status could not be changed.'),
   });
 
   const visibleWorlds = useMemo(() => {
@@ -158,7 +101,7 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
             <option value="all">All worlds</option><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option><option value="generating">Generating</option><option value="generation-failed">Generation failed</option>
           </select>
         </div>
-        {feedback ? <p className="rpg-authoring-feedback">{feedback}</p> : null}
+        {feedback ? <p className="rpg-authoring-feedback" aria-live="polite">{feedback}</p> : null}
         {libraryQuery.isPending ? <p>Loading worlds…</p> : null}
         {libraryQuery.isError ? <p className="rpg-world-catalog-error">Unable to load worlds.</p> : null}
         <div className="rpg-world-card-grid">
@@ -181,6 +124,7 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
           <div className="rpg-authoring-modal" role="dialog" aria-modal="true" aria-label="Create new world">
             <form onSubmit={(event) => { event.preventDefault(); createWorld.mutate(); }}>
               <h3>Create New World</h3>
+              <p>A stable technical identifier will be assigned automatically.</p>
               <label><span>Title</span><input required value={title} onChange={(event) => setTitle(event.currentTarget.value)} /></label>
               <label><span>Description</span><textarea value={description} onChange={(event) => setDescription(event.currentTarget.value)} /></label>
               <label><span>Genre</span><input value={genre} onChange={(event) => setGenre(event.currentTarget.value)} /></label>
@@ -193,27 +137,23 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
     );
   }
 
-  const world = libraryQuery.data?.worlds.find((candidate) => candidate.id === view.worldId) ?? detailQuery.data?.world;
   if (view.kind === 'campaignSetup') {
-    const campaigns = (libraryQuery.data?.campaigns ?? []).filter((campaign) => campaign.world_id === view.worldId && campaign.status !== 'archived');
-    const scenarios = (detailQuery.data?.scenarios ?? []).filter((scenario) => scenario.status === 'published');
     return (
-      <section className="rpg-authoring-campaign-setup" aria-label="World campaign setup">
-        <header className="rpg-authoring-heading"><div><p className="eyebrow">Campaign setup</p><h2>{world?.title ?? 'World'}</h2><p>Continue a campaign or start from a published opening.</p></div><button className="rpg-secondary-button" type="button" onClick={() => setView({ kind: 'library' })}>Back to Worlds</button></header>
-        <div className="rpg-authoring-two-column">
-          <section><h3>Continue Campaign</h3>{campaigns.map((campaign) => <article key={campaign.campaign_id}><div><strong>{campaign.title}</strong><p>{campaign.status}</p></div><button type="button" disabled={continueCampaign.isPending} onClick={() => continueCampaign.mutate(campaign.campaign_id)}>Continue</button></article>)}{!campaigns.length ? <p>No campaigns have started in this world.</p> : null}</section>
-          <section><h3>Start New Campaign</h3>{scenarios.map((scenario) => <article key={scenario.id}><div><strong>{scenario.title}</strong><p>{scenario.description || 'Published opening scenario'}</p></div><button type="button" disabled={launchScenario.isPending} onClick={() => launchScenario.mutate(scenario.id)}>Play</button></article>)}{!scenarios.length ? <><p>World setup is incomplete. Publish an opening scenario before play.</p><button type="button" onClick={() => setView({ kind: 'editor', worldId: view.worldId })}>Review World Setup</button></> : null}</section>
-        </div>
-      </section>
+      <RpgWorldCampaignSetup
+        onBack={() => setView({ kind: 'library' })}
+        onEditWorld={() => setView({ kind: 'editor', worldId: view.worldId })}
+        onSessionLaunched={onSessionLaunched}
+        worldId={view.worldId}
+      />
     );
   }
 
+  const world = libraryQuery.data?.worlds.find((candidate) => candidate.id === view.worldId);
   if (!world) return <p>Loading world editor…</p>;
   return (
     <RpgWorldEditorShell
       onBack={() => setView({ kind: 'library' })}
       onPlay={() => setView({ kind: 'campaignSetup', worldId: view.worldId })}
-      onSessionLaunched={onSessionLaunched}
       world={world}
       worldId={view.worldId}
     />

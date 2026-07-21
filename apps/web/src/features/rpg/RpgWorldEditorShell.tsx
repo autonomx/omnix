@@ -6,15 +6,16 @@ import {
   type RpgAuthoringSection,
 } from '../../api/rpgWorldAuthoringClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+import { RpgWorldAdvancedPanel } from './RpgWorldAdvancedPanel';
 import { RpgWorldAuthoringPage } from './RpgWorldAuthoringPage';
 import { RpgWorldGenerationPanel } from './RpgWorldGenerationPanel';
 import { RpgWorldImagesPanel } from './RpgWorldImagesPanel';
-import { RpgWorldsCampaignsLibrary } from './RpgWorldsCampaignsLibrary';
+import { RpgWorldMapAuthoringPanel } from './RpgWorldMapAuthoringPanel';
+import { RpgWorldScenarioAuthoringPanel } from './RpgWorldScenarioAuthoringPanel';
 
 interface RpgWorldEditorShellProps {
   onBack: () => void;
   onPlay: () => void;
-  onSessionLaunched: (sessionId: string) => void;
   world: RpgWorldSummary;
   worldId: string;
 }
@@ -25,6 +26,8 @@ const GROUPS: Array<{ id: RpgAuthoringGroup; label: string }> = [
   { id: 'lore', label: 'Lore' },
   { id: 'game-master', label: 'Game Master' },
 ];
+
+const DEDICATED_SECTIONS = ['advanced', 'generation', 'images', 'map', 'scenarios'];
 
 function statusLabel(value: string): string {
   return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -41,7 +44,6 @@ function worldState(world: RpgWorldSummary): string {
 export function RpgWorldEditorShell({
   onBack,
   onPlay,
-  onSessionLaunched,
   world,
   worldId,
 }: RpgWorldEditorShellProps) {
@@ -73,7 +75,7 @@ export function RpgWorldEditorShell({
   const pageQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-authoring-section', worldId, selectedSection.id],
     queryFn: () => rpgWorldAuthoringClient.section(worldId, selectedSection.id),
-    enabled: Boolean(worldId) && !['advanced', 'generation', 'images'].includes(selectedSection.id),
+    enabled: Boolean(worldId) && !DEDICATED_SECTIONS.includes(selectedSection.id),
     refetchInterval: selectedSection.operational_status === 'generating' ? 3000 : false,
   });
 
@@ -136,7 +138,7 @@ export function RpgWorldEditorShell({
         </nav>
         <main>
           {selectedSection.id === 'advanced' ? (
-            <RpgWorldsCampaignsLibrary onBack={onBack} onSessionLaunched={onSessionLaunched} />
+            <RpgWorldAdvancedPanel world={currentWorld} />
           ) : selectedSection.id === 'generation' ? (
             <RpgWorldGenerationPanel
               generation={manifestQuery.data?.generation}
@@ -146,6 +148,10 @@ export function RpgWorldEditorShell({
             />
           ) : selectedSection.id === 'images' ? (
             <RpgWorldImagesPanel worldId={worldId} />
+          ) : selectedSection.id === 'map' ? (
+            <RpgWorldMapAuthoringPanel worldId={worldId} />
+          ) : selectedSection.id === 'scenarios' ? (
+            <RpgWorldScenarioAuthoringPanel worldId={worldId} />
           ) : (
             <RpgWorldAuthoringPage
               error={pageQuery.error instanceof Error ? pageQuery.error.message : undefined}
