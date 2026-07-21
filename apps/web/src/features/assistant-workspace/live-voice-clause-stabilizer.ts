@@ -22,6 +22,15 @@ const ABBREVIATION = /(?:\b(?:mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|e\.g|i\.e)|\b[A-
 const DECIMAL_OR_VERSION = /\d\.\d$/;
 const URL_TAIL = /(?:https?:\/\/|www\.)\S*$/i;
 const OPENING_QUOTE = /^["“‘]/;
+const EMPHASISED_PARENTHETICAL = /(?:\*{1,3}|_{1,3})\s*\([^)*_\n]{0,240}\)\s*(?:\*{1,3}|_{1,3})/gu;
+const PLAIN_PARENTHETICAL = /\(([^)\n]{1,180})\)/gu;
+const MARKDOWN_SPAN = /(\*{1,3}|_{1,3})([^*_\n]{1,160})\1/gu;
+const EMOJI_SEQUENCE = /\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier}|\u200D\p{Extended_Pictographic})*/gu;
+const STACKED_LEADING_HESITATIONS = /^(?:(?:h+m+|u+m+|uh+|erm+|er+)\b(?:\s|[.…,!—–-])*){2,}/iu;
+const STAGE_DIRECTION_START = /^(?:(?:a|an|the)\s+)?(?:(?:soft|small|little|nervous|playful|gentle|quiet)\s+)*(?:pause|pauses|sigh|sighs|laugh|laughs|laughter|chuckle|chuckles|giggle|giggles|breath|breathes|inhale|inhales|exhale|exhales|nod|nods|smile|smiles|grin|grins|shrug|shrugs|tilt|tilts|whisper|whispers|murmur|murmurs|typing sounds?)(?:\b|$)/iu;
+const STAGE_DIRECTION_META = /\b(?:tone|sounds?\s+implied|stage\s+direction|gesture|facial\s+expression)\b/iu;
+const WRITTEN_SOUND_EFFECT = /^["“”'‘’]?(?:he+he+|ha+ha+|hm+|mm+|ugh+|ah+)[.!…]*["“”'‘’]?$/iu;
+const NON_SPEECH_EMOJI_ONLY = /^(?=[\s\S]*\p{Extended_Pictographic})[\s\p{Extended_Pictographic}\uFE0F\p{Emoji_Modifier}\u200D\p{Punctuation}\p{Symbol}]+$/u;
 
 export class StableClauseAccumulator {
   private buffer = '';
@@ -53,14 +62,15 @@ export class StableClauseAccumulator {
       if (!boundary) break;
       const text = this.buffer.slice(0, boundary.end).trim();
       this.buffer = this.buffer.slice(boundary.end).trimStart();
-      if (text) committed.push({ text, reason: boundary.reason });
+      const spokenText = sanitizeLiveVoiceSpokenText(text);
+      if (spokenText) committed.push({ text: spokenText, reason: boundary.reason });
       this.openedAtMs = this.buffer ? nowMs : null;
     }
     return committed;
   }
 
   flush(): StableClause[] {
-    const text = this.buffer.trim();
+    const text = sanitizeLiveVoiceSpokenText(this.buffer.trim());
     this.buffer = '';
     this.openedAtMs = null;
     return text ? [{ text, reason: 'stream-end' }] : [];
@@ -106,6 +116,31 @@ export class StableClauseAccumulator {
   }
 }
 
+export function sanitizeLiveVoiceSpokenText(text: string): string {
+  const original = text.trim();
+  let cleaned = text
+    .replace(EMPHASISED_PARENTHETICAL, ' ')
+    .replace(PLAIN_PARENTHETICAL, (match, content: string) => (
+      isStageDirection(content) ? ' ' : match
+    ))
+    .replace(MARKDOWN_SPAN, (_match, _marker: string, content: string) => (
+      isStageDirection(content) ? ' ' : content
+    ))
+    .replace(EMOJI_SEQUENCE, ' ');
+
+  cleaned = cleaned.replace(STACKED_LEADING_HESITATIONS, '');
+
+  const spokenText = cleaned
+    .replace(/\s+/gu, ' ')
+    .replace(/\s+([,.;:!?])/gu, '$1')
+    .replace(/\s+([)\]}])/gu, '$1')
+    .replace(/^[\s,;:!?…—–.-]+/u, '')
+    .trim();
+
+  if (spokenText) return spokenText;
+  return NON_SPEECH_EMOJI_ONLY.test(original) ? original : '';
+}
+
 export function mergeStreamText(current: string, next: string): string {
   const left = current.trimEnd();
   const right = next.trimStart();
@@ -113,6 +148,13 @@ export function mergeStreamText(current: string, next: string): string {
   if (!right) return left;
   if (/^[,.;:!?%\]})]/.test(right) || /[([{“‘]$/.test(left)) return `${left}${right}`;
   return `${left} ${right}`;
+}
+
+function isStageDirection(content: string): boolean {
+  const normalized = content.trim();
+  return STAGE_DIRECTION_START.test(normalized)
+    || STAGE_DIRECTION_META.test(normalized)
+    || WRITTEN_SOUND_EFFECT.test(normalized);
 }
 
 function findSafeBoundary(text: string, pattern: RegExp, minimum: number): number | null {

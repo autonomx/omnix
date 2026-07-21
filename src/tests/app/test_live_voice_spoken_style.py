@@ -33,17 +33,23 @@ def test_spoken_style_is_inserted_before_the_current_user_turn() -> None:
     )
 
 
-def test_spoken_style_rejects_assistant_copy_without_forcing_brevity() -> None:
+def test_spoken_style_rejects_roleplay_copy_without_forcing_brevity() -> None:
     normalized = LIVE_VOICE_SPOKEN_STYLE.casefold()
 
     assert "ordinary conversational language" in normalized
-    assert "polished copy" in normalized
+    assert "literal words the character says aloud" in normalized
+    assert "not a screenplay" in normalized
+    assert "soft pause" in normalized
+    assert "typing sounds implied" in normalized
+    assert "do not spell out laughter" in normalized
+    assert "do not use markdown emphasis or emoji" in normalized
     assert "longer responses are welcome" in normalized
     assert "do not force every reply into a brief summary" in normalized
     assert "easy to follow aloud" in normalized
     assert "customer-service phrasing" in normalized
+    assert "never stack fillers" in normalized
+    assert "attempt to sound human" in normalized
     assert "do not end every response with a question" in normalized
-    assert "circuits" in normalized
     assert "one to three short sentences" not in normalized
 
 
