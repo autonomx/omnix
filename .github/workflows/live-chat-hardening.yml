@@ -3,41 +3,292 @@ name: Live Chat hardening gates
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  fix-deferred-output-typing:
-    name: Fix deferred output typing
-    if: github.event_name == 'pull_request' && github.head_ref == 'agent/general-full-duplex-live'
+  live-chat-hardening:
+    name: Live Chat hardening
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: src
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          ref: ${{ github.head_ref }}
-      - name: Patch test typing
-        shell: bash
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Python test dependencies
         run: |
-          set -euo pipefail
-          if [ "$(git log -1 --pretty=%s)" = "Fix deferred output test typing" ]; then
-            exit 0
-          fi
+          python -m pip install --upgrade pip
+          python -m pip install ruff pytest fastapi httpx numpy pydantic requests python-multipart playwright
+
+      - name: Install web dependencies
+        run: npm install
+
+      - name: Ruff Live Chat hardening modules
+        run: |
+          set -o pipefail
+          ruff check \
+            src/app/assistant_memory/companion_context.py \
+            src/app/assistant_memory/controls.py \
+            src/app/assistant_memory/initiative.py \
+            src/app/assistant_memory/jobs.py \
+            src/app/assistant_memory/management_routes.py \
+            src/app/assistant_memory/observability.py \
+            src/app/assistant_memory/paralinguistic_state.py \
+            src/app/assistant_memory/rollout.py \
+            src/app/assistant_memory/settings.py \
+            src/app/assistant_memory/settings_routes.py \
+            src/app/assistant_memory/structured_consolidation.py \
+            src/app/assistant_memory/structured_extraction.py \
+            src/app/assistant_memory/structured_provider.py \
+            src/app/assistant_memory/temporal_retrieval.py \
+            src/app/chat/character_store.py \
+            src/app/chat/compaction.py \
+            src/app/chat/memory_commands.py \
+            src/app/chat/provider_metrics.py \
+            src/app/chat/retention_policy.py \
+            src/app/gateway/blocking_route_offload.py \
+            src/app/gateway/content_free_diagnostics.py \
+            src/app/gateway/event_loop_lag_monitor.py \
+            src/app/gateway/live_chat_companion_context.py \
+            src/app/gateway/live_chat_live_voice_profile.py \
+            src/app/gateway/live_chat_low_latency_stream.py \
+            src/app/gateway/live_chat_postgres_fast_path.py \
+            src/app/gateway/live_chat_provider_metrics.py \
+            src/app/gateway/live_chat_provider_routing.py \
+            src/app/gateway/live_chat_stream_retry.py \
+            src/app/gateway/live_material_context.py \
+            src/app/gateway/live_observation_generation.py \
+            src/app/gateway/live_voice_cue_asset_routes.py \
+            src/app/gateway/live_voice_runtime_offload.py \
+            src/app/gateway/live_voice_release_gate.py \
+            src/app/gateway/live_chat_release_gate.py \
+            src/app/gateway/live_chat_release_aggregation.py \
+            src/app/gateway/live_chat_evaluation_store.py \
+            src/app/gateway/live_chat_evaluation_routes.py \
+            src/app/gateway/live_voice_diagnostics_routes.py \
+            src/app/gateway/memory_job_offload.py \
+            src/app/gateway/tts_live_call_websocket.py \
+            src/app/gateway/tts_stream_contract.py \
+            src/app/gateway/tts_stream_diagnostics.py \
+            src/app/persistence/chat_compat.py \
+            src/app/persistence/chat_runtime_compat.py \
+            src/app/providers/lmstudio_provider.py \
+            src/app/providers/stt_live_runtime_support.py \
+            src/app/providers/stt_live_websocket.py \
+            src/app/providers/stt_segment_scheduler.py \
+            src/app/providers/stt_streaming_audio.py \
+            src/parakeet_stt_runtime.py \
+            src/parakeet_stt_server.py \
+            src/tests/app/test_chat_response_metrics.py \
+            src/tests/app/test_gateway_blocking_route_offload.py \
+            src/tests/app/test_gateway_event_loop_lag_monitor.py \
+            src/tests/app/test_gateway_live_voice_cue_assets.py \
+            src/tests/app/test_live_chat_live_voice_profile.py \
+            src/tests/app/test_live_chat_low_latency_stream.py \
+            src/tests/app/test_live_chat_postgres_fast_path.py \
+            src/tests/app/test_live_chat_provider_routing.py \
+            src/tests/app/test_live_chat_stream_retry.py \
+            src/tests/app/test_live_full_duplex_acceptance.py \
+            src/tests/app/test_live_material_context.py \
+            src/tests/app/test_live_observation_generation.py \
+            src/tests/app/test_live_voice_runtime_offload.py \
+            src/tests/app/test_live_voice_release_gate.py \
+            src/tests/app/test_live_chat_release_gate.py \
+            src/tests/app/test_live_chat_release_completion.py \
+            src/tests/app/test_live_chat_evaluation_store.py \
+            src/tests/app/test_live_chat_authoritative_state_source.py \
+            src/tests/app/test_gateway_tts_live_call_latency.py \
+            src/tests/app/test_memory_job_offload.py \
+            src/tests/app/test_tts_stream_contract_performance.py \
+            src/tests/app/test_stt_streaming_audio.py \
+            src/tests/unit/assistant_memory/test_companion_completion_acceptance.py \
+            src/tests/unit/assistant_memory/test_companion_context.py \
+            src/tests/unit/assistant_memory/test_companion_controls.py \
+            src/tests/unit/assistant_memory/test_companion_phase8_evaluation.py \
+            src/tests/unit/assistant_memory/test_initiative.py \
+            src/tests/unit/assistant_memory/test_paralinguistic_state.py \
+            src/tests/unit/assistant_memory/test_structured_extraction.py \
+            src/tests/unit/assistant_memory/test_structured_provider.py \
+            src/tests/unit/assistant_memory/test_temporal_retrieval.py \
+            src/tests/unit/chat/test_companion_retention_policy.py \
+            2>&1 | tee ruff-output.txt
+
+      - name: Existing live voice release-gate regression
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_live_voice_release_gate.py -q --tb=short \
+            2>&1 | tee live-voice-release-gate-output.txt
+
+      - name: Live TTS response-onset regression
+        run: |
+          set -o pipefail
+          python -m pytest \
+            src/tests/app/test_gateway_blocking_route_offload.py \
+            src/tests/app/test_gateway_event_loop_lag_monitor.py \
+            src/tests/app/test_gateway_live_voice_cue_assets.py \
+            src/tests/app/test_live_voice_runtime_offload.py \
+            src/tests/app/test_gateway_tts_live_call_websocket.py \
+            src/tests/app/test_gateway_tts_live_call_latency.py \
+            src/tests/app/test_tts_stream_contract_performance.py \
+            -q --tb=short 2>&1 | tee live-tts-response-onset-output.txt
+
+      - name: Live segmented STT regression
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_stt_streaming_audio.py -q --tb=short \
+            2>&1 | tee live-stt-finalization-output.txt
+
+      - name: Live material and observation regression
+        run: |
+          set -o pipefail
+          python -m pytest \
+            src/tests/app/test_live_material_context.py \
+            src/tests/app/test_live_observation_generation.py \
+            -q --tb=short 2>&1 | tee live-material-context-output.txt
+
+      - name: Companion memory completion evaluation
+        run: |
+          set -o pipefail
+          python -m pytest \
+            src/tests/app/test_memory_job_offload.py \
+            src/tests/unit/assistant_memory/test_companion_completion_acceptance.py \
+            src/tests/unit/assistant_memory/test_companion_context.py \
+            src/tests/unit/assistant_memory/test_companion_controls.py \
+            src/tests/unit/assistant_memory/test_companion_phase8_evaluation.py \
+            src/tests/unit/assistant_memory/test_initiative.py \
+            src/tests/unit/assistant_memory/test_paralinguistic_state.py \
+            src/tests/unit/assistant_memory/test_settings.py \
+            src/tests/unit/assistant_memory/test_structured_extraction.py \
+            src/tests/unit/assistant_memory/test_structured_provider.py \
+            src/tests/unit/assistant_memory/test_temporal_retrieval.py \
+            src/tests/unit/chat/test_companion_retention_policy.py \
+            -q --tb=short 2>&1 | tee companion-memory-completion-output.txt
+
+      - name: Live Chat stream and release regression
+        run: |
+          set -o pipefail
+          python -m pytest \
+            src/tests/app/test_chat_response_metrics.py \
+            src/tests/app/test_live_chat_live_voice_profile.py \
+            src/tests/app/test_live_chat_low_latency_stream.py \
+            src/tests/app/test_live_chat_postgres_fast_path.py \
+            src/tests/app/test_live_chat_provider_routing.py \
+            src/tests/app/test_live_chat_stream_retry.py \
+            src/tests/app/test_live_chat_release_gate.py \
+            src/tests/app/test_live_chat_release_completion.py \
+            -q --tb=short 2>&1 | tee live-chat-release-gate-output.txt
+
+      - name: Phase 11 authoritative-state source guard
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_live_chat_authoritative_state_source.py -q --tb=short \
+            2>&1 | tee live-chat-authoritative-state-output.txt
+
+      - name: Phase 12 durable evaluation and policy regression
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_live_chat_evaluation_store.py -q --tb=short \
+            2>&1 | tee live-chat-durable-evaluation-output.txt
+
+      - name: Phase 5 server full-duplex acceptance
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_live_full_duplex_acceptance.py -q --tb=short \
+            2>&1 | tee live-full-duplex-server-output.txt
+
+      - name: Phase 5 browser full-duplex evaluation
+        run: |
+          set -o pipefail
+          npm --workspace @omnix/web run test -- --run \
+            src/features/assistant-workspace/live-full-duplex-evaluation.test.ts \
+            2>&1 | tee live-full-duplex-evaluation-output.txt
           python - <<'PY'
+          import json
           from pathlib import Path
 
-          path = Path('apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts')
-          text = path.read_text(encoding='utf-8')
-          old = "new Promise<void>((resolve) => {\n      resolveOutput = resolve;"
-          new = "new Promise<undefined>((resolve) => {\n      resolveOutput = () => resolve(undefined);"
-          count = text.count(old)
-          if count != 2:
-              raise SystemExit(f'Expected two deferred output promises, found {count}')
-          path.write_text(text.replace(old, new), encoding='utf-8')
+          output = Path("live-full-duplex-evaluation-output.txt").read_text(encoding="utf-8")
+          markers = [
+              line.split("LIVE_FULL_DUPLEX_EVIDENCE=", 1)[1].strip()
+              for line in output.splitlines()
+              if "LIVE_FULL_DUPLEX_EVIDENCE=" in line
+          ]
+          if len(markers) != 1:
+              raise SystemExit(f"Expected one content-free evidence marker, found {len(markers)}")
+          evidence = json.loads(markers[0])
+          if evidence.get("content_policy") != "content_free":
+              raise SystemExit("Full-duplex evidence is not content-free")
+          Path("live-full-duplex-evidence.json").write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
           PY
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts
-          git commit -m 'Fix deferred output test typing'
-          git push origin HEAD:${{ github.head_ref }}
+
+      - name: Upload full-duplex evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-full-duplex-evidence
+          if-no-files-found: warn
+          path: |
+            live-full-duplex-evidence.json
+            live-full-duplex-server-output.txt
+            live-full-duplex-evaluation-output.txt
+
+      - name: Upload hardening diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-chat-hardening-output
+          path: |
+            ruff-output.txt
+            live-voice-release-gate-output.txt
+            live-tts-response-onset-output.txt
+            live-stt-finalization-output.txt
+            live-material-context-output.txt
+            companion-memory-completion-output.txt
+            live-chat-release-gate-output.txt
+            live-chat-authoritative-state-output.txt
+            live-chat-durable-evaluation-output.txt
+            live-full-duplex-server-output.txt
+            live-full-duplex-evaluation-output.txt
+            live-full-duplex-evidence.json
+
+      - name: Web typecheck
+        run: |
+          set -o pipefail
+          npm --workspace @omnix/web run typecheck 2>&1 | tee web-typecheck-output.txt
+
+      - name: Web unit tests
+        run: |
+          set -o pipefail
+          npm --workspace @omnix/web run test -- --run 2>&1 | tee web-unit-test-output.txt
+
+      - name: Upload web diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-chat-web-output
+          path: |
+            web-typecheck-output.txt
+            web-unit-test-output.txt
+            apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts
+            apps/web/src/features/assistant-workspace/live-output-coordinator.ts
+            apps/web/src/features/assistant-workspace/live-output-coordinator.test.ts
+            apps/web/src/features/assistant-workspace/live-full-duplex-evaluation.test.ts
