@@ -42,7 +42,7 @@ const characterClass: RpgAuthoringEntityCard = {
 };
 
 describe('RpgWorldEntityDetail', () => {
-  it('shows the complete class dossier after a card is opened', () => {
+  it('shows the complete class dossier as a routed subpage', () => {
     const onClose = vi.fn();
     render(
       <RpgWorldEntityDetail
@@ -52,7 +52,8 @@ describe('RpgWorldEntityDetail', () => {
       />,
     );
 
-    expect(screen.getByRole('dialog', { name: 'Ward Runner details' })).toBeInTheDocument();
+    expect(screen.getByRole('main', { name: 'Ward Runner details' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '← Back to Classes' })).toBeInTheDocument();
     expect(screen.getByText('Cross active wards')).toBeInTheDocument();
     expect(screen.getByText('Pathfinder')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Additional details' })).toBeInTheDocument();

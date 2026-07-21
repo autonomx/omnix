@@ -8,10 +8,17 @@ import {
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
 import { RpgWorldAdvancedPanel } from './RpgWorldAdvancedPanel';
 import { RpgWorldAuthoringPage } from './RpgWorldAuthoringPage';
-import { RpgWorldGenerationPanel } from './RpgWorldGenerationPanel';
+import {
+  completeAuthoringSections,
+  parseWorldEditorRoute,
+  pushWorldEditorRoute,
+} from './RpgWorldCompletionModels';
+import { RpgWorldGenerationDashboard } from './RpgWorldGenerationDashboard';
 import { RpgWorldImagesPanel } from './RpgWorldImagesPanel';
-import { RpgWorldMapAuthoringPanel } from './RpgWorldMapAuthoringPanel';
 import { RpgWorldScenarioAuthoringPanel } from './RpgWorldScenarioAuthoringPanel';
+import { RpgWorldVisualMapPanel } from './RpgWorldVisualMapPanel';
+import './RpgWorldFinalizedDesign.css';
+import './RpgWorldCompletionDesign.css';
 
 interface RpgWorldEditorShellProps {
   onBack: () => void;
@@ -47,14 +54,22 @@ export function RpgWorldEditorShell({
   world,
   worldId,
 }: RpgWorldEditorShellProps) {
+  const initialRoute = parseWorldEditorRoute();
   const queryClient = useQueryClient();
-  const [sectionId, setSectionId] = useState('overview');
+  const [sectionId, setSectionId] = useState(
+    initialRoute?.worldId === worldId ? initialRoute.sectionId : 'overview',
+  );
+  const [entityId, setEntityId] = useState<string | null>(
+    initialRoute?.worldId === worldId ? initialRoute.entityId ?? null : null,
+  );
   const manifestQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-authoring-manifest', worldId],
     queryFn: () => rpgWorldAuthoringClient.manifest(worldId),
     refetchInterval: 5000,
   });
-  const sections = manifestQuery.data?.sections ?? [];
+  const rawSections = manifestQuery.data?.sections ?? [];
+  const sections = useMemo(() => completeAuthoringSections(rawSections), [rawSections]);
+  const rawSectionIds = useMemo(() => new Set(rawSections.map((section) => section.id)), [rawSections]);
   const selectedSection = sections.find((section) => section.id === sectionId)
     ?? sections.find((section) => section.id === 'overview')
     ?? ({
@@ -75,15 +90,43 @@ export function RpgWorldEditorShell({
   const pageQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-authoring-section', worldId, selectedSection.id],
     queryFn: () => rpgWorldAuthoringClient.section(worldId, selectedSection.id),
-    enabled: Boolean(worldId) && !DEDICATED_SECTIONS.includes(selectedSection.id),
+    enabled: Boolean(worldId)
+      && !DEDICATED_SECTIONS.includes(selectedSection.id)
+      && rawSectionIds.has(selectedSection.id),
     refetchInterval: selectedSection.operational_status === 'generating' ? 3000 : false,
   });
 
+  const navigate = (nextSectionId: string, nextEntityId: string | null = null, replace = false) => {
+    setSectionId(nextSectionId);
+    setEntityId(nextEntityId);
+    pushWorldEditorRoute({ worldId, sectionId: nextSectionId, entityId: nextEntityId ?? undefined }, replace);
+  };
+
+  useEffect(() => {
+    const syncRoute = () => {
+      const route = parseWorldEditorRoute();
+      if (!route || route.worldId !== worldId) return;
+      setSectionId(route.sectionId || 'overview');
+      setEntityId(route.entityId ?? null);
+    };
+    window.addEventListener('popstate', syncRoute);
+    window.addEventListener('hashchange', syncRoute);
+    return () => {
+      window.removeEventListener('popstate', syncRoute);
+      window.removeEventListener('hashchange', syncRoute);
+    };
+  }, [worldId]);
+
   useEffect(() => {
     if (sections.length && !sections.some((section) => section.id === sectionId)) {
-      setSectionId(sections[0].id);
+      navigate(sections[0].id, null, true);
     }
   }, [sectionId, sections]);
+
+  useEffect(() => {
+    const route = parseWorldEditorRoute();
+    if (!route || route.worldId !== worldId) navigate(sectionId, entityId, true);
+  }, [worldId]);
 
   const updateWorld = useMutation({
     mutationFn: (changes: Record<string, unknown>) => rpgWorldAuthoringClient.updateWorld(worldId, {
@@ -108,7 +151,7 @@ export function RpgWorldEditorShell({
   return (
     <section className="rpg-authoring-editor" aria-label="World editor">
       <header className="rpg-authoring-editor-header">
-        <div><button className="rpg-secondary-button" type="button" onClick={onBack}>Back to Worlds</button><span>/</span><strong>{currentWorld.title}</strong></div>
+        <div><button className="rpg-secondary-button" type="button" onClick={onBack}>Back to Worlds</button><span>/</span><strong>{currentWorld.title}</strong>{entityId ? <><span>/</span><span>{statusLabel(entityId)}</span></> : null}</div>
         <div><span>{worldState(currentWorld)}</span><button type="button" onClick={onPlay}>Play</button></div>
       </header>
       <div className="rpg-authoring-editor-layout">
@@ -124,7 +167,7 @@ export function RpgWorldEditorShell({
                     className={selectedSection.id === section.id ? 'is-active' : ''}
                     key={section.id}
                     type="button"
-                    onClick={() => setSectionId(section.id)}
+                    onClick={() => navigate(section.id)}
                   >
                     <span>{section.label}</span>
                     <small>{statusLabel(section.operational_status)}{section.entity_count ? ` · ${section.entity_count}` : ''}</small>
@@ -140,26 +183,30 @@ export function RpgWorldEditorShell({
           {selectedSection.id === 'advanced' ? (
             <RpgWorldAdvancedPanel world={currentWorld} />
           ) : selectedSection.id === 'generation' ? (
-            <RpgWorldGenerationPanel
+            <RpgWorldGenerationDashboard
               generation={manifestQuery.data?.generation}
-              onOpenImages={() => setSectionId('images')}
+              onOpenImages={() => navigate('images')}
               sections={sections}
               worldId={worldId}
             />
           ) : selectedSection.id === 'images' ? (
             <RpgWorldImagesPanel worldId={worldId} />
           ) : selectedSection.id === 'map' ? (
-            <RpgWorldMapAuthoringPanel worldId={worldId} />
+            <RpgWorldVisualMapPanel worldId={worldId} />
           ) : selectedSection.id === 'scenarios' ? (
             <RpgWorldScenarioAuthoringPanel worldId={worldId} />
           ) : (
             <RpgWorldAuthoringPage
               error={pageQuery.error instanceof Error ? pageQuery.error.message : undefined}
-              isLoading={pageQuery.isPending}
+              isLoading={pageQuery.isPending && rawSectionIds.has(selectedSection.id)}
               isSaving={updateWorld.isPending}
+              onOpenSection={(nextSectionId) => navigate(nextSectionId)}
               onSaveWorld={(changes) => updateWorld.mutate(changes)}
+              onSelectEntity={(nextEntityId) => navigate(selectedSection.id, nextEntityId)}
               page={pageQuery.data}
               section={selectedSection}
+              sections={sections}
+              selectedEntityId={entityId}
               world={currentWorld}
               worldId={worldId}
             />
