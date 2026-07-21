@@ -19,7 +19,6 @@ import {
 } from './live-observation-coordinator';
 import { LiveOutputQueue } from './live-output-queue';
 import {
-  LIVE_COORDINATION_SUBMIT_EVENT,
   LIVE_OBSERVATION_CANDIDATE_EVENT,
   LIVE_OBSERVATION_SUPERSEDED_EVENT,
   LIVE_VOICE_INTERRUPT_EVENT,
@@ -154,6 +153,7 @@ function createCoordinatorHarness(options: {
   const coordinator = new LiveSessionCoordinator({
     store,
     materialClient: material,
+    chatGateway: { submit: async (input) => { events.push({ type: 'live-chat-gateway-submit', detail: input }); } },
     now: () => now++,
     dispatchEvent: (event) => {
       events.push({
@@ -246,7 +246,7 @@ describe('deterministic full-duplex Live acceptance', () => {
     });
     countAction(directQuestion.coordination.action);
     expect(directQuestion.coordination.action).toBe('interrupt_and_respond');
-    expect(harness.events.some((event) => event.type === LIVE_COORDINATION_SUBMIT_EVENT)).toBe(true);
+    expect(harness.events.some((event) => event.type === 'live-chat-gateway-submit')).toBe(true);
     expect(harness.events.some((event) => event.type === LIVE_VOICE_INTERRUPT_EVENT)).toBe(true);
 
     const stop = await harness.coordinator.coordinate({
