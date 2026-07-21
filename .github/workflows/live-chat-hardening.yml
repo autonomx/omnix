@@ -32,6 +32,18 @@ jobs:
           end = workflow.index("\n          PY", start)
           raw = workflow[start:end]
           script = "\n".join(line[10:] if line.startswith("          ") else line for line in raw.splitlines())
+          brittle = """if old not in text:
+    raise SystemExit('missing unified completion block')
+text = text.replace(old, new, 1)"""
+          bounded = """if old not in text:
+    block_start = text.index('  let audioIssue: string | null = null;')
+    block_end = text.index('\\n  if (turn.generation !== playbackGeneration)', block_start)
+    text = text[:block_start] + new + text[block_end:]
+else:
+    text = text.replace(old, new, 1)"""
+          if brittle not in script:
+              raise SystemExit('canonical completion transform not found')
+          script = script.replace(brittle, bounded, 1)
           exec(compile(script, 'live-physical-patch', 'exec'))
           PY
           status=$?
