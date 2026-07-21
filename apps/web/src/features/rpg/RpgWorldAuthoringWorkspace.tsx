@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldLibraryClient,
@@ -6,6 +6,10 @@ import {
 } from '../../api/rpgWorldLibraryClient';
 import { RpgWorldCampaignSetup } from './RpgWorldCampaignSetup';
 import { RpgWorldCard } from './RpgWorldCard';
+import {
+  parseWorldEditorRoute,
+  pushWorldEditorRoute,
+} from './RpgWorldCompletionModels';
 import { RpgWorldEditorShell } from './RpgWorldEditorShell';
 import './RpgWorldAuthoringWorkspace.css';
 
@@ -18,6 +22,11 @@ type WorldWorkspaceView =
   | { kind: 'library' }
   | { kind: 'editor'; worldId: string }
   | { kind: 'campaignSetup'; worldId: string };
+
+function initialView(): WorldWorkspaceView {
+  const route = parseWorldEditorRoute();
+  return route ? { kind: 'editor', worldId: route.worldId } : { kind: 'library' };
+}
 
 function timestamp(value: string): number {
   const parsed = Date.parse(value);
@@ -34,7 +43,7 @@ function worldState(world: RpgWorldSummary): string {
 
 export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWorldAuthoringWorkspaceProps) {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<WorldWorkspaceView>({ kind: 'library' });
+  const [view, setView] = useState<WorldWorkspaceView>(initialView);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
@@ -49,6 +58,28 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
     queryFn: () => rpgWorldLibraryClient.list(),
     refetchInterval: 5000,
   });
+
+  const openEditor = (worldId: string, replace = false) => {
+    setView({ kind: 'editor', worldId });
+    pushWorldEditorRoute({ worldId, sectionId: 'overview' }, replace);
+  };
+  const openLibrary = (replace = false) => {
+    setView({ kind: 'library' });
+    pushWorldEditorRoute(null, replace);
+  };
+
+  useEffect(() => {
+    const syncRoute = () => {
+      const route = parseWorldEditorRoute();
+      setView(route ? { kind: 'editor', worldId: route.worldId } : { kind: 'library' });
+    };
+    window.addEventListener('popstate', syncRoute);
+    window.addEventListener('hashchange', syncRoute);
+    return () => {
+      window.removeEventListener('popstate', syncRoute);
+      window.removeEventListener('hashchange', syncRoute);
+    };
+  }, []);
 
   const refresh = async () => queryClient.invalidateQueries({ queryKey: ['feature', 'rpg'] });
   const createWorld = useMutation({
@@ -67,7 +98,7 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
       setDescription('');
       setFeedback(`Created ${result.world.title}.`);
       await refresh();
-      setView({ kind: 'editor', worldId: result.world.id });
+      openEditor(result.world.id);
     },
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'World could not be created.'),
   });
@@ -113,7 +144,7 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
                 key={world.id}
                 world={world}
                 facts={<><span>{worldState(world)}</span><span>{scenarioCount} opening{scenarioCount === 1 ? '' : 's'}</span><span>{campaignCount} campaign{campaignCount === 1 ? '' : 's'}</span></>}
-                actions={<><button className="rpg-secondary-button" type="button" onClick={() => setView({ kind: 'editor', worldId: world.id })}>Edit</button><button type="button" onClick={() => setView({ kind: 'campaignSetup', worldId: world.id })}>Play</button></>}
+                actions={<><button className="rpg-secondary-button" type="button" onClick={() => openEditor(world.id)}>Edit</button><button type="button" onClick={() => { pushWorldEditorRoute(null); setView({ kind: 'campaignSetup', worldId: world.id }); }}>Play</button></>}
                 footer={<details className="rpg-world-card-more"><summary>More</summary><button className="rpg-secondary-button" type="button" onClick={() => lifecycle.mutate(world)}>{world.status === 'archived' ? 'Restore' : 'Archive'}</button></details>}
               />
             );
@@ -140,8 +171,8 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
   if (view.kind === 'campaignSetup') {
     return (
       <RpgWorldCampaignSetup
-        onBack={() => setView({ kind: 'library' })}
-        onEditWorld={() => setView({ kind: 'editor', worldId: view.worldId })}
+        onBack={() => openLibrary()}
+        onEditWorld={() => openEditor(view.worldId)}
         onSessionLaunched={onSessionLaunched}
         worldId={view.worldId}
       />
@@ -152,8 +183,8 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
   if (!world) return <p>Loading world editor…</p>;
   return (
     <RpgWorldEditorShell
-      onBack={() => setView({ kind: 'library' })}
-      onPlay={() => setView({ kind: 'campaignSetup', worldId: view.worldId })}
+      onBack={() => openLibrary()}
+      onPlay={() => { pushWorldEditorRoute(null); setView({ kind: 'campaignSetup', worldId: view.worldId }); }}
       world={world}
       worldId={view.worldId}
     />
