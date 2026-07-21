@@ -11,14 +11,13 @@ permissions:
 jobs:
   align-shared-audio-tests:
     name: Align shared audio lifecycle tests
-    if: github.event_name == 'pull_request' && github.head_ref == 'agent/general-full-duplex-live' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.sha != ''
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/general-full-duplex-live'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
       - name: Patch lifecycle tests
-        if: github.event.pull_request.head.sha != '0000000000000000000000000000000000000000'
         shell: bash
         run: |
           set -euo pipefail
@@ -42,79 +41,32 @@ jobs:
               "  mocks.session.enqueueCue.mockReset().mockResolvedValue(undefined);\n  mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);\n  mocks.session.waitForOutputItem.mockReset().mockResolvedValue(undefined);\n  mocks.session.setStartPolicy.mockReset();",
           )
           replace(
-              """afterEach(() => {
-  cleanup?.();
-  cleanup = null;
-  document.body.innerHTML = '';
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});""",
-              """afterEach(async () => {
-  const hadSharedSession = mocks.createSession.mock.calls.length > 0;
-  cleanup?.();
-  cleanup = null;
-  if (hadSharedSession) {
-    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalled());
-  }
-  document.body.innerHTML = '';
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});""",
+              "afterEach(() => {\n  cleanup?.();\n  cleanup = null;\n  document.body.innerHTML = '';\n  vi.restoreAllMocks();\n  vi.unstubAllGlobals();\n});",
+              "afterEach(async () => {\n  const hadSharedSession = mocks.createSession.mock.calls.length > 0;\n  cleanup?.();\n  cleanup = null;\n  if (hadSharedSession) {\n    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalled());\n  }\n  document.body.innerHTML = '';\n  vi.restoreAllMocks();\n  vi.unstubAllGlobals();\n});",
           )
           replace(
-              """    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(
-      'Hey there! How is your day going?',
-      0,
-      {},
-    ));""",
-              """    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(
-      'Hey there! How is your day going?',
-      0,
-      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),
-      {},
-    ));""",
+              "    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(\n      'Hey there! How is your day going?',\n      0,\n      {},\n    ));",
+              "    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(\n      'Hey there! How is your day going?',\n      0,\n      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),\n      {},\n    ));",
           )
           replace(
-              """  it('aborts greeting generation and playback when the user begins speaking', async () => {
-    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));""",
-              """  it('aborts greeting generation and playback when the user begins speaking', async () => {
-    let resolveOutput: () => void = () => undefined;
-    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {
-      resolveOutput = resolve;
-    }));
-    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));""",
+              "  it('aborts greeting generation and playback when the user begins speaking', async () => {\n    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));",
+              "  it('aborts greeting generation and playback when the user begins speaking', async () => {\n    let resolveOutput: () => void = () => undefined;\n    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {\n      resolveOutput = resolve;\n    }));\n    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));",
           )
           replace(
-              """    expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBeUndefined();
-    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
-  });""",
-              """    expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBeUndefined();
-    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
-    resolveOutput();
-  });""",
+              "    expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBeUndefined();\n    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n  });",
+              "    expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBeUndefined();\n    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n    resolveOutput();\n  });",
           )
           replace(
               "    expect(mocks.createTraceId).not.toHaveBeenCalled();",
               "    expect(mocks.createTraceId).toHaveBeenCalledWith('s1:audio-session');",
           )
           replace(
-              """  it('aborts the active request and stops the persistent session on interruption', async () => {
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });""",
-              """  it('aborts the active request and cancels owned output on interruption', async () => {
-    let resolveOutput: () => void = () => undefined;
-    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {
-      resolveOutput = resolve;
-    }));
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });""",
+              "  it('aborts the active request and stops the persistent session on interruption', async () => {\n    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });",
+              "  it('aborts the active request and cancels owned output on interruption', async () => {\n    let resolveOutput: () => void = () => undefined;\n    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {\n      resolveOutput = resolve;\n    }));\n    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });",
           )
           replace(
-              """    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
-  });
-});""",
-              """    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
-    resolveOutput();
-  });
-});""",
+              "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n  });\n});",
+              "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n    resolveOutput();\n  });\n});",
           )
           path.write_text(text, encoding='utf-8')
           PY
