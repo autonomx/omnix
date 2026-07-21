@@ -2,6 +2,12 @@ import type { RpgAuthoringDocumentBlock } from '../../api/rpgWorldAuthoringClien
 import { formatAuthoringValue } from './RpgWorldEntityCard';
 
 const PRIMARY_FIELDS = new Set([
+  'id',
+  'fact_id',
+  'relationship_id',
+  'rule_id',
+  'thread_id',
+  'document_id',
   'label',
   'name',
   'title',
@@ -39,16 +45,10 @@ function meaningful(value: unknown): boolean {
 }
 
 function recordLabel(item: Record<string, unknown>, index: number, fallback: string): string {
-  const value = item.label
-    ?? item.name
-    ?? item.title
-    ?? item.key
-    ?? item.fact_id
-    ?? item.relationship_id
-    ?? item.rule_id
-    ?? item.thread_id
-    ?? item.id;
-  return value == null || String(value).trim() === '' ? `${fallback} ${index + 1}` : humanize(String(value));
+  const value = item.label ?? item.name ?? item.title ?? item.key;
+  return value == null || String(value).trim() === ''
+    ? `${fallback} ${index + 1}`
+    : humanize(String(value));
 }
 
 function recordValue(item: Record<string, unknown>): unknown {
@@ -62,12 +62,19 @@ function recordValue(item: Record<string, unknown>): unknown {
     ?? 'No description was provided.';
 }
 
+function visibleBadge(value: unknown): unknown | undefined {
+  if (!meaningful(value)) return undefined;
+  if (typeof value === 'string' && value.includes(':')) return undefined;
+  return value;
+}
+
 function recordBadges(item: Record<string, unknown>): unknown[] {
   const explicit = Array.isArray(item.badges) ? item.badges : [];
+  const authority = visibleBadge(item.approved_authority ?? item.authority);
   return [
     ...explicit,
     item.visibility,
-    item.approved_authority ?? item.authority,
+    authority,
     item.status,
   ].filter(meaningful);
 }
@@ -105,12 +112,17 @@ function detailRows(item: Record<string, unknown>): Array<{ label: string; value
     .map(([key, value]) => ({ label: humanize(key), value }));
 }
 
+function readableRecordValue(value: unknown): string {
+  return typeof value === 'string' ? value : formatAuthoringValue(value);
+}
+
 function MetaChips({ values }: { values: unknown[] }) {
   return values.length ? (
     <div className="rpg-authoring-record-badges">
-      {values.map((value, index) => (
-        <span key={`${formatAuthoringValue(value)}:${index}`}>{formatAuthoringValue(value)}</span>
-      ))}
+      {values.map((value, index) => {
+        const label = typeof value === 'string' ? humanize(value) : formatAuthoringValue(value);
+        return <span key={`${label}:${index}`}>{label}</span>;
+      })}
     </div>
   ) : null;
 }
@@ -132,7 +144,7 @@ function StructuredRecord({
         <p className="rpg-authoring-card-eyebrow">{recordLabel(item, index, fallback)}</p>
         <MetaChips values={recordBadges(item)} />
       </header>
-      <p className="rpg-authoring-record-statement">{formatAuthoringValue(recordValue(item))}</p>
+      <p className="rpg-authoring-record-statement">{readableRecordValue(recordValue(item))}</p>
       {references.length ? (
         <section className="rpg-authoring-record-references">
           <h4>References</h4>
