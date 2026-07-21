@@ -1,0 +1,884 @@
+name: Apply Live physical acceptance fixes
+on:
+  push:
+    branches: [agent/general-full-duplex-live]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Fix physical Live acceptance ownership'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/general-full-duplex-live
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Apply ownership and provenance fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, count: int = 1) -> None:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'missing pattern in {path}: {old[:160]!r}')
+              p.write_text(text.replace(old, new, count), encoding='utf-8')
+
+          # Do not preempt assistant audio merely because STT produced a final.
+          replace(
+              'apps/web/src/features/chatbot/ChatbotWorkspace.tsx',
+              "      stopAssistantResponseAudio(undefined);\n      voiceTurnPerformanceRef.current = {",
+              "      voiceTurnPerformanceRef.current = {",
+          )
+
+          # Make local Vite runtime provenance concrete without requiring shell setup.
+          p = Path('apps/web/vite.config.ts')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              "import { defineConfig, type PluginOption } from 'vite';",
+              "import { execFileSync } from 'node:child_process';\n\nimport { defineConfig, type PluginOption } from 'vite';",
+              1,
+          )
+          text = text.replace(
+              "export default defineConfig(({ command, mode }) => ({",
+              """function resolveGitSha(): string {
+  const configured = process.env.VITE_GIT_SHA?.trim();
+  if (configured) return configured;
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+export default defineConfig(({ command, mode }) => {
+  const gitSha = resolveGitSha();
+  process.env.VITE_GIT_SHA ??= gitSha;
+  process.env.VITE_BUILD_ID ??= `${command}-${mode}-${gitSha.slice(0, 12)}`;
+  return ({""",
+              1,
+          )
+          if not text.rstrip().endswith('}));'):
+              raise SystemExit('unexpected vite config ending')
+          text = text.rstrip()[:-4] + "  });\n});\n"
+          p.write_text(text, encoding='utf-8')
+
+          # Persist capture-owner provenance and one terminal coordination record per accepted final.
+          path = 'apps/web/src/features/assistant-workspace/live-voice-controller.ts'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              "import type { AcceptedVoiceFinal, LiveFinalRoutingResult } from './live-accepted-final';",
+              """import type { AcceptedVoiceFinal, LiveFinalRoutingResult } from './live-accepted-final';
+import {
+  createLiveCallDiagnosticsReporter,
+  createLiveCallTraceId,
+  type LiveCallDiagnosticsReporter,
+} from './live-call-diagnostics-client';""",
+              1,
+          )
+          text = text.replace(
+              "  finalizationBuffer: FinalizationAudioBuffer;\n  speechDetected: boolean;",
+              "  finalizationBuffer: FinalizationAudioBuffer;\n  reporter: LiveCallDiagnosticsReporter;\n  speechDetected: boolean;",
+              1,
+          )
+          text = text.replace(
+              "  let audioContext: AudioContext | null = null;\n  let stream: MediaStream | null = null;",
+              "  let audioContext: AudioContext | null = null;\n  let sessionReporter: LiveCallDiagnosticsReporter | null = null;\n  let stream: MediaStream | null = null;",
+              1,
+          )
+          text = text.replace(
+              """    const sessionId = liveConversationStore.getState().sessionId;
+    if (!sessionId) throw new Error('Select or create a chat session before starting Live voice.');
+    const taskInstruction = readLiveTaskInstruction(card);
+    await liveSessionCoordinator.prepareTaskContract(sessionId, taskInstruction);
+    dispatchLiveVoicePerfEvent({
+      stage: 'live_task_contract_acknowledged',
+      timestamp: new Date().toISOString(),
+      taskInstructionConfigured: Boolean(taskInstruction),
+      ...currentLiveRuntimeProvenance(),
+    });""",
+              """    const sessionId = liveConversationStore.getState().sessionId;
+    if (!sessionId) throw new Error('Select or create a chat session before starting Live voice.');
+    const reporter = createLiveCallDiagnosticsReporter(createLiveCallTraceId(`${sessionId}:capture`));
+    sessionReporter = reporter;
+    const provenance = currentLiveRuntimeProvenance();
+    reporter.record('live_runtime_provenance', provenance, 'live_voice_controller');
+    const taskInstruction = readLiveTaskInstruction(card);
+    await liveSessionCoordinator.prepareTaskContract(sessionId, taskInstruction);
+    const coordination = liveConversationStore.getState().coordination;
+    reporter.record('live_task_contract_acknowledged', {
+      ...provenance,
+      task_instruction_configured: Boolean(taskInstruction),
+      task_contract_id: coordination.taskContract.taskContractId,
+      task_contract_version: coordination.taskContract.version,
+      context_version: coordination.contextVersion,
+    }, 'live_voice_controller');
+    dispatchLiveVoicePerfEvent({
+      stage: 'live_task_contract_acknowledged',
+      timestamp: new Date().toISOString(),
+      taskInstructionConfigured: Boolean(taskInstruction),
+      ...provenance,
+    });""",
+              1,
+          )
+          text = text.replace(
+              """      onFinalRejected: (reason, identity) => {
+        dispatchLiveVoicePerfEvent({ stage: 'stt_final_rejected', timestamp: new Date().toISOString(), reason, segmentId: identity.segmentId, sourceSequence: identity.sourceSequence });
+        setPanelStatus(card, 'error');
+      },""",
+              """      onFinalRejected: (reason, identity) => {
+        reporter.record('stt_final_rejected', {
+          reason,
+          segment_id: identity.segmentId,
+          result_id: identity.resultId,
+          finalize_request_id: identity.finalizeRequestId,
+          source_sequence: identity.sourceSequence,
+          capture_epoch: identity.captureEpoch,
+        }, 'live_voice_controller');
+        dispatchLiveVoicePerfEvent({ stage: 'stt_final_rejected', timestamp: new Date().toISOString(), reason, segmentId: identity.segmentId, sourceSequence: identity.sourceSequence });
+        setPanelStatus(card, 'error');
+      },""",
+              1,
+          )
+          text = text.replace(
+              "      finalizationBuffer: new FinalizationAudioBuffer(\n        Math.max(1, Math.round(audioContext.sampleRate * FINALIZATION_BUFFER_MS / 1_000)),\n      ),\n      speechDetected: false,",
+              "      finalizationBuffer: new FinalizationAudioBuffer(\n        Math.max(1, Math.round(audioContext.sampleRate * FINALIZATION_BUFFER_MS / 1_000)),\n      ),\n      reporter,\n      speechDetected: false,",
+              1,
+          )
+          text = text.replace(
+              """    if (pendingStart?.token === token) pendingStart = null;
+    showLiveVoiceError(card, error instanceof Error ? error.message : 'Could not start live voice.');""",
+              """    if (pendingStart?.token === token) pendingStart = null;
+    if (sessionReporter) {
+      void sessionReporter.close('live_capture_start_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    showLiveVoiceError(card, error instanceof Error ? error.message : 'Could not start live voice.');""",
+              1,
+          )
+          old = """  dispatchLiveVoicePerfEvent({
+    stage: 'stt_final_received',
+    turnId: session.perfTurnId ?? `voice-turn:${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    transcriptChars: final.text.trim().length,
+    sttFinalizeMs: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),
+    segmentId: final.segmentId,
+    sourceSequence: final.sourceSequence,
+    captureEpoch: final.captureEpoch,
+  });"""
+          new = old + """
+  session.reporter.record('stt_final_received', {
+    ...currentLiveRuntimeProvenance(),
+    chat_session_id: final.chatSessionId,
+    stt_session_id: final.sttSessionId,
+    capture_epoch: final.captureEpoch,
+    segment_id: final.segmentId,
+    result_id: final.resultId,
+    finalize_request_id: final.finalizeRequestId,
+    source_sequence: final.sourceSequence,
+    start_sample: final.startSample,
+    end_sample: final.endSample,
+    protocol: final.protocol,
+    transcript_chars: final.text.trim().length,
+    stt_finalize_ms: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),
+  }, 'live_voice_controller');"""
+          if old not in text:
+              raise SystemExit('missing controller accepted-final event block')
+          text = text.replace(old, new, 1)
+          old = """    if (suppressTurn || !final.text.trim()) {
+      return ignoredRoutingResult(final);
+    }
+    renderTranscript(card, 'You', final.text, 'final');
+    dispatchLiveVoicePerfEvent({
+      stage: 'coordination_started',
+      timestamp: new Date().toISOString(),
+      segmentId: final.segmentId,
+      sourceSequence: final.sourceSequence,
+      captureEpoch: final.captureEpoch,
+    });
+    const result = await liveSessionCoordinator.routeAcceptedFinal(final);
+    dispatchLiveVoicePerfEvent({
+      stage: 'coordination_completed',
+      timestamp: new Date().toISOString(),
+      segmentId: final.segmentId,
+      sourceSequence: final.sourceSequence,
+      outcome: result.outcome,
+      errorCode: result.errorCode,
+    });
+    if (result.outcome === 'failed') setPanelStatus(card, 'error');
+    else setPanelStatus(card, 'connected');
+    return result;"""
+          new = """    if (suppressTurn || !final.text.trim()) {
+      const result = ignoredRoutingResult(final);
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        result_id: final.resultId,
+        source_sequence: final.sourceSequence,
+        outcome: result.outcome,
+        suppression_reason: suppressTurn ? overlapIntent ?? 'suppressed_overlap' : 'empty_transcript',
+      }, 'live_voice_controller');
+      return result;
+    }
+    renderTranscript(card, 'You', final.text, 'final');
+    session.reporter.record('coordination_started', {
+      segment_id: final.segmentId,
+      result_id: final.resultId,
+      finalize_request_id: final.finalizeRequestId,
+      source_sequence: final.sourceSequence,
+      capture_epoch: final.captureEpoch,
+    }, 'live_voice_controller');
+    dispatchLiveVoicePerfEvent({
+      stage: 'coordination_started',
+      timestamp: new Date().toISOString(),
+      segmentId: final.segmentId,
+      sourceSequence: final.sourceSequence,
+      captureEpoch: final.captureEpoch,
+    });
+    try {
+      const result = await liveSessionCoordinator.routeAcceptedFinal(final);
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        result_id: final.resultId,
+        source_sequence: final.sourceSequence,
+        outcome: result.outcome,
+        task_contract_id: result.taskContractId,
+        task_contract_version: result.taskContractVersion,
+        error_code: result.errorCode,
+      }, 'live_voice_controller');
+      dispatchLiveVoicePerfEvent({
+        stage: 'coordination_completed',
+        timestamp: new Date().toISOString(),
+        segmentId: final.segmentId,
+        sourceSequence: final.sourceSequence,
+        outcome: result.outcome,
+        errorCode: result.errorCode,
+      });
+      if (result.outcome === 'failed') setPanelStatus(card, 'error');
+      else setPanelStatus(card, 'connected');
+      return result;
+    } catch (error) {
+      const result = failedRoutingResult(final, 'live_coordination_failed');
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        result_id: final.resultId,
+        source_sequence: final.sourceSequence,
+        outcome: result.outcome,
+        error_code: result.errorCode,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'live_voice_controller');
+      setPanelStatus(card, 'error');
+      return result;
+    }"""
+          if old not in text:
+              raise SystemExit('missing controller coordination block')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              """  session.client.disconnect();
+  void session.audioContext.close().catch(() => undefined);""",
+              """  session.client.disconnect();
+  void session.audioContext.close().catch(() => undefined);
+  void session.reporter.close('live_capture_session_closed', {
+    session_id: liveConversationStore.getState().sessionId,
+  });""",
+              1,
+          )
+          p.write_text(text, encoding='utf-8')
+
+          # Add output-completion waits to the reusable PCM transport.
+          path = 'apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              "  cancelAllAfter: (outputOrder: number, reason?: string) => void;\n  setStartPolicy:",
+              "  cancelAllAfter: (outputOrder: number, reason?: string) => void;\n  waitForOutputItem: (outputId: string, generationEpoch: number) => Promise<void>;\n  setStartPolicy:",
+              1,
+          )
+          text = text.replace(
+              "  const cancelledOutputKeys = new Set<string>();\n  const drainPromise = new Promise<void>((resolve) => {",
+              "  const cancelledOutputKeys = new Set<string>();\n  const terminalOutputKeys = new Set<string>();\n  const outputWaiters = new Map<string, Set<() => void>>();\n  const drainPromise = new Promise<void>((resolve) => {",
+              1,
+          )
+          text = text.replace(
+              "  const outputKey = (outputId: string, generationEpoch: number): string => `${outputId}:${generationEpoch}`;",
+              """  const outputKey = (outputId: string, generationEpoch: number): string => `${outputId}:${generationEpoch}`;
+  const settleOutput = (key: string): void => {
+    terminalOutputKeys.add(key);
+    while (terminalOutputKeys.size > 512) terminalOutputKeys.delete(terminalOutputKeys.values().next().value as string);
+    const waiters = outputWaiters.get(key);
+    outputWaiters.delete(key);
+    waiters?.forEach((resolve) => resolve());
+  };""",
+              1,
+          )
+          text = text.replace(
+              """    reporter.record(`worklet_${eventType}`, details, 'audio_worklet');
+    options.onWorkletEvent?.(details);
+    if (eventType === 'drained') {""",
+              """    reporter.record(`worklet_${eventType}`, details, 'audio_worklet');
+    options.onWorkletEvent?.(details);
+    const outputId = event.data?.output_id;
+    const generationEpoch = event.data?.generation_epoch;
+    if (outputId && typeof generationEpoch === 'number'
+      && (eventType === 'segment_completed' || eventType === 'segment_cancelled' || eventType === 'segment_interrupted')) {
+      settleOutput(outputKey(outputId, generationEpoch));
+    }
+    if (eventType === 'drained') {""",
+              1,
+          )
+          text = text.replace(
+              """    if (phrase?.ownership
+      && phrase.ownership.outputId === outputId
+      && phrase.ownership.generationEpoch === generationEpoch) {
+      settleCancelledPhrase(phrase, reason);
+    }
+  };""",
+              """    if (phrase?.ownership
+      && phrase.ownership.outputId === outputId
+      && phrase.ownership.generationEpoch === generationEpoch) {
+      settleCancelledPhrase(phrase, reason);
+    }
+    settleOutput(key);
+  };""",
+              1,
+          )
+          marker = """  const setStartPolicy = (policy: Partial<PlaybackStartPolicyMs>): void => {"""
+          method = """  const waitForOutputItem = (outputId: string, generationEpoch: number): Promise<void> => {
+    const key = outputKey(outputId, generationEpoch);
+    if (terminalOutputKeys.has(key) || cancelledOutputKeys.has(key)) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const waiters = outputWaiters.get(key) ?? new Set<() => void>();
+      waiters.add(resolve);
+      outputWaiters.set(key, waiters);
+    });
+  };
+
+"""
+          if marker not in text:
+              raise SystemExit('missing PCM start policy marker')
+          text = text.replace(marker, method + marker, 1)
+          text = text.replace(
+              """    closed = true;
+    document.removeEventListener('visibilitychange', handlePlaybackResumeSignal);""",
+              """    closed = true;
+    [...outputWaiters.keys()].forEach(settleOutput);
+    document.removeEventListener('visibilitychange', handlePlaybackResumeSignal);""",
+              1,
+          )
+          text = text.replace(
+              "    cancelAllAfter,\n    setStartPolicy,",
+              "    cancelAllAfter,\n    waitForOutputItem,\n    setStartPolicy,",
+              1,
+          )
+          p.write_text(text, encoding='utf-8')
+
+          # Reuse one call-scoped PCM session for greeting and ordinary response output.
+          path = 'apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              "  createLiveVoicePcmSession,\n  type LiveVoicePcmSession,",
+              "  createLiveVoicePcmSession,\n  type LiveOutputOwnership,\n  type LiveVoicePcmSession,",
+              1,
+          )
+          text = text.replace(
+              """  sessionPromise: Promise<LiveVoicePcmSession>;
+  abortController: AbortController;""",
+              """  sessionPromise: Promise<LiveVoicePcmSession>;
+  audioTasks: Promise<void>[];
+  outputOwnerships: LiveOutputOwnership[];
+  abortController: AbortController;""",
+              1,
+          )
+          type_marker = """type LiveTurnIds = {
+  userTurnId: string;
+  speechSegmentId: string;
+};"""
+          shared_type = type_marker + """
+
+type SharedLiveAudioSession = {
+  sessionId: string;
+  voiceId: string | null;
+  traceId: string;
+  reporter: LiveCallDiagnosticsReporter;
+  sessionPromise: Promise<LiveVoicePcmSession>;
+  session: LiveVoicePcmSession | null;
+  nextPhraseIndex: number;
+  nextOutputOrder: number;
+};"""
+          if type_marker not in text:
+              raise SystemExit('missing unified type marker')
+          text = text.replace(type_marker, shared_type, 1)
+          text = text.replace(
+              "let activeTurn: ActiveLiveTurn | null = null;\nlet greetingStartup:",
+              "let activeTurn: ActiveLiveTurn | null = null;\nlet sharedAudioSession: SharedLiveAudioSession | null = null;\nlet greetingStartup:",
+              1,
+          )
+          text = text.replace(
+              "  void stopActiveTurn(kind === 'response' ? 'superseded-by-real-response' : 'superseded-by-greeting');",
+              "  await stopActiveTurn(kind === 'response' ? 'superseded-by-real-response' : 'superseded-by-greeting');",
+              1,
+          )
+          text = text.replace(
+              """  const voiceId = selectedVoiceId();
+  const startedAtMs = performance.now();
+  const sessionPromise = createLiveVoicePcmSession(traceId, voiceId, reporter);""",
+              """  const voiceId = selectedVoiceId();
+  const startedAtMs = performance.now();
+  const sharedAudio = await ensureSharedAudioSession(sessionId, voiceId);
+  const sessionPromise = sharedAudio.sessionPromise;""",
+              1,
+          )
+          text = text.replace(
+              """    reporter,
+    sessionPromise,
+    abortController,""",
+              """    reporter,
+    sessionPromise,
+    audioTasks: [],
+    outputOwnerships: [],
+    abortController,""",
+              1,
+          )
+          text = text.replace(
+              """    const session = await sessionPromise.catch(() => null);
+    await session?.stop('turn-failed');""",
+              """    const session = await sessionPromise.catch(() => null);
+    if (session) await cancelTurnOutputs(turn, 'turn-failed', session);""",
+              1,
+          )
+          old = """  let audioIssue: string | null = null;
+  const session = await turn.sessionPromise.catch((error: unknown) => {
+    audioIssue = error instanceof Error ? error.message : 'Live audio could not start.';
+    turn.reporter.record('turn_audio_unavailable', { error: audioIssue }, 'controller');
+    return null;
+  });
+  if (session) {
+    try {
+      await withTimeout(session.finish(), AUDIO_COMPLETION_TIMEOUT_MS, 'Live audio completion timed out.');
+    } catch (error: unknown) {
+      audioIssue = error instanceof Error ? error.message : 'Live audio completion failed.';
+      turn.reporter.record('turn_audio_recovered', {
+        error: audioIssue,
+        elapsed_ms: performance.now() - turn.startedAtMs,
+      }, 'controller');
+      await session.stop('audio-recovery').catch((cleanupError: unknown) => {
+        turn.reporter.record('turn_audio_cleanup_failed', {
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        }, 'controller');
+      });
+    }
+  }"""
+          new = """  let audioIssue: string | null = null;
+  const session = await turn.sessionPromise.catch((error: unknown) => {
+    audioIssue = error instanceof Error ? error.message : 'Live audio could not start.';
+    turn.reporter.record('turn_audio_unavailable', { error: audioIssue }, 'controller');
+    return null;
+  });
+  if (session) {
+    try {
+      const generationResults = await Promise.allSettled(turn.audioTasks);
+      const rejected = generationResults.find((result) => result.status === 'rejected');
+      if (rejected?.status === 'rejected') throw rejected.reason;
+      await withTimeout(
+        Promise.all(turn.outputOwnerships.map((ownership) => session.waitForOutputItem(
+          ownership.outputId,
+          ownership.generationEpoch,
+        ))).then(() => undefined),
+        AUDIO_COMPLETION_TIMEOUT_MS,
+        'Live audio completion timed out.',
+      );
+    } catch (error: unknown) {
+      audioIssue = error instanceof Error ? error.message : 'Live audio completion failed.';
+      turn.reporter.record('turn_audio_recovered', {
+        error: audioIssue,
+        elapsed_ms: performance.now() - turn.startedAtMs,
+      }, 'controller');
+      await cancelTurnOutputs(turn, 'audio-recovery', session);
+    }
+  }"""
+          if old not in text:
+              raise SystemExit('missing unified completion block')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              """  const phraseIndex = turn.phraseCount;
+  const synthesisOptions:""",
+              """  const phraseIndex = turn.phraseCount;
+  const sharedAudio = sharedAudioSession;
+  if (!sharedAudio || sharedAudio.sessionId !== turn.sessionId) {
+    turn.reporter.record('phrase_queue_failed', {
+      phrase_index: phraseIndex,
+      error: 'live_audio_session_unavailable',
+      continuing: false,
+    }, 'controller');
+    return;
+  }
+  const sessionPhraseIndex = sharedAudio.nextPhraseIndex++;
+  const ownership: LiveOutputOwnership = {
+    outputId: conversationOutputId(turn, phraseIndex),
+    generationEpoch: turn.generation,
+    outputOrder: sharedAudio.nextOutputOrder++,
+  };
+  turn.outputOwnerships.push(ownership);
+  const synthesisOptions:""",
+              1,
+          )
+          text = text.replace(
+              """    turn_kind: turn.kind,
+  }, 'controller');
+
+  void turn.sessionPromise.then(async (session) => {""",
+              """    turn_kind: turn.kind,
+    output_id: ownership.outputId,
+    generation_epoch: ownership.generationEpoch,
+    output_order: ownership.outputOrder,
+  }, 'controller');
+
+  const audioTask = turn.sessionPromise.then(async (session) => {""",
+              1,
+          )
+          text = text.replace(
+              "    await session.enqueuePhrase(phrase, phraseIndex, synthesisOptions);\n  }).catch((error: unknown) => {",
+              "    await session.enqueueOutputPhrase(phrase, sessionPhraseIndex, ownership, synthesisOptions);\n  });\n  turn.audioTasks.push(audioTask);\n  void audioTask.catch((error: unknown) => {",
+              1,
+          )
+          old = """function stopLiveVoiceUnifiedAudio(event?: Event): void {
+  const reason = event?.type === LIVE_VOICE_INTERRUPT_EVENT ? 'voice-interrupt' : 'live-call-stop';
+  cancelGreetingStartup(reason);
+  playbackGeneration += 1;
+  void stopActiveTurn(reason);
+  stopAssistantPcmStream(document);
+  setVoiceSpeaking(false);
+}"""
+          new = """function stopLiveVoiceUnifiedAudio(event?: Event): void {
+  const reason = event?.type === LIVE_VOICE_INTERRUPT_EVENT ? 'voice-interrupt' : 'live-call-stop';
+  cancelGreetingStartup(reason);
+  playbackGeneration += 1;
+  void stopActiveTurn(reason).finally(() => {
+    if (reason !== 'voice-interrupt') void stopSharedAudioSession(reason);
+  });
+  stopAssistantPcmStream(document);
+  setVoiceSpeaking(false);
+}"""
+          if old not in text:
+              raise SystemExit('missing unified stop function')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              """  const session = await turn.sessionPromise.catch(() => null);
+  await session?.stop(reason);
+  await turn.reporter.close('turn_stopped', {""",
+              """  const session = await turn.sessionPromise.catch(() => null);
+  if (session) await cancelTurnOutputs(turn, reason, session);
+  await turn.reporter.close('turn_stopped', {""",
+              1,
+          )
+          helper_marker = """function createLiveTurnIds(): LiveTurnIds {"""
+          helpers = """async function ensureSharedAudioSession(
+  sessionId: string,
+  voiceId: string | null,
+): Promise<SharedLiveAudioSession> {
+  const current = sharedAudioSession;
+  if (current && current.sessionId === sessionId && current.voiceId === voiceId) {
+    const session = current.session ?? await current.sessionPromise;
+    if (!session.isClosed()) return current;
+  }
+  if (current) await stopSharedAudioSession('live_audio_session_replaced');
+  const traceId = createLiveCallTraceId(`${sessionId}:audio-session`);
+  const reporter = createLiveCallDiagnosticsReporter(traceId);
+  reporter.record('live_audio_session_created', {
+    session_id: sessionId,
+    voice_id: voiceId,
+    websocket_scope: 'live_session',
+  }, 'controller');
+  const sessionPromise = createLiveVoicePcmSession(traceId, voiceId, reporter, {
+    sessionScoped: true,
+  });
+  const state: SharedLiveAudioSession = {
+    sessionId,
+    voiceId,
+    traceId,
+    reporter,
+    sessionPromise,
+    session: null,
+    nextPhraseIndex: 0,
+    nextOutputOrder: 0,
+  };
+  sharedAudioSession = state;
+  void sessionPromise.then((session) => {
+    state.session = session;
+  }).catch(async (error: unknown) => {
+    if (sharedAudioSession === state) sharedAudioSession = null;
+    await reporter.close('live_audio_session_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+  return state;
+}
+
+async function stopSharedAudioSession(reason: string): Promise<void> {
+  const state = sharedAudioSession;
+  sharedAudioSession = null;
+  if (!state) return;
+  const session = state.session ?? await state.sessionPromise.catch(() => null);
+  if (session && !session.isClosed()) await session.stop(reason);
+  await state.reporter.close('live_audio_session_closed', {
+    reason,
+    session_id: state.sessionId,
+    phrase_count: state.nextPhraseIndex,
+  });
+}
+
+async function cancelTurnOutputs(
+  turn: ActiveLiveTurn,
+  reason: string,
+  session: LiveVoicePcmSession,
+): Promise<void> {
+  await Promise.all(turn.outputOwnerships.map((ownership) => session.cancelOutputItem(
+    ownership.outputId,
+    ownership.generationEpoch,
+    reason,
+  )));
+}
+
+function conversationOutputId(turn: ActiveLiveTurn, phraseIndex: number): string {
+  const session = turn.sessionId.replace(/[^A-Za-z0-9_.-]+/g, '-').slice(-40);
+  return `conversation-${session}-g${turn.generation}-p${phraseIndex}`.slice(0, 120);
+}
+
+"""
+          if helper_marker not in text:
+              raise SystemExit('missing unified helper marker')
+          text = text.replace(helper_marker, helpers + helper_marker, 1)
+          p.write_text(text, encoding='utf-8')
+
+          # Update unified-audio tests for session-scoped ownership semantics.
+          path = 'apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              """    enqueuePhrase: vi.fn(async (
+      _text: string,
+      _phraseIndex: number,
+      _options?: { performancePlan?: Record<string, unknown> },
+    ) => undefined),""",
+              """    enqueuePhrase: vi.fn(async () => undefined),
+    enqueueOutputPhrase: vi.fn(async (
+      _text: string,
+      _phraseIndex: number,
+      _ownership: { outputId: string; generationEpoch: number; outputOrder: number },
+      _options?: { performancePlan?: Record<string, unknown> },
+    ) => undefined),""",
+              1,
+          )
+          text = text.replace(
+              "    setStartPolicy: vi.fn((_policy: Record<string, number>) => undefined),\n    finish:",
+              "    cancelSegment: vi.fn(),\n    cancelOutputItem: vi.fn(async () => undefined),\n    cancelAllAfter: vi.fn(),\n    waitForOutputItem: vi.fn(async () => undefined),\n    setStartPolicy: vi.fn((_policy: Record<string, number>) => undefined),\n    finish:",
+              1,
+          )
+          text = text.replace(
+              "    mocks.session.enqueuePhrase.mockReset().mockResolvedValue(undefined);",
+              "    mocks.session.enqueuePhrase.mockReset().mockResolvedValue(undefined);\n    mocks.session.enqueueOutputPhrase.mockReset().mockResolvedValue(undefined);",
+              1,
+          )
+          text = text.replace(
+              "    mocks.session.setStartPolicy.mockReset();",
+              "    mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);\n    mocks.session.waitForOutputItem.mockReset().mockResolvedValue(undefined);\n    mocks.session.setStartPolicy.mockReset();",
+              1,
+          )
+          text = text.replace("mocks.session.enqueuePhrase", "mocks.session.enqueueOutputPhrase")
+          text = text.replace(
+              """    expect(mocks.createSession).toHaveBeenCalledWith(
+      'live-call:s1:test-trace',
+      'Jinx',
+      mocks.reporter,
+    );""",
+              """    expect(mocks.createSession).toHaveBeenCalledWith(
+      'live-call:s1:test-trace',
+      'Jinx',
+      mocks.reporter,
+      expect.objectContaining({ sessionScoped: true }),
+    );""",
+              1,
+          )
+          text = text.replace(
+              """      0,
+      {},
+    );""",
+              """      0,
+      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),
+      {},
+    );""",
+              1,
+          )
+          text = text.replace(
+              """      1,
+      {},
+    );""",
+              """      1,
+      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 1 }),
+      {},
+    );""",
+              1,
+          )
+          text = text.replace(
+              "    await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));",
+              "    await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalledTimes(2));",
+              1,
+          )
+          text = text.replace(
+              "    const options = mocks.session.enqueueOutputPhrase.mock.calls[0]?.[2];",
+              "    const options = mocks.session.enqueueOutputPhrase.mock.calls[0]?.[3];",
+              1,
+          )
+          text = text.replace(
+              """    expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(
+      'Hey there! How is your day going?',
+      0,
+      {},
+    ));""",
+              """    expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(
+      'Hey there! How is your day going?',
+      0,
+      expect.objectContaining({ outputOrder: 0 }),
+      {},
+    ));""",
+              1,
+          )
+          text = text.replace(
+              """    expect(mocks.createSession).toHaveBeenCalledWith(
+      'live-call:s1:test-trace',
+      'Maya',
+      mocks.reporter,
+    );""",
+              """    expect(mocks.createSession).toHaveBeenCalledWith(
+      'live-call:s1:test-trace',
+      'Maya',
+      mocks.reporter,
+      expect.objectContaining({ sessionScoped: true }),
+    );""",
+              1,
+          )
+          text = text.replace(
+              "    await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));\n    await waitFor(() => expect(states.at(-1)).toBe(false));",
+              "    await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalled());\n    await waitFor(() => expect(states.at(-1)).toBe(false));",
+              1,
+          )
+          text = text.replace(
+              """      0,
+      {},
+    );
+    expect(mocks.recordSpy).toHaveBeenCalledWith(
+      'phrase_skipped',""",
+              """      0,
+      expect.objectContaining({ outputOrder: 0 }),
+      {},
+    );
+    expect(mocks.recordSpy).toHaveBeenCalledWith(
+      'phrase_skipped',""",
+              1,
+          )
+          text = text.replace(
+              "    await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));\n    expect(mocks.session.stop).not.toHaveBeenCalled();",
+              "    await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalledTimes(1));\n    expect(mocks.session.stop).not.toHaveBeenCalled();",
+              1,
+          )
+          text = text.replace(
+              """    let finishResolve: () => void = () => undefined;
+    mocks.session.finish.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      finishResolve = () => resolve(undefined);
+    }));
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));""",
+              """    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));""",
+              1,
+          )
+          text = text.replace(
+              "    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalledWith('user-spoke-during-greeting'));",
+              "    await waitFor(() => expect(mocks.session.cancelOutputItem).toHaveBeenCalledWith(\n      expect.stringContaining('conversation-'),\n      expect.any(Number),\n      'user-spoke-during-greeting',\n    ));",
+              1,
+          )
+          text = text.replace("    finishResolve();\n", "", 1)
+          text = text.replace(
+              """    let finishResolve: () => void = () => undefined;
+    mocks.session.finish.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      finishResolve = () => resolve(undefined);
+    }));
+
+    const response =""",
+              """    const response =""",
+              1,
+          )
+          text = text.replace(
+              "    await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));",
+              "    await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalled());",
+              1,
+          )
+          text = text.replace(
+              "    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalledWith('voice-interrupt'));",
+              "    await waitFor(() => expect(mocks.session.cancelOutputItem).toHaveBeenCalledWith(\n      expect.stringContaining('conversation-'),\n      expect.any(Number),\n      'voice-interrupt',\n    ));\n    expect(mocks.session.stop).not.toHaveBeenCalled();",
+              1,
+          )
+          text = text.replace("    finishResolve();\n", "", 1)
+          p.write_text(text, encoding='utf-8')
+
+          # Source invariants for physical acceptance regressions.
+          path = 'src/tests/app/test_live_chat_authoritative_state_source.py'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          text += """
+
+
+def test_stt_final_does_not_preempt_audio_before_coordination() -> None:
+    source = _source("apps/web/src/features/chatbot/ChatbotWorkspace.tsx")
+    marker = "if (detail.stage !== 'stt_final_received') return;"
+    handler = source[source.index(marker):source.index("window.addEventListener(LIVE_VOICE_PERF_EVENT", source.index(marker))]
+    assert "stopAssistantResponseAudio" not in handler
+
+
+def test_live_response_audio_is_call_scoped_and_owned() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts")
+    assert "sessionScoped: true" in source
+    assert "enqueueOutputPhrase" in source
+    assert "waitForOutputItem" in source
+    assert "cancelOutputItem" in source
+    assert "session.finish()" not in source
+
+
+def test_capture_owner_persists_direct_routing_provenance() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-voice-controller.ts")
+    assert "live_runtime_provenance" in source
+    assert "live_task_contract_acknowledged" in source
+    assert "coordination_started" in source
+    assert "coordination_completed" in source
+    assert "currentLiveRuntimeProvenance()" in source
+"""
+          p.write_text(text, encoding='utf-8')
+          PY
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Targeted web tests
+        working-directory: apps/web
+        run: npm test -- --run src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts src/features/assistant-workspace/live-output-coordinator.test.ts src/features/assistant-workspace/live-voice-pcm-worklet.test.ts
+      - name: Web typecheck
+        working-directory: apps/web
+        run: npm run typecheck
+      - name: Source invariants
+        run: python -m pytest -q src/tests/app/test_live_chat_authoritative_state_source.py
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/web/vite.config.ts apps/web/src/features/chatbot/ChatbotWorkspace.tsx apps/web/src/features/assistant-workspace/live-voice-controller.ts apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts src/tests/app/test_live_chat_authoritative_state_source.py
+          git commit -m 'Fix physical Live acceptance ownership'
+          git push origin HEAD:agent/general-full-duplex-live
