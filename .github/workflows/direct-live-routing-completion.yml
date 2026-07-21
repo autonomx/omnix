@@ -1,0 +1,115 @@
+name: Direct Live routing completion
+on:
+  push:
+    branches: [agent/general-full-duplex-live]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Complete direct Live routing architecture'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/general-full-duplex-live
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply production routing architecture
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'missing pattern in {path}: {old[:120]!r}')
+              text = text.replace(old, new, count)
+              p.write_text(text, encoding='utf-8')
+
+          # Explicit controller ownership and direct accepted-final routing.
+          p = Path('apps/web/src/features/assistant-workspace/live-voice-controller.ts')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace("import { liveConversationStore } from './live-conversation-store';", "import type { AcceptedVoiceFinal, LiveFinalRoutingResult } from './live-accepted-final';\nimport { liveConversationStore } from './live-conversation-store';\nimport { currentLiveRuntimeProvenance } from './live-runtime-provenance';\nimport { liveSessionCoordinator } from './live-session-coordinator';")
+          text = text.replace("const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';", "const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';\nconst LIVE_TASK_INSTRUCTION_STORAGE_KEY = 'omnix.live.taskInstruction';")
+          text = text.replace("      panelStatuses.set(card, 'idle');", "      ensureLiveTaskPreset(card);\n      panelStatuses.set(card, 'idle');")
+          old_start = """  try {\n    const liveWindow = window as LiveVoiceWindow;\n    const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;"""
+          new_start = """  try {\n    const sessionId = liveConversationStore.getState().sessionId;\n    if (!sessionId) throw new Error('Select or create a chat session before starting Live voice.');\n    const taskInstruction = readLiveTaskInstruction(card);\n    await liveSessionCoordinator.prepareTaskContract(sessionId, taskInstruction);\n    dispatchLiveVoicePerfEvent({\n      stage: 'live_task_contract_acknowledged',\n      timestamp: new Date().toISOString(),\n      taskInstructionConfigured: Boolean(taskInstruction),\n      ...currentLiveRuntimeProvenance(),\n    });\n    const liveWindow = window as LiveVoiceWindow;\n    const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;"""
+          if old_start not in text: raise SystemExit('controller start pattern missing')
+          text = text.replace(old_start, new_start, 1)
+          text = text.replace("      url: getDefaultStreamingSttWebSocketUrl(window.location, runtimeConfig.sttServiceUrl),\n      webSocketCtor: WebSocketCtor,", "      url: getDefaultStreamingSttWebSocketUrl(window.location, runtimeConfig.sttServiceUrl),\n      webSocketCtor: WebSocketCtor,\n      chatSessionId: sessionId,")
+          text = text.replace("      onPartialTranscript: (text) => handlePartialTranscript(card, text),\n      onFinalTranscript: (text) => handleFinalTranscript(card, text),", "      onPartialTranscript: (text) => handlePartialTranscript(card, text),\n      onAcceptedFinal: (final) => handleAcceptedFinal(card, final),\n      onFinalRejected: (reason, identity) => {\n        dispatchLiveVoicePerfEvent({ stage: 'stt_final_rejected', timestamp: new Date().toISOString(), reason, segmentId: identity.segmentId, sourceSequence: identity.sourceSequence });\n        setPanelStatus(card, 'error');\n      },")
+          start = text.index('function handleFinalTranscript(')
+          end = text.index('function replayFinalizationBuffer(', start)
+          replacement = """async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal): Promise<LiveFinalRoutingResult> {\n  const session = activeSession;\n  if (!session || session.card !== card) {\n    return failedRoutingResult(final, 'live_capture_session_inactive');\n  }\n  const receivedAt = performance.now();\n  const overlapIntent = session.overlapIntent;\n  const interruptionDispatched = session.interruptionDispatched;\n  const continuation = session.finalizationBuffer.drain();\n  dispatchLiveVoicePerfEvent({\n    stage: 'stt_final_received',\n    turnId: session.perfTurnId ?? `voice-turn:${Date.now()}`,\n    timestamp: new Date().toISOString(),\n    transcriptChars: final.text.trim().length,\n    sttFinalizeMs: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),\n    segmentId: final.segmentId,\n    sourceSequence: final.sourceSequence,\n    captureEpoch: final.captureEpoch,\n  });\n  const suppressTurn = Boolean(\n    overlapIntent === 'hard_stop'\n    || overlapIntent === 'backchannel'\n    || overlapIntent === 'noise'\n    || (overlapIntent === 'uncertain' && !interruptionDispatched),\n  );\n  resetTurnState(session);\n  try {\n    if (suppressTurn || !final.text.trim()) {\n      return ignoredRoutingResult(final);\n    }\n    renderTranscript(card, 'You', final.text, 'final');\n    dispatchLiveVoicePerfEvent({\n      stage: 'coordination_started',\n      timestamp: new Date().toISOString(),\n      segmentId: final.segmentId,\n      sourceSequence: final.sourceSequence,\n      captureEpoch: final.captureEpoch,\n    });\n    const result = await liveSessionCoordinator.routeAcceptedFinal(final);\n    dispatchLiveVoicePerfEvent({\n      stage: 'coordination_completed',\n      timestamp: new Date().toISOString(),\n      segmentId: final.segmentId,\n      sourceSequence: final.sourceSequence,\n      outcome: result.outcome,\n      errorCode: result.errorCode,\n    });\n    if (result.outcome === 'failed') setPanelStatus(card, 'error');\n    else setPanelStatus(card, 'connected');\n    return result;\n  } finally {\n    replayFinalizationBuffer(session, continuation);\n  }\n}\n\nfunction ignoredRoutingResult(final: AcceptedVoiceFinal): LiveFinalRoutingResult {\n  const task = liveConversationStore.getState().coordination.taskContract;\n  return { outcome: 'ignored', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: task.taskContractId, taskContractVersion: task.version };\n}\n\nfunction failedRoutingResult(final: AcceptedVoiceFinal, errorCode: string): LiveFinalRoutingResult {\n  const task = liveConversationStore.getState().coordination.taskContract;\n  return { outcome: 'failed', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: task.taskContractId, taskContractVersion: task.version, errorCode };\n}\n\nfunction ensureLiveTaskPreset(card: HTMLElement): void {\n  if (card.querySelector('[data-live-task-instruction]')) return;\n  const select = document.createElement('select');\n  select.dataset.liveTaskInstruction = 'true';\n  select.setAttribute('aria-label', 'Live task');\n  for (const [label, value] of [\n    ['Conversation', ''],\n    ['Translate Japanese to English', 'Translate Japanese speech into concise English continuously. Keep listening while speaking.'],\n    ['Live grammar correction', 'Correct my grammar continuously while I speak.'],\n  ] as const) {\n    const option = document.createElement('option');\n    option.textContent = label;\n    option.value = value;\n    select.append(option);\n  }\n  select.value = window.localStorage.getItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY) ?? '';\n  select.addEventListener('change', () => window.localStorage.setItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY, select.value));\n  card.querySelector('header')?.append(select);\n}\n\nfunction readLiveTaskInstruction(card: HTMLElement): string | undefined {\n  const selected = card.querySelector<HTMLSelectElement>('[data-live-task-instruction]')?.value.trim();\n  const stored = window.localStorage.getItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY)?.trim();\n  return selected || stored || undefined;\n}\n\n"""
+          text = text[:start] + replacement + text[end:]
+          # Remove composer helpers and hidden side-effect initialization.
+          for fn_start, fn_end in [('function populateComposer(', 'function dispatchLiveVoiceLifecycleEvent('), ("if (typeof window !== 'undefined') {", None)]:
+              if fn_start in text:
+                  s = text.index(fn_start)
+                  if fn_end:
+                      e = text.index(fn_end, s)
+                      text = text[:s] + text[e:]
+                  else:
+                      text = text[:s].rstrip() + '\n'
+          p.write_text(text, encoding='utf-8')
+
+          # Explicit bootstrap and provenance.
+          p = Path('apps/web/src/main.tsx')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace("import { initializeLiveSegmentSubmitInterceptor } from './features/assistant-workspace/live-segment-submit-interceptor';\n", '')
+          text = text.replace("import './features/assistant-workspace/live-voice-controller';", "import { initializeLiveVoiceController } from './features/assistant-workspace/live-voice-controller';\nimport { emitLiveRuntimeProvenance } from './features/assistant-workspace/live-runtime-provenance';")
+          text = text.replace('initializeLiveSegmentSubmitInterceptor();\n', '')
+          text = text.replace('initializeLiveSessionCoordinator();\n', 'initializeLiveSessionCoordinator();\nemitLiveRuntimeProvenance();\ninitializeLiveVoiceController();\n')
+          p.write_text(text, encoding='utf-8')
+
+          # Register the typed chat gateway with the React-owned streaming submit path.
+          p = Path('apps/web/src/features/chatbot/ChatbotWorkspace.tsx')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace("import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';", "import { liveChatSubmissionGateway } from '../assistant-workspace/live-chat-submission-gateway';\nimport { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';")
+          marker = """  function scheduleLiveVoiceAutoSend(content: string): void {"""
+          effect = """  useEffect(() => liveChatSubmissionGateway.register(async (input) => {\n    if (input.sessionId !== selectedSessionId) throw new Error('live_chat_session_mismatch');\n    await sendStreamingVoiceTranscript(input.text);\n  }), [selectedSessionId, selectedProviderId, selectedModelId, assistantSettings, autoSpeakResponses]);\n\n"""
+          if effect not in text:
+              text = text.replace(marker, effect + marker, 1)
+          p.write_text(text, encoding='utf-8')
+
+          # Task-contract acknowledgement route.
+          p = Path('src/app/gateway/live_material_context.py')
+          text = p.read_text(encoding='utf-8')
+          insertion = '''\n\nclass LiveTaskContractAcknowledgementRequest(BaseModel):\n    model_config = ConfigDict(extra="forbid")\n\n    task_contract_id: str = Field(min_length=1, max_length=160)\n    task_contract_version: int = Field(ge=1)\n\n\nclass LiveTaskContractAcknowledgement(BaseModel):\n    model_config = ConfigDict(extra="forbid")\n\n    session_id: str\n    task_contract_id: str\n    task_contract_version: int\n    context_version: int\n    idempotent: bool\n'''
+          text = text.replace('\n\nclass LiveMaterialPromotionRequest(BaseModel):', insertion + '\n\nclass LiveMaterialPromotionRequest(BaseModel):', 1)
+          store_method = '''\n    def acknowledge_task_contract(\n        self, session_id: str, request: LiveTaskContractAcknowledgementRequest\n    ) -> LiveTaskContractAcknowledgement:\n        normalized_session = _identifier(session_id, "session_id")\n        with self._lock:\n            self._prune_locked()\n            session = self._sessions.setdefault(normalized_session, LiveMaterialSession(session_id=normalized_session))\n            idempotent = (\n                session.task_contract_id == request.task_contract_id\n                and session.task_contract_version == request.task_contract_version\n            )\n            if not idempotent:\n                session.task_contract_id = request.task_contract_id\n                session.task_contract_version = request.task_contract_version\n                session.context_version += 1\n            session.last_seen = time.monotonic()\n            return LiveTaskContractAcknowledgement(\n                session_id=session.session_id,\n                task_contract_id=session.task_contract_id,\n                task_contract_version=session.task_contract_version,\n                context_version=session.context_version,\n                idempotent=idempotent,\n            )\n\n'''
+          text = text.replace('    def snapshot(self, session_id: str) -> LiveMaterialSnapshot | None:\n', store_method + '    def snapshot(self, session_id: str) -> LiveMaterialSnapshot | None:\n', 1)
+          route = '''\n    @gateway.post(\n        f"{LIVE_MATERIAL_PATH}/task-contract",\n        response_model=LiveTaskContractAcknowledgement,\n        include_in_schema=False,\n    )\n    async def acknowledge_live_task_contract(\n        session_id: str, request: LiveTaskContractAcknowledgementRequest\n    ) -> LiveTaskContractAcknowledgement:\n        try:\n            return live_material_store.acknowledge_task_contract(session_id, request)\n        except LiveMaterialConflictError as exc:\n            raise HTTPException(status_code=409, detail=str(exc)) from exc\n\n'''
+          text = text.replace('    @gateway.get(LIVE_MATERIAL_PATH, response_model=LiveMaterialSnapshot, include_in_schema=False)\n', route + '    @gateway.get(LIVE_MATERIAL_PATH, response_model=LiveMaterialSnapshot, include_in_schema=False)\n', 1)
+          p.write_text(text, encoding='utf-8')
+
+          # Echo identity fields from both legacy and segmented STT results.
+          p = Path('src/app/providers/stt_live_websocket.py')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('    finalize_queued: bool = False\n', '    finalize_queued: bool = False\n    capture_epoch: str = ""\n    finalize_request_id: str = ""\n    end_sample: int = 0\n')
+          text = text.replace('                    "sessionId": state.session_id,\n                    "segmentId": segment.segment_id,', '                    "sessionId": state.session_id,\n                    "captureEpoch": segment.capture_epoch,\n                    "segmentId": segment.segment_id,')
+          text = text.replace('                    "resultId": uuid.uuid4().hex,\n                    "text": text,', '                    "resultId": uuid.uuid4().hex,\n                    "finalizeRequestId": segment.finalize_request_id,\n                    "startSample": segment.primary_start_sample,\n                    "endSample": segment.end_sample or segment.accepted_through_sample,\n                    "text": text,')
+          text = text.replace('                    await _safe_send(websocket, send_lock, {"type": "done", "text": text})', '                    await _safe_send(websocket, send_lock, {**payload, "type": "done"})')
+          text = text.replace('                await _safe_send(websocket, send_lock, cached if not legacy_mode else {"type": "done", "text": cached["text"]})', '                await _safe_send(websocket, send_lock, cached if not legacy_mode else {**cached, "type": "done"})')
+          text = text.replace('                            primary_start_sample=primary_start,\n                        )', '                            primary_start_sample=primary_start,\n                            capture_epoch=str(_field(data, "captureEpoch", "capture_epoch", ""))[:160],\n                        )')
+          text = text.replace('                    if segmented:\n                        segment_id = str(_field(data, "segmentId", "segment_id", ""))[:120]\n                        sequence = int(data.get("sequence", 0))\n                    else:', '                    if segmented:\n                        segment_id = str(_field(data, "segmentId", "segment_id", ""))[:120]\n                        sequence = int(data.get("sequence", 0))\n                    else:')
+          text = text.replace('                    await finalize_segment(state, segment_id, sequence, legacy_mode=not segmented)', '                    segment = state.segments.get(segment_id)\n                    if segment is not None:\n                        segment.capture_epoch = str(_field(data, "captureEpoch", "capture_epoch", segment.capture_epoch))[:160]\n                        segment.finalize_request_id = str(_field(data, "finalizeRequestId", "finalize_request_id", ""))[:160]\n                        segment.end_sample = int(_field(data, "endSample", "end_sample", segment.accepted_through_sample))\n                    await finalize_segment(state, segment_id, sequence, legacy_mode=not segmented)')
+          p.write_text(text, encoding='utf-8')
+
+          # Architectural invariants.
+          p = Path('src/tests/app/test_live_chat_authoritative_state_source.py')
+          text = p.read_text(encoding='utf-8')
+          addition = '''\n\ndef test_live_voice_final_routing_has_no_composer_dependency() -> None:\n    controller = _source("apps/web/src/features/assistant-workspace/live-voice-controller.ts")\n    coordinator = _source("apps/web/src/features/assistant-workspace/live-session-coordinator.ts")\n    interceptor = _source("apps/web/src/features/assistant-workspace/live-segment-submit-interceptor.ts")\n    assert "requestSubmit" not in controller\n    assert ".assistant-composer" not in controller\n    assert "populateComposer" not in controller\n    assert "querySelector" not in coordinator\n    assert "requestSubmit" not in coordinator\n    assert "document.addEventListener('submit'" not in interceptor\n    assert "onAcceptedFinal" in controller\n    assert "routeAcceptedFinal" in controller\n    assert "direct_final_routing: true" in _source("apps/web/src/features/assistant-workspace/live-runtime-provenance.ts")\n'''
+          if 'test_live_voice_final_routing_has_no_composer_dependency' not in text:
+              text += addition
+          p.write_text(text, encoding='utf-8')
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/web/src/features/assistant-workspace/live-voice-controller.ts apps/web/src/main.tsx apps/web/src/features/chatbot/ChatbotWorkspace.tsx src/app/gateway/live_material_context.py src/app/providers/stt_live_websocket.py src/tests/app/test_live_chat_authoritative_state_source.py
+          git commit -m 'Complete direct Live routing architecture'
+          git push origin HEAD:agent/general-full-duplex-live
