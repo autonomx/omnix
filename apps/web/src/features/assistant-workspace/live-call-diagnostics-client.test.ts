@@ -42,6 +42,32 @@ describe('live call diagnostics client', () => {
     expect(event?.detail.details.transcript).toBeUndefined();
     expect(event?.detail.details.text).toBeUndefined();
     expect(fetchMock).toHaveBeenCalled();
+    window.removeEventListener('omnix:live-call-diagnostic', listener);
+  });
+
+  it('keeps full debug content in the local event but never uploads it', async () => {
+    window.localStorage.setItem('omnix.liveCall.transcriptLogging', 'full_local_debug');
+    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const listener = vi.fn();
+    window.addEventListener('omnix:live-call-diagnostic', listener);
+    const reporter = createLiveCallDiagnosticsReporter('live-call:debug');
+
+    reporter.record('llm_text_chunk_received', { text: 'local secret' }, 'controller');
+    await reporter.close();
+
+    const local = listener.mock.calls
+      .map((call) => call[0] as CustomEvent)
+      .find((candidate) => candidate.detail.event === 'llm_text_chunk_received');
+    expect(local?.detail.details.text).toBe('local secret');
+
+    const uploadedBody = JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body)) as {
+      events: Array<{ event: string; details: Record<string, unknown> }>;
+    };
+    const uploaded = uploadedBody.events.find((event) => event.event === 'llm_text_chunk_received');
+    expect(uploaded?.details.text).toBeUndefined();
+    expect(uploaded?.details.text_chars).toBe(12);
+    window.removeEventListener('omnix:live-call-diagnostic', listener);
   });
 
   it('keeps transcript sanitization policy unchanged', () => {
