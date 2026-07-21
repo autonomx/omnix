@@ -17,145 +17,151 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-      - name: Patch lifecycle tests
+      - name: Patch lifecycle tests or capture traceback
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$(git log -1 --pretty=%s)" = "Align shared audio lifecycle tests" ]; then
+          if [ "$(git log -1 --pretty=%s)" = "Align shared audio lifecycle tests" ] || [ "$(git log -1 --pretty=%s)" = "Capture shared audio patch exception" ]; then
             exit 0
           fi
           python - <<'PY'
           from pathlib import Path
+          import traceback
 
           path = Path('apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts')
-          text = path.read_text(encoding='utf-8')
+          error_path = Path('.github/shared-audio-test-patch-error.txt')
+          original = path.read_text(encoding='utf-8')
+          text = original
+          try:
+              if 'mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);' not in text:
+                  marker = '  mocks.session.enqueueCue.mockReset().mockResolvedValue(undefined);\n'
+                  if marker not in text:
+                      raise RuntimeError('enqueueCue reset marker missing')
+                  text = text.replace(
+                      marker,
+                      marker
+                      + '  mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);\n'
+                      + '  mocks.session.waitForOutputItem.mockReset().mockResolvedValue(undefined);\n',
+                      1,
+                  )
 
-          def section(title: str, following_title: str | None = None) -> tuple[int, int]:
-              start = text.index(title)
-              if following_title is None:
-                  return start, len(text)
-              return start, text.index(following_title, start)
+              if 'afterEach(async () => {' not in text:
+                  start = text.index('afterEach(() => {')
+                  end = text.index('\n});', start) + len('\n});')
+                  replacement = (
+                      "afterEach(async () => {\n"
+                      "  const hadSharedSession = mocks.createSession.mock.calls.length > 0;\n"
+                      "  cleanup?.();\n"
+                      "  cleanup = null;\n"
+                      "  if (hadSharedSession) {\n"
+                      "    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalled());\n"
+                      "  }\n"
+                      "  document.body.innerHTML = '';\n"
+                      "  vi.restoreAllMocks();\n"
+                      "  vi.unstubAllGlobals();\n"
+                      "});"
+                  )
+                  text = text[:start] + replacement + text[end:]
 
-          if 'mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);' not in text:
-              marker = '  mocks.session.enqueueCue.mockReset().mockResolvedValue(undefined);\n'
+              greeting_title = "  it('generates one transient greeting only after runtime and microphone connection are ready'"
+              next_title = "  it('does not generate a greeting when the user speaks before startup is ready'"
+              start = text.index(greeting_title)
+              end = text.index(next_title, start)
+              block = text[start:end]
+              if "expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 })" not in block:
+                  needle = "      0,\n      {},\n    ));"
+                  if needle not in block:
+                      raise RuntimeError('greeting ownership expectation marker missing')
+                  block = block.replace(
+                      needle,
+                      "      0,\n      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),\n      {},\n    ));",
+                      1,
+                  )
+                  text = text[:start] + block + text[end:]
+
+              greeting_interrupt_title = "  it('aborts greeting generation and playback when the user begins speaking'"
+              next_title = "  it('uses the authoritative live-call voice instead of the chat voice setting'"
+              start = text.index(greeting_interrupt_title)
+              end = text.index(next_title, start)
+              block = text[start:end]
+              if 'let resolveOutput: () => void' not in block:
+                  opening = "  it('aborts greeting generation and playback when the user begins speaking', async () => {\n"
+                  if opening not in block:
+                      raise RuntimeError('greeting interruption opening missing')
+                  block = block.replace(
+                      opening,
+                      opening
+                      + "    let resolveOutput: () => void = () => undefined;\n"
+                      + "    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {\n"
+                      + "      resolveOutput = resolve;\n"
+                      + "    }));\n",
+                      1,
+                  )
+              if '    resolveOutput();\n' not in block:
+                  closing = "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n  });"
+                  if closing not in block:
+                      raise RuntimeError('greeting interruption closing missing')
+                  block = block.replace(
+                      closing,
+                      "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n"
+                      + "    resolveOutput();\n"
+                      + "  });",
+                      1,
+                  )
+              text = text[:start] + block + text[end:]
+
               text = text.replace(
-                  marker,
-                  marker
-                  + '  mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);\n'
-                  + '  mocks.session.waitForOutputItem.mockReset().mockResolvedValue(undefined);\n',
+                  "    expect(mocks.createTraceId).not.toHaveBeenCalled();",
+                  "    expect(mocks.createTraceId).toHaveBeenCalledWith('s1:audio-session');",
                   1,
               )
 
-          if 'afterEach(async () => {' not in text:
-              start = text.index('afterEach(() => {')
-              end = text.index('\n});', start) + len('\n});')
-              text = text[:start] + (
-                  "afterEach(async () => {\n"
-                  "  const hadSharedSession = mocks.createSession.mock.calls.length > 0;\n"
-                  "  cleanup?.();\n"
-                  "  cleanup = null;\n"
-                  "  if (hadSharedSession) {\n"
-                  "    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalled());\n"
-                  "  }\n"
-                  "  document.body.innerHTML = '';\n"
-                  "  vi.restoreAllMocks();\n"
-                  "  vi.unstubAllGlobals();\n"
-                  "});"
-              ) + text[end:]
+              old_title = "  it('aborts the active request and stops the persistent session on interruption'"
+              new_title = "  it('aborts the active request and cancels owned output on interruption'"
+              if old_title in text:
+                  text = text.replace(old_title, new_title, 1)
+              start = text.index(new_title)
+              block = text[start:]
+              if 'let resolveOutput: () => void' not in block:
+                  opening = "  it('aborts the active request and cancels owned output on interruption', async () => {\n"
+                  if opening not in block:
+                      raise RuntimeError('response interruption opening missing')
+                  block = block.replace(
+                      opening,
+                      opening
+                      + "    let resolveOutput: () => void = () => undefined;\n"
+                      + "    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {\n"
+                      + "      resolveOutput = resolve;\n"
+                      + "    }));\n",
+                      1,
+                  )
+              if '    resolveOutput();\n' not in block:
+                  closing = "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n  });\n});"
+                  if closing not in block:
+                      raise RuntimeError('response interruption closing missing')
+                  block = block.replace(
+                      closing,
+                      "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n"
+                      + "    resolveOutput();\n"
+                      + "  });\n"
+                      + "});",
+                      1,
+                  )
+              text = text[:start] + block
 
-          greeting_start, greeting_end = section(
-              "  it('generates one transient greeting only after runtime and microphone connection are ready'",
-              "  it('does not generate a greeting when the user speaks before startup is ready'",
-          )
-          greeting = text[greeting_start:greeting_end]
-          if "expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 })" not in greeting:
-              greeting = greeting.replace(
-                  "      0,\n      {},\n    ));",
-                  "      0,\n      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),\n      {},\n    ));",
-                  1,
-              )
-              text = text[:greeting_start] + greeting + text[greeting_end:]
-
-          interrupt_greeting_start, interrupt_greeting_end = section(
-              "  it('aborts greeting generation and playback when the user begins speaking'",
-              "  it('uses the authoritative live-call voice instead of the chat voice setting'",
-          )
-          greeting_interrupt = text[interrupt_greeting_start:interrupt_greeting_end]
-          if 'let resolveOutput: () => void' not in greeting_interrupt:
-              opening = "  it('aborts greeting generation and playback when the user begins speaking', async () => {\n"
-              greeting_interrupt = greeting_interrupt.replace(
-                  opening,
-                  opening
-                  + "    let resolveOutput: () => void = () => undefined;\n"
-                  + "    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {\n"
-                  + "      resolveOutput = resolve;\n"
-                  + "    }));\n",
-                  1,
-              )
-          if '    resolveOutput();\n' not in greeting_interrupt:
-              closing = "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n  });"
-              greeting_interrupt = greeting_interrupt.replace(
-                  closing,
-                  "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n"
-                  + "    resolveOutput();\n"
-                  + "  });",
-                  1,
-              )
-          text = text[:interrupt_greeting_start] + greeting_interrupt + text[interrupt_greeting_end:]
-
-          text = text.replace(
-              "    expect(mocks.createTraceId).not.toHaveBeenCalled();",
-              "    expect(mocks.createTraceId).toHaveBeenCalledWith('s1:audio-session');",
-              1,
-          )
-
-          final_start, final_end = section(
-              "  it('aborts the active request and stops the persistent session on interruption'",
-              None,
-          )
-          final_test = text[final_start:final_end]
-          final_test = final_test.replace(
-              "  it('aborts the active request and stops the persistent session on interruption', async () => {",
-              "  it('aborts the active request and cancels owned output on interruption', async () => {",
-              1,
-          )
-          if 'let resolveOutput: () => void' not in final_test:
-              opening = "  it('aborts the active request and cancels owned output on interruption', async () => {\n"
-              final_test = final_test.replace(
-                  opening,
-                  opening
-                  + "    let resolveOutput: () => void = () => undefined;\n"
-                  + "    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {\n"
-                  + "      resolveOutput = resolve;\n"
-                  + "    }));\n",
-                  1,
-              )
-          if '    resolveOutput();\n' not in final_test:
-              closing = "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n  });\n});"
-              final_test = final_test.replace(
-                  closing,
-                  "    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');\n"
-                  + "    resolveOutput();\n"
-                  + "  });\n"
-                  + "});",
-                  1,
-              )
-          text = text[:final_start] + final_test
-
-          required = (
-              'afterEach(async () => {',
-              'cancelOutputItem.mockReset()',
-              'waitForOutputItem.mockReset()',
-              "toHaveBeenCalledWith('s1:audio-session')",
-              "aborts the active request and cancels owned output on interruption",
-          )
-          missing = [item for item in required if item not in text]
-          if missing:
-              raise SystemExit(f'patched lifecycle test is missing: {missing}')
-          path.write_text(text, encoding='utf-8')
+              path.write_text(text, encoding='utf-8')
+              error_path.unlink(missing_ok=True)
+          except Exception:
+              path.write_text(original, encoding='utf-8')
+              error_path.write_text(traceback.format_exc(), encoding='utf-8')
           PY
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts
-          git commit -m 'Align shared audio lifecycle tests'
+          if [ -f .github/shared-audio-test-patch-error.txt ]; then
+            git add .github/shared-audio-test-patch-error.txt
+            git commit -m 'Capture shared audio patch exception'
+          else
+            git add apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts
+            git commit -m 'Align shared audio lifecycle tests'
+          fi
           git push origin HEAD:${{ github.head_ref }}
