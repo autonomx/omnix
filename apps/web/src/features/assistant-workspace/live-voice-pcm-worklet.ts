@@ -28,6 +28,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     this.queue = [];
     this.endedSegments = new Set();
     this.terminalSegments = new Set();
+    this.cancelledOutputs = new Set();
     this.headOffset = 0;
     this.queuedSamples = 0;
     this.bufferedSpeechSamples = 0;
@@ -38,6 +39,8 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     this.stopped = false;
     this.drained = false;
     this.fadeInRemaining = 0;
+    this.cancellationFade = null;
+    this.lastOutputSample = 0;
     this.underrunCount = 0;
     this.renderClockSamples = 0;
     this.segmentTimelineSamples = 0;
@@ -58,12 +61,19 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     };
   }
 
+  outputKey(outputId, generationEpoch) {
+    return String(outputId || '') + ':' + String(Number(generationEpoch) || 0);
+  }
+
   segmentFields(segment = this.activeSegment, playedSamples = this.activeSegmentPlayedSamples) {
     if (!segment) return {};
     return {
       segment_id: segment.segmentId,
       segment_kind: segment.segmentKind,
       phrase_index: Number.isInteger(segment.phraseIndex) ? segment.phraseIndex : undefined,
+      output_id: segment.outputId || undefined,
+      generation_epoch: Number.isInteger(segment.generationEpoch) ? segment.generationEpoch : undefined,
+      output_order: Number.isInteger(segment.outputOrder) ? segment.outputOrder : undefined,
       segment_played_samples: playedSamples,
     };
   }
@@ -98,13 +108,30 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       const segmentId = String(
         message.segmentId || (segmentKind === 'speech' ? 'legacy-phrase-' + phraseIndex : 'legacy-cue'),
       );
-      this.queue.push({ segmentId, segmentKind, phraseIndex, samples });
+      const outputId = message.outputId ? String(message.outputId) : null;
+      const generationEpoch = Number.isInteger(message.generationEpoch) ? message.generationEpoch : 0;
+      const outputOrder = Number.isInteger(message.outputOrder) ? message.outputOrder : -1;
+      if (this.terminalSegments.has(segmentId)
+        || (outputId && this.cancelledOutputs.has(this.outputKey(outputId, generationEpoch)))) {
+        this.emit('late_segment_rejected', {
+          segment_id: segmentId,
+          segment_kind: segmentKind,
+          output_id: outputId || undefined,
+          generation_epoch: generationEpoch,
+          incoming_samples: samples.length,
+        });
+        return;
+      }
+      this.queue.push({ segmentId, segmentKind, phraseIndex, outputId, generationEpoch, outputOrder, samples });
       this.queuedSamples += samples.length;
       if (segmentKind === 'speech') this.bufferedSpeechSamples += samples.length;
       this.emit('buffered', {
         segment_id: segmentId,
         segment_kind: segmentKind,
         phrase_index: phraseIndex,
+        output_id: outputId || undefined,
+        generation_epoch: generationEpoch,
+        output_order: outputOrder,
         buffered_samples: this.queuedSamples,
         buffered_speech_samples: this.bufferedSpeechSamples,
         incoming_samples: samples.length,
@@ -123,10 +150,27 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       const durationSamples = Math.max(0, Math.round(Number(message.durationSamples) || 0));
       if (durationSamples <= 0) return;
       const segmentId = String(message.segmentId || 'silence-' + this.renderClockSamples);
+      const outputId = message.outputId ? String(message.outputId) : null;
+      const generationEpoch = Number.isInteger(message.generationEpoch) ? message.generationEpoch : 0;
+      const outputOrder = Number.isInteger(message.outputOrder) ? message.outputOrder : -1;
+      if (this.terminalSegments.has(segmentId)
+        || (outputId && this.cancelledOutputs.has(this.outputKey(outputId, generationEpoch)))) {
+        this.emit('late_segment_rejected', {
+          segment_id: segmentId,
+          segment_kind: 'silence',
+          output_id: outputId || undefined,
+          generation_epoch: generationEpoch,
+          incoming_samples: durationSamples,
+        });
+        return;
+      }
       this.queue.push({
         segmentId,
         segmentKind: 'silence',
         phraseIndex: null,
+        outputId,
+        generationEpoch,
+        outputOrder,
         remainingSamples: durationSamples,
         minimumFollowingSpeechSamples: Math.max(
           0,
@@ -139,6 +183,9 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       this.emit('buffered', {
         segment_id: segmentId,
         segment_kind: 'silence',
+        output_id: outputId || undefined,
+        generation_epoch: generationEpoch,
+        output_order: outputOrder,
         buffered_samples: this.queuedSamples,
         buffered_speech_samples: this.bufferedSpeechSamples,
         incoming_samples: durationSamples,
@@ -159,13 +206,40 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     }
     if (message.type === 'segment_end') {
       const segmentId = String(message.segmentId || '');
-      if (segmentId) this.endedSegments.add(segmentId);
+      if (segmentId && !this.terminalSegments.has(segmentId)) this.endedSegments.add(segmentId);
       this.maybeCompleteActiveSegment();
       return;
     }
     if (message.type === 'phrase_end' && Number.isInteger(message.phraseIndex)) {
       this.endedSegments.add('legacy-phrase-' + message.phraseIndex);
       this.maybeCompleteActiveSegment();
+      return;
+    }
+    if (message.type === 'cancel_segment') {
+      const segmentId = String(message.segmentId || '');
+      if (segmentId) this.cancelMatching((segment) => segment.segmentId === segmentId, String(message.reason || 'cancelled'));
+      return;
+    }
+    if (message.type === 'cancel_output') {
+      const outputId = String(message.outputId || '');
+      const generationEpoch = Number(message.generationEpoch) || 0;
+      if (outputId) {
+        this.cancelledOutputs.add(this.outputKey(outputId, generationEpoch));
+        this.cancelMatching(
+          (segment) => segment.outputId === outputId && segment.generationEpoch === generationEpoch,
+          String(message.reason || 'cancelled'),
+        );
+      }
+      return;
+    }
+    if (message.type === 'cancel_all_after') {
+      const outputOrder = Number(message.outputOrder);
+      if (Number.isFinite(outputOrder)) {
+        this.cancelMatching(
+          (segment) => Number.isInteger(segment.outputOrder) && segment.outputOrder > outputOrder,
+          String(message.reason || 'cancelled_after'),
+        );
+      }
       return;
     }
     if (message.type === 'end') {
@@ -185,7 +259,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     }
     if (message.type === 'stop') {
       const reason = String(message.reason || 'stopped');
-      this.interruptActiveSegment(reason);
+      this.interruptActiveSegment(reason, false);
       this.cancelQueuedSegments(reason);
       this.queuedSamples = 0;
       this.bufferedSpeechSamples = 0;
@@ -249,6 +323,9 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       segmentId: segment.segmentId,
       segmentKind: segment.segmentKind,
       phraseIndex: segment.phraseIndex,
+      outputId: segment.outputId,
+      generationEpoch: segment.generationEpoch,
+      outputOrder: segment.outputOrder,
     };
     this.activeSegmentPlayedSamples = 0;
     this.emit('segment_started', this.segmentFields());
@@ -272,7 +349,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     this.activeSegmentPlayedSamples = 0;
   }
 
-  interruptActiveSegment(reason) {
+  interruptActiveSegment(reason, fade = true) {
     const segment = this.activeSegment;
     if (!segment || this.terminalSegments.has(segment.segmentId)) return;
     this.terminalSegments.add(segment.segmentId);
@@ -280,8 +357,64 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       ...this.segmentFields(segment),
       reason,
     });
+    if (fade) {
+      this.cancellationFade = {
+        remaining: this.transitionFadeSamples,
+        total: this.transitionFadeSamples,
+        initialSample: this.lastOutputSample,
+      };
+    }
+    this.endedSegments.delete(segment.segmentId);
     this.activeSegment = null;
     this.activeSegmentPlayedSamples = 0;
+  }
+
+  remainingSamples(segment, index) {
+    if (segment.segmentKind === 'silence') return Math.max(0, segment.remainingSamples);
+    const offset = index === 0 ? this.headOffset : 0;
+    return Math.max(0, segment.samples.length - offset);
+  }
+
+  cancelMatching(predicate, reason) {
+    const active = this.activeSegment;
+    if (active && predicate(active)) this.interruptActiveSegment(reason, true);
+    const seen = new Set();
+    let removedSamples = 0;
+    let removedSpeechSamples = 0;
+    const kept = [];
+    for (let index = 0; index < this.queue.length; index += 1) {
+      const segment = this.queue[index];
+      if (!predicate(segment)) {
+        kept.push(segment);
+        continue;
+      }
+      const remaining = this.remainingSamples(segment, index);
+      removedSamples += remaining;
+      if (segment.segmentKind === 'speech') removedSpeechSamples += remaining;
+      if (!seen.has(segment.segmentId) && !this.terminalSegments.has(segment.segmentId)) {
+        seen.add(segment.segmentId);
+        this.terminalSegments.add(segment.segmentId);
+        this.emit('segment_cancelled', {
+          ...this.segmentFields(segment, 0),
+          reason,
+        });
+      }
+      this.endedSegments.delete(segment.segmentId);
+    }
+    const headRemoved = this.queue.length > 0 && kept[0] !== this.queue[0];
+    this.queue = kept;
+    if (headRemoved) this.headOffset = 0;
+    this.queuedSamples = Math.max(0, this.queuedSamples - removedSamples);
+    this.bufferedSpeechSamples = Math.max(0, this.bufferedSpeechSamples - removedSpeechSamples);
+    this.waitingForFollowingSpeech = false;
+    this.emit('targeted_cancellation_completed', {
+      reason,
+      removed_samples: removedSamples,
+      removed_speech_samples: removedSpeechSamples,
+      buffered_samples: this.queuedSamples,
+      buffered_speech_samples: this.bufferedSpeechSamples,
+    });
+    this.maybeStartOrResume();
   }
 
   cancelQueuedSegments(reason) {
@@ -319,6 +452,23 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       const progress = (index + 1) / fadeSamples;
       channel[start + index] *= 0.5 * (1 + Math.cos(Math.PI * progress));
     }
+  }
+
+  writeCancellationFade(channel) {
+    const fade = this.cancellationFade;
+    if (!fade) return 0;
+    let written = 0;
+    while (written < channel.length && fade.remaining > 0) {
+      const progress = 1 - (fade.remaining / fade.total);
+      channel[written] = fade.initialSample * 0.5 * (1 + Math.cos(Math.PI * progress));
+      fade.remaining -= 1;
+      written += 1;
+    }
+    if (fade.remaining <= 0) {
+      this.cancellationFade = null;
+      this.lastOutputSample = 0;
+    }
+    return written;
   }
 
   beginRebuffering() {
@@ -376,13 +526,13 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     if (this.stopped) return false;
 
     this.maybeStartOrResume();
-    if (!this.started || this.waitingForBuffer) {
+    let written = this.writeCancellationFade(channel);
+    if ((!this.started || this.waitingForBuffer) && written === 0) {
       this.maybeReportProgress();
       if (this.inputEnded && this.queuedSamples === 0) return this.signalDrained();
       return true;
     }
 
-    let written = 0;
     while (written < channel.length && this.queue.length > 0) {
       const head = this.queue[0];
       if (!this.followingSpeechReady(head)) {
@@ -417,11 +567,11 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
         head.remainingSamples -= take;
       }
       written += take;
-      this.queuedSamples -= take;
+      this.queuedSamples = Math.max(0, this.queuedSamples - take);
       this.segmentTimelineSamples += take;
       this.activeSegmentPlayedSamples += take;
       if (head.segmentKind === 'speech') {
-        this.bufferedSpeechSamples -= take;
+        this.bufferedSpeechSamples = Math.max(0, this.bufferedSpeechSamples - take);
         this.semanticSpeechSamples += take;
       }
       const consumed = head.segmentKind === 'silence'
@@ -435,7 +585,8 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     }
 
     this.applyFadeIn(channel, written);
-    if (this.queue.length === 0) {
+    if (written > 0) this.lastOutputSample = channel[written - 1];
+    if (this.queue.length === 0 && !this.cancellationFade) {
       this.applyFadeOut(channel, written);
       this.maybeCompleteActiveSegment();
       if (this.inputEnded) return this.signalDrained();
