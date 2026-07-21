@@ -885,7 +885,7 @@ export async function createLiveVoicePcmSession(
       resumes,
       elapsed_ms: performance.now() - startedAtMs,
     }, 'pcm_session');
-    await terminateSession('turn-finished', { workletAlreadyDrained: true });
+    await terminateSession('turn-finished', true);
   };
 
   const stop = async (reason = 'stopped'): Promise<void> => {

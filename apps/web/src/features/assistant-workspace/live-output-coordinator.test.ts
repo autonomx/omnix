@@ -50,7 +50,7 @@ function createHarness() {
   });
   store.dispatch({ type: 'material_ack', acceptedSequence: 1, contextVersion: 2 });
 
-  const enqueueOutputPhrase = vi.fn(async () => undefined);
+  const enqueueOutputPhrase = vi.fn<LiveVoicePcmSession['enqueueOutputPhrase']>(async () => undefined);
   const cancelOutputItem = vi.fn(async () => undefined);
   const stop = vi.fn(async () => undefined);
   const pcm: LiveVoicePcmSession = {
@@ -129,8 +129,8 @@ describe('LiveOutputCoordinator', () => {
 
     expect(harness.createPcmSession).toHaveBeenCalledTimes(1);
     expect(harness.enqueueOutputPhrase).toHaveBeenCalledTimes(2);
-    const firstOwnership = harness.enqueueOutputPhrase.mock.calls[0][2];
-    const secondOwnership = harness.enqueueOutputPhrase.mock.calls[1][2];
+    const firstOwnership = harness.enqueueOutputPhrase.mock.calls[0]![2];
+    const secondOwnership = harness.enqueueOutputPhrase.mock.calls[1]![2];
     expect(firstOwnership.outputOrder).toBeLessThan(secondOwnership.outputOrder);
     expect(firstOwnership.outputId).not.toBe(secondOwnership.outputId);
     expect(harness.coordinator.snapshot.map((item) => item.status)).toEqual(['buffered', 'buffered']);
