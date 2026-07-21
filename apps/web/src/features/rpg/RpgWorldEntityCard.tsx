@@ -8,6 +8,7 @@ import './RpgWorldCollectionToolbar.css';
 interface RpgWorldEntityCardProps {
   entity: RpgAuthoringEntityCard;
   imageAssetId?: string;
+  onOpen?: () => void;
   topic?: RpgAuthoringTopic;
   worldId: string;
 }
@@ -33,7 +34,7 @@ export function formatAuthoringValue(value: unknown): string {
   if (Array.isArray(value)) return value.map(formatAuthoringValue).join(', ');
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>;
-    const label = record.label ?? record.name ?? record.resource ?? record.type;
+    const label = record.label ?? record.name ?? record.resource ?? record.type ?? record.id;
     const amount = record.value ?? record.amount ?? record.count ?? record.quantity;
     if (label != null && amount != null) {
       return `${formatAuthoringValue(label)}: ${formatAuthoringValue(amount)}`;
@@ -46,7 +47,13 @@ export function formatAuthoringValue(value: unknown): string {
   return String(value);
 }
 
-export function RpgWorldEntityCard({ entity, imageAssetId, topic, worldId }: RpgWorldEntityCardProps) {
+export function RpgWorldEntityCard({
+  entity,
+  imageAssetId,
+  onOpen,
+  topic,
+  worldId,
+}: RpgWorldEntityCardProps) {
   const presentation = entity.presentation ?? {
     variant: entity.card_type || entity.kind,
     eyebrow: humanize(entity.card_type || entity.kind),
@@ -54,6 +61,8 @@ export function RpgWorldEntityCard({ entity, imageAssetId, topic, worldId }: Rpg
     highlights: [],
     groups: [],
   };
+  const previewHighlights = presentation.highlights.slice(0, 2);
+
   return (
     <article className={`rpg-authoring-entity-card is-${presentation.variant}`}>
       <div
@@ -73,15 +82,15 @@ export function RpgWorldEntityCard({ entity, imageAssetId, topic, worldId }: Rpg
         <h3>{entity.title}</h3>
         {presentation.badges.length ? (
           <div className="rpg-authoring-card-badges">
-            {presentation.badges.map((badge, index) => (
+            {presentation.badges.slice(0, 3).map((badge, index) => (
               <span key={`${formatAuthoringValue(badge)}:${index}`}>{formatAuthoringValue(badge)}</span>
             ))}
           </div>
         ) : null}
-        <p>{entity.summary}</p>
-        {presentation.highlights.length ? (
+        <p className="rpg-authoring-card-summary">{entity.summary}</p>
+        {previewHighlights.length ? (
           <dl className="rpg-authoring-card-highlights">
-            {presentation.highlights.map((highlight) => (
+            {previewHighlights.map((highlight) => (
               <div key={highlight.label}>
                 <dt>{highlight.label}</dt>
                 <dd>{formatAuthoringValue(highlight.value)}</dd>
@@ -89,7 +98,7 @@ export function RpgWorldEntityCard({ entity, imageAssetId, topic, worldId }: Rpg
             ))}
           </dl>
         ) : null}
-        {presentation.groups.map((group) => (
+        {!onOpen ? presentation.groups.map((group) => (
           <section className={`rpg-authoring-card-group is-${group.style}`} key={group.label}>
             <h4>{group.label}</h4>
             {group.style === 'chips' ? (
@@ -106,14 +115,21 @@ export function RpgWorldEntityCard({ entity, imageAssetId, topic, worldId }: Rpg
               </ul>
             )}
           </section>
-        ))}
-        <small>{humanize(entity.kind)} · {entity.id}</small>
+        )) : null}
+        <div className="rpg-authoring-card-footer">
+          <small>{humanize(entity.kind)}</small>
+          {onOpen ? <button type="button" onClick={onOpen}>View details</button> : null}
+        </div>
       </div>
-      <details className="rpg-authoring-card-structured">
-        <summary>Structured details</summary>
-        <pre>{JSON.stringify(entity.metadata, null, 2)}</pre>
-      </details>
-      {topic ? <RpgWorldEntityEditor entity={entity} topic={topic} worldId={worldId} /> : null}
+      {!onOpen ? (
+        <>
+          <details className="rpg-authoring-card-structured">
+            <summary>Structured details</summary>
+            <pre>{JSON.stringify(entity.metadata, null, 2)}</pre>
+          </details>
+          {topic ? <RpgWorldEntityEditor entity={entity} topic={topic} worldId={worldId} /> : null}
+        </>
+      ) : null}
     </article>
   );
 }
