@@ -529,6 +529,12 @@ function handleFinalTranscript(card: HTMLElement, text: string): void {
   );
   resetTurnState(session);
   if (transcript && !suppressTurn) {
+    dispatchLiveVoicePerfEvent({
+      stage: 'stt_final_submit_requested',
+      timestamp: new Date().toISOString(),
+      transcriptChars: transcript.length,
+      protocol: session.client.segmentedProtocolActive ? 'segmented-v1' : 'legacy',
+    });
     renderTranscript(card, 'You', transcript, 'final');
     populateComposer(transcript);
     submitComposer();
