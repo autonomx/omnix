@@ -169,6 +169,16 @@ export interface RpgDeferredMaterializationResponse {
   materialization: Record<string, unknown>;
 }
 
+export interface RpgWorldGenerationMutationResponse {
+  ok: boolean;
+  run: RpgWorldGenerationRun;
+  worker_started: boolean;
+  scope?: Record<string, unknown>;
+  retry_of_run_id?: string;
+  diagnostic_id?: string;
+  diagnostic_log?: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   const text = await response.text();
@@ -248,8 +258,24 @@ export const rpgWorldLibraryClient = {
   startGeneration(
     worldId: string,
     body: Record<string, unknown>,
-  ): Promise<{ ok: boolean; run: RpgWorldGenerationRun; worker_started: boolean }> {
+  ): Promise<RpgWorldGenerationMutationResponse> {
     return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/generation`, jsonInit(body));
+  },
+
+  retryFailedGeneration(runId: string): Promise<RpgWorldGenerationMutationResponse> {
+    return request(
+      `/api/rpg/world-generation/${encodeURIComponent(runId)}/retry-failed`,
+      jsonInit({}),
+    );
+  },
+
+  generationDiagnostics(): Promise<{
+    ok: boolean;
+    path: string;
+    format: string;
+    contains_generated_content: boolean;
+  }> {
+    return request('/api/rpg/world-generation/diagnostics');
   },
 
   generation(runId: string): Promise<{ ok: boolean; run: RpgWorldGenerationRun }> {
