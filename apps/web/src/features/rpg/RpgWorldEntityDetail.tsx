@@ -93,17 +93,14 @@ export function RpgWorldEntityDetail({
     .sort(([left], [right]) => left.localeCompare(right));
 
   return (
-    <div className="rpg-authoring-detail-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.currentTarget === event.target) onClose();
-    }}>
-      <section
+    <div className="rpg-authoring-detail-backdrop is-routed-subpage">
+      <main
         aria-label={`${entity.title} details`}
-        aria-modal="true"
         className="rpg-authoring-entity-detail"
-        role="dialog"
       >
         <header className="rpg-authoring-entity-detail-header">
           <div>
+            <button className="rpg-authoring-detail-breadcrumb" type="button" onClick={onClose}>← Back to {humanize(entity.card_type || entity.kind)}</button>
             <p className="rpg-authoring-card-eyebrow">{presentation.eyebrow}</p>
             <h2>{entity.title}</h2>
           </div>
@@ -187,7 +184,7 @@ export function RpgWorldEntityDetail({
           <summary>Advanced structured data</summary>
           <pre>{JSON.stringify(entity.metadata, null, 2)}</pre>
         </details>
-      </section>
+      </main>
     </div>
   );
 }
