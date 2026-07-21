@@ -17,16 +17,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-      - name: Patch lifecycle tests
+      - name: Patch lifecycle tests or capture exception
         shell: bash
         run: |
-          set -euo pipefail
-          if [ "$(git log -1 --pretty=%s)" = "Align shared audio lifecycle tests" ]; then
-            exit 0
-          fi
-          node .github/scripts/patch-shared-audio-tests.mjs
+          set +e
+          node .github/scripts/patch-shared-audio-tests.mjs >/tmp/shared-audio-patch.log 2>&1
+          status=$?
+          set -e
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/shared-audio-patch.log .github/shared-audio-script-error.txt
+            git add .github/shared-audio-script-error.txt
+            git commit -m 'Capture shared audio script exception'
+            git push origin HEAD:${{ github.head_ref }}
+            exit 0
+          fi
+          rm -f .github/shared-audio-script-error.txt
           git add apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts
           git commit -m 'Align shared audio lifecycle tests'
           git push origin HEAD:${{ github.head_ref }}
