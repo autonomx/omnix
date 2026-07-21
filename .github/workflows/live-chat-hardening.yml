@@ -19,14 +19,11 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Apply, restore workflow, and commit
+      - name: Apply, capture failure, and restore workflow
         shell: bash
         run: |
-          set -euo pipefail
-          if [ "$(git log -1 --pretty=%s)" = "Fix physical Live acceptance ownership" ]; then
-            exit 0
-          fi
-          python - <<'PY'
+          set -uo pipefail
+          python - <<'PY' 2>&1 | tee /tmp/live-physical-patch.log
           from pathlib import Path
           from textwrap import dedent
 
@@ -36,15 +33,24 @@ jobs:
           end = workflow.index("\n          PY", start)
           exec(compile(dedent(workflow[start:end]), 'live-physical-patch', 'exec'))
           PY
+          status=${PIPESTATUS[0]}
           git fetch origin main
           git checkout origin/main -- .github/workflows/live-chat-hardening.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/live-physical-patch.log .github/live-physical-patch-error.txt
+            git add .github/workflows/live-chat-hardening.yml .github/live-physical-patch-error.txt
+            git commit -m 'Capture physical Live patch failure'
+            git push origin HEAD:${{ github.head_ref }}
+            exit "$status"
+          fi
           rm -f \
             .github/workflows/apply-live-physical-acceptance-fixes.yml \
             .github/workflows/apply-live-physical-patch-only.yml \
             .github/live-physical-fix-trigger \
-            .github/live-physical-patch-trigger-2
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            .github/live-physical-patch-trigger-2 \
+            .github/live-physical-patch-error.txt
           git add -A
           git commit -m 'Fix physical Live acceptance ownership'
           git push origin HEAD:${{ github.head_ref }}
