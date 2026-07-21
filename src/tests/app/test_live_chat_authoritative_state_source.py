@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.gateway.content_free_diagnostics import sanitize_content_free_details
+
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -27,6 +29,20 @@ def test_duplex_policy_no_longer_infers_playback_from_dom() -> None:
     assert "compareRecentWaveforms" in source
     assert "resolveLiveVoiceDeviceKey" in source
     assert "currentDeviceKey" in source
+
+
+def test_microphone_capture_policy_is_store_derived_and_buffers_finalization() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-voice-controller.ts")
+    policy = source[source.index("function processAudioFrame"):source.index("function updateVoiceVisualizer")]
+    assert "if (session.finalRequested) return" not in source
+    assert "FinalizationAudioBuffer" in source
+    assert "stt_finalization_buffer_overflow" in source
+    assert "stt_finalization_buffer_replayed" in source
+    assert "liveConversationStore.getState" in source
+    assert "function assistantIsSpeaking" not in source
+    assert ".querySelector" not in policy
+    assert ".dataset" not in policy
+    assert "readCurrentAssistantDiagnosticText" in source
 
 
 def test_initiative_policy_no_longer_reads_visible_voice_state() -> None:
@@ -76,6 +92,33 @@ def test_diagnostics_summarize_before_existing_redaction_boundary() -> None:
     assert source.index("observeAssistantDiagnostic(traceId, event, details)") < source.index(
         "sanitizeDiagnosticDetails(details"
     )
+    assert "mode === 'full_local_debug' ? 'lengths_only'" in source
+
+
+def test_server_diagnostics_enforce_content_free_boundary() -> None:
+    tts = _source("src/app/gateway/tts_stream_diagnostics.py")
+    browser_route = _source("src/app/gateway/live_voice_diagnostics_routes.py")
+    assert "sanitize_content_free_details(details)" in tts
+    assert "sanitize_content_free_details(item.details)" in browser_route
+    assert "**item.details" not in browser_route
+
+    sanitized = sanitize_content_free_details(
+        {
+            "text": "private phrase",
+            "sanitized_text": "private phrase",
+            "text_sha256": "dictionary-guessable",
+            "text_length": 14,
+            "phrase_index": 2,
+            "nested": {"transcript": "secret", "latency_ms": 42},
+        }
+    )
+    assert sanitized == {
+        "text_chars": 14,
+        "sanitized_text_chars": 14,
+        "text_length": 14,
+        "phrase_index": 2,
+        "nested": {"transcript_chars": 6, "latency_ms": 42},
+    }
 
 
 def test_durable_payload_uses_aggregates_not_event_or_content_uploads() -> None:
