@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
-  RpgAuthoringDocumentBlock,
+  RpgAuthoringDocumentPage,
+  RpgAuthoringEntityCard,
   RpgAuthoringPage,
   RpgAuthoringSection,
 } from '../../api/rpgWorldAuthoringClient';
 import { rpgWorldImageClient } from '../../api/rpgWorldImageClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+import { RpgWorldDocumentBlock } from './RpgWorldDocumentBlocks';
 import { RpgWorldEntityCard } from './RpgWorldEntityCard';
+import { RpgWorldEntityDetail } from './RpgWorldEntityDetail';
 import { RpgWorldTopicEditor } from './RpgWorldTopicEditor';
 import './RpgWorldAuthoringPage.css';
 
@@ -22,48 +25,78 @@ interface RpgWorldAuthoringPageProps {
   worldId: string;
 }
 
-function displayValue(value: unknown): string {
-  if (value == null) return '';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return JSON.stringify(value, null, 2);
-}
-
 function humanize(value: string): string {
   return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function FactBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
-  const items = block.items ?? [];
-  return (
-    <section className="rpg-authoring-document-block">
-      {block.title ? <h3>{block.title}</h3> : null}
-      <dl className="rpg-authoring-fact-grid">
-        {items.map((item, index) => {
-          const label = displayValue(item.label ?? item.name ?? item.key ?? `Fact ${index + 1}`);
-          const value = displayValue(item.value ?? item.description ?? item.fact ?? item);
-          return <div key={`${label}:${index}`}><dt>{label}</dt><dd>{value}</dd></div>;
-        })}
-      </dl>
-    </section>
-  );
+function text(value: unknown, fallback = ''): string {
+  return value == null || String(value).trim() === '' ? fallback : String(value).trim();
 }
 
-function DocumentBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
-  if (block.kind === 'facts') return <FactBlock block={block} />;
-  if (block.kind === 'json') {
-    return (
-      <details className="rpg-authoring-structured-data">
-        <summary>{block.title || 'Structured canon'}</summary>
-        <pre>{JSON.stringify(block.value, null, 2)}</pre>
-      </details>
+function meaningful(value: unknown): boolean {
+  if (value == null || value === '') return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+  return true;
+}
+
+function relatedEntityCards(page: RpgAuthoringDocumentPage): RpgAuthoringEntityCard[] {
+  const projected = page.related_entities.filter((row): row is RpgAuthoringEntityCard => (
+    Boolean(row)
+    && typeof row === 'object'
+    && typeof row.id === 'string'
+    && typeof row.title === 'string'
+    && typeof row.presentation === 'object'
+  ));
+  if (projected.length) return projected;
+
+  const content = page.topic?.content ?? {};
+  const entities = Array.isArray(content.entities)
+    ? content.entities.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
+    : [];
+  return entities.map((metadata, index) => {
+    const kind = text(metadata.kind, page.section_id.replace(/s$/, '') || 'entity');
+    const id = text(metadata.id ?? metadata.entity_id, `${kind}:${index + 1}`);
+    const title = text(metadata.name ?? metadata.title ?? metadata.label, humanize(id.split(':').at(-1) ?? id));
+    const summary = text(
+      metadata.summary
+      ?? metadata.description
+      ?? metadata.personality
+      ?? metadata.sensory_profile
+      ?? metadata.purpose
+      ?? metadata.premise,
+      'No overview has been written yet.',
     );
-  }
-  return (
-    <section className="rpg-authoring-document-block">
-      {block.title ? <h3>{block.title}</h3> : null}
-      <p style={{ whiteSpace: 'pre-line' }}>{block.body || ''}</p>
-    </section>
-  );
+    const badges = [metadata.visibility, metadata.status, metadata.dossier_status].filter(meaningful);
+    const highlights = Object.entries(metadata)
+      .filter(([key, value]) => !['id', 'entity_id', 'name', 'title', 'label', 'kind', 'summary', 'description', 'visibility', 'status', 'dossier_status'].includes(key) && meaningful(value))
+      .filter(([, value]) => !Array.isArray(value) && typeof value !== 'object')
+      .slice(0, 3)
+      .map(([key, value]) => ({ label: humanize(key), value }));
+    const groups = Object.entries(metadata)
+      .filter(([, value]) => Array.isArray(value) && value.length)
+      .slice(0, 5)
+      .map(([key, value]) => ({
+        label: humanize(key),
+        items: value as unknown[],
+        style: /(_ids|_refs|tags|languages|regions|locations|factions|classes)$/.test(key) ? 'chips' : 'list',
+      }));
+    return {
+      id,
+      title,
+      summary,
+      kind,
+      card_type: kind,
+      presentation: {
+        variant: kind,
+        eyebrow: humanize(kind),
+        badges,
+        highlights,
+        groups,
+      },
+      metadata,
+    };
+  });
 }
 
 export function RpgWorldAuthoringPage({
@@ -85,10 +118,11 @@ export function RpgWorldAuthoringPage({
   const [collectionSearch, setCollectionSearch] = useState('');
   const [collectionKind, setCollectionKind] = useState('all');
   const [collectionSort, setCollectionSort] = useState('name');
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const imagesQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-image-targets', worldId],
     queryFn: () => rpgWorldImageClient.list(worldId),
-    enabled: page?.page_kind === 'collection' && section.id !== 'images',
+    enabled: Boolean(page) && section.id !== 'images',
     staleTime: 10_000,
   });
   const approvedAssets = useMemo(() => new Map(
@@ -97,6 +131,9 @@ export function RpgWorldAuthoringPage({
       .map((target) => [target.entity_id, String(target.active_asset_id)]),
   ), [imagesQuery.data?.targets]);
   const collectionEntities = page?.page_kind === 'collection' ? page.entities : [];
+  const documentEntities = page?.page_kind === 'document' ? relatedEntityCards(page) : [];
+  const allPageEntities = page?.page_kind === 'collection' ? collectionEntities : documentEntities;
+  const selectedEntity = allPageEntities.find((entity) => entity.id === selectedEntityId);
   const collectionKinds = useMemo(
     () => Array.from(new Set(collectionEntities.map((entity) => entity.kind))).sort(),
     [collectionEntities],
@@ -128,7 +165,12 @@ export function RpgWorldAuthoringPage({
     setCollectionSearch('');
     setCollectionKind('all');
     setCollectionSort('name');
+    setSelectedEntityId(null);
   }, [section.id]);
+
+  useEffect(() => {
+    if (selectedEntityId && !selectedEntity) setSelectedEntityId(null);
+  }, [selectedEntity, selectedEntityId]);
 
   if (isLoading) return <section className="rpg-authoring-page"><h2>{section.label}</h2><p>Loading world content…</p></section>;
   if (error) return <section className="rpg-authoring-page"><h2>{section.label}</h2><p className="rpg-world-catalog-error">{error}</p></section>;
@@ -161,7 +203,7 @@ export function RpgWorldAuthoringPage({
   if (page.page_kind === 'collection') {
     return (
       <section className="rpg-authoring-page">
-        <div className="rpg-authoring-page-heading"><div><p className="eyebrow">{section.group}</p><h2>{page.title || section.label}</h2></div><span>{visibleEntities.length === page.entities.length ? page.entities.length : `${visibleEntities.length} of ${page.entities.length}`} entr{page.entities.length === 1 ? 'y' : 'ies'}</span></div>
+        <div className="rpg-authoring-page-heading"><div><p className="eyebrow">{section.group}</p><h2>{page.title || section.label}</h2><p className="rpg-authoring-page-summary">Browse the collection, then open an entry for its full structured dossier.</p></div><span>{visibleEntities.length === page.entities.length ? page.entities.length : `${visibleEntities.length} of ${page.entities.length}`} entr{page.entities.length === 1 ? 'y' : 'ies'}</span></div>
         {page.entities.length ? (
           <div className="rpg-authoring-collection-toolbar">
             <input aria-label={`Search ${page.title || section.label}`} placeholder={`Search ${page.title || section.label.toLowerCase()}…`} value={collectionSearch} onChange={(event) => setCollectionSearch(event.currentTarget.value)} />
@@ -183,12 +225,22 @@ export function RpgWorldAuthoringPage({
               entity={entity}
               imageAssetId={approvedAssets.get(entity.id)}
               key={entity.id}
+              onOpen={() => setSelectedEntityId(entity.id)}
               topic={page.topic}
               worldId={worldId}
             />
           ))}
         </div>
         {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
+        {selectedEntity ? (
+          <RpgWorldEntityDetail
+            entity={selectedEntity}
+            imageAssetId={approvedAssets.get(selectedEntity.id)}
+            onClose={() => setSelectedEntityId(null)}
+            topic={page.topic}
+            worldId={worldId}
+          />
+        ) : null}
       </section>
     );
   }
@@ -200,8 +252,34 @@ export function RpgWorldAuthoringPage({
         {section.id === 'overview' ? <button className="rpg-secondary-button" type="button" onClick={() => setIsEditingOverview(true)}>Edit</button> : null}
       </div>
       {page.summary ? <p className="rpg-authoring-page-summary">{page.summary}</p> : null}
-      {page.body.length ? page.body.map((block, index) => <DocumentBlock key={`${block.kind}:${index}`} block={block} />) : <div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This section will populate as world generation completes.</p></div>}
+      {page.body.length ? page.body.map((block, index) => <RpgWorldDocumentBlock key={`${block.kind}:${index}`} block={block} />) : <div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This section will populate as world generation completes.</p></div>}
+      {documentEntities.length ? (
+        <section className="rpg-authoring-related-entities">
+          <div className="rpg-authoring-page-heading"><div><p className="eyebrow">Connected canon</p><h3>Related entries</h3></div><span>{documentEntities.length}</span></div>
+          <div className="rpg-authoring-entity-grid">
+            {documentEntities.map((entity) => (
+              <RpgWorldEntityCard
+                entity={entity}
+                imageAssetId={approvedAssets.get(entity.id)}
+                key={entity.id}
+                onOpen={() => setSelectedEntityId(entity.id)}
+                topic={page.topic}
+                worldId={worldId}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
       {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
+      {selectedEntity ? (
+        <RpgWorldEntityDetail
+          entity={selectedEntity}
+          imageAssetId={approvedAssets.get(selectedEntity.id)}
+          onClose={() => setSelectedEntityId(null)}
+          topic={page.topic}
+          worldId={worldId}
+        />
+      ) : null}
     </section>
   );
 }
