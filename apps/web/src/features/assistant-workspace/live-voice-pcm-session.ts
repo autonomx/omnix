@@ -847,7 +847,7 @@ export async function createLiveVoicePcmSession(
     ]);
   };
 
-  const terminateSession = async (reason: string, *, workletAlreadyDrained = false): Promise<void> => {
+  const terminateSession = async (reason: string, workletAlreadyDrained = false): Promise<void> => {
     if (closed) return;
     closed = true;
     document.removeEventListener('visibilitychange', handlePlaybackResumeSignal);
