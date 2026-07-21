@@ -1,4 +1,4 @@
-"""Soft archival lifecycle for reusable RPG world and scenario projects."""
+"""Lifecycle operations for reusable RPG world and scenario projects."""
 from __future__ import annotations
 
 from typing import Any
@@ -59,6 +59,266 @@ def require_scenario_writable(
         raise ValueError(f"scenario_archived:{scenario_id}")
     require_world_writable(work, context, str(scenario["world_id"]))
     return scenario
+
+
+def _count(work: Any, query: str, params: tuple[Any, ...]) -> int:
+    row = work.connection.execute(query, params).fetchone()
+    return int(row[0]) if row is not None else 0
+
+
+def _world_deletion_snapshot(
+    work: Any,
+    context: Any,
+    world: dict[str, Any],
+) -> dict[str, Any]:
+    workspace_id = context.workspace_id
+    world_id = str(world["id"])
+    params = (workspace_id, world_id)
+    counts = {
+        "world_revisions": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_world_revisions "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "world_releases": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_world_releases "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "scenario_projects": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_scenarios "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "scenario_revisions": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_scenario_revisions AS revision "
+            "JOIN omnix_rpg_scenarios AS scenario "
+            "ON scenario.workspace_id = revision.workspace_id "
+            "AND scenario.id = revision.scenario_id "
+            "WHERE scenario.workspace_id = %s AND scenario.world_id = %s",
+            params,
+        ),
+        "campaign_bindings": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_campaign_world_bindings "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "map_definitions": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_map_definitions "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "active_generation_runs": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_world_generation_runs "
+            "WHERE workspace_id = %s AND world_id = %s "
+            "AND status IN ('planned', 'running')",
+            params,
+        ),
+        "active_image_targets": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_world_image_targets "
+            "WHERE workspace_id = %s AND world_id = %s "
+            "AND status IN ('queued', 'generating')",
+            params,
+        ),
+        "topics": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_world_topics "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "generation_runs": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_world_generation_runs "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "topic_history": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_world_topic_history "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "entity_history": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_world_entity_history "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "map_blueprints": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_map_blueprint_revisions "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "image_targets": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_world_image_targets "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+        "image_attempts": _count(
+            work,
+            "SELECT COUNT(*) FROM omnix_rpg_world_image_attempts "
+            "WHERE workspace_id = %s AND world_id = %s",
+            params,
+        ),
+    }
+    blockers: list[dict[str, Any]] = []
+
+    def block(code: str, count: int, message: str) -> None:
+        if count:
+            blockers.append({"code": code, "count": count, "message": message})
+
+    block(
+        "active_generation_runs",
+        counts["active_generation_runs"],
+        "Wait for active world generation to finish before deleting this world.",
+    )
+    block(
+        "active_image_generation",
+        counts["active_image_targets"],
+        "Wait for active image generation to finish before deleting this world.",
+    )
+    block(
+        "published_world_revisions",
+        counts["world_revisions"],
+        "Published world revisions are immutable and must be retained; archive this world instead.",
+    )
+    block(
+        "published_world_releases",
+        counts["world_releases"],
+        "Published world releases are immutable and must be retained; archive this world instead.",
+    )
+    block(
+        "published_scenario_revisions",
+        counts["scenario_revisions"],
+        "Published scenario revisions depend on this world and must be retained.",
+    )
+    block(
+        "campaign_bindings",
+        counts["campaign_bindings"],
+        "Existing campaigns are pinned to this world and must remain playable.",
+    )
+    block(
+        "map_definitions",
+        counts["map_definitions"],
+        "Published map definitions depend on this world and must be retained.",
+    )
+    if world["status"] == "published" and not counts["world_revisions"]:
+        blockers.append(
+            {
+                "code": "published_world_status",
+                "count": 1,
+                "message": "Published worlds must be archived instead of permanently deleted.",
+            }
+        )
+
+    deleted_counts = {
+        key: counts[key]
+        for key in (
+            "scenario_projects",
+            "topics",
+            "generation_runs",
+            "topic_history",
+            "entity_history",
+            "map_blueprints",
+            "image_targets",
+            "image_attempts",
+        )
+    }
+    return {
+        "can_delete": not blockers,
+        "world_id": world_id,
+        "world_title": str(world["title"]),
+        "world_status": str(world["status"]),
+        "blockers": blockers,
+        "deleted_counts": deleted_counts,
+    }
+
+
+def world_deletion_eligibility(
+    world_id: str,
+    *,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        world = work.world_scenarios.get_world(context, world_id)
+        if world is None:
+            raise KeyError(f"world_not_found:{world_id}")
+        eligibility = _world_deletion_snapshot(work, context, world)
+        work.rollback()
+    return {"ok": True, "eligibility": eligibility}
+
+
+def delete_world_project(
+    world_id: str,
+    *,
+    confirmation_title: str,
+    acknowledge_permanent: bool,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    if not acknowledge_permanent:
+        raise ValueError("world_delete_acknowledgement_required")
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        world = work.world_scenarios.get_world(context, world_id, for_update=True)
+        if world is None:
+            raise KeyError(f"world_not_found:{world_id}")
+        if confirmation_title != str(world["title"]):
+            raise ValueError("world_delete_confirmation_mismatch")
+        eligibility = _world_deletion_snapshot(work, context, world)
+        if not eligibility["can_delete"]:
+            codes = ",".join(str(row["code"]) for row in eligibility["blockers"])
+            raise ValueError(f"world_delete_blocked:{world_id}:{codes}")
+
+        work.connection.execute(
+            "UPDATE omnix_rpg_world_generation_runs SET parent_run_id = NULL "
+            "WHERE workspace_id = %s AND world_id = %s",
+            (context.workspace_id, world_id),
+        )
+        work.connection.execute(
+            "DELETE FROM omnix_rpg_scenarios "
+            "WHERE workspace_id = %s AND world_id = %s",
+            (context.workspace_id, world_id),
+        )
+        audit_event_id = work.audit.append(
+            context,
+            aggregate_type="rpg_world_project",
+            aggregate_id=world_id,
+            action="permanently_deleted",
+            payload={
+                "title": str(world["title"]),
+                "status": str(world["status"]),
+                "draft_revision": int(world["draft_revision"]),
+                "deleted_counts": eligibility["deleted_counts"],
+                "decision": "explicit_typed_confirmation",
+            },
+        )
+        deleted = work.connection.execute(
+            "DELETE FROM omnix_rpg_worlds "
+            "WHERE workspace_id = %s AND id = %s RETURNING id",
+            (context.workspace_id, world_id),
+        ).fetchone()
+        if deleted is None:
+            raise KeyError(f"world_not_found:{world_id}")
+        work.commit()
+    return {
+        "ok": True,
+        "deleted": True,
+        "world_id": world_id,
+        "world_title": str(world["title"]),
+        "deleted_counts": eligibility["deleted_counts"],
+        "audit_event_id": audit_event_id,
+    }
 
 
 def archive_world_project(
