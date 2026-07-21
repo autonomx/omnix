@@ -314,8 +314,8 @@ describe('live voice unified audio controller', () => {
 
   it('aborts greeting generation and playback when the user begins speaking', async () => {
     let resolveOutput: () => void = () => undefined;
-    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {
-      resolveOutput = resolve;
+    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      resolveOutput = () => resolve(undefined);
     }));
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
     await window.fetch('/api/chat/sessions/s1/live-call/runtime');
@@ -435,8 +435,8 @@ describe('live voice unified audio controller', () => {
 
   it('aborts the active request and cancels owned output on interruption', async () => {
     let resolveOutput: () => void = () => undefined;
-    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {
-      resolveOutput = resolve;
+    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      resolveOutput = () => resolve(undefined);
     }));
     const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
