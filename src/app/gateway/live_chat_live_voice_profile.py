@@ -7,13 +7,14 @@ from functools import wraps
 from typing import Any, Iterator
 
 from app.chat.compaction import compaction_enabled
+from app.chat.context_budget import PromptBudget, prompt_budget_from_env
 from app.chat.memory_prompt import resolve_prompt_memory
 from app.chat.prompt_assembly import build_prompt_assembly
 from app.chat.prompt_rendering import render_prompt_assembly
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
-from app.chat.context_budget import PromptBudget, prompt_budget_from_env
 from app.providers.lmstudio_provider import LMStudioProvider
 
+from .live_material_context import live_material_context_items
 from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_chat_live_voice_profile_installed"
@@ -119,11 +120,13 @@ def _build_live_voice_prompt(
     )
     recent_message_limit = _live_voice_recent_message_limit()
     budget = _live_voice_prompt_budget()
+    live_material = live_material_context_items(session.id)
+    merged_context = [*(context_items or []), *live_material]
     assembly = build_prompt_assembly(
         session,
         user_message,
         global_system_prompt=shared.get_global_system_prompt(),
-        context_items=context_items or [],
+        context_items=merged_context,
         approved_memory=approved_memory,
         retrieved_history=[],
         session_summary=summary_record.summary if summary_record is not None else None,
@@ -131,6 +134,10 @@ def _build_live_voice_prompt(
         budget=budget,
     )
     assembly.diagnostics["memory"] = memory_diagnostics
+    assembly.diagnostics["live_material"] = {
+        "included": bool(live_material),
+        "item_count": len(live_material),
+    }
     assembly.diagnostics["compaction"] = (
         {
             "enabled": True,
@@ -173,6 +180,7 @@ def _build_live_voice_prompt(
         estimated_tokens=rendered.diagnostics.estimated_tokens,
         max_input_tokens=budget.max_input_tokens,
         history_recall=False,
+        live_material_item_count=len(live_material),
     )
     return assembly, rendered
 
