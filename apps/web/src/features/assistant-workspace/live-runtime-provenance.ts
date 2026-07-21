@@ -8,7 +8,7 @@ export type LiveRuntimeProvenance = {
 };
 
 function envValue(name: string): string | undefined {
-  const env = import.meta.env as Record<string, string | undefined>;
+  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
   const value = env[name]?.trim();
   return value || undefined;
 }

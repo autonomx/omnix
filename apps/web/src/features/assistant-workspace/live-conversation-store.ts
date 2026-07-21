@@ -78,6 +78,7 @@ export type LiveConversationStoreAction =
   | { type: 'transcript_partial'; text: string }
   | { type: 'transcript_final'; text: string }
   | { type: 'task_contract'; contract: LiveTaskContract }
+  | { type: 'task_contract_ack'; contextVersion: number; taskContractId: string; taskContractVersion: number }
   | { type: 'material_ack'; acceptedSequence: number; contextVersion: number }
   | { type: 'capture_activity'; activity: LiveCoordinationRuntimeState['captureActivity'] }
   | { type: 'pending_segments'; count: number }
@@ -185,6 +186,15 @@ export function reduceLiveConversationRuntimeState(
           ...state.coordination,
           taskContract: normalizeLiveTaskContract(action.contract),
           lastAction: 'task_contract_changed',
+        },
+      };
+    case 'task_contract_ack':
+      return {
+        ...state,
+        coordination: {
+          ...state.coordination,
+          contextVersion: Math.max(state.coordination.contextVersion, action.contextVersion),
+          lastAction: 'task_contract_acknowledged',
         },
       };
     case 'material_ack':

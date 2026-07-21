@@ -119,7 +119,7 @@ describe('live voice websocket helpers', () => {
     const client = new StreamingSttWebSocketClient({
       url: 'ws://127.0.0.1:5201/ws/transcribe',
       webSocketCtor: TestWebSocket,
-      onFinalTranscript: (text) => finals.push(text),
+      onAcceptedFinal: async (final) => { finals.push(final.text); return { outcome: 'ignored', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: 'test', taskContractVersion: 1 }; },
     });
     const connected = client.connect();
     sockets[0].readyState = TestWebSocket.OPEN;
@@ -128,13 +128,13 @@ describe('live voice websocket helpers', () => {
     sockets[0].receive({ type: 'ready', protocol: 'segmented-v1' });
 
     sockets[0].receive({
-      type: 'result_available', segmentId: 's1', sequence: 1, resultId: 'r1', text: 'brown fox jumps',
+      type: 'result_available', sessionId: 'stt-session', captureEpoch: client.segmentState.captureEpoch, segmentId: 's1', sequence: 1, resultId: 'r1', finalizeRequestId: 'f1', startSample: 2, endSample: 4, text: 'brown fox jumps',
     });
     expect(finals).toEqual([]);
     sockets[0].receive({
-      type: 'result_available', segmentId: 's0', sequence: 0, resultId: 'r0', text: 'the brown fox',
+      type: 'result_available', sessionId: 'stt-session', captureEpoch: client.segmentState.captureEpoch, segmentId: 's0', sequence: 0, resultId: 'r0', finalizeRequestId: 'f0', startSample: 0, endSample: 2, text: 'the brown fox',
     });
-    expect(finals).toEqual(['the brown fox', 'jumps']);
+    await vi.waitFor(() => expect(finals).toEqual(['the brown fox', 'jumps']));
   });
 });
 

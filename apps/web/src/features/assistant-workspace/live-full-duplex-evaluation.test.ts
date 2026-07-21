@@ -96,6 +96,10 @@ class DeterministicMaterialClient {
     this.contextVersion = initialContextVersion;
   }
 
+  async acknowledgeTaskContract(sessionId: string, request: { task_contract_id: string; task_contract_version: number }) {
+    return { session_id: sessionId, task_contract_id: request.task_contract_id, task_contract_version: request.task_contract_version, context_version: this.contextVersion, idempotent: true };
+  }
+
   async append(sessionId: string, request: LiveMaterialAppendRequest): Promise<LiveMaterialAcknowledgement> {
     if (request.sequence !== this.acceptedSequence + 1) throw new Error('segment_sequence_gap');
     this.requests.push({ sessionId, request });

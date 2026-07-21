@@ -7,9 +7,8 @@ import {
   createObservationAnchor,
   type LiveObservation,
 } from './live-observation-coordinator';
-import { LiveSegmentSubmitInterceptor } from './live-segment-submit-interceptor';
+import { LiveSegmentStateObserver } from './live-segment-submit-interceptor';
 import {
-  LIVE_COORDINATION_SUBMIT_EVENT,
   LIVE_OBSERVATION_CANDIDATE_EVENT,
   LIVE_VOICE_INTERRUPT_EVENT,
   LiveSessionCoordinator,
@@ -72,7 +71,8 @@ describe('LiveSessionCoordinator', () => {
     const events: Event[] = [];
     const coordinator = new LiveSessionCoordinator({
       store,
-      materialClient: { append },
+      materialClient: { append, acknowledgeTaskContract: vi.fn() },
+      chatGateway: { submit: vi.fn() },
       now: () => 100,
       dispatchEvent: (event) => { events.push(event); return true; },
     });
@@ -92,7 +92,7 @@ describe('LiveSessionCoordinator', () => {
       retention: 'ephemeral_session',
       task_contract_id: 'editing',
     }));
-    expect(events.some((event) => event.type === LIVE_COORDINATION_SUBMIT_EVENT)).toBe(false);
+    expect(events.some((event) => event.type === 'live-chat-gateway-submit')).toBe(false);
     expect(events.some((event) => event.type === LIVE_OBSERVATION_CANDIDATE_EVENT)).toBe(true);
     expect(store.getState().coordination).toMatchObject({ acceptedSequence: 0, contextVersion: 1, queuedObservationCount: 1 });
   });
@@ -101,9 +101,11 @@ describe('LiveSessionCoordinator', () => {
     const store = createLiveConversationStore();
     store.dispatch({ type: 'session', sessionId: 'chat:two' });
     const events: Event[] = [];
+    const submit = vi.fn(async () => undefined);
     const coordinator = new LiveSessionCoordinator({
       store,
-      materialClient: { append: vi.fn() },
+      materialClient: { append: vi.fn(), acknowledgeTaskContract: vi.fn() },
+      chatGateway: { submit },
       now: () => 100,
       dispatchEvent: (event) => { events.push(event); return true; },
     });
@@ -113,7 +115,7 @@ describe('LiveSessionCoordinator', () => {
     await coordinator.coordinate({ text: 'mhm', segmentId: 's2', sourceSequence: 2, assistantSpeaking: true });
 
     expect(events.filter((event) => event.type === LIVE_VOICE_INTERRUPT_EVENT)).toHaveLength(2);
-    expect(events.filter((event) => event.type === LIVE_COORDINATION_SUBMIT_EVENT)).toHaveLength(1);
+    expect(submit).toHaveBeenCalledTimes(1);
   });
 
   it('versions a task instruction before later material arrives', async () => {
@@ -122,7 +124,8 @@ describe('LiveSessionCoordinator', () => {
     const events: Event[] = [];
     const coordinator = new LiveSessionCoordinator({
       store,
-      materialClient: { append: vi.fn() },
+      materialClient: { append: vi.fn(), acknowledgeTaskContract: vi.fn() },
+      chatGateway: { submit: vi.fn() },
       now: () => 100,
       dispatchEvent: (event) => { events.push(event); return true; },
     });
@@ -174,18 +177,12 @@ describe('Live observation admission', () => {
   });
 });
 
-describe('LiveSegmentSubmitInterceptor', () => {
-  it('intercepts only the next accepted voice submit and allows coordinator resubmission', () => {
-    const coordinate = vi.fn(async () => undefined);
-    const interceptor = new LiveSegmentSubmitInterceptor({ coordinate, assistantSpeaking: () => true });
-    interceptor.observePerformanceEvent({ stage: 'stt_segment_state', protocol: 'segmented-v1' });
-    interceptor.observePerformanceEvent({ stage: 'stt_final_submit_requested' });
-
-    expect(interceptor.intercept('source phrase')).toBe(true);
-    expect(coordinate).toHaveBeenCalledWith(expect.objectContaining({ text: 'source phrase', sourceSequence: 0, assistantSpeaking: true }));
-    expect(interceptor.intercept('manual message')).toBe(false);
-
-    interceptor.permitNextCoordinatedSubmit();
-    expect(interceptor.intercept('coordinated response')).toBe(false);
+describe('LiveSegmentStateObserver', () => {
+  it('observes protocol state without owning submission behavior', () => {
+    const observer = new LiveSegmentStateObserver();
+    observer.observePerformanceEvent({ stage: 'stt_segment_state', protocol: 'segmented-v1' });
+    expect(observer.protocol).toBe('segmented-v1');
+    observer.reset();
+    expect(observer.protocol).toBe('legacy');
   });
 });
