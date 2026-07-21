@@ -30,6 +30,7 @@ const STACKED_LEADING_HESITATIONS = /^(?:(?:h+m+|u+m+|uh+|erm+|er+)\b(?:\s|[.…
 const STAGE_DIRECTION_START = /^(?:(?:a|an|the)\s+)?(?:(?:soft|small|little|nervous|playful|gentle|quiet)\s+)*(?:pause|pauses|sigh|sighs|laugh|laughs|laughter|chuckle|chuckles|giggle|giggles|breath|breathes|inhale|inhales|exhale|exhales|nod|nods|smile|smiles|grin|grins|shrug|shrugs|tilt|tilts|whisper|whispers|murmur|murmurs|typing sounds?)(?:\b|$)/iu;
 const STAGE_DIRECTION_META = /\b(?:tone|sounds?\s+implied|stage\s+direction|gesture|facial\s+expression)\b/iu;
 const WRITTEN_SOUND_EFFECT = /^["“”'‘’]?(?:he+he+|ha+ha+|hm+|mm+|ugh+|ah+)[.!…]*["“”'‘’]?$/iu;
+const NON_SPEECH_EMOJI_ONLY = /^\s*(?:\p{Extended_Pictographic}|\uFE0F|\p{Emoji_Modifier}|\u200D|\p{Punctuation}|\p{Symbol})+\s*$/u;
 
 export class StableClauseAccumulator {
   private buffer = '';
@@ -116,6 +117,7 @@ export class StableClauseAccumulator {
 }
 
 export function sanitizeLiveVoiceSpokenText(text: string): string {
+  const original = text.trim();
   let cleaned = text
     .replace(EMPHASISED_PARENTHETICAL, ' ')
     .replace(PLAIN_PARENTHETICAL, (match, content: string) => (
@@ -128,12 +130,15 @@ export function sanitizeLiveVoiceSpokenText(text: string): string {
 
   cleaned = cleaned.replace(STACKED_LEADING_HESITATIONS, '');
 
-  return cleaned
+  const spokenText = cleaned
     .replace(/\s+/gu, ' ')
     .replace(/\s+([,.;:!?])/gu, '$1')
     .replace(/\s+([)\]}])/gu, '$1')
     .replace(/^[\s,;:!?…—–.-]+/u, '')
     .trim();
+
+  if (spokenText) return spokenText;
+  return NON_SPEECH_EMOJI_ONLY.test(original) ? original : '';
 }
 
 export function mergeStreamText(current: string, next: string): string {
