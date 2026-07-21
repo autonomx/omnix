@@ -54,8 +54,8 @@ export function completeAuthoringSections(sections: RpgAuthoringSection[]): RpgA
   return groups;
 }
 
-export function parseWorldEditorRoute(hash = typeof window === 'undefined' ? '' : window.location.hash): RpgWorldEditorRoute | null {
-  const query = hash.startsWith('#') ? hash.slice(1) : hash;
+export function parseWorldEditorRoute(search = typeof window === 'undefined' ? '' : window.location.search): RpgWorldEditorRoute | null {
+  const query = search.startsWith('?') ? search.slice(1) : search;
   const params = new URLSearchParams(query);
   const worldId = params.get('rpg-world')?.trim() ?? '';
   if (!worldId) return null;
@@ -66,18 +66,23 @@ export function parseWorldEditorRoute(hash = typeof window === 'undefined' ? '' 
   };
 }
 
-export function worldEditorHash(route: RpgWorldEditorRoute | null): string {
-  if (!route) return '';
-  const params = new URLSearchParams();
-  params.set('rpg-world', route.worldId);
-  params.set('section', route.sectionId || 'overview');
-  if (route.entityId) params.set('entity', route.entityId);
-  return `#${params.toString()}`;
+export function worldEditorSearch(route: RpgWorldEditorRoute | null, currentSearch = ''): string {
+  const params = new URLSearchParams(currentSearch.startsWith('?') ? currentSearch.slice(1) : currentSearch);
+  params.delete('rpg-world');
+  params.delete('section');
+  params.delete('entity');
+  if (route) {
+    params.set('rpg-world', route.worldId);
+    params.set('section', route.sectionId || 'overview');
+    if (route.entityId) params.set('entity', route.entityId);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : '';
 }
 
 export function pushWorldEditorRoute(route: RpgWorldEditorRoute | null, replace = false): void {
   if (typeof window === 'undefined') return;
-  const next = `${window.location.pathname}${window.location.search}${worldEditorHash(route)}`;
+  const next = `${window.location.pathname}${worldEditorSearch(route, window.location.search)}`;
   if (replace) window.history.replaceState(route, '', next);
   else window.history.pushState(route, '', next);
 }
