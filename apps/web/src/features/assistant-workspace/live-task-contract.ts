@@ -17,7 +17,7 @@ export type LiveTaskContract = {
   };
 };
 
-export const DEFAULT_LIVE_TASK_CONTRACT: LiveTaskContract = Object.freeze({
+export const DEFAULT_LIVE_TASK_CONTRACT: LiveTaskContract = {
   taskContractId: 'conversation',
   version: 1,
   instruction: 'Have a normal live conversation.',
@@ -29,7 +29,7 @@ export const DEFAULT_LIVE_TASK_CONTRACT: LiveTaskContract = Object.freeze({
     minorFeedback: 'defer',
     criticalFeedback: 'queue',
   },
-});
+};
 
 export type LiveTaskTransitionDecision = {
   preserveCapturedMaterial: true;
