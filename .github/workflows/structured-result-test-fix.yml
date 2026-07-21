@@ -1,0 +1,31 @@
+name: Structured result test fix
+on:
+  push:
+    branches: [agent/general-full-duplex-live]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Test structured out-of-order STT results'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/general-full-duplex-live
+      - name: Correct structured result fixture
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('apps/web/src/features/assistant-workspace/live-voice-websocket.spec.ts')
+          text = p.read_text(encoding='utf-8')
+          old = """    sockets[0].receive({ type: 'ready', protocol: 'segmented-v1' });\n\n    sockets[0].receive({\n      type: 'result_available', sessionId: 'stt-session', captureEpoch: client.segmentState.captureEpoch, segmentId: 's1', sequence: 1, resultId: 'r1', finalizeRequestId: 'f1', startSample: 2, endSample: 4, text: 'brown fox jumps',\n    });\n    expect(finals).toEqual([]);\n    sockets[0].receive({\n      type: 'result_available', sessionId: 'stt-session', captureEpoch: client.segmentState.captureEpoch, segmentId: 's0', sequence: 0, resultId: 'r0', finalizeRequestId: 'f0', startSample: 0, endSample: 2, text: 'the brown fox',\n    });\n    await vi.waitFor(() => expect(finals).toEqual(['the brown fox', 'jumps']));"""
+          new = """    sockets[0].receive({ type: 'ready', protocol: 'segmented-v1' });\n\n    client.sendAudio(new Float32Array([0.1, 0.2]), 16_000);\n    client.sendFinal();\n    client.sendAudio(new Float32Array([0.3, 0.4]), 16_000);\n    client.sendFinal();\n    const finalizes = sockets[0].sentJson().filter((message) => message.type === 'finalize');\n    expect(finalizes).toHaveLength(2);\n    const first = finalizes[0];\n    const second = finalizes[1];\n\n    sockets[0].receive({\n      type: 'result_available', sessionId: client.segmentState.sessionId, captureEpoch: client.segmentState.captureEpoch, segmentId: second.segmentId, sequence: second.sequence, resultId: 'r1', finalizeRequestId: second.finalizeRequestId, startSample: second.primaryStartSample, endSample: second.endSample, text: 'brown fox jumps',\n    });\n    expect(finals).toEqual([]);\n    sockets[0].receive({\n      type: 'result_available', sessionId: client.segmentState.sessionId, captureEpoch: client.segmentState.captureEpoch, segmentId: first.segmentId, sequence: first.sequence, resultId: 'r0', finalizeRequestId: first.finalizeRequestId, startSample: first.primaryStartSample, endSample: first.endSample, text: 'the brown fox',\n    });\n    await vi.waitFor(() => expect(finals).toEqual(['the brown fox', 'jumps']));"""
+          if old not in text: raise SystemExit('fixture pattern missing')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/web/src/features/assistant-workspace/live-voice-websocket.spec.ts
+          git commit -m 'Test structured out-of-order STT results'
+          git push origin HEAD:agent/general-full-duplex-live
