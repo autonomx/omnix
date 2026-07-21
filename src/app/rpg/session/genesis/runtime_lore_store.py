@@ -120,7 +120,7 @@ def ensure_turn_scene_lore(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Materialize missing location and encountered-entity canon for this turn.
 
-    PostgreSQL remains preferred authority. If it is unavailable, the same generated
+    PostgreSQL remains preferred authority. If it is unavailable, deterministic
     canon is written to the portable session projection and used immediately. The
     function fails closed only when neither authority can provide complete dossiers.
     """
@@ -218,13 +218,14 @@ def ensure_turn_scene_lore(
             "target_entity_ids": [target.entity_id for target in targets],
         }
     except Exception as database_error:
+        fallback_gateway = llm_gateway if llm_gateway is not None else False
         bible, report = materialize_scene_lore(
             portable,
             session,
             result,
             campaign_id=campaign_id,
             explicit_entity_ids=explicit_entity_ids,
-            llm_gateway=llm_gateway,
+            llm_gateway=fallback_gateway,
         )
         target_ids = _assert_materialized(
             bible,
