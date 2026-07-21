@@ -8,9 +8,15 @@ import type {
 } from '../../api/rpgWorldAuthoringClient';
 import { rpgWorldImageClient } from '../../api/rpgWorldImageClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+import {
+  documentAnchors,
+  isChronicleSection,
+  presentLoreBlocks,
+} from './RpgWorldCompletionModels';
 import { RpgWorldDocumentBlock } from './RpgWorldDocumentBlocks';
 import { RpgWorldEntityCard } from './RpgWorldEntityCard';
 import { RpgWorldEntityDetail } from './RpgWorldEntityDetail';
+import { RpgWorldOverviewDashboard } from './RpgWorldOverviewDashboard';
 import { RpgWorldTopicEditor } from './RpgWorldTopicEditor';
 import './RpgWorldAuthoringPage.css';
 
@@ -18,9 +24,13 @@ interface RpgWorldAuthoringPageProps {
   error?: string;
   isLoading: boolean;
   isSaving: boolean;
+  onOpenSection?: (sectionId: string) => void;
   onSaveWorld: (changes: Record<string, unknown>) => void;
+  onSelectEntity?: (entityId: string | null) => void;
   page?: RpgAuthoringPage;
   section: RpgAuthoringSection;
+  sections?: RpgAuthoringSection[];
+  selectedEntityId?: string | null;
   world: RpgWorldSummary;
   worldId: string;
 }
@@ -40,13 +50,8 @@ function meaningful(value: unknown): boolean {
   return true;
 }
 
-function slug(value: string, fallback: string): string {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  return normalized || fallback;
-}
-
-function isChronicle(sectionId: string): boolean {
-  return ['history', 'calendar', 'calendar_and_eras', 'current_conflicts'].includes(sectionId);
+function assetUrl(assetId: string): string {
+  return `/api/assets/${encodeURIComponent(assetId)}/file`;
 }
 
 function relatedEntityCards(page: RpgAuthoringDocumentPage): RpgAuthoringEntityCard[] {
@@ -115,9 +120,13 @@ export function RpgWorldAuthoringPage({
   error,
   isLoading,
   isSaving,
+  onOpenSection,
   onSaveWorld,
+  onSelectEntity,
   page,
   section,
+  sections = [],
+  selectedEntityId: controlledSelectedEntityId,
   world,
   worldId,
 }: RpgWorldAuthoringPageProps) {
@@ -130,18 +139,26 @@ export function RpgWorldAuthoringPage({
   const [collectionSearch, setCollectionSearch] = useState('');
   const [collectionKind, setCollectionKind] = useState('all');
   const [collectionSort, setCollectionSort] = useState('name');
-  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [localSelectedEntityId, setLocalSelectedEntityId] = useState<string | null>(null);
+  const selectedEntityId = controlledSelectedEntityId === undefined ? localSelectedEntityId : controlledSelectedEntityId;
+  const setSelectedEntityId = (value: string | null) => {
+    if (onSelectEntity) onSelectEntity(value);
+    else setLocalSelectedEntityId(value);
+  };
   const imagesQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-image-targets', worldId],
     queryFn: () => rpgWorldImageClient.list(worldId),
     enabled: Boolean(page) && section.id !== 'images',
     staleTime: 10_000,
   });
+  const approvedTargets = (imagesQuery.data?.targets ?? [])
+    .filter((target) => target.review_state === 'approved' && target.active_asset_id);
   const approvedAssets = useMemo(() => new Map(
-    (imagesQuery.data?.targets ?? [])
-      .filter((target) => target.review_state === 'approved' && target.active_asset_id)
-      .map((target) => [target.entity_id, String(target.active_asset_id)]),
-  ), [imagesQuery.data?.targets]);
+    approvedTargets.map((target) => [target.entity_id, String(target.active_asset_id)]),
+  ), [approvedTargets]);
+  const bannerAssetId = approvedTargets.find((target) => target.role === 'banner')?.active_asset_id
+    ?? approvedTargets.find((target) => target.role === 'cover')?.active_asset_id
+    ?? undefined;
   const collectionEntities = page?.page_kind === 'collection' ? page.entities : [];
   const documentEntities = page?.page_kind === 'document' ? relatedEntityCards(page) : [];
   const allPageEntities = page?.page_kind === 'collection' ? collectionEntities : documentEntities;
@@ -177,12 +194,12 @@ export function RpgWorldAuthoringPage({
     setCollectionSearch('');
     setCollectionKind('all');
     setCollectionSort('name');
-    setSelectedEntityId(null);
-  }, [section.id]);
+    if (controlledSelectedEntityId === undefined) setLocalSelectedEntityId(null);
+  }, [controlledSelectedEntityId, section.id]);
 
   useEffect(() => {
-    if (selectedEntityId && !selectedEntity) setSelectedEntityId(null);
-  }, [selectedEntity, selectedEntityId]);
+    if (selectedEntityId && page && !selectedEntity) setSelectedEntityId(null);
+  }, [page, selectedEntity, selectedEntityId]);
 
   if (isLoading) return <section className="rpg-authoring-page"><h2>{section.label}</h2><p>Loading world content…</p></section>;
   if (error) return <section className="rpg-authoring-page"><h2>{section.label}</h2><p className="rpg-world-catalog-error">{error}</p></section>;
@@ -209,7 +226,20 @@ export function RpgWorldAuthoringPage({
   }
 
   if (!page) {
-    return <section className="rpg-authoring-page"><h2>{section.label}</h2><div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This section will populate as world generation completes.</p></div></section>;
+    return <section className="rpg-authoring-page"><h2>{section.label}</h2><div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This canonical section is available in the authoring roadmap and will populate when it is generated.</p></div></section>;
+  }
+
+  if (section.id === 'overview' && page.page_kind === 'document') {
+    return (
+      <RpgWorldOverviewDashboard
+        bannerAssetId={bannerAssetId ? String(bannerAssetId) : undefined}
+        onEdit={() => setIsEditingOverview(true)}
+        onOpenSection={onOpenSection}
+        page={page}
+        sections={sections}
+        world={world}
+      />
+    );
   }
 
   if (page.page_kind === 'collection') {
@@ -245,37 +275,39 @@ export function RpgWorldAuthoringPage({
         </div>
         {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
         {selectedEntity ? (
-          <RpgWorldEntityDetail
-            entity={selectedEntity}
-            imageAssetId={approvedAssets.get(selectedEntity.id)}
-            onClose={() => setSelectedEntityId(null)}
-            topic={page.topic}
-            worldId={worldId}
-          />
+          <div className="rpg-authoring-entity-detail-route">
+            <RpgWorldEntityDetail
+              entity={selectedEntity}
+              imageAssetId={approvedAssets.get(selectedEntity.id)}
+              onClose={() => setSelectedEntityId(null)}
+              topic={page.topic}
+              worldId={worldId}
+            />
+          </div>
         ) : null}
       </section>
     );
   }
 
-  const toc = page.body.map((block, index) => ({
-    id: slug(block.title || `${block.kind}-${index + 1}`, `section-${index + 1}`),
-    label: block.title || humanize(block.kind),
-  }));
-  const chronicle = isChronicle(section.id);
+  const blocks = presentLoreBlocks(section.id, page.body);
+  const toc = documentAnchors(blocks);
+  const chronicle = isChronicleSection(section.id);
+  const heroStyle = bannerAssetId ? {
+    backgroundImage: `linear-gradient(180deg, rgba(3, 6, 18, 0.12), rgba(3, 6, 18, 0.9)), url(${JSON.stringify(assetUrl(String(bannerAssetId)))})`,
+  } : undefined;
 
   return (
     <section className="rpg-authoring-page">
       <div className="rpg-authoring-page-heading">
         <div><p className="eyebrow">{section.group}</p><h2>{page.title || section.label}</h2></div>
-        {section.id === 'overview' ? <button className="rpg-secondary-button" type="button" onClick={() => setIsEditingOverview(true)}>Edit</button> : null}
       </div>
       <div className={`rpg-authoring-document-shell${chronicle ? ' is-chronicle' : ''}`}>
         <article className="rpg-authoring-document-stream">
-          <div className="rpg-authoring-document-hero">
+          <div className={`rpg-authoring-document-hero${bannerAssetId ? ' has-image' : ''}`} style={heroStyle}>
             <p>{page.summary || `${section.label} is presented as a readable, vertically scrolling lore document.`}</p>
           </div>
-          {page.body.length ? page.body.map((block, index) => (
-            <div id={toc[index].id} key={`${block.kind}:${index}`}>
+          {blocks.length ? blocks.map((block, index) => (
+            <div id={toc[index].id} key={`${toc[index].id}:${index}`}>
               <RpgWorldDocumentBlock block={block} />
             </div>
           )) : <div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This section will populate as world generation completes.</p></div>}
@@ -306,13 +338,15 @@ export function RpgWorldAuthoringPage({
         ) : null}
       </div>
       {selectedEntity ? (
-        <RpgWorldEntityDetail
-          entity={selectedEntity}
-          imageAssetId={approvedAssets.get(selectedEntity.id)}
-          onClose={() => setSelectedEntityId(null)}
-          topic={page.topic}
-          worldId={worldId}
-        />
+        <div className="rpg-authoring-entity-detail-route">
+          <RpgWorldEntityDetail
+            entity={selectedEntity}
+            imageAssetId={approvedAssets.get(selectedEntity.id)}
+            onClose={() => setSelectedEntityId(null)}
+            topic={page.topic}
+            worldId={worldId}
+          />
+        </div>
       ) : null}
     </section>
   );
