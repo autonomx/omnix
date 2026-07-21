@@ -50,6 +50,9 @@ describe('RpgWorldGenerationPanel failed-topic retry guards', () => {
         ok: true,
         worker_started: true,
         run: run('running'),
+        retry_of_run_id: 'run:failed',
+        diagnostic_id: 'world-generation-retry-test',
+        diagnostic_log: 'resources\\logs\\rpg\\world-generation-2026-07-21.jsonl',
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -68,7 +71,7 @@ describe('RpgWorldGenerationPanel failed-topic retry guards', () => {
     expect(screen.getByText(/Failed-topic retry becomes available/)).toBeInTheDocument();
   });
 
-  it('enables retry only for terminally failed topics and sends failed scope', async () => {
+  it('retries the exact failed run instead of rebuilding a failed scope from UI defaults', async () => {
     renderPanel(run('failed', ['points_of_interest']));
 
     const retry = screen.getByRole('button', { name: 'Retry Failed (1)' });
@@ -76,8 +79,15 @@ describe('RpgWorldGenerationPanel failed-topic retry guards', () => {
     fireEvent.click(retry);
 
     await waitFor(() => expect(requests).toHaveLength(1));
-    expect(JSON.parse(String(requests[0].init?.body))).toMatchObject({
-      scope: { mode: 'failed' },
-    });
+    expect(requests[0].url).toBe('/api/rpg/world-generation/run%3Afailed/retry-failed');
+    expect(JSON.parse(String(requests[0].init?.body))).toEqual({});
+    expect(await screen.findByText(/diagnostic world-generation-retry-test/)).toBeInTheDocument();
+    expect(screen.getByText(/world-generation-2026-07-21\.jsonl/)).toBeInTheDocument();
+  });
+
+  it('explains that the compact log omits generated content', () => {
+    renderPanel(run('failed', ['points_of_interest']));
+
+    expect(screen.getByText(/Prompts, completions, and generated world content are omitted/)).toBeInTheDocument();
   });
 });
