@@ -122,6 +122,8 @@ beforeEach(() => {
   mocks.session.enqueueOutputPhrase.mockReset().mockResolvedValue(undefined);
   mocks.session.enqueueSilence.mockReset().mockResolvedValue(undefined);
   mocks.session.enqueueCue.mockReset().mockResolvedValue(undefined);
+  mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);
+  mocks.session.waitForOutputItem.mockReset().mockResolvedValue(undefined);
   mocks.session.setStartPolicy.mockReset();
   mocks.session.finish.mockReset().mockResolvedValue(undefined);
   mocks.session.stop.mockReset().mockResolvedValue(undefined);
@@ -137,9 +139,13 @@ beforeEach(() => {
   cleanup = initializeLiveVoiceUnifiedAudioController();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  const hadSharedSession = mocks.createSession.mock.calls.length > 0;
   cleanup?.();
   cleanup = null;
+  if (hadSharedSession) {
+    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalled());
+  }
   document.body.innerHTML = '';
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -284,6 +290,7 @@ describe('live voice unified audio controller', () => {
     await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(
       'Hey there! How is your day going?',
       0,
+      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),
       {},
     ));
     expect(mocks.recordSpy).toHaveBeenCalledWith(
@@ -306,6 +313,10 @@ describe('live voice unified audio controller', () => {
   });
 
   it('aborts greeting generation and playback when the user begins speaking', async () => {
+    let resolveOutput: () => void = () => undefined;
+    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveOutput = resolve;
+    }));
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
     await window.fetch('/api/chat/sessions/s1/live-call/runtime');
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
@@ -326,6 +337,7 @@ describe('live voice unified audio controller', () => {
     ));
     expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBeUndefined();
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
+    resolveOutput();
   });
 
   it('uses the authoritative live-call voice instead of the chat voice setting', async () => {
@@ -373,7 +385,7 @@ describe('live voice unified audio controller', () => {
       expect.objectContaining({ voice_turn_id: 'voice-turn:12345', turn_kind: 'response' }),
       'controller',
     );
-    expect(mocks.createTraceId).not.toHaveBeenCalled();
+    expect(mocks.createTraceId).toHaveBeenCalledWith('s1:audio-session');
   });
 
   it('skips non-speech-only trailing chunks without stopping the turn', async () => {
@@ -421,7 +433,11 @@ describe('live voice unified audio controller', () => {
     expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'GET' })).toBe(false);
   });
 
-  it('aborts the active request and stops the persistent session on interruption', async () => {
+  it('aborts the active request and cancels owned output on interruption', async () => {
+    let resolveOutput: () => void = () => undefined;
+    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveOutput = resolve;
+    }));
     const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
     await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalled());
@@ -444,5 +460,6 @@ describe('live voice unified audio controller', () => {
       expect.objectContaining({ reason: 'voice-interrupt', assistant_turn_id: 'assistant-turn:t1', turn_kind: 'response' }),
     ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
+    resolveOutput();
   });
 });
