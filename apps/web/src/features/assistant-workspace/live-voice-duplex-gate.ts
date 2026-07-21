@@ -67,6 +67,9 @@ export function shouldMuteLiveMic(
 
 export function initializeLiveVoiceDuplexGate(): () => void {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return () => undefined;
+  const liveWindow = window as Window & typeof globalThis & { __omnixLiveVoiceDuplexGateInstalled?: boolean };
+  if (liveWindow.__omnixLiveVoiceDuplexGateInstalled) return () => undefined;
+  liveWindow.__omnixLiveVoiceDuplexGateInstalled = true;
   const mediaDevices = navigator.mediaDevices;
   if (!mediaDevices?.getUserMedia) return () => undefined;
 
@@ -216,6 +219,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     for (const tap of microphoneTaps.values()) void tap.close();
     microphoneTaps.clear();
     trackedStreams.clear();
+    liveWindow.__omnixLiveVoiceDuplexGateInstalled = false;
   };
 }
 

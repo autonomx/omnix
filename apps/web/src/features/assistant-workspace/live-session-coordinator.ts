@@ -252,7 +252,10 @@ let initialized = false;
 
 export function initializeLiveSessionCoordinator(): void {
   if (initialized || typeof window === 'undefined') return;
+  const liveWindow = window as Window & typeof globalThis & { __omnixLiveSessionCoordinatorInstalled?: boolean };
+  if (liveWindow.__omnixLiveSessionCoordinatorInstalled) return;
   initialized = true;
+  liveWindow.__omnixLiveSessionCoordinatorInstalled = true;
   window.addEventListener(LIVE_COORDINATION_SUBMIT_EVENT, (event) => {
     const detail = (event as CustomEvent<{ text?: string }>).detail;
     const text = detail?.text?.trim();

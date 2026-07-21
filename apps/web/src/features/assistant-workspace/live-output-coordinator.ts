@@ -296,7 +296,10 @@ let initialized = false;
 
 export function initializeLiveOutputCoordinator(): void {
   if (initialized || typeof window === 'undefined') return;
+  const liveWindow = window as Window & typeof globalThis & { __omnixLiveOutputCoordinatorInstalled?: boolean };
+  if (liveWindow.__omnixLiveOutputCoordinatorInstalled) return;
   initialized = true;
+  liveWindow.__omnixLiveOutputCoordinatorInstalled = true;
   window.addEventListener(LIVE_OBSERVATION_CANDIDATE_EVENT, (event) => {
     const detail = (event as CustomEvent<LiveObservationCandidateDetail>).detail;
     if (detail?.observation) void liveOutputCoordinator.handleObservationCandidate(detail);

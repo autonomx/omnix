@@ -80,8 +80,10 @@ const liveVoiceWorkletContexts = new WeakSet<AudioContext>();
 
 export function initializeLiveVoiceController(root: ParentNode = document): void {
   if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return;
+  const liveWindow = window as LiveVoiceWindow;
+  if (liveWindow.__omnixLiveVoiceControllerInstalled) return;
   initialized = true;
-  (window as LiveVoiceWindow).__omnixLiveVoiceControllerInstalled = true;
+  liveWindow.__omnixLiveVoiceControllerInstalled = true;
   prepareCards(root);
   document.addEventListener('click', handleDocumentClick, true);
   window.addEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
