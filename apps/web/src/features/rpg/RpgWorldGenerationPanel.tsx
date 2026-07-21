@@ -20,6 +20,12 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    : [];
+}
+
 function statusLabel(value: string): string {
   return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -53,6 +59,9 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
   );
   const currentRun = generation && 'run_id' in generation ? generation as RpgWorldGenerationRun : undefined;
   const progress = record(currentRun?.progress);
+  const failedTopicIds = stringArray(progress.failed_topic_ids);
+  const generationBusy = currentRun?.status === 'running' || currentRun?.status === 'planned';
+  const canRetryFailed = !generationBusy && failedTopicIds.length > 0;
 
   const refresh = async () => {
     await Promise.all([
@@ -109,6 +118,14 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
   });
 
   const start = (mode: string) => {
+    if (generationBusy) {
+      setFeedback('World generation is still running. Wait for it to finish before starting another scope.');
+      return;
+    }
+    if (mode === 'failed' && !failedTopicIds.length) {
+      setFeedback('No failed topics are available to retry.');
+      return;
+    }
     const scope = mode === 'selected'
       ? { mode, topic_ids: selected }
       : { mode };
@@ -152,14 +169,23 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
       </details>
 
       <div className="rpg-generation-actions">
-        <button type="button" disabled={generate.isPending} onClick={() => start('full')}>Generate World</button>
-        <button type="button" disabled={generate.isPending || !selected.length} onClick={() => start('selected')}>Generate Selected</button>
-        <button className="rpg-secondary-button" type="button" disabled={generate.isPending} onClick={() => start('stale')}>Regenerate Stale</button>
-        <button className="rpg-secondary-button" type="button" disabled={generate.isPending} onClick={() => start('failed')}>Retry Failed</button>
+        <button type="button" disabled={generate.isPending || generationBusy} onClick={() => start('full')}>Generate World</button>
+        <button type="button" disabled={generate.isPending || generationBusy || !selected.length} onClick={() => start('selected')}>Generate Selected</button>
+        <button className="rpg-secondary-button" type="button" disabled={generate.isPending || generationBusy} onClick={() => start('stale')}>Regenerate Stale</button>
+        <button
+          className="rpg-secondary-button"
+          type="button"
+          disabled={generate.isPending || !canRetryFailed}
+          title={canRetryFailed ? `Retry ${failedTopicIds.length} failed topic(s)` : 'No terminally failed topics are available'}
+          onClick={() => start('failed')}
+        >
+          Retry Failed{failedTopicIds.length ? ` (${failedTopicIds.length})` : ''}
+        </button>
         <button type="button" disabled={publish.isPending || currentRun?.status !== 'review'} onClick={() => publish.mutate()}>{publish.isPending ? 'Publishing…' : 'Publish World'}</button>
         {onOpenImages ? <button className="rpg-secondary-button" type="button" onClick={onOpenImages}>Generate Images</button> : null}
       </div>
-      {currentRun && currentRun.status !== 'review' ? <small>Publishing becomes available when generation reaches Review.</small> : null}
+      {generationBusy ? <small>Generation is running. Failed-topic retry becomes available only after a topic exhausts its automatic attempts.</small> : null}
+      {currentRun && currentRun.status !== 'review' && !generationBusy ? <small>Publishing becomes available when generation reaches Review.</small> : null}
       {feedback ? <p className="rpg-authoring-feedback" aria-live="polite">{feedback}</p> : null}
 
       <div className="rpg-generation-topic-grid">
