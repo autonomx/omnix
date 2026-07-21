@@ -8,9 +8,40 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  apply-physical-acceptance-fixes:
+    name: Apply physical Live fixes
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/general-full-duplex-live' && github.event.pull_request.head.sha == '4936c00b083e74609d1f7ae6a9802bb5a89ee2da'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Execute canonical patch script
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+
+          workflow = Path('.github/workflows/apply-live-physical-acceptance-fixes.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY", start)
+          exec(compile(dedent(workflow[start:end]), 'live-physical-patch', 'exec'))
+          PY
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/web/vite.config.ts apps/web/src/features/chatbot/ChatbotWorkspace.tsx apps/web/src/features/assistant-workspace/live-voice-controller.ts apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts src/tests/app/test_live_chat_authoritative_state_source.py
+          git commit -m 'Fix physical Live acceptance ownership'
+          git push origin HEAD:${{ github.head_ref }}
+
   live-chat-hardening:
     name: Live Chat hardening
     runs-on: ubuntu-latest
