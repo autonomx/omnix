@@ -10,6 +10,7 @@ import {
   parseWorldEditorRoute,
   pushWorldEditorRoute,
 } from './RpgWorldCompletionModels';
+import { RpgWorldDeleteDialog } from './RpgWorldDeleteDialog';
 import { RpgWorldEditorShell } from './RpgWorldEditorShell';
 import './RpgWorldAuthoringWorkspace.css';
 
@@ -47,6 +48,7 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
+  const [pendingDeleteWorld, setPendingDeleteWorld] = useState<RpgWorldSummary | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [genre, setGenre] = useState('classic_fantasy');
@@ -145,7 +147,13 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
                 world={world}
                 facts={<><span>{worldState(world)}</span><span>{scenarioCount} opening{scenarioCount === 1 ? '' : 's'}</span><span>{campaignCount} campaign{campaignCount === 1 ? '' : 's'}</span></>}
                 actions={<><button className="rpg-secondary-button" type="button" onClick={() => openEditor(world.id)}>Edit</button><button type="button" onClick={() => { pushWorldEditorRoute(null); setView({ kind: 'campaignSetup', worldId: world.id }); }}>Play</button></>}
-                footer={<details className="rpg-world-card-more"><summary>More</summary><button className="rpg-secondary-button" type="button" onClick={() => lifecycle.mutate(world)}>{world.status === 'archived' ? 'Restore' : 'Archive'}</button></details>}
+                footer={(
+                  <details className="rpg-world-card-more">
+                    <summary>More</summary>
+                    <button className="rpg-secondary-button" type="button" onClick={() => lifecycle.mutate(world)}>{world.status === 'archived' ? 'Restore' : 'Archive'}</button>
+                    <button className="rpg-danger-button" type="button" onClick={() => setPendingDeleteWorld(world)}>Delete world</button>
+                  </details>
+                )}
               />
             );
           })}
@@ -163,6 +171,17 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
               <div><button className="rpg-secondary-button" type="button" onClick={() => setShowCreate(false)}>Cancel</button><button type="submit" disabled={createWorld.isPending}>Create World</button></div>
             </form>
           </div>
+        ) : null}
+        {pendingDeleteWorld ? (
+          <RpgWorldDeleteDialog
+            world={pendingDeleteWorld}
+            onCancel={() => setPendingDeleteWorld(null)}
+            onDeleted={(result) => {
+              setPendingDeleteWorld(null);
+              setFeedback(`Deleted ${result.world_title}.`);
+              void refresh();
+            }}
+          />
         ) : null}
       </section>
     );
