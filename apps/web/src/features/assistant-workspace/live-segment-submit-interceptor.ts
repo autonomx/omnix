@@ -29,11 +29,11 @@ export class LiveSegmentSubmitInterceptor {
       this.segmentedActive = detail.protocol === 'segmented-v1';
       return;
     }
-    if (detail.stage === 'stt_final_received') {
+    if (detail.stage === 'stt_final_submit_requested') {
       // Semantic routing must not depend on protocol negotiation. A stale or
-      // compatibility STT process may use the legacy wire format, but its Live
-      // finals still represent voice input and must not silently become ordinary
-      // composer turns that supersede active translation output.
+      // compatibility STT process may use the legacy wire format, but a Live
+      // final that is actually being submitted must not silently become an
+      // ordinary composer turn that supersedes active translation output.
       this.pendingVoiceFinal = true;
     }
   }
