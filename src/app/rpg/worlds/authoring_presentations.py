@@ -1,7 +1,9 @@
-"""Stable page and card presentation schemas for reusable-world authoring."""
+"""Stable page, card, and rich dossier schemas for reusable-world authoring."""
 from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
+
+from app.rpg.session.genesis.world_forge_dossiers import project_entity_dossier
 
 SYSTEM_SECTIONS: tuple[dict[str, Any], ...] = (
     {"id": "overview", "label": "Overview", "group": "workspace", "page_kind": "document"},
@@ -301,6 +303,7 @@ def _linked_summary(content: Mapping[str, Any], entity_id: str) -> str:
 
 def _summary(row: Mapping[str, Any], card_type: str, content: Mapping[str, Any], entity_id: str) -> str:
     candidates = (
+        "short_summary",
         "summary",
         "description",
         "role",
@@ -359,10 +362,21 @@ def entity_card(
 ) -> dict[str, Any]:
     entity_id = _identity(row, card_type, index)
     source = dict(row)
+    canon = dict(content or {})
+    short_summary, dossier = project_entity_dossier(
+        source,
+        card_type=card_type,
+        content=canon,
+        entity_id=entity_id,
+    )
+    if short_summary == "No overview has been written yet.":
+        short_summary = _summary(source, card_type, canon, entity_id)
     return {
         "id": entity_id,
         "title": _title(source, entity_id, card_type),
-        "summary": _summary(source, card_type, dict(content or {}), entity_id),
+        "summary": short_summary,
+        "short_summary": short_summary,
+        "dossier": dossier,
         "kind": kind,
         "card_type": card_type,
         "image_target_id": f"{kind}:{entity_id}",
