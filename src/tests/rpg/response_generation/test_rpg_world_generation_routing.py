@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig
+from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
 from app.rpg_world_forge_provider import ProviderWorldForgeTopicGenerator
 from app.rpg.worlds import generation_routing
@@ -26,6 +29,19 @@ class _Provider(BaseProvider):
 
     def test_connection(self) -> bool:
         return True
+
+
+def _node() -> CampaignTopicNode:
+    return CampaignTopicNode(
+        topic_id="realm",
+        title="Realm",
+        category="lore",
+        dependencies=(),
+        generator_role="world_forge",
+        required_before_launch=True,
+        visibility="public",
+        target_count=1,
+    )
 
 
 def test_configured_route_resolves_once_from_settings(monkeypatch) -> None:
@@ -93,9 +109,10 @@ def test_unresolved_job_route_fails_closed() -> None:
         {"provider_route": "configured", "model": "configured"}
     )
 
-    try:
-        generator.generate(None)  # type: ignore[arg-type]
-    except RuntimeError as exc:
-        assert "unresolved provider route" in str(exc)
-    else:
-        raise AssertionError("unresolved durable routes must fail closed")
+    with pytest.raises(RuntimeError, match="unresolved provider route"):
+        generator.generate(
+            _node(),
+            seed=1,
+            campaign_context={},
+            dependency_topics={},
+        )
