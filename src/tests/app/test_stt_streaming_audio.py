@@ -6,7 +6,11 @@ from array import array
 
 import pytest
 
-from app.providers.stt_live_websocket import SegmentBuffer
+from app.providers.stt_live_websocket import (
+    MAX_REPLAY_RESULTS,
+    SegmentBuffer,
+    SegmentSessionState,
+)
 from app.providers.stt_segment_scheduler import (
     ProviderSegmentScheduler,
     SegmentQueueFullError,
@@ -86,6 +90,34 @@ def test_segment_buffer_has_exact_primary_sample_accounting() -> None:
         segment.append(108, _pcm([7]))
     with pytest.raises(ValueError, match="audio_frame_partial_sample"):
         segment.append(106, b"\x00")
+
+
+def test_completed_segment_buffers_are_released_and_replay_results_are_bounded() -> None:
+    state = SegmentSessionState(session_id="stt:test")
+
+    for sequence in range(MAX_REPLAY_RESULTS + 5):
+        segment_id = f"segment-{sequence}"
+        state.segments[segment_id] = SegmentBuffer(
+            segment_id=segment_id,
+            sequence=sequence,
+            capture_start_sample=sequence * 100,
+            primary_start_sample=sequence * 100,
+        )
+        state.remember_result(
+            {
+                "type": "result_available",
+                "sequence": sequence,
+                "segmentId": segment_id,
+                "resultId": f"result-{sequence}",
+            }
+        )
+        state.release_segment(segment_id)
+
+    assert state.segments == {}
+    assert state.inflight == {}
+    assert len(state.results) == MAX_REPLAY_RESULTS
+    assert min(state.results) == 5
+    assert max(state.results) == MAX_REPLAY_RESULTS + 4
 
 
 def test_provider_scheduler_serializes_inference_and_bounds_sessions() -> None:
