@@ -14,6 +14,9 @@ from app.rpg.worlds.dossier_quality_service import (
     enrich_world_dossiers,
     world_dossier_quality,
 )
+from app.rpg.worlds.dossier_regeneration_preview import (
+    preview_world_entity_dossier_regeneration,
+)
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_dossier_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_dossier_route_hook_installed"
@@ -128,6 +131,38 @@ def register_rpg_world_dossier_routes(app: FastAPI) -> None:
                 expected_content_hash=content_hash,
                 short_summary=str(payload.get("short_summary") or ""),
                 dossier=dossier,
+            )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}/regenerate-dossier-preview",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    async def rpg_preview_world_entity_dossier_regeneration(
+        world_id: str,
+        topic_id: str,
+        entity_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        revision, content_hash = _expected(payload)
+        directives = payload.get("directives")
+        if directives is not None and not isinstance(directives, Mapping):
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "entity_directives_must_be_object"},
+            )
+        try:
+            return preview_world_entity_dossier_regeneration(
+                world_id,
+                topic_id,
+                entity_id,
+                expected_draft_revision=revision,
+                expected_content_hash=content_hash,
+                directives=dict(directives or {}),
             )
         except Exception as exc:
             _raise_domain_error(exc)
