@@ -177,20 +177,46 @@ def enrich_fallback_dossier(
             for value in section.get("paragraphs") or ()
             if str(value).strip()
         ]
-        paragraphs = [paragraph for paragraph in existing if len(_WORD.findall(paragraph)) >= 24]
-        paragraph_target = 2 if target_per_section >= 80 else 1
-        each_words = max(45, (target_per_section + paragraph_target - 1) // paragraph_target)
-        while len(paragraphs) < paragraph_target:
-            paragraphs.append(
-                _paragraph(
+        paragraphs: list[str] = []
+        seen: set[str] = set()
+        for paragraph in existing:
+            normalized_paragraph = " ".join(paragraph.casefold().split())
+            if len(_WORD.findall(paragraph)) < 24 or normalized_paragraph in seen:
+                continue
+            seen.add(normalized_paragraph)
+            paragraphs.append(paragraph)
+            if len(paragraphs) == 3:
+                break
+        section_words = sum(len(_WORD.findall(paragraph)) for paragraph in paragraphs)
+        while section_words < target_per_section and len(paragraphs) < 3:
+            remaining_words = target_per_section - section_words
+            remaining_slots = 3 - len(paragraphs)
+            target_words = max(
+                45,
+                (remaining_words + remaining_slots - 1) // remaining_slots,
+            )
+            paragraph = _paragraph(
+                name=name,
+                title=title,
+                seed=seed,
+                topic_id=topic_id,
+                index=section_index * 3 + len(paragraphs),
+                target_words=target_words,
+            )
+            normalized_paragraph = " ".join(paragraph.casefold().split())
+            if normalized_paragraph in seen:
+                paragraph = _paragraph(
                     name=name,
-                    title=title,
+                    title=f"{title} in practice",
                     seed=seed,
                     topic_id=topic_id,
-                    index=section_index + len(paragraphs),
-                    target_words=each_words,
+                    index=section_index * 3 + len(paragraphs) + 1,
+                    target_words=target_words,
                 )
-            )
+                normalized_paragraph = " ".join(paragraph.casefold().split())
+            seen.add(normalized_paragraph)
+            paragraphs.append(paragraph)
+            section_words += len(_WORD.findall(paragraph))
         normalized.append(
             {
                 "id": str(section.get("id") or f"section-{section_index + 1}"),
