@@ -1,6 +1,6 @@
 .rpg-authoring-collection-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto auto;
   gap: 0.7rem;
   margin-bottom: 1rem;
   padding: 0.8rem;
@@ -24,8 +24,73 @@
   color: var(--omnix-muted, #a7a4b8);
 }
 
+.rpg-authoring-collection-view-toggle {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid rgba(168, 139, 250, 0.24);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.6);
+}
+
+.rpg-authoring-collection-view-toggle button {
+  min-width: 58px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.rpg-authoring-collection-view-toggle button + button {
+  border-left: 1px solid rgba(168, 139, 250, 0.2);
+}
+
+.rpg-authoring-collection-view-toggle button.is-active {
+  background: linear-gradient(145deg, rgba(109, 40, 217, 0.82), rgba(76, 29, 149, 0.84));
+  color: #fff;
+}
+
+.rpg-authoring-entity-grid.is-list {
+  grid-template-columns: 1fr;
+}
+
+.rpg-authoring-entity-grid.is-list .rpg-authoring-entity-card {
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+}
+
+.rpg-authoring-entity-grid.is-list .rpg-authoring-entity-placeholder {
+  min-height: 100%;
+}
+
+.rpg-authoring-entity-grid.is-list .rpg-authoring-entity-card-copy {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.35fr);
+  align-items: start;
+}
+
+.rpg-authoring-entity-grid.is-list .rpg-authoring-card-eyebrow,
+.rpg-authoring-entity-grid.is-list .rpg-authoring-entity-card-copy h3,
+.rpg-authoring-entity-grid.is-list .rpg-authoring-card-summary,
+.rpg-authoring-entity-grid.is-list .rpg-authoring-card-badges,
+.rpg-authoring-entity-grid.is-list .rpg-authoring-card-footer {
+  grid-column: 1;
+}
+
+.rpg-authoring-entity-grid.is-list .rpg-authoring-card-highlights {
+  grid-column: 2;
+  grid-row: 1 / span 5;
+}
+
 @media (max-width: 760px) {
-  .rpg-authoring-collection-toolbar {
+  .rpg-authoring-collection-toolbar,
+  .rpg-authoring-entity-grid.is-list .rpg-authoring-entity-card,
+  .rpg-authoring-entity-grid.is-list .rpg-authoring-entity-card-copy {
     grid-template-columns: 1fr;
+  }
+
+  .rpg-authoring-entity-grid.is-list .rpg-authoring-card-highlights {
+    grid-column: 1;
+    grid-row: auto;
   }
 }
