@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -19,6 +20,20 @@ def test_low_latency_chunker_keeps_split_words_intact() -> None:
     assert chunker.push("right back") == []
     assert chunker.push(" at ya.") == ["right back at ya."]
     assert chunker.flush() == ""
+
+
+def _store() -> SimpleNamespace:
+    rendered = SimpleNamespace(
+        messages=[SimpleNamespace(role="user", content="Hello")],
+    )
+    return SimpleNamespace(
+        build_provider_prompt=lambda session, user_message, context_items: (
+            SimpleNamespace(diagnostics={}),
+            rendered,
+        ),
+        _active_memory_metadata=lambda assembly, current_rendered: {},
+        _active_history_metadata=lambda assembly: {},
+    )
 
 
 def test_generic_provider_emits_first_word_before_sentence_and_retains_usage(monkeypatch) -> None:
@@ -44,21 +59,10 @@ def test_generic_provider_emits_first_word_before_sentence_and_retains_usage(mon
             )
 
     monkeypatch.setattr(shared, "get_provider", lambda name: FakeProvider())
-    rendered = SimpleNamespace(
-        messages=[SimpleNamespace(role="user", content="Hello")],
-    )
-    store = SimpleNamespace(
-        build_provider_prompt=lambda session, user_message, context_items: (
-            SimpleNamespace(diagnostics={}),
-            rendered,
-        ),
-        _active_memory_metadata=lambda assembly, current_rendered: {},
-        _active_history_metadata=lambda assembly: {},
-    )
 
     events = list(
         _stream_low_latency_reply(
-            store,
+            _store(),
             SimpleNamespace(id="chat:test"),
             SimpleNamespace(id="msg:user", content="Hello", metadata={}),
             provider_id="llm:cerebras",
@@ -73,3 +77,50 @@ def test_generic_provider_emits_first_word_before_sentence_and_retains_usage(mon
     assert events[-1]["type"] == "complete"
     assert events[-1]["content"] == "Howdy right back at ya."
     assert events[-1]["metadata"]["usage"] == {"completion_tokens": 6}
+    json.dumps(events[-1])
+
+
+def test_provider_usage_model_is_normalized_before_terminal_sse_serialization(monkeypatch) -> None:
+    class UsageModel:
+        def model_dump(self, *, mode: str = "python") -> dict[str, Any]:
+            assert mode == "json"
+            return {
+                "prompt_tokens": 4,
+                "completion_tokens": 2,
+                "details": {"cached": False},
+            }
+
+    class FakeProvider:
+        provider_name = "lmstudio"
+
+        def chat_completion(self, **kwargs: Any):
+            assert kwargs["stream"] is True
+            return iter(
+                [
+                    SimpleNamespace(content="Hello ", model="local-model", usage=None),
+                    SimpleNamespace(content="there.", model="local-model", usage=None),
+                    SimpleNamespace(content="", model="local-model", usage=UsageModel()),
+                ]
+            )
+
+    monkeypatch.setattr(shared, "get_provider", lambda name: FakeProvider())
+
+    events = list(
+        _stream_low_latency_reply(
+            _store(),
+            SimpleNamespace(id="chat:test"),
+            SimpleNamespace(id="msg:user", content="Hello", metadata={}),
+            provider_id="lmstudio",
+            model_id="local-model",
+            context_items=[],
+        )
+    )
+
+    terminal = events[-1]
+    assert terminal["type"] == "complete"
+    assert terminal["metadata"]["usage"] == {
+        "prompt_tokens": 4,
+        "completion_tokens": 2,
+        "details": {"cached": False},
+    }
+    json.dumps(terminal)
