@@ -1,0 +1,237 @@
+.rpg-lore-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 1.4rem;
+  align-items: start;
+}
+
+.rpg-lore-layout-stream {
+  min-width: 0;
+}
+
+.rpg-lore-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(220px, 0.36fr);
+  gap: 1.25rem;
+  min-height: 230px;
+  align-items: end;
+  overflow: hidden;
+  padding: 2rem;
+  border: 1px solid rgba(212, 175, 55, 0.26);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 82% 12%, rgba(168, 85, 247, 0.3), transparent 32%),
+    linear-gradient(145deg, rgba(30, 20, 58, 0.98), rgba(5, 8, 24, 0.98));
+  background-position: center;
+  background-size: cover;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+}
+
+.rpg-lore-hero.has-image::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(4, 6, 19, 0.94), rgba(4, 6, 19, 0.54) 58%, rgba(4, 6, 19, 0.84));
+  pointer-events: none;
+}
+
+.rpg-lore-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.rpg-lore-hero-mark {
+  display: grid;
+  width: 62px;
+  height: 62px;
+  place-items: center;
+  border: 1px solid rgba(250, 204, 21, 0.34);
+  border-radius: 18px;
+  background: rgba(76, 29, 149, 0.5);
+  color: #fde68a;
+  font-size: 1.75rem;
+}
+
+.rpg-lore-hero h2,
+.rpg-lore-hero p {
+  margin-top: 0;
+}
+
+.rpg-lore-hero h2 {
+  margin-bottom: 0.75rem;
+  color: #fffaf0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 1.02;
+}
+
+.rpg-lore-summary {
+  max-width: 70ch;
+  margin-bottom: 0;
+  color: rgba(241, 245, 249, 0.9);
+  font-size: 1.04rem;
+  line-height: 1.7;
+}
+
+.rpg-lore-hero aside {
+  padding: 1rem;
+  border: 1px solid rgba(196, 181, 253, 0.18);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.52);
+}
+
+.rpg-lore-hero aside strong,
+.rpg-lore-hero aside span {
+  color: #fde68a;
+  font-size: 0.74rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.rpg-lore-hero aside p {
+  margin: 0.55rem 0 0.75rem;
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.rpg-lore-pull-quote {
+  margin: 1.35rem 0;
+  padding: 1.2rem 1.4rem;
+  border-left: 3px solid #d4af37;
+  border-radius: 0 14px 14px 0;
+  background: linear-gradient(90deg, rgba(76, 29, 149, 0.28), rgba(15, 23, 42, 0.38));
+  color: #ede9fe;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.18rem;
+  font-style: italic;
+  line-height: 1.65;
+}
+
+.rpg-lore-blocks {
+  display: grid;
+  gap: 1rem;
+}
+
+.rpg-lore-block-anchor > .rpg-authoring-document-block {
+  max-width: none;
+  margin-top: 0;
+  padding: 1.35rem 1.45rem;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.68), rgba(8, 12, 29, 0.86));
+}
+
+.rpg-lore-layout.is-cosmology .rpg-lore-blocks,
+.rpg-lore-layout.is-pantheon .rpg-lore-blocks,
+.rpg-lore-layout.is-powers .rpg-lore-blocks {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rpg-lore-layout.is-chronicle .rpg-lore-block-anchor {
+  position: relative;
+  padding-left: 1.4rem;
+}
+
+.rpg-lore-layout.is-chronicle .rpg-lore-block-anchor::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: -1rem;
+  left: 0.25rem;
+  width: 1px;
+  background: linear-gradient(#d4af37, rgba(168, 85, 247, 0.3));
+}
+
+.rpg-lore-layout.is-chronicle .rpg-lore-block-anchor::after {
+  content: '';
+  position: absolute;
+  top: 1.45rem;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #fde68a;
+  border-radius: 50%;
+  background: #4c1d95;
+}
+
+.rpg-lore-toc {
+  position: sticky;
+  top: 86px;
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem;
+  border: 1px solid rgba(168, 139, 250, 0.18);
+  border-radius: 16px;
+  background: rgba(7, 10, 26, 0.78);
+  backdrop-filter: blur(14px);
+}
+
+.rpg-lore-toc > strong {
+  color: #fde68a;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rpg-lore-toc > p {
+  margin: 0.15rem 0 0.55rem;
+  color: rgba(203, 213, 225, 0.72);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.rpg-lore-toc a {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.45rem;
+  align-items: start;
+  padding: 0.5rem 0.55rem;
+  border-radius: 9px;
+  color: #ddd6fe;
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.rpg-lore-toc a:hover,
+.rpg-lore-toc a:focus-visible {
+  background: rgba(91, 33, 182, 0.3);
+  color: #fff;
+}
+
+.rpg-lore-toc a span {
+  color: rgba(250, 204, 21, 0.72);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem;
+}
+
+@media (max-width: 1100px) {
+  .rpg-lore-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .rpg-lore-toc {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rpg-lore-toc > strong,
+  .rpg-lore-toc > p {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .rpg-lore-hero {
+    grid-template-columns: 1fr;
+    align-items: start;
+    padding: 1.25rem;
+  }
+
+  .rpg-lore-layout.is-cosmology .rpg-lore-blocks,
+  .rpg-lore-layout.is-pantheon .rpg-lore-blocks,
+  .rpg-lore-layout.is-powers .rpg-lore-blocks,
+  .rpg-lore-toc {
+    grid-template-columns: 1fr;
+  }
+}
