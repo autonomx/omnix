@@ -108,9 +108,10 @@ export function RpgWorldLoreLayout({
     note: 'A structured record of established canon and connected world knowledge.',
   };
   const quote = pullQuote(blocks);
+  const chronicle = layout.mode === 'chronicle';
 
   return (
-    <div className={`rpg-lore-layout is-${layout.mode}`}>
+    <div className={`rpg-authoring-document-shell${chronicle ? ' is-chronicle' : ''} rpg-lore-layout is-${layout.mode}`}>
       <article className="rpg-lore-layout-stream">
         <header className={`rpg-lore-hero${heroStyle ? ' has-image' : ''}`} style={heroStyle}>
           <div className="rpg-lore-hero-mark" aria-hidden="true">{layout.icon}</div>
