@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 
@@ -29,6 +30,23 @@ REQUIRED_RPG_WORKFLOWS = [
     ".github/workflows/rpg-phase0-architecture-compliance.yml",
 ]
 REQUIRED_CI_BRANCHES = "branches: [main, rpg]"
+REGISTERED_STRUCTURED_FEATURES = [
+    "src/app/rpg_world_forge_provider.py",
+    "src/app/rpg/narrative_provider.py",
+    "src/app/assistant_memory/structured_provider.py",
+    "src/app/rpg/llm_app_gateway.py",
+    "src/app/rpg/ai/action_intelligence.py",
+    "src/app/rpg/ai/semantic_action_intelligence.py",
+    "src/app/rpg/session/genesis/runtime_materialization.py",
+]
+FORBIDDEN_STRUCTURED_HELPERS = {
+    "_extract_json",
+    "_response_format_error",
+}
+LEGACY_COMPLETE_JSON_COMPATIBILITY = {
+    "src/app/rpg/ai/action_intelligence.py",
+    "src/app/rpg/ai/semantic_action_intelligence.py",
+}
 
 
 def _read(path: str) -> str:
@@ -59,7 +77,10 @@ def _runtime_part_from_module(module: str) -> str:
 
 def _find_forbidden_imports(path: Path) -> list[str]:
     violations = []
-    for lineno, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    for lineno, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
         line = raw_line.strip()
         if line.startswith("import "):
             imported_modules = line.removeprefix("import ").split(",")
@@ -71,6 +92,39 @@ def _find_forbidden_imports(path: Path) -> list[str]:
             module = line.removeprefix("from ").split(" import ", 1)[0].strip()
             if _module_is_forbidden(module):
                 violations.append(f"line {lineno}: from {module} import ...")
+    return violations
+
+
+def _attribute_name(node: ast.AST) -> str:
+    return node.attr if isinstance(node, ast.Attribute) else ""
+
+
+def _structured_architecture_violations(relative_path: str) -> list[str]:
+    path = REPO_ROOT / relative_path
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative_path)
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name in FORBIDDEN_STRUCTURED_HELPERS:
+                violations.append(
+                    f"{relative_path}:{node.lineno}: duplicated helper {node.name}"
+                )
+        if not isinstance(node, ast.Call):
+            continue
+        called = _attribute_name(node.func)
+        if called == "chat_completion" and any(
+            keyword.arg == "response_format" for keyword in node.keywords
+        ):
+            violations.append(
+                f"{relative_path}:{node.lineno}: feature passes response_format directly"
+            )
+        if (
+            called == "complete_json"
+            and relative_path not in LEGACY_COMPLETE_JSON_COMPATIBILITY
+        ):
+            violations.append(
+                f"{relative_path}:{node.lineno}: deprecated complete_json caller"
+            )
     return violations
 
 
@@ -147,5 +201,13 @@ def test_phase0_deterministic_layers_do_not_import_live_providers():
             relative = path.relative_to(REPO_ROOT).as_posix()
             for violation in _find_forbidden_imports(path):
                 violations.append(f"{relative}: {violation}")
+
+    assert violations == []
+
+
+def test_registered_structured_features_use_central_boundary():
+    violations: list[str] = []
+    for relative_path in REGISTERED_STRUCTURED_FEATURES:
+        violations.extend(_structured_architecture_violations(relative_path))
 
     assert violations == []
