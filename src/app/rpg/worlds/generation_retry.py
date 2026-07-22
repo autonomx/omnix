@@ -17,6 +17,21 @@ from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_world_writable
 
 
+def _execution_summary(run: Mapping[str, Any]) -> dict[str, Any]:
+    plan = dict(run.get("plan") or {})
+    progress = dict(run.get("progress") or {})
+    return {
+        "queued_topic_ids": list(plan.get("new_topic_ids") or ()),
+        "reused_topic_ids": list(plan.get("reusable_topic_ids") or ()),
+        "protected_topic_ids": list(plan.get("protected_topic_ids") or ()),
+        "target_topic_ids": list(plan.get("topic_ids") or ()),
+        "queued_count": len(plan.get("new_job_ids") or ()),
+        "reused_count": len(plan.get("reusable_topic_ids") or ()),
+        "protected_count": len(plan.get("protected_topic_ids") or ()),
+        "active_count": len(progress.get("active_topic_ids") or ()),
+    }
+
+
 def retry_failed_world_generation(
     run_id: str,
     *,
@@ -116,7 +131,14 @@ def retry_failed_world_generation(
         strategy="force",
         database=database,
     )
-    worker_started = kick_world_generation_worker(database=database) if kick_worker else False
+    worker_started = (
+        kick_world_generation_worker(
+            database=database,
+            provider_route=settings.provider_route,
+        )
+        if kick_worker
+        else False
+    )
     log_world_generation_event(
         "world_generation.retry_started",
         diagnostic_id=diagnostic_id,
@@ -136,4 +158,10 @@ def retry_failed_world_generation(
         "scope": retry_scope,
         "retry_of_run_id": run_id,
         "diagnostic_id": diagnostic_id,
+        "execution_summary": _execution_summary(retry_run),
+        "resolved_route": {
+            "provider": settings.provider_route,
+            "model": settings.model,
+            "source": "retry_durable_run",
+        },
     }
