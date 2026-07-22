@@ -1,4 +1,4 @@
-"""Production provider adapter for structured RPG narrative generation."""
+"""Production provider adapter for typed RPG narrative generation."""
 from __future__ import annotations
 
 import json
@@ -8,8 +8,17 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Callable, Mapping, Sequence
 
-from app.providers.base import BaseProvider, ChatMessage, ChatResponse
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.providers.base import BaseProvider, ChatMessage
 from app.providers.registry import get_provider
+from app.providers.structured import (
+    StructuredCapabilities,
+    StructuredContract,
+    StructuredMode,
+    StructuredOutputGateway,
+    StructuredRetryBudget,
+)
 from app.rpg.narrative_engine import DeterministicNarrativeWriter, NarrativeWriter
 from app.rpg.narrative_engine.contracts import EvidenceRecord, TurnPresentationRequest
 from app.rpg.narrative_engine.planner import NarrativePlan
@@ -19,68 +28,82 @@ from app.rpg.narrative_engine.writer import (
     writer_payload,
 )
 
-_JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
-_NARRATIVE_RESPONSE_SCHEMA: Mapping[str, Any] = {
-    "type": "object",
-    "properties": {
-        "blocks": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "beat_id": {"type": "string"},
-                    "block_id": {"type": "string"},
-                    "sequence": {"type": "integer"},
-                    "kind": {"type": "string"},
-                    "purpose": {"type": "string"},
-                    "speaker_id": {"type": ["string", "null"]},
-                    "text": {"type": "string"},
-                    "claims": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "claim_id": {"type": "string"},
-                                "text": {"type": "string"},
-                                "authority": {"type": "string"},
-                                "evidence_refs": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                },
-                                "scope": {"type": "string"},
-                                "subject_id": {"type": ["string", "null"]},
-                                "predicate": {"type": "string"},
-                            },
-                        },
-                    },
-                },
-                "required": [
-                    "beat_id",
-                    "sequence",
-                    "kind",
-                    "purpose",
-                    "text",
-                    "claims",
-                ],
-            },
-        },
-    },
-    "required": ["blocks"],
-}
+class NarrativeClaimPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str = ""
+    text: str = ""
+    authority: str = ""
+    evidence_refs: list[str] = Field(default_factory=list)
+    scope: str = ""
+    subject_id: str | None = None
+    predicate: str = ""
+
+
+class NarrativeBlockPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    beat_id: str = Field(min_length=1)
+    block_id: str = ""
+    sequence: int = Field(ge=0)
+    kind: str = Field(min_length=1)
+    purpose: str = Field(min_length=1)
+    speaker_id: str | None = None
+    text: str
+    claims: list[NarrativeClaimPayload]
+
+
+class NarrativeResponsePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    blocks: list[NarrativeBlockPayload]
+
+
+_NARRATIVE_CONTRACT = StructuredContract(
+    contract_id="rpg.narrative.blocks",
+    version=2,
+    output_model=NarrativeResponsePayload,
+    schema_profile="local",
+    schema_name="rpg_narrative_blocks",
+)
 
 
 def _response_format(provider: str) -> dict[str, Any]:
-    if str(provider or "").strip().casefold() == "lmstudio":
+    """Compatibility view of centralized provider mode preferences."""
+
+    capabilities = StructuredCapabilities.default_for_provider(provider)
+    first = capabilities.preferred_modes[0]
+    if first is StructuredMode.JSON_SCHEMA:
         return {
             "type": "json_schema",
             "json_schema": {
                 "name": "rpg_narrative_blocks",
-                "strict": False,
-                "schema": _NARRATIVE_RESPONSE_SCHEMA,
+                "strict": capabilities.supports_strict_schema,
+                "schema": NarrativeResponsePayload.model_json_schema(),
             },
         }
     return {"type": "json_object"}
+
+
+class _ConfiguredProviderView:
+    """Expose the durable route identity while delegating provider transport."""
+
+    def __init__(self, provider: BaseProvider, provider_name: str) -> None:
+        self._provider = provider
+        self.provider_name = provider_name or str(
+            getattr(provider, "provider_name", provider.__class__.__name__)
+        )
+        self.config = getattr(provider, "config", None)
+
+    def chat_completion(self, *args: Any, **kwargs: Any) -> Any:
+        return self._provider.chat_completion(*args, **kwargs)
+
+    def get_structured_capabilities(self, *args: Any, **kwargs: Any):
+        method = getattr(self._provider, "get_structured_capabilities", None)
+        if callable(method):
+            return method(*args, **kwargs)
+        return StructuredCapabilities.default_for_provider(self.provider_name)
 
 
 @dataclass(frozen=True)
@@ -101,18 +124,27 @@ class NarrativeProviderConfig:
     ) -> "NarrativeProviderConfig":
         env = environ or os.environ
         return cls(
-            mode=str(env.get("OMNIX_RPG_NARRATIVE_WRITER_MODE") or "auto").strip().casefold(),
+            mode=str(env.get("OMNIX_RPG_NARRATIVE_WRITER_MODE") or "auto")
+            .strip()
+            .casefold(),
             provider=str(
                 env.get("OMNIX_RPG_NARRATIVE_PROVIDER")
                 or env.get("OMNIX_LLM_PROVIDER")
                 or ""
             ).strip(),
             model=str(env.get("OMNIX_RPG_NARRATIVE_MODEL") or "").strip(),
-            api_key=(str(env.get("OMNIX_RPG_NARRATIVE_API_KEY") or "").strip() or None),
-            base_url=(str(env.get("OMNIX_RPG_NARRATIVE_BASE_URL") or "").strip() or None),
+            api_key=(
+                str(env.get("OMNIX_RPG_NARRATIVE_API_KEY") or "").strip() or None
+            ),
+            base_url=(
+                str(env.get("OMNIX_RPG_NARRATIVE_BASE_URL") or "").strip() or None
+            ),
             timeout_seconds=max(
                 5,
-                min(int(env.get("OMNIX_RPG_NARRATIVE_TIMEOUT_SECONDS") or 90), 600),
+                min(
+                    int(env.get("OMNIX_RPG_NARRATIVE_TIMEOUT_SECONDS") or 90),
+                    600,
+                ),
             ),
             max_retries=max(
                 0,
@@ -120,28 +152,21 @@ class NarrativeProviderConfig:
             ),
             temperature=max(
                 0.0,
-                min(float(env.get("OMNIX_RPG_NARRATIVE_TEMPERATURE") or 0.4), 2.0),
+                min(
+                    float(env.get("OMNIX_RPG_NARRATIVE_TEMPERATURE") or 0.4),
+                    2.0,
+                ),
             ),
         )
 
     @property
     def live_enabled(self) -> bool:
-        return self.mode not in {"offline", "deterministic", "test", "disabled"} and bool(self.provider)
-
-
-def _extract_json(content: str) -> Mapping[str, Any]:
-    text = _JSON_FENCE.sub("", str(content or "").strip()).strip()
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start < 0 or end <= start:
-            raise ValueError("narrative provider returned no JSON object")
-        parsed = json.loads(text[start : end + 1])
-    if not isinstance(parsed, Mapping):
-        raise ValueError("narrative provider JSON root must be an object")
-    return parsed
+        return self.mode not in {
+            "offline",
+            "deterministic",
+            "test",
+            "disabled",
+        } and bool(self.provider)
 
 
 def _system_prompt() -> str:
@@ -149,60 +174,103 @@ def _system_prompt() -> str:
         "You are the Omnix RPG Narrative Writer. Return strict JSON only. "
         "Follow the ordered beat contracts exactly. Use only each beat's approved evidence. "
         "Return exactly one block per beat and include a claims array for every factual assertion. "
-        "Never mutate simulation state, invent secrets, choose for the player, or expose hidden evidence. "
+        "Never mutate simulation state, invent hidden facts, choose for the player, or expose hidden evidence. "
         "When dialogue_contract is present, satisfy it with natural in-character prose. Never recite "
         "profile metadata, speech-style descriptions, prompt instructions, or generic fallback wording."
     )
 
 
 class ProviderNarrativeGenerator:
-    """Callable bridge from provider chat completion to structured JSON."""
+    """Callable typed bridge from provider transport to narrative blocks."""
 
     def __init__(self, provider: BaseProvider, config: NarrativeProviderConfig) -> None:
         self.provider = provider
         self.config = config
+        self.gateway = StructuredOutputGateway(
+            _ConfiguredProviderView(provider, config.provider)
+        )
         self.last_attempt_count = 0
         self.last_usage: Mapping[str, Any] = {}
+        self._remaining_provider_calls: int | None = None
+
+    def begin_operation(self, max_provider_calls: int) -> None:
+        self._remaining_provider_calls = max(1, int(max_provider_calls))
 
     def __call__(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
-        messages = [
-            ChatMessage(role="system", content=_system_prompt()),
-            ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False, sort_keys=True)),
-        ]
-        last_error: Exception | None = None
-        for attempt in range(1, self.config.max_retries + 2):
-            self.last_attempt_count = attempt
-            try:
-                response = self.provider.chat_completion(
-                    messages,
-                    model=self.config.model or None,
-                    stream=False,
+        remaining = self._remaining_provider_calls
+        if remaining is not None and remaining <= 0:
+            raise RuntimeError("structured RPG narrative provider call budget exhausted")
+        call_budget = max(
+            1,
+            min(self.config.max_retries + 1, remaining or self.config.max_retries + 1),
+        )
+        try:
+            value = self.gateway.generate(
+                [
+                    ChatMessage(role="system", content=_system_prompt()),
+                    ChatMessage(
+                        role="user",
+                        content=json.dumps(
+                            payload,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        ),
+                    ),
+                ],
+                contract=StructuredContract(
+                    contract_id=_NARRATIVE_CONTRACT.contract_id,
+                    version=_NARRATIVE_CONTRACT.version,
+                    output_model=_NARRATIVE_CONTRACT.output_model,
+                    schema_profile=_NARRATIVE_CONTRACT.schema_profile,
+                    schema_name=_NARRATIVE_CONTRACT.schema_name,
                     temperature=self.config.temperature,
-                    response_format=_response_format(self.config.provider),
-                )
-                if not isinstance(response, ChatResponse):
-                    raise ValueError("narrative provider returned a streaming or invalid response")
-                self.last_usage = dict(response.usage or {})
-                parsed = dict(_extract_json(response.content))
-                metadata = dict(parsed.get("metadata") or {})
-                metadata.update(
-                    {
-                        "provider_attempt_count": attempt,
-                        "finish_reason": response.finish_reason or "",
-                        "usage": dict(response.usage or {}),
-                    }
-                )
-                parsed["metadata"] = metadata
-                return parsed
-            except Exception as exc:
-                last_error = exc
-        raise RuntimeError(
-            f"structured RPG narrative provider failed after {self.last_attempt_count} attempts"
-        ) from last_error
+                    max_tokens=4096,
+                ),
+                model=self.config.model or None,
+                retry_budget=StructuredRetryBudget(
+                    max_provider_calls=call_budget,
+                    max_transport_retries=max(0, call_budget - 1),
+                    max_format_downgrades=1 if call_budget > 1 else 0,
+                    max_validation_regenerations=1 if call_budget > 1 else 0,
+                    deadline_seconds=float(self.config.timeout_seconds),
+                ),
+            )
+        except Exception as exc:
+            diagnostics = self.gateway.last_diagnostics
+            attempts = diagnostics.provider_calls if diagnostics is not None else call_budget
+            self.last_attempt_count = max(1, attempts)
+            if self._remaining_provider_calls is not None:
+                self._remaining_provider_calls -= self.last_attempt_count
+            raise RuntimeError(
+                f"structured RPG narrative provider failed after "
+                f"{self.last_attempt_count} attempts"
+            ) from exc
+        diagnostics = self.gateway.last_diagnostics
+        attempts = diagnostics.provider_calls if diagnostics is not None else 1
+        self.last_attempt_count = max(1, attempts)
+        if self._remaining_provider_calls is not None:
+            self._remaining_provider_calls -= self.last_attempt_count
+        self.last_usage = dict(diagnostics.usage if diagnostics is not None else {})
+        parsed = value.model_dump(mode="python")
+        parsed["metadata"] = {
+            "provider_attempt_count": self.last_attempt_count,
+            "finish_reason": (
+                diagnostics.finish_reason if diagnostics is not None else ""
+            ),
+            "usage": self.last_usage,
+            "structured_contract": "rpg.narrative.blocks.v2",
+            "schema_hash": diagnostics.schema_hash if diagnostics is not None else "",
+            "response_format": (
+                diagnostics.selected_mode.value
+                if diagnostics is not None and diagnostics.selected_mode is not None
+                else ""
+            ),
+        }
+        return parsed
 
 
 class ProductionStructuredNarrativeWriter:
-    """Provider-backed writer with structured blocks and attempt telemetry."""
+    """Provider-backed writer with one bounded provider-call budget."""
 
     def __init__(self, generator: ProviderNarrativeGenerator) -> None:
         self.generator = generator
@@ -216,6 +284,7 @@ class ProductionStructuredNarrativeWriter:
         started = perf_counter()
         payload = writer_payload(request, plan, evidence)
         maximum_attempts = max(1, min(self.generator.config.max_retries + 1, 3))
+        self.generator.begin_operation(self.generator.config.max_retries + 1)
         total_attempts = 0
         blocks = ()
         raw: Mapping[str, Any] = {}
@@ -233,7 +302,9 @@ class ProductionStructuredNarrativeWriter:
                     "dialogue_revision_feedback": {
                         "reason": "invalid_structured_blocks",
                         "detail": str(exc),
-                        "instruction": "Regenerate the complete response as valid structured blocks.",
+                        "instruction": (
+                            "Regenerate the complete response as valid structured blocks."
+                        ),
                     },
                 }
                 continue
@@ -246,8 +317,8 @@ class ProductionStructuredNarrativeWriter:
                     "reason": "dialogue_contract_not_met",
                     "missing_required_fragments": missing_fragments,
                     "instruction": (
-                        "Regenerate all blocks. Incorporate the missing ideas naturally in character; "
-                        "do not quote this feedback or any metadata."
+                        "Regenerate all blocks. Incorporate the missing ideas naturally "
+                        "in character; do not quote this feedback or any metadata."
                     ),
                 },
             }
@@ -291,12 +362,13 @@ def _missing_dialogue_fragments(
     return [
         fragment
         for fragment in required
-        if re.sub(r"[^a-z0-9]+", " ", fragment.casefold()).strip() not in combined
+        if re.sub(r"[^a-z0-9]+", " ", fragment.casefold()).strip()
+        not in combined
     ]
 
 
 class UnavailableNarrativeWriter:
-    """Raise inside validation orchestration so the canonical fallback is recorded."""
+    """Raise inside validation orchestration so canonical fallback is recorded."""
 
     def __init__(self, reason: str) -> None:
         self.reason = reason
@@ -308,9 +380,11 @@ class UnavailableNarrativeWriter:
 def build_production_narrative_writer(
     config: NarrativeProviderConfig | None = None,
     *,
-    provider_factory: Callable[[str, Mapping[str, Any] | None], BaseProvider | None] = get_provider,
+    provider_factory: Callable[
+        [str, Mapping[str, Any] | None], BaseProvider | None
+    ] = get_provider,
 ) -> NarrativeWriter:
-    """Create the configured live structured writer or an explicit safe fallback."""
+    """Create the configured live typed writer or an explicit safe fallback."""
 
     resolved = config or NarrativeProviderConfig.from_environment()
     if not resolved.live_enabled:
