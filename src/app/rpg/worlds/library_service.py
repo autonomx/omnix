@@ -193,7 +193,7 @@ def start_world_library_generation(
         tone=str(world.get("tone") or "heroic adventure"),
         depth=depth,
         starting_location=starting_location,
-        background_expansion=backgroundExpansion if False else background_expansion,
+        background_expansion=background_expansion,
     )
     target_topic_ids, forced_topic_ids, normalized_scope = resolve_generation_scope(
         graph,
