@@ -213,9 +213,9 @@ def regenerate_world_entity_dossier(
 
     selected_generator = generator
     if selected_generator is None:
-        from app.rpg_world_forge_provider import build_production_world_forge_generator
+        from .generation_routing import build_world_forge_generator_for_run
 
-        selected_generator = build_production_world_forge_generator()
+        selected_generator = build_world_forge_generator_for_run(run)
     node = replace(
         node,
         target_count=1,
@@ -281,6 +281,7 @@ def regenerate_world_entity_dossier(
         metadata={
             "directives": dict(directives or {}),
             "generation": dict(generated.provenance),
+            "provider_route_source": "durable_world_generation_run",
         },
         database=database,
     )
