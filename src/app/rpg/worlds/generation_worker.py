@@ -70,15 +70,10 @@ def _configured_world_forge_provider(
 
 def world_generation_worker_limit(
     environ: Mapping[str, str] | None = None,
+    *,
+    provider_route: str = "",
 ) -> int:
-    """Return a safe worker count for the configured World Forge provider.
-
-    LM Studio commonly exposes one model channel even when the application can queue
-    several jobs. Serializing provider calls avoids the channel resets that otherwise
-    turn healthy topic jobs into repeated transient failures. Operators with an LM
-    Studio deployment configured for parallel inference can explicitly raise the
-    worker count through ``OMNIX_RPG_WORLD_GENERATION_WORKERS``.
-    """
+    """Return a safe worker count for the provider that owns this durable run."""
 
     env = environ or os.environ
     override = str(env.get("OMNIX_RPG_WORLD_GENERATION_WORKERS") or "").strip()
@@ -90,7 +85,8 @@ def world_generation_worker_limit(
                 "Ignoring invalid OMNIX_RPG_WORLD_GENERATION_WORKERS=%r",
                 override,
             )
-    if _configured_world_forge_provider(env) == "lmstudio":
+    provider = _provider_key(provider_route) or _configured_world_forge_provider(env)
+    if provider == "lmstudio":
         return _LMSTUDIO_MAX_WORLD_GENERATION_WORKERS
     return _DEFAULT_MAX_WORLD_GENERATION_WORKERS
 
@@ -155,10 +151,17 @@ def run_world_generation_worker_once(
         job_id=str(job.get("id") or ""),
         fields=_job_fields(job, worker_id=worker_id),
     )
+    selected_generator = generator
+    if selected_generator is None:
+        from .generation_routing import build_world_forge_generator_from_settings
+
+        selected_generator = build_world_forge_generator_from_settings(
+            dict(dict(job.get("input_payload") or {}).get("settings") or {})
+        )
     result = execute_claimed_world_topic_job(
         job=job,
         worker_id=worker_id,
-        generator=generator,
+        generator=selected_generator,
         database=db,
     )
     status = str(result.get("status") or "unknown")
@@ -226,20 +229,21 @@ def _worker_loop(
                 return
 
 
-def _worker_pool_loop(database: Any | None) -> None:
+def _worker_pool_loop(database: Any | None, provider_route: str) -> None:
     global _worker_active
-    worker_limit = world_generation_worker_limit()
+    worker_limit = world_generation_worker_limit(provider_route=provider_route)
     try:
         state = _WorkerPoolState()
         _LOGGER.info(
-            "Starting RPG world-generation worker pool with %s slot(s)",
+            "Starting RPG world-generation worker pool with %s slot(s) for %s",
             worker_limit,
+            provider_route or "configured route",
         )
         log_world_generation_event(
             "world_generation.worker_pool_started",
             fields={
                 "worker_limit": worker_limit,
-                "configured_provider": _configured_world_forge_provider(),
+                "configured_provider": provider_route or _configured_world_forge_provider(),
             },
         )
         workers = [
@@ -259,20 +263,24 @@ def _worker_pool_loop(database: Any | None) -> None:
         log_world_generation_event(
             "world_generation.worker_pool_failed",
             level="error",
-            fields={"worker_limit": worker_limit},
+            fields={"worker_limit": worker_limit, "provider_route": provider_route},
             error=exc,
         )
         raise
     finally:
         log_world_generation_event(
             "world_generation.worker_pool_stopped",
-            fields={"worker_limit": worker_limit},
+            fields={"worker_limit": worker_limit, "provider_route": provider_route},
         )
         with _worker_lock:
             _worker_active = False
 
 
-def kick_world_generation_worker(*, database: Any | None = None) -> bool:
+def kick_world_generation_worker(
+    *,
+    database: Any | None = None,
+    provider_route: str = "",
+) -> bool:
     """Start one bounded provider-aware worker pool when none is already active."""
 
     global _worker_active
@@ -280,13 +288,18 @@ def kick_world_generation_worker(*, database: Any | None = None) -> bool:
         if _worker_active:
             log_world_generation_event(
                 "world_generation.worker_pool_already_active",
-                fields={"worker_limit": world_generation_worker_limit()},
+                fields={
+                    "worker_limit": world_generation_worker_limit(
+                        provider_route=provider_route
+                    ),
+                    "provider_route": provider_route,
+                },
             )
             return False
         _worker_active = True
     thread = threading.Thread(
         target=_worker_pool_loop,
-        args=(database,),
+        args=(database, provider_route),
         daemon=True,
         name="omnix-rpg-world-generation-supervisor",
     )
