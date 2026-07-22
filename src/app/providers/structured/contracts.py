@@ -36,15 +36,12 @@ class StructuredCapabilities:
         )
 
 
-SemanticValidator = Callable[[T], None]
-
-
 @dataclass(frozen=True)
 class StructuredContract(Generic[T]):
     contract_id: str
     version: int
     output_model: type[T]
-    semantic_validator: SemanticValidator[T] | None = None
+    semantic_validator: Callable[[T], None] | None = None
     schema_profile: str = "default"
     schema_name: str = ""
     temperature: float = 0.0
