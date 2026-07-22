@@ -207,6 +207,7 @@ def test_worker_discards_an_orphaned_world_topic_job() -> None:
                 prompt_version="test-prompt-v1",
                 provider_route="deterministic",
                 model="deterministic",
+                seed=17,
             ),
             database=database,
         )
