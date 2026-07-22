@@ -55,9 +55,8 @@ export function RpgWorldDeleteDialog({ onCancel, onDeleted, world }: RpgWorldDel
           <span aria-hidden="true">!</span>
         </div>
         <p>
-          Permanent deletion is limited to disposable world projects with no published revisions,
-          releases, scenario revisions, map definitions, campaign bindings, or active generation.
-          Published or campaign-bound worlds must be archived so existing campaigns remain playable.
+          Permanently delete this world at any state. This also removes its authoring and published
+          content, including scenarios, maps, campaigns bound to this world, and active generation work.
         </p>
 
         {eligibilityQuery.isPending ? <p>Checking deletion safety…</p> : null}
@@ -65,25 +64,10 @@ export function RpgWorldDeleteDialog({ onCancel, onDeleted, world }: RpgWorldDel
           <p className="rpg-world-catalog-error">Unable to verify whether this world can be deleted.</p>
         ) : null}
 
-        {eligibility && !eligibility.can_delete ? (
-          <section className="rpg-world-delete-blocked" aria-label="Deletion blockers">
-            <h4>This world cannot be permanently deleted</h4>
-            <ul>
-              {eligibility.blockers.map((blocker) => (
-                <li key={blocker.code}>
-                  <strong>{blocker.count} · {humanize(blocker.code)}</strong>
-                  <span>{blocker.message}</span>
-                </li>
-              ))}
-            </ul>
-            <p>Use Archive from the world card to remove it from normal authoring without deleting authority.</p>
-          </section>
-        ) : null}
-
         {eligibility?.can_delete ? (
           <>
             <section className="rpg-world-delete-preview" aria-label="Content to be deleted">
-              <h4>This permanently removes the draft authoring project</h4>
+              <h4>This permanently removes the world and its associated data</h4>
               {deletionPreview.length ? (
                 <dl>
                   {deletionPreview.map(([label, count]) => (

@@ -51,17 +51,52 @@ _WORLD_FORGE_RESPONSE_SCHEMA: Mapping[str, Any] = {
 }
 
 
+def _response_formats(provider: str) -> tuple[tuple[str, dict[str, Any]], ...]:
+    """Return response modes from strongest constraint to widest compatibility."""
+
+    if str(provider or "").strip().casefold() == "lmstudio":
+        return (
+            (
+                "json_schema",
+                {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "rpg_world_forge_topic",
+                        "strict": False,
+                        "schema": _WORLD_FORGE_RESPONSE_SCHEMA,
+                    },
+                },
+            ),
+            # LM Studio rejects OpenAI's json_object mode.  Text remains valid
+            # and the application still requires a JSON object from the model.
+            ("text", {"type": "text"}),
+        )
+    return (
+        ("json_object", {"type": "json_object"}),
+        ("text", {"type": "text"}),
+    )
+
+
+def _response_format_error(error: Exception) -> bool:
+    text = str(error).casefold()
+    return any(
+        marker in text
+        for marker in (
+            "response_format",
+            "json_schema",
+            "json_object",
+            "structured output",
+        )
+    )
+
+
 def _response_format(provider: str, *, schema_enabled: bool = True) -> dict[str, Any]:
-    if str(provider or "").strip().casefold() == "lmstudio" and schema_enabled:
-        return {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "rpg_world_forge_topic",
-                "strict": False,
-                "schema": _WORLD_FORGE_RESPONSE_SCHEMA,
-            },
-        }
-    return {"type": "json_object"}
+    """Compatibility shim retained for integrations importing this helper."""
+
+    modes = _response_formats(provider)
+    if schema_enabled:
+        return dict(modes[0][1])
+    return dict(modes[-1][1])
 
 
 @dataclass(frozen=True)
@@ -266,7 +301,8 @@ class ProviderWorldForgeTopicGenerator:
         ]
         started = perf_counter()
         last_error: Exception | None = None
-        schema_enabled = True
+        response_formats = _response_formats(self.config.provider)
+        response_format_index = 0
         prompt_chars = sum(len(message.content) for message in messages)
         for attempt in range(1, self.config.max_retries + 2):
             try:
@@ -276,10 +312,7 @@ class ProviderWorldForgeTopicGenerator:
                     stream=False,
                     temperature=self.config.temperature,
                     max_tokens=self.config.max_tokens,
-                    response_format=_response_format(
-                        self.config.provider,
-                        schema_enabled=schema_enabled,
-                    ),
+                    response_format=response_formats[response_format_index][1],
                 )
                 if not isinstance(response, ChatResponse):
                     raise ValueError(
@@ -315,7 +348,7 @@ class ProviderWorldForgeTopicGenerator:
                         "usage": dict(response.usage or {}),
                         "finish_reason": response.finish_reason or "",
                         "entity_dossier_schema": "rpg_world_entity_dossier_v1",
-                        "response_format": "json_schema" if schema_enabled else "json_object",
+                        "response_format": response_formats[response_format_index][0],
                         "max_tokens": self.config.max_tokens,
                     },
                 )
@@ -330,16 +363,16 @@ class ProviderWorldForgeTopicGenerator:
                     attempt,
                     self.config.max_retries + 1,
                     prompt_chars,
-                    "json_schema" if schema_enabled else "json_object",
+                    response_formats[response_format_index][0],
                     type(exc).__name__,
                     exc,
                 )
                 if (
-                    self.config.provider.strip().casefold() == "lmstudio"
-                    and schema_enabled
-                    and self.config.lmstudio_schema_fallback
+                    self.config.lmstudio_schema_fallback
+                    and _response_format_error(exc)
+                    and response_format_index + 1 < len(response_formats)
                 ):
-                    schema_enabled = False
+                    response_format_index += 1
                 if attempt <= self.config.max_retries and self.config.retry_backoff_seconds > 0:
                     sleep(self.config.retry_backoff_seconds * (2 ** (attempt - 1)))
         raise RuntimeError(

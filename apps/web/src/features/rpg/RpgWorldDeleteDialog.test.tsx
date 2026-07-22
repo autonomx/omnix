@@ -63,7 +63,7 @@ describe('RpgWorldDeleteDialog', () => {
     }));
     const onDeleted = renderDialog();
 
-    expect(await screen.findByRole('heading', { name: 'This permanently removes the draft authoring project' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'This permanently removes the world and its associated data' })).toBeInTheDocument();
     const submit = screen.getByRole('button', { name: 'Delete Permanently' });
     expect(submit).toBeDisabled();
 
@@ -86,27 +86,35 @@ describe('RpgWorldDeleteDialog', () => {
     });
   });
 
-  it('explains why published authority must be archived instead', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      ok: true,
-      eligibility: {
-        can_delete: false,
-        world_id: world.id,
-        world_title: world.title,
-        world_status: 'published',
-        blockers: [{
-          code: 'campaign_bindings',
-          count: 2,
-          message: 'Existing campaigns are pinned to this world and must remain playable.',
-        }],
-        deleted_counts: {},
-      },
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
-    renderDialog();
+  it('allows a published, campaign-bound world to be deleted', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        return new Response(JSON.stringify({
+          ok: true,
+          deleted: true,
+          world_id: world.id,
+          world_title: world.title,
+          deleted_counts: {},
+          audit_event_id: 42,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        eligibility: {
+          can_delete: true,
+          world_id: world.id,
+          world_title: world.title,
+          world_status: 'published',
+          blockers: [],
+          deleted_counts: { campaign_bindings: 2 },
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    const onDeleted = renderDialog();
 
-    expect(await screen.findByRole('heading', { name: 'This world cannot be permanently deleted' })).toBeInTheDocument();
-    expect(screen.getByText('Existing campaigns are pinned to this world and must remain playable.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Delete Permanently' })).toBeDisabled();
-    expect(screen.queryByLabelText(`Type ${world.title} to confirm deletion`)).not.toBeInTheDocument();
+    const confirmation = await screen.findByLabelText(`Type ${world.title} to confirm deletion`);
+    fireEvent.change(confirmation, { target: { value: world.title } });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Permanently' }));
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
   });
 });

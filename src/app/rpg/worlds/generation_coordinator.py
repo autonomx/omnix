@@ -29,6 +29,7 @@ _TERMINAL_JOB_STATUSES = {"completed", "failed", "canceled", "stale"}
 _ACTIVE_JOB_STATUSES = {"queued", "leased", "running", "waiting", "retrying"}
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 _reconcile_lock = threading.Lock()
+_AUTOMATIC_RECOVERY_PASSES = 1
 
 
 def _database(value: Any | None) -> Any:
@@ -348,16 +349,62 @@ def _reconcile_world_generation_unlocked(
                 for plan in plans
                 if work.jobs.get_job(context, plan.job_id) is not None
             )
+        latest_jobs: dict[str, Mapping[str, Any]] = {}
+        for job in jobs:
+            topic_id = str(job["metadata"].get("topic_id") or "")
+            if not topic_id:
+                continue
+            recovery_pass = int(job["metadata"].get("recovery_pass") or 0)
+            current = latest_jobs.get(topic_id)
+            current_pass = int(current["metadata"].get("recovery_pass") or 0) if current else -1
+            if recovery_pass >= current_pass:
+                latest_jobs[topic_id] = job
         active_topics = [
-            str(job["metadata"].get("topic_id") or "")
-            for job in jobs
+            topic_id
+            for topic_id, job in latest_jobs.items()
             if job["status"] in _ACTIVE_JOB_STATUSES
         ]
         failed_topics = [
-            str(job["metadata"].get("topic_id") or "")
-            for job in jobs
+            topic_id
+            for topic_id, job in latest_jobs.items()
             if job["status"] == "failed"
         ]
+        recoverable_failed_topics = [
+            topic_id
+            for topic_id in failed_topics
+            if int(latest_jobs[topic_id]["metadata"].get("recovery_pass") or 0)
+            < _AUTOMATIC_RECOVERY_PASSES
+        ]
+        recovery_plans = ()
+        if (
+            recoverable_failed_topics
+            and not active_topics
+        ):
+            recovery_plans = plan_ready_topic_jobs(
+                graph,
+                run_id=run_id,
+                world_id=run["world_id"],
+                draft_revision=run["draft_revision"],
+                generation_context=generation_context,
+                topic_directives=topic_directives,
+                completed_topics=available,
+                existing_job_ids=existing_job_ids,
+                entity_manifest_hash=entity_manifest_hash,
+                settings=settings,
+                target_topic_ids=recoverable_failed_topics,
+                recovery_pass=_AUTOMATIC_RECOVERY_PASSES,
+            )
+            for plan in recovery_plans:
+                work.jobs.create_job(context, dict(plan.job_payload))
+                existing_job_ids.append(plan.job_id)
+            if recovery_plans:
+                jobs.extend(
+                    work.jobs.get_job(context, plan.job_id)
+                    for plan in recovery_plans
+                    if work.jobs.get_job(context, plan.job_id) is not None
+                )
+                active_topics.extend(plan.topic_id for plan in recovery_plans)
+                failed_topics = []
         progress = generation_progress(
             graph,
             completed_topic_ids=tuple(available),
@@ -374,6 +421,18 @@ def _reconcile_world_generation_unlocked(
         plan_payload = {
             "job_ids": sorted(set(existing_job_ids)),
             "new_job_ids": [plan.job_id for plan in plans],
+            "recovery_job_ids": [plan.job_id for plan in recovery_plans],
+            "failure_history": [
+                {
+                    "topic_id": str(job["metadata"].get("topic_id") or ""),
+                    "job_id": str(job.get("id") or ""),
+                    "recovery_pass": int(job["metadata"].get("recovery_pass") or 0),
+                    "attempt_count": int(job.get("attempt_count") or 0),
+                    "error": dict(job.get("error") or {}),
+                }
+                for job in jobs
+                if job["status"] == "failed"
+            ],
             "available_topic_ids": sorted(available),
             "reusable_topic_ids": sorted(reusable_ids),
             "protected_topic_ids": sorted(protected_ids),

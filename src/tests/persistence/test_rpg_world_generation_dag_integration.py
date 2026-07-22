@@ -180,3 +180,55 @@ def test_world_topic_jobs_resume_from_persisted_completed_topics() -> None:
         )
     finally:
         database.close()
+
+
+def test_worker_discards_an_orphaned_world_topic_job() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = bootstrap_local_tenant(database)
+        with unit_of_work(database) as work:
+            work.world_scenarios.create_world(
+                context,
+                world_id="world:orphaned-job",
+                title="Orphaned Job World",
+                source_mode="ai",
+            )
+            work.commit()
+
+        started = start_world_generation(
+            world_id="world:orphaned-job",
+            draft_revision=1,
+            graph=_graph(),
+            generation_context={"genre": "fantasy", "tone": "mythic"},
+            entity_manifest_hash="sha256:" + "e" * 64,
+            settings=WorldTopicGenerationSettings(
+                generator_version="deterministic-v1",
+                prompt_version="test-prompt-v1",
+                provider_route="deterministic",
+                model="deterministic",
+            ),
+            database=database,
+        )
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                "DELETE FROM omnix_rpg_world_generation_runs "
+                "WHERE workspace_id = %s AND run_id = %s",
+                (context.workspace_id, started["run_id"]),
+            )
+            work.commit()
+
+        result = run_world_generation_worker_once(
+            database=database,
+            worker_id="world-worker:test",
+        )
+
+        assert result is not None
+        assert result["ok"] is True
+        assert result["status"] == "discarded"
+        with unit_of_work(database) as work:
+            remaining_jobs = work.jobs.list_jobs(context, limit=100)
+            work.rollback()
+        assert remaining_jobs == []
+    finally:
+        database.close()

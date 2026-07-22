@@ -101,8 +101,13 @@ def test_durable_world_generation_worker_pool_runs_four_slots(monkeypatch) -> No
         "run_world_generation_worker_once",
         fake_run_once,
     )
+    monkeypatch.setattr(
+        generation_worker,
+        "_recover_interrupted_jobs",
+        lambda **_kwargs: {"discarded": 0, "requeued": 0},
+    )
 
-    generation_worker._worker_pool_loop(None)
+    generation_worker._worker_pool_loop(None, "openrouter")
 
     assert sorted(calls) == [
         "rpg-world-generation:local:1",
@@ -111,3 +116,23 @@ def test_durable_world_generation_worker_pool_runs_four_slots(monkeypatch) -> No
         "rpg-world-generation:local:4",
     ]
     assert all(count >= 1 for count in calls.values())
+
+
+def test_worker_waits_for_a_scheduled_retry_before_claiming_again(monkeypatch) -> None:
+    results = iter(({"status": "retrying"}, {"status": "completed"}, None))
+    sleeps: list[float] = []
+
+    monkeypatch.setattr(
+        generation_worker,
+        "run_world_generation_worker_once",
+        lambda **_kwargs: next(results),
+    )
+    monkeypatch.setattr(generation_worker.time, "sleep", sleeps.append)
+
+    generation_worker._worker_loop(
+        1,
+        None,
+        generation_worker._WorkerPoolState(),
+    )
+
+    assert sleeps == [generation_worker._RETRY_POLL_SECONDS]

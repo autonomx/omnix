@@ -6,6 +6,8 @@ from typing import Any
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
+from .generation_jobs import WORLD_TOPIC_JOB_TYPE
+
 
 def require_world_writable(work: Any, context: Any, world_id: str) -> dict[str, Any]:
     world = work.world_scenarios.get_world(context, world_id, for_update=True)
@@ -171,60 +173,15 @@ def _world_deletion_snapshot(
             params,
         ),
     }
-    blockers: list[dict[str, Any]] = []
-
-    def block(code: str, count: int, message: str) -> None:
-        if count:
-            blockers.append({"code": code, "count": count, "message": message})
-
-    block(
-        "active_generation_runs",
-        counts["active_generation_runs"],
-        "Wait for active world generation to finish before deleting this world.",
-    )
-    block(
-        "active_image_generation",
-        counts["active_image_targets"],
-        "Wait for active image generation to finish before deleting this world.",
-    )
-    block(
-        "published_world_revisions",
-        counts["world_revisions"],
-        "Published world revisions are immutable and must be retained; archive this world instead.",
-    )
-    block(
-        "published_world_releases",
-        counts["world_releases"],
-        "Published world releases are immutable and must be retained; archive this world instead.",
-    )
-    block(
-        "published_scenario_revisions",
-        counts["scenario_revisions"],
-        "Published scenario revisions depend on this world and must be retained.",
-    )
-    block(
-        "campaign_bindings",
-        counts["campaign_bindings"],
-        "Existing campaigns are pinned to this world and must remain playable.",
-    )
-    block(
-        "map_definitions",
-        counts["map_definitions"],
-        "Published map definitions depend on this world and must be retained.",
-    )
-    if world["status"] == "published" and not counts["world_revisions"]:
-        blockers.append(
-            {
-                "code": "published_world_status",
-                "count": 1,
-                "message": "Published worlds must be archived instead of permanently deleted.",
-            }
-        )
-
     deleted_counts = {
         key: counts[key]
         for key in (
+            "world_revisions",
+            "world_releases",
             "scenario_projects",
+            "scenario_revisions",
+            "campaign_bindings",
+            "map_definitions",
             "topics",
             "generation_runs",
             "topic_history",
@@ -235,11 +192,11 @@ def _world_deletion_snapshot(
         )
     }
     return {
-        "can_delete": not blockers,
+        "can_delete": True,
         "world_id": world_id,
         "world_title": str(world["title"]),
         "world_status": str(world["status"]),
-        "blockers": blockers,
+        "blockers": [],
         "deleted_counts": deleted_counts,
     }
 
@@ -276,17 +233,59 @@ def delete_world_project(
         if confirmation_title != str(world["title"]):
             raise ValueError("world_delete_confirmation_mismatch")
         eligibility = _world_deletion_snapshot(work, context, world)
-        if not eligibility["can_delete"]:
-            codes = ",".join(str(row["code"]) for row in eligibility["blockers"])
-            raise ValueError(f"world_delete_blocked:{world_id}:{codes}")
 
+        work.connection.execute(
+            "UPDATE omnix_rpg_world_generation_runs SET parent_run_id = NULL "
+            "WHERE workspace_id = %s AND parent_run_id IN ("
+            "SELECT run_id FROM omnix_rpg_world_generation_runs "
+            "WHERE workspace_id = %s AND world_id = %s)",
+            (context.workspace_id, context.workspace_id, world_id),
+        )
         work.connection.execute(
             "UPDATE omnix_rpg_world_generation_runs SET parent_run_id = NULL "
             "WHERE workspace_id = %s AND world_id = %s",
             (context.workspace_id, world_id),
         )
         work.connection.execute(
+            "DELETE FROM omnix_jobs WHERE workspace_id = %s AND job_type = %s "
+            "AND (metadata->>'world_id' = %s OR input_payload->>'world_id' = %s)",
+            (context.workspace_id, WORLD_TOPIC_JOB_TYPE, world_id, world_id),
+        )
+        work.connection.execute(
+            "DELETE FROM omnix_rpg_campaigns WHERE workspace_id = %s AND id IN ("
+            "SELECT campaign_id FROM omnix_rpg_campaign_world_bindings "
+            "WHERE workspace_id = %s AND world_id = %s)",
+            (context.workspace_id, context.workspace_id, world_id),
+        )
+        work.connection.execute(
+            "DELETE FROM omnix_rpg_campaign_map_instances WHERE workspace_id = %s "
+            "AND (map_id, map_definition_revision) IN ("
+            "SELECT map_id, definition_revision FROM omnix_rpg_map_definitions "
+            "WHERE workspace_id = %s AND world_id = %s)",
+            (context.workspace_id, context.workspace_id, world_id),
+        )
+        work.connection.execute(
+            "DELETE FROM omnix_rpg_map_definitions "
+            "WHERE workspace_id = %s AND world_id = %s",
+            (context.workspace_id, world_id),
+        )
+        work.connection.execute(
+            "DELETE FROM omnix_rpg_scenario_revisions "
+            "WHERE workspace_id = %s AND world_id = %s",
+            (context.workspace_id, world_id),
+        )
+        work.connection.execute(
             "DELETE FROM omnix_rpg_scenarios "
+            "WHERE workspace_id = %s AND world_id = %s",
+            (context.workspace_id, world_id),
+        )
+        work.connection.execute(
+            "DELETE FROM omnix_rpg_world_releases "
+            "WHERE workspace_id = %s AND world_id = %s",
+            (context.workspace_id, world_id),
+        )
+        work.connection.execute(
+            "DELETE FROM omnix_rpg_world_revisions "
             "WHERE workspace_id = %s AND world_id = %s",
             (context.workspace_id, world_id),
         )

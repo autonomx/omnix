@@ -60,9 +60,6 @@ class ReferenceSafeWorldForgeGenerator:
         content = topic.as_dict()
         entities: list[dict[str, Any]] = []
         word_counts: dict[str, int] = {}
-        deterministic_output = "deterministic" in str(
-            topic.provenance.get("generator") or ""
-        ).casefold()
         for entity in topic.entities:
             row = dict(entity)
             entity_id = str(row.get("id") or row.get("entity_id") or "")
@@ -73,12 +70,7 @@ class ReferenceSafeWorldForgeGenerator:
                 entity_id=entity_id,
             )
             quality_issues = validate_dossier_quality(dossier, topic_id=node.topic_id)
-            fallback_output = (
-                bool(dossier.get("generated_from_legacy"))
-                or deterministic_output
-                or bool(row.get("generated_for_reference_completeness"))
-            )
-            if quality_issues and fallback_output:
+            if quality_issues:
                 dossier = enrich_fallback_dossier(
                     row,
                     dossier,

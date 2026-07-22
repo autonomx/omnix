@@ -10,7 +10,10 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.worlds.contracts import ScenarioProjectCreate, WorldProjectCreate
-from app.rpg.worlds.library_service import save_world_topic
+from app.rpg.worlds.library_service import (
+    save_world_topic,
+    start_world_library_generation,
+)
 from app.rpg.worlds.lifecycle_service import (
     delete_world_project,
     world_deletion_eligibility,
@@ -87,6 +90,11 @@ def test_disposable_draft_world_is_deleted_with_audit_record() -> None:
             ),
             database=database,
         )
+        start_world_library_generation(
+            world_id,
+            database=database,
+            kick_worker=False,
+        )
 
         eligibility = world_deletion_eligibility(world_id, database=database)[
             "eligibility"
@@ -120,6 +128,12 @@ def test_disposable_draft_world_is_deleted_with_audit_record() -> None:
                 "WHERE workspace_id = %s AND world_id = %s",
                 (context.workspace_id, world_id),
             ).fetchone()[0]
+            queued_job_count = work.connection.execute(
+                "SELECT COUNT(*) FROM omnix_jobs WHERE workspace_id = %s "
+                "AND job_type = 'rpg.world_topic.generate' "
+                "AND metadata->>'world_id' = %s",
+                (context.workspace_id, world_id),
+            ).fetchone()[0]
             audit = work.connection.execute(
                 "SELECT action, payload FROM omnix_audit_events "
                 "WHERE workspace_id = %s AND aggregate_type = 'rpg_world_project' "
@@ -129,6 +143,7 @@ def test_disposable_draft_world_is_deleted_with_audit_record() -> None:
             work.rollback()
         assert retained_world is None
         assert int(scenario_count) == 0
+        assert int(queued_job_count) == 0
         assert audit is not None
         assert str(audit[0]) == "permanently_deleted"
         assert dict(audit[1])["decision"] == "explicit_typed_confirmation"
@@ -136,7 +151,7 @@ def test_disposable_draft_world_is_deleted_with_audit_record() -> None:
         database.close()
 
 
-def test_published_world_cannot_be_permanently_deleted() -> None:
+def test_published_world_can_be_permanently_deleted() -> None:
     database = _database()
     try:
         _reset(database)
@@ -159,22 +174,21 @@ def test_published_world_cannot_be_permanently_deleted() -> None:
         eligibility = world_deletion_eligibility(world_id, database=database)[
             "eligibility"
         ]
-        blocker_codes = {row["code"] for row in eligibility["blockers"]}
-        assert eligibility["can_delete"] is False
-        assert "published_world_revisions" in blocker_codes
+        assert eligibility["can_delete"] is True
+        assert eligibility["blockers"] == []
 
-        with pytest.raises(ValueError, match="world_delete_blocked"):
-            delete_world_project(
-                world_id,
-                confirmation_title=title,
-                acknowledge_permanent=True,
-                database=database,
-            )
+        result = delete_world_project(
+            world_id,
+            confirmation_title=title,
+            acknowledge_permanent=True,
+            database=database,
+        )
+        assert result["deleted"] is True
 
         context = bootstrap_local_tenant(database)
         with unit_of_work(database) as work:
             retained_world = work.world_scenarios.get_world(context, world_id)
             work.rollback()
-        assert retained_world is not None
+        assert retained_world is None
     finally:
         database.close()

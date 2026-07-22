@@ -67,6 +67,6 @@ describe('world library deletion option', () => {
     fireEvent.click(within(card as HTMLElement).getByRole('button', { name: 'Delete world' }));
 
     expect(await screen.findByRole('dialog', { name: `Delete ${world.title}` })).toBeInTheDocument();
-    expect(screen.getByText(/Published or campaign-bound worlds must be archived/)).toBeInTheDocument();
+    expect(screen.getByText(/Permanently delete this world at any state/)).toBeInTheDocument();
   });
 });

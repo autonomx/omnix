@@ -269,6 +269,12 @@ def read_world_generation(
             work.rollback()
         if run is None:
             raise KeyError(f"world_generation_run_not_found:{run_id}")
+    if str(run.get("status") or "") in {"planned", "running"}:
+        settings = dict(run.get("settings") or {})
+        kick_world_generation_worker(
+            database=database,
+            provider_route=str(settings.get("provider_route") or ""),
+        )
     return {"ok": True, "run": run}
 
 

@@ -138,15 +138,17 @@ def world_topic_job_id(
     topic_id: str,
     fingerprint: str,
     run_id: str = "",
+    recovery_pass: int = 0,
 ) -> str:
     safe_world = _SAFE_ID.sub("-", world_id).strip("-")
     safe_topic = _SAFE_ID.sub("-", topic_id).strip("-")
     digest = fingerprint.removeprefix("sha256:")[:16]
     run_digest = canonical_hash({"run_id": run_id}).removeprefix("sha256:")[:10]
-    return (
+    job_id = (
         f"world-topic:{safe_world}:draft:{int(draft_revision)}:"
         f"{safe_topic}:{digest}:{run_digest}"
     )
+    return job_id if recovery_pass <= 0 else f"{job_id}:recovery:{int(recovery_pass)}"
 
 
 def generation_topic_ids(
@@ -175,6 +177,7 @@ def plan_ready_topic_jobs(
     entity_manifest_hash: str,
     settings: WorldTopicGenerationSettings,
     target_topic_ids: Sequence[str] | None = None,
+    recovery_pass: int = 0,
 ) -> tuple[WorldTopicJobPlan, ...]:
     existing = set(existing_job_ids)
     targets = set(generation_topic_ids(graph, target_topic_ids))
@@ -214,6 +217,7 @@ def plan_ready_topic_jobs(
             topic_id=node.topic_id,
             fingerprint=fingerprint,
             run_id=run_id,
+            recovery_pass=recovery_pass,
         )
         if job_id in existing:
             continue
@@ -231,6 +235,7 @@ def plan_ready_topic_jobs(
             "directive_hash": directive_hash,
             "entity_manifest_hash": entity_manifest_hash,
             "settings": settings.as_dict(),
+            "recovery_pass": int(recovery_pass),
         }
         job_payload = {
             "id": job_id,
@@ -248,6 +253,7 @@ def plan_ready_topic_jobs(
                 "topic_id": node.topic_id,
                 "fingerprint": fingerprint,
                 "dependency_ids": list(node.dependencies),
+                "recovery_pass": int(recovery_pass),
             },
         }
         plans.append(

@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -11,11 +12,12 @@ from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenera
 
 from .generation_coordinator import execute_claimed_world_topic_job
 from .generation_diagnostics import log_world_generation_event
-from .generation_jobs import WORLD_TOPIC_RESOURCE_CLASS
+from .generation_jobs import WORLD_TOPIC_JOB_TYPE, WORLD_TOPIC_RESOURCE_CLASS
 
 _DEFAULT_LEASE_SECONDS = 3600
 _DEFAULT_MAX_WORLD_GENERATION_WORKERS = 4
 _LMSTUDIO_MAX_WORLD_GENERATION_WORKERS = 1
+_RETRY_POLL_SECONDS = 1.1
 _LOGGER = logging.getLogger(__name__)
 _worker_lock = threading.Lock()
 _worker_active = False
@@ -108,6 +110,38 @@ def _job_fields(job: Mapping[str, Any], *, worker_id: str) -> dict[str, Any]:
     }
 
 
+def _recover_interrupted_jobs(*, database: Any | None = None) -> dict[str, int]:
+    """Remove orphaned jobs and release local leases left by a stopped worker pool."""
+
+    db = _database(database)
+    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.persistence.unit_of_work import unit_of_work
+
+    context = bootstrap_local_tenant(db)
+    with unit_of_work(db) as work:
+        discarded = work.connection.execute(
+            "DELETE FROM omnix_jobs AS job WHERE job.workspace_id = %s "
+            "AND job.job_type = %s AND ("
+            "NOT EXISTS (SELECT 1 FROM omnix_rpg_world_generation_runs AS run "
+            "WHERE run.workspace_id = job.workspace_id "
+            "AND run.run_id = job.metadata->>'run_id') "
+            "OR NOT EXISTS (SELECT 1 FROM omnix_rpg_worlds AS world "
+            "WHERE world.workspace_id = job.workspace_id "
+            "AND world.id = job.metadata->>'world_id'))",
+            (context.workspace_id, WORLD_TOPIC_JOB_TYPE),
+        ).rowcount
+        requeued = work.connection.execute(
+            "UPDATE omnix_jobs SET status = 'retrying', available_at = CURRENT_TIMESTAMP, "
+            "lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, "
+            "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
+            "AND job_type = %s AND status IN ('leased', 'running', 'cancel_requested') "
+            "AND lease_owner LIKE 'rpg-world-generation:local:%%'",
+            (context.workspace_id, WORLD_TOPIC_JOB_TYPE),
+        ).rowcount
+        work.commit()
+    return {"discarded": int(discarded), "requeued": int(requeued)}
+
+
 def run_world_generation_worker_once(
     *,
     worker_id: str = "rpg-world-generation:local",
@@ -131,6 +165,51 @@ def run_world_generation_worker_once(
         if job is None:
             work.rollback()
             return None
+        metadata = dict(job.get("metadata") or {})
+        run_id = str(metadata.get("run_id") or "")
+        world_id = str(metadata.get("world_id") or "")
+        run = work.world_generation.get(context, run_id) if run_id else None
+        world = work.world_scenarios.get_world(context, world_id) if world_id else None
+        discard_reason = (
+            "missing_run_id"
+            if not run_id
+            else "missing_world_id"
+            if not world_id
+            else "world_generation_run_not_found"
+            if run is None
+            else "world_not_found"
+            if world is None
+            else "world_generation_run_world_mismatch"
+            if str(run["world_id"]) != world_id
+            else ""
+        )
+        if discard_reason:
+            work.connection.execute(
+                "DELETE FROM omnix_jobs WHERE id = %s AND workspace_id = %s "
+                "AND lease_owner = %s AND lease_token = %s",
+                (
+                    str(job["id"]),
+                    context.workspace_id,
+                    worker_id,
+                    str(job["lease_token"]),
+                ),
+            )
+            work.commit()
+            log_world_generation_event(
+                "world_generation.orphaned_job_discarded",
+                level="warning",
+                world_id=world_id,
+                run_id=run_id,
+                topic_id=str(metadata.get("topic_id") or ""),
+                job_id=str(job.get("id") or ""),
+                fields={"reason": discard_reason, "worker_id": worker_id},
+            )
+            return {
+                "ok": True,
+                "status": "discarded",
+                "job": job,
+                "detail": discard_reason,
+            }
         job = work.jobs.mark_running(
             context,
             job_id=job["id"],
@@ -209,6 +288,8 @@ def _worker_loop(
                 error=exc,
             )
             result = None
+        if result is not None and str(result.get("status") or "") == "retrying":
+            time.sleep(_RETRY_POLL_SECONDS)
         with state.condition:
             state.calls_in_progress -= 1
             if result is not None:
@@ -233,6 +314,7 @@ def _worker_pool_loop(database: Any | None, provider_route: str) -> None:
     global _worker_active
     worker_limit = world_generation_worker_limit(provider_route=provider_route)
     try:
+        recovered = _recover_interrupted_jobs(database=database)
         state = _WorkerPoolState()
         _LOGGER.info(
             "Starting RPG world-generation worker pool with %s slot(s) for %s",
@@ -244,6 +326,8 @@ def _worker_pool_loop(database: Any | None, provider_route: str) -> None:
             fields={
                 "worker_limit": worker_limit,
                 "configured_provider": provider_route or _configured_world_forge_provider(),
+                "recovered_orphaned_jobs": recovered["discarded"],
+                "requeued_interrupted_jobs": recovered["requeued"],
             },
         )
         workers = [

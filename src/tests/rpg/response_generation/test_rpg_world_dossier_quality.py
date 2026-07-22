@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_dossier_quality import (
@@ -61,7 +59,7 @@ def test_major_legacy_projection_is_enriched_to_multi_paragraph_quality() -> Non
     assert topic.provenance["entity_dossier_quality_validated"] is True
 
 
-def test_explicit_shallow_live_dossier_fails_instead_of_publishing_thin_lore() -> None:
+def test_explicit_shallow_live_dossier_is_enriched_before_validation() -> None:
     generator = ReferenceSafeWorldForgeGenerator(
         _Generator(
             {
@@ -83,10 +81,13 @@ def test_explicit_shallow_live_dossier_fails_instead_of_publishing_thin_lore() -
         )
     )
 
-    with pytest.raises(ValueError, match="world_entity_dossier_quality:factions"):
-        generator.generate(
-            _node("factions", "factions"),
-            seed=1,
-            campaign_context={},
-            dependency_topics={},
-        )
+    topic = generator.generate(
+        _node("factions", "factions"),
+        seed=1,
+        campaign_context={},
+        dependency_topics={},
+    )
+
+    dossier = topic.entities[0]["dossier"]
+    assert dossier["quality_enriched"] is True
+    assert validate_dossier_quality(dossier, topic_id="factions") == ()

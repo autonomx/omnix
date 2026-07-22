@@ -82,8 +82,8 @@ def test_lmstudio_call_has_bounded_completion_tokens() -> None:
     assert provider.calls[0]["kwargs"]["response_format"]["type"] == "json_schema"
 
 
-def test_lmstudio_retries_channel_failure_with_json_object_fallback() -> None:
-    provider = _Provider([RuntimeError("Channel Error"), _payload()])
+def test_lmstudio_retries_format_failure_with_text_fallback() -> None:
+    provider = _Provider([RuntimeError("response_format is unsupported"), _payload()])
     generator = ProviderWorldForgeTopicGenerator(
         provider,
         WorldForgeProviderConfig(
@@ -100,5 +100,25 @@ def test_lmstudio_retries_channel_failure_with_json_object_fallback() -> None:
 
     assert topic.topic_id == "realm"
     assert provider.calls[0]["kwargs"]["response_format"]["type"] == "json_schema"
-    assert provider.calls[1]["kwargs"]["response_format"] == {"type": "json_object"}
-    assert topic.provenance["response_format"] == "json_object"
+    assert provider.calls[1]["kwargs"]["response_format"] == {"type": "text"}
+    assert topic.provenance["response_format"] == "text"
+
+
+def test_other_provider_retries_format_failure_with_text_fallback() -> None:
+    provider = _Provider([RuntimeError("response_format is unsupported"), _payload()])
+    generator = ProviderWorldForgeTopicGenerator(
+        provider,
+        WorldForgeProviderConfig(
+            mode="live",
+            provider="openrouter",
+            model="remote-model",
+            max_retries=1,
+            retry_backoff_seconds=0,
+        ),
+    )
+
+    topic = generator.generate(_node(), seed=1, campaign_context={}, dependency_topics={})
+
+    assert provider.calls[0]["kwargs"]["response_format"] == {"type": "json_object"}
+    assert provider.calls[1]["kwargs"]["response_format"] == {"type": "text"}
+    assert topic.provenance["response_format"] == "text"
