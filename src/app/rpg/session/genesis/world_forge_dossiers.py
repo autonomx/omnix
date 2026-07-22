@@ -1,9 +1,8 @@
 """Versioned editorial dossier contracts for generated world entities.
 
-The dossier is presentation-rich canon: it may explain and organize established
-facts, but it never owns identity, mechanics, or reference integrity.  Compact
-summaries remain suitable for catalogues while dossier sections power long-form
-reading pages.
+Dossiers organize and explain canonical data for reading. They never own entity
+identity, mechanics, or reference integrity. Compact summaries remain suitable
+for catalogues while ordered sections power long-form lore pages.
 """
 from __future__ import annotations
 
@@ -12,7 +11,9 @@ from typing import Any, Mapping, Sequence
 
 DOSSIER_SCHEMA_VERSION = "rpg_world_entity_dossier_v1"
 
-_SECTION_TEMPLATES: Mapping[str, tuple[tuple[str, str, tuple[str, ...]], ...]] = {
+SectionSpec = tuple[str, str, tuple[str, ...]]
+
+_SECTION_TEMPLATES: Mapping[str, tuple[SectionSpec, ...]] = {
     "regions": (
         ("overview", "Overview", ("description", "summary")),
         ("geography", "Geography", ("geography", "terrain", "climate")),
@@ -155,7 +156,7 @@ _SECTION_TEMPLATES: Mapping[str, tuple[tuple[str, str, tuple[str, ...]], ...]] =
     ),
 }
 
-_GENERIC_TEMPLATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+_GENERIC_TEMPLATE: tuple[SectionSpec, ...] = (
     ("overview", "Overview", ("description", "summary", "purpose", "premise")),
     ("history", "History and Context", ("history", "origin", "origins", "backstory")),
     ("details", "Details", ("details", "traits", "values", "goals", "effects")),
@@ -191,29 +192,6 @@ def _section_id(value: Any, fallback: str) -> str:
     return candidate or fallback
 
 
-def _paragraphs(value: Any) -> list[str]:
-    if value in (None, "", [], (), {}):
-        return []
-    if isinstance(value, Mapping):
-        rendered = []
-        for key, item in value.items():
-            item_text = _display(item)
-            if item_text:
-                rendered.append(f"{str(key).replace('_', ' ').title()}: {item_text}.")
-        return rendered
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        rendered = [_display(item) for item in value]
-        rendered = [item for item in rendered if item]
-        if not rendered:
-            return []
-        return ["; ".join(rendered).rstrip(".") + "."]
-    raw = text(value)
-    if not raw:
-        return []
-    chunks = [chunk.strip() for chunk in re.split(r"\n\s*\n", raw) if chunk.strip()]
-    return chunks or [raw]
-
-
 def _display(value: Any) -> str:
     if value in (None, "", [], (), {}):
         return ""
@@ -237,6 +215,35 @@ def _display(value: Any) -> str:
     if ":" in rendered and " " not in rendered:
         rendered = rendered.split(":", 1)[-1]
     return rendered.replace("_", " ")
+
+
+def _paragraphs(value: Any) -> list[str]:
+    """Normalize prose while preserving every explicit paragraph boundary."""
+    if value in (None, "", [], (), {}):
+        return []
+    if isinstance(value, Mapping):
+        rendered = []
+        for key, item in value.items():
+            item_text = _display(item)
+            if item_text:
+                rendered.append(f"{str(key).replace('_', ' ').title()}: {item_text}.")
+        return rendered
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        paragraphs: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                paragraphs.extend(
+                    part.strip()
+                    for part in re.split(r"\n\s*\n", item)
+                    if part.strip()
+                )
+            else:
+                rendered = _display(item)
+                if rendered:
+                    paragraphs.append(rendered.rstrip(".") + ".")
+        return paragraphs
+    raw = text(value)
+    return [part.strip() for part in re.split(r"\n\s*\n", raw) if part.strip()]
 
 
 def compact_summary(value: Any, *, limit: int = 420) -> str:
@@ -266,17 +273,10 @@ def _linked_document(content: Mapping[str, Any], entity_id: str) -> Mapping[str,
 def _source_summary(row: Mapping[str, Any], content: Mapping[str, Any], entity_id: str) -> str:
     document = _linked_document(content, entity_id)
     for value in (
-        row.get("short_summary"),
-        row.get("summary"),
-        row.get("description"),
-        document.get("summary_120"),
-        document.get("summary_500"),
-        document.get("full_text"),
-        row.get("personality"),
-        row.get("sensory_profile"),
-        row.get("purpose"),
-        row.get("premise"),
-        row.get("setup"),
+        row.get("short_summary"), row.get("summary"), row.get("description"),
+        document.get("summary_120"), document.get("summary_500"), document.get("full_text"),
+        row.get("personality"), row.get("sensory_profile"), row.get("purpose"),
+        row.get("premise"), row.get("setup"),
     ):
         rendered = text(value)
         if rendered:
@@ -288,10 +288,7 @@ def _normalize_quote(value: Any) -> dict[str, str] | None:
     if isinstance(value, Mapping):
         quote_text = text(value.get("text") or value.get("quote"))
         if quote_text:
-            return {
-                "text": quote_text,
-                "attribution": text(value.get("attribution") or value.get("source")),
-            }
+            return {"text": quote_text, "attribution": text(value.get("attribution") or value.get("source"))}
     quote_text = text(value)
     return {"text": quote_text, "attribution": ""} if quote_text else None
 
@@ -316,9 +313,9 @@ def _normalize_quick_facts(value: Any, row: Mapping[str, Any]) -> list[dict[str,
 
 
 def _normalize_sections(value: Any) -> list[dict[str, Any]]:
-    sections: list[dict[str, Any]] = []
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return sections
+        return []
+    sections: list[dict[str, Any]] = []
     used: set[str] = set()
     for index, item in enumerate(value):
         if not isinstance(item, Mapping):
@@ -371,23 +368,20 @@ def _fallback_sections(
             sections.append({"id": section_id, "title": title, "paragraphs": paragraphs[:6]})
 
     if len(sections) < 2:
-        extra: list[str] = []
         excluded = {
             "id", "entity_id", "name", "title", "label", "kind", "summary",
             "short_summary", "description", "dossier", "visibility", "schema_version",
             *consumed,
         }
+        extra = []
         for key, value in row.items():
-            if key in excluded or value in (None, "", [], (), {}):
-                continue
-            if key.endswith("_hash") or key.endswith("_version"):
+            if key in excluded or value in (None, "", [], (), {}) or key.endswith(("_hash", "_version")):
                 continue
             rendered = _display(value)
             if rendered:
                 extra.append(f"{key.replace('_', ' ').title()}: {rendered}.")
         if extra:
             sections.append({"id": "canon-details", "title": "Canon Details", "paragraphs": extra[:6]})
-
     return sections or [{"id": "overview", "title": "Overview", "paragraphs": [short_summary]}]
 
 
@@ -415,12 +409,7 @@ def project_entity_dossier(
     content: Mapping[str, Any] | None = None,
     entity_id: str = "",
 ) -> tuple[str, dict[str, Any]]:
-    """Return a compact summary and a normalized rich dossier.
-
-    Existing worlds without the v1 dossier are projected from canonical fields,
-    so stored data does not require a destructive migration.
-    """
-
+    """Return compact catalogue prose plus a normalized long-form dossier."""
     source = dict(row)
     canon = dict(content or {})
     resolved_id = entity_id or text(source.get("id") or source.get("entity_id"))
