@@ -20,6 +20,7 @@ import { RpgWorldVisualMapPanel } from './RpgWorldVisualMapPanel';
 import './RpgWorldFinalizedDesign.css';
 import './RpgWorldCompletionDesign.css';
 import './RpgWorldShellDesign.css';
+import './RpgWorldShellInteractions.css';
 
 interface RpgWorldEditorShellProps {
   onBack: () => void;
@@ -94,6 +95,9 @@ export function RpgWorldEditorShell({
   const initialRoute = parseWorldEditorRoute();
   const queryClient = useQueryClient();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [sectionId, setSectionId] = useState(
     initialRoute?.worldId === worldId ? initialRoute.sectionId : 'overview',
   );
@@ -137,6 +141,8 @@ export function RpgWorldEditorShell({
   const navigate = (nextSectionId: string, nextEntityId: string | null = null, replace = false) => {
     setSectionId(nextSectionId);
     setEntityId(nextEntityId);
+    setSearchOpen(false);
+    setNotificationsOpen(false);
     pushWorldEditorRoute({ worldId, sectionId: nextSectionId, entityId: nextEntityId ?? undefined }, replace);
   };
 
@@ -187,6 +193,20 @@ export function RpgWorldEditorShell({
   const currentWorld = manifestQuery.data?.world ?? world;
   const selectedGroup = GROUPS.find((group) => group.id === selectedSection.group)?.label ?? statusLabel(selectedSection.group);
   const profileInitial = currentWorld.title.trim().slice(0, 1).toUpperCase() || 'W';
+  const searchResults = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return sections.slice(0, 8);
+    return sections.filter((candidate) => [candidate.label, candidate.id, candidate.group]
+      .some((value) => String(value).toLowerCase().includes(query))).slice(0, 12);
+  }, [searchQuery, sections]);
+  const attentionSections = sections.filter((candidate) => (
+    candidate.operational_status === 'failed'
+    || candidate.operational_status === 'stale'
+    || candidate.editorial_status === 'needs_review'
+  ));
+  const generation = manifestQuery.data?.generation;
+  const generationRun = generation && 'run_id' in generation ? generation : undefined;
+  const notificationCount = attentionSections.length + (generationRun?.status === 'failed' ? 1 : 0);
 
   return (
     <section className={`rpg-authoring-editor rpg-world-product-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`} aria-label="World editor">
@@ -246,8 +266,8 @@ export function RpgWorldEditorShell({
               {entityId ? <><span>›</span><strong>{statusLabel(entityId.split(':').slice(-1)[0])}</strong></> : null}
             </nav>
             <div className="rpg-world-topbar-actions">
-              <button aria-label="Search world" className="rpg-world-icon-button" type="button">⌕</button>
-              <button aria-label="Notifications" className="rpg-world-icon-button" type="button">♧</button>
+              <button aria-expanded={searchOpen} aria-label="Search world" className="rpg-world-icon-button" type="button" onClick={() => { setSearchOpen((value) => !value); setNotificationsOpen(false); }}>⌕</button>
+              <button aria-expanded={notificationsOpen} aria-label="Notifications" className="rpg-world-icon-button rpg-world-notification-button" type="button" onClick={() => { setNotificationsOpen((value) => !value); setSearchOpen(false); }}>♧{notificationCount ? <b>{notificationCount}</b> : null}</button>
               <span className="rpg-world-topbar-divider" />
               <span className="rpg-world-profile-avatar" aria-hidden="true">{profileInitial}</span>
               <span className="rpg-world-profile-copy"><strong>Lorekeeper</strong><small>Game Master</small></span>
@@ -256,6 +276,25 @@ export function RpgWorldEditorShell({
             </div>
           </header>
 
+          {searchOpen ? (
+            <aside className="rpg-world-command-popover is-search" aria-label="Search world sections">
+              <label><span>Search this world</span><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.currentTarget.value)} placeholder="Regions, factions, history…" /></label>
+              <div>
+                {searchResults.map((candidate) => <button key={candidate.id} type="button" onClick={() => navigate(candidate.id)}><span>{icon(candidate.id)}</span><strong>{candidate.label}</strong><small>{statusLabel(candidate.group)} · {statusLabel(candidate.operational_status)}</small></button>)}
+                {!searchResults.length ? <p>No matching sections.</p> : null}
+              </div>
+            </aside>
+          ) : null}
+
+          {notificationsOpen ? (
+            <aside className="rpg-world-command-popover is-notifications" aria-label="World notifications">
+              <header><strong>World activity</strong><span>{notificationCount || 'All clear'}</span></header>
+              {generationRun ? <button type="button" onClick={() => navigate('generation')}><span>⚙</span><strong>Generation {statusLabel(generationRun.status)}</strong><small>Open run diagnostics and activity.</small></button> : null}
+              {attentionSections.map((candidate) => <button key={candidate.id} type="button" onClick={() => navigate(candidate.id)}><span>{icon(candidate.id)}</span><strong>{candidate.label}</strong><small>{statusLabel(candidate.operational_status)} · {statusLabel(candidate.editorial_status)}</small></button>)}
+              {!generationRun && !attentionSections.length ? <p>No generation failures, stale sections, or pending reviews.</p> : null}
+            </aside>
+          ) : null}
+
           <main className="rpg-world-content-canvas">
             {selectedSection.id === 'advanced' ? (
               <RpgWorldAdvancedPanel world={currentWorld} />
@@ -263,6 +302,7 @@ export function RpgWorldEditorShell({
               <RpgWorldGenerationDashboard
                 generation={manifestQuery.data?.generation}
                 onOpenImages={() => navigate('images')}
+                onOpenSection={(nextSectionId) => navigate(nextSectionId)}
                 sections={sections}
                 worldId={worldId}
               />
@@ -277,6 +317,7 @@ export function RpgWorldEditorShell({
                 error={pageQuery.error instanceof Error ? pageQuery.error.message : undefined}
                 isLoading={pageQuery.isPending && rawSectionIds.has(selectedSection.id)}
                 isSaving={updateWorld.isPending}
+                onOpenEntity={(nextSectionId, nextEntityId) => navigate(nextSectionId, nextEntityId)}
                 onOpenSection={(nextSectionId) => navigate(nextSectionId)}
                 onSaveWorld={(changes) => updateWorld.mutate(changes)}
                 onSelectEntity={(nextEntityId) => navigate(selectedSection.id, nextEntityId)}
