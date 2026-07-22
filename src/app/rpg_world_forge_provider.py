@@ -16,14 +16,11 @@ from app.providers.registry import get_provider
 from app.providers.structured import (
     StructuredCapabilities,
     StructuredContract,
-    StructuredMode,
     StructuredOutputGateway,
     StructuredRetryBudget,
 )
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_default import (
-    ReferenceSafeWorldForgeGenerator,
-)
+from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
 from app.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
@@ -42,12 +39,7 @@ _COLLECTIONS = (
 
 
 class _WorldForgeRow(BaseModel):
-    """Typed object envelope for heterogeneous topic rows.
-
-    Topic-specific normalization and semantic auditing remain authoritative after
-    provider decoding. Pydantic still rejects scalar/list rows instead of silently
-    discarding them.
-    """
+    """Typed object envelope for heterogeneous topic rows."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -105,41 +97,6 @@ def _topic_contract(expected_topic_id: str) -> StructuredContract[WorldForgeTopi
         schema_profile="canon_strict",
         schema_name="rpg_world_forge_topic",
     )
-
-
-def _response_formats(provider: str) -> tuple[tuple[str, dict[str, Any]], ...]:
-    """Compatibility view of the centralized provider mode preferences."""
-
-    capabilities = StructuredCapabilities.default_for_provider(provider)
-    schema = WorldForgeTopicResponse.model_json_schema()
-    rows: list[tuple[str, dict[str, Any]]] = []
-    for mode in capabilities.preferred_modes:
-        if mode is StructuredMode.JSON_SCHEMA:
-            rows.append(
-                (
-                    mode.value,
-                    {
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "rpg_world_forge_topic",
-                            "strict": capabilities.supports_strict_schema,
-                            "schema": schema,
-                        },
-                    },
-                )
-            )
-        elif mode is StructuredMode.JSON_OBJECT:
-            rows.append((mode.value, {"type": "json_object"}))
-        elif mode is StructuredMode.TEXT_JSON:
-            rows.append(("text", {"type": "text"}))
-    return tuple(rows)
-
-
-def _response_format(provider: str, *, schema_enabled: bool = True) -> dict[str, Any]:
-    """Compatibility shim retained for integrations importing this helper."""
-
-    modes = _response_formats(provider)
-    return dict(modes[0 if schema_enabled else -1][1])
 
 
 @dataclass(frozen=True)
@@ -221,6 +178,26 @@ class WorldForgeProviderConfig:
         } and bool(self.provider)
 
 
+class _ConfiguredProviderView:
+    """Expose immutable route identity without mutating a shared provider instance."""
+
+    def __init__(self, provider: BaseProvider, provider_name: str) -> None:
+        self._provider = provider
+        self.provider_name = provider_name or str(
+            getattr(provider, "provider_name", provider.__class__.__name__)
+        )
+        self.config = getattr(provider, "config", None)
+
+    def chat_completion(self, *args: Any, **kwargs: Any) -> Any:
+        return self._provider.chat_completion(*args, **kwargs)
+
+    def get_structured_capabilities(self, *args: Any, **kwargs: Any):
+        method = getattr(self._provider, "get_structured_capabilities", None)
+        if callable(method):
+            return method(*args, **kwargs)
+        return StructuredCapabilities.default_for_provider(self.provider_name)
+
+
 def _system_prompt(node: CampaignTopicNode) -> str:
     return (
         "You are the Omnix Campaign World Forge. Return strict JSON only for the "
@@ -280,12 +257,12 @@ def _model_rows(rows: list[_WorldForgeRow]) -> tuple[Mapping[str, Any], ...]:
 
 
 class ProviderWorldForgeTopicGenerator:
-    """Generate one validated canon topic through the shared structured gateway."""
+    """Generate one validated canon topic through a request-local gateway."""
 
     def __init__(self, provider: BaseProvider, config: WorldForgeProviderConfig) -> None:
-        self.provider = provider
+        self.transport_provider = provider
+        self.provider = _ConfiguredProviderView(provider, config.provider)
         self.config = config
-        self.gateway = StructuredOutputGateway(provider)
 
     def generate(
         self,
@@ -313,36 +290,35 @@ class ProviderWorldForgeTopicGenerator:
         ]
         started = perf_counter()
         total_calls = max(1, self.config.max_retries + 2)
-        try:
-            value = self.gateway.generate(
-                messages,
-                contract=replace(
-                    _topic_contract(node.topic_id),
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens,
+        gateway = StructuredOutputGateway(self.provider)
+        outcome = gateway.try_generate(
+            messages,
+            contract=replace(
+                _topic_contract(node.topic_id),
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+            ),
+            model=self.config.model or None,
+            retry_budget=StructuredRetryBudget(
+                max_provider_calls=total_calls,
+                max_transport_retries=self.config.max_retries,
+                max_format_downgrades=(
+                    1 if self.config.lmstudio_schema_fallback else 0
                 ),
-                model=self.config.model or None,
-                retry_budget=StructuredRetryBudget(
-                    max_provider_calls=total_calls,
-                    max_transport_retries=self.config.max_retries,
-                    max_format_downgrades=(
-                        1 if self.config.lmstudio_schema_fallback else 0
-                    ),
-                    max_validation_regenerations=self.config.max_retries,
-                    deadline_seconds=float(self.config.timeout_seconds),
-                ),
-            )
-        except Exception as exc:
-            diagnostics = self.gateway.last_diagnostics
-            attempts = diagnostics.provider_calls if diagnostics is not None else 0
+                max_validation_regenerations=self.config.max_retries,
+                deadline_seconds=float(self.config.timeout_seconds),
+            ),
+        )
+        diagnostics = outcome.diagnostics
+        if outcome.error is not None:
             raise RuntimeError(
                 f"structured World Forge provider failed for {node.topic_id} "
-                f"after {attempts or total_calls} attempts: "
-                f"{type(exc).__name__}: {exc}"
-            ) from exc
-
-        diagnostics = self.gateway.last_diagnostics
-        trusted = diagnostics.as_dict() if diagnostics is not None else {}
+                f"after {diagnostics.provider_calls or total_calls} attempts: "
+                f"{type(outcome.error).__name__}: {outcome.error}"
+            ) from outcome.error
+        assert outcome.value is not None
+        value = outcome.value
+        trusted = diagnostics.as_dict()
         return GeneratedTopic(
             topic_id=value.topic_id,
             documents=_model_rows(value.documents),
@@ -353,7 +329,8 @@ class ProviderWorldForgeTopicGenerator:
             story_threads=_model_rows(value.story_threads),
             provenance={
                 **dict(value.provenance),
-                "generator": "structured_world_forge_provider_v2",
+                "generator": "structured_world_forge_provider_v1",
+                "provider_contract": "rpg_world_forge_topic_request_v3",
                 "provider": self.config.provider,
                 "model": self.config.model,
                 "attempt_count": int(trusted.get("provider_calls") or 1),
