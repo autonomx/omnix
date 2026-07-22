@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass, replace
 from threading import Lock
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any, Callable, Mapping
 
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse
@@ -22,6 +23,7 @@ from app.rpg.session.genesis.world_forge_generation import (
 )
 
 
+_LOGGER = logging.getLogger(__name__)
 _JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _COLLECTIONS = (
     "documents",
@@ -49,8 +51,8 @@ _WORLD_FORGE_RESPONSE_SCHEMA: Mapping[str, Any] = {
 }
 
 
-def _response_format(provider: str) -> dict[str, Any]:
-    if str(provider or "").strip().casefold() == "lmstudio":
+def _response_format(provider: str, *, schema_enabled: bool = True) -> dict[str, Any]:
+    if str(provider or "").strip().casefold() == "lmstudio" and schema_enabled:
         return {
             "type": "json_schema",
             "json_schema": {
@@ -72,13 +74,16 @@ class WorldForgeProviderConfig:
     timeout_seconds: int = 180
     max_retries: int = 2
     temperature: float = 0.6
+    max_tokens: int = 8192
+    retry_backoff_seconds: float = 1.0
+    lmstudio_schema_fallback: bool = True
 
     @classmethod
     def from_environment(
         cls,
         environ: Mapping[str, str] | None = None,
     ) -> "WorldForgeProviderConfig":
-        env = environ or os.environ
+        env = environ if environ is not None else os.environ
         return cls(
             mode=str(env.get("OMNIX_RPG_WORLD_FORGE_MODE") or "auto")
             .strip()
@@ -119,6 +124,20 @@ class WorldForgeProviderConfig:
                     2.0,
                 ),
             ),
+            max_tokens=max(
+                1024,
+                min(int(env.get("OMNIX_RPG_WORLD_FORGE_MAX_TOKENS") or 8192), 32768),
+            ),
+            retry_backoff_seconds=max(
+                0.0,
+                min(
+                    float(env.get("OMNIX_RPG_WORLD_FORGE_RETRY_BACKOFF_SECONDS") or 1.0),
+                    30.0,
+                ),
+            ),
+            lmstudio_schema_fallback=str(
+                env.get("OMNIX_RPG_WORLD_FORGE_LMSTUDIO_SCHEMA_FALLBACK") or "true"
+            ).strip().casefold() not in {"0", "false", "no", "off"},
         )
 
     @property
@@ -247,6 +266,8 @@ class ProviderWorldForgeTopicGenerator:
         ]
         started = perf_counter()
         last_error: Exception | None = None
+        schema_enabled = True
+        prompt_chars = sum(len(message.content) for message in messages)
         for attempt in range(1, self.config.max_retries + 2):
             try:
                 response = self.provider.chat_completion(
@@ -254,7 +275,11 @@ class ProviderWorldForgeTopicGenerator:
                     model=self.config.model or None,
                     stream=False,
                     temperature=self.config.temperature,
-                    response_format=_response_format(self.config.provider),
+                    max_tokens=self.config.max_tokens,
+                    response_format=_response_format(
+                        self.config.provider,
+                        schema_enabled=schema_enabled,
+                    ),
                 )
                 if not isinstance(response, ChatResponse):
                     raise ValueError(
@@ -290,10 +315,33 @@ class ProviderWorldForgeTopicGenerator:
                         "usage": dict(response.usage or {}),
                         "finish_reason": response.finish_reason or "",
                         "entity_dossier_schema": "rpg_world_entity_dossier_v1",
+                        "response_format": "json_schema" if schema_enabled else "json_object",
+                        "max_tokens": self.config.max_tokens,
                     },
                 )
             except Exception as exc:
                 last_error = exc
+                _LOGGER.warning(
+                    "World Forge provider attempt failed provider=%s model=%s topic=%s "
+                    "attempt=%s/%s prompt_chars=%s response_format=%s error=%s: %s",
+                    self.config.provider,
+                    self.config.model,
+                    node.topic_id,
+                    attempt,
+                    self.config.max_retries + 1,
+                    prompt_chars,
+                    "json_schema" if schema_enabled else "json_object",
+                    type(exc).__name__,
+                    exc,
+                )
+                if (
+                    self.config.provider.strip().casefold() == "lmstudio"
+                    and schema_enabled
+                    and self.config.lmstudio_schema_fallback
+                ):
+                    schema_enabled = False
+                if attempt <= self.config.max_retries and self.config.retry_backoff_seconds > 0:
+                    sleep(self.config.retry_backoff_seconds * (2 ** (attempt - 1)))
         raise RuntimeError(
             f"structured World Forge provider failed for {node.topic_id} "
             f"after {self.config.max_retries + 1} attempts: "
