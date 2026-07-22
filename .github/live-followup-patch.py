@@ -1,4 +1,12 @@
+import os
+import subprocess
 from pathlib import Path
+
+branch = os.environ.get("GITHUB_HEAD_REF", "").strip()
+if not branch:
+    raise SystemExit("GITHUB_HEAD_REF is missing")
+subprocess.run(["git", "fetch", "origin", branch], check=True)
+subprocess.run(["git", "checkout", "-B", branch, f"origin/{branch}"], check=True)
 
 controller_path = Path("apps/web/src/features/assistant-workspace/live-voice-controller.ts")
 workflow_path = Path(".github/workflows/live-chat-hardening.yml")
