@@ -7,8 +7,40 @@ const characterClass: RpgAuthoringEntityCard = {
   id: 'class:ward_runner',
   title: 'Ward Runner',
   summary: 'A mobile defender trained to cross unstable wards.',
+  short_summary: 'A mobile defender trained to cross unstable wards.',
   kind: 'class',
   card_type: 'classes',
+  dossier: {
+    schema_version: 'rpg_world_entity_dossier_v1',
+    subtitle: 'Pathfinders through broken magic',
+    quote: {
+      text: 'A ward is only a wall until you learn where it breathes.',
+      attribution: 'Runner-Captain Sera Vale',
+    },
+    quick_facts: [
+      { label: 'Primary role', value: 'mobile_defender' },
+      { label: 'Institution', value: 'institution:wayfinders' },
+    ],
+    sections: [
+      {
+        id: 'overview',
+        title: 'Overview',
+        paragraphs: [
+          'Ward Runners cross unstable magical boundaries while conventional defenders hold position.',
+          'Their discipline combines fieldcraft, protective magic, and the judgment to retreat before a failing ward collapses.',
+        ],
+      },
+      {
+        id: 'training',
+        title: 'Training',
+        paragraphs: [
+          'Initiates learn to read pressure changes in active wards before they attempt a crossing.',
+          'Senior runners practice with damaged ward keys and map safe paths for those who follow.',
+        ],
+      },
+    ],
+    related_entity_ids: ['institution:wayfinders'],
+  },
   presentation: {
     variant: 'classes',
     eyebrow: 'Class / Discipline',
@@ -42,7 +74,7 @@ const characterClass: RpgAuthoringEntityCard = {
 };
 
 describe('RpgWorldEntityDetail', () => {
-  it('shows the complete class dossier as a routed subpage', () => {
+  it('shows the complete rich dossier as a routed reading page', () => {
     const onClose = vi.fn();
     render(
       <RpgWorldEntityDetail
@@ -54,11 +86,17 @@ describe('RpgWorldEntityDetail', () => {
 
     expect(screen.getByRole('main', { name: 'Ward Runner details' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '← Back to Classes' })).toBeInTheDocument();
-    expect(screen.getByText('Cross active wards')).toBeInTheDocument();
-    expect(screen.getByText('Pathfinder')).toBeInTheDocument();
+    expect(screen.getByText('Pathfinders through broken magic')).toBeInTheDocument();
+    expect(screen.getByText(/A ward is only a wall/)).toBeInTheDocument();
+    expect(screen.getByText('Runner-Captain Sera Vale')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Training' })).toBeInTheDocument();
+    expect(screen.getByText(/Senior runners practice with damaged ward keys/)).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Ward Runner sections' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Training' })).toHaveAttribute('href', '#training');
+    expect(screen.getByText('Wayfinders')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Additional details' })).toBeInTheDocument();
     expect(screen.getByText('Ward key')).toBeInTheDocument();
-    expect(screen.getByText('Wayfinders')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close Ward Runner details' }));
     expect(onClose).toHaveBeenCalledTimes(1);
