@@ -73,7 +73,11 @@ def test_campaign_genesis_materializes_bible_and_ready_gate_atomically() -> None
             compiled_genesis=compiled,
             generator=generator,
         )
-        assert world_forge.launch_ready is True
+        assert world_forge.launch_ready is True, {
+            "failed_topic_ids": world_forge.generation.failed_topic_ids,
+            "jobs": [job.as_dict() for job in world_forge.generation.jobs],
+            "audit": world_forge.audit.as_dict(),
+        }
         session = {
             "manifest": {
                 "session_id": "campaign:genesis",
