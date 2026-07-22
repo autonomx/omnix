@@ -1,5 +1,6 @@
 import { readCurrentAssistantDiagnosticText } from './live-conversation-assistant-summary';
 import type { AcceptedVoiceFinal, LiveFinalRoutingResult } from './live-accepted-final';
+import { acceptedFinalSuppressionReason } from './live-accepted-final-routing';
 import {
   createLiveCallDiagnosticsReporter,
   createLiveCallTraceId,
@@ -563,8 +564,13 @@ async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal)
     return failedRoutingResult(final, 'live_capture_session_inactive');
   }
   const receivedAt = performance.now();
-  const overlapIntent = session.overlapIntent;
+  const partialOverlapIntent = session.overlapIntent;
+  const finalOverlapAssessment = partialOverlapIntent === 'uncertain'
+    ? classifyOverlap(final.text, currentAssistantSpeechText())
+    : null;
+  const overlapIntent = finalOverlapAssessment?.intent ?? partialOverlapIntent;
   const interruptionDispatched = session.interruptionDispatched;
+  const suppressionReason = acceptedFinalSuppressionReason(final.text, overlapIntent);
   const continuation = session.finalizationBuffer.drain();
   dispatchLiveVoicePerfEvent({
     stage: 'stt_final_received',
@@ -590,23 +596,24 @@ async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal)
     protocol: final.protocol,
     transcript_chars: final.text.trim().length,
     stt_finalize_ms: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),
+    overlap_intent: overlapIntent,
+    overlap_confidence: finalOverlapAssessment?.confidence,
+    overlap_reason: finalOverlapAssessment?.reason,
+    interruption_dispatched: interruptionDispatched,
   }, 'live_voice_controller');
-  const suppressTurn = Boolean(
-    overlapIntent === 'hard_stop'
-    || overlapIntent === 'backchannel'
-    || overlapIntent === 'noise'
-    || (overlapIntent === 'uncertain' && !interruptionDispatched),
-  );
   resetTurnState(session);
   try {
-    if (suppressTurn || !final.text.trim()) {
+    if (suppressionReason) {
       const result = ignoredRoutingResult(final);
       session.reporter.record('coordination_completed', {
         segment_id: final.segmentId,
         result_id: final.resultId,
         source_sequence: final.sourceSequence,
         outcome: result.outcome,
-        suppression_reason: suppressTurn ? overlapIntent ?? 'suppressed_overlap' : 'empty_transcript',
+        suppression_reason: suppressionReason,
+        overlap_intent: overlapIntent,
+        overlap_confidence: finalOverlapAssessment?.confidence,
+        overlap_reason: finalOverlapAssessment?.reason,
       }, 'live_voice_controller');
       return result;
     }
@@ -617,6 +624,10 @@ async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal)
       finalize_request_id: final.finalizeRequestId,
       source_sequence: final.sourceSequence,
       capture_epoch: final.captureEpoch,
+      overlap_intent: overlapIntent,
+      overlap_confidence: finalOverlapAssessment?.confidence,
+      overlap_reason: finalOverlapAssessment?.reason,
+      interruption_dispatched: interruptionDispatched,
     }, 'live_voice_controller');
     dispatchLiveVoicePerfEvent({
       stage: 'coordination_started',
