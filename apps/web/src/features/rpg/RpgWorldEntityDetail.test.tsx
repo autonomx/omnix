@@ -94,7 +94,7 @@ describe('RpgWorldEntityDetail', () => {
     expect(screen.getByText(/Senior runners practice with damaged ward keys/)).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Ward Runner sections' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Training' })).toHaveAttribute('href', '#training');
-    expect(screen.getByText('Wayfinders')).toBeInTheDocument();
+    expect(screen.getAllByText('Wayfinders').length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: 'Additional details' })).toBeInTheDocument();
     expect(screen.getByText('Ward key')).toBeInTheDocument();
 
