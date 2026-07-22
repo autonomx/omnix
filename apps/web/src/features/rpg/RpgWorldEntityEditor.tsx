@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldAuthoringClient,
+  type RpgAuthoringDossierPreviewResponse,
   type RpgAuthoringEntityCard,
   type RpgAuthoringEntityDossier,
   type RpgAuthoringTopic,
@@ -59,6 +60,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
   const [rawDossier, setRawDossier] = useState(initialDossier);
   const rawDossierRef = useRef(initialDossier);
   const [dossierDraftDirty, setDossierDraftDirty] = useState(false);
+  const [dossierPreview, setDossierPreview] = useState<RpgAuthoringDossierPreviewResponse | null>(null);
   const [rawDirectives, setRawDirectives] = useState('{}');
   const [feedback, setFeedback] = useState('');
   const queryKey = ['feature', 'rpg', 'world-entity', worldId, topic.topic_id, entity.id];
@@ -82,6 +84,14 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
   const updateDossierDraft = (value: RpgAuthoringEntityDossier) => {
     setDossierDraftDirty(true);
     replaceDossierDraft(JSON.stringify(value, null, 2));
+  };
+
+  const discardPreview = () => {
+    setDossierPreview(null);
+    setDossierDraftDirty(false);
+    setShortSummary(entity.short_summary || entity.summary || '');
+    replaceDossierDraft(JSON.stringify(entity.dossier ?? {}, null, 2));
+    setFeedback('Discarded the regeneration preview; stored lore was not changed.');
   };
 
   useEffect(() => {
@@ -115,6 +125,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
       },
     ),
     onSuccess: async (result) => {
+      setDossierPreview(null);
       setDossierDraftDirty(false);
       const storedDossier = result.entity.dossier && typeof result.entity.dossier === 'object'
         ? result.entity.dossier
@@ -127,8 +138,8 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Dossier could not be saved.'),
   });
 
-  const regenerateDossier = useMutation({
-    mutationFn: () => rpgWorldAuthoringClient.regenerateEntityDossier(
+  const previewDossier = useMutation({
+    mutationFn: () => rpgWorldAuthoringClient.previewEntityDossier(
       worldId,
       topic.topic_id,
       entity.id,
@@ -138,17 +149,43 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
         directives: parseObject(rawDirectives, 'Regeneration directives'),
       },
     ),
+    onSuccess: (result) => {
+      setDossierPreview(result);
+      setDossierDraftDirty(true);
+      setShortSummary(result.short_summary);
+      replaceDossierDraft(JSON.stringify(result.dossier, null, 2));
+      setFeedback(`Generated a preview for ${entity.title}. Nothing has been stored; review or edit it before applying.`);
+    },
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Dossier preview could not be generated.'),
+  });
+
+  const applyPreview = useMutation({
+    mutationFn: () => {
+      if (!dossierPreview) throw new Error('No dossier preview is available.');
+      return rpgWorldAuthoringClient.updateEntityDossier(
+        worldId,
+        topic.topic_id,
+        entity.id,
+        {
+          expected_draft_revision: dossierPreview.expected_draft_revision,
+          expected_content_hash: dossierPreview.expected_content_hash,
+          short_summary: shortSummary,
+          dossier: parseObject(rawDossierRef.current, 'Dossier preview'),
+        },
+      );
+    },
     onSuccess: async (result) => {
+      setDossierPreview(null);
       setDossierDraftDirty(false);
       const storedDossier = result.entity.dossier && typeof result.entity.dossier === 'object'
         ? result.entity.dossier
         : {};
       replaceDossierDraft(JSON.stringify(storedDossier, null, 2));
-      setShortSummary(String(result.entity.short_summary || ''));
-      setFeedback(`Regenerated only the prose dossier for ${entity.title}; no dependent canon was marked stale.`);
+      setShortSummary(String(result.entity.short_summary || shortSummary));
+      setFeedback(`Applied the reviewed prose preview for ${entity.title}; no canonical structured fields changed.`);
       await refresh();
     },
-    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Dossier could not be regenerated.'),
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Dossier preview could not be applied.'),
   });
 
   const save = useMutation({
@@ -207,6 +244,11 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
             <h4>Editorial dossier</h4>
             <p>These controls update reading prose only. Entity identity, mechanics, references, facts, and relationships remain unchanged.</p>
           </div>
+          {dossierPreview ? (
+            <div className="rpg-authoring-feedback" role="status">
+              Preview mode: the generated prose is local and editable. Stored canon remains unchanged until Apply Preview is selected.
+            </div>
+          ) : null}
           <label>
             <span>Short catalogue summary</span>
             <textarea
@@ -246,13 +288,34 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
             </label>
           </details>
 
+          <label>
+            <span>Dossier regeneration directives</span>
+            <textarea
+              aria-label={`Regeneration directives for ${entity.title}`}
+              rows={4}
+              value={rawDirectives}
+              onChange={(event) => setRawDirectives(event.currentTarget.value)}
+              placeholder={'{"focus":"Deepen motives without changing identity"}'}
+            />
+          </label>
           <div className="rpg-authoring-entity-editor-actions">
-            <button type="button" disabled={saveDossier.isPending || !dossierDraft} onClick={() => saveDossier.mutate()}>
-              {saveDossier.isPending ? 'Saving dossier…' : 'Save Dossier Only'}
-            </button>
-            <button className="rpg-secondary-button" type="button" disabled={regenerateDossier.isPending} onClick={() => regenerateDossier.mutate()}>
-              {regenerateDossier.isPending ? 'Regenerating dossier…' : 'Regenerate Dossier Only'}
-            </button>
+            {dossierPreview ? (
+              <>
+                <button type="button" disabled={applyPreview.isPending || !dossierDraft} onClick={() => applyPreview.mutate()}>
+                  {applyPreview.isPending ? 'Applying preview…' : 'Apply Preview'}
+                </button>
+                <button className="rpg-secondary-button" type="button" onClick={discardPreview}>Discard Preview</button>
+              </>
+            ) : (
+              <>
+                <button type="button" disabled={saveDossier.isPending || !dossierDraft} onClick={() => saveDossier.mutate()}>
+                  {saveDossier.isPending ? 'Saving dossier…' : 'Save Dossier Only'}
+                </button>
+                <button className="rpg-secondary-button" type="button" disabled={previewDossier.isPending} onClick={() => previewDossier.mutate()}>
+                  {previewDossier.isPending ? 'Generating preview…' : 'Preview Dossier Regeneration'}
+                </button>
+              </>
+            )}
           </div>
         </section>
 
@@ -278,9 +341,9 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
         </details>
 
         <label>
-          <span>Regeneration directives</span>
+          <span>Entire entity regeneration directives</span>
           <textarea
-            aria-label={`Regeneration directives for ${entity.title}`}
+            aria-label={`Entire entity regeneration directives for ${entity.title}`}
             rows={5}
             value={rawDirectives}
             onChange={(event) => setRawDirectives(event.currentTarget.value)}
