@@ -19,6 +19,7 @@ import { RpgWorldScenarioAuthoringPanel } from './RpgWorldScenarioAuthoringPanel
 import { RpgWorldVisualMapPanel } from './RpgWorldVisualMapPanel';
 import './RpgWorldFinalizedDesign.css';
 import './RpgWorldCompletionDesign.css';
+import './RpgWorldShellDesign.css';
 
 interface RpgWorldEditorShellProps {
   onBack: () => void;
@@ -36,6 +37,38 @@ const GROUPS: Array<{ id: RpgAuthoringGroup; label: string }> = [
 
 const DEDICATED_SECTIONS = ['advanced', 'generation', 'images', 'map', 'scenarios'];
 
+const SECTION_ICONS: Record<string, string> = {
+  overview: '◉',
+  generation: '⚙',
+  images: '▧',
+  map: '⌖',
+  regions: '◈',
+  races: '✥',
+  factions: '♜',
+  classes: '✣',
+  spells: '✦',
+  feats: '✧',
+  locations: '⌂',
+  points_of_interest: '◇',
+  monsters: '♢',
+  items: '♧',
+  realm: '⌂',
+  realm_overview: '⌂',
+  cosmology: '◊',
+  magic_technology: '⋈',
+  history: '▣',
+  calendar: '◷',
+  cultures: '♙',
+  institutions: '▤',
+  pantheon: '✺',
+  hero_system: '✵',
+  current_conflicts: '⚔',
+  npcs: '♟',
+  quests: '✎',
+  scenarios: '▶',
+  advanced: '⋯',
+};
+
 function statusLabel(value: string): string {
   return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -48,6 +81,10 @@ function worldState(world: RpgWorldSummary): string {
   return world.status === 'published' ? 'Published' : 'Draft';
 }
 
+function icon(sectionId: string): string {
+  return SECTION_ICONS[sectionId] ?? SECTION_ICONS[sectionId.replace(/s$/, '')] ?? '✦';
+}
+
 export function RpgWorldEditorShell({
   onBack,
   onPlay,
@@ -56,6 +93,7 @@ export function RpgWorldEditorShell({
 }: RpgWorldEditorShellProps) {
   const initialRoute = parseWorldEditorRoute();
   const queryClient = useQueryClient();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sectionId, setSectionId] = useState(
     initialRoute?.worldId === worldId ? initialRoute.sectionId : 'overview',
   );
@@ -147,71 +185,111 @@ export function RpgWorldEditorShell({
     sections.filter((section) => section.group === group.id),
   ])), [sections]);
   const currentWorld = manifestQuery.data?.world ?? world;
+  const selectedGroup = GROUPS.find((group) => group.id === selectedSection.group)?.label ?? statusLabel(selectedSection.group);
+  const profileInitial = currentWorld.title.trim().slice(0, 1).toUpperCase() || 'W';
 
   return (
-    <section className="rpg-authoring-editor" aria-label="World editor">
-      <header className="rpg-authoring-editor-header">
-        <div><button className="rpg-secondary-button" type="button" onClick={onBack}>Back to Worlds</button><span>/</span><strong>{currentWorld.title}</strong>{entityId ? <><span>/</span><span>{statusLabel(entityId)}</span></> : null}</div>
-        <div><span>{worldState(currentWorld)}</span><button type="button" onClick={onPlay}>Play</button></div>
-      </header>
-      <div className="rpg-authoring-editor-layout">
-        <nav aria-label="World editor sections">
-          {GROUPS.map((group) => {
-            const rows = grouped.get(group.id) ?? [];
-            if (!rows.length) return null;
-            return (
-              <section key={group.id}>
-                <h4>{group.label}</h4>
-                {rows.map((section) => (
-                  <button
-                    className={selectedSection.id === section.id ? 'is-active' : ''}
-                    key={section.id}
-                    type="button"
-                    onClick={() => navigate(section.id)}
-                  >
-                    <span>{section.label}</span>
-                    <small>{statusLabel(section.operational_status)}{section.entity_count ? ` · ${section.entity_count}` : ''}</small>
-                  </button>
-                ))}
-              </section>
-            );
-          })}
-          {manifestQuery.isPending ? <p>Loading sections…</p> : null}
-          {manifestQuery.isError ? <p className="rpg-world-catalog-error">Unable to load authoring manifest.</p> : null}
-        </nav>
-        <main>
-          {selectedSection.id === 'advanced' ? (
-            <RpgWorldAdvancedPanel world={currentWorld} />
-          ) : selectedSection.id === 'generation' ? (
-            <RpgWorldGenerationDashboard
-              generation={manifestQuery.data?.generation}
-              onOpenImages={() => navigate('images')}
-              sections={sections}
-              worldId={worldId}
-            />
-          ) : selectedSection.id === 'images' ? (
-            <RpgWorldImagesPanel worldId={worldId} />
-          ) : selectedSection.id === 'map' ? (
-            <RpgWorldVisualMapPanel worldId={worldId} />
-          ) : selectedSection.id === 'scenarios' ? (
-            <RpgWorldScenarioAuthoringPanel worldId={worldId} />
-          ) : (
-            <RpgWorldAuthoringPage
-              error={pageQuery.error instanceof Error ? pageQuery.error.message : undefined}
-              isLoading={pageQuery.isPending && rawSectionIds.has(selectedSection.id)}
-              isSaving={updateWorld.isPending}
-              onOpenSection={(nextSectionId) => navigate(nextSectionId)}
-              onSaveWorld={(changes) => updateWorld.mutate(changes)}
-              onSelectEntity={(nextEntityId) => navigate(selectedSection.id, nextEntityId)}
-              page={pageQuery.data}
-              section={selectedSection}
-              sections={sections}
-              selectedEntityId={entityId}
-              world={currentWorld}
-              worldId={worldId}
-            />
-          )}
-        </main>
+    <section className={`rpg-authoring-editor rpg-world-product-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`} aria-label="World editor">
+      <div className="rpg-world-shell-layout">
+        <aside className="rpg-world-sidebar">
+          <div className="rpg-world-brand" aria-label="Worlds and Campaigns">
+            <span className="rpg-world-brand-mark">✥</span>
+            <strong><span>Worlds &amp;</span><span>Campaigns</span></strong>
+          </div>
+          <nav aria-label="World editor sections">
+            {GROUPS.map((group) => {
+              const rows = grouped.get(group.id) ?? [];
+              if (!rows.length) return null;
+              return (
+                <section key={group.id}>
+                  <h4>{group.label}</h4>
+                  {rows.map((section) => (
+                    <button
+                      aria-current={selectedSection.id === section.id ? 'page' : undefined}
+                      className={selectedSection.id === section.id ? 'is-active' : ''}
+                      key={section.id}
+                      title={sidebarCollapsed ? section.label : undefined}
+                      type="button"
+                      onClick={() => navigate(section.id)}
+                    >
+                      <span className="rpg-world-nav-icon" aria-hidden="true">{icon(section.id)}</span>
+                      <span className="rpg-world-nav-copy"><span>{section.label}</span><small>{statusLabel(section.operational_status)}{section.entity_count ? ` · ${section.entity_count}` : ''}</small></span>
+                    </button>
+                  ))}
+                </section>
+              );
+            })}
+            {manifestQuery.isPending ? <p>Loading sections…</p> : null}
+            {manifestQuery.isError ? <p className="rpg-world-catalog-error">Unable to load authoring manifest.</p> : null}
+          </nav>
+          <button
+            aria-expanded={!sidebarCollapsed}
+            className="rpg-world-sidebar-collapse"
+            type="button"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+          >
+            <span aria-hidden="true">{sidebarCollapsed ? '›' : '‹'}</span>
+            <span>{sidebarCollapsed ? 'Expand' : 'Collapse'}</span>
+          </button>
+        </aside>
+
+        <div className="rpg-world-main-shell">
+          <header className="rpg-authoring-editor-header rpg-world-topbar">
+            <nav className="rpg-world-breadcrumbs" aria-label="Breadcrumb">
+              <button type="button" onClick={onBack}>← Back to Worlds</button>
+              <span>›</span>
+              <button type="button" onClick={() => navigate('overview')}>{currentWorld.title}</button>
+              <span>›</span>
+              <span>{selectedGroup}</span>
+              <span>›</span>
+              <strong>{selectedSection.label}</strong>
+              {entityId ? <><span>›</span><strong>{statusLabel(entityId.split(':').slice(-1)[0])}</strong></> : null}
+            </nav>
+            <div className="rpg-world-topbar-actions">
+              <button aria-label="Search world" className="rpg-world-icon-button" type="button">⌕</button>
+              <button aria-label="Notifications" className="rpg-world-icon-button" type="button">♧</button>
+              <span className="rpg-world-topbar-divider" />
+              <span className="rpg-world-profile-avatar" aria-hidden="true">{profileInitial}</span>
+              <span className="rpg-world-profile-copy"><strong>Lorekeeper</strong><small>Game Master</small></span>
+              <span className={`rpg-world-state is-${worldState(currentWorld).toLowerCase().replace(/\s+/g, '-')}`}>{worldState(currentWorld)}</span>
+              <button className="rpg-world-play-button" type="button" onClick={onPlay}>Play</button>
+            </div>
+          </header>
+
+          <main className="rpg-world-content-canvas">
+            {selectedSection.id === 'advanced' ? (
+              <RpgWorldAdvancedPanel world={currentWorld} />
+            ) : selectedSection.id === 'generation' ? (
+              <RpgWorldGenerationDashboard
+                generation={manifestQuery.data?.generation}
+                onOpenImages={() => navigate('images')}
+                sections={sections}
+                worldId={worldId}
+              />
+            ) : selectedSection.id === 'images' ? (
+              <RpgWorldImagesPanel worldId={worldId} />
+            ) : selectedSection.id === 'map' ? (
+              <RpgWorldVisualMapPanel worldId={worldId} />
+            ) : selectedSection.id === 'scenarios' ? (
+              <RpgWorldScenarioAuthoringPanel worldId={worldId} />
+            ) : (
+              <RpgWorldAuthoringPage
+                error={pageQuery.error instanceof Error ? pageQuery.error.message : undefined}
+                isLoading={pageQuery.isPending && rawSectionIds.has(selectedSection.id)}
+                isSaving={updateWorld.isPending}
+                onOpenSection={(nextSectionId) => navigate(nextSectionId)}
+                onSaveWorld={(changes) => updateWorld.mutate(changes)}
+                onSelectEntity={(nextEntityId) => navigate(selectedSection.id, nextEntityId)}
+                page={pageQuery.data}
+                section={selectedSection}
+                sections={sections}
+                selectedEntityId={entityId}
+                world={currentWorld}
+                worldId={worldId}
+              />
+            )}
+          </main>
+        </div>
       </div>
     </section>
   );
