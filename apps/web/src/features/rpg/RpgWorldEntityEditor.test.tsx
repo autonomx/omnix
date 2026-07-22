@@ -161,7 +161,7 @@ describe('RpgWorldEntityEditor', () => {
   it('previews dossier regeneration without storing and applies only after review', async () => {
     renderEditor();
     fireEvent.click(screen.getByText('Edit or regenerate'));
-    fireEvent.change(await screen.findByLabelText('Dossier regeneration directives for Bran'), {
+    fireEvent.change(await screen.findByLabelText('Regeneration directives for Bran'), {
       target: { value: '{"focus":"deepen the inn history"}' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Preview Dossier Regeneration' }));
