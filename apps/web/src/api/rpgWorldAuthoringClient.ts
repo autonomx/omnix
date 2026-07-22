@@ -46,10 +46,38 @@ export interface RpgAuthoringCardPresentation {
   groups: RpgAuthoringCardGroup[];
 }
 
+export interface RpgAuthoringDossierQuote {
+  text: string;
+  attribution?: string;
+}
+
+export interface RpgAuthoringDossierQuickFact {
+  label: string;
+  value: unknown;
+}
+
+export interface RpgAuthoringDossierSection {
+  id: string;
+  title: string;
+  paragraphs: string[];
+}
+
+export interface RpgAuthoringEntityDossier {
+  schema_version: 'rpg_world_entity_dossier_v1' | string;
+  subtitle?: string;
+  quote?: RpgAuthoringDossierQuote | null;
+  quick_facts: RpgAuthoringDossierQuickFact[];
+  sections: RpgAuthoringDossierSection[];
+  related_entity_ids: string[];
+  generated_from_legacy?: boolean;
+}
+
 export interface RpgAuthoringEntityCard {
   id: string;
   title: string;
   summary: string;
+  short_summary?: string;
+  dossier?: RpgAuthoringEntityDossier;
   kind: string;
   card_type: string;
   image_target_id?: string;
