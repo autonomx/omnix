@@ -201,6 +201,7 @@ def test_worker_discards_an_orphaned_world_topic_job() -> None:
             draft_revision=1,
             graph=_graph(),
             generation_context={"genre": "fantasy", "tone": "mythic"},
+            topic_directives={},
             entity_manifest_hash="sha256:" + "e" * 64,
             settings=WorldTopicGenerationSettings(
                 generator_version="deterministic-v1",
