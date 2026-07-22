@@ -140,15 +140,18 @@ def save_world_topic(
 def _execution_summary(run: Mapping[str, Any]) -> dict[str, Any]:
     plan = dict(run.get("plan") or {})
     progress = dict(run.get("progress") or {})
+    queued_jobs = list(plan.get("new_job_ids") or ())
+    active_topics = list(progress.get("active_topic_ids") or ())
     return {
-        "queued_topic_ids": list(plan.get("new_topic_ids") or ()),
+        "queued_topic_ids": active_topics,
+        "queued_job_ids": queued_jobs,
         "reused_topic_ids": list(plan.get("reusable_topic_ids") or ()),
         "protected_topic_ids": list(plan.get("protected_topic_ids") or ()),
         "target_topic_ids": list(plan.get("topic_ids") or ()),
-        "queued_count": len(plan.get("new_topic_ids") or ()),
+        "queued_count": len(queued_jobs),
         "reused_count": len(plan.get("reusable_topic_ids") or ()),
         "protected_count": len(plan.get("protected_topic_ids") or ()),
-        "active_count": len(progress.get("active_topic_ids") or ()),
+        "active_count": len(active_topics),
     }
 
 
@@ -190,7 +193,7 @@ def start_world_library_generation(
         tone=str(world.get("tone") or "heroic adventure"),
         depth=depth,
         starting_location=starting_location,
-        background_expansion=background_expansion,
+        background_expansion=backgroundExpansion if False else background_expansion,
     )
     target_topic_ids, forced_topic_ids, normalized_scope = resolve_generation_scope(
         graph,
