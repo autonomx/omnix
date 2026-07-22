@@ -10,6 +10,7 @@ from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_gr
 from .generation_coordinator import reconcile_world_generation, start_world_generation
 from .generation_jobs import WorldTopicGenerationSettings, canonical_hash
 from .generation_publication import publish_world_generation
+from .generation_routing import resolve_world_forge_route
 from .generation_scope import resolve_generation_scope
 from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_world_writable
@@ -136,6 +137,21 @@ def save_world_topic(
     return {"ok": True, "topic": stored}
 
 
+def _execution_summary(run: Mapping[str, Any]) -> dict[str, Any]:
+    plan = dict(run.get("plan") or {})
+    progress = dict(run.get("progress") or {})
+    return {
+        "queued_topic_ids": list(plan.get("new_topic_ids") or ()),
+        "reused_topic_ids": list(plan.get("reusable_topic_ids") or ()),
+        "protected_topic_ids": list(plan.get("protected_topic_ids") or ()),
+        "target_topic_ids": list(plan.get("topic_ids") or ()),
+        "queued_count": len(plan.get("new_topic_ids") or ()),
+        "reused_count": len(plan.get("reusable_topic_ids") or ()),
+        "protected_count": len(plan.get("protected_topic_ids") or ()),
+        "active_count": len(progress.get("active_topic_ids") or ()),
+    }
+
+
 def start_world_library_generation(
     world_id: str,
     *,
@@ -184,6 +200,7 @@ def start_world_library_generation(
         latest_run=runs[0] if runs else None,
         replace_locked=replace_locked,
     )
+    route = resolve_world_forge_route(provider_route, model)
     run = start_world_generation(
         world_id=world_id,
         draft_revision=int(world["draft_revision"]),
@@ -193,14 +210,17 @@ def start_world_library_generation(
             "tone": str(world.get("tone") or "heroic adventure"),
             "starting_location": starting_location,
             "background_expansion": background_expansion,
+            "requested_provider_route": route.requested_provider,
+            "requested_model": route.requested_model,
+            "resolved_provider_source": route.source,
         },
         topic_directives=dict(topic_directives or {}),
         entity_manifest_hash=canonical_hash(dict(entity_manifest or {})),
         settings=WorldTopicGenerationSettings(
             generator_version=generator_version,
             prompt_version=prompt_version,
-            provider_route=provider_route,
-            model=model,
+            provider_route=route.provider,
+            model=route.model,
             seed=int(world.get("seed") or 0),
         ),
         target_topic_ids=target_topic_ids,
@@ -209,12 +229,25 @@ def start_world_library_generation(
         strategy=strategy,
         database=database,
     )
-    worker_started = kick_world_generation_worker(database=database) if kick_worker else False
+    worker_started = (
+        kick_world_generation_worker(
+            database=database,
+            provider_route=route.provider,
+        )
+        if kick_worker
+        else False
+    )
     return {
         "ok": True,
         "run": run,
         "worker_started": worker_started,
         "scope": normalized_scope,
+        "execution_summary": _execution_summary(run),
+        "resolved_route": {
+            "provider": route.provider,
+            "model": route.model,
+            "source": route.source,
+        },
     }
 
 
