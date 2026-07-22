@@ -62,9 +62,11 @@ export function RpgWorldEntityCard({
     groups: [],
   };
   const previewHighlights = presentation.highlights.slice(0, 2);
+  const featured = Boolean(entity.metadata.featured);
 
   return (
-    <article className={`rpg-authoring-entity-card is-${presentation.variant}`}>
+    <article className={`rpg-authoring-entity-card is-${presentation.variant}${featured ? ' is-featured' : ''}`}>
+      {featured ? <span className="rpg-authoring-featured-ribbon">Featured</span> : null}
       <div
         className={`rpg-authoring-entity-placeholder${imageAssetId ? ' has-image' : ''}`}
         aria-hidden="true"
@@ -117,7 +119,7 @@ export function RpgWorldEntityCard({
           </section>
         )) : null}
         <div className="rpg-authoring-card-footer">
-          <small>{humanize(entity.kind)}</small>
+          <small>{featured ? '★ Featured · ' : ''}{humanize(entity.kind)}</small>
           {onOpen ? <button type="button" onClick={onOpen}>View details</button> : null}
         </div>
       </div>
