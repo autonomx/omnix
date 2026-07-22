@@ -3,8 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldAuthoringClient,
   type RpgAuthoringEntityCard,
+  type RpgAuthoringEntityDossier,
   type RpgAuthoringTopic,
 } from '../../api/rpgWorldAuthoringClient';
+import { RpgWorldDossierSectionEditor } from './RpgWorldDossierSectionEditor';
 
 interface RpgWorldEntityEditorProps {
   entity: RpgAuthoringEntityCard;
@@ -18,6 +20,27 @@ function parseObject(value: string, label: string): Record<string, unknown> {
     throw new Error(`${label} must be a JSON object.`);
   }
   return parsed as Record<string, unknown>;
+}
+
+function parseDossier(value: string): RpgAuthoringEntityDossier | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const dossier = parsed as Partial<RpgAuthoringEntityDossier>;
+    if (!Array.isArray(dossier.sections)) return null;
+    return {
+      schema_version: dossier.schema_version ?? 'rpg_world_entity_dossier_v1',
+      subtitle: dossier.subtitle ?? '',
+      quote: dossier.quote ?? null,
+      quick_facts: Array.isArray(dossier.quick_facts) ? dossier.quick_facts : [],
+      sections: dossier.sections,
+      related_entity_ids: Array.isArray(dossier.related_entity_ids) ? dossier.related_entity_ids : [],
+      generated_from_legacy: dossier.generated_from_legacy,
+      quality_enriched: dossier.quality_enriched,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function operationLabel(value: string): string {
@@ -44,6 +67,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
     queryFn: () => rpgWorldAuthoringClient.entity(worldId, topic.topic_id, entity.id),
     enabled: open,
   });
+  const dossierDraft = parseDossier(rawDossier);
 
   const replaceEntityDraft = (value: string) => {
     rawEntityRef.current = value;
@@ -53,6 +77,11 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
   const replaceDossierDraft = (value: string) => {
     rawDossierRef.current = value;
     setRawDossier(value);
+  };
+
+  const updateDossierDraft = (value: RpgAuthoringEntityDossier) => {
+    setDossierDraftDirty(true);
+    replaceDossierDraft(JSON.stringify(value, null, 2));
   };
 
   useEffect(() => {
@@ -69,6 +98,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-section', worldId, topic.topic_id] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-manifest', worldId] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-image-targets', worldId] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-dossier-quality', worldId] }),
     ]);
   };
 
@@ -189,20 +219,35 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
               }}
             />
           </label>
-          <label>
-            <span>Rich dossier JSON</span>
-            <textarea
-              aria-label={`Dossier JSON for ${entity.title}`}
-              rows={18}
-              value={rawDossier}
-              onChange={(event) => {
-                setDossierDraftDirty(true);
-                replaceDossierDraft(event.currentTarget.value);
-              }}
+
+          {dossierDraft ? (
+            <RpgWorldDossierSectionEditor
+              dossier={dossierDraft}
+              entityTitle={entity.title}
+              onChange={updateDossierDraft}
             />
-          </label>
+          ) : (
+            <p className="rpg-world-catalog-error">The dossier JSON is invalid. Repair it in Advanced dossier JSON before using the section editor.</p>
+          )}
+
+          <details className="rpg-authoring-structured-data">
+            <summary>Advanced dossier JSON</summary>
+            <label>
+              <span>Rich dossier JSON</span>
+              <textarea
+                aria-label={`Dossier JSON for ${entity.title}`}
+                rows={18}
+                value={rawDossier}
+                onChange={(event) => {
+                  setDossierDraftDirty(true);
+                  replaceDossierDraft(event.currentTarget.value);
+                }}
+              />
+            </label>
+          </details>
+
           <div className="rpg-authoring-entity-editor-actions">
-            <button type="button" disabled={saveDossier.isPending} onClick={() => saveDossier.mutate()}>
+            <button type="button" disabled={saveDossier.isPending || !dossierDraft} onClick={() => saveDossier.mutate()}>
               {saveDossier.isPending ? 'Saving dossier…' : 'Save Dossier Only'}
             </button>
             <button className="rpg-secondary-button" type="button" disabled={regenerateDossier.isPending} onClick={() => regenerateDossier.mutate()}>
