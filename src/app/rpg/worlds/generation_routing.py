@@ -73,7 +73,7 @@ def resolve_world_forge_route(
 ) -> ResolvedWorldForgeRoute:
     """Resolve a concrete route once, before a durable generation run is created."""
 
-    env = environ or os.environ
+    env = environ if environ is not None else os.environ
     requested_provider = _provider_key(provider_route)
     requested_model = _model_key(model)
     explicit_provider = requested_provider not in _CONFIGURED_VALUES
