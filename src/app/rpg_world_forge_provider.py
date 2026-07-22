@@ -15,6 +15,7 @@ from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_default import (
     ReferenceSafeWorldForgeGenerator,
 )
+from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
 from app.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeTopicGenerator,
@@ -146,18 +147,25 @@ def _extract_json(content: str) -> Mapping[str, Any]:
     return topic if isinstance(topic, Mapping) else parsed
 
 
-def _system_prompt() -> str:
+def _system_prompt(node: CampaignTopicNode) -> str:
     return (
         "You are the Omnix Campaign World Forge. Return strict JSON only for the "
         "single requested topic. Build rich, internally consistent campaign canon, "
         "not player-facing turn narration. Respect dependency entities and IDs. "
         "Return topic_id plus arrays named documents, entities, facts, relationships, "
-        "knowledge_rules, and story_threads, and a provenance object. NPC dossiers "
-        "must include appearance, personality, backstory, goals, motives, speech_style, "
-        "faction_ids, location_id, secrets, and known_facts. Location dossiers must "
-        "include a sensory_profile and region_id. Every factual row must use stable IDs, "
+        "knowledge_rules, and story_threads, and a provenance object. Every generated "
+        "entity must include short_summary plus a dossier object matching the supplied "
+        "rpg_world_entity_dossier_v1 contract. Dossier sections use stable IDs, titled "
+        "sections, and one to three substantial paragraphs per substantive section. "
+        "Use short_summary only for cards; do not replace the long dossier with a one- "
+        "or two-line description. Keep mechanics and canonical references in their "
+        "structured fields rather than hiding them in prose. NPC dossiers must include "
+        "appearance, personality, backstory, goals, motives, speech_style, faction_ids, "
+        "location_id, secrets, and known_facts. Location dossiers must include a "
+        "sensory_profile and region_id. Every factual row must use stable IDs, "
         "generated_proposal authority, approved objective_canon authority, visibility, "
-        "and entity_refs. Never invent an unresolved dependency ID."
+        "and entity_refs. Never invent an unresolved dependency ID. The requested "
+        f"domain is {node.topic_id}; follow its domain-specific section template exactly."
     )
 
 
@@ -169,7 +177,7 @@ def _payload(
     dependency_topics: Mapping[str, GeneratedTopic],
 ) -> dict[str, Any]:
     return {
-        "contract_version": "rpg_world_forge_topic_request_v1",
+        "contract_version": "rpg_world_forge_topic_request_v2",
         "seed": seed,
         "topic": {
             "topic_id": node.topic_id,
@@ -188,6 +196,7 @@ def _payload(
         "required_output": {
             "topic_id": node.topic_id,
             "collections": list(_COLLECTIONS),
+            "entity_dossier": dossier_prompt_contract(node.topic_id),
         },
     }
 
@@ -221,7 +230,7 @@ class ProviderWorldForgeTopicGenerator:
         dependency_topics: Mapping[str, GeneratedTopic],
     ) -> GeneratedTopic:
         messages = [
-            ChatMessage(role="system", content=_system_prompt()),
+            ChatMessage(role="system", content=_system_prompt(node)),
             ChatMessage(
                 role="user",
                 content=json.dumps(
@@ -270,7 +279,7 @@ class ProviderWorldForgeTopicGenerator:
                     story_threads=_rows(raw.get("story_threads"), "story_threads"),
                     provenance={
                         **dict(raw.get("provenance") or {}),
-                        "generator": "structured_world_forge_provider_v1",
+                        "generator": "structured_world_forge_provider_v2",
                         "provider": self.config.provider,
                         "model": self.config.model,
                         "attempt_count": attempt,
@@ -280,6 +289,7 @@ class ProviderWorldForgeTopicGenerator:
                         ),
                         "usage": dict(response.usage or {}),
                         "finish_reason": response.finish_reason or "",
+                        "entity_dossier_schema": "rpg_world_entity_dossier_v1",
                     },
                 )
             except Exception as exc:
