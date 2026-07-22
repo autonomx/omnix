@@ -115,7 +115,7 @@ export interface RpgAuthoringTopicHistory extends RpgAuthoringTopic {
 
 export interface RpgAuthoringEntityHistory {
   history_sequence: number;
-  operation: 'manual_edit' | 'regenerate' | 'restore' | string;
+  operation: 'manual_edit' | 'regenerate' | 'manual_dossier_edit' | 'regenerate_dossier' | 'restore' | string;
   before: Record<string, unknown>;
   after: Record<string, unknown>;
   topic_content_hash: string;
@@ -143,6 +143,16 @@ export interface RpgAuthoringCollectionPage {
   filters: Array<Record<string, unknown>>;
   sort_options: string[];
   topic?: RpgAuthoringTopic;
+}
+
+export interface RpgAuthoringEntityMutationResponse {
+  ok: boolean;
+  topic: RpgAuthoringTopic;
+  entity: Record<string, unknown>;
+  stale_topic_ids: string[];
+  stale_entity_ids: string[];
+  canonical_fields_preserved?: boolean;
+  editorial_only?: boolean;
 }
 
 export type RpgAuthoringPage = RpgAuthoringDocumentPage | RpgAuthoringCollectionPage;
@@ -248,13 +258,7 @@ export const rpgWorldAuthoringClient = {
     topicId: string,
     entityId: string,
     body: Record<string, unknown>,
-  ): Promise<{
-    ok: boolean;
-    topic: RpgAuthoringTopic;
-    entity: Record<string, unknown>;
-    stale_topic_ids: string[];
-    stale_entity_ids: string[];
-  }> {
+  ): Promise<RpgAuthoringEntityMutationResponse> {
     return request(entityPath(worldId, topicId, entityId), jsonPatch(body));
   },
 
@@ -263,13 +267,25 @@ export const rpgWorldAuthoringClient = {
     topicId: string,
     entityId: string,
     body: Record<string, unknown>,
-  ): Promise<{
-    ok: boolean;
-    topic: RpgAuthoringTopic;
-    entity: Record<string, unknown>;
-    stale_topic_ids: string[];
-    stale_entity_ids: string[];
-  }> {
+  ): Promise<RpgAuthoringEntityMutationResponse> {
     return request(`${entityPath(worldId, topicId, entityId)}/regenerate`, jsonPost(body));
+  },
+
+  updateEntityDossier(
+    worldId: string,
+    topicId: string,
+    entityId: string,
+    body: Record<string, unknown>,
+  ): Promise<RpgAuthoringEntityMutationResponse> {
+    return request(`${entityPath(worldId, topicId, entityId)}/dossier`, jsonPatch(body));
+  },
+
+  regenerateEntityDossier(
+    worldId: string,
+    topicId: string,
+    entityId: string,
+    body: Record<string, unknown>,
+  ): Promise<RpgAuthoringEntityMutationResponse> {
+    return request(`${entityPath(worldId, topicId, entityId)}/regenerate-dossier`, jsonPost(body));
   },
 };
