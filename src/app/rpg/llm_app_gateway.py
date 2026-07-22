@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Dict, Iterator, List, Optional, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.base import ChatMessage, ChatResponse
 from app.providers.structured import (
@@ -23,6 +23,16 @@ _RPG_LLM_TIMING_CONTEXT: ContextVar[Dict[str, Any]] = ContextVar(
     default={},
 )
 T = TypeVar("T", bound=BaseModel)
+
+
+class _SemanticPacketEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action_intent: dict[str, Any]
+    semantic_advisory: dict[str, Any]
+    dialogue_gate: dict[str, Any]
+    final_narration_candidate: dict[str, Any]
+    reason: str = Field(max_length=1000)
 
 
 @contextmanager
@@ -159,11 +169,7 @@ class AppLLMGateway:
         semantic_validator: Any | None = None,
         provider_options: Optional[Dict[str, Any]] = None,
     ) -> T:
-        """Return one validated Pydantic value through the shared boundary.
-
-        Feature code supplies its model and semantic validator while provider-mode
-        negotiation, JSON decoding, correction attempts, and telemetry remain here.
-        """
+        """Return one validated Pydantic value through the shared boundary."""
 
         gateway = StructuredOutputGateway(self.provider)
         config = getattr(self.provider, "config", None)
@@ -275,22 +281,34 @@ class AppLLMGateway:
         *,
         response_schema: Dict[str, Any],
     ) -> Dict[str, Any]:
-        response = self.generate(
+        """Return a validated semantic envelope through central negotiation.
+
+        `response_schema` remains accepted for caller compatibility. The Pydantic
+        envelope is authoritative and nested feature normalization remains in the
+        semantic action layer.
+        """
+
+        del response_schema
+        value = self.generate_typed(
             prompt,
+            output_model=_SemanticPacketEnvelope,
+            contract_id="rpg.semantic_action.packet",
+            contract_version=2,
+            timeout_s=15.0,
+            max_provider_calls=2,
+            max_format_downgrades=1,
+            max_validation_regenerations=1,
+            temperature=0.3,
+            max_tokens=2400,
+            schema_profile="local",
+            schema_name="rpg_semantic_packet",
             provider_options={
-                "temperature": 0.3,
                 "chat_template_kwargs": {"enable_thinking": False},
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "rpg_semantic_packet",
-                        "strict": True,
-                        "schema": response_schema,
-                    },
-                },
             },
         )
-        return {"text": str(response or ""), "raw": response}
+        payload = value.model_dump(mode="python")
+        text = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        return {"text": text, "raw": payload}
 
     def call(
         self,
