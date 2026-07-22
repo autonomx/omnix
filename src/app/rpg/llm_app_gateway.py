@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Dict, Iterator, List, Optional, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 
 from app.providers.base import ChatMessage, ChatResponse
 from app.providers.structured import (
@@ -17,6 +17,7 @@ from app.providers.structured import (
     StructuredRetryBudget,
 )
 from app.providers.structured.parsing import decode_json_object
+from app.rpg.ai.semantic_packet_contract import SemanticPacketEnvelope
 
 logger = logging.getLogger(__name__)
 _RPG_LLM_TIMING_CONTEXT: ContextVar[Dict[str, Any]] = ContextVar(
@@ -24,16 +25,6 @@ _RPG_LLM_TIMING_CONTEXT: ContextVar[Dict[str, Any]] = ContextVar(
     default={},
 )
 T = TypeVar("T", bound=BaseModel)
-
-
-class _SemanticPacketEnvelope(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    action_intent: dict[str, Any]
-    semantic_advisory: dict[str, Any]
-    dialogue_gate: dict[str, Any]
-    final_narration_candidate: dict[str, Any]
-    reason: str = Field(max_length=1000)
 
 
 @contextmanager
@@ -174,7 +165,7 @@ class AppLLMGateway:
 
         gateway = StructuredOutputGateway(self.provider)
         config = getattr(self.provider, "config", None)
-        result = gateway.generate(
+        outcome = gateway.try_generate(
             self._build_messages(prompt, context=context),
             contract=StructuredContract(
                 contract_id=contract_id,
@@ -198,8 +189,11 @@ class AppLLMGateway:
             ),
             provider_options=provider_options,
         )
-        self.last_structured_diagnostics = gateway.last_diagnostics
-        return result
+        self.last_structured_diagnostics = outcome.diagnostics
+        if outcome.error is not None:
+            raise outcome.error
+        assert outcome.value is not None
+        return outcome.value
 
     def generate_stream(
         self,
@@ -283,19 +277,19 @@ class AppLLMGateway:
         *,
         response_schema: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Return a validated semantic envelope through central negotiation.
+        """Return a fully nested, strictly typed semantic packet.
 
-        `response_schema` remains accepted for caller compatibility. The Pydantic
-        envelope is authoritative and nested feature normalization remains in the
-        semantic action layer.
+        ``response_schema`` remains accepted for caller compatibility. The Pydantic
+        contract is authoritative and rejects nested coercion, invalid enums, missing
+        fields, and unexpected fields before normalization can observe the packet.
         """
 
         del response_schema
         value = self.generate_typed(
             prompt,
-            output_model=_SemanticPacketEnvelope,
+            output_model=SemanticPacketEnvelope,
             contract_id="rpg.semantic_action.packet",
-            contract_version=2,
+            contract_version=3,
             timeout_s=15.0,
             max_provider_calls=2,
             max_format_downgrades=1,
