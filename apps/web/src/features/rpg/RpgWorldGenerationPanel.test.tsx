@@ -79,6 +79,8 @@ describe('RpgWorldGenerationPanel', () => {
         ok: true,
         worker_started: true,
         run: { ...reviewRun, run_id: 'run:new', status: 'running', progress: { percent: 0 } },
+        execution_summary: { queued_count: 1, reused_count: 0, protected_count: 0 },
+        resolved_route: { provider: 'lmstudio', model: 'qwen-world-forge', source: 'explicit' },
       });
     }));
   });
@@ -133,7 +135,9 @@ describe('RpgWorldGenerationPanel', () => {
       provider_route: 'lmstudio',
       model: 'qwen-world-forge',
     });
-    expect(await screen.findByText('Generation started: run:new')).toBeInTheDocument();
+    expect(await screen.findByText(/Generation started: run:new/)).toBeInTheDocument();
+    expect(screen.getByText(/1 provider topic job queued/)).toBeInTheDocument();
+    expect(screen.getByText(/Route: lmstudio \/ qwen-world-forge/)).toBeInTheDocument();
   });
 
   it('publishes a generation run after it reaches review', async () => {
