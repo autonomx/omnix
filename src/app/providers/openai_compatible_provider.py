@@ -1,10 +1,5 @@
-"""
-OpenAI-Compatible Provider Plugin
-
-Implements the BaseProvider interface for OpenAI-compatible APIs.
-This provider allows users to connect to any OpenAI-compatible API (Azure OpenAI, custom deployments, etc.)
-by providing a URL, API key, model ID, and custom headers.
-"""
+"""OpenAI-compatible provider plugin."""
+from __future__ import annotations
 
 import json
 from typing import Any, Dict, Iterator, List, Optional, Union
@@ -22,324 +17,282 @@ from .base import (
     ProviderCapability,
 )
 from .provider_trace import provider_call_enter, provider_call_exit
+from .structured.transport import (
+    pop_structured_transport_options,
+    raise_if_structured_mode_rejected,
+)
 
 
 class OpenAICompatibleProvider(BaseProvider):
-    """
-    Provider for OpenAI-compatible APIs.
-    
-    This provider allows connection to any API that follows the OpenAI API specification,
-    such as Azure OpenAI, custom deployments, or other compatible services.
-    """
-    
+    """Provider for APIs implementing the OpenAI chat-completions contract."""
+
     provider_name = "openai_compatible"
     provider_display_name = "OpenAI Compatible"
     provider_description = "OpenAI-compatible API (Azure OpenAI, custom deployments, etc.)"
-    default_capabilities = [ProviderCapability.CHAT, ProviderCapability.STREAMING, ProviderCapability.MODELS]
-    
+    default_capabilities = [
+        ProviderCapability.CHAT,
+        ProviderCapability.STREAMING,
+        ProviderCapability.MODELS,
+    ]
+
     def _validate_config(self):
-        """Validate OpenAI-compatible configuration."""
         if not self.config.base_url:
             raise ValueError("OpenAI-compatible provider requires a base URL")
         if not self.config.api_key:
             raise AuthenticationError("OpenAI-compatible provider requires an API key")
         if not self.config.model:
             raise ValueError("OpenAI-compatible provider requires a model ID")
-        
-        # Ensure base_url doesn't have trailing slash
-        self.config.base_url = self.config.base_url.rstrip('/')
-    
+        self.config.base_url = self.config.base_url.rstrip("/")
+
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
-        """
-        Make an HTTP request to the OpenAI-compatible API.
-        
-        Args:
-            method: HTTP method
-            endpoint: API endpoint (without base URL)
-            **kwargs: Additional arguments for requests
-            
-        Returns:
-            Response object
-            
-        Raises:
-            AuthenticationError: If authentication fails
-            ConnectionError: If connection fails
-        """
         url = f"{self.config.base_url}{endpoint}"
-        headers = kwargs.pop('headers', {})
-        
-        # Add authorization header (can be overridden by custom headers)
-        if 'Authorization' not in headers:
+        headers = kwargs.pop("headers", {})
+        if "Authorization" not in headers:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
-        
-        # Add content type
         headers["Content-Type"] = "application/json"
-        
-        # Add custom headers from extra_params
-        custom_headers = self.config.extra_params.get('custom_headers', {})
+        custom_headers = self.config.extra_params.get("custom_headers", {})
         if isinstance(custom_headers, dict):
             headers.update(custom_headers)
-        
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = self.config.timeout
         try:
-            # Don't override timeout if already provided in kwargs
-            if 'timeout' not in kwargs:
-                kwargs['timeout'] = self.config.timeout
             response = requests.request(method, url, headers=headers, **kwargs)
             response.raise_for_status()
             return response
-        except requests.exceptions.ConnectionError as e:
-            raise ConnectionError(f"Failed to connect to {url}: {e}")
-        except requests.exceptions.Timeout as e:
-            raise ConnectionError(f"Connection to {url} timed out: {e}")
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code in [401, 403]:
-                raise AuthenticationError(f"Authentication failed: {e}")
-            elif e.response.status_code == 404:
-                raise ModelNotFoundError(f"Resource not found: {e}")
-            elif e.response.status_code == 429:
+        except requests.exceptions.ConnectionError as exc:
+            raise ConnectionError(f"Failed to connect to {url}: {exc}") from exc
+        except requests.exceptions.Timeout as exc:
+            raise ConnectionError(f"Connection to {url} timed out: {exc}") from exc
+        except requests.exceptions.HTTPError as exc:
+            response = exc.response
+            status = response.status_code if response is not None else None
+            body = ""
+            if response is not None:
+                try:
+                    body = response.text[:2000]
+                except Exception:
+                    body = ""
+            raise_if_structured_mode_rejected(
+                status_code=status,
+                response_body=body,
+                error=exc,
+            )
+            if status in {401, 403}:
+                raise AuthenticationError(f"Authentication failed: {exc}") from exc
+            if status == 404:
+                raise ModelNotFoundError(f"Resource not found: {exc}") from exc
+            if status == 429:
                 from .exceptions import RateLimitError
-                raise RateLimitError(f"Rate limit exceeded: {e}")
-            else:
-                raise ConnectionError(f"HTTP error {e.response.status_code}: {e}")
-        except Exception as e:
-            raise ConnectionError(f"Unexpected error: {e}")
-    
+
+                raise RateLimitError(f"Rate limit exceeded: {exc}") from exc
+            raise ConnectionError(
+                f"HTTP error {status}: {exc}; response_body={body}"
+            ) from exc
+        except Exception as exc:
+            if isinstance(exc, (AuthenticationError, ModelNotFoundError, ConnectionError)):
+                raise
+            raise ConnectionError(f"Unexpected error: {exc}") from exc
+
     def chat_completion(
         self,
         messages: List[ChatMessage],
         model: Optional[str] = None,
         stream: bool = False,
-        **kwargs
+        **kwargs,
     ) -> Union[ChatResponse, Iterator[ChatResponse]]:
-        """
-        Generate a chat completion using OpenAI-compatible API.
-
-        Args:
-            messages: List of chat messages
-            model: Optional model override
-            stream: Whether to stream the response
-            **kwargs: Additional parameters (temperature, max_tokens, etc.)
-
-        Returns:
-            ChatResponse or iterator of ChatResponse chunks
-
-        Raises:
-            AuthenticationError: If authentication fails
-            ConnectionError: If connection fails
-            ModelNotFoundError: If model doesn't exist
-        """
-        _trace_row = provider_call_enter(
+        trace_row = provider_call_enter(
             provider="openai_compatible",
             method="chat_completion",
             model=model,
             messages=messages,
-            extra={"stream": bool(stream), "kwargs_keys": sorted(list(kwargs.keys()))},
+            extra={"stream": bool(stream), "kwargs_keys": sorted(kwargs)},
         )
         try:
             if not messages:
                 raise ValueError("Messages list cannot be empty")
-
-            # Build payload
-            payload = {
+            transport = pop_structured_transport_options(kwargs)
+            payload: Dict[str, Any] = {
                 "model": model or self.config.model,
-                "messages": [msg.to_dict() for msg in messages],
+                "messages": [message.to_dict() for message in messages],
                 "stream": stream,
+                **transport.payload_options,
             }
-
-            # Add optional parameters
-            optional_params = ["temperature", "top_p", "max_tokens", "top_k", "presence_penalty", "frequency_penalty"]
+            optional_params = [
+                "temperature",
+                "top_p",
+                "max_tokens",
+                "top_k",
+                "presence_penalty",
+                "frequency_penalty",
+                "chat_template_kwargs",
+            ]
             for key in optional_params:
                 if key in kwargs:
                     payload[key] = kwargs[key]
                 elif key in self.config.extra_params:
                     payload[key] = self.config.extra_params[key]
-
-            # Add any additional parameters from extra_params
             for key, value in self.config.extra_params.items():
-                if key not in ['custom_headers', 'thinking_budget'] and key not in payload:
+                if key not in {"custom_headers", "thinking_budget"} and key not in payload:
                     payload[key] = value
-
-            # Handle thinking budget if supported (some APIs might use different field names)
-            thinking_budget = kwargs.get('thinking_budget', self.config.extra_params.get('thinking_budget', 0))
+            thinking_budget = kwargs.get(
+                "thinking_budget",
+                self.config.extra_params.get("thinking_budget", 0),
+            )
             if thinking_budget and thinking_budget > 0:
-                # Try common field names for thinking/reasoning tokens
-                if 'max_completion_tokens' in payload:
-                    payload['max_completion_tokens'] = thinking_budget
-                elif 'max_tokens' in payload:
-                    payload['max_tokens'] = thinking_budget
-                else:
-                    payload['max_tokens'] = thinking_budget
-
-            # Make request
-            if stream:
-                result = self._stream_completion(payload)
-            else:
-                result = self._non_stream_completion(payload)
-            provider_call_exit(_trace_row, ok=True)
+                payload["max_tokens"] = thinking_budget
+            timeout = transport.request_timeout_seconds
+            result = (
+                self._stream_completion(payload, timeout=timeout)
+                if stream
+                else self._non_stream_completion(payload, timeout=timeout)
+            )
+            provider_call_exit(trace_row, ok=True)
             return result
         except Exception as exc:
-            provider_call_exit(_trace_row, ok=False, error=f"{type(exc).__name__}: {exc}")
+            provider_call_exit(trace_row, ok=False, error=f"{type(exc).__name__}: {exc}")
             raise
-    
-    def _non_stream_completion(self, payload: Dict[str, Any]) -> ChatResponse:
-        """Handle non-streaming completion."""
-        response = self._make_request('post', '/chat/completions', json=payload)
-        
+
+    def _non_stream_completion(
+        self,
+        payload: Dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> ChatResponse:
+        request_kwargs: Dict[str, Any] = {"json": payload}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
+        response = self._make_request("post", "/chat/completions", **request_kwargs)
         try:
             data = response.json()
-        except ValueError as e:
-            raise ConnectionError(f"Invalid JSON response: {e}")
-        
-        choices = data.get('choices', [])
+        except ValueError as exc:
+            raise ConnectionError(f"Invalid JSON response: {exc}") from exc
+        choices = data.get("choices", [])
         if not choices:
             raise ConnectionError("No choices in response")
-        
-        message = choices[0].get('message', {})
-        content = message.get('content', '')
-        
-        # Try to extract thinking/reasoning from various possible fields
-        thinking = None
-        if 'reasoning' in message:
-            thinking = message['reasoning']
-        elif 'thinking' in message:
-            thinking = message['thinking']
-        elif 'analysis' in message:
-            thinking = message['analysis']
-        elif 'thoughts' in message:
-            thinking = message['thoughts']
-        
+        message = choices[0].get("message", {})
+        content = message.get("content", "")
+        thinking = (
+            message.get("reasoning")
+            or message.get("thinking")
+            or message.get("analysis")
+            or message.get("thoughts")
+        )
+        tool_calls = message.get("tool_calls")
         return ChatResponse(
             content=content,
-            model=data.get('model', payload.get('model', '')),
-            usage=data.get('usage'),
+            model=data.get("model", payload.get("model", "")),
+            usage=data.get("usage"),
             thinking=thinking,
             reasoning=thinking,
-            finish_reason=choices[0].get('finish_reason'),
-            raw_response=data
+            tool_calls=tool_calls if isinstance(tool_calls, list) else None,
+            finish_reason=choices[0].get("finish_reason"),
+            raw_response=data,
         )
-    
-    def _stream_completion(self, payload: Dict[str, Any]) -> Iterator[ChatResponse]:
-        """Handle streaming completion."""
+
+    def _stream_completion(
+        self,
+        payload: Dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> Iterator[ChatResponse]:
+        request_kwargs: Dict[str, Any] = {"json": payload, "stream": True}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
         try:
-            response = self._make_request('post', '/chat/completions', json=payload, stream=True)
-        except Exception as e:
-            raise ConnectionError(f"Failed to start stream: {e}")
-        
+            response = self._make_request("post", "/chat/completions", **request_kwargs)
+        except Exception as exc:
+            raise ConnectionError(f"Failed to start stream: {exc}") from exc
         try:
             for line in response.iter_lines():
                 if not line:
                     continue
-                    
-                line_str = line.decode('utf-8') if isinstance(line, bytes) else line
-                if not line_str.startswith('data: '):
+                line_text = line.decode("utf-8") if isinstance(line, bytes) else line
+                if not line_text.startswith("data: "):
                     continue
-                    
-                data_str = line_str[6:].strip()
-                if data_str == '[DONE]':
+                data_text = line_text[6:].strip()
+                if data_text == "[DONE]":
                     break
-                    
                 try:
-                    data = json.loads(data_str)
+                    data = json.loads(data_text)
                     if not isinstance(data, dict):
                         continue
-                        
-                    delta = data.get('choices', [{}])[0].get('delta', {})
-                    
-                    yield ChatResponse(
-                        content=delta.get('content', ''),
-                        model=payload.get('model', ''),
-                        thinking=delta.get('reasoning') or delta.get('thinking') or delta.get('analysis'),
-                        reasoning=delta.get('reasoning') or delta.get('thinking') or delta.get('analysis'),
-                        raw_response=data
+                    delta = data.get("choices", [{}])[0].get("delta", {})
+                    thinking = (
+                        delta.get("reasoning")
+                        or delta.get("thinking")
+                        or delta.get("analysis")
                     )
-                except (ValueError, KeyError, IndexError):
+                    yield ChatResponse(
+                        content=delta.get("content", ""),
+                        model=payload.get("model", ""),
+                        thinking=thinking,
+                        reasoning=thinking,
+                        tool_calls=(
+                            delta.get("tool_calls")
+                            if isinstance(delta.get("tool_calls"), list)
+                            else None
+                        ),
+                        raw_response=data,
+                    )
+                except (ValueError, KeyError, IndexError, TypeError):
                     continue
-                    
-        except Exception as e:
-            raise ConnectionError(f"Stream error: {e}")
-    
+        except Exception as exc:
+            raise ConnectionError(f"Stream error: {exc}") from exc
+
     def get_models(self) -> List[ModelInfo]:
-        """
-        Get list of available models from OpenAI-compatible API.
-        This attempts to use the standard /models endpoint, but many compatible APIs
-        might not implement this, so it returns a basic list with the configured model.
-        
-        Returns:
-            List of ModelInfo objects
-            
-        Raises:
-            ConnectionError: If unable to fetch models
-            AuthenticationError: If authentication fails
-        """
-        models = []
-        
-        # First try the standard /models endpoint
+        models: List[ModelInfo] = []
         try:
-            response = self._make_request('get', '/models')
+            response = self._make_request("get", "/models")
             data = response.json()
-            
-            for model_data in data.get('data', []):
-                model_info = ModelInfo(
-                    id=model_data.get('id', ''),
-                    name=model_data.get('name', model_data.get('id', '')),
-                    provider=self.provider_name,
-                    context_length=model_data.get('context_length'),
-                    description=model_data.get('description', ''),
-                    metadata=model_data.get('metadata', {})
+            for model_data in data.get("data", []):
+                models.append(
+                    ModelInfo(
+                        id=model_data.get("id", ""),
+                        name=model_data.get("name", model_data.get("id", "")),
+                        provider=self.provider_name,
+                        context_length=model_data.get("context_length"),
+                        description=model_data.get("description", ""),
+                        metadata=model_data.get("metadata", {}),
+                    )
                 )
-                models.append(model_info)
-                
         except Exception:
-            # If /models endpoint doesn't work, just add the configured model
-            # This is common for many OpenAI-compatible APIs
             pass
-        
-        # Always include the configured model if it's not already in the list
-        if self.config.model and not any(m.id == self.config.model for m in models):
-            models.append(ModelInfo(
-                id=self.config.model,
-                name=self.config.model,
-                provider=self.provider_name,
-                description="Configured model",
-                metadata={"configured": True}
-            ))
-        
+        if self.config.model and not any(model.id == self.config.model for model in models):
+            models.append(
+                ModelInfo(
+                    id=self.config.model,
+                    name=self.config.model,
+                    provider=self.provider_name,
+                    description="Configured model",
+                    metadata={"configured": True},
+                )
+            )
         return models
-    
+
     def test_connection(self) -> bool:
-        """
-        Test connection to OpenAI-compatible API.
-        This tries to make a simple request to verify the connection and authentication.
-        
-        Returns:
-            True if connection successful, False otherwise
-        """
         try:
-            # Try to get models list first
-            response = self._make_request('get', '/models', timeout=5)
+            response = self._make_request("get", "/models", timeout=5)
             return response.status_code == 200
         except AuthenticationError:
-            raise  # Re-raise auth errors - API key is invalid
+            raise
         except Exception:
-            # If /models doesn't work, try a simple chat completion with minimal payload
             try:
                 payload = {
                     "model": self.config.model,
                     "messages": [{"role": "user", "content": "test"}],
-                    "max_tokens": 1
+                    "max_tokens": 1,
                 }
-                response = self._make_request('post', '/chat/completions', json=payload, timeout=5)
+                response = self._make_request(
+                    "post",
+                    "/chat/completions",
+                    json=payload,
+                    timeout=5,
+                )
                 return response.status_code == 200
             except Exception:
                 return False
-    
+
     def get_config_schema(self) -> Dict[str, Any]:
-        """
-        Get configuration schema for OpenAI-compatible provider.
-        
-        Returns:
-            Dictionary with configuration fields for frontend
-        """
         return {
             "provider_type": self.provider_name,
             "display_name": self.provider_display_name,
@@ -350,32 +303,32 @@ class OpenAICompatibleProvider(BaseProvider):
                     "type": "text",
                     "label": "API Base URL",
                     "required": True,
-                    "description": "Base URL for the OpenAI-compatible API (e.g., https://your-api.com/v1)"
+                    "description": "Base URL for the OpenAI-compatible API (e.g., https://your-api.com/v1)",
                 },
                 {
                     "name": "api_key",
                     "type": "password",
                     "label": "API Key",
                     "required": True,
-                    "description": "API key for authentication"
+                    "description": "API key for authentication",
                 },
                 {
                     "name": "model",
                     "type": "text",
                     "label": "Model ID",
                     "required": True,
-                    "description": "Model identifier (e.g., gpt-4, gpt-3.5-turbo, your-custom-model)"
+                    "description": "Model identifier (e.g., gpt-4 or your custom model)",
                 },
                 {
                     "name": "custom_headers",
                     "type": "object",
                     "label": "Custom Headers",
                     "required": False,
-                    "description": "Additional headers to send with requests (key-value pairs)",
+                    "description": "Additional headers to send with requests",
                     "properties": {
                         "key": {"type": "text", "label": "Header Name"},
-                        "value": {"type": "text", "label": "Header Value"}
-                    }
+                        "value": {"type": "text", "label": "Header Value"},
+                    },
                 },
                 {
                     "name": "thinking_budget",
@@ -383,7 +336,7 @@ class OpenAICompatibleProvider(BaseProvider):
                     "label": "Thinking Budget (tokens)",
                     "default": 0,
                     "required": False,
-                    "description": "Additional tokens for thinking/reasoning (0 to disable)"
+                    "description": "Additional tokens for thinking/reasoning",
                 },
                 {
                     "name": "timeout",
@@ -391,16 +344,10 @@ class OpenAICompatibleProvider(BaseProvider):
                     "label": "Timeout (seconds)",
                     "default": 300,
                     "required": False,
-                    "description": "Request timeout in seconds"
-                }
-            ]
+                    "description": "Request timeout in seconds",
+                },
+            ],
         }
-    
+
     def supports_thinking_budget(self) -> bool:
-        """
-        OpenAI-compatible APIs typically support thinking budget via max_tokens.
-        
-        Returns:
-            True
-        """
         return True
