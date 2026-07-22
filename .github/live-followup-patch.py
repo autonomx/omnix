@@ -17,7 +17,6 @@ subprocess.run(
 subprocess.run(["git", "checkout", "-B", branch, f"origin/{branch}"], check=True)
 
 controller_path = Path("apps/web/src/features/assistant-workspace/live-voice-controller.ts")
-workflow_path = Path(".github/workflows/live-chat-hardening.yml")
 script_path = Path(".github/live-followup-patch.py")
 
 controller = controller_path.read_text(encoding="utf-8")
@@ -108,15 +107,4 @@ elif new_started not in controller:
     raise SystemExit("coordination-start diagnostic anchor missing")
 
 controller_path.write_text(controller, encoding="utf-8")
-
-workflow = workflow_path.read_text(encoding="utf-8")
-start = "      # BEGIN ONE-TIME LIVE FOLLOWUP\n"
-end = "      # END ONE-TIME LIVE FOLLOWUP\n"
-if start not in workflow or end not in workflow:
-    raise SystemExit("one-time workflow markers missing")
-head, remainder = workflow.split(start, 1)
-_, tail = remainder.split(end, 1)
-workflow = head + tail
-workflow = workflow.replace("permissions:\n  contents: write\n", "permissions:\n  contents: read\n", 1)
-workflow_path.write_text(workflow, encoding="utf-8")
 script_path.unlink()
