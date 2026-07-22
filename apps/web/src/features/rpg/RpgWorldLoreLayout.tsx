@@ -149,7 +149,7 @@ export function RpgWorldLoreLayout({
           <strong>On this page</strong>
           <p>{layout.note}</p>
           {toc.map((item, index) => (
-            <a href={`#${item.id}`} key={item.id}><span>{String(index + 1).padStart(2, '0')}</span>{item.label}</a>
+            <a href={`#${item.id}`} key={item.id}><span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>{item.label}</a>
           ))}
         </nav>
       ) : null}
