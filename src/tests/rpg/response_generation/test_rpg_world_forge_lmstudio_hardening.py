@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg_world_forge_provider import ProviderWorldForgeTopicGenerator, WorldForgeProviderConfig
@@ -48,12 +50,12 @@ def _node() -> CampaignTopicNode:
     )
 
 
-def _payload() -> str:
+def _payload(*, entities: object | None = None) -> str:
     return json.dumps(
         {
             "topic_id": "realm",
             "documents": [],
-            "entities": [],
+            "entities": [] if entities is None else entities,
             "facts": [],
             "relationships": [],
             "knowledge_rules": [],
@@ -101,11 +103,12 @@ def test_lmstudio_retries_format_failure_with_text_fallback() -> None:
     assert topic.topic_id == "realm"
     assert provider.calls[0]["kwargs"]["response_format"]["type"] == "json_schema"
     assert provider.calls[1]["kwargs"]["response_format"] == {"type": "text"}
-    assert topic.provenance["response_format"] == "text"
+    assert topic.provenance["response_format"] == "text_json"
 
 
 def test_other_provider_retries_format_failure_with_text_fallback() -> None:
     provider = _Provider([RuntimeError("response_format is unsupported"), _payload()])
+    provider.provider_name = "openrouter"
     generator = ProviderWorldForgeTopicGenerator(
         provider,
         WorldForgeProviderConfig(
@@ -121,4 +124,20 @@ def test_other_provider_retries_format_failure_with_text_fallback() -> None:
 
     assert provider.calls[0]["kwargs"]["response_format"] == {"type": "json_object"}
     assert provider.calls[1]["kwargs"]["response_format"] == {"type": "text"}
-    assert topic.provenance["response_format"] == "text"
+    assert topic.provenance["response_format"] == "text_json"
+
+
+def test_world_forge_rejects_non_object_collection_rows() -> None:
+    provider = _Provider([_payload(entities=["not-an-object"])])
+    generator = ProviderWorldForgeTopicGenerator(
+        provider,
+        WorldForgeProviderConfig(
+            mode="live",
+            provider="lmstudio",
+            model="local-model",
+            max_retries=0,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="schema validation"):
+        generator.generate(_node(), seed=1, campaign_context={}, dependency_topics={})
