@@ -35,6 +35,7 @@ SEGMENTED_PROTOCOL = "segmented-v1"
 SESSION_TTL_SECONDS = 600.0
 MAX_SESSION_STATES = 64
 MAX_OPEN_SEGMENTS = 16
+MAX_REPLAY_RESULTS = 64
 MAX_SEGMENT_AUDIO_MS = 15_000
 MAX_SEGMENT_BYTES = int(DEFAULT_SAMPLE_RATE * 2 * MAX_SEGMENT_AUDIO_MS / 1_000)
 _PROVIDER_SCHEDULERS: dict[int, ProviderSegmentScheduler[tuple[str, dict[str, float | int | bool]]]] = {}
@@ -84,6 +85,18 @@ class SegmentSessionState:
     results: dict[int, dict[str, Any]] = field(default_factory=dict)
     inflight: dict[str, asyncio.Future[tuple[str, dict[str, float | int | bool]]]] = field(default_factory=dict)
     last_seen: float = field(default_factory=time.monotonic)
+
+    def remember_result(self, payload: dict[str, Any]) -> None:
+        sequence = int(payload["sequence"])
+        self.results[sequence] = payload
+        while len(self.results) > MAX_REPLAY_RESULTS:
+            self.results.pop(min(self.results))
+        self.last_seen = time.monotonic()
+
+    def release_segment(self, segment_id: str) -> None:
+        self.inflight.pop(segment_id, None)
+        self.segments.pop(segment_id, None)
+        self.last_seen = time.monotonic()
 
 
 def _remove_existing_route(app: Any) -> None:
@@ -267,8 +280,7 @@ def install_live_stt_websocket(legacy: Any) -> None:
                     "text": text,
                     "acceptedThroughSample": segment.accepted_through_sample,
                 }
-                state.results[segment.sequence] = payload
-                state.last_seen = time.monotonic()
+                state.remember_result(payload)
                 if legacy_mode:
                     await _safe_send(websocket, send_lock, {**payload, "type": "done"})
                 else:
@@ -281,6 +293,8 @@ def install_live_stt_websocket(legacy: Any) -> None:
                     transcript_chars=len(text),
                     segment_sequence=segment.sequence,
                     queued_segments=_scheduler_for(legacy).queued_jobs,
+                    open_segments=max(0, len(state.segments) - 1),
+                    replay_results=len(state.results),
                     **metrics,
                 )
             except asyncio.CancelledError:
@@ -305,7 +319,7 @@ def install_live_stt_websocket(legacy: Any) -> None:
                     },
                 )
             finally:
-                state.inflight.pop(segment.segment_id, None)
+                state.release_segment(segment.segment_id)
 
         async def finalize_segment(
             state: SegmentSessionState,
@@ -314,6 +328,14 @@ def install_live_stt_websocket(legacy: Any) -> None:
             *,
             legacy_mode: bool,
         ) -> None:
+            cached = state.results.get(sequence)
+            if cached is not None:
+                await _safe_send(
+                    websocket,
+                    send_lock,
+                    cached if not legacy_mode else {**cached, "type": "done"},
+                )
+                return
             segment = state.segments.get(segment_id)
             if segment is None:
                 await _safe_send(
@@ -329,10 +351,6 @@ def install_live_stt_websocket(legacy: Any) -> None:
                     },
                 )
                 return
-            cached = state.results.get(sequence)
-            if cached is not None:
-                await _safe_send(websocket, send_lock, cached if not legacy_mode else {**cached, "type": "done"})
-                return
             existing = state.inflight.get(segment_id)
             if existing is not None:
                 await _safe_send(
@@ -345,16 +363,26 @@ def install_live_stt_websocket(legacy: Any) -> None:
                 payload = {
                     "type": "result_available",
                     "sessionId": state.session_id,
+                    "captureEpoch": segment.capture_epoch,
                     "segmentId": segment_id,
                     "sequence": sequence,
                     "resultId": uuid.uuid4().hex,
+                    "finalizeRequestId": segment.finalize_request_id,
+                    "startSample": segment.primary_start_sample,
+                    "endSample": segment.end_sample or segment.accepted_through_sample,
                     "text": "",
                     "acceptedThroughSample": segment.accepted_through_sample,
                 }
-                state.results[sequence] = payload
-                await _safe_send(websocket, send_lock, payload if not legacy_mode else {"type": "done", "text": ""})
+                state.remember_result(payload)
+                state.release_segment(segment_id)
+                await _safe_send(
+                    websocket,
+                    send_lock,
+                    payload if not legacy_mode else {**payload, "type": "done"},
+                )
                 return
             if legacy.model is None:
+                state.release_segment(segment_id)
                 await _safe_send(
                     websocket,
                     send_lock,
@@ -439,7 +467,10 @@ def install_live_stt_websocket(legacy: Any) -> None:
                         sequence = legacy_segment_sequence
                         capture_start = 0
                         primary_start = 0
-                        sample_start = state.segments.get(segment_id, SegmentBuffer(segment_id, sequence, 0, 0)).accepted_through_sample
+                        sample_start = state.segments.get(
+                            segment_id,
+                            SegmentBuffer(segment_id, sequence, 0, 0),
+                        ).accepted_through_sample
                     if segment_id not in state.segments:
                         if len(state.segments) >= MAX_OPEN_SEGMENTS:
                             await _safe_send(
@@ -466,6 +497,7 @@ def install_live_stt_websocket(legacy: Any) -> None:
                     try:
                         accepted = segment.append(sample_start, base64.b64decode(encoded_audio))
                     except Exception as exc:
+                        state.release_segment(segment_id)
                         await _safe_send(
                             websocket,
                             send_lock,
@@ -502,9 +534,15 @@ def install_live_stt_websocket(legacy: Any) -> None:
                         legacy_segment_sequence += 1
                     segment = state.segments.get(segment_id)
                     if segment is not None:
-                        segment.capture_epoch = str(_field(data, "captureEpoch", "capture_epoch", segment.capture_epoch))[:160]
-                        segment.finalize_request_id = str(_field(data, "finalizeRequestId", "finalize_request_id", ""))[:160]
-                        segment.end_sample = int(_field(data, "endSample", "end_sample", segment.accepted_through_sample))
+                        segment.capture_epoch = str(
+                            _field(data, "captureEpoch", "capture_epoch", segment.capture_epoch)
+                        )[:160]
+                        segment.finalize_request_id = str(
+                            _field(data, "finalizeRequestId", "finalize_request_id", "")
+                        )[:160]
+                        segment.end_sample = int(
+                            _field(data, "endSample", "end_sample", segment.accepted_through_sample)
+                        )
                     await finalize_segment(state, segment_id, sequence, legacy_mode=not segmented)
                     continue
         except WebSocketDisconnect:
