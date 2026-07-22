@@ -78,14 +78,14 @@ describe('RpgWorldEntityEditor', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it('saves one entity with topic concurrency tokens', async () => {
+  it('saves one canonical entity with topic concurrency tokens', async () => {
     renderEditor();
     fireEvent.click(screen.getByText('Edit or regenerate'));
     const editor = await screen.findByLabelText('Entity JSON for Bran');
     fireEvent.change(editor, {
       target: { value: JSON.stringify({ ...entity.metadata, goals: ['protect every traveler'] }) },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Entity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Canonical Entity' }));
 
     await waitFor(() => expect(requests.some((request) => request.init?.method === 'PATCH')).toBe(true));
     const saved = requests.find((request) => request.init?.method === 'PATCH');
@@ -98,14 +98,14 @@ describe('RpgWorldEntityEditor', () => {
     expect(await screen.findByText(/1 dependent entities need review/)).toBeInTheDocument();
   });
 
-  it('regenerates only the selected entity with directives', async () => {
+  it('regenerates the entire selected entity with directives', async () => {
     renderEditor();
     fireEvent.click(screen.getByText('Edit or regenerate'));
     await screen.findByLabelText('Regeneration directives for Bran');
     fireEvent.change(screen.getByLabelText('Regeneration directives for Bran'), {
       target: { value: '{"focus":"deepen motives"}' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Regenerate This Entity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate Entire Entity' }));
 
     await waitFor(() => expect(requests.some((request) => request.init?.method === 'POST')).toBe(true));
     const regenerated = requests.find((request) => request.init?.method === 'POST');
