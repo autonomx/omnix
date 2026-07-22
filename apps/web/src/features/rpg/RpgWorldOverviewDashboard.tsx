@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type {
   RpgAuthoringDocumentPage,
   RpgAuthoringEntityCard,
@@ -40,14 +41,16 @@ function label(value: string): string {
 }
 
 function projectedEntities(page: RpgAuthoringDocumentPage): RpgAuthoringEntityCard[] {
-  return page.related_entities.filter((row): row is unknown as RpgAuthoringEntityCard => (
-    Boolean(row)
-    && typeof row === 'object'
-    && typeof row.id === 'string'
-    && typeof row.title === 'string'
-    && typeof row.kind === 'string'
-    && typeof row.presentation === 'object'
-  ));
+  return page.related_entities
+    .filter((row) => (
+      Boolean(row)
+      && typeof row === 'object'
+      && typeof row.id === 'string'
+      && typeof row.title === 'string'
+      && typeof row.kind === 'string'
+      && typeof row.presentation === 'object'
+    ))
+    .map((row) => row as unknown as RpgAuthoringEntityCard);
 }
 
 function sectionFor(sections: RpgAuthoringSection[], ids: string[]): RpgAuthoringSection | undefined {
@@ -97,6 +100,9 @@ export function RpgWorldOverviewDashboard({
     { label: 'Quests', section: sectionFor(sections, ['quests']) },
     { label: 'Lore Topics', value: sections.filter((section) => section.group === 'lore').length },
   ];
+  const progressStyle = {
+    '--world-progress': `${Math.max(0, Math.min(100, percent)) * 3.6}deg`,
+  } as CSSProperties;
 
   return (
     <section className="rpg-authoring-page rpg-world-overview-dashboard is-mockup-layout">
@@ -167,7 +173,7 @@ export function RpgWorldOverviewDashboard({
         <section className="rpg-world-overview-panel rpg-world-overview-generation-card">
           <div className="rpg-world-overview-panel-heading"><h3>World Generation</h3><span>{Math.round(percent)}%</span></div>
           <div className="rpg-world-overview-generation-content">
-            <div className="rpg-world-overview-ring" style={{ '--world-progress': `${Math.max(0, Math.min(100, percent)) * 3.6}deg` } as React.CSSProperties}><strong>{Math.round(percent)}%</strong><small>Complete</small></div>
+            <div className="rpg-world-overview-ring" style={progressStyle}><strong>{Math.round(percent)}%</strong><small>Complete</small></div>
             <div className="rpg-world-overview-progress-groups">
               {PROGRESS_GROUPS.map((group) => {
                 const rows = sections.filter((section) => group.sectionIds.includes(section.id));
