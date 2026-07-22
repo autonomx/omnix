@@ -52,6 +52,32 @@
   color: #fff;
 }
 
+.rpg-authoring-entity-card {
+  position: relative;
+}
+
+.rpg-authoring-entity-card.is-featured {
+  border-color: rgba(250, 204, 21, 0.42);
+  box-shadow: 0 18px 50px rgba(76, 29, 149, 0.18);
+}
+
+.rpg-authoring-featured-ribbon {
+  position: absolute;
+  z-index: 3;
+  top: 0.7rem;
+  left: 0.7rem;
+  padding: 0.34rem 0.62rem;
+  border: 1px solid rgba(254, 240, 138, 0.48);
+  border-radius: 999px;
+  background: rgba(120, 53, 15, 0.86);
+  color: #fef3c7;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
 .rpg-authoring-entity-grid.is-list {
   grid-template-columns: 1fr;
 }
