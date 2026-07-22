@@ -63,9 +63,9 @@ def preview_world_entity_dossier_regeneration(
 
     selected_generator = generator
     if selected_generator is None:
-        from app.rpg_world_forge_provider import build_production_world_forge_generator
+        from .generation_routing import build_world_forge_generator_for_run
 
-        selected_generator = build_production_world_forge_generator()
+        selected_generator = build_world_forge_generator_for_run(run)
     preview_node = replace(
         node,
         target_count=1,
@@ -136,7 +136,10 @@ def preview_world_entity_dossier_regeneration(
         "expected_content_hash": expected_content_hash,
         "short_summary": short_summary,
         "dossier": dossier,
-        "generation": dict(generated.provenance),
+        "generation": {
+            **dict(generated.provenance),
+            "provider_route_source": "durable_world_generation_run",
+        },
         "canonical_fields_preserved": True,
         "stored": False,
     }
