@@ -6,6 +6,7 @@ import random
 from typing import Any, Mapping, Sequence
 
 from .world_forge_contract import CampaignTopicNode
+from .world_forge_dossiers import project_entity_dossier, validate_entity_dossier
 from .world_forge_generation import GeneratedTopic
 
 
@@ -252,18 +253,53 @@ def _normalize_entity(
         "schema_version",
         str(node.metadata.get("schema_version") or f"rpg_world_{node.topic_id}_v1"),
     )
+    short_summary, dossier = project_entity_dossier(
+        entity,
+        card_type=node.topic_id,
+        entity_id=entity_id,
+    )
+    entity.setdefault("short_summary", short_summary)
+    entity["dossier"] = dossier
+    issues = validate_entity_dossier(dossier)
+    if issues:
+        raise ValueError(
+            f"structured_domain_dossier:{node.topic_id}:{entity_id}:" + ",".join(issues)
+        )
     return entity
+
+
+def _dossier_text(entity: Mapping[str, Any]) -> str:
+    dossier = entity.get("dossier") if isinstance(entity.get("dossier"), Mapping) else {}
+    sections = dossier.get("sections") if isinstance(dossier, Mapping) else []
+    paragraphs: list[str] = []
+    if isinstance(sections, Sequence) and not isinstance(sections, (str, bytes)):
+        for section in sections:
+            if not isinstance(section, Mapping):
+                continue
+            title = str(section.get("title") or "").strip()
+            values = section.get("paragraphs")
+            if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+                continue
+            rendered = [str(value).strip() for value in values if str(value).strip()]
+            if not rendered:
+                continue
+            if title:
+                paragraphs.append(title)
+            paragraphs.extend(rendered)
+    return "\n\n".join(paragraphs)
 
 
 def _document(node: CampaignTopicNode, entity: Mapping[str, Any]) -> dict[str, Any]:
     description = str(entity.get("description") or "")
+    short_summary = str(entity.get("short_summary") or description)
+    full_text = _dossier_text(entity) or description
     return {
         "document_id": f"lore:{node.topic_id}:{_slug(str(entity['id']))}",
         "topic_id": node.topic_id,
         "title": str(entity["name"]),
-        "full_text": description,
-        "summary_500": description[:500],
-        "summary_120": description[:120],
+        "full_text": full_text,
+        "summary_500": short_summary[:500],
+        "summary_120": short_summary[:120],
         "facts": [],
         "entities": [str(entity["id"])],
         "relationships": [],
@@ -329,6 +365,7 @@ def normalize_structured_domain(
             ),
             "domain_normalized": True,
             "domain_entity_ids": sorted(str(entity["id"]) for entity in entities),
+            "entity_dossier_schema": "rpg_world_entity_dossier_v1",
         },
     )
     validate_structured_domain(node, normalized, dependency_topics)
@@ -362,6 +399,11 @@ def validate_structured_domain(
         for field in spec.required_lists:
             if not isinstance(entity.get(field), list) or not entity.get(field):
                 raise ValueError(f"structured_domain_list:{node.topic_id}:{entity_id}:{field}")
+        dossier_issues = validate_entity_dossier(entity.get("dossier"))
+        if dossier_issues:
+            raise ValueError(
+                f"structured_domain_dossier:{node.topic_id}:{entity_id}:" + ",".join(dossier_issues)
+            )
         for field, kinds in spec.reference_fields.items():
             values = entity.get(field)
             values = values if isinstance(values, list) else [values] if values else []

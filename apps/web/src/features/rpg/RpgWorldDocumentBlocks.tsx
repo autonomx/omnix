@@ -119,6 +119,25 @@ function readableRecordValue(value: unknown): string {
   return typeof value === 'string' ? value : formatAuthoringValue(value);
 }
 
+function proseParagraphs(value: unknown): string[] {
+  const rendered = readableRecordValue(value).trim();
+  if (!rendered) return [];
+  const explicit = rendered
+    .split(/\n\s*\n/g)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  return explicit.length ? explicit : [rendered];
+}
+
+function Prose({ value, className = '' }: { value: unknown; className?: string }) {
+  const paragraphs = proseParagraphs(value);
+  return (
+    <div className={`rpg-authoring-prose${className ? ` ${className}` : ''}`}>
+      {paragraphs.map((paragraph, index) => <p key={`${paragraph.slice(0, 48)}:${index}`}>{paragraph}</p>)}
+    </div>
+  );
+}
+
 function MetaChips({ values }: { values: unknown[] }) {
   return values.length ? (
     <div className="rpg-authoring-record-badges">
@@ -147,7 +166,7 @@ function StructuredRecord({
         <p className="rpg-authoring-card-eyebrow">{recordLabel(item, index, fallback)}</p>
         <MetaChips values={recordBadges(item)} />
       </header>
-      <p className="rpg-authoring-record-statement">{readableRecordValue(recordValue(item))}</p>
+      <Prose className="rpg-authoring-record-statement" value={recordValue(item)} />
       {references.length ? (
         <section className="rpg-authoring-record-references">
           <h4>References</h4>
@@ -199,7 +218,7 @@ function SectionBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
   return (
     <section className={`rpg-authoring-document-block is-prose${realmSummary ? ' is-realm-summary' : ''}`}>
       {block.title ? <h3>{block.title}</h3> : null}
-      <div className="rpg-authoring-prose" style={{ whiteSpace: 'pre-line' }}>{block.body || ''}</div>
+      <Prose value={block.body || ''} />
       {metadata.length ? (
         <dl className="rpg-authoring-section-metadata">
           {metadata.map((item, index) => (
