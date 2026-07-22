@@ -5,6 +5,7 @@ import type {
 import { RpgWorldEntityEditor } from './RpgWorldEntityEditor';
 import { formatAuthoringValue } from './RpgWorldEntityCard';
 import './RpgWorldRichPresentation.css';
+import './RpgWorldDossierDesign.css';
 
 interface RpgWorldEntityDetailProps {
   entity: RpgAuthoringEntityCard;
@@ -23,6 +24,10 @@ const RESERVED_FIELDS = new Set([
   'kind',
   'description',
   'summary',
+  'short_summary',
+  'subtitle',
+  'quote',
+  'dossier',
   'visibility',
   'schema_version',
 ]);
@@ -83,6 +88,8 @@ export function RpgWorldEntityDetail({
   worldId,
 }: RpgWorldEntityDetailProps) {
   const presentation = entity.presentation;
+  const dossier = entity.dossier;
+  const sections = dossier?.sections ?? [];
   const representedFields = new Set<string>();
   for (const highlight of presentation.highlights) representedFields.add(highlight.label.toLowerCase().replace(/\s+/g, '_'));
   for (const group of presentation.groups) representedFields.add(group.label.toLowerCase().replace(/\s+/g, '_'));
@@ -93,7 +100,7 @@ export function RpgWorldEntityDetail({
     .sort(([left], [right]) => left.localeCompare(right));
 
   return (
-    <div className="rpg-authoring-detail-backdrop is-routed-subpage">
+    <div className="rpg-authoring-detail-backdrop is-routed-subpage is-rich-dossier">
       <main
         aria-label={`${entity.title} details`}
         className="rpg-authoring-entity-detail"
@@ -103,8 +110,9 @@ export function RpgWorldEntityDetail({
             <button className="rpg-authoring-detail-breadcrumb" type="button" onClick={onClose}>← Back to {humanize(entity.card_type || entity.kind)}</button>
             <p className="rpg-authoring-card-eyebrow">{presentation.eyebrow}</p>
             <h2>{entity.title}</h2>
+            {dossier?.subtitle ? <p className="rpg-authoring-dossier-subtitle">{dossier.subtitle}</p> : null}
           </div>
-          <button aria-label={`Close ${entity.title} details`} className="rpg-secondary-button" type="button" onClick={onClose}>Close</button>
+          <button aria-label={`Close ${entity.title} details`} className="rpg-secondary-button" type="button" onClick={onClose}>Back to collection</button>
         </header>
 
         <div className="rpg-authoring-entity-detail-hero">
@@ -128,62 +136,109 @@ export function RpgWorldEntityDetail({
                 ))}
               </div>
             ) : null}
-            <p>{entity.summary || 'No overview has been written yet.'}</p>
+            <p>{entity.short_summary || entity.summary || 'No overview has been written yet.'}</p>
             <small>{humanize(entity.kind)} · {entity.id}</small>
           </div>
         </div>
 
-        {presentation.highlights.length ? (
-          <section className="rpg-authoring-detail-section">
-            <h3>At a glance</h3>
-            <dl className="rpg-authoring-card-highlights">
-              {presentation.highlights.map((highlight) => (
-                <div key={highlight.label}><dt>{highlight.label}</dt><dd>{formatAuthoringValue(highlight.value)}</dd></div>
-              ))}
-            </dl>
-          </section>
+        {dossier?.quote?.text ? (
+          <blockquote className="rpg-authoring-dossier-quote">
+            <p>“{dossier.quote.text}”</p>
+            {dossier.quote.attribution ? <cite>— {dossier.quote.attribution}</cite> : null}
+          </blockquote>
         ) : null}
 
-        {presentation.groups.map((group) => (
-          <section className="rpg-authoring-detail-section" key={group.label}>
-            <h3>{group.label}</h3>
-            {group.style === 'chips' ? (
-              <div className="rpg-authoring-card-chip-list">
-                {group.items.map((item, index) => (
-                  <span key={`${formatAuthoringValue(item)}:${index}`}>{formatAuthoringValue(item)}</span>
-                ))}
-              </div>
-            ) : (
-              <DetailValue value={group.items} />
-            )}
-          </section>
-        ))}
+        <div className="rpg-authoring-dossier-layout">
+          <article className="rpg-authoring-dossier-stream">
+            {dossier?.quick_facts.length ? (
+              <section className="rpg-authoring-detail-section rpg-authoring-dossier-facts" id="quick-facts">
+                <h3>Quick Facts</h3>
+                <dl>
+                  {dossier.quick_facts.map((fact, index) => (
+                    <div key={`${fact.label}:${index}`}><dt>{fact.label}</dt><dd>{formatAuthoringValue(fact.value)}</dd></div>
+                  ))}
+                </dl>
+              </section>
+            ) : null}
 
-        {remainingFields.length ? (
-          <section className="rpg-authoring-detail-section">
-            <h3>Additional details</h3>
-            <div className="rpg-authoring-detail-field-grid">
-              {remainingFields.map(([key, value]) => (
-                <article className={`is-${fieldStyle(key, value)}`} key={key}>
-                  <h4>{humanize(key)}</h4>
-                  {fieldStyle(key, value) === 'chips' && Array.isArray(value) ? (
-                    <div className="rpg-authoring-card-chip-list">
-                      {value.map((item, index) => (
-                        <span key={`${formatAuthoringValue(item)}:${index}`}>{formatAuthoringValue(item)}</span>
-                      ))}
-                    </div>
-                  ) : <DetailValue value={value} />}
-                </article>
-              ))}
-            </div>
-          </section>
-        ) : null}
+            {sections.map((section) => (
+              <section className="rpg-authoring-detail-section rpg-authoring-dossier-section" id={section.id} key={section.id}>
+                <h3>{section.title}</h3>
+                {section.paragraphs.map((paragraph, index) => <p key={`${section.id}:${index}`}>{paragraph}</p>)}
+              </section>
+            ))}
 
-        {topic ? <RpgWorldEntityEditor entity={entity} topic={topic} worldId={worldId} /> : null}
-        <details className="rpg-authoring-structured-data">
-          <summary>Advanced structured data</summary>
-          <pre>{JSON.stringify(entity.metadata, null, 2)}</pre>
-        </details>
+            {!sections.length && presentation.highlights.length ? (
+              <section className="rpg-authoring-detail-section">
+                <h3>At a glance</h3>
+                <dl className="rpg-authoring-card-highlights">
+                  {presentation.highlights.map((highlight) => (
+                    <div key={highlight.label}><dt>{highlight.label}</dt><dd>{formatAuthoringValue(highlight.value)}</dd></div>
+                  ))}
+                </dl>
+              </section>
+            ) : null}
+
+            {!sections.length ? presentation.groups.map((group) => (
+              <section className="rpg-authoring-detail-section" key={group.label}>
+                <h3>{group.label}</h3>
+                {group.style === 'chips' ? (
+                  <div className="rpg-authoring-card-chip-list">
+                    {group.items.map((item, index) => (
+                      <span key={`${formatAuthoringValue(item)}:${index}`}>{formatAuthoringValue(item)}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <DetailValue value={group.items} />
+                )}
+              </section>
+            )) : null}
+
+            {dossier?.related_entity_ids.length ? (
+              <section className="rpg-authoring-detail-section rpg-authoring-dossier-related" id="related-entries">
+                <h3>Related Entries</h3>
+                <div className="rpg-authoring-card-chip-list">
+                  {dossier.related_entity_ids.map((entityId) => <span key={entityId}>{humanize(entityId)}</span>)}
+                </div>
+              </section>
+            ) : null}
+
+            {remainingFields.length ? (
+              <details className="rpg-authoring-detail-section rpg-authoring-dossier-canon-details">
+                <summary><h3>Additional details</h3></summary>
+                <div className="rpg-authoring-detail-field-grid">
+                  {remainingFields.map(([key, value]) => (
+                    <article className={`is-${fieldStyle(key, value)}`} key={key}>
+                      <h4>{humanize(key)}</h4>
+                      {fieldStyle(key, value) === 'chips' && Array.isArray(value) ? (
+                        <div className="rpg-authoring-card-chip-list">
+                          {value.map((item, index) => (
+                            <span key={`${formatAuthoringValue(item)}:${index}`}>{formatAuthoringValue(item)}</span>
+                          ))}
+                        </div>
+                      ) : <DetailValue value={value} />}
+                    </article>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+
+            {topic ? <RpgWorldEntityEditor entity={entity} topic={topic} worldId={worldId} /> : null}
+            <details className="rpg-authoring-structured-data">
+              <summary>Advanced structured data</summary>
+              <pre>{JSON.stringify(entity.metadata, null, 2)}</pre>
+            </details>
+          </article>
+
+          {sections.length ? (
+            <nav className="rpg-authoring-dossier-toc" aria-label={`${entity.title} sections`}>
+              <strong>On this page</strong>
+              {dossier?.quick_facts.length ? <a href="#quick-facts">Quick Facts</a> : null}
+              {sections.map((section) => <a href={`#${section.id}`} key={section.id}>{section.title}</a>)}
+              {dossier?.related_entity_ids.length ? <a href="#related-entries">Related Entries</a> : null}
+            </nav>
+          ) : null}
+        </div>
       </main>
     </div>
   );
