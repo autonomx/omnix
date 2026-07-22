@@ -53,6 +53,7 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
   const [model, setModel] = useState('configured');
   const [entityManifestJson, setEntityManifestJson] = useState('{}');
   const [feedback, setFeedback] = useState('');
+  const [diagnosticLog, setDiagnosticLog] = useState('resources\\logs\\rpg\\world-generation-YYYY-MM-DD.jsonl');
   const generationSections = useMemo(
     () => sections.filter((section) => section.supports_generation),
     [sections],
@@ -92,10 +93,27 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
       model: model.trim() || 'configured',
     }),
     onSuccess: async (result) => {
-      setFeedback(`Generation started: ${result.run.run_id}`);
+      if (result.diagnostic_log) setDiagnosticLog(result.diagnostic_log);
+      setFeedback(`Generation started: ${result.run.run_id}${result.diagnostic_id ? ` · diagnostic ${result.diagnostic_id}` : ''}`);
       await refresh();
     },
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Generation could not be started.'),
+  });
+
+  const retryFailed = useMutation({
+    mutationFn: () => {
+      if (!currentRun) throw new Error('No failed generation run is available.');
+      return rpgWorldLibraryClient.retryFailedGeneration(currentRun.run_id);
+    },
+    onSuccess: async (result) => {
+      if (result.diagnostic_log) setDiagnosticLog(result.diagnostic_log);
+      setFeedback(
+        `Retry started from ${result.retry_of_run_id ?? currentRun?.run_id}: ${result.run.run_id}`
+        + (result.diagnostic_id ? ` · diagnostic ${result.diagnostic_id}` : ''),
+      );
+      await refresh();
+    },
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Failed topics could not be retried.'),
   });
 
   const publish = useMutation({
@@ -122,8 +140,12 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
       setFeedback('World generation is still running. Wait for it to finish before starting another scope.');
       return;
     }
-    if (mode === 'failed' && !failedTopicIds.length) {
-      setFeedback('No failed topics are available to retry.');
+    if (mode === 'failed') {
+      if (!failedTopicIds.length) {
+        setFeedback('No failed topics are available to retry.');
+        return;
+      }
+      retryFailed.mutate();
       return;
     }
     const scope = mode === 'selected'
@@ -169,17 +191,17 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
       </details>
 
       <div className="rpg-generation-actions">
-        <button type="button" disabled={generate.isPending || generationBusy} onClick={() => start('full')}>Generate World</button>
-        <button type="button" disabled={generate.isPending || generationBusy || !selected.length} onClick={() => start('selected')}>Generate Selected</button>
-        <button className="rpg-secondary-button" type="button" disabled={generate.isPending || generationBusy} onClick={() => start('stale')}>Regenerate Stale</button>
+        <button type="button" disabled={generate.isPending || retryFailed.isPending || generationBusy} onClick={() => start('full')}>Generate World</button>
+        <button type="button" disabled={generate.isPending || retryFailed.isPending || generationBusy || !selected.length} onClick={() => start('selected')}>Generate Selected</button>
+        <button className="rpg-secondary-button" type="button" disabled={generate.isPending || retryFailed.isPending || generationBusy} onClick={() => start('stale')}>Regenerate Stale</button>
         <button
           className="rpg-secondary-button"
           type="button"
-          disabled={generate.isPending || !canRetryFailed}
-          title={canRetryFailed ? `Retry ${failedTopicIds.length} failed topic(s)` : 'No terminally failed topics are available'}
+          disabled={generate.isPending || retryFailed.isPending || !canRetryFailed}
+          title={canRetryFailed ? `Retry ${failedTopicIds.length} failed topic(s) using the original run settings` : 'No terminally failed topics are available'}
           onClick={() => start('failed')}
         >
-          Retry Failed{failedTopicIds.length ? ` (${failedTopicIds.length})` : ''}
+          {retryFailed.isPending ? 'Retrying…' : `Retry Failed${failedTopicIds.length ? ` (${failedTopicIds.length})` : ''}`}
         </button>
         <button type="button" disabled={publish.isPending || currentRun?.status !== 'review'} onClick={() => publish.mutate()}>{publish.isPending ? 'Publishing…' : 'Publish World'}</button>
         {onOpenImages ? <button className="rpg-secondary-button" type="button" onClick={onOpenImages}>Generate Images</button> : null}
@@ -187,6 +209,9 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
       {generationBusy ? <small>Generation is running. Failed-topic retry becomes available only after a topic exhausts its automatic attempts.</small> : null}
       {currentRun && currentRun.status !== 'review' && !generationBusy ? <small>Publishing becomes available when generation reaches Review.</small> : null}
       {feedback ? <p className="rpg-authoring-feedback" aria-live="polite">{feedback}</p> : null}
+      <small className="rpg-generation-diagnostic-hint">
+        Compact diagnostics: <code>{diagnosticLog}</code>. Prompts, completions, and generated world content are omitted.
+      </small>
 
       <div className="rpg-generation-topic-grid">
         {generationSections.map((section) => (
@@ -213,7 +238,7 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
       {currentRun ? (
         <details className="rpg-authoring-structured-data">
           <summary>Current run details</summary>
-          <pre>{JSON.stringify({ scope: record(currentRun.context).scope, progress: currentRun.progress, plan: currentRun.plan }, null, 2)}</pre>
+          <pre>{JSON.stringify({ scope: record(currentRun.context).scope, progress: currentRun.progress, plan: currentRun.plan, error: currentRun.error }, null, 2)}</pre>
         </details>
       ) : null}
     </section>
