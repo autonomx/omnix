@@ -16,6 +16,7 @@ from app.providers.structured import (
     StructuredOutputGateway,
     StructuredRetryBudget,
 )
+from app.providers.structured.parsing import decode_json_object
 
 logger = logging.getLogger(__name__)
 _RPG_LLM_TIMING_CONTEXT: ContextVar[Dict[str, Any]] = ContextVar(
@@ -266,14 +267,15 @@ class AppLLMGateway:
         return {"text": str(response or ""), "raw": response}
 
     def complete_json(self, prompt: str) -> Dict[str, Any]:
+        """Deprecated compatibility method that fails explicitly on invalid output.
+
+        Registered structured operations must use `generate_typed`. This wrapper is
+        retained for legacy callers, but malformed or empty content can no longer be
+        confused with a legitimate empty object.
+        """
+
         response = self.complete(prompt)
-        text = str(response.get("text") or "").strip()
-        if not text:
-            return {}
-        try:
-            return json.loads(text)
-        except Exception:
-            return {}
+        return decode_json_object(str(response.get("text") or ""))
 
     def complete_semantic_packet(
         self,
