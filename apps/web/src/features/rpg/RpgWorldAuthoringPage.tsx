@@ -76,7 +76,8 @@ function relatedEntityCards(page: RpgAuthoringDocumentPage): RpgAuthoringEntityC
     const idParts = id.split(':');
     const title = text(metadata.name ?? metadata.title ?? metadata.label, humanize(idParts[idParts.length - 1] || id));
     const summary = text(
-      metadata.summary
+      metadata.short_summary
+      ?? metadata.summary
       ?? metadata.description
       ?? metadata.personality
       ?? metadata.sensory_profile
@@ -86,7 +87,7 @@ function relatedEntityCards(page: RpgAuthoringDocumentPage): RpgAuthoringEntityC
     );
     const badges = [metadata.visibility, metadata.status, metadata.dossier_status].filter(meaningful);
     const highlights = Object.entries(metadata)
-      .filter(([key, value]) => !['id', 'entity_id', 'name', 'title', 'label', 'kind', 'summary', 'description', 'visibility', 'status', 'dossier_status'].includes(key) && meaningful(value))
+      .filter(([key, value]) => !['id', 'entity_id', 'name', 'title', 'label', 'kind', 'summary', 'short_summary', 'description', 'dossier', 'visibility', 'status', 'dossier_status'].includes(key) && meaningful(value))
       .filter(([, value]) => !Array.isArray(value) && typeof value !== 'object')
       .slice(0, 3)
       .map(([key, value]) => ({ label: humanize(key), value }));
@@ -102,6 +103,10 @@ function relatedEntityCards(page: RpgAuthoringDocumentPage): RpgAuthoringEntityC
       id,
       title,
       summary,
+      short_summary: summary,
+      dossier: metadata.dossier && typeof metadata.dossier === 'object'
+        ? metadata.dossier as RpgAuthoringEntityCard['dossier']
+        : undefined,
       kind,
       card_type: kind,
       presentation: {
@@ -229,6 +234,18 @@ export function RpgWorldAuthoringPage({
     return <section className="rpg-authoring-page"><h2>{section.label}</h2><div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This canonical section is available in the authoring roadmap and will populate when it is generated.</p></div></section>;
   }
 
+  if (selectedEntity) {
+    return (
+      <RpgWorldEntityDetail
+        entity={selectedEntity}
+        imageAssetId={approvedAssets.get(selectedEntity.id)}
+        onClose={() => setSelectedEntityId(null)}
+        topic={page.topic}
+        worldId={worldId}
+      />
+    );
+  }
+
   if (section.id === 'overview' && page.page_kind === 'document') {
     return (
       <RpgWorldOverviewDashboard
@@ -274,17 +291,6 @@ export function RpgWorldAuthoringPage({
           ))}
         </div>
         {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
-        {selectedEntity ? (
-          <div className="rpg-authoring-entity-detail-route">
-            <RpgWorldEntityDetail
-              entity={selectedEntity}
-              imageAssetId={approvedAssets.get(selectedEntity.id)}
-              onClose={() => setSelectedEntityId(null)}
-              topic={page.topic}
-              worldId={worldId}
-            />
-          </div>
-        ) : null}
       </section>
     );
   }
@@ -337,17 +343,6 @@ export function RpgWorldAuthoringPage({
           </nav>
         ) : null}
       </div>
-      {selectedEntity ? (
-        <div className="rpg-authoring-entity-detail-route">
-          <RpgWorldEntityDetail
-            entity={selectedEntity}
-            imageAssetId={approvedAssets.get(selectedEntity.id)}
-            onClose={() => setSelectedEntityId(null)}
-            topic={page.topic}
-            worldId={worldId}
-          />
-        </div>
-      ) : null}
     </section>
   );
 }
