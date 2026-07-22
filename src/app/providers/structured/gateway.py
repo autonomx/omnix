@@ -9,7 +9,16 @@ from typing import Any, Generic, Mapping, Sequence, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from app.providers.base import BaseProvider, ChatMessage, ChatResponse
+from app.providers.base import (
+    AuthenticationError,
+    BaseProvider,
+    ChatMessage,
+    ChatResponse,
+    ConnectionError as ProviderConnectionError,
+    ModelNotFoundError,
+    ProviderError,
+)
+from app.providers.exceptions import RateLimitError
 
 from .contracts import (
     StructuredCapabilities,
@@ -41,14 +50,22 @@ T = TypeVar("T", bound=BaseModel)
 class _NegativeCapabilityCache:
     def __init__(self, ttl_seconds: float = 300.0) -> None:
         self.ttl_seconds = max(1.0, float(ttl_seconds))
-        self._values: dict[tuple[str, str, str, StructuredMode], float] = {}
+        self._values: dict[tuple[str, str, str, str, StructuredMode], float] = {}
         self._lock = threading.Lock()
 
-    def mark_unsupported(self, key: tuple[str, str, str], mode: StructuredMode) -> None:
+    def mark_unsupported(
+        self,
+        key: tuple[str, str, str, str],
+        mode: StructuredMode,
+    ) -> None:
         with self._lock:
             self._values[(*key, mode)] = monotonic() + self.ttl_seconds
 
-    def is_unsupported(self, key: tuple[str, str, str], mode: StructuredMode) -> bool:
+    def is_unsupported(
+        self,
+        key: tuple[str, str, str, str],
+        mode: StructuredMode,
+    ) -> bool:
         now = monotonic()
         compound = (*key, mode)
         with self._lock:
@@ -80,27 +97,20 @@ def _validation_issues(error: ValidationError) -> tuple[StructuredValidationIssu
 
 
 def _unsupported_mode_error(error: Exception) -> bool:
-    if isinstance(error, UnsupportedStructuredMode):
-        return True
-    text = str(error).casefold()
-    return any(
-        marker in text
-        for marker in (
-            "response_format",
-            "json_schema",
-            "json_object",
-            "structured output",
-            "tool_choice",
-            "tools are not supported",
-        )
-    )
+    """Return true only for an adapter-classified capability rejection."""
+
+    return isinstance(error, UnsupportedStructuredMode)
 
 
-def _provider_identity(provider: Any, model: str) -> tuple[str, str, str]:
+def _provider_identity(
+    provider: Any,
+    model: str,
+    schema_scope: str,
+) -> tuple[str, str, str, str]:
     provider_name = str(getattr(provider, "provider_name", provider.__class__.__name__) or "")
     config = getattr(provider, "config", None)
     base_url = str(getattr(config, "base_url", "") or "")
-    return provider_name.casefold(), base_url, model
+    return provider_name.casefold(), base_url, model, schema_scope
 
 
 def _provider_capabilities(provider: Any, model: str) -> StructuredCapabilities:
@@ -187,6 +197,8 @@ def _correction_message(
 
 
 def _normalize_provider_error(error: Exception) -> Exception:
+    """Classify transport failures without turning permanent errors into retries."""
+
     if isinstance(
         error,
         (
@@ -199,7 +211,83 @@ def _normalize_provider_error(error: Exception) -> Exception:
         ),
     ):
         return error
-    return ProviderTransportError(f"{type(error).__name__}: {error}")
+    if isinstance(error, TimeoutError):
+        return ProviderTimeout(f"provider call timed out: {error}")
+    if isinstance(error, (RateLimitError, ProviderConnectionError)):
+        return ProviderTransportError(f"{type(error).__name__}: {error}")
+    if isinstance(error, (AuthenticationError, ModelNotFoundError, ProviderError)):
+        return error
+    if isinstance(error, OSError):
+        return ProviderTransportError(f"{type(error).__name__}: {error}")
+    return error
+
+
+def _provider_call_with_deadline(
+    provider: Any,
+    messages: Sequence[ChatMessage],
+    *,
+    model: str,
+    options: Mapping[str, Any],
+    deadline: float,
+    operation_id: str,
+) -> Any:
+    """Bound caller wait time and pass the remaining budget to provider adapters.
+
+    The daemon wrapper guarantees that a non-cooperative provider cannot block the
+    structured-output caller beyond the operation deadline. HTTP-backed adapters use
+    ``request_timeout_seconds`` to stop the underlying request as well.
+    """
+
+    remaining = deadline - monotonic()
+    if remaining <= 0:
+        raise ProviderTimeout(f"structured operation {operation_id} exceeded its deadline")
+
+    call_options = dict(options)
+    configured_hint = call_options.get("request_timeout_seconds")
+    if configured_hint is None:
+        call_options["request_timeout_seconds"] = remaining
+    else:
+        try:
+            call_options["request_timeout_seconds"] = min(
+                max(0.001, float(configured_hint)),
+                remaining,
+            )
+        except (TypeError, ValueError):
+            call_options["request_timeout_seconds"] = remaining
+
+    completed = threading.Event()
+    result: dict[str, Any] = {}
+
+    def invoke() -> None:
+        try:
+            result["value"] = provider.chat_completion(
+                list(messages),
+                model=model or None,
+                stream=False,
+                **call_options,
+            )
+        except BaseException as exc:
+            result["error"] = exc
+        finally:
+            completed.set()
+
+    worker = threading.Thread(
+        target=invoke,
+        name=f"omnix-structured-{operation_id}",
+        daemon=True,
+    )
+    worker.start()
+    if not completed.wait(timeout=remaining):
+        raise ProviderTimeout(
+            f"structured operation {operation_id} exceeded its deadline during provider call"
+        )
+    if "error" in result:
+        error = result["error"]
+        if isinstance(error, BaseException):
+            raise error
+    if "value" not in result:
+        raise ProviderTransportError("structured provider completed without a response")
+    return result["value"]
 
 
 class StructuredOutputGateway(Generic[T]):
@@ -245,13 +333,6 @@ class StructuredOutputGateway(Generic[T]):
         provider_name = str(
             getattr(self.provider, "provider_name", self.provider.__class__.__name__) or ""
         )
-        identity = _provider_identity(self.provider, resolved_model)
-        capabilities = _provider_capabilities(self.provider, resolved_model)
-        modes = tuple(
-            mode
-            for mode in capabilities.preferred_modes
-            if not _NEGATIVE_CAPABILITIES.is_unsupported(identity, mode)
-        ) or (StructuredMode.TEXT_JSON,)
         schema_text = json.dumps(
             contract.output_model.model_json_schema(),
             ensure_ascii=False,
@@ -259,6 +340,14 @@ class StructuredOutputGateway(Generic[T]):
             separators=(",", ":"),
         )
         schema_hash = hashlib.sha256(schema_text.encode("utf-8")).hexdigest()
+        cache_scope = f"{contract.schema_profile}:{schema_hash}"
+        identity = _provider_identity(self.provider, resolved_model, cache_scope)
+        capabilities = _provider_capabilities(self.provider, resolved_model)
+        modes = tuple(
+            mode
+            for mode in capabilities.preferred_modes
+            if not _NEGATIVE_CAPABILITIES.is_unsupported(identity, mode)
+        ) or (StructuredMode.TEXT_JSON,)
         started = monotonic()
         deadline = started + budget.deadline_seconds
         provider_calls = 0
@@ -318,12 +407,18 @@ class StructuredOutputGateway(Generic[T]):
             )
             provider_calls += 1
             try:
-                response = self.provider.chat_completion(
-                    list(working_messages),
-                    model=resolved_model or None,
-                    stream=False,
-                    **options,
+                response = _provider_call_with_deadline(
+                    self.provider,
+                    working_messages,
+                    model=resolved_model,
+                    options=options,
+                    deadline=deadline,
+                    operation_id=contract.qualified_id,
                 )
+                if monotonic() > deadline:
+                    raise ProviderTimeout(
+                        f"structured operation {contract.qualified_id} exceeded its deadline"
+                    )
                 if not isinstance(response, ChatResponse):
                     raise ProviderTransportError(
                         "structured provider returned a streaming or invalid response"
@@ -357,12 +452,17 @@ class StructuredOutputGateway(Generic[T]):
                 result_diagnostics = diagnostics()
                 self.last_diagnostics = result_diagnostics
                 return StructuredOutcome.success(value, result_diagnostics)
-            except Exception as raw_error:
+            except BaseException as raw_error:
+                if not isinstance(raw_error, Exception):
+                    raise
                 exc = _normalize_provider_error(raw_error)
                 last_error = exc
                 if _unsupported_mode_error(exc):
                     _NEGATIVE_CAPABILITIES.mark_unsupported(identity, mode)
-                    if format_downgrades < budget.max_format_downgrades:
+                    if (
+                        format_downgrades < budget.max_format_downgrades
+                        and mode_index + 1 < len(modes)
+                    ):
                         format_downgrades += 1
                         mode_index += 1
                         continue
