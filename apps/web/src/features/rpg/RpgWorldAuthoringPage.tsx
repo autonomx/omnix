@@ -10,12 +10,11 @@ import { rpgWorldImageClient } from '../../api/rpgWorldImageClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
 import {
   documentAnchors,
-  isChronicleSection,
   presentLoreBlocks,
 } from './RpgWorldCompletionModels';
-import { RpgWorldDocumentBlock } from './RpgWorldDocumentBlocks';
 import { RpgWorldEntityCard } from './RpgWorldEntityCard';
 import { RpgWorldEntityDetail } from './RpgWorldEntityDetail';
+import { RpgWorldLoreLayout } from './RpgWorldLoreLayout';
 import { RpgWorldOverviewDashboard } from './RpgWorldOverviewDashboard';
 import { RpgWorldTopicEditor } from './RpgWorldTopicEditor';
 import './RpgWorldAuthoringPage.css';
@@ -24,6 +23,7 @@ interface RpgWorldAuthoringPageProps {
   error?: string;
   isLoading: boolean;
   isSaving: boolean;
+  onOpenEntity?: (sectionId: string, entityId: string) => void;
   onOpenSection?: (sectionId: string) => void;
   onSaveWorld: (changes: Record<string, unknown>) => void;
   onSelectEntity?: (entityId: string | null) => void;
@@ -34,6 +34,28 @@ interface RpgWorldAuthoringPageProps {
   world: RpgWorldSummary;
   worldId: string;
 }
+
+const ENTITY_SECTION_ALIASES: Record<string, string> = {
+  class: 'classes',
+  encounter: 'encounter_seeds',
+  encounter_seed: 'encounter_seeds',
+  faction: 'factions',
+  feat: 'feats',
+  institution: 'institutions',
+  item: 'items',
+  location: 'locations',
+  monster: 'monsters',
+  npc: 'npcs',
+  one_shot: 'one_shots',
+  opening: 'opening_scenarios',
+  opening_scenario: 'opening_scenarios',
+  poi: 'points_of_interest',
+  point_of_interest: 'points_of_interest',
+  quest: 'quests',
+  race: 'races',
+  region: 'regions',
+  spell: 'spells',
+};
 
 function humanize(value: string): string {
   return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -52,6 +74,17 @@ function meaningful(value: unknown): boolean {
 
 function assetUrl(assetId: string): string {
   return `/api/assets/${encodeURIComponent(assetId)}/file`;
+}
+
+function entitySectionId(entityId: string, sections: RpgAuthoringSection[]): string {
+  const prefix = entityId.split(':', 1)[0].trim().toLowerCase();
+  const alias = ENTITY_SECTION_ALIASES[prefix] ?? prefix;
+  const matched = sections.find((candidate) => (
+    candidate.id === alias
+    || candidate.entity_kind === prefix
+    || candidate.entity_kind === alias.replace(/s$/, '')
+  ));
+  return matched?.id ?? alias;
 }
 
 function relatedEntityCards(page: RpgAuthoringDocumentPage): RpgAuthoringEntityCard[] {
@@ -85,9 +118,9 @@ function relatedEntityCards(page: RpgAuthoringDocumentPage): RpgAuthoringEntityC
       ?? metadata.premise,
       'No overview has been written yet.',
     );
-    const badges = [metadata.visibility, metadata.status, metadata.dossier_status].filter(meaningful);
+    const badges = [metadata.featured ? 'Featured' : undefined, metadata.visibility, metadata.status, metadata.dossier_status].filter(meaningful);
     const highlights = Object.entries(metadata)
-      .filter(([key, value]) => !['id', 'entity_id', 'name', 'title', 'label', 'kind', 'summary', 'short_summary', 'description', 'dossier', 'visibility', 'status', 'dossier_status'].includes(key) && meaningful(value))
+      .filter(([key, value]) => !['id', 'entity_id', 'name', 'title', 'label', 'kind', 'summary', 'short_summary', 'description', 'dossier', 'visibility', 'status', 'dossier_status', 'featured'].includes(key) && meaningful(value))
       .filter(([, value]) => !Array.isArray(value) && typeof value !== 'object')
       .slice(0, 3)
       .map(([key, value]) => ({ label: humanize(key), value }));
@@ -125,6 +158,7 @@ export function RpgWorldAuthoringPage({
   error,
   isLoading,
   isSaving,
+  onOpenEntity,
   onOpenSection,
   onSaveWorld,
   onSelectEntity,
@@ -144,6 +178,7 @@ export function RpgWorldAuthoringPage({
   const [collectionSearch, setCollectionSearch] = useState('');
   const [collectionKind, setCollectionKind] = useState('all');
   const [collectionSort, setCollectionSort] = useState('name');
+  const [collectionView, setCollectionView] = useState<'grid' | 'list'>('grid');
   const [localSelectedEntityId, setLocalSelectedEntityId] = useState<string | null>(null);
   const selectedEntityId = controlledSelectedEntityId === undefined ? localSelectedEntityId : controlledSelectedEntityId;
   const setSelectedEntityId = (value: string | null) => {
@@ -179,6 +214,10 @@ export function RpgWorldAuthoringPage({
       .filter((entity) => !query || [entity.title, entity.summary, entity.kind, entity.id]
         .some((value) => value.toLowerCase().includes(query)))
       .sort((left, right) => {
+        if (collectionSort === 'featured') {
+          const featured = Number(Boolean(right.metadata.featured)) - Number(Boolean(left.metadata.featured));
+          if (featured) return featured;
+        }
         if (collectionSort === 'type') {
           const kindOrder = left.kind.localeCompare(right.kind);
           if (kindOrder) return kindOrder;
@@ -186,6 +225,19 @@ export function RpgWorldAuthoringPage({
         return left.title.localeCompare(right.title);
       });
   }, [collectionEntities, collectionKind, collectionSearch, collectionSort]);
+
+  const openRelatedEntity = (entityId: string) => {
+    const targetSectionId = entitySectionId(entityId, sections);
+    if (targetSectionId === section.id && allPageEntities.some((entity) => entity.id === entityId)) {
+      setSelectedEntityId(entityId);
+      return;
+    }
+    if (onOpenEntity) {
+      onOpenEntity(targetSectionId, entityId);
+      return;
+    }
+    onOpenSection?.(targetSectionId);
+  };
 
   useEffect(() => {
     setTitle(world.title);
@@ -199,12 +251,19 @@ export function RpgWorldAuthoringPage({
     setCollectionSearch('');
     setCollectionKind('all');
     setCollectionSort('name');
+    setCollectionView('grid');
     if (controlledSelectedEntityId === undefined) setLocalSelectedEntityId(null);
   }, [controlledSelectedEntityId, section.id]);
 
   useEffect(() => {
-    if (selectedEntityId && page && !selectedEntity) setSelectedEntityId(null);
-  }, [page, selectedEntity, selectedEntityId]);
+    if (
+      selectedEntityId
+      && page
+      && page.section_id === section.id
+      && !selectedEntity
+      && !isLoading
+    ) setSelectedEntityId(null);
+  }, [isLoading, page, section.id, selectedEntity, selectedEntityId]);
 
   if (isLoading) return <section className="rpg-authoring-page"><h2>{section.label}</h2><p>Loading world content…</p></section>;
   if (error) return <section className="rpg-authoring-page"><h2>{section.label}</h2><p className="rpg-world-catalog-error">{error}</p></section>;
@@ -240,6 +299,7 @@ export function RpgWorldAuthoringPage({
         entity={selectedEntity}
         imageAssetId={approvedAssets.get(selectedEntity.id)}
         onClose={() => setSelectedEntityId(null)}
+        onOpenRelated={openRelatedEntity}
         topic={page.topic}
         worldId={worldId}
       />
@@ -272,13 +332,18 @@ export function RpgWorldAuthoringPage({
             </select>
             <select aria-label={`Sort ${page.title || section.label}`} value={collectionSort} onChange={(event) => setCollectionSort(event.currentTarget.value)}>
               <option value="name">Sort by name</option>
+              <option value="featured">Featured first</option>
               <option value="type">Sort by type</option>
             </select>
+            <div className="rpg-authoring-collection-view-toggle" aria-label="Collection view">
+              <button className={collectionView === 'grid' ? 'is-active' : ''} type="button" onClick={() => setCollectionView('grid')}>Grid</button>
+              <button className={collectionView === 'list' ? 'is-active' : ''} type="button" onClick={() => setCollectionView('list')}>List</button>
+            </div>
           </div>
         ) : null}
         {!page.entities.length ? <div className="rpg-authoring-empty"><h3>No entries yet</h3><p>Generate this section to add structured world entities.</p></div> : null}
         {page.entities.length && !visibleEntities.length ? <div className="rpg-authoring-empty"><h3>No matching entries</h3><p>Clear the search or choose a different type.</p></div> : null}
-        <div className="rpg-authoring-entity-grid">
+        <div className={`rpg-authoring-entity-grid is-${collectionView}`}>
           {visibleEntities.map((entity) => (
             <RpgWorldEntityCard
               entity={entity}
@@ -297,52 +362,39 @@ export function RpgWorldAuthoringPage({
 
   const blocks = presentLoreBlocks(section.id, page.body);
   const toc = documentAnchors(blocks);
-  const chronicle = isChronicleSection(section.id);
   const heroStyle = bannerAssetId ? {
-    backgroundImage: `linear-gradient(180deg, rgba(3, 6, 18, 0.12), rgba(3, 6, 18, 0.9)), url(${JSON.stringify(assetUrl(String(bannerAssetId)))})`,
+    backgroundImage: `url(${JSON.stringify(assetUrl(String(bannerAssetId)))})`,
   } : undefined;
 
   return (
     <section className="rpg-authoring-page">
-      <div className="rpg-authoring-page-heading">
-        <div><p className="eyebrow">{section.group}</p><h2>{page.title || section.label}</h2></div>
-      </div>
-      <div className={`rpg-authoring-document-shell${chronicle ? ' is-chronicle' : ''}`}>
-        <article className="rpg-authoring-document-stream">
-          <div className={`rpg-authoring-document-hero${bannerAssetId ? ' has-image' : ''}`} style={heroStyle}>
-            <p>{page.summary || `${section.label} is presented as a readable, vertically scrolling lore document.`}</p>
-          </div>
-          {blocks.length ? blocks.map((block, index) => (
-            <div id={toc[index].id} key={`${toc[index].id}:${index}`}>
-              <RpgWorldDocumentBlock block={block} />
+      <RpgWorldLoreLayout
+        blocks={blocks}
+        heroStyle={heroStyle}
+        sectionId={section.id}
+        summary={page.summary || `${section.label} is presented as a readable, vertically scrolling lore document.`}
+        title={page.title || section.label}
+        toc={toc}
+      >
+        {documentEntities.length ? (
+          <section className="rpg-authoring-related-entities">
+            <div className="rpg-authoring-page-heading"><div><p className="eyebrow">Connected canon</p><h3>Related entries</h3></div><span>{documentEntities.length}</span></div>
+            <div className="rpg-authoring-entity-grid">
+              {documentEntities.map((entity) => (
+                <RpgWorldEntityCard
+                  entity={entity}
+                  imageAssetId={approvedAssets.get(entity.id)}
+                  key={entity.id}
+                  onOpen={() => setSelectedEntityId(entity.id)}
+                  topic={page.topic}
+                  worldId={worldId}
+                />
+              ))}
             </div>
-          )) : <div className="rpg-authoring-empty"><h3>Not generated yet</h3><p>This section will populate as world generation completes.</p></div>}
-          {documentEntities.length ? (
-            <section className="rpg-authoring-related-entities">
-              <div className="rpg-authoring-page-heading"><div><p className="eyebrow">Connected canon</p><h3>Related entries</h3></div><span>{documentEntities.length}</span></div>
-              <div className="rpg-authoring-entity-grid">
-                {documentEntities.map((entity) => (
-                  <RpgWorldEntityCard
-                    entity={entity}
-                    imageAssetId={approvedAssets.get(entity.id)}
-                    key={entity.id}
-                    onOpen={() => setSelectedEntityId(entity.id)}
-                    topic={page.topic}
-                    worldId={worldId}
-                  />
-                ))}
-              </div>
-            </section>
-          ) : null}
-          {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
-        </article>
-        {toc.length ? (
-          <nav className="rpg-authoring-document-toc" aria-label={`${section.label} sections`}>
-            <strong>On this page</strong>
-            {toc.map((item) => <a href={`#${item.id}`} key={item.id}>{item.label}</a>)}
-          </nav>
+          </section>
         ) : null}
-      </div>
+        {page.topic ? <RpgWorldTopicEditor topic={page.topic} worldId={worldId} /> : null}
+      </RpgWorldLoreLayout>
     </section>
   );
 }

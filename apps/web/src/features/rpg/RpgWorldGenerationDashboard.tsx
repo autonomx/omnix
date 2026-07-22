@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { RpgAuthoringSection } from '../../api/rpgWorldAuthoringClient';
 import type { RpgWorldGenerationRun } from '../../api/rpgWorldLibraryClient';
-import { RpgWorldGenerationPanel } from './RpgWorldGenerationPanel';
+import {
+  RpgWorldGenerationPanel,
+  type RpgWorldGenerationPanelHandle,
+} from './RpgWorldGenerationPanel';
 import './RpgWorldGenerationDashboardDesign.css';
 
 interface RpgWorldGenerationDashboardProps {
   generation?: RpgWorldGenerationRun | Record<string, never>;
   onOpenImages?: () => void;
+  onOpenSection?: (sectionId: string) => void;
   sections: RpgAuthoringSection[];
   worldId: string;
 }
@@ -35,10 +39,13 @@ function statusIcon(status: string): string {
 export function RpgWorldGenerationDashboard({
   generation,
   onOpenImages,
+  onOpenSection,
   sections,
   worldId,
 }: RpgWorldGenerationDashboardProps) {
   const [view, setView] = useState<'board' | 'timeline'>('board');
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const panelRef = useRef<RpgWorldGenerationPanelHandle>(null);
   const run = generation && 'run_id' in generation ? generation as RpgWorldGenerationRun : undefined;
   const progress = record(run?.progress);
   const percent = Number(progress.percent ?? 0);
@@ -66,6 +73,13 @@ export function RpgWorldGenerationDashboard({
     };
   });
 
+  const openControls = () => {
+    setControlsOpen(true);
+    window.requestAnimationFrame(() => {
+      document.getElementById('generation-controls')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
   return (
     <div className="rpg-generation-dashboard is-operational-dashboard">
       <section className="rpg-generation-dashboard-header" aria-label="Generation status dashboard">
@@ -85,17 +99,17 @@ export function RpgWorldGenerationDashboard({
         </div>
         <aside className="rpg-generation-provider-card">
           <span>Provider</span><strong>{label(provider)}</strong>
-          <span>Model</span><strong>{model}</strong>
+          <span>Model</span><strong>{model || 'Provider default'}</strong>
           <small>{run?.run_id ?? 'No active run'}</small>
         </aside>
       </section>
 
       <div className="rpg-generation-primary-actions">
-        <button type="button" onClick={() => document.getElementById('generation-controls')?.scrollIntoView({ behavior: 'smooth' })}>✦ Generate World</button>
-        <button type="button" onClick={() => document.getElementById('generation-controls')?.scrollIntoView({ behavior: 'smooth' })}>Generate Selected</button>
-        <button type="button" onClick={() => document.getElementById('generation-controls')?.scrollIntoView({ behavior: 'smooth' })}>Regenerate Stale</button>
-        <button type="button" disabled={!failed.size} onClick={() => document.getElementById('generation-controls')?.scrollIntoView({ behavior: 'smooth' })}>Retry Failed{failed.size ? ` (${failed.size})` : ''}</button>
-        <button type="button" disabled={run?.status !== 'review'} onClick={() => document.getElementById('generation-controls')?.scrollIntoView({ behavior: 'smooth' })}>Publish World</button>
+        <button type="button" onClick={() => panelRef.current?.generateWorld()}>✦ Generate World</button>
+        <button type="button" onClick={openControls}>Generate Selected</button>
+        <button type="button" onClick={() => panelRef.current?.regenerateStale()}>Regenerate Stale</button>
+        <button type="button" disabled={!failed.size} onClick={() => panelRef.current?.retryFailed()}>Retry Failed{failed.size ? ` (${failed.size})` : ''}</button>
+        <button type="button" disabled={run?.status !== 'review'} onClick={() => panelRef.current?.publish()}>Publish World</button>
         {onOpenImages ? <button type="button" onClick={onOpenImages}>Generate Images</button> : null}
       </div>
 
@@ -128,10 +142,13 @@ export function RpgWorldGenerationDashboard({
                   <div className={`rpg-generation-topic-table-row is-${section.displayStatus}`} role="row" key={section.id}>
                     <div role="cell"><span className="rpg-generation-topic-icon">{statusIcon(section.displayStatus)}</span><strong>{section.label}</strong></div>
                     <span role="cell" className="rpg-generation-topic-status">{label(section.displayStatus)}</span>
-                    <div role="cell" className={`rpg-generation-row-progress${generatingRow ? ' is-indeterminate' : ''}`}><i style={{ width: completeRow ? '100%' : generatingRow ? '58%' : '0%' }} /><small>{completeRow ? '100%' : generatingRow ? 'In progress' : '0%'}</small></div>
+                    <div role="cell" className={`rpg-generation-row-progress${generatingRow ? ' is-indeterminate' : ''}`}><i style={{ width: completeRow || generatingRow ? '100%' : '0%' }} /><small>{completeRow ? '100%' : generatingRow ? 'Provider call in progress' : '0%'}</small></div>
                     <span role="cell">{active.has(section.id) || failed.has(section.id) ? (run?.updated_at ? new Date(run.updated_at).toLocaleString() : '—') : '—'}</span>
                     <span role="cell">{section.entity_count ? `${section.entity_count} structured entries` : section.displayStatus === 'failed' ? errorText : 'Queued for generation'}</span>
-                    <div role="cell"><button type="button" aria-label={`View ${section.label}`}>◉</button><button type="button" aria-label={`More actions for ${section.label}`}>⋮</button></div>
+                    <div role="cell">
+                      <button type="button" aria-label={`View ${section.label}`} onClick={() => onOpenSection?.(section.id)}>◉</button>
+                      <button type="button" aria-label={`Generation settings for ${section.label}`} onClick={openControls}>⋮</button>
+                    </div>
                   </div>
                 );
               })}
@@ -147,7 +164,7 @@ export function RpgWorldGenerationDashboard({
           <section className="rpg-generation-diagnostics-card">
             <header><h3>Diagnostics &amp; Activity</h3><span>{run?.updated_at ? new Date(run.updated_at).toLocaleTimeString() : '—'}</span></header>
             {failed.size ? (
-              <article className="rpg-generation-last-error"><small>Last Error</small><strong>{Array.from(failed).map(label).join(', ')} failed</strong><p>{errorText}</p><button type="button" onClick={() => document.getElementById('generation-controls')?.scrollIntoView({ behavior: 'smooth' })}>Retry Now</button></article>
+              <article className="rpg-generation-last-error"><small>Last Error</small><strong>{Array.from(failed).map(label).join(', ')} failed</strong><p>{errorText}</p><button type="button" onClick={() => panelRef.current?.retryFailed()}>Retry Now</button></article>
             ) : <p className="rpg-generation-no-error">No terminal topic failures.</p>}
             <div className="rpg-generation-activity-stream">
               {rows.filter((section) => section.displayStatus !== 'waiting' && section.displayStatus !== 'empty').slice(0, 7).map((section) => <div key={section.id}><span>{statusIcon(section.displayStatus)}</span><p><strong>{section.label}</strong> {label(section.displayStatus).toLowerCase()}</p></div>)}
@@ -162,9 +179,20 @@ export function RpgWorldGenerationDashboard({
         </aside>
       </div>
 
-      <details className="rpg-generation-dashboard-controls" id="generation-controls" open={!run}>
+      <details
+        className="rpg-generation-dashboard-controls"
+        id="generation-controls"
+        open={!run || controlsOpen}
+        onToggle={(event) => setControlsOpen(event.currentTarget.open)}
+      >
         <summary>Generation controls and advanced settings</summary>
-        <RpgWorldGenerationPanel generation={generation} onOpenImages={onOpenImages} sections={sections} worldId={worldId} />
+        <RpgWorldGenerationPanel
+          ref={panelRef}
+          generation={generation}
+          onOpenImages={onOpenImages}
+          sections={sections}
+          worldId={worldId}
+        />
       </details>
     </div>
   );

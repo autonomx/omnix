@@ -142,6 +142,7 @@ def test_failed_retry_reuses_original_graph_provider_and_prompt_settings(
             return None
 
     captured: dict[str, object] = {}
+    worker_call: dict[str, object] = {}
 
     monkeypatch.setattr(
         "app.rpg.worlds.generation_retry.bootstrap_local_tenant",
@@ -180,13 +181,17 @@ def test_failed_retry_reuses_original_graph_provider_and_prompt_settings(
         captured.update(kwargs)
         return {"run_id": "run:retry", "status": "running"}
 
+    def kick_world_generation_worker(**kwargs):
+        worker_call.update(kwargs)
+        return True
+
     monkeypatch.setattr(
         "app.rpg.worlds.generation_retry.start_world_generation",
         start_world_generation,
     )
     monkeypatch.setattr(
         "app.rpg.worlds.generation_retry.kick_world_generation_worker",
-        lambda database=None: True,
+        kick_world_generation_worker,
     )
     monkeypatch.setattr(
         "app.rpg.worlds.generation_retry.log_world_generation_event",
@@ -210,3 +215,4 @@ def test_failed_retry_reuses_original_graph_provider_and_prompt_settings(
     assert captured["forced_topic_ids"] == ("classes",)
     assert captured["strategy"] == "force"
     assert captured["scope"]["retry_of_run_id"] == "run:failed"
+    assert worker_call["provider_route"] == "lmstudio"

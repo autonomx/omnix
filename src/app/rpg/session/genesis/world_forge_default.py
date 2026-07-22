@@ -6,6 +6,12 @@ from typing import Any, Mapping
 
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_deterministic import DeterministicWorldForgeGenerator
+from .world_forge_dossier_quality import (
+    dossier_word_count,
+    enrich_fallback_dossier,
+    validate_dossier_quality,
+)
+from .world_forge_dossiers import project_entity_dossier, validate_entity_dossier
 from .world_forge_domains import normalize_structured_domain
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 
@@ -35,12 +41,75 @@ class ReferenceSafeWorldForgeGenerator:
         )
         topic = normalize_structured_domain(node, topic, dependency_topics)
         if node.category == "locations":
-            return self._normalize_location_regions(topic, dependency_topics)
-        if node.category == "npcs":
-            return self._complete_npc_reference_entities(topic, dependency_topics)
-        if node.category == "story":
-            return self._complete_story_reference_entities(topic, dependency_topics)
-        return topic
+            topic = self._normalize_location_regions(topic, dependency_topics)
+        elif node.category == "npcs":
+            topic = self._complete_npc_reference_entities(topic, dependency_topics)
+        elif node.category == "story":
+            topic = self._complete_story_reference_entities(topic, dependency_topics)
+        return self._normalize_entity_dossiers(node, topic)
+
+    @staticmethod
+    def _normalize_entity_dossiers(
+        node: CampaignTopicNode,
+        topic: GeneratedTopic,
+    ) -> GeneratedTopic:
+        """Project, enrich, and validate dossiers for every entity-bearing topic."""
+
+        if not topic.entities:
+            return topic
+        content = topic.as_dict()
+        entities: list[dict[str, Any]] = []
+        word_counts: dict[str, int] = {}
+        deterministic_output = "deterministic" in str(
+            topic.provenance.get("generator") or ""
+        ).casefold()
+        for entity in topic.entities:
+            row = dict(entity)
+            entity_id = str(row.get("id") or row.get("entity_id") or "")
+            short_summary, dossier = project_entity_dossier(
+                row,
+                card_type=node.topic_id,
+                content=content,
+                entity_id=entity_id,
+            )
+            quality_issues = validate_dossier_quality(dossier, topic_id=node.topic_id)
+            fallback_output = (
+                bool(dossier.get("generated_from_legacy"))
+                or deterministic_output
+                or bool(row.get("generated_for_reference_completeness"))
+            )
+            if quality_issues and fallback_output:
+                dossier = enrich_fallback_dossier(
+                    row,
+                    dossier,
+                    topic_id=node.topic_id,
+                )
+                quality_issues = validate_dossier_quality(
+                    dossier,
+                    topic_id=node.topic_id,
+                )
+            schema_issues = validate_entity_dossier(dossier)
+            issues = (*schema_issues, *quality_issues)
+            if issues:
+                raise ValueError(
+                    f"world_entity_dossier_quality:{node.topic_id}:{entity_id}:"
+                    + ",".join(issues)
+                )
+            row["short_summary"] = short_summary
+            row["dossier"] = dossier
+            entities.append(row)
+            if entity_id:
+                word_counts[entity_id] = dossier_word_count(dossier)
+        return replace(
+            topic,
+            entities=tuple(entities),
+            provenance={
+                **dict(topic.provenance),
+                "entity_dossier_schema": "rpg_world_entity_dossier_v1",
+                "entity_dossier_quality_validated": True,
+                "entity_dossier_word_counts": word_counts,
+            },
+        )
 
     @staticmethod
     def _known_entities(

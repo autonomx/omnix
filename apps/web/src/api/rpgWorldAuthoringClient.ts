@@ -70,6 +70,7 @@ export interface RpgAuthoringEntityDossier {
   sections: RpgAuthoringDossierSection[];
   related_entity_ids: string[];
   generated_from_legacy?: boolean;
+  quality_enriched?: boolean;
 }
 
 export interface RpgAuthoringEntityCard {
@@ -155,6 +156,75 @@ export interface RpgAuthoringEntityMutationResponse {
   editorial_only?: boolean;
 }
 
+export interface RpgAuthoringDossierPreviewResponse {
+  ok: boolean;
+  preview_only: boolean;
+  world_id: string;
+  topic_id: string;
+  entity_id: string;
+  expected_draft_revision: number;
+  expected_content_hash: string;
+  short_summary: string;
+  dossier: RpgAuthoringEntityDossier;
+  generation: Record<string, unknown>;
+  canonical_fields_preserved: boolean;
+  stored: false;
+}
+
+export interface RpgDossierQualityMetrics {
+  entities: number;
+  rich_dossiers: number;
+  projected_legacy_dossiers: number;
+  invalid_or_thin_dossiers: number;
+  coverage_percent: number;
+  average_words: number;
+  unresolved_related_entity_ids: number;
+}
+
+export interface RpgDossierQualityTopicMetrics {
+  topic_id: string;
+  entities: number;
+  rich: number;
+  projected: number;
+  invalid: number;
+  words: number;
+  coverage_percent: number;
+  average_words: number;
+}
+
+export interface RpgDossierEnrichmentCandidate {
+  topic_id: string;
+  entity_id: string;
+  title: string;
+  word_count: number;
+  generated_from_legacy: boolean;
+  issues: string[];
+}
+
+export interface RpgWorldDossierQualityResponse {
+  ok: boolean;
+  world_id: string;
+  draft_revision: number;
+  schema_version: string;
+  metrics: RpgDossierQualityMetrics;
+  by_topic: RpgDossierQualityTopicMetrics[];
+  unresolved_related_entity_ids: string[];
+  enrichment_candidates: RpgDossierEnrichmentCandidate[];
+}
+
+export interface RpgWorldDossierEnrichmentResponse {
+  ok: boolean;
+  world_id: string;
+  dry_run: boolean;
+  candidate_count?: number;
+  candidates?: RpgDossierEnrichmentCandidate[];
+  attempted?: number;
+  completed?: Array<{ topic_id: string; entity_id: string; content_hash: string }>;
+  failed?: Array<{ topic_id: string; entity_id: string; error: string }>;
+  metrics?: RpgDossierQualityMetrics;
+  quality?: RpgWorldDossierQualityResponse;
+}
+
 export type RpgAuthoringPage = RpgAuthoringDocumentPage | RpgAuthoringCollectionPage;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -202,6 +272,20 @@ export const rpgWorldAuthoringClient = {
   section(worldId: string, sectionId: string): Promise<RpgAuthoringPage> {
     return request(
       `/api/rpg/worlds/${encodeURIComponent(worldId)}/authoring-sections/${encodeURIComponent(sectionId)}`,
+    );
+  },
+
+  dossierQuality(worldId: string): Promise<RpgWorldDossierQualityResponse> {
+    return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/dossier-quality`);
+  },
+
+  enrichDossiers(
+    worldId: string,
+    body: Record<string, unknown>,
+  ): Promise<RpgWorldDossierEnrichmentResponse> {
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/enrich-dossiers`,
+      jsonPost(body),
     );
   },
 
@@ -278,6 +362,18 @@ export const rpgWorldAuthoringClient = {
     body: Record<string, unknown>,
   ): Promise<RpgAuthoringEntityMutationResponse> {
     return request(`${entityPath(worldId, topicId, entityId)}/dossier`, jsonPatch(body));
+  },
+
+  previewEntityDossier(
+    worldId: string,
+    topicId: string,
+    entityId: string,
+    body: Record<string, unknown>,
+  ): Promise<RpgAuthoringDossierPreviewResponse> {
+    return request(
+      `${entityPath(worldId, topicId, entityId)}/regenerate-dossier-preview`,
+      jsonPost(body),
+    );
   },
 
   regenerateEntityDossier(

@@ -1,4 +1,5 @@
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+import { RpgWorldDossierQualityPanel } from './RpgWorldDossierQualityPanel';
 
 interface RpgWorldAdvancedPanelProps {
   world: RpgWorldSummary;
@@ -16,7 +17,7 @@ export function RpgWorldAdvancedPanel({ world }: RpgWorldAdvancedPanelProps) {
         <div>
           <p className="eyebrow">Technical details</p>
           <h2>Advanced</h2>
-          <p>Inspect stable identifiers, lifecycle state, and provider-independent metadata.</p>
+          <p>Inspect stable identifiers, lifecycle state, provider-independent metadata, and editorial quality.</p>
         </div>
         <span>{world.status}</span>
       </div>
@@ -33,6 +34,7 @@ export function RpgWorldAdvancedPanel({ world }: RpgWorldAdvancedPanelProps) {
         </dl>
         <p>The technical ID is assigned by the backend during creation and remains stable across edits, releases, and campaigns.</p>
       </section>
+      <RpgWorldDossierQualityPanel worldId={world.id} />
       <details className="rpg-authoring-structured-data">
         <summary>World metadata</summary>
         <pre>{JSON.stringify(world.metadata, null, 2)}</pre>

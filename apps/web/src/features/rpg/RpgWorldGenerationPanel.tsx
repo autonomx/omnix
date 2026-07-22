@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { RpgAuthoringSection } from '../../api/rpgWorldAuthoringClient';
 import {
@@ -12,6 +12,13 @@ interface RpgWorldGenerationPanelProps {
   onOpenImages?: () => void;
   sections: RpgAuthoringSection[];
   worldId: string;
+}
+
+export interface RpgWorldGenerationPanelHandle {
+  generateWorld: () => void;
+  regenerateStale: () => void;
+  retryFailed: () => void;
+  publish: () => void;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -38,7 +45,29 @@ function parseEntityManifest(value: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, worldId }: RpgWorldGenerationPanelProps) {
+function generationResultFeedback(result: unknown, prefix: string): string {
+  const response = record(result);
+  const run = record(response.run);
+  const summary = record(response.execution_summary);
+  const route = record(response.resolved_route);
+  const queued = Number(summary.queued_count ?? 0);
+  const reused = Number(summary.reused_count ?? 0);
+  const protectedCount = Number(summary.protected_count ?? 0);
+  const provider = String(route.provider ?? record(run.settings).provider_route ?? 'unknown');
+  const model = String(route.model ?? record(run.settings).model ?? 'default model');
+  const routeLabel = provider === 'deterministic'
+    ? 'deterministic reference-safe generator'
+    : `${provider}${model ? ` / ${model}` : ''}`;
+  const work = queued > 0
+    ? `${queued} provider topic job${queued === 1 ? '' : 's'} queued; ${reused} reused; ${protectedCount} protected.`
+    : `No provider calls were queued; ${reused} topic${reused === 1 ? ' was' : 's were'} reused and ${protectedCount} protected.`;
+  return `${prefix}: ${String(run.run_id ?? 'unknown run')} · ${work} Route: ${routeLabel}.`;
+}
+
+export const RpgWorldGenerationPanel = forwardRef<
+  RpgWorldGenerationPanelHandle,
+  RpgWorldGenerationPanelProps
+>(function RpgWorldGenerationPanel({ generation, onOpenImages, sections, worldId }, ref) {
   const queryClient = useQueryClient();
   const [depth, setDepth] = useState('standard');
   const [startingLocation, setStartingLocation] = useState('');
@@ -94,7 +123,7 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
     }),
     onSuccess: async (result) => {
       if (result.diagnostic_log) setDiagnosticLog(result.diagnostic_log);
-      setFeedback(`Generation started: ${result.run.run_id}${result.diagnostic_id ? ` · diagnostic ${result.diagnostic_id}` : ''}`);
+      setFeedback(generationResultFeedback(result, 'Generation started'));
       await refresh();
     },
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Generation could not be started.'),
@@ -107,10 +136,7 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
     },
     onSuccess: async (result) => {
       if (result.diagnostic_log) setDiagnosticLog(result.diagnostic_log);
-      setFeedback(
-        `Retry started from ${result.retry_of_run_id ?? currentRun?.run_id}: ${result.run.run_id}`
-        + (result.diagnostic_id ? ` · diagnostic ${result.diagnostic_id}` : ''),
-      );
+      setFeedback(generationResultFeedback(result, `Retry started from ${result.retry_of_run_id ?? currentRun?.run_id}`));
       await refresh();
     },
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Failed topics could not be retried.'),
@@ -148,11 +174,22 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
       retryFailed.mutate();
       return;
     }
+    if (mode === 'selected' && !selected.length) {
+      setFeedback('Select at least one topic before generating a selected scope.');
+      return;
+    }
     const scope = mode === 'selected'
       ? { mode, topic_ids: selected }
       : { mode };
     generate.mutate(scope);
   };
+
+  useImperativeHandle(ref, () => ({
+    generateWorld: () => start('full'),
+    regenerateStale: () => start('stale'),
+    retryFailed: () => start('failed'),
+    publish: () => publish.mutate(),
+  }));
 
   const toggleSelected = (topicId: string, checked: boolean) => {
     setSelected((current) => checked
@@ -172,8 +209,8 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
       </div>
 
       <div className="rpg-generation-settings">
-        <label><span>Depth</span><select value={depth} onChange={(event) => setDepth(event.currentTarget.value)}><option value="quick">Quick</option><option value="standard">Standard</option><option value="epic">Epic</option></select></label>
-        <label><span>Starting location</span><input placeholder="Optional stable location ID" value={startingLocation} onChange={(event) => setStartingLocation(event.currentTarget.value)} /></label>
+        <label><span>Depth</span><select aria-label="Depth" value={depth} onChange={(event) => setDepth(event.currentTarget.value)}><option value="quick">Quick</option><option value="standard">Standard</option><option value="epic">Epic</option></select></label>
+        <label><span>Starting location</span><input aria-label="Starting location" placeholder="Optional stable location ID" value={startingLocation} onChange={(event) => setStartingLocation(event.currentTarget.value)} /></label>
         <label><span>Strategy</span><select value={strategy} onChange={(event) => setStrategy(event.currentTarget.value)}><option value="reuse_unchanged">Reuse unchanged</option><option value="force">Force selected replacement</option></select></label>
         <label className="rpg-authoring-checkbox"><input type="checkbox" checked={backgroundExpansion} onChange={(event) => setBackgroundExpansion(event.currentTarget.checked)} /><span>Allow optional topics to continue as background expansion</span></label>
         <label className="rpg-authoring-checkbox"><input type="checkbox" checked={replaceLocked} onChange={(event) => setReplaceLocked(event.currentTarget.checked)} /><span>Allow forced replacement of locked manual topics</span></label>
@@ -243,4 +280,4 @@ export function RpgWorldGenerationPanel({ generation, onOpenImages, sections, wo
       ) : null}
     </section>
   );
-}
+});

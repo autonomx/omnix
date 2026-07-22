@@ -12,7 +12,7 @@ function run(status: string, failedTopicIds: string[] = []): RpgWorldGenerationR
     status,
     graph: {},
     context: {},
-    settings: {},
+    settings: { provider_route: 'lmstudio', model: 'qwen-world' },
     plan: {},
     progress: {
       percent: status === 'running' ? 27 : 40,
@@ -53,6 +53,8 @@ describe('RpgWorldGenerationPanel failed-topic retry guards', () => {
         retry_of_run_id: 'run:failed',
         diagnostic_id: 'world-generation-retry-test',
         diagnostic_log: 'resources\\logs\\rpg\\world-generation-2026-07-21.jsonl',
+        execution_summary: { queued_count: 1, reused_count: 2, protected_count: 0 },
+        resolved_route: { provider: 'lmstudio', model: 'qwen-world', source: 'retry_durable_run' },
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -81,7 +83,9 @@ describe('RpgWorldGenerationPanel failed-topic retry guards', () => {
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].url).toBe('/api/rpg/world-generation/run%3Afailed/retry-failed');
     expect(JSON.parse(String(requests[0].init?.body))).toEqual({});
-    expect(await screen.findByText(/diagnostic world-generation-retry-test/)).toBeInTheDocument();
+    expect(await screen.findByText(/Retry started from run:failed/)).toBeInTheDocument();
+    expect(screen.getByText(/1 provider topic job queued/)).toBeInTheDocument();
+    expect(screen.getByText(/Route: lmstudio \/ qwen-world/)).toBeInTheDocument();
     expect(screen.getByText(/world-generation-2026-07-21\.jsonl/)).toBeInTheDocument();
   });
 
