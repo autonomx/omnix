@@ -83,7 +83,7 @@ describe('RpgWorldGenerationDashboard', () => {
     }));
 
     renderDashboard();
-    fireEvent.click(screen.getByRole('button', { name: /Generate World/ }));
+    fireEvent.click(screen.getByRole('button', { name: '✦ Generate World' }));
 
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].url).toContain('/api/rpg/worlds/world%3Aaurelia/generation');
