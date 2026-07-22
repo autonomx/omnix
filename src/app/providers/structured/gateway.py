@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
-from dataclasses import replace
 from time import monotonic
 from typing import Any, Generic, Mapping, Sequence, TypeVar
 
@@ -187,6 +186,22 @@ def _correction_message(
     )
 
 
+def _normalize_provider_error(error: Exception) -> Exception:
+    if isinstance(
+        error,
+        (
+            StructuredOutputError,
+            UnsupportedStructuredMode,
+            ProviderTransportError,
+            ProviderEmptyResponse,
+            ProviderTimeout,
+            ProviderTruncatedResponse,
+        ),
+    ):
+        return error
+    return ProviderTransportError(f"{type(error).__name__}: {error}")
+
+
 class StructuredOutputGateway(Generic[T]):
     """Obtain, decode, and validate one provider-independent structured value."""
 
@@ -342,7 +357,8 @@ class StructuredOutputGateway(Generic[T]):
                 result_diagnostics = diagnostics()
                 self.last_diagnostics = result_diagnostics
                 return StructuredOutcome.success(value, result_diagnostics)
-            except Exception as exc:
+            except Exception as raw_error:
+                exc = _normalize_provider_error(raw_error)
                 last_error = exc
                 if _unsupported_mode_error(exc):
                     _NEGATIVE_CAPABILITIES.mark_unsupported(identity, mode)
