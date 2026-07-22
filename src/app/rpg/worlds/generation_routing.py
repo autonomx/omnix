@@ -1,8 +1,9 @@
 """Resolve and execute the durable provider route stored with a World Forge run.
 
 The browser may request the ``configured`` route, but a durable generation run must
-record the concrete provider and model that will execute it. Workers then use those
-stored values instead of re-resolving mutable global settings for every topic.
+record the concrete provider and model that will execute it. Workers and editorial
+regeneration then use those stored values instead of re-resolving mutable global
+settings for every provider call.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from app.rpg_world_forge_provider import (
     ProviderWorldForgeTopicGenerator,
     UnavailableWorldForgeTopicGenerator,
     WorldForgeProviderConfig,
+    build_production_world_forge_generator,
 )
 
 _CONFIGURED_VALUES = {"", "auto", "configured", "settings"}
@@ -183,3 +185,15 @@ def build_world_forge_generator_from_settings(
     return ReferenceSafeWorldForgeGenerator(
         ProviderWorldForgeTopicGenerator(provider, config)
     )
+
+
+def build_world_forge_generator_for_run(
+    run: Mapping[str, Any] | None,
+) -> WorldForgeTopicGenerator:
+    """Use durable settings when present, with compatibility for legacy unresolved runs."""
+
+    settings = dict((run or {}).get("settings") or {})
+    provider_id = _provider_key(settings.get("provider_route"))
+    if provider_id and provider_id not in _CONFIGURED_VALUES:
+        return build_world_forge_generator_from_settings(settings)
+    return build_production_world_forge_generator()
