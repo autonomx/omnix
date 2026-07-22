@@ -11,6 +11,7 @@ interface RpgWorldEntityDetailProps {
   entity: RpgAuthoringEntityCard;
   imageAssetId?: string;
   onClose: () => void;
+  onOpenRelated?: (entityId: string) => void;
   topic?: RpgAuthoringTopic;
   worldId: string;
 }
@@ -84,6 +85,7 @@ export function RpgWorldEntityDetail({
   entity,
   imageAssetId,
   onClose,
+  onOpenRelated,
   topic,
   worldId,
 }: RpgWorldEntityDetailProps) {
@@ -144,7 +146,7 @@ export function RpgWorldEntityDetail({
         {dossier?.quote?.text ? (
           <blockquote className="rpg-authoring-dossier-quote">
             <p>“{dossier.quote.text}”</p>
-            {dossier.quote.attribution ? <cite>— {dossier.quote.attribution}</cite> : null}
+            {dossier.quote.attribution ? <cite><span aria-hidden="true">— </span><span>{dossier.quote.attribution}</span></cite> : null}
           </blockquote>
         ) : null}
 
@@ -198,7 +200,9 @@ export function RpgWorldEntityDetail({
               <section className="rpg-authoring-detail-section rpg-authoring-dossier-related" id="related-entries">
                 <h3>Related Entries</h3>
                 <div className="rpg-authoring-card-chip-list">
-                  {dossier.related_entity_ids.map((entityId) => <span key={entityId}>{humanize(entityId)}</span>)}
+                  {dossier.related_entity_ids.map((entityId) => onOpenRelated ? (
+                    <button key={entityId} type="button" onClick={() => onOpenRelated(entityId)}>{humanize(entityId)} →</button>
+                  ) : <span key={entityId}>{humanize(entityId)}</span>)}
                 </div>
               </section>
             ) : null}
