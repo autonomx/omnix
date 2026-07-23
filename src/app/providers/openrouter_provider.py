@@ -1,10 +1,8 @@
-"""
-OpenRouter Provider Plugin
+"""OpenRouter provider plugin."""
+from __future__ import annotations
 
-Implements the BaseProvider interface for OpenRouter API.
-OpenRouter provides access to various LLM models through a unified API.
-"""
-
+import json
+import logging
 from typing import Any, Dict, Iterator, List, Optional, Union
 
 import requests
@@ -19,293 +17,243 @@ from .base import (
     ModelNotFoundError,
     ProviderCapability,
 )
+from .structured.transport import (
+    pop_structured_transport_options,
+    raise_if_structured_mode_rejected,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class OpenRouterProvider(BaseProvider):
-    """
-    Provider for OpenRouter API.
-    
-    OpenRouter offers a unified API for many different LLM models from various providers.
-    Requires an API key for authentication.
-    """
-    
     provider_name = "openrouter"
     provider_display_name = "OpenRouter"
     provider_description = "OpenRouter API with access to multiple LLM providers"
-    default_capabilities = [ProviderCapability.CHAT, ProviderCapability.STREAMING, ProviderCapability.MODELS]
-    
+    default_capabilities = [
+        ProviderCapability.CHAT,
+        ProviderCapability.STREAMING,
+        ProviderCapability.MODELS,
+    ]
+
     API_BASE_URL = "https://openrouter.ai/api/v1"
-    MODELS_URL = "https://openrouter.ai/api/v1/models"
-    
+
     def _validate_config(self):
-        """Validate OpenRouter configuration."""
         if not self.config.base_url:
             self.config.base_url = self.API_BASE_URL
         if not self.config.api_key:
             raise AuthenticationError("OpenRouter requires an API key")
-        # Ensure base_url doesn't have trailing slash
-        self.config.base_url = self.config.base_url.rstrip('/')
-    
+        self.config.base_url = self.config.base_url.rstrip("/")
+
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
-        """
-        Make an HTTP request to the OpenRouter API.
-        
-        Args:
-            method: HTTP method
-            endpoint: API endpoint (without base URL)
-            **kwargs: Additional arguments for requests
-            
-        Returns:
-            Response object
-            
-        Raises:
-            AuthenticationError: If authentication fails
-            ConnectionError: If connection fails
-        """
         url = f"{self.config.base_url}{endpoint}"
-        headers = kwargs.pop('headers', {})
-        
-        # Add authorization header
+        headers = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {self.config.api_key}"
-        
-        # Add required OpenRouter headers if not present
-        if "HTTP-Referer" not in headers:
-            headers["HTTP-Referer"] = "http://localhost:5000"
-        if "X-Title" not in headers:
-            headers["X-Title"] = "Omnix"
-        
+        headers.setdefault("HTTP-Referer", "http://localhost:5000")
+        headers.setdefault("X-Title", "Omnix")
+        kwargs.setdefault("timeout", self.config.timeout or 60)
         try:
-            # Add default timeout if not provided
-            if 'timeout' not in kwargs:
-                kwargs['timeout'] = 60  # 60 seconds timeout
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"Making request to {url} with timeout {kwargs.get('timeout', 'default')}")
             response = requests.request(method, url, headers=headers, **kwargs)
-            logger.info(f"Request to {url} completed with status {response.status_code}")
             response.raise_for_status()
             return response
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None:
+        except requests.exceptions.ConnectionError as exc:
+            raise ConnectionError(f"Failed to connect to OpenRouter at {url}: {exc}") from exc
+        except requests.exceptions.Timeout as exc:
+            raise ConnectionError(f"Connection to OpenRouter timed out: {exc}") from exc
+        except requests.exceptions.HTTPError as exc:
+            response = exc.response
+            status = response.status_code if response is not None else None
+            body = ""
+            if response is not None:
                 try:
-                    error_data = e.response.json()
-                    print(f"OpenRouter API Error {e.response.status_code}: {error_data}")
+                    body = response.text[:2000]
                 except Exception:
-                    print(f"OpenRouter API Error {e.response.status_code}: {e.response.text}")
-            raise
-        except requests.exceptions.ConnectionError as e:
-            raise ConnectionError(f"Failed to connect to OpenRouter at {url}: {e}")
-        except requests.exceptions.Timeout as e:
-            raise ConnectionError(f"Connection to OpenRouter timed out: {e}")
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code in [401, 403]:
-                raise AuthenticationError(f"Authentication failed: {e}")
-            elif e.response.status_code == 404:
-                raise ModelNotFoundError(f"Resource not found: {e}")
-            elif e.response.status_code == 429:
+                    body = ""
+            raise_if_structured_mode_rejected(
+                status_code=status,
+                response_body=body,
+                error=exc,
+            )
+            if status in {401, 403}:
+                raise AuthenticationError(f"Authentication failed: {exc}") from exc
+            if status == 404:
+                raise ModelNotFoundError(f"Resource not found: {exc}") from exc
+            if status == 429:
                 from .exceptions import RateLimitError
-                raise RateLimitError(f"Rate limit exceeded: {e}")
-            else:
-                raise ConnectionError(f"HTTP error {e.response.status_code}: {e}")
-        except Exception as e:
-            raise ConnectionError(f"Unexpected error: {e}")
-    
+
+                raise RateLimitError(f"Rate limit exceeded: {exc}") from exc
+            raise ConnectionError(
+                f"HTTP error {status}: {exc}; response_body={body}"
+            ) from exc
+        except Exception as exc:
+            if isinstance(exc, (AuthenticationError, ModelNotFoundError, ConnectionError)):
+                raise
+            raise ConnectionError(f"Unexpected error: {exc}") from exc
+
     def chat_completion(
         self,
         messages: List[ChatMessage],
         model: Optional[str] = None,
         stream: bool = False,
-        **kwargs
+        **kwargs,
     ) -> Union[ChatResponse, Iterator[ChatResponse]]:
-        """
-        Generate a chat completion using OpenRouter.
-        
-        Args:
-            messages: List of chat messages
-            model: Optional model override
-            stream: Whether to stream the response
-            **kwargs: Additional parameters (temperature, max_tokens, thinking_budget, etc.)
-            
-        Returns:
-            ChatResponse or iterator of ChatResponse chunks
-            
-        Raises:
-            AuthenticationError: If authentication fails
-            ConnectionError: If connection fails
-            ModelNotFoundError: If model doesn't exist
-        """
         if not messages:
             raise ValueError("Messages list cannot be empty")
-        
-        # Build payload
-        payload = {
+        transport = pop_structured_transport_options(kwargs)
+        payload: Dict[str, Any] = {
             "model": model or self.config.model,
-            "messages": [msg.to_dict() for msg in messages],
+            "messages": [message.to_dict() for message in messages],
             "stream": stream,
+            **transport.payload_options,
         }
-        
-        # Add optional parameters
-        optional_params = ["temperature", "top_p", "max_tokens", "top_k", "presence_penalty", "frequency_penalty", "thinking"]
+        optional_params = [
+            "temperature",
+            "top_p",
+            "max_tokens",
+            "top_k",
+            "presence_penalty",
+            "frequency_penalty",
+            "thinking",
+            "chat_template_kwargs",
+        ]
         for key in optional_params:
             if key in kwargs:
                 payload[key] = kwargs[key]
             elif key in self.config.extra_params:
                 payload[key] = self.config.extra_params[key]
-        
-        # Handle thinking budget (OpenRouter's extra_options)
-        thinking_budget = kwargs.get('thinking_budget', getattr(self.config, 'thinking_budget', self.config.extra_params.get('thinking_budget', 0)))
+        thinking_budget = kwargs.get(
+            "thinking_budget",
+            self.config.extra_params.get("thinking_budget", 0),
+        )
         if thinking_budget and thinking_budget > 0:
             payload["max_tokens"] = thinking_budget
-            # For reasoning models like Elephant Alpha
-            if 'thinking' not in payload:
-                payload["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
-        
-        # Make request
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"OpenRouter chat_completion called with model {payload.get('model')} for {len(messages)} messages")
+            payload.setdefault(
+                "thinking",
+                {"type": "enabled", "budget_tokens": thinking_budget},
+            )
+        timeout = transport.request_timeout_seconds
+        _LOGGER.info(
+            "OpenRouter chat_completion model=%s messages=%s",
+            payload.get("model"),
+            len(messages),
+        )
         if stream:
-            return self._stream_completion(payload)
-        else:
-            return self._non_stream_completion(payload)
-    
-    def _non_stream_completion(self, payload: Dict[str, Any]) -> ChatResponse:
-        """Handle non-streaming completion."""
-        response = self._make_request('post', '/chat/completions', json=payload)
-        
+            return self._stream_completion(payload, timeout=timeout)
+        return self._non_stream_completion(payload, timeout=timeout)
+
+    def _non_stream_completion(
+        self,
+        payload: Dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> ChatResponse:
+        request_kwargs: Dict[str, Any] = {"json": payload}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
+        response = self._make_request("post", "/chat/completions", **request_kwargs)
         try:
             data = response.json()
-        except ValueError as e:
-            raise ConnectionError(f"Invalid JSON response: {e}")
-        
-        choices = data.get('choices', [])
+        except ValueError as exc:
+            raise ConnectionError(f"Invalid JSON response: {exc}") from exc
+        choices = data.get("choices", [])
         if not choices:
             raise ConnectionError("No choices in OpenRouter response")
-        
-        message = choices[0].get('message', {})
-        content = message.get('content', '')
-        
-        # OpenRouter uses 'reasoning' or 'thinking' field
-        thinking = message.get('reasoning') or message.get('thinking')
-        
+        message = choices[0].get("message", {})
+        thinking = message.get("reasoning") or message.get("thinking")
+        tool_calls = message.get("tool_calls")
         return ChatResponse(
-            content=content,
-            model=data.get('model', payload.get('model', '')),
-            usage=data.get('usage'),
+            content=message.get("content", ""),
+            model=data.get("model", payload.get("model", "")),
+            usage=data.get("usage"),
             thinking=thinking,
             reasoning=thinking,
-            finish_reason=choices[0].get('finish_reason'),
-            raw_response=data
+            tool_calls=tool_calls if isinstance(tool_calls, list) else None,
+            finish_reason=choices[0].get("finish_reason"),
+            raw_response=data,
         )
-    
-    def _stream_completion(self, payload: Dict[str, Any]) -> Iterator[ChatResponse]:
-        """Handle streaming completion."""
+
+    def _stream_completion(
+        self,
+        payload: Dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> Iterator[ChatResponse]:
+        request_kwargs: Dict[str, Any] = {"json": payload, "stream": True}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
         try:
-            response = self._make_request('post', '/chat/completions', json=payload, stream=True)
-        except Exception as e:
-            raise ConnectionError(f"Failed to start stream: {e}")
-        
+            response = self._make_request("post", "/chat/completions", **request_kwargs)
+        except Exception as exc:
+            raise ConnectionError(f"Failed to start stream: {exc}") from exc
         try:
             for line in response.iter_lines():
                 if not line:
                     continue
-                    
-                line_str = line.decode('utf-8') if isinstance(line, bytes) else line
-                if not line_str.startswith('data: '):
+                line_text = line.decode("utf-8") if isinstance(line, bytes) else line
+                if not line_text.startswith("data: "):
                     continue
-                    
-                data_str = line_str[6:].strip()
-                if data_str == '[DONE]':
+                data_text = line_text[6:].strip()
+                if data_text == "[DONE]":
                     break
-                    
                 try:
-                    import json
-                    data = json.loads(data_str)
+                    data = json.loads(data_text)
                     if not isinstance(data, dict):
                         continue
-                    
-                    delta = data.get('choices', [{}])[0].get('delta', {})
-                    
-                    # OpenRouter uses 'thinking' field for Elephant Alpha models
-                    thinking = delta.get('reasoning') or delta.get('thinking')
-                    
+                    choice = data.get("choices", [{}])[0]
+                    delta = choice.get("delta", {})
+                    thinking = delta.get("reasoning") or delta.get("thinking")
                     yield ChatResponse(
-                        content=delta.get('content', ''),
-                        model=payload.get('model', ''),
+                        content=delta.get("content", ""),
+                        model=data.get("model", payload.get("model", "")),
+                        usage=data.get("usage"),
                         thinking=thinking,
                         reasoning=thinking,
-                        raw_response=data
+                        tool_calls=(
+                            delta.get("tool_calls")
+                            if isinstance(delta.get("tool_calls"), list)
+                            else None
+                        ),
+                        finish_reason=choice.get("finish_reason"),
+                        raw_response=data,
                     )
-                except (ValueError, KeyError, IndexError):
+                except (ValueError, KeyError, IndexError, TypeError):
                     continue
-                    
-        except Exception as e:
-            raise ConnectionError(f"Stream error: {e}")
-    
+        except Exception as exc:
+            raise ConnectionError(f"Stream error: {exc}") from exc
+
     def get_models(self) -> List[ModelInfo]:
-        """
-        Get list of available models from OpenRouter.
-        This can be filtered based on provider's available models.
-        
-        Returns:
-            List of ModelInfo objects
-            
-        Raises:
-            ConnectionError: If unable to fetch models
-            AuthenticationError: If authentication fails
-        """
         try:
-            response = self._make_request('get', '/models')
+            response = self._make_request("get", "/models")
             data = response.json()
-            
-            models = []
-            for model_data in data.get('data', []):
-                # OpenRouter returns model info with id, name, description, etc.
-                model_info = ModelInfo(
-                    id=model_data.get('id', ''),
-                    name=model_data.get('name', model_data.get('id', '')),
+            return [
+                ModelInfo(
+                    id=model_data.get("id", ""),
+                    name=model_data.get("name", model_data.get("id", "")),
                     provider=self.provider_name,
-                    context_length=model_data.get('context_length'),
-                    description=model_data.get('description', ''),
+                    context_length=model_data.get("context_length"),
+                    description=model_data.get("description", ""),
                     metadata={
-                        'owned_by': model_data.get('owned_by', ''),
-                        'top_provider': model_data.get('top_provider', False),
-                        'pricing': model_data.get('pricing', {}),
-                    }
+                        "owned_by": model_data.get("owned_by", ""),
+                        "top_provider": model_data.get("top_provider", False),
+                        "pricing": model_data.get("pricing", {}),
+                    },
                 )
-                models.append(model_info)
-            
-            return models
-            
-        except Exception as e:
-            if isinstance(e, (AuthenticationError, ConnectionError)):
+                for model_data in data.get("data", [])
+            ]
+        except Exception as exc:
+            if isinstance(exc, (AuthenticationError, ConnectionError)):
                 raise
-            raise ConnectionError(f"Failed to fetch models from OpenRouter: {e}")
-    
+            raise ConnectionError(f"Failed to fetch models from OpenRouter: {exc}") from exc
+
     def test_connection(self) -> bool:
-        """
-        Test connection to OpenRouter.
-        
-        Returns:
-            True if connection successful (API key valid), False otherwise
-        """
         try:
-            # Test with models endpoint
-            response = self._make_request('get', '/models', timeout=5)
+            response = self._make_request("get", "/models", timeout=5)
             return response.status_code == 200
-        except Exception as e:
-            print(f"OpenRouter connection test failed: {type(e).__name__}: {e}")
-            if isinstance(e, AuthenticationError):
-                raise
+        except AuthenticationError:
+            raise
+        except Exception:
             return False
-    
+
     def get_config_schema(self) -> Dict[str, Any]:
-        """
-        Get configuration schema for OpenRouter provider.
-        
-        Returns:
-            Dictionary with configuration fields for frontend
-        """
         return {
             "provider_type": self.provider_name,
             "display_name": self.provider_display_name,
@@ -316,7 +264,7 @@ class OpenRouterProvider(BaseProvider):
                     "type": "password",
                     "label": "API Key",
                     "required": True,
-                    "description": "OpenRouter API key"
+                    "description": "OpenRouter API key",
                 },
                 {
                     "name": "model",
@@ -324,7 +272,7 @@ class OpenRouterProvider(BaseProvider):
                     "label": "Model",
                     "required": True,
                     "description": "Select a model",
-                    "options": []  # Will be populated dynamically from /models endpoint
+                    "options": [],
                 },
                 {
                     "name": "thinking_budget",
@@ -332,16 +280,10 @@ class OpenRouterProvider(BaseProvider):
                     "label": "Thinking Budget (tokens)",
                     "default": 0,
                     "required": False,
-                    "description": "Additional tokens for thinking/reasoning (0 to disable)"
-                }
-            ]
+                    "description": "Additional tokens for thinking/reasoning (0 to disable)",
+                },
+            ],
         }
-    
+
     def supports_thinking_budget(self) -> bool:
-        """
-        OpenRouter supports thinking budget via extra_options.
-        
-        Returns:
-            True
-        """
         return True
