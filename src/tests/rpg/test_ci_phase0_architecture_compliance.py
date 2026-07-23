@@ -39,13 +39,22 @@ REGISTERED_STRUCTURED_FEATURES = [
     "src/app/rpg/ai/semantic_action_intelligence.py",
     "src/app/rpg/session/genesis/runtime_materialization.py",
 ]
-FORBIDDEN_STRUCTURED_HELPERS = {
+FORBIDDEN_STRUCTURED_HELPER_PREFIXES = (
     "_extract_json",
-    "_response_format_error",
-}
+    "_response_format",
+)
 LEGACY_COMPLETE_JSON_COMPATIBILITY = {
     "src/app/rpg/ai/action_intelligence.py",
     "src/app/rpg/ai/semantic_action_intelligence.py",
+}
+CENTRAL_STRUCTURED_MARKERS = {
+    "src/app/rpg_world_forge_provider.py": "StructuredOutputGateway",
+    "src/app/rpg/narrative_provider.py": "StructuredOutputGateway",
+    "src/app/assistant_memory/structured_provider.py": "StructuredOutputGateway",
+    "src/app/rpg/llm_app_gateway.py": "StructuredOutputGateway",
+    "src/app/rpg/ai/action_intelligence.py": "decode_legacy_json_object",
+    "src/app/rpg/ai/semantic_action_intelligence.py": "decode_legacy_json_object",
+    "src/app/rpg/session/genesis/runtime_materialization.py": "generate_typed",
 }
 
 
@@ -101,23 +110,37 @@ def _attribute_name(node: ast.AST) -> str:
 
 def _structured_architecture_violations(relative_path: str) -> list[str]:
     path = REPO_ROOT / relative_path
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative_path)
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=relative_path)
     violations: list[str] = []
+    required_marker = CENTRAL_STRUCTURED_MARKERS.get(relative_path)
+    if required_marker and required_marker not in source:
+        violations.append(
+            f"{relative_path}: missing central structured boundary marker {required_marker}"
+        )
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name in FORBIDDEN_STRUCTURED_HELPERS:
+            if any(
+                node.name.startswith(prefix)
+                for prefix in FORBIDDEN_STRUCTURED_HELPER_PREFIXES
+            ):
                 violations.append(
                     f"{relative_path}:{node.lineno}: duplicated helper {node.name}"
                 )
         if not isinstance(node, ast.Call):
             continue
         called = _attribute_name(node.func)
-        if called == "chat_completion" and any(
-            keyword.arg == "response_format" for keyword in node.keywords
-        ):
-            violations.append(
-                f"{relative_path}:{node.lineno}: feature passes response_format directly"
-            )
+        if called == "chat_completion":
+            forbidden_args = {
+                keyword.arg
+                for keyword in node.keywords
+                if keyword.arg in {"response_format", "tools", "tool_choice"}
+            }
+            if forbidden_args:
+                violations.append(
+                    f"{relative_path}:{node.lineno}: feature passes structured transport "
+                    f"arguments directly: {','.join(sorted(forbidden_args))}"
+                )
         if (
             called == "complete_json"
             and relative_path not in LEGACY_COMPLETE_JSON_COMPATIBILITY
