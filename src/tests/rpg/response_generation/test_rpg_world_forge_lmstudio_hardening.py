@@ -102,7 +102,7 @@ def test_lmstudio_call_has_bounded_completion_tokens() -> None:
         WorldForgeProviderConfig(
             mode="live",
             provider="lmstudio",
-            model="local-model",
+            model="bounded-local-model",
             max_tokens=6144,
             max_retries=0,
         ),
@@ -124,7 +124,7 @@ def test_lmstudio_retries_typed_format_failure_with_text_fallback() -> None:
         WorldForgeProviderConfig(
             mode="live",
             provider="lmstudio",
-            model="local-model",
+            model="fallback-local-model",
             max_retries=1,
             retry_backoff_seconds=0,
             lmstudio_schema_fallback=True,
@@ -149,7 +149,7 @@ def test_other_provider_retries_typed_format_failure_with_text_fallback() -> Non
         WorldForgeProviderConfig(
             mode="live",
             provider="openrouter",
-            model="remote-model",
+            model="fallback-remote-model",
             max_retries=1,
             retry_backoff_seconds=0,
         ),
@@ -172,7 +172,7 @@ def test_world_forge_route_identity_is_immutable_across_concurrent_calls() -> No
         WorldForgeProviderConfig(
             mode="live",
             provider="lmstudio",
-            model="local-model",
+            model="concurrent-local-model",
             max_retries=0,
         ),
     )
@@ -181,7 +181,7 @@ def test_world_forge_route_identity_is_immutable_across_concurrent_calls() -> No
         WorldForgeProviderConfig(
             mode="live",
             provider="openrouter",
-            model="remote-model",
+            model="concurrent-remote-model",
             max_retries=0,
         ),
     )
@@ -215,7 +215,7 @@ def test_world_forge_rejects_non_object_collection_rows() -> None:
         WorldForgeProviderConfig(
             mode="live",
             provider="lmstudio",
-            model="local-model",
+            model="invalid-row-local-model",
             max_retries=0,
         ),
     )
