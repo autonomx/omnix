@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
+from app.providers.structured.legacy import decode_legacy_json_object
 from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
 
@@ -104,26 +105,6 @@ def _clip_text(text: Any, limit: int = 240) -> str:
     return _safe_str(text).strip()[:limit]
 
 
-def _extract_json_object(text: str) -> Dict[str, Any]:
-    """Compatibility parser used only by injected legacy gateways."""
-
-    text = _safe_str(text).strip()
-    if not text:
-        return {}
-    try:
-        parsed = json.loads(text)
-        return _safe_dict(parsed)
-    except Exception:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                return _safe_dict(json.loads(text[start : end + 1]))
-            except Exception:
-                pass
-    return {}
-
-
 def _prompt_payload(prompt: str) -> Dict[str, Any]:
     if "INPUT:\n" not in prompt:
         return {}
@@ -154,7 +135,7 @@ def _attach_first_call_diagnostics(
         parse_ok = (
             bool(_safe_dict(raw_result))
             if isinstance(raw_result, dict)
-            else bool(_extract_json_object(raw_text))
+            else bool(decode_legacy_json_object(raw_text))
         )
     provider_response_empty = provider_called and not raw_text.strip() and not parse_ok
     provider_malformed_json = provider_called and bool(raw_text.strip()) and not parse_ok
@@ -420,7 +401,7 @@ def get_action_advisory(
             parsed = (
                 _safe_dict(raw_result)
                 if source.endswith("complete_json")
-                else _extract_json_object(raw_text)
+                else decode_legacy_json_object(raw_text)
             )
     except Exception as exc:
         provider_error = f"{type(exc).__name__}: {exc}"
