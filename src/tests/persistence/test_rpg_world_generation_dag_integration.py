@@ -88,6 +88,29 @@ def _graph() -> CampaignTopicGraph:
     )
 
 
+def _settings() -> WorldTopicGenerationSettings:
+    return WorldTopicGenerationSettings(
+        generator_version="deterministic-v1",
+        prompt_version="test-prompt-v1",
+        provider_route="deterministic",
+        model="deterministic",
+        seed=17,
+    )
+
+
+def _start(database: PostgresDatabase, world_id: str):
+    return start_world_generation(
+        world_id=world_id,
+        draft_revision=1,
+        graph=_graph(),
+        generation_context={"genre": "fantasy", "tone": "mythic"},
+        topic_directives={"regions": {"direction": "coastal regions"}},
+        entity_manifest_hash="sha256:" + "e" * 64,
+        settings=_settings(),
+        database=database,
+    )
+
+
 def test_world_topic_jobs_resume_from_persisted_completed_topics() -> None:
     database = _database()
     try:
@@ -102,23 +125,7 @@ def test_world_topic_jobs_resume_from_persisted_completed_topics() -> None:
             )
             work.commit()
 
-        settings = WorldTopicGenerationSettings(
-            generator_version="deterministic-v1",
-            prompt_version="test-prompt-v1",
-            provider_route="deterministic",
-            model="deterministic",
-            seed=17,
-        )
-        started = start_world_generation(
-            world_id="world:durable",
-            draft_revision=1,
-            graph=_graph(),
-            generation_context={"genre": "fantasy", "tone": "mythic"},
-            topic_directives={"regions": {"direction": "coastal regions"}},
-            entity_manifest_hash="sha256:" + "e" * 64,
-            settings=settings,
-            database=database,
-        )
+        started = _start(database, "world:durable")
         generator = ReferenceSafeWorldForgeGenerator(
             DeterministicWorldForgeGenerator()
         )
@@ -178,6 +185,60 @@ def test_world_topic_jobs_resume_from_persisted_completed_topics() -> None:
             row["provenance"]["generation_fingerprint"].startswith("sha256:")
             for row in topics
         )
+        assert all(
+            row["provenance"]["validation_receipt"]["schema_version"]
+            == "rpg_generated_topic_domain_v2"
+            for row in topics
+        )
+        assert all(
+            row["content"]["provenance"]["validation_receipt"]["topic_id"]
+            == row["topic_id"]
+            for row in topics
+        )
+    finally:
+        database.close()
+
+
+def test_malformed_generator_output_is_not_persisted() -> None:
+    class _MalformedGenerator:
+        def generate(self, node, **kwargs):
+            return {
+                "topic_id": node.topic_id,
+                "documents": [],
+                "entities": ["not-an-object"],
+            }
+
+    database = _database()
+    try:
+        _reset(database)
+        context = bootstrap_local_tenant(database)
+        with unit_of_work(database) as work:
+            work.world_scenarios.create_world(
+                context,
+                world_id="world:invalid-output",
+                title="Invalid Output World",
+                source_mode="ai",
+            )
+            work.commit()
+
+        _start(database, "world:invalid-output")
+        result = run_world_generation_worker_once(
+            database=database,
+            generator=_MalformedGenerator(),
+            worker_id="world-worker:invalid-output",
+        )
+
+        assert result is not None
+        assert result["ok"] is False
+        assert "publication_requires_domain_type" in result["detail"]
+        with unit_of_work(database) as work:
+            topics = work.world_generation.list_topics(
+                context,
+                world_id="world:invalid-output",
+                draft_revision=1,
+            )
+            work.rollback()
+        assert topics == []
     finally:
         database.close()
 
@@ -201,13 +262,9 @@ def test_worker_discards_an_orphaned_world_topic_job() -> None:
             draft_revision=1,
             graph=_graph(),
             generation_context={"genre": "fantasy", "tone": "mythic"},
+            topic_directives={},
             entity_manifest_hash="sha256:" + "e" * 64,
-            settings=WorldTopicGenerationSettings(
-                generator_version="deterministic-v1",
-                prompt_version="test-prompt-v1",
-                provider_route="deterministic",
-                model="deterministic",
-            ),
+            settings=_settings(),
             database=database,
         )
         with unit_of_work(database) as work:

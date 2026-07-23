@@ -1,30 +1,33 @@
-"""Production provider adapter for structured Campaign World Forge topics."""
+"""Production provider adapter for typed Campaign World Forge topics."""
 from __future__ import annotations
 
 import json
 import logging
 import os
-import re
 from dataclasses import dataclass, replace
 from threading import Lock
-from time import perf_counter, sleep
+from time import perf_counter
 from typing import Any, Callable, Mapping
 
-from app.providers.base import BaseProvider, ChatMessage, ChatResponse
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.providers.base import BaseProvider, ChatMessage
 from app.providers.registry import get_provider
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_default import (
-    ReferenceSafeWorldForgeGenerator,
+from app.providers.structured import (
+    StructuredCapabilities,
+    StructuredContract,
+    StructuredOutputGateway,
+    StructuredRetryBudget,
 )
+from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
 from app.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeTopicGenerator,
 )
 
-
 _LOGGER = logging.getLogger(__name__)
-_JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _COLLECTIONS = (
     "documents",
     "entities",
@@ -34,69 +37,66 @@ _COLLECTIONS = (
     "story_threads",
 )
 
-_WORLD_FORGE_RESPONSE_SCHEMA: Mapping[str, Any] = {
-    "type": "object",
-    "properties": {
-        "topic_id": {"type": "string"},
-        **{
-            name: {
-                "type": "array",
-                "items": {"type": "object"},
-            }
-            for name in _COLLECTIONS
-        },
-        "provenance": {"type": "object"},
-    },
-    "required": ["topic_id", *_COLLECTIONS, "provenance"],
-}
+
+class _WorldForgeRow(BaseModel):
+    """Typed object envelope for heterogeneous topic rows."""
+
+    model_config = ConfigDict(extra="allow")
 
 
-def _response_formats(provider: str) -> tuple[tuple[str, dict[str, Any]], ...]:
-    """Return response modes from strongest constraint to widest compatibility."""
+class WorldForgeDocument(_WorldForgeRow):
+    pass
 
-    if str(provider or "").strip().casefold() == "lmstudio":
-        return (
-            (
-                "json_schema",
-                {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "rpg_world_forge_topic",
-                        "strict": False,
-                        "schema": _WORLD_FORGE_RESPONSE_SCHEMA,
-                    },
-                },
-            ),
-            # LM Studio rejects OpenAI's json_object mode.  Text remains valid
-            # and the application still requires a JSON object from the model.
-            ("text", {"type": "text"}),
-        )
-    return (
-        ("json_object", {"type": "json_object"}),
-        ("text", {"type": "text"}),
+
+class WorldForgeEntity(_WorldForgeRow):
+    pass
+
+
+class WorldForgeFact(_WorldForgeRow):
+    pass
+
+
+class WorldForgeRelationship(_WorldForgeRow):
+    pass
+
+
+class WorldForgeKnowledgeRule(_WorldForgeRow):
+    pass
+
+
+class WorldForgeStoryThread(_WorldForgeRow):
+    pass
+
+
+class WorldForgeTopicResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topic_id: str = Field(min_length=1)
+    documents: list[WorldForgeDocument]
+    entities: list[WorldForgeEntity]
+    facts: list[WorldForgeFact]
+    relationships: list[WorldForgeRelationship]
+    knowledge_rules: list[WorldForgeKnowledgeRule]
+    story_threads: list[WorldForgeStoryThread]
+    provenance: dict[str, Any]
+
+
+def _topic_contract(expected_topic_id: str) -> StructuredContract[WorldForgeTopicResponse]:
+    def validate_topic(value: WorldForgeTopicResponse) -> None:
+        if value.topic_id != expected_topic_id:
+            raise ValueError(
+                f"World Forge provider returned {value.topic_id or '<missing>'} "
+                f"for {expected_topic_id}"
+            )
+
+    return StructuredContract(
+        contract_id="rpg.world_forge.topic",
+        version=3,
+        output_model=WorldForgeTopicResponse,
+        semantic_validator=validate_topic,
+        schema_profile="canon_strict",
+        schema_name="rpg_world_forge_topic",
     )
-
-
-def _response_format_error(error: Exception) -> bool:
-    text = str(error).casefold()
-    return any(
-        marker in text
-        for marker in (
-            "response_format",
-            "json_schema",
-            "json_object",
-            "structured output",
-        )
-    )
-
-
-def _response_format(provider: str, *, schema_enabled: bool = True) -> dict[str, Any]:
-    """Compatibility shim retained for integrations importing this helper."""
-
-    modes = _response_formats(provider)
-    if schema_enabled:
-        return dict(modes[0][1])
-    return dict(modes[-1][1])
 
 
 @dataclass(frozen=True)
@@ -123,23 +123,13 @@ class WorldForgeProviderConfig:
             mode=str(env.get("OMNIX_RPG_WORLD_FORGE_MODE") or "auto")
             .strip()
             .casefold(),
-            provider=str(
-                env.get("OMNIX_RPG_WORLD_FORGE_PROVIDER") or ""
-            ).strip(),
-            model=str(
-                env.get("OMNIX_RPG_WORLD_FORGE_MODEL") or ""
-            ).strip(),
+            provider=str(env.get("OMNIX_RPG_WORLD_FORGE_PROVIDER") or "").strip(),
+            model=str(env.get("OMNIX_RPG_WORLD_FORGE_MODEL") or "").strip(),
             api_key=(
-                str(
-                    env.get("OMNIX_RPG_WORLD_FORGE_API_KEY") or ""
-                ).strip()
-                or None
+                str(env.get("OMNIX_RPG_WORLD_FORGE_API_KEY") or "").strip() or None
             ),
             base_url=(
-                str(
-                    env.get("OMNIX_RPG_WORLD_FORGE_BASE_URL") or ""
-                ).strip()
-                or None
+                str(env.get("OMNIX_RPG_WORLD_FORGE_BASE_URL") or "").strip() or None
             ),
             timeout_seconds=max(
                 10,
@@ -166,13 +156,16 @@ class WorldForgeProviderConfig:
             retry_backoff_seconds=max(
                 0.0,
                 min(
-                    float(env.get("OMNIX_RPG_WORLD_FORGE_RETRY_BACKOFF_SECONDS") or 1.0),
+                    float(
+                        env.get("OMNIX_RPG_WORLD_FORGE_RETRY_BACKOFF_SECONDS") or 1.0
+                    ),
                     30.0,
                 ),
             ),
             lmstudio_schema_fallback=str(
                 env.get("OMNIX_RPG_WORLD_FORGE_LMSTUDIO_SCHEMA_FALLBACK") or "true"
-            ).strip().casefold() not in {"0", "false", "no", "off"},
+            ).strip().casefold()
+            not in {"0", "false", "no", "off"},
         )
 
     @property
@@ -185,20 +178,24 @@ class WorldForgeProviderConfig:
         } and bool(self.provider)
 
 
-def _extract_json(content: str) -> Mapping[str, Any]:
-    text = _JSON_FENCE.sub("", str(content or "").strip()).strip()
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start < 0 or end <= start:
-            raise ValueError("World Forge provider returned no JSON object")
-        parsed = json.loads(text[start : end + 1])
-    if not isinstance(parsed, Mapping):
-        raise ValueError("World Forge provider JSON root must be an object")
-    topic = parsed.get("topic")
-    return topic if isinstance(topic, Mapping) else parsed
+class _ConfiguredProviderView:
+    """Expose immutable route identity without mutating a shared provider instance."""
+
+    def __init__(self, provider: BaseProvider, provider_name: str) -> None:
+        self._provider = provider
+        self.provider_name = provider_name or str(
+            getattr(provider, "provider_name", provider.__class__.__name__)
+        )
+        self.config = getattr(provider, "config", None)
+
+    def chat_completion(self, *args: Any, **kwargs: Any) -> Any:
+        return self._provider.chat_completion(*args, **kwargs)
+
+    def get_structured_capabilities(self, *args: Any, **kwargs: Any):
+        method = getattr(self._provider, "get_structured_capabilities", None)
+        if callable(method):
+            return method(*args, **kwargs)
+        return StructuredCapabilities.default_for_provider(self.provider_name)
 
 
 def _system_prompt(node: CampaignTopicNode) -> str:
@@ -231,7 +228,7 @@ def _payload(
     dependency_topics: Mapping[str, GeneratedTopic],
 ) -> dict[str, Any]:
     return {
-        "contract_version": "rpg_world_forge_topic_request_v2",
+        "contract_version": "rpg_world_forge_topic_request_v3",
         "seed": seed,
         "topic": {
             "topic_id": node.topic_id,
@@ -255,24 +252,16 @@ def _payload(
     }
 
 
-def _rows(value: Any, name: str) -> tuple[Mapping[str, Any], ...]:
-    if value is None:
-        return ()
-    if not isinstance(value, list):
-        raise ValueError(f"World Forge {name} must be an array")
-    rows: list[Mapping[str, Any]] = []
-    for index, row in enumerate(value):
-        if not isinstance(row, Mapping):
-            raise ValueError(f"World Forge {name}[{index}] must be an object")
-        rows.append(dict(row))
-    return tuple(rows)
+def _model_rows(rows: list[_WorldForgeRow]) -> tuple[Mapping[str, Any], ...]:
+    return tuple(row.model_dump(mode="python") for row in rows)
 
 
 class ProviderWorldForgeTopicGenerator:
-    """Generate one structured canon topic through a configured chat provider."""
+    """Generate one validated canon topic through a request-local gateway."""
 
     def __init__(self, provider: BaseProvider, config: WorldForgeProviderConfig) -> None:
-        self.provider = provider
+        self.transport_provider = provider
+        self.provider = _ConfiguredProviderView(provider, config.provider)
         self.config = config
 
     def generate(
@@ -300,86 +289,61 @@ class ProviderWorldForgeTopicGenerator:
             ),
         ]
         started = perf_counter()
-        last_error: Exception | None = None
-        response_formats = _response_formats(self.config.provider)
-        response_format_index = 0
-        prompt_chars = sum(len(message.content) for message in messages)
-        for attempt in range(1, self.config.max_retries + 2):
-            try:
-                response = self.provider.chat_completion(
-                    messages,
-                    model=self.config.model or None,
-                    stream=False,
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens,
-                    response_format=response_formats[response_format_index][1],
-                )
-                if not isinstance(response, ChatResponse):
-                    raise ValueError(
-                        "World Forge provider returned a streaming or invalid response"
-                    )
-                raw = _extract_json(response.content)
-                topic_id = str(raw.get("topic_id") or "").strip()
-                if topic_id != node.topic_id:
-                    raise ValueError(
-                        f"World Forge provider returned {topic_id or '<missing>'} "
-                        f"for {node.topic_id}"
-                    )
-                return GeneratedTopic(
-                    topic_id=topic_id,
-                    documents=_rows(raw.get("documents"), "documents"),
-                    entities=_rows(raw.get("entities"), "entities"),
-                    facts=_rows(raw.get("facts"), "facts"),
-                    relationships=_rows(raw.get("relationships"), "relationships"),
-                    knowledge_rules=_rows(
-                        raw.get("knowledge_rules"), "knowledge_rules"
-                    ),
-                    story_threads=_rows(raw.get("story_threads"), "story_threads"),
-                    provenance={
-                        **dict(raw.get("provenance") or {}),
-                        "generator": "structured_world_forge_provider_v2",
-                        "provider": self.config.provider,
-                        "model": self.config.model,
-                        "attempt_count": attempt,
-                        "latency_ms": round(
-                            (perf_counter() - started) * 1000.0,
-                            3,
-                        ),
-                        "usage": dict(response.usage or {}),
-                        "finish_reason": response.finish_reason or "",
-                        "entity_dossier_schema": "rpg_world_entity_dossier_v1",
-                        "response_format": response_formats[response_format_index][0],
-                        "max_tokens": self.config.max_tokens,
-                    },
-                )
-            except Exception as exc:
-                last_error = exc
-                _LOGGER.warning(
-                    "World Forge provider attempt failed provider=%s model=%s topic=%s "
-                    "attempt=%s/%s prompt_chars=%s response_format=%s error=%s: %s",
-                    self.config.provider,
-                    self.config.model,
-                    node.topic_id,
-                    attempt,
-                    self.config.max_retries + 1,
-                    prompt_chars,
-                    response_formats[response_format_index][0],
-                    type(exc).__name__,
-                    exc,
-                )
-                if (
-                    self.config.lmstudio_schema_fallback
-                    and _response_format_error(exc)
-                    and response_format_index + 1 < len(response_formats)
-                ):
-                    response_format_index += 1
-                if attempt <= self.config.max_retries and self.config.retry_backoff_seconds > 0:
-                    sleep(self.config.retry_backoff_seconds * (2 ** (attempt - 1)))
-        raise RuntimeError(
-            f"structured World Forge provider failed for {node.topic_id} "
-            f"after {self.config.max_retries + 1} attempts: "
-            f"{type(last_error).__name__}: {last_error}"
-        ) from last_error
+        total_calls = max(1, self.config.max_retries + 2)
+        gateway = StructuredOutputGateway(self.provider)
+        outcome = gateway.try_generate(
+            messages,
+            contract=replace(
+                _topic_contract(node.topic_id),
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+            ),
+            model=self.config.model or None,
+            retry_budget=StructuredRetryBudget(
+                max_provider_calls=total_calls,
+                max_transport_retries=self.config.max_retries,
+                max_format_downgrades=(
+                    1 if self.config.lmstudio_schema_fallback else 0
+                ),
+                max_validation_regenerations=self.config.max_retries,
+                deadline_seconds=float(self.config.timeout_seconds),
+            ),
+        )
+        diagnostics = outcome.diagnostics
+        if outcome.error is not None:
+            raise RuntimeError(
+                f"structured World Forge provider failed for {node.topic_id} "
+                f"after {diagnostics.provider_calls or total_calls} attempts: "
+                f"{type(outcome.error).__name__}: {outcome.error}"
+            ) from outcome.error
+        assert outcome.value is not None
+        value = outcome.value
+        trusted = diagnostics.as_dict()
+        return GeneratedTopic(
+            topic_id=value.topic_id,
+            documents=_model_rows(value.documents),
+            entities=_model_rows(value.entities),
+            facts=_model_rows(value.facts),
+            relationships=_model_rows(value.relationships),
+            knowledge_rules=_model_rows(value.knowledge_rules),
+            story_threads=_model_rows(value.story_threads),
+            provenance={
+                **dict(value.provenance),
+                "generator": "structured_world_forge_provider_v1",
+                "provider_contract": "rpg_world_forge_topic_request_v3",
+                "provider": self.config.provider,
+                "model": self.config.model,
+                "attempt_count": int(trusted.get("provider_calls") or 1),
+                "latency_ms": round((perf_counter() - started) * 1000.0, 3),
+                "usage": dict(trusted.get("usage") or {}),
+                "finish_reason": str(trusted.get("finish_reason") or ""),
+                "entity_dossier_schema": "rpg_world_entity_dossier_v1",
+                "response_format": str(trusted.get("selected_mode") or ""),
+                "structured_contract": "rpg.world_forge.topic.v3",
+                "schema_hash": str(trusted.get("schema_hash") or ""),
+                "max_tokens": self.config.max_tokens,
+            },
+        )
 
 
 class UnavailableWorldForgeTopicGenerator:
@@ -429,7 +393,8 @@ def build_production_world_forge_generator(
     *,
     provider_factory: Callable[
         [str, Mapping[str, Any] | None], BaseProvider | None
-    ] | None = None,
+    ]
+    | None = None,
 ) -> WorldForgeTopicGenerator:
     """Resolve the one production World Forge generator for every topic job."""
 
@@ -472,8 +437,6 @@ def build_production_world_forge_generator(
                 model=model_key,
             )
         except Exception:
-            # Settings may be unavailable during isolated tools and migrations.
-            # In that case the existing offline/reference-safe behavior remains.
             pass
     if not resolved.live_enabled:
         return ReferenceSafeWorldForgeGenerator()
@@ -506,7 +469,6 @@ def build_production_world_forge_generator(
                     },
                 )
             elif settings_routed:
-                # Settings owns provider URLs and protected keys. Reuse its cache.
                 from app import shared
 
                 provider = shared.get_provider(provider_id)

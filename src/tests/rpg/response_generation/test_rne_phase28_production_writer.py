@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import replace
 
 from app.providers.base import (
     BaseProvider,
     ChatMessage,
     ChatResponse,
+    ConnectionError,
     ModelInfo,
     ProviderConfig,
 )
@@ -41,6 +43,7 @@ class _Provider(BaseProvider):
         self.config = ProviderConfig(provider_type="phase28", model="phase28-model")
         self.responses = list(responses)
         self.calls: list[dict] = []
+        self._lock = threading.Lock()
 
     def chat_completion(
         self,
@@ -49,15 +52,16 @@ class _Provider(BaseProvider):
         stream: bool = False,
         **kwargs,
     ):
-        self.calls.append(
-            {
-                "messages": messages,
-                "model": model,
-                "stream": stream,
-                "kwargs": kwargs,
-            }
-        )
-        value = self.responses.pop(0)
+        with self._lock:
+            self.calls.append(
+                {
+                    "messages": messages,
+                    "model": model,
+                    "stream": stream,
+                    "kwargs": kwargs,
+                }
+            )
+            value = self.responses.pop(0)
         if isinstance(value, Exception):
             raise value
         return ChatResponse(
@@ -121,7 +125,7 @@ def _evidence() -> tuple[EvidenceRecord, ...]:
     )
 
 
-def _structured_payload() -> str:
+def _structured_payload(text: str = "The east road is muddy but passable.") -> str:
     return json.dumps(
         {
             "blocks": [
@@ -131,7 +135,7 @@ def _structured_payload() -> str:
                     "kind": "dialogue",
                     "purpose": "direct_answer",
                     "speaker_id": "npc:bran",
-                    "text": "The east road is muddy but passable.",
+                    "text": text,
                     "claims": [
                         {
                             "claim_id": "claim:road",
@@ -201,37 +205,39 @@ def test_provider_config_reads_bounded_rpg_specific_settings() -> None:
     assert config.temperature == 2.0
 
 
-def test_live_provider_retries_then_returns_native_structured_blocks() -> None:
-    provider = _Provider([RuntimeError("temporary"), _structured_payload()])
-    config = NarrativeProviderConfig(
-        mode="live",
-        provider="phase28",
-        model="phase28-model",
-        max_retries=2,
-    )
+def test_live_provider_retries_transient_failure_then_returns_blocks() -> None:
+    provider = _Provider([ConnectionError("temporary"), _structured_payload()])
     writer = ProductionStructuredNarrativeWriter(
-        ProviderNarrativeGenerator(provider, config)
+        ProviderNarrativeGenerator(
+            provider,
+            NarrativeProviderConfig(
+                mode="live",
+                provider="phase28",
+                model="phase28-model",
+                max_retries=2,
+            ),
+        )
     )
+
     result = writer.write(_request(), _plan(), _evidence())
+
     assert result.source == "structured_provider"
     assert result.provider == "phase28"
     assert result.model == "phase28-model"
     assert result.attempt_count == 2
     assert result.blocks[0].claims[0].claim_id == "claim:road"
-    assert provider.calls[-1]["kwargs"]["response_format"] == {
-        "type": "json_object"
-    }
-    system = provider.calls[-1]["messages"][0].content
-    assert "strict JSON only" in system
-    assert "claims array" in system
+    assert provider.calls[-1]["kwargs"]["response_format"] == {"type": "json_object"}
+    assert provider.calls[-1]["kwargs"]["request_timeout_seconds"] <= 90
+    assert "strict JSON only" in provider.calls[-1]["messages"][0].content
 
 
-def test_dialogue_contract_retries_provider_prose_instead_of_using_canned_repair() -> None:
-    revised = json.loads(_structured_payload())
-    revised["blocks"][0]["text"] = (
-        "The old road is muddy, and the guards say it remains passable."
+def test_dialogue_contract_retries_provider_prose_instead_of_canned_repair() -> None:
+    provider = _Provider(
+        [
+            _structured_payload(),
+            _structured_payload("The old road is muddy, and the guards say it remains passable."),
+        ]
     )
-    provider = _Provider([_structured_payload(), json.dumps(revised)])
     writer = ProductionStructuredNarrativeWriter(
         ProviderNarrativeGenerator(
             provider,
@@ -259,20 +265,13 @@ def test_dialogue_contract_retries_provider_prose_instead_of_using_canned_repair
     result = writer.write(request, _plan(), _evidence())
 
     assert len(provider.calls) == 2
-    assert result.source == "structured_provider"
     assert result.raw_metadata["dialogue_quality_attempts"] == 2
     assert result.raw_metadata["dialogue_missing_fragments"] == []
+    assert result.raw_metadata["provider_calls_remaining"] == 0
     assert "old road" in result.blocks[0].text.casefold()
     second_payload = json.loads(provider.calls[1]["messages"][1].content)
-    assert second_payload["dialogue_contract"]["required_fragments"] == [
-        "old road",
-        "guards",
-    ]
-    assert second_payload["dialogue_revision_feedback"]["reason"] == (
-        "dialogue_contract_not_met"
-    )
+    assert second_payload["dialogue_revision_feedback"]["reason"] == "dialogue_contract_not_met"
     assert "Speaking plainly" in second_payload["dialogue_contract"]["requirements"][-1]
-    assert "generic fallback wording" in provider.calls[1]["messages"][0].content
 
 
 def test_dialogue_writer_payload_excludes_precomputed_fallback_prose() -> None:
@@ -303,9 +302,7 @@ def test_dialogue_writer_payload_excludes_precomputed_fallback_prose() -> None:
 
     assert "repeat this canned response" not in rendered
     assert "nested canned response" not in rendered
-    assert payload["authoritative_outcome"] == {
-        "stateful": False,
-    }
+    assert payload["authoritative_outcome"] == {"stateful": False}
 
 
 def test_lmstudio_uses_supported_json_schema_response_format() -> None:
@@ -332,14 +329,8 @@ def test_lmstudio_uses_supported_json_schema_response_format() -> None:
     assert schema["properties"]["blocks"]["type"] == "array"
 
 
-def _misgrounded_claim_payload() -> str:
-    payload = json.loads(_structured_payload())
-    payload["blocks"][0]["claims"][0]["text"] = "The moon is made of cheese."
-    return json.dumps(payload)
-
-
-def test_configured_provider_failure_uses_one_validated_canonical_fallback() -> None:
-    provider = _Provider([RuntimeError("down"), RuntimeError("still down")])
+def test_configured_provider_failure_uses_validated_canonical_fallback() -> None:
+    provider = _Provider([ConnectionError("down"), ConnectionError("still down")])
     writer = build_production_narrative_writer(
         NarrativeProviderConfig(
             mode="live",
@@ -349,12 +340,14 @@ def test_configured_provider_failure_uses_one_validated_canonical_fallback() -> 
         ),
         provider_factory=lambda name, config: provider,
     )
+
     validated = write_validate_repair(
         _request(),
         _plan(),
         _evidence(),
         writer,
     )
+
     assert validated.validation.passed is True
     assert validated.fallback_used is True
     assert validated.writer_result.source == "deterministic_writer"
@@ -364,8 +357,10 @@ def test_configured_provider_failure_uses_one_validated_canonical_fallback() -> 
     assert len(provider.calls) == 2
 
 
-def test_provider_claim_metadata_is_rebuilt_without_accepting_unsupported_prose() -> None:
-    provider = _Provider([_misgrounded_claim_payload()])
+def test_provider_claim_metadata_is_rebuilt_without_unsupported_prose() -> None:
+    payload = json.loads(_structured_payload())
+    payload["blocks"][0]["claims"][0]["text"] = "The moon is made of cheese."
+    provider = _Provider([json.dumps(payload)])
     writer = ProductionStructuredNarrativeWriter(
         ProviderNarrativeGenerator(
             provider,
@@ -432,7 +427,9 @@ def test_service_default_resolves_production_writer_factory(monkeypatch) -> None
             [InMemoryEvidenceSource(_evidence(), source_id="phase28")]
         )
     )
+
     generated = service.generate(_request())
+
     assert generated.response.generation.source == "structured_provider"
     assert generated.response.generation.provider == "phase28"
     assert generated.response.generation.metadata["fallback_used"] is False

@@ -1,4 +1,4 @@
-"""Just-in-time campaign lore and mechanics materialization.
+"""Just-in-time campaign lore and executable mechanics materialization.
 
 Runtime discoveries are campaign-local overlays. They never mutate the pinned
 published world revision, and prose is generated from the same validated
@@ -11,7 +11,7 @@ import re
 from copy import deepcopy
 from typing import Any, Literal, Mapping
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.persistence.database import default_database
 from app.persistence.identity_service import bootstrap_local_tenant
@@ -28,8 +28,6 @@ from .campaign_lore_store import (
     load_campaign_lore,
 )
 
-
-_JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _SUPPORTED_CONDITIONS = {
     "bleeding",
     "burning",
@@ -47,7 +45,11 @@ class RuntimeMaterializationConflict(RuntimeError):
     """Raised when canon changes while a definition is being generated."""
 
 
-class CreatureVulnerability(BaseModel):
+class _StrictMaterializationModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class CreatureVulnerability(_StrictMaterializationModel):
     trigger_tag: str = Field(min_length=1, max_length=80)
     aliases: list[str] = Field(default_factory=list, max_length=8)
     condition: Literal["bleeding", "burning", "poisoned", "prone", "stunned"]
@@ -56,7 +58,7 @@ class CreatureVulnerability(BaseModel):
     description: str = Field(min_length=1, max_length=300)
 
 
-class CreatureDefinition(BaseModel):
+class CreatureDefinition(_StrictMaterializationModel):
     definition_id: str = Field(min_length=1, max_length=180)
     definition_revision: int = Field(default=1, ge=1)
     source_document_id: str = ""
@@ -98,7 +100,7 @@ class CreatureDefinition(BaseModel):
         return self
 
 
-class LocationHazard(BaseModel):
+class LocationHazard(_StrictMaterializationModel):
     hazard_id: str = Field(min_length=1, max_length=180)
     name: str = Field(min_length=1, max_length=120)
     trigger: str = Field(min_length=1, max_length=300)
@@ -107,14 +109,14 @@ class LocationHazard(BaseModel):
     consequence: str = Field(min_length=1, max_length=300)
 
 
-class LocationExit(BaseModel):
+class LocationExit(_StrictMaterializationModel):
     destination_id: str = Field(min_length=1, max_length=180)
     label: str = Field(min_length=1, max_length=120)
     access: Literal["open", "hidden", "locked", "conditional"] = "open"
     requirement: str = Field(default="", max_length=300)
 
 
-class LocationDefinition(BaseModel):
+class LocationDefinition(_StrictMaterializationModel):
     definition_id: str = Field(min_length=1, max_length=180)
     definition_revision: int = Field(default=1, ge=1)
     source_document_id: str = ""
@@ -128,7 +130,7 @@ class LocationDefinition(BaseModel):
     atmosphere: str = Field(min_length=1, max_length=1200)
 
 
-class RuntimeMaterializationProposal(BaseModel):
+class RuntimeMaterializationProposal(_StrictMaterializationModel):
     kind: Literal["creature", "location"]
     name: str = Field(min_length=1, max_length=120)
     lore_text: str = Field(min_length=600, max_length=12000)
@@ -159,30 +161,6 @@ def _slug(value: str) -> str:
 
 def _definition_id(kind: str, name: str) -> str:
     return f"{kind}:{_slug(name)}"
-
-
-def _extract_json(value: Any) -> Mapping[str, Any]:
-    text = _JSON_FENCE.sub("", _text(value)).strip()
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start < 0 or end <= start:
-            raise RuntimeMaterializationUnavailable(
-                "The materialization provider returned no JSON definition."
-            )
-        try:
-            parsed = json.loads(text[start : end + 1])
-        except json.JSONDecodeError as exc:
-            raise RuntimeMaterializationUnavailable(
-                "The materialization provider returned invalid JSON."
-            ) from exc
-    if not isinstance(parsed, Mapping):
-        raise RuntimeMaterializationUnavailable(
-            "The materialization provider returned an invalid definition."
-        )
-    return parsed
 
 
 def _matching_document(
@@ -234,7 +212,9 @@ def _generation_context(
 ) -> dict[str, Any]:
     related = []
     for row in _rows(bible.get("documents")):
-        if document and _text(row.get("document_id")) == _text(document.get("document_id")):
+        if document and _text(row.get("document_id")) == _text(
+            document.get("document_id")
+        ):
             continue
         if _text(row.get("visibility")) not in {
             "public",
@@ -274,38 +254,79 @@ def _prompt(kind: str, name: str) -> str:
         return common + (
             "Use root keys kind, name, lore_text, creature, and location. Set kind to "
             '"creature" and location to null. The creature object must contain definition_id, '
-            "name,level,hp,defense,armor,damage_min,damage_max,accuracy_bonus,initiative_bonus,"
-            "morale_threshold,tags,loot_table_id,xp_value,budget_cost,condition_immunities,"
-            "vulnerabilities,behavior, and habitat. Each vulnerability must contain "
-            "trigger_tag, aliases, condition, duration_turns, magnitude, and description. "
-            "Allowed conditions are bleeding, burning, poisoned, prone, and stunned."
+            "name, level, hp, defense, armor, damage_min, damage_max, accuracy_bonus, "
+            "initiative_bonus, morale_threshold, tags, loot_table_id, xp_value, budget_cost, "
+            "condition_immunities, vulnerabilities, behavior, and habitat. Each vulnerability "
+            "must contain trigger_tag, aliases, condition, duration_turns, magnitude, and "
+            "description. Allowed conditions are bleeding, burning, poisoned, prone, and stunned."
         )
     return common + (
         "Use root keys kind, name, lore_text, creature, and location. Set kind to "
         '"location" and creature to null. The location object must contain definition_id, '
         "name, region_id, environment, tags, services, exits, hazards, and atmosphere. "
-        "Each exit must contain destination_id,label,access,requirement. Each hazard must "
-        "contain hazard_id,name,trigger,check,difficulty,consequence. Allowed checks are "
+        "Each exit must contain destination_id, label, access, requirement. Each hazard must "
+        "contain hazard_id, name, trigger, check, difficulty, consequence. Allowed checks are "
         "agility, endurance, intellect, perception, and survival."
     )
 
 
-def _validated_proposal(raw: Any, *, kind: str, name: str) -> RuntimeMaterializationProposal:
-    payload = dict(_extract_json(raw))
+def _expected_proposal_validator(kind: str, name: str):
+    def validate(value: RuntimeMaterializationProposal) -> None:
+        if value.kind != kind:
+            raise ValueError(f"materialization_kind_mismatch:{value.kind}:{kind}")
+        if value.name.casefold() != name.casefold():
+            raise ValueError(f"materialization_name_mismatch:{value.name}:{name}")
+
+    return validate
+
+
+def _canonicalize_proposal(
+    proposal: RuntimeMaterializationProposal,
+    *,
+    kind: str,
+    name: str,
+) -> RuntimeMaterializationProposal:
+    payload = proposal.model_dump(mode="python")
     payload["kind"] = kind
     payload["name"] = name
-    definition_key = kind
-    definition = _mapping(payload.get(definition_key))
+    definition = dict(payload.get(kind) or {})
     definition["definition_id"] = _definition_id(kind, name)
     definition["name"] = name
-    payload[definition_key] = definition
+    payload[kind] = definition
     payload["location" if kind == "creature" else "creature"] = None
     try:
         return RuntimeMaterializationProposal.model_validate(payload)
     except Exception as exc:
         raise RuntimeMaterializationUnavailable(
+            f"The generated {kind} definition failed canonical validation: {exc}"
+        ) from exc
+
+
+def _legacy_validated_proposal(
+    raw: Any,
+    *,
+    kind: str,
+    name: str,
+) -> RuntimeMaterializationProposal:
+    """Compatibility for injected legacy test gateways without typed support."""
+
+    text = _text(raw).strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE)
+    try:
+        payload = json.loads(text)
+    except Exception as exc:
+        raise RuntimeMaterializationUnavailable(
+            "The legacy materialization gateway returned invalid JSON."
+        ) from exc
+    try:
+        proposal = RuntimeMaterializationProposal.model_validate(payload)
+    except Exception as exc:
+        raise RuntimeMaterializationUnavailable(
             f"The generated {kind} definition failed validation: {exc}"
         ) from exc
+    _expected_proposal_validator(kind, name)(proposal)
+    return _canonicalize_proposal(proposal, kind=kind, name=name)
 
 
 def _retrieval_cards(
@@ -365,7 +386,6 @@ def apply_runtime_materialization(
         f"lore:runtime:{proposal.kind}:{_slug(proposal.name)}"
     )
     topic_id = "monsters" if proposal.kind == "creature" else "locations"
-
     definition_model = proposal.creature or proposal.location
     assert definition_model is not None
     definition = definition_model.model_dump(mode="json")
@@ -379,7 +399,6 @@ def apply_runtime_materialization(
     ) + 1
     definition["source_document_id"] = document_id
     definition["campaign_canon_revision"] = canon_revision
-
     full_text = proposal.lore_text.strip()
     document = {
         **dict(existing_document or {}),
@@ -419,7 +438,6 @@ def apply_runtime_materialization(
     if not replaced:
         documents.append(document)
     candidate["documents"] = documents
-
     catalog = deepcopy(_mapping(candidate.get("mechanics_catalog")))
     catalog.update(
         {
@@ -434,7 +452,6 @@ def apply_runtime_materialization(
     catalog.setdefault("creatures", {})
     catalog.setdefault("locations", {})
     candidate["mechanics_catalog"] = catalog
-
     entities = deepcopy(_mapping(candidate.get("entities")))
     definition_id = _text(definition.get("definition_id"))
     entities[definition_id] = {
@@ -447,7 +464,6 @@ def apply_runtime_materialization(
         "mechanics_definition_revision": definition["definition_revision"],
     }
     candidate["entities"] = entities
-
     discovery = deepcopy(_mapping(candidate.get("discovery_state")))
     pages = deepcopy(_mapping(discovery.get("pages")))
     entity_statuses = deepcopy(_mapping(discovery.get("entities")))
@@ -526,24 +542,57 @@ def materialize_runtime_lore(
         raise RuntimeMaterializationUnavailable(
             "No runtime materialization provider is configured."
         )
+    context_payload = _generation_context(
+        source_bible,
+        kind=kind,
+        name=normalized_name,
+        direction=_text(direction),
+        document=current_document,
+        existing_definition=current_definition,
+    )
     try:
-        raw = gateway.generate(
-            _prompt(kind, normalized_name),
-            context=_generation_context(
-                source_bible,
+        if hasattr(gateway, "generate_typed"):
+            proposal = gateway.generate_typed(
+                _prompt(kind, normalized_name),
+                output_model=RuntimeMaterializationProposal,
+                contract_id="rpg.runtime_materialization.proposal",
+                contract_version=2,
+                context=context_payload,
+                timeout_s=90.0,
+                max_provider_calls=3,
+                max_format_downgrades=1,
+                max_validation_regenerations=2,
+                temperature=0.2,
+                max_tokens=8192,
+                schema_profile="canon_strict",
+                schema_name="rpg_runtime_materialization",
+                semantic_validator=_expected_proposal_validator(
+                    kind,
+                    normalized_name,
+                ),
+            )
+            proposal = _canonicalize_proposal(
+                proposal,
                 kind=kind,
                 name=normalized_name,
-                direction=_text(direction),
-                document=current_document,
-                existing_definition=current_definition,
-            ),
-            timeout_s=90.0,
-        )
+            )
+        else:
+            raw = gateway.generate(
+                _prompt(kind, normalized_name),
+                context=context_payload,
+                timeout_s=90.0,
+            )
+            proposal = _legacy_validated_proposal(
+                raw,
+                kind=kind,
+                name=normalized_name,
+            )
+    except RuntimeMaterializationUnavailable:
+        raise
     except Exception as exc:
         raise RuntimeMaterializationUnavailable(
             f"The runtime materialization provider failed: {exc}"
         ) from exc
-    proposal = _validated_proposal(raw, kind=kind, name=normalized_name)
 
     with unit_of_work(db) as work:
         current = work.campaign_bibles.get(context, campaign_id, for_update=True)
@@ -570,6 +619,7 @@ def materialize_runtime_lore(
             provenance={
                 **_mapping(current.get("provenance")),
                 "last_source": "runtime_structured_materialization",
+                "structured_contract": "rpg.runtime_materialization.proposal.v2",
                 "materialized_kind": kind,
                 "materialized_definition_id": definition["definition_id"],
             },
@@ -585,6 +635,7 @@ def materialize_runtime_lore(
         content_hash=str(stored["content_hash"]),
     )
     updated = _save_portable_projection(updated)
+    diagnostics = getattr(gateway, "last_structured_diagnostics", None)
     return updated, {
         "mode": "postgresql_authority",
         "persisted": True,
@@ -594,6 +645,10 @@ def materialize_runtime_lore(
         "document_id": persisted_document_id,
         "kind": kind,
         "definition": definition,
+        "structured_contract": "rpg.runtime_materialization.proposal.v2",
+        "structured_diagnostics": (
+            diagnostics.as_dict() if diagnostics is not None else {}
+        ),
         "mechanics_catalog_revision": int(stored["revision"]),
         "world_revision_mutated": False,
     }

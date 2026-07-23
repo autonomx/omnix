@@ -13,6 +13,7 @@ from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenera
 from .generation_coordinator import execute_claimed_world_topic_job
 from .generation_diagnostics import log_world_generation_event
 from .generation_jobs import WORLD_TOPIC_JOB_TYPE, WORLD_TOPIC_RESOURCE_CLASS
+from .generation_validation import PublicationValidatedWorldForgeGenerator
 
 _DEFAULT_LEASE_SECONDS = 3600
 _DEFAULT_MAX_WORLD_GENERATION_WORKERS = 4
@@ -237,6 +238,7 @@ def run_world_generation_worker_once(
         selected_generator = build_world_forge_generator_from_settings(
             dict(dict(job.get("input_payload") or {}).get("settings") or {})
         )
+    selected_generator = PublicationValidatedWorldForgeGenerator(selected_generator)
     result = execute_claimed_world_topic_job(
         job=job,
         worker_id=worker_id,

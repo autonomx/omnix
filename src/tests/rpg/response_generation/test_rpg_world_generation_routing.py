@@ -50,13 +50,11 @@ def test_configured_route_resolves_once_from_settings(monkeypatch) -> None:
         "_settings_route",
         lambda: ("lmstudio", "qwen-world-forge"),
     )
-
     route = generation_routing.resolve_world_forge_route(
         "configured",
         "configured",
         environ={},
     )
-
     assert route.provider == "lmstudio"
     assert route.model == "qwen-world-forge"
     assert route.source == "settings_control_center"
@@ -68,13 +66,11 @@ def test_explicit_route_is_not_replaced_by_current_settings(monkeypatch) -> None
         "_settings_route",
         lambda: ("cerebras", "different-model"),
     )
-
     route = generation_routing.resolve_world_forge_route(
         "lmstudio",
         "qwen-durable",
         environ={},
     )
-
     assert route.provider == "lmstudio"
     assert route.model == "qwen-durable"
     assert route.source == "explicit"
@@ -89,17 +85,13 @@ def test_job_generator_uses_stored_provider_and_model(monkeypatch) -> None:
         "get_provider",
         lambda provider_name=None: provider if provider_name == "lmstudio" else None,
     )
-
     generator = generation_routing.build_world_forge_generator_from_settings(
-        {
-            "provider_route": "lmstudio",
-            "model": "qwen-durable",
-        }
+        {"provider_route": "lmstudio", "model": "qwen-durable"}
     )
 
     assert isinstance(generator, ReferenceSafeWorldForgeGenerator)
     assert isinstance(generator.generator, ProviderWorldForgeTopicGenerator)
-    assert generator.generator.provider is provider
+    assert generator.generator.transport_provider is provider
     assert generator.generator.config.provider == "lmstudio"
     assert generator.generator.config.model == "qwen-durable"
 
@@ -108,7 +100,6 @@ def test_unresolved_job_route_fails_closed() -> None:
     generator = generation_routing.build_world_forge_generator_from_settings(
         {"provider_route": "configured", "model": "configured"}
     )
-
     with pytest.raises(RuntimeError, match="unresolved provider route"):
         generator.generate(
             _node(),
