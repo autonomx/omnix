@@ -5,7 +5,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from time import perf_counter
+from time import monotonic, perf_counter
 from typing import Any, Callable, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,7 +15,6 @@ from app.providers.registry import get_provider
 from app.providers.structured import (
     StructuredCapabilities,
     StructuredContract,
-    StructuredMode,
     StructuredOutputGateway,
     StructuredRetryBudget,
 )
@@ -69,25 +68,8 @@ _NARRATIVE_CONTRACT = StructuredContract(
 )
 
 
-def _response_format(provider: str) -> dict[str, Any]:
-    """Compatibility view of centralized provider mode preferences."""
-
-    capabilities = StructuredCapabilities.default_for_provider(provider)
-    first = capabilities.preferred_modes[0]
-    if first is StructuredMode.JSON_SCHEMA:
-        return {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "rpg_narrative_blocks",
-                "strict": capabilities.supports_strict_schema,
-                "schema": NarrativeResponsePayload.model_json_schema(),
-            },
-        }
-    return {"type": "json_object"}
-
-
 class _ConfiguredProviderView:
-    """Expose the durable route identity while delegating provider transport."""
+    """Expose immutable route identity while delegating provider transport."""
 
     def __init__(self, provider: BaseProvider, provider_name: str) -> None:
         self._provider = provider
@@ -181,96 +163,87 @@ def _system_prompt() -> str:
 
 
 class ProviderNarrativeGenerator:
-    """Callable typed bridge from provider transport to narrative blocks."""
+    """Request-local typed bridge from provider transport to narrative blocks."""
 
     def __init__(self, provider: BaseProvider, config: NarrativeProviderConfig) -> None:
-        self.provider = provider
+        self.transport_provider = provider
+        self.provider = _ConfiguredProviderView(provider, config.provider)
         self.config = config
-        self.gateway = StructuredOutputGateway(
-            _ConfiguredProviderView(provider, config.provider)
-        )
-        self.last_attempt_count = 0
-        self.last_usage: Mapping[str, Any] = {}
-        self._remaining_provider_calls: int | None = None
 
-    def begin_operation(self, max_provider_calls: int) -> None:
-        self._remaining_provider_calls = max(1, int(max_provider_calls))
-
-    def __call__(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
-        remaining = self._remaining_provider_calls
-        if remaining is not None and remaining <= 0:
-            raise RuntimeError("structured RPG narrative provider call budget exhausted")
-        call_budget = max(
-            1,
-            min(self.config.max_retries + 1, remaining or self.config.max_retries + 1),
-        )
-        try:
-            value = self.gateway.generate(
-                [
-                    ChatMessage(role="system", content=_system_prompt()),
-                    ChatMessage(
-                        role="user",
-                        content=json.dumps(
-                            payload,
-                            ensure_ascii=False,
-                            sort_keys=True,
-                        ),
+    def generate(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        max_provider_calls: int,
+        deadline_seconds: float,
+    ) -> Mapping[str, Any]:
+        call_budget = max(1, int(max_provider_calls))
+        remaining_seconds = float(deadline_seconds)
+        if remaining_seconds <= 0:
+            raise RuntimeError("structured RPG narrative operation deadline exhausted")
+        gateway = StructuredOutputGateway(self.provider)
+        outcome = gateway.try_generate(
+            [
+                ChatMessage(role="system", content=_system_prompt()),
+                ChatMessage(
+                    role="user",
+                    content=json.dumps(
+                        payload,
+                        ensure_ascii=False,
+                        sort_keys=True,
                     ),
-                ],
-                contract=StructuredContract(
-                    contract_id=_NARRATIVE_CONTRACT.contract_id,
-                    version=_NARRATIVE_CONTRACT.version,
-                    output_model=_NARRATIVE_CONTRACT.output_model,
-                    schema_profile=_NARRATIVE_CONTRACT.schema_profile,
-                    schema_name=_NARRATIVE_CONTRACT.schema_name,
-                    temperature=self.config.temperature,
-                    max_tokens=4096,
                 ),
-                model=self.config.model or None,
-                retry_budget=StructuredRetryBudget(
-                    max_provider_calls=call_budget,
-                    max_transport_retries=max(0, call_budget - 1),
-                    max_format_downgrades=1 if call_budget > 1 else 0,
-                    max_validation_regenerations=1 if call_budget > 1 else 0,
-                    deadline_seconds=float(self.config.timeout_seconds),
-                ),
-            )
-        except Exception as exc:
-            diagnostics = self.gateway.last_diagnostics
-            attempts = diagnostics.provider_calls if diagnostics is not None else call_budget
-            self.last_attempt_count = max(1, attempts)
-            if self._remaining_provider_calls is not None:
-                self._remaining_provider_calls -= self.last_attempt_count
-            raise RuntimeError(
-                f"structured RPG narrative provider failed after "
-                f"{self.last_attempt_count} attempts"
-            ) from exc
-        diagnostics = self.gateway.last_diagnostics
-        attempts = diagnostics.provider_calls if diagnostics is not None else 1
-        self.last_attempt_count = max(1, attempts)
-        if self._remaining_provider_calls is not None:
-            self._remaining_provider_calls -= self.last_attempt_count
-        self.last_usage = dict(diagnostics.usage if diagnostics is not None else {})
-        parsed = value.model_dump(mode="python")
-        parsed["metadata"] = {
-            "provider_attempt_count": self.last_attempt_count,
-            "finish_reason": (
-                diagnostics.finish_reason if diagnostics is not None else ""
+            ],
+            contract=StructuredContract(
+                contract_id=_NARRATIVE_CONTRACT.contract_id,
+                version=_NARRATIVE_CONTRACT.version,
+                output_model=_NARRATIVE_CONTRACT.output_model,
+                schema_profile=_NARRATIVE_CONTRACT.schema_profile,
+                schema_name=_NARRATIVE_CONTRACT.schema_name,
+                temperature=self.config.temperature,
+                max_tokens=4096,
             ),
-            "usage": self.last_usage,
+            model=self.config.model or None,
+            retry_budget=StructuredRetryBudget(
+                max_provider_calls=call_budget,
+                max_transport_retries=max(0, call_budget - 1),
+                max_format_downgrades=1 if call_budget > 1 else 0,
+                max_validation_regenerations=1 if call_budget > 1 else 0,
+                deadline_seconds=remaining_seconds,
+            ),
+        )
+        diagnostics = outcome.diagnostics
+        if outcome.error is not None:
+            raise RuntimeError(
+                "structured RPG narrative provider failed after "
+                f"{max(1, diagnostics.provider_calls)} attempts"
+            ) from outcome.error
+        assert outcome.value is not None
+        parsed = outcome.value.model_dump(mode="python")
+        parsed["metadata"] = {
+            "provider_attempt_count": max(1, diagnostics.provider_calls),
+            "finish_reason": diagnostics.finish_reason,
+            "usage": dict(diagnostics.usage),
             "structured_contract": "rpg.narrative.blocks.v2",
-            "schema_hash": diagnostics.schema_hash if diagnostics is not None else "",
+            "schema_hash": diagnostics.schema_hash,
             "response_format": (
-                diagnostics.selected_mode.value
-                if diagnostics is not None and diagnostics.selected_mode is not None
-                else ""
+                diagnostics.selected_mode.value if diagnostics.selected_mode else ""
             ),
         }
         return parsed
 
+    def __call__(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Compatibility call using one self-contained configured operation."""
+
+        return self.generate(
+            payload,
+            max_provider_calls=self.config.max_retries + 1,
+            deadline_seconds=float(self.config.timeout_seconds),
+        )
+
 
 class ProductionStructuredNarrativeWriter:
-    """Provider-backed writer with one bounded provider-call budget."""
+    """Provider-backed writer with request-local call and deadline budgets."""
 
     def __init__(self, generator: ProviderNarrativeGenerator) -> None:
         self.generator = generator
@@ -282,20 +255,34 @@ class ProductionStructuredNarrativeWriter:
         evidence: Sequence[EvidenceRecord],
     ) -> WriterResult:
         started = perf_counter()
+        deadline = monotonic() + float(self.generator.config.timeout_seconds)
         payload = writer_payload(request, plan, evidence)
-        maximum_attempts = max(1, min(self.generator.config.max_retries + 1, 3))
-        self.generator.begin_operation(self.generator.config.max_retries + 1)
+        remaining_calls = max(1, self.generator.config.max_retries + 1)
+        maximum_attempts = max(1, min(remaining_calls, 3))
         total_attempts = 0
         blocks = ()
         raw: Mapping[str, Any] = {}
         missing_fragments: list[str] = []
+        quality_attempt = 0
         for quality_attempt in range(1, maximum_attempts + 1):
-            raw = self.generator(payload)
-            total_attempts += max(1, self.generator.last_attempt_count)
+            remaining_seconds = deadline - monotonic()
+            if remaining_calls <= 0:
+                raise RuntimeError("structured RPG narrative provider call budget exhausted")
+            if remaining_seconds <= 0:
+                raise RuntimeError("structured RPG narrative operation deadline exhausted")
+            raw = self.generator.generate(
+                payload,
+                max_provider_calls=remaining_calls,
+                deadline_seconds=remaining_seconds,
+            )
+            metadata = dict(raw.get("metadata") or {})
+            attempts = max(1, int(metadata.get("provider_attempt_count") or 1))
+            remaining_calls = max(0, remaining_calls - attempts)
+            total_attempts += attempts
             try:
                 blocks = parse_structured_blocks(raw, plan)
             except (TypeError, ValueError) as exc:
-                if quality_attempt >= maximum_attempts:
+                if quality_attempt >= maximum_attempts or remaining_calls <= 0:
                     raise
                 payload = {
                     **payload,
@@ -310,6 +297,8 @@ class ProductionStructuredNarrativeWriter:
                 continue
             missing_fragments = _missing_dialogue_fragments(payload, blocks)
             if not missing_fragments or quality_attempt >= maximum_attempts:
+                break
+            if remaining_calls <= 0:
                 break
             payload = {
                 **payload,
@@ -327,6 +316,7 @@ class ProductionStructuredNarrativeWriter:
             {
                 "dialogue_quality_attempts": quality_attempt,
                 "dialogue_missing_fragments": missing_fragments,
+                "provider_calls_remaining": remaining_calls,
             }
         )
         return WriterResult(
