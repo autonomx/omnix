@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -44,6 +45,26 @@ class _Provider(BaseProvider):
 
     def test_connection(self) -> bool:
         return True
+
+
+class _RoutingProvider(_Provider):
+    def __init__(self) -> None:
+        super().__init__([])
+        self._lock = threading.Lock()
+
+    def chat_completion(self, messages, model=None, stream=False, **kwargs):
+        request = json.loads(messages[-1].content)
+        topic_id = request["topic"]["topic_id"]
+        with self._lock:
+            self.calls.append(
+                {
+                    "messages": messages,
+                    "model": model,
+                    "provider_name": self.provider_name,
+                    "kwargs": kwargs,
+                }
+            )
+        return ChatResponse(content=_payload(topic_id=topic_id), model=model or "model")
 
 
 def _node(topic_id: str = "realm") -> CampaignTopicNode:
@@ -144,7 +165,7 @@ def test_other_provider_retries_typed_format_failure_with_text_fallback() -> Non
 
 
 def test_world_forge_route_identity_is_immutable_across_concurrent_calls() -> None:
-    provider = _Provider([_payload(topic_id="realm"), _payload(topic_id="history")])
+    provider = _RoutingProvider()
     provider.provider_name = "shared-transport"
     realm = ProviderWorldForgeTopicGenerator(
         provider,
@@ -166,17 +187,17 @@ def test_world_forge_route_identity_is_immutable_across_concurrent_calls() -> No
     )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        results = list(
-            executor.map(
-                lambda pair: pair[0].generate(
-                    pair[1],
-                    seed=1,
-                    campaign_context={},
-                    dependency_topics={},
-                ),
-                ((realm, _node("realm")), (history, _node("history"))),
+        futures = [
+            executor.submit(
+                generator.generate,
+                _node(topic_id),
+                seed=1,
+                campaign_context={},
+                dependency_topics={},
             )
-        )
+            for generator, topic_id in ((realm, "realm"), (history, "history"))
+        ]
+        results = [future.result() for future in futures]
 
     assert {topic.topic_id for topic in results} == {"realm", "history"}
     assert provider.provider_name == "shared-transport"
