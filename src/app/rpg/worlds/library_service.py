@@ -5,7 +5,11 @@ from typing import Any, Mapping
 
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
+from app.rpg.session.genesis.world_forge_profile_generation import (
+    ProfileResolution,
+    resolve_or_generate_genre_profile,
+)
+from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
 
 from .generation_coordinator import reconcile_world_generation, start_world_generation
 from .generation_jobs import WorldTopicGenerationSettings, canonical_hash
@@ -27,12 +31,14 @@ def _world_generation_context(
     starting_location: str,
     background_expansion: bool,
     route: Any,
+    profile_resolution: ProfileResolution | None = None,
 ) -> dict[str, Any]:
     """Build a durable, authoritative setting brief for every topic request."""
+
     metadata = dict(world.get("metadata") or {})
     genre = str(world.get("genre") or "classic_fantasy")
     tone = str(world.get("tone") or "heroic adventure")
-    return {
+    context: dict[str, Any] = {
         "world_brief": {
             "title": str(world.get("title") or "").strip(),
             "description": str(world.get("description") or "").strip(),
@@ -49,6 +55,11 @@ def _world_generation_context(
         "requested_model": route.requested_model,
         "resolved_provider_source": route.source,
     }
+    if profile_resolution is not None:
+        context["genre_profile_resolution"] = profile_resolution.as_dict()
+        context["resolved_genre_profile"] = profile_resolution.profile.as_dict()
+        context["resolved_profile_hash"] = profile_resolution.profile.content_hash
+    return context
 
 
 def read_world_library(
@@ -215,16 +226,27 @@ def start_world_library_generation(
             limit=1,
         )
         work.rollback()
-    graph = build_campaign_topic_graph(
-        campaign_template=str(
-            world.get("metadata", {}).get("campaign_template") or "classic_fantasy"
+
+    route = resolve_world_forge_route(provider_route, model)
+    metadata = dict(world.get("metadata") or {})
+    campaign_template = str(metadata.get("campaign_template") or "classic_fantasy")
+    profile_resolution = resolve_or_generate_genre_profile(
+        genre=str(world.get("genre") or campaign_template),
+        description=str(world.get("description") or ""),
+        campaign_mode=str(
+            metadata.get("campaign_mode") or "persistent_living_world"
         ),
-        genre=str(world.get("genre") or "classic_fantasy"),
-        tone=str(world.get("tone") or "heroic adventure"),
+    )
+    graph = build_profile_topic_graph(
+        profile_resolution.profile,
+        campaign_template=campaign_template,
         depth=depth,
+        tone=str(world.get("tone") or ""),
         starting_location=starting_location,
         background_expansion=background_expansion,
+        runtime_capabilities=dict(metadata.get("runtime_capabilities") or {}),
     )
+
     target_topic_ids, forced_topic_ids, normalized_scope = resolve_generation_scope(
         graph,
         scope=scope,
@@ -233,17 +255,18 @@ def start_world_library_generation(
         latest_run=runs[0] if runs else None,
         replace_locked=replace_locked,
     )
-    route = resolve_world_forge_route(provider_route, model)
+    generation_context = _world_generation_context(
+        world,
+        starting_location=starting_location,
+        background_expansion=background_expansion,
+        route=route,
+        profile_resolution=profile_resolution,
+    )
     run = start_world_generation(
         world_id=world_id,
         draft_revision=int(world["draft_revision"]),
         graph=graph,
-        generation_context=_world_generation_context(
-            world,
-            starting_location=starting_location,
-            background_expansion=background_expansion,
-            route=route,
-        ),
+        generation_context=generation_context,
         topic_directives=dict(topic_directives or {}),
         entity_manifest_hash=canonical_hash(dict(entity_manifest or {})),
         settings=WorldTopicGenerationSettings(
@@ -279,6 +302,7 @@ def start_world_library_generation(
             "model": route.model,
             "source": route.source,
         },
+        "genre_profile": profile_resolution.as_dict(),
     }
 
 

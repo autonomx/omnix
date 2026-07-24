@@ -1,0 +1,67 @@
+name: World Forge quality gates
+
+on:
+  pull_request:
+    branches: [main, rpg]
+    paths:
+      - "src/app/rpg/session/genesis/**"
+      - "src/app/rpg/worlds/**"
+      - "src/tests/rpg/response_generation/test_world_forge_*.py"
+      - "src/tests/rpg/worlds/test_*world*.py"
+      - ".github/workflows/world-forge-quality-pr.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  world-forge-quality:
+    name: World Forge focused regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src
+      RPG_TEST_MODE: deterministic
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart playwright
+
+      - name: Run World Forge quality regressions
+        run: |
+          set -o pipefail
+          python -m pytest \
+            src/tests/rpg/response_generation/test_world_forge_regeneration.py \
+            src/tests/rpg/response_generation/test_world_forge_semantic_quality.py \
+            src/tests/rpg/response_generation/test_world_forge_presentation.py \
+            src/tests/rpg/response_generation/test_world_forge_presentation_compilation.py \
+            src/tests/rpg/response_generation/test_world_forge_contradictions.py \
+            src/tests/rpg/response_generation/test_world_forge_fact_pipeline.py \
+            src/tests/rpg/response_generation/test_world_forge_profile_generation.py \
+            src/tests/rpg/response_generation/test_world_forge_profile_graph.py \
+            src/tests/rpg/response_generation/test_world_forge_profile_relationships.py \
+            src/tests/rpg/response_generation/test_world_forge_profiles.py \
+            src/tests/rpg/response_generation/test_rpg_world_scenario_phase3_publication.py \
+            src/tests/rpg/worlds/test_canon_repair.py \
+            src/tests/rpg/worlds/test_world_library_profile_generation.py \
+            src/tests/rpg/worlds/test_world_runtime_seed.py \
+            src/tests/rpg/worlds/test_world_generation_artifact_pipeline.py \
+            src/tests/rpg/worlds/test_world_release_artifacts.py \
+            -q --tb=short 2>&1 | tee world-forge-quality-pytest-output.txt
+
+      - name: Upload World Forge diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: world-forge-quality-pytest-output
+          path: world-forge-quality-pytest-output.txt
