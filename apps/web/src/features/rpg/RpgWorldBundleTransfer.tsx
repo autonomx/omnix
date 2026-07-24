@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { rpgWorldBundleClient } from '../../api/rpgWorldBundleClient';
+import './RpgWorldBundleTransfer.css';
 
 interface RpgWorldBundleTransferProps {
   initialWorldId?: string;
@@ -13,6 +14,7 @@ export function RpgWorldBundleTransfer({
   const [exportWorldId, setExportWorldId] = useState(initialWorldId);
   const [importFile, setImportFile] = useState<File>();
   const [targetWorldId, setTargetWorldId] = useState('');
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [feedback, setFeedback] = useState<string>();
   const [error, setError] = useState<string>();
   const [exporting, setExporting] = useState(false);
@@ -57,6 +59,7 @@ export function RpgWorldBundleTransfer({
       setError(undefined);
       setExportWorldId(result.world_id);
       setImportFile(undefined);
+      setFileInputKey((value) => value + 1);
       setTargetWorldId('');
       await onImported?.(result.world_id);
     } catch (cause) {
@@ -67,54 +70,87 @@ export function RpgWorldBundleTransfer({
   };
 
   return (
-    <section className="rpg-world-library-panel rpg-world-library-form" aria-label="World export and import">
-      <p className="eyebrow">Portable bundle</p>
-      <h3>Export / import world</h3>
-      <p>
-        Transfer world canon, topic history, scenarios, map blueprints, compiled maps,
-        releases, and referenced images in one checksummed archive.
-      </p>
-      <label>
-        <span>World id to export</span>
-        <input
-          value={exportWorldId}
-          placeholder="world:my-world"
-          onChange={(event) => setExportWorldId(event.currentTarget.value)}
-        />
-      </label>
-      <button
-        type="button"
-        className="rpg-secondary-button"
-        disabled={!exportWorldId.trim() || exporting}
-        onClick={() => void exportWorld()}
-      >
-        {exporting ? 'Preparing export…' : 'Export world bundle'}
-      </button>
-      <label>
-        <span>World bundle</span>
-        <input
-          aria-label="World bundle file"
-          type="file"
-          accept=".zip,.omnix-world.zip,application/zip"
-          onChange={(event) => setImportFile(event.currentTarget.files?.[0])}
-        />
-      </label>
-      <label>
-        <span>New world id (optional)</span>
-        <input
-          value={targetWorldId}
-          placeholder="Use bundle world id"
-          onChange={(event) => setTargetWorldId(event.currentTarget.value)}
-        />
-      </label>
-      <button
-        type="button"
-        disabled={!importFile || importing}
-        onClick={() => void importWorld()}
-      >
-        {importing ? 'Validating and importing…' : 'Import world bundle'}
-      </button>
-      <small>Imports never overwrite an existing world. Use a new world id to create a portable clone.</small>
+    <section
+      className="rpg-world-library-panel rpg-world-library-form rpg-world-bundle-transfer"
+      aria-label="World export and import"
+    >
+      <div className="rpg-world-bundle-heading">
+        <p className="eyebrow">Portable bundle</p>
+        <h3>Export / import world</h3>
+        <p>
+          Transfer world canon, topic history, scenarios, map blueprints, compiled maps,
+          releases, and referenced images in one checksummed archive.
+        </p>
+      </div>
+      <div className="rpg-world-bundle-grid">
+        <section className="rpg-world-bundle-card" aria-labelledby="world-bundle-export-title">
+          <div className="rpg-world-bundle-card-heading">
+            <span className="rpg-world-bundle-step" aria-hidden="true">1</span>
+            <div>
+              <h4 id="world-bundle-export-title">Export a world</h4>
+              <p>Download a self-contained archive of the selected world.</p>
+            </div>
+          </div>
+          <label>
+            <span>World id to export</span>
+            <input
+              value={exportWorldId}
+              placeholder="world:my-world"
+              onChange={(event) => setExportWorldId(event.currentTarget.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="rpg-secondary-button"
+            disabled={!exportWorldId.trim() || exporting}
+            onClick={() => void exportWorld()}
+          >
+            {exporting ? 'Preparing export…' : 'Export world bundle'}
+          </button>
+        </section>
+        <section className="rpg-world-bundle-card" aria-labelledby="world-bundle-import-title">
+          <div className="rpg-world-bundle-card-heading">
+            <span className="rpg-world-bundle-step" aria-hidden="true">2</span>
+            <div>
+              <h4 id="world-bundle-import-title">Import a bundle</h4>
+              <p>Restore it as a new world without changing the original.</p>
+            </div>
+          </div>
+          <label className="rpg-world-bundle-file-picker">
+            <span>World bundle</span>
+            <span className="rpg-world-bundle-file-control">
+              <span className="rpg-world-bundle-file-button">Choose bundle</span>
+              <span className="rpg-world-bundle-file-name">{importFile?.name ?? 'No file selected'}</span>
+            </span>
+            <input
+              key={fileInputKey}
+              aria-label="World bundle file"
+              type="file"
+              accept=".zip,.omnix-world.zip,application/zip"
+              onChange={(event) => setImportFile(event.currentTarget.files?.[0])}
+            />
+          </label>
+          <label>
+            <span>New world id <small>Optional</small></span>
+            <input
+              aria-label="New world id (optional)"
+              value={targetWorldId}
+              placeholder="Use bundle world id"
+              onChange={(event) => setTargetWorldId(event.currentTarget.value)}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={!importFile || importing}
+            onClick={() => void importWorld()}
+          >
+            {importing ? 'Validating and importing…' : 'Import world bundle'}
+          </button>
+        </section>
+      </div>
+      <small className="rpg-world-bundle-note">
+        Imports never overwrite an existing world. Use a new world id to create a portable clone.
+      </small>
       {feedback ? <p className="rpg-world-library-feedback" aria-live="polite">{feedback}</p> : null}
       {error ? <p className="rpg-world-library-error" aria-live="assertive">{error}</p> : null}
     </section>

@@ -21,6 +21,36 @@ def _database(value: Any | None) -> Any | None:
     return value
 
 
+def _world_generation_context(
+    world: Mapping[str, Any],
+    *,
+    starting_location: str,
+    background_expansion: bool,
+    route: Any,
+) -> dict[str, Any]:
+    """Build a durable, authoritative setting brief for every topic request."""
+    metadata = dict(world.get("metadata") or {})
+    genre = str(world.get("genre") or "classic_fantasy")
+    tone = str(world.get("tone") or "heroic adventure")
+    return {
+        "world_brief": {
+            "title": str(world.get("title") or "").strip(),
+            "description": str(world.get("description") or "").strip(),
+            "source_mode": str(world.get("source_mode") or "").strip(),
+            "genre": genre,
+            "tone": tone,
+            "campaign_template": str(metadata.get("campaign_template") or "").strip(),
+        },
+        "genre": genre,
+        "tone": tone,
+        "starting_location": starting_location,
+        "background_expansion": background_expansion,
+        "requested_provider_route": route.requested_provider,
+        "requested_model": route.requested_model,
+        "resolved_provider_source": route.source,
+    }
+
+
 def read_world_library(
     *,
     database: Any | None = None,
@@ -208,15 +238,12 @@ def start_world_library_generation(
         world_id=world_id,
         draft_revision=int(world["draft_revision"]),
         graph=graph,
-        generation_context={
-            "genre": str(world.get("genre") or "classic_fantasy"),
-            "tone": str(world.get("tone") or "heroic adventure"),
-            "starting_location": starting_location,
-            "background_expansion": background_expansion,
-            "requested_provider_route": route.requested_provider,
-            "requested_model": route.requested_model,
-            "resolved_provider_source": route.source,
-        },
+        generation_context=_world_generation_context(
+            world,
+            starting_location=starting_location,
+            background_expansion=background_expansion,
+            route=route,
+        ),
         topic_directives=dict(topic_directives or {}),
         entity_manifest_hash=canonical_hash(dict(entity_manifest or {})),
         settings=WorldTopicGenerationSettings(
@@ -231,6 +258,7 @@ def start_world_library_generation(
         scope=normalized_scope,
         strategy=strategy,
         database=database,
+        tenant_context=context,
     )
     worker_started = (
         kick_world_generation_worker(

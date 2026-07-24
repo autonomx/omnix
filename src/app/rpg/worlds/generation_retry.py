@@ -130,6 +130,7 @@ def retry_failed_world_generation(
         scope=retry_scope,
         strategy="force",
         database=database,
+        tenant_context=context,
     )
     worker_started = (
         kick_world_generation_worker(
@@ -163,5 +164,152 @@ def retry_failed_world_generation(
             "provider": settings.provider_route,
             "model": settings.model,
             "source": "retry_durable_run",
+        },
+    }
+
+
+def continue_world_generation(
+    run_id: str,
+    *,
+    database: Any | None = None,
+    kick_worker: bool = True,
+    diagnostic_id: str | None = None,
+) -> dict[str, Any]:
+    """Continue a failed generation run without discarding completed topics.
+
+    A failed-topic retry deliberately limits its target to the failed dependency
+    closure. Continuing restores the original *full* target graph. The
+    coordinator reuses every topic whose original inputs are still valid, forces
+    the topics that failed, and schedules downstream topics that were never
+    reached.
+    """
+
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        previous_run = work.world_generation.get(context, run_id)
+        if previous_run is None:
+            work.rollback()
+            raise KeyError(f"world_generation_run_not_found:{run_id}")
+        world_id = str(previous_run["world_id"])
+        world = require_world_writable(work, context, world_id)
+        topics = work.world_library.list_topics(context, world_id)
+        work.rollback()
+
+    previous_revision = int(previous_run["draft_revision"])
+    current_revision = int(world["draft_revision"])
+    if previous_revision != current_revision:
+        raise ValueError(
+            "world_generation_continue_revision_conflict:"
+            f"run={previous_revision}:current={current_revision}"
+        )
+    if str(previous_run.get("status") or "") != "failed":
+        raise ValueError("world_generation_continue_not_failed")
+
+    progress = dict(previous_run.get("progress") or {})
+    failed_topic_ids = tuple(
+        dict.fromkeys(
+            str(topic_id)
+            for topic_id in progress.get("failed_topic_ids") or ()
+            if str(topic_id)
+        )
+    )
+    graph = _graph_from_payload(dict(previous_run.get("graph") or {}))
+    targets, _ignored_forced, normalized_scope = resolve_generation_scope(
+        graph,
+        scope={"mode": "full"},
+        strategy="reuse_unchanged",
+        topic_rows=topics,
+        latest_run=previous_run,
+        replace_locked=False,
+    )
+    topic_status = {
+        str(topic.get("topic_id") or ""): str(topic.get("status") or "")
+        for topic in topics
+    }
+    remaining_topic_ids = tuple(
+        topic_id
+        for topic_id in targets
+        if topic_id in failed_topic_ids or topic_status.get(topic_id) != "ready"
+    )
+    if not remaining_topic_ids:
+        raise ValueError("generation_scope_empty:continue")
+
+    run_context = dict(previous_run.get("context") or {})
+    generation_context = dict(run_context.get("generation_context") or {})
+    topic_directives = {
+        str(topic_id): dict(value)
+        for topic_id, value in dict(run_context.get("topic_directives") or {}).items()
+        if isinstance(value, Mapping)
+    }
+    settings = _settings_from_payload(dict(previous_run.get("settings") or {}))
+    continue_scope = {
+        **normalized_scope,
+        "mode": "continue",
+        "continue_of_run_id": run_id,
+        "failed_topic_ids": list(failed_topic_ids),
+        "remaining_topic_ids": list(remaining_topic_ids),
+    }
+
+    log_world_generation_event(
+        "world_generation.continue_requested",
+        diagnostic_id=diagnostic_id,
+        world_id=world_id,
+        run_id=run_id,
+        fields={
+            "draft_revision": previous_revision,
+            "failed_topic_ids": failed_topic_ids,
+            "remaining_topic_ids": remaining_topic_ids,
+            "resolved_topic_ids": targets,
+            "provider_route": settings.provider_route,
+            "model": settings.model,
+        },
+    )
+    continuation_run = start_world_generation(
+        world_id=world_id,
+        draft_revision=previous_revision,
+        graph=graph,
+        generation_context=generation_context,
+        topic_directives=topic_directives,
+        entity_manifest_hash=str(run_context.get("entity_manifest_hash") or ""),
+        settings=settings,
+        target_topic_ids=targets,
+        forced_topic_ids=failed_topic_ids,
+        scope=continue_scope,
+        strategy="reuse_unchanged",
+        database=database,
+        tenant_context=context,
+    )
+    worker_started = (
+        kick_world_generation_worker(
+            database=database,
+            provider_route=settings.provider_route,
+        )
+        if kick_worker
+        else False
+    )
+    log_world_generation_event(
+        "world_generation.continue_started",
+        diagnostic_id=diagnostic_id,
+        world_id=world_id,
+        run_id=str(continuation_run["run_id"]),
+        fields={
+            "continue_of_run_id": run_id,
+            "remaining_topic_ids": remaining_topic_ids,
+            "worker_started": worker_started,
+            "status": continuation_run.get("status"),
+        },
+    )
+    return {
+        "ok": True,
+        "run": continuation_run,
+        "worker_started": worker_started,
+        "scope": continue_scope,
+        "continue_of_run_id": run_id,
+        "diagnostic_id": diagnostic_id,
+        "execution_summary": _execution_summary(continuation_run),
+        "resolved_route": {
+            "provider": settings.provider_route,
+            "model": settings.model,
+            "source": "continue_durable_run",
         },
     }

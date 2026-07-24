@@ -132,8 +132,26 @@
   font-weight: 800;
 }
 
+.rpg-generation-primary-actions button.is-active,
+.rpg-generation-primary-actions button:first-child.is-active {
+  border-color: #f0d27e;
+  box-shadow: 0 0 0 2px rgba(227, 189, 104, 0.22), 0 0 20px rgba(215, 174, 89, 0.16);
+}
+
+.rpg-generation-primary-actions button.is-active:not(:first-child) {
+  background: linear-gradient(180deg, rgba(236, 210, 127, 0.24), rgba(216, 170, 81, 0.16));
+  color: #fff4cf;
+  font-weight: 700;
+}
+
 .rpg-generation-primary-actions button:disabled {
   opacity: 0.42;
+}
+
+.rpg-generation-primary-action-feedback {
+  margin: -0.2rem 0 0;
+  color: rgba(240, 210, 126, 0.86);
+  font-size: 0.68rem;
 }
 
 .is-operational-dashboard .rpg-generation-dashboard-layout {
@@ -474,6 +492,55 @@
 .rpg-generation-no-error {
   color: rgba(134, 239, 172, 0.7);
   font-size: 0.65rem;
+}
+
+.rpg-generation-token-total {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.7rem 0 0.55rem;
+}
+
+.rpg-generation-token-total strong {
+  color: #f5d77e;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.rpg-generation-token-total span,
+.rpg-generation-token-card > p {
+  color: rgba(203, 213, 225, 0.58);
+  font-size: 0.62rem;
+}
+
+.rpg-generation-token-breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.rpg-generation-token-breakdown > span {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.45rem;
+  border: 1px solid rgba(215, 174, 89, 0.12);
+  border-radius: 4px;
+  background: rgba(215, 174, 89, 0.05);
+}
+
+.rpg-generation-token-breakdown small {
+  color: rgba(203, 213, 225, 0.55);
+  font-size: 0.54rem;
+  text-transform: uppercase;
+}
+
+.rpg-generation-token-breakdown b {
+  color: rgba(248, 250, 252, 0.88);
+  font-size: 0.7rem;
+}
+
+.rpg-generation-token-card > p {
+  margin: 0.55rem 0 0;
+  line-height: 1.4;
 }
 
 .rpg-generation-activity-stream {

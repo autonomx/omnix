@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { RpgAuthoringSection } from '../../api/rpgWorldAuthoringClient';
+import type { RpgAuthoringSection, RpgWorldTokenUsage } from '../../api/rpgWorldAuthoringClient';
 import type { RpgWorldGenerationRun } from '../../api/rpgWorldLibraryClient';
 import {
   RpgWorldGenerationPanel,
@@ -12,8 +12,11 @@ interface RpgWorldGenerationDashboardProps {
   onOpenImages?: () => void;
   onOpenSection?: (sectionId: string) => void;
   sections: RpgAuthoringSection[];
+  tokenUsage?: RpgWorldTokenUsage;
   worldId: string;
 }
+
+type PrimaryAction = 'full' | 'selected' | 'stale' | 'retry' | 'continue' | 'publish' | 'images';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -36,15 +39,33 @@ function statusIcon(status: string): string {
   return '◷';
 }
 
+function primaryActionLabel(action: PrimaryAction): string {
+  return {
+    full: 'Generate World',
+    selected: 'Generate Selected',
+    stale: 'Regenerate Stale',
+    retry: 'Retry Failed',
+    continue: 'Continue Generation',
+    publish: 'Publish World',
+    images: 'Generate Images',
+  }[action];
+}
+
+function tokenLabel(value: number): string {
+  return new Intl.NumberFormat().format(Math.max(0, Math.round(value)));
+}
+
 export function RpgWorldGenerationDashboard({
   generation,
   onOpenImages,
   onOpenSection,
   sections,
+  tokenUsage,
   worldId,
 }: RpgWorldGenerationDashboardProps) {
   const [view, setView] = useState<'board' | 'timeline'>('board');
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<PrimaryAction | null>(null);
   const panelRef = useRef<RpgWorldGenerationPanelHandle>(null);
   const run = generation && 'run_id' in generation ? generation as RpgWorldGenerationRun : undefined;
   const progress = record(run?.progress);
@@ -76,9 +97,22 @@ export function RpgWorldGenerationDashboard({
   const openControls = () => {
     setControlsOpen(true);
     window.requestAnimationFrame(() => {
-      document.getElementById('generation-controls')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const controls = document.getElementById('generation-controls');
+      controls?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     });
   };
+
+  const runPrimaryAction = (action: PrimaryAction, invoke: () => void) => {
+    setSelectedAction(action);
+    setControlsOpen(true);
+    invoke();
+    window.requestAnimationFrame(() => {
+      const controls = document.getElementById('generation-controls');
+      controls?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const isSelectedAction = (action: PrimaryAction) => selectedAction === action;
 
   return (
     <div className="rpg-generation-dashboard is-operational-dashboard">
@@ -105,13 +139,15 @@ export function RpgWorldGenerationDashboard({
       </section>
 
       <div className="rpg-generation-primary-actions">
-        <button type="button" onClick={() => panelRef.current?.generateWorld()}>✦ Generate World</button>
-        <button type="button" onClick={openControls}>Generate Selected</button>
-        <button type="button" onClick={() => panelRef.current?.regenerateStale()}>Regenerate Stale</button>
-        <button type="button" disabled={!failed.size} onClick={() => panelRef.current?.retryFailed()}>Retry Failed{failed.size ? ` (${failed.size})` : ''}</button>
-        <button type="button" disabled={run?.status !== 'review'} onClick={() => panelRef.current?.publish()}>Publish World</button>
-        {onOpenImages ? <button type="button" onClick={onOpenImages}>Generate Images</button> : null}
+        <button className={isSelectedAction('full') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('full')} onClick={() => runPrimaryAction('full', () => panelRef.current?.generateWorld())}>✦ Generate World</button>
+        <button className={isSelectedAction('selected') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('selected')} onClick={() => { setSelectedAction('selected'); openControls(); }}>Generate Selected</button>
+        <button className={isSelectedAction('stale') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('stale')} onClick={() => runPrimaryAction('stale', () => panelRef.current?.regenerateStale())}>Regenerate Stale</button>
+        <button className={isSelectedAction('retry') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('retry')} disabled={!failed.size} onClick={() => runPrimaryAction('retry', () => panelRef.current?.retryFailed())}>Retry Failed{failed.size ? ` (${failed.size})` : ''}</button>
+        <button className={isSelectedAction('continue') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('continue')} disabled={run?.status !== 'failed'} onClick={() => runPrimaryAction('continue', () => panelRef.current?.continueGeneration())}>Continue Generation</button>
+        <button className={isSelectedAction('publish') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('publish')} disabled={run?.status !== 'review'} onClick={() => runPrimaryAction('publish', () => panelRef.current?.publish())}>Publish World</button>
+        {onOpenImages ? <button className={isSelectedAction('images') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('images')} onClick={() => runPrimaryAction('images', onOpenImages)}>Generate Images</button> : null}
       </div>
+      {selectedAction ? <p className="rpg-generation-primary-action-feedback" aria-live="polite">{primaryActionLabel(selectedAction)} selected. Generation controls are open below with the operation result.</p> : null}
 
       <div className="rpg-generation-dashboard-layout">
         <section className="rpg-generation-topic-board">
@@ -169,6 +205,23 @@ export function RpgWorldGenerationDashboard({
             <div className="rpg-generation-activity-stream">
               {rows.filter((section) => section.displayStatus !== 'waiting' && section.displayStatus !== 'empty').slice(0, 7).map((section) => <div key={section.id}><span>{statusIcon(section.displayStatus)}</span><p><strong>{section.label}</strong> {label(section.displayStatus).toLowerCase()}</p></div>)}
             </div>
+          </section>
+
+          <section className="rpg-generation-token-card" aria-label="World generation token usage">
+            <header><h3>Token usage</h3><span>{tokenUsage?.topic_count ?? 0} completed{tokenUsage?.in_flight_topics ? ` · ${tokenUsage.in_flight_topics} active` : ''}</span></header>
+            <div className="rpg-generation-token-total">
+              <strong>{tokenLabel(tokenUsage?.total_tokens ?? 0)}</strong><span>tokens accounted</span>
+            </div>
+            <div className="rpg-generation-token-breakdown">
+              <span><small>Prompt</small><b>{tokenLabel(tokenUsage?.prompt_tokens ?? 0)}</b></span>
+              <span><small>Completion</small><b>{tokenLabel(tokenUsage?.completion_tokens ?? 0)}</b></span>
+            </div>
+            <p>
+              {tokenUsage?.provider_reported_topics ?? 0} provider-reported
+              {tokenUsage?.estimated_topics ? ` · ${tokenUsage.estimated_topics} estimated` : ''}
+              {tokenUsage?.unavailable_topics ? ` · ${tokenUsage.unavailable_topics} unavailable` : ''}
+              {tokenUsage?.in_flight_topics ? <small> (live batches included)</small> : null}
+            </p>
           </section>
 
           <section className="rpg-generation-image-card">

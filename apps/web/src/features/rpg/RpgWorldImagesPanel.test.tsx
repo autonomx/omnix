@@ -132,4 +132,19 @@ describe('RpgWorldImagesPanel', () => {
       active_asset_id: 'image:old-cover',
     });
   });
+
+  it('keeps an edited image prompt when regenerating', async () => {
+    renderPanel();
+
+    const prompt = await screen.findByLabelText('Prompt for Aurelia cover');
+    fireEvent.change(prompt, { target: { value: 'A hand-painted moonlit cover for Aurelia' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
+
+    await waitFor(() => expect(requests.some((request) => request.url.includes('/regenerate'))).toBe(true));
+    const regenerated = requests.find((request) => request.url.includes('/regenerate'));
+    expect(JSON.parse(String(regenerated?.init?.body))).toMatchObject({
+      prompt: 'A hand-painted moonlit cover for Aurelia',
+      no_cache: true,
+    });
+  });
 });

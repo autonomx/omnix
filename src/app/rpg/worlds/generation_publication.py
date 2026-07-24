@@ -21,7 +21,10 @@ from app.rpg.session.genesis.world_forge_quality import apply_world_forge_qualit
 from .canon_repair import repair_generation_contracts
 from .contracts import WorldReleaseDocument, WorldRevisionDocument
 from .lifecycle_service import require_world_writable
-from .map_blueprint_authoring import latest_ready_blueprint_requirements
+from .map_blueprint_authoring import (
+    latest_ready_blueprint_requirements,
+    materialize_generated_location_blueprints,
+)
 from .map_blueprint_publication import merge_authored_blueprints
 from .service import compile_world_release, compile_world_revision
 from .world_image_bindings import approved_world_asset_bindings
@@ -302,6 +305,18 @@ def publish_world_generation(
             topic_rows=topic_rows,
             revision=current_revision + 1,
             asset_bindings=asset_bindings,
+        )
+        canon_entities = compiled.world_revision.canon.get("entities")
+        generated_locations = {
+            str(entity_id): dict(entity)
+            for entity_id, entity in dict(canon_entities or {}).items()
+            if isinstance(entity, Mapping) and str(entity.get("kind") or "") == "location"
+        }
+        materialize_generated_location_blueprints(
+            work,
+            context,
+            world_id,
+            generated_locations,
         )
         requirements = latest_ready_blueprint_requirements(work, context, world_id)
         revision, release = merge_authored_blueprints(

@@ -304,6 +304,7 @@ export function RpgWorldEditorShell({
                 onOpenImages={() => navigate('images')}
                 onOpenSection={(nextSectionId) => navigate(nextSectionId)}
                 sections={sections}
+                tokenUsage={manifestQuery.data?.token_usage}
                 worldId={worldId}
               />
             ) : selectedSection.id === 'images' ? (

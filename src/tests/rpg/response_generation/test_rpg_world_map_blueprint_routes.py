@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.gateway.rpg_world_routes import register_rpg_world_routes
 from app.rpg.worlds.map_blueprint_authoring import (
     MapBlueprintDocument,
+    generated_location_blueprint_documents,
     reconcile_blueprint_scenarios,
 )
 from app.rpg.worlds.service import (
@@ -18,7 +19,27 @@ def test_world_routes_register_map_blueprint_authoring_endpoints() -> None:
     paths = {route.path for route in app.routes}
 
     assert "/api/rpg/worlds/{world_id}/map-blueprints" in paths
+    assert "/api/rpg/worlds/{world_id}/map-blueprints/materialize" in paths
     assert "/api/rpg/worlds/{world_id}/map-blueprints/{map_id}" in paths
+
+
+def test_generated_locations_receive_safe_baseline_blueprints() -> None:
+    documents = generated_location_blueprint_documents(
+        {
+            "location:ruined_vault": {
+                "name": "Ruined Vault",
+                "description": "A sealed vault beneath the wasteland.",
+            },
+            "location:market": {"name": "Market"},
+        }
+    )
+
+    by_location = {document.location_id: document for document in documents}
+    assert by_location["location:ruined_vault"].map_id == "map:location:ruined_vault"
+    assert by_location["location:ruined_vault"].level == "dungeon"
+    assert by_location["location:market"].level == "settlement"
+    assert by_location["location:market"].required_spawn_point_ids == ("spawn:arrival",)
+    assert by_location["location:market"].required_zone_ids == ("zone:main",)
 
 
 def test_blueprint_reconciliation_reports_scenario_semantic_ids() -> None:

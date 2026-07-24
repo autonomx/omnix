@@ -114,6 +114,60 @@
   white-space: pre-line;
 }
 
+.rpg-authoring-record-expansion {
+  border-top: 1px solid rgba(168, 139, 250, 0.16);
+  padding-top: 0.7rem;
+}
+
+.rpg-authoring-record-expansion summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  color: #d7b8ff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  list-style: none;
+}
+
+.rpg-authoring-record-expansion summary::-webkit-details-marker {
+  display: none;
+}
+
+.rpg-authoring-record-expansion summary::after {
+  content: '⌄';
+  color: #f4d98f;
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 150ms ease;
+}
+
+.rpg-authoring-record-expansion[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.rpg-authoring-record-expand-label.is-expanded,
+.rpg-authoring-record-expansion[open] .rpg-authoring-record-expand-label.is-collapsed {
+  display: none;
+}
+
+.rpg-authoring-record-expansion[open] .rpg-authoring-record-expand-label.is-expanded {
+  display: inline;
+}
+
+.rpg-authoring-record-expanded-prose {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.8rem;
+  color: rgba(226, 232, 240, 0.94);
+  font-size: 0.94rem;
+  line-height: 1.72;
+}
+
+.rpg-authoring-record-expanded-prose p {
+  margin: 0;
+}
+
 .rpg-authoring-record-references {
   display: grid;
   gap: 0.45rem;

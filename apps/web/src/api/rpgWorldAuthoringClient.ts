@@ -20,11 +20,23 @@ export interface RpgAuthoringSection {
   entity_count: number;
 }
 
+export interface RpgWorldTokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  provider_reported_topics: number;
+  estimated_topics: number;
+  unavailable_topics: number;
+  topic_count: number;
+  in_flight_topics?: number;
+}
+
 export interface RpgAuthoringManifestResponse {
   ok: boolean;
   world: RpgWorldSummary;
   sections: RpgAuthoringSection[];
   generation: RpgWorldGenerationRun | Record<string, never>;
+  token_usage?: RpgWorldTokenUsage;
 }
 
 export interface RpgAuthoringCardHighlight {

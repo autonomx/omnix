@@ -12,7 +12,10 @@ from .world_forge_dossier_quality import (
     validate_dossier_quality,
 )
 from .world_forge_dossiers import project_entity_dossier, validate_entity_dossier
-from .world_forge_domains import normalize_structured_domain
+from .world_forge_domains import (
+    normalize_structured_domain,
+    validate_world_brief_grounding,
+)
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 
 
@@ -39,7 +42,16 @@ class ReferenceSafeWorldForgeGenerator:
             campaign_context=campaign_context,
             dependency_topics=dependency_topics,
         )
-        topic = normalize_structured_domain(node, topic, dependency_topics)
+        provider_generated = str(
+            dict(topic.provenance).get("generator") or ""
+        ).startswith("structured_world_forge_provider_")
+        topic = normalize_structured_domain(
+            node,
+            topic,
+            dependency_topics,
+            allow_synthetic_completion=not provider_generated,
+        )
+        validate_world_brief_grounding(node, topic, campaign_context)
         if node.category == "locations":
             topic = self._normalize_location_regions(topic, dependency_topics)
         elif node.category == "npcs":

@@ -38,7 +38,7 @@ def register_image_asset_file_route(gateway: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="asset_not_found")
         if asset.type != AssetType.IMAGE or asset.mime_type.lower() not in SUPPORTED_IMAGE_MIME_TYPES:
             raise HTTPException(status_code=415, detail="asset_content_not_image")
-        if asset.mime_type.lower() == "image/svg+xml" and not bool(asset.metadata.get("trusted_svg")):
+        if asset.mime_type.lower() == "image/svg+xml" and not _is_trusted_svg(asset):
             raise HTTPException(status_code=415, detail="asset_svg_not_trusted")
         path = Path(asset.storage_path)
         if not path.is_file():
@@ -69,6 +69,14 @@ def register_image_asset_file_route(gateway: FastAPI) -> None:
 
 def _asset_by_id(asset_id: str) -> AssetRecord | None:
     return next((asset for asset in default_asset_store().list_assets().assets if asset.id == asset_id), None)
+
+
+def _is_trusted_svg(asset: AssetRecord) -> bool:
+    """Allow only explicitly trusted SVGs, including legacy curated map-pack records."""
+
+    if bool(asset.metadata.get("trusted_svg")):
+        return True
+    return str(asset.compat.get("source") or "").strip() == "curated-svg"
 
 
 def _cache_control(asset: AssetRecord) -> str:

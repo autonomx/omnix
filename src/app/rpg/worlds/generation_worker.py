@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from app.persistence.database import DatabaseUnavailableError
 from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
 
 from .generation_coordinator import execute_claimed_world_topic_job
@@ -17,8 +18,9 @@ from .generation_validation import PublicationValidatedWorldForgeGenerator
 
 _DEFAULT_LEASE_SECONDS = 3600
 _DEFAULT_MAX_WORLD_GENERATION_WORKERS = 4
-_LMSTUDIO_MAX_WORLD_GENERATION_WORKERS = 1
+_LMSTUDIO_MAX_WORLD_GENERATION_WORKERS = 2
 _RETRY_POLL_SECONDS = 1.1
+_DATABASE_RECOVERY_POLL_SECONDS = 5.0
 _LOGGER = logging.getLogger(__name__)
 _worker_lock = threading.Lock()
 _worker_active = False
@@ -141,6 +143,39 @@ def _recover_interrupted_jobs(*, database: Any | None = None) -> dict[str, int]:
         ).rowcount
         work.commit()
     return {"discarded": int(discarded), "requeued": int(requeued)}
+
+
+def _recover_worker_database_interruption(
+    worker_id: str,
+    *,
+    database: Any | None = None,
+) -> int:
+    """Release only this worker's leases after PostgreSQL comes back.
+
+    Claiming a job increments its attempt count before a provider call. A database
+    outage is infrastructure state, not a provider attempt, so return that lease to
+    the queue without consuming an attempt. Restricting the update to one worker
+    avoids disturbing other slots that may still be completing provider calls.
+    """
+
+    db = _database(database)
+    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.persistence.unit_of_work import unit_of_work
+
+    context = bootstrap_local_tenant(db)
+    with unit_of_work(db) as work:
+        recovered = work.connection.execute(
+            "UPDATE omnix_jobs SET status = 'retrying', available_at = CURRENT_TIMESTAMP, "
+            "attempt_count = GREATEST(0, attempt_count - 1), "
+            "error = jsonb_build_object('code', 'database_unavailable'), "
+            "lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, "
+            "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
+            "AND job_type = %s AND status IN ('leased', 'running', 'cancel_requested') "
+            "AND lease_owner = %s",
+            (context.workspace_id, WORLD_TOPIC_JOB_TYPE, worker_id),
+        ).rowcount
+        work.commit()
+    return int(recovered)
 
 
 def run_world_generation_worker_once(
@@ -271,16 +306,38 @@ def _worker_loop(
     state: _WorkerPoolState,
 ) -> None:
     worker_id = f"rpg-world-generation:local:{slot}"
+    database_recovery_pending = False
     while True:
         with state.condition:
             if state.stop:
                 return
             state.calls_in_progress += 1
         try:
+            if database_recovery_pending:
+                requeued = _recover_worker_database_interruption(
+                    worker_id,
+                    database=database,
+                )
+                database_recovery_pending = False
+                log_world_generation_event(
+                    "world_generation.worker_database_recovered",
+                    world_id="",
+                    fields={"slot": slot, "worker_id": worker_id, "requeued": requeued},
+                )
             result = run_world_generation_worker_once(
                 worker_id=worker_id,
                 database=database,
             )
+        except DatabaseUnavailableError as exc:
+            if not database_recovery_pending:
+                log_world_generation_event(
+                    "world_generation.worker_database_unavailable",
+                    level="warning",
+                    fields={"slot": slot, "worker_id": worker_id},
+                    error=exc,
+                )
+            database_recovery_pending = True
+            result = {"ok": False, "status": "database_unavailable"}
         except Exception as exc:
             _LOGGER.exception("RPG world-generation worker slot failed")
             log_world_generation_event(
@@ -290,8 +347,12 @@ def _worker_loop(
                 error=exc,
             )
             result = None
-        if result is not None and str(result.get("status") or "") == "retrying":
-            time.sleep(_RETRY_POLL_SECONDS)
+        if result is not None:
+            result_status = str(result.get("status") or "")
+            if result_status == "retrying":
+                time.sleep(_RETRY_POLL_SECONDS)
+            elif result_status == "database_unavailable":
+                time.sleep(_DATABASE_RECOVERY_POLL_SECONDS)
         with state.condition:
             state.calls_in_progress -= 1
             if result is not None:

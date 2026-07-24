@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 
+from app.persistence.database import DatabaseUnavailableError
 from app.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
@@ -9,6 +10,11 @@ from app.rpg.session.genesis.world_forge_contract import (
 from app.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     generate_campaign_topics,
+)
+from app.rpg.worlds.generation_coordinator import available_completed_topics
+from app.rpg.worlds.generation_jobs import (
+    WorldTopicGenerationSettings,
+    topic_generation_fingerprint,
 )
 from app.rpg.worlds import generation_worker
 
@@ -81,6 +87,98 @@ def test_world_forge_respects_a_lower_parallel_limit() -> None:
     assert generator.peak == 2
 
 
+def test_completed_forced_topic_from_current_run_unblocks_dependents() -> None:
+    graph = CampaignTopicGraph(
+        graph_version="forced-topic-test-v1",
+        campaign_template="test",
+        depth="quick",
+        nodes=(
+            CampaignTopicNode(topic_id="realm", title="Realm", category="lore"),
+            CampaignTopicNode(
+                topic_id="races",
+                title="Races",
+                category="races",
+                dependencies=("realm",),
+            ),
+        ),
+    )
+    settings = WorldTopicGenerationSettings(
+        generator_version="test-v1",
+        prompt_version="test-prompt-v1",
+        provider_route="lmstudio",
+        model="test-model",
+        seed=1,
+    )
+    context = {"genre": "fantasy"}
+    manifest_hash = "sha256:manifest"
+    realm = graph.nodes[0]
+    races = graph.nodes[1]
+    realm_fingerprint, realm_input_hash, realm_directive_hash = topic_generation_fingerprint(
+        realm,
+        normalized_topic_input={
+            "generation_context": context,
+            "target_count": realm.target_count,
+            "visibility": realm.visibility,
+        },
+        dependency_hashes={},
+        directives={},
+        entity_manifest_hash=manifest_hash,
+        settings=settings,
+    )
+    realm_hash = "sha256:realm"
+    races_fingerprint, races_input_hash, races_directive_hash = topic_generation_fingerprint(
+        races,
+        normalized_topic_input={
+            "generation_context": context,
+            "target_count": races.target_count,
+            "visibility": races.visibility,
+        },
+        dependency_hashes={"realm": realm_hash},
+        directives={},
+        entity_manifest_hash=manifest_hash,
+        settings=settings,
+    )
+    rows = {
+        "realm": {
+            "status": "ready",
+            "source": "ai",
+            "content_hash": realm_hash,
+            "input_hash": realm_input_hash,
+            "dependency_hashes": {},
+            "provenance": {
+                "generation_fingerprint": realm_fingerprint,
+                "directive_hash": realm_directive_hash,
+                "run_id": "run:earlier",
+            },
+        },
+        "races": {
+            "status": "ready",
+            "source": "ai",
+            "content_hash": "sha256:races",
+            "input_hash": races_input_hash,
+            "dependency_hashes": {"realm": realm_hash},
+            "provenance": {
+                "generation_fingerprint": races_fingerprint,
+                "directive_hash": races_directive_hash,
+                "run_id": "run:continuation",
+            },
+        },
+    }
+
+    available, _, _ = available_completed_topics(
+        graph,
+        rows=rows,
+        generation_context=context,
+        topic_directives={},
+        entity_manifest_hash=manifest_hash,
+        settings=settings,
+        forced_topic_ids=("races",),
+        current_run_id="run:continuation",
+    )
+
+    assert set(available) == {"realm", "races"}
+
+
 def test_durable_world_generation_worker_pool_runs_four_slots(monkeypatch) -> None:
     barrier = threading.Barrier(4, timeout=2)
     calls: dict[str, int] = {}
@@ -136,3 +234,25 @@ def test_worker_waits_for_a_scheduled_retry_before_claiming_again(monkeypatch) -
     )
 
     assert sleeps == [generation_worker._RETRY_POLL_SECONDS]
+
+
+def test_worker_pauses_for_database_recovery_without_stopping(monkeypatch) -> None:
+    calls = iter((DatabaseUnavailableError("database unavailable"), None))
+    sleeps: list[float] = []
+    recoveries: list[str] = []
+
+    def run_once(**_kwargs):
+        result = next(calls)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(generation_worker, "run_world_generation_worker_once", run_once)
+    monkeypatch.setattr(generation_worker, "_recover_worker_database_interruption", lambda worker_id, **_kwargs: recoveries.append(worker_id) or 1)
+    monkeypatch.setattr(generation_worker.time, "sleep", sleeps.append)
+    monkeypatch.setattr(generation_worker, "log_world_generation_event", lambda *args, **kwargs: {})
+
+    generation_worker._worker_loop(1, None, generation_worker._WorkerPoolState())
+
+    assert recoveries == ["rpg-world-generation:local:1"]
+    assert sleeps == [generation_worker._DATABASE_RECOVERY_POLL_SECONDS]

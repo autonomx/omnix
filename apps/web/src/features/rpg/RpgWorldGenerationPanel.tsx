@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { RpgAuthoringSection } from '../../api/rpgWorldAuthoringClient';
 import {
   rpgWorldLibraryClient,
+  RpgWorldGenerationRequestError,
   type RpgWorldGenerationRun,
 } from '../../api/rpgWorldLibraryClient';
 import './RpgWorldGenerationPanel.css';
@@ -18,6 +19,7 @@ export interface RpgWorldGenerationPanelHandle {
   generateWorld: () => void;
   regenerateStale: () => void;
   retryFailed: () => void;
+  continueGeneration: () => void;
   publish: () => void;
 }
 
@@ -64,6 +66,22 @@ function generationResultFeedback(result: unknown, prefix: string): string {
   return `${prefix}: ${String(run.run_id ?? 'unknown run')} · ${work} Route: ${routeLabel}.`;
 }
 
+function generationErrorFeedback(cause: unknown, fallback: string): string {
+  if (
+    cause instanceof RpgWorldGenerationRequestError
+    && cause.retryable
+  ) {
+    if (cause.code === 'world_generation_database_authentication_failed') {
+      return 'PostgreSQL is reachable, but Omnix’s database credential was rejected. Refresh the protected credential and restart Omnix; completed topics remain safe.';
+    }
+    if (cause.code !== 'world_generation_database_unavailable') {
+      return cause.message;
+    }
+    return 'World generation is paused because Omnix cannot reach PostgreSQL. Completed topics remain safe. Restore database connectivity, then retry this same run.';
+  }
+  return cause instanceof Error ? cause.message : fallback;
+}
+
 export const RpgWorldGenerationPanel = forwardRef<
   RpgWorldGenerationPanelHandle,
   RpgWorldGenerationPanelProps
@@ -92,6 +110,7 @@ export const RpgWorldGenerationPanel = forwardRef<
   const failedTopicIds = stringArray(progress.failed_topic_ids);
   const generationBusy = currentRun?.status === 'running' || currentRun?.status === 'planned';
   const canRetryFailed = !generationBusy && failedTopicIds.length > 0;
+  const canContinueGeneration = !generationBusy && currentRun?.status === 'failed';
 
   const refresh = async () => {
     await Promise.all([
@@ -126,7 +145,7 @@ export const RpgWorldGenerationPanel = forwardRef<
       setFeedback(generationResultFeedback(result, 'Generation started'));
       await refresh();
     },
-    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Generation could not be started.'),
+    onError: (cause) => setFeedback(generationErrorFeedback(cause, 'Generation could not be started.')),
   });
 
   const retryFailed = useMutation({
@@ -139,7 +158,20 @@ export const RpgWorldGenerationPanel = forwardRef<
       setFeedback(generationResultFeedback(result, `Retry started from ${result.retry_of_run_id ?? currentRun?.run_id}`));
       await refresh();
     },
-    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Failed topics could not be retried.'),
+    onError: (cause) => setFeedback(generationErrorFeedback(cause, 'Failed topics could not be retried.')),
+  });
+
+  const continueGeneration = useMutation({
+    mutationFn: () => {
+      if (!currentRun) throw new Error('No failed generation run is available to continue.');
+      return rpgWorldLibraryClient.continueGeneration(currentRun.run_id);
+    },
+    onSuccess: async (result) => {
+      if (result.diagnostic_log) setDiagnosticLog(result.diagnostic_log);
+      setFeedback(generationResultFeedback(result, `Continuation started from ${result.continue_of_run_id ?? currentRun?.run_id}`));
+      await refresh();
+    },
+    onError: (cause) => setFeedback(generationErrorFeedback(cause, 'Generation could not be continued.')),
   });
 
   const publish = useMutation({
@@ -174,6 +206,14 @@ export const RpgWorldGenerationPanel = forwardRef<
       retryFailed.mutate();
       return;
     }
+    if (mode === 'continue') {
+      if (!canContinueGeneration) {
+        setFeedback('Only a failed generation run can be continued.');
+        return;
+      }
+      continueGeneration.mutate();
+      return;
+    }
     if (mode === 'selected' && !selected.length) {
       setFeedback('Select at least one topic before generating a selected scope.');
       return;
@@ -188,6 +228,7 @@ export const RpgWorldGenerationPanel = forwardRef<
     generateWorld: () => start('full'),
     regenerateStale: () => start('stale'),
     retryFailed: () => start('failed'),
+    continueGeneration: () => start('continue'),
     publish: () => publish.mutate(),
   }));
 
@@ -228,17 +269,26 @@ export const RpgWorldGenerationPanel = forwardRef<
       </details>
 
       <div className="rpg-generation-actions">
-        <button type="button" disabled={generate.isPending || retryFailed.isPending || generationBusy} onClick={() => start('full')}>Generate World</button>
-        <button type="button" disabled={generate.isPending || retryFailed.isPending || generationBusy || !selected.length} onClick={() => start('selected')}>Generate Selected</button>
-        <button className="rpg-secondary-button" type="button" disabled={generate.isPending || retryFailed.isPending || generationBusy} onClick={() => start('stale')}>Regenerate Stale</button>
+        <button type="button" disabled={generate.isPending || retryFailed.isPending || continueGeneration.isPending || generationBusy} onClick={() => start('full')}>Generate World</button>
+        <button type="button" disabled={generate.isPending || retryFailed.isPending || continueGeneration.isPending || generationBusy || !selected.length} onClick={() => start('selected')}>Generate Selected</button>
+        <button className="rpg-secondary-button" type="button" disabled={generate.isPending || retryFailed.isPending || continueGeneration.isPending || generationBusy} onClick={() => start('stale')}>Regenerate Stale</button>
         <button
           className="rpg-secondary-button"
           type="button"
-          disabled={generate.isPending || retryFailed.isPending || !canRetryFailed}
+          disabled={generate.isPending || retryFailed.isPending || continueGeneration.isPending || !canRetryFailed}
           title={canRetryFailed ? `Retry ${failedTopicIds.length} failed topic(s) using the original run settings` : 'No terminally failed topics are available'}
           onClick={() => start('failed')}
         >
           {retryFailed.isPending ? 'Retrying…' : `Retry Failed${failedTopicIds.length ? ` (${failedTopicIds.length})` : ''}`}
+        </button>
+        <button
+          className="rpg-secondary-button"
+          type="button"
+          disabled={generate.isPending || retryFailed.isPending || continueGeneration.isPending || !canContinueGeneration}
+          title={canContinueGeneration ? 'Resume this failed run, preserving completed topics and generating what remains' : 'A failed generation run is required'}
+          onClick={() => start('continue')}
+        >
+          {continueGeneration.isPending ? 'Continuing…' : 'Continue Generation'}
         </button>
         <button type="button" disabled={publish.isPending || currentRun?.status !== 'review'} onClick={() => publish.mutate()}>{publish.isPending ? 'Publishing…' : 'Publish World'}</button>
         {onOpenImages ? <button className="rpg-secondary-button" type="button" onClick={onOpenImages}>Generate Images</button> : null}

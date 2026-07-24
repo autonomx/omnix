@@ -6,12 +6,17 @@ from typing import Any, Mapping
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import ValidationError
 
+from app.persistence.config import DatabaseConfigurationError
+from app.persistence.database import DatabaseUnavailableError
 from app.rpg.debug_logging import new_rpg_trace_id
 from app.rpg.worlds.generation_diagnostics import (
     log_world_generation_event,
     world_generation_log_hint,
 )
-from app.rpg.worlds.generation_retry import retry_failed_world_generation
+from app.rpg.worlds.generation_retry import (
+    continue_world_generation,
+    retry_failed_world_generation,
+)
 from app.rpg.worlds.launch_repair_service import repair_world_for_launch
 from app.rpg.worlds.library_service import (
     publish_world_library_generation,
@@ -24,6 +29,7 @@ from app.rpg.worlds.library_service import (
 from app.rpg.worlds.map_blueprint_authoring import (
     MapBlueprintDocument,
     list_map_blueprints,
+    materialize_missing_location_blueprints,
     save_map_blueprint,
 )
 from app.rpg.worlds.published_launch import launch_published_scenario
@@ -68,13 +74,27 @@ def _raise_generation_error(
     run_id: str | None = None,
 ) -> None:
     log_path = world_generation_log_hint()
+    error_fields: dict[str, Any] = {"operation": operation, "log_path": log_path}
+    if isinstance(exc, DatabaseUnavailableError):
+        root: BaseException = exc
+        seen: set[int] = set()
+        while id(root) not in seen and (root.__cause__ or root.__context__):
+            seen.add(id(root))
+            root = root.__cause__ or root.__context__  # type: ignore[assignment]
+        error_fields.update(
+            {
+                "database_sqlstate": exc.sqlstate or getattr(root, "sqlstate", None),
+                "database_error_type": type(root).__name__,
+                "database_error_message": str(root),
+            }
+        )
     log_world_generation_event(
         f"world_generation.{operation}_failed",
         level="error",
         diagnostic_id=diagnostic_id,
         world_id=world_id,
         run_id=run_id,
-        fields={"operation": operation, "log_path": log_path},
+        fields=error_fields,
         error=exc,
     )
     detail = {
@@ -83,6 +103,33 @@ def _raise_generation_error(
         "diagnostic_id": diagnostic_id,
         "diagnostic_log": log_path,
     }
+    if isinstance(exc, (DatabaseConfigurationError, DatabaseUnavailableError)):
+        authentication_failed = (
+            isinstance(exc, DatabaseUnavailableError) and exc.sqlstate == "28P01"
+        )
+        detail.update(
+            {
+                "error": (
+                    "world_generation_database_authentication_failed"
+                    if authentication_failed
+                    else "world_generation_database_unavailable"
+                ),
+                "message": (
+                    "PostgreSQL is reachable, but Omnix's database credential was rejected. "
+                    "Refresh the protected credential and restart Omnix; completed topics "
+                    "remain safe."
+                    if authentication_failed
+                    else "World generation could not reach PostgreSQL. No completed "
+                    "topics were discarded; restore database connectivity and retry."
+                ),
+                "retryable": True,
+            }
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=detail,
+            headers={"Retry-After": "5"},
+        ) from exc
     if isinstance(exc, KeyError):
         raise HTTPException(status_code=404, detail=detail) from exc
     if isinstance(exc, ValueError):
@@ -126,6 +173,17 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
                     latest_only=latest_only,
                 ),
             }
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/map-blueprints/materialize",
+        include_in_schema=False,
+    )
+    def rpg_world_materialize_map_blueprints(world_id: str) -> dict[str, Any]:
+        try:
+            return materialize_missing_location_blueprints(world_id)
         except Exception as exc:
             _raise_domain_error(exc)
             raise
@@ -295,6 +353,27 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
             _raise_generation_error(
                 exc,
                 operation="retry_failed",
+                diagnostic_id=diagnostic_id,
+                run_id=run_id,
+            )
+            raise
+
+    @app.post(
+        "/api/rpg/world-generation/{run_id}/continue",
+        include_in_schema=False,
+    )
+    def rpg_world_continue_generation(run_id: str) -> dict[str, Any]:
+        diagnostic_id = new_rpg_trace_id("world-generation-continue")
+        try:
+            result = continue_world_generation(
+                run_id,
+                diagnostic_id=diagnostic_id,
+            )
+            return {**result, "diagnostic_log": world_generation_log_hint()}
+        except Exception as exc:
+            _raise_generation_error(
+                exc,
+                operation="continue",
                 diagnostic_id=diagnostic_id,
                 run_id=run_id,
             )

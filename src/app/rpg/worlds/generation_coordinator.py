@@ -5,6 +5,7 @@ import threading
 import uuid
 from typing import Any, Mapping, Sequence
 
+from app.persistence.database import DatabaseUnavailableError
 from app.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
@@ -110,6 +111,7 @@ def available_completed_topics(
     entity_manifest_hash: str,
     settings: WorldTopicGenerationSettings,
     forced_topic_ids: Sequence[str] = (),
+    current_run_id: str = "",
 ) -> tuple[
     dict[str, Mapping[str, Any]],
     tuple[str, ...],
@@ -129,7 +131,17 @@ def available_completed_topics(
             continue
         if not set(node.dependencies).issubset(available):
             continue
-        if node.topic_id in forced:
+        # A forced topic must not be reused from an earlier run.  Once this
+        # run has regenerated and persisted it, however, it is a valid DAG
+        # dependency just like every other completed topic.  Treating it as
+        # permanently unavailable strands continuations after their forced
+        # root topics finish.
+        provenance = row.get("provenance")
+        provenance = provenance if isinstance(provenance, Mapping) else {}
+        if (
+            node.topic_id in forced
+            and str(provenance.get("run_id") or "") != current_run_id
+        ):
             continue
         if _protected(row):
             available[node.topic_id] = row
@@ -151,8 +163,6 @@ def available_completed_topics(
             entity_manifest_hash=entity_manifest_hash,
             settings=settings,
         )
-        provenance = row.get("provenance")
-        provenance = provenance if isinstance(provenance, Mapping) else {}
         if str(provenance.get("generation_fingerprint") or "") != fingerprint:
             continue
         if str(row.get("input_hash") or "") != input_hash:
@@ -202,6 +212,7 @@ def start_world_generation(
     scope: Mapping[str, Any] | None = None,
     strategy: str = "reuse_unchanged",
     database: Any | None = None,
+    tenant_context: Any | None = None,
 ) -> dict[str, Any]:
     issues = graph.validate()
     if issues:
@@ -210,7 +221,11 @@ def start_world_generation(
     from app.persistence.identity_service import bootstrap_local_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    # Higher-level services commonly validate the world in an existing tenant
+    # context immediately before creating a run. Reuse that context instead of
+    # opening a second migration/bootstrap transaction between validation and
+    # durable run creation.
+    context = tenant_context or bootstrap_local_tenant(db)
     targets = generation_topic_ids(graph, target_topic_ids)
     scope_payload = {
         "topic_ids": list(targets),
@@ -319,6 +334,7 @@ def _reconcile_world_generation_unlocked(
             entity_manifest_hash=entity_manifest_hash,
             settings=settings,
             forced_topic_ids=forced,
+            current_run_id=run_id,
         )
         jobs = [
             job
@@ -520,20 +536,52 @@ def execute_claimed_world_topic_job(
             )
 
             selected_generator = build_production_world_forge_generator()
+        from app.rpg_world_forge_provider import attach_world_forge_progress_callback
+
+        def checkpoint_batch_progress(checkpoint: Mapping[str, Any]) -> None:
+            """Make completed entity batches visible before their topic is merged."""
+
+            token_usage = dict(checkpoint.get("token_usage") or {})
+            batch_current = max(0, int(checkpoint.get("batch_current") or 0))
+            batch_total = max(1, int(checkpoint.get("batch_total") or 1))
+            progress = {
+                "current": batch_current,
+                "total": batch_total,
+                "message": f"world entity batch {batch_current}/{batch_total} generated",
+                "topic_id": topic_id,
+                "token_usage": token_usage,
+            }
+            with unit_of_work(db) as checkpoint_work:
+                checkpoint_work.jobs.update_progress(
+                    context,
+                    job_id=str(job["id"]),
+                    worker_id=worker_id,
+                    lease_token=lease_token,
+                    progress=progress,
+                )
+                checkpoint_work.commit()
+
+        detach_progress_callback = attach_world_forge_progress_callback(
+            selected_generator,
+            checkpoint_batch_progress,
+        )
         from app.rpg.llm_priority import background_rpg_llm_priority
 
-        with background_rpg_llm_priority():
-            generated = selected_generator.generate(
-                node,
-                seed=int(dict(payload.get("settings") or {}).get("seed") or 0),
-                campaign_context={
-                    **dict(payload.get("generation_context") or {}),
-                    "world_id": world_id,
-                    "draft_revision": int(payload.get("draft_revision") or 1),
-                    "topic_directives": dict(payload.get("directives") or {}),
-                },
-                dependency_topics=dependency_topics,
-            )
+        try:
+            with background_rpg_llm_priority():
+                generated = selected_generator.generate(
+                    node,
+                    seed=int(dict(payload.get("settings") or {}).get("seed") or 0),
+                    campaign_context={
+                        **dict(payload.get("generation_context") or {}),
+                        "world_id": world_id,
+                        "draft_revision": int(payload.get("draft_revision") or 1),
+                        "topic_directives": dict(payload.get("directives") or {}),
+                    },
+                    dependency_topics=dependency_topics,
+                )
+        finally:
+            detach_progress_callback()
         if generated.topic_id != topic_id:
             raise RuntimeError(
                 f"world_topic_generator_returned:{generated.topic_id}:expected:{topic_id}"
@@ -592,6 +640,10 @@ def execute_claimed_world_topic_job(
             "content_hash": content_hash,
             "run": run,
         }
+    except DatabaseUnavailableError:
+        # A persistence outage must not consume a provider attempt or turn a
+        # resumable durable job into a terminal content-generation failure.
+        raise
     except Exception as exc:
         with unit_of_work(db) as work:
             failed = work.jobs.fail(

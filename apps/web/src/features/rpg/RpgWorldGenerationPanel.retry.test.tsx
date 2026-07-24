@@ -89,9 +89,59 @@ describe('RpgWorldGenerationPanel failed-topic retry guards', () => {
     expect(screen.getByText(/world-generation-2026-07-21\.jsonl/)).toBeInTheDocument();
   });
 
+  it('continues a failed run from remaining topics with its durable settings', async () => {
+    renderPanel(run('failed', ['points_of_interest']));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue Generation' }));
+
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0].url).toBe('/api/rpg/world-generation/run%3Afailed/continue');
+    expect(JSON.parse(String(requests[0].init?.body))).toEqual({});
+    expect(await screen.findByText(/Continuation started from run:failed/)).toBeInTheDocument();
+  });
+
   it('explains that the compact log omits generated content', () => {
     renderPanel(run('failed', ['points_of_interest']));
 
     expect(screen.getByText(/Prompts, completions, and generated world content are omitted/)).toBeInTheDocument();
+  });
+
+  it('keeps the failed run resumable and explains a retryable database outage', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      detail: {
+        ok: false,
+        error: 'world_generation_database_unavailable',
+        message: 'World generation could not reach PostgreSQL.',
+        retryable: true,
+      },
+    }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+    renderPanel(run('failed', ['points_of_interest']));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry Failed (1)' }));
+
+    expect(await screen.findByText(/cannot reach PostgreSQL/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Retry Failed (1)' })).toBeEnabled());
+  });
+
+  it('explains a rejected database credential without claiming PostgreSQL is down', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      detail: {
+        ok: false,
+        error: 'world_generation_database_authentication_failed',
+        message: 'PostgreSQL is reachable, but Omnix’s database credential was rejected.',
+        retryable: true,
+      },
+    }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+    renderPanel(run('failed', ['points_of_interest']));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry Failed (1)' }));
+
+    expect(await screen.findByText(/database credential was rejected/)).toBeInTheDocument();
   });
 });

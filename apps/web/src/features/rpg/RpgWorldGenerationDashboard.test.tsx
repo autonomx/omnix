@@ -86,6 +86,8 @@ describe('RpgWorldGenerationDashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: '✦ Generate World' }));
 
     await waitFor(() => expect(requests).toHaveLength(1));
+    expect(screen.getAllByRole('button', { name: /Generate World/ })[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(/Generate World selected\. Generation controls are open below/)).toBeInTheDocument();
     expect(requests[0].url).toContain('/api/rpg/worlds/world%3Aaurelia/generation');
     expect(JSON.parse(String(requests[0].init?.body))).toMatchObject({
       scope: { mode: 'full' },
@@ -93,5 +95,35 @@ describe('RpgWorldGenerationDashboard', () => {
       model: 'configured',
     });
     expect(await screen.findByText(/1 provider topic job queued/)).toBeInTheDocument();
+  });
+
+  it('shows provider-reported and estimated world-generation token usage', () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RpgWorldGenerationDashboard
+          generation={previousRun}
+          sections={[section]}
+          tokenUsage={{
+            prompt_tokens: 12_000,
+            completion_tokens: 3_000,
+            total_tokens: 15_000,
+            provider_reported_topics: 3,
+            estimated_topics: 1,
+            unavailable_topics: 0,
+            topic_count: 4,
+            in_flight_topics: 1,
+          }}
+          worldId="world:aurelia"
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole('region', { name: 'World generation token usage' })).toHaveTextContent('15,000');
+    expect(screen.getByText(/4 completed/)).toBeInTheDocument();
+    expect(screen.getByText(/live batches included/i)).toBeInTheDocument();
+    expect(screen.getByText('3 provider-reported · 1 estimated')).toBeInTheDocument();
   });
 });

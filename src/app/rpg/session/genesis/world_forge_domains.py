@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import random
+import re
 from typing import Any, Mapping, Sequence
 
 from .world_forge_contract import CampaignTopicNode
@@ -88,6 +89,29 @@ _REFERENCE_HINTS: Mapping[str, tuple[str, ...]] = {
     "starting_location_id": ("location:",),
 }
 
+_WORLD_BRIEF_STOP_WORDS = frozenset(
+    {
+        "about",
+        "after",
+        "alternate",
+        "before",
+        "built",
+        "civilization",
+        "description",
+        "humanity",
+        "people",
+        "their",
+        "there",
+        "these",
+        "they",
+        "this",
+        "through",
+        "where",
+        "which",
+        "world",
+    }
+)
+
 
 def is_structured_domain(topic_id: str) -> bool:
     return topic_id in DOMAIN_SPECS
@@ -98,12 +122,17 @@ def _slug(value: str) -> str:
 
 
 def _known_entities(dependencies: Mapping[str, GeneratedTopic]) -> dict[str, dict[str, Any]]:
-    return {
-        str(entity["id"]): dict(entity)
-        for topic in dependencies.values()
-        for entity in topic.entities
-        if str(entity.get("id") or "")
-    }
+    known: dict[str, dict[str, Any]] = {}
+    for dependency_topic_id, topic in dependencies.items():
+        for entity in topic.entities:
+            entity_id = str(entity.get("id") or "")
+            if not entity_id:
+                continue
+            known[entity_id] = {
+                **dict(entity),
+                "_source_topic_id": dependency_topic_id,
+            }
+    return known
 
 
 def _reference_candidates(
@@ -112,10 +141,17 @@ def _reference_candidates(
     kinds: Sequence[str],
 ) -> list[str]:
     allowed = set(kinds)
+
+    def matches_kind(entity_id: str, entity: Mapping[str, Any]) -> bool:
+        entity_kind = str(entity.get("kind") or "").rstrip("s")
+        source_topic_id = str(entity.get("_source_topic_id") or "").rstrip("s")
+        id_prefix = entity_id.split(":", 2)[1] if entity_id.startswith("ent:") else entity_id.split(":", 1)[0]
+        return bool(allowed & {entity_kind, source_topic_id, id_prefix.rstrip("s")})
+
     candidates = sorted(
         entity_id
         for entity_id, entity in known.items()
-        if str(entity.get("kind") or "") in allowed
+        if matches_kind(entity_id, entity)
     )
     hints = _REFERENCE_HINTS.get(field, ())
     if hints:
@@ -131,6 +167,73 @@ def _reference_candidates(
 
 def _name(node: CampaignTopicNode, index: int) -> str:
     return f"{node.title.rstrip('s')} {index + 1}"
+
+
+def _world_brief_keywords(campaign_context: Mapping[str, Any]) -> tuple[str, ...]:
+    brief = campaign_context.get("world_brief")
+    if not isinstance(brief, Mapping):
+        return ()
+    text = " ".join(
+        str(brief.get(field) or "") for field in ("title", "description")
+    )
+    return tuple(
+        sorted(
+            {
+                token.casefold()
+                for token in re.findall(r"[A-Za-z0-9]{4,}", text)
+                if token.casefold() not in _WORLD_BRIEF_STOP_WORDS
+            }
+        )
+    )
+
+
+def _topic_text(topic: GeneratedTopic) -> str:
+    values: list[str] = []
+
+    def collect(value: Any) -> None:
+        if isinstance(value, Mapping):
+            for nested in value.values():
+                collect(nested)
+        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            for nested in value:
+                collect(nested)
+        elif isinstance(value, str):
+            values.append(value)
+
+    collect(topic.documents)
+    collect(topic.entities)
+    collect(topic.facts)
+    collect(topic.relationships)
+    collect(topic.knowledge_rules)
+    collect(topic.story_threads)
+    return "\n".join(values).casefold()
+
+
+def validate_world_brief_grounding(
+    node: CampaignTopicNode,
+    topic: GeneratedTopic,
+    campaign_context: Mapping[str, Any],
+) -> None:
+    """Reject placeholders and content that ignores a supplied world brief."""
+    placeholder_name = re.compile(
+        rf"^{re.escape(node.title.rstrip('s').casefold())}\s+\d+$"
+    )
+    for entity in topic.entities:
+        if placeholder_name.fullmatch(str(entity.get("name") or "").strip().casefold()):
+            raise ValueError(
+                f"world_generation_placeholder_entity:{node.topic_id}:{entity.get('name')}"
+            )
+
+    keywords = _world_brief_keywords(campaign_context)
+    if not keywords:
+        return
+    generated_text = _topic_text(topic)
+    matches = tuple(keyword for keyword in keywords if keyword in generated_text)
+    required_matches = min(3, len(keywords))
+    if len(matches) < required_matches:
+        raise ValueError(
+            f"world_brief_grounding:{node.topic_id}:{len(matches)}:{required_matches}"
+        )
 
 
 def _scalar_default(field: str, *, name: str, index: int, spec: DomainSpec) -> Any:
@@ -193,7 +296,21 @@ def _normalize_reference(
 ) -> Any:
     candidates = _reference_candidates(field, known, kinds)
     raw_values = value if isinstance(value, list) else [value] if value else []
-    resolved = [str(item) for item in raw_values if str(item) in candidates]
+    candidate_names = {
+        str(entity.get("name") or entity.get("title") or "").strip().casefold(): entity_id
+        for entity_id, entity in known.items()
+        if entity_id in candidates
+        and str(entity.get("name") or entity.get("title") or "").strip()
+    }
+    resolved: list[str] = []
+    for item in raw_values:
+        reference = str(item).strip()
+        if reference in candidates:
+            resolved.append(reference)
+            continue
+        matched = candidate_names.get(reference.casefold())
+        if matched:
+            resolved.append(matched)
     if not resolved and candidates:
         resolved = [candidates[0]]
     if not resolved and not known:
@@ -328,11 +445,17 @@ def normalize_structured_domain(
     node: CampaignTopicNode,
     topic: GeneratedTopic,
     dependency_topics: Mapping[str, GeneratedTopic],
+    *,
+    allow_synthetic_completion: bool = True,
 ) -> GeneratedTopic:
     if node.topic_id not in DOMAIN_SPECS:
         return topic
     known = _known_entities(dependency_topics)
     sources = list(topic.entities)
+    if len(sources) < node.target_count and not allow_synthetic_completion:
+        raise ValueError(
+            f"structured_domain_count:{node.topic_id}:{len(sources)}:{node.target_count}"
+        )
     while len(sources) < node.target_count:
         sources.append({"name": _name(node, len(sources))})
     entities = tuple(

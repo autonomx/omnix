@@ -205,6 +205,32 @@ def test_structured_provider_retries_typed_transport_failure() -> None:
     assert "NPC dossiers" in provider.calls[-1]["messages"][0].content
 
 
+def test_world_brief_is_sent_and_overrides_generic_defaults() -> None:
+    provider = _Provider([_payload()])
+    generator = ProviderWorldForgeTopicGenerator(
+        provider,
+        WorldForgeProviderConfig(mode="live", provider="phase36", max_retries=0),
+    )
+
+    generator.generate(
+        _node(),
+        seed=36,
+        campaign_context={
+            "genre": "classic_fantasy",
+            "tone": "heroic adventure",
+            "world_brief": {
+                "title": "Fallout",
+                "description": "A retro-futuristic nuclear wasteland of Vaults and mutants.",
+            },
+        },
+        dependency_topics={},
+    )
+
+    request = json.loads(provider.calls[-1]["messages"][1].content)
+    assert request["campaign_context"]["world_brief"]["title"] == "Fallout"
+    assert "world_brief is authoritative" in provider.calls[-1]["messages"][0].content
+
+
 def test_lmstudio_uses_supported_json_schema_response_format() -> None:
     provider = _Provider([_payload()])
     generator = ProviderWorldForgeTopicGenerator(

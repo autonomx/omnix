@@ -19,6 +19,10 @@ const PRIMARY_FIELDS = new Set([
   'object',
   'description',
   'summary',
+  'expanded_description',
+  'long_description',
+  'lore',
+  'context',
   'badges',
   'references',
   'details',
@@ -138,6 +142,30 @@ function Prose({ value, className = '' }: { value: unknown; className?: string }
   );
 }
 
+function expandedLoreParagraphs(item: Record<string, unknown>): string[] {
+  const value = item.expanded_description
+    ?? item.long_description
+    ?? item.lore
+    ?? item.context;
+  return value == null ? [] : proseParagraphs(value).slice(0, 2);
+}
+
+function ExpandableLore({ item }: { item: Record<string, unknown> }) {
+  const paragraphs = expandedLoreParagraphs(item);
+  if (!paragraphs.length) return null;
+  return (
+    <details className="rpg-authoring-record-expansion">
+      <summary>
+        <span className="rpg-authoring-record-expand-label is-collapsed">Read more</span>
+        <span className="rpg-authoring-record-expand-label is-expanded">Show less</span>
+      </summary>
+      <div className="rpg-authoring-record-expanded-prose">
+        {paragraphs.map((paragraph, index) => <p key={`${paragraph.slice(0, 48)}:${index}`}>{paragraph}</p>)}
+      </div>
+    </details>
+  );
+}
+
 function MetaChips({ values }: { values: unknown[] }) {
   return values.length ? (
     <div className="rpg-authoring-record-badges">
@@ -167,6 +195,7 @@ function StructuredRecord({
         <MetaChips values={recordBadges(item)} />
       </header>
       <Prose className="rpg-authoring-record-statement" value={recordValue(item)} />
+      <ExpandableLore item={item} />
       {references.length ? (
         <section className="rpg-authoring-record-references">
           <h4>References</h4>

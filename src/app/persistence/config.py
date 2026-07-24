@@ -6,9 +6,6 @@ from functools import lru_cache
 from urllib.parse import urlparse
 
 
-_DEFAULT_DATABASE_URL = "postgresql://omnix:omnix@127.0.0.1:5432/omnix"
-
-
 class DatabaseConfigurationError(ValueError):
     """Raised when authoritative persistence configuration is unsafe or invalid."""
 
@@ -80,13 +77,19 @@ class DatabaseSettings:
 
 @lru_cache(maxsize=1)
 def database_settings() -> DatabaseSettings:
+    database_url = (os.environ.get("OMNIX_DATABASE_URL") or "").strip()
+    if not database_url:
+        raise DatabaseConfigurationError(
+            "OMNIX_DATABASE_URL must be configured; start Omnix through the "
+            "credential-aware launcher or provide an explicit PostgreSQL URL"
+        )
     pool_min = _integer("OMNIX_DATABASE_POOL_MIN", 1, minimum=0, maximum=100)
     pool_max = _integer("OMNIX_DATABASE_POOL_MAX", 10, minimum=1, maximum=200)
     statement_timeout_ms = _integer(
         "OMNIX_DATABASE_STATEMENT_TIMEOUT", 30_000, minimum=100, maximum=3_600_000
     )
     return DatabaseSettings(
-        url=(os.environ.get("OMNIX_DATABASE_URL") or _DEFAULT_DATABASE_URL).strip(),
+        url=database_url,
         pool_min=pool_min,
         pool_max=pool_max,
         connect_timeout_seconds=_integer(

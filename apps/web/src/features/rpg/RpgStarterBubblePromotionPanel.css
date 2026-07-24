@@ -1,11 +1,13 @@
 .rpg-starter-bubble-panel {
-  border-bottom: 1px solid var(--mantine-color-dark-4, #495057);
-  background: var(--mantine-color-dark-8, #141517);
-  padding: 0.75rem 1rem;
+  border: 1px solid rgba(215, 174, 89, 0.16);
+  border-radius: 5px;
+  background: rgba(10, 14, 34, 0.7);
+  padding: 0.8rem 0.9rem;
 }
 
 .rpg-starter-bubble-panel summary {
   cursor: pointer;
+  color: #fff9ef;
 }
 
 .rpg-starter-bubble-panel summary > span {
@@ -39,11 +41,11 @@
 .rpg-starter-bubble-controls select {
   box-sizing: border-box;
   width: 100%;
-  border: 1px solid var(--mantine-color-dark-4, #495057);
-  border-radius: 0.5rem;
-  background: var(--mantine-color-dark-7, #1a1b1e);
-  color: inherit;
-  padding: 0.5rem 0.65rem;
+  border: 1px solid rgba(215, 174, 89, 0.2);
+  border-radius: 5px;
+  background: rgba(5, 9, 24, 0.88);
+  color: #f8fafc;
+  padding: 0.55rem 0.7rem;
 }
 
 .rpg-starter-bubble-actions,
@@ -55,10 +57,10 @@
 
 .rpg-starter-bubble-actions button,
 .rpg-starter-bubble-materialization-list button {
-  border: 1px solid var(--mantine-color-dark-3, #5c636a);
-  border-radius: 0.55rem;
-  background: var(--mantine-color-dark-7, #1a1b1e);
-  color: inherit;
+  border: 1px solid rgba(215, 174, 89, 0.2);
+  border-radius: 5px;
+  background: rgba(10, 14, 34, 0.82);
+  color: rgba(241, 245, 249, 0.9);
   cursor: pointer;
   padding: 0.55rem 0.8rem;
 }

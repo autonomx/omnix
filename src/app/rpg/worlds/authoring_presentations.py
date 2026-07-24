@@ -41,6 +41,7 @@ COLLECTION_CATEGORIES = WORLD_COLLECTION_CATEGORIES | GAME_MASTER_COLLECTION_CAT
 PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 
 _SECTION_LABELS = {
+    "realm": "Realm Overview",
     "locations": "Areas",
     "npcs": "Characters",
     "one_shots": "One-Shots",
@@ -267,15 +268,30 @@ def _identity(row: Mapping[str, Any], card_type: str, index: int) -> str:
 
 def _title(row: Mapping[str, Any], entity_id: str, card_type: str) -> str:
     document = row.get("document") if isinstance(row.get("document"), Mapping) else {}
+    dossier = row.get("dossier") if isinstance(row.get("dossier"), Mapping) else {}
+    quick_facts = rows(dossier.get("quick_facts"))
+    readable_label = next(
+        (
+            text(fact.get("value"))
+            for fact in quick_facts
+            if text(fact.get("label")).lower() in {"readable label", "display name"}
+            and text(fact.get("value"))
+        ),
+        "",
+    )
+    identifier = entity_id.split(":", 1)[-1].replace("_", " ").title()
+    fallback = section_label(card_type) if identifier.isdecimal() else identifier
     return text(
         row.get("name")
         or row.get("title")
         or row.get("label")
         or row.get("scenario_name")
-        or document.get("title"),
-        entity_id.split(":", 1)[-1].replace("_", " ").title()
-        if ":" in entity_id
-        else f"{section_label(card_type)} {entity_id}",
+        or document.get("title")
+        or readable_label
+        or dossier.get("title")
+        or dossier.get("name")
+        or dossier.get("subtitle"),
+        fallback if ":" in entity_id else f"{section_label(card_type)} {entity_id}",
     )
 
 

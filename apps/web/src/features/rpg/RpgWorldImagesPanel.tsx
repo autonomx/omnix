@@ -156,7 +156,10 @@ export function RpgWorldImagesPanel({ worldId }: RpgWorldImagesPanelProps) {
                 <h3>{String(target.metadata.entity_name ?? target.target_id)}</h3>
                 <p>{label(target.target_type)} · {label(target.role)}</p>
                 <div className="rpg-chip-row"><span>{label(target.status)}</span><span>{label(target.review_state)}</span>{target.active_asset_id ? <span>Active</span> : null}</div>
-                <label className="rpg-world-image-prompt"><span>Prompt</span><textarea aria-label={`Prompt for ${String(target.metadata.entity_name ?? target.target_id)}`} rows={4} value={prompts[target.target_id] ?? target.suggested_prompt} onChange={(event) => setPrompts((current) => ({ ...current, [target.target_id]: event.currentTarget.value }))} /></label>
+                <label className="rpg-world-image-prompt"><span>Prompt</span><textarea aria-label={`Prompt for ${String(target.metadata.entity_name ?? target.target_id)}`} rows={4} value={prompts[target.target_id] ?? target.suggested_prompt} onChange={(event) => {
+                  const prompt = event.currentTarget.value;
+                  setPrompts((current) => ({ ...current, [target.target_id]: prompt }));
+                }} /></label>
                 <div className="rpg-world-image-actions">
                   <button className="rpg-secondary-button" type="button" disabled={regenerate.isPending} onClick={() => regenerate.mutate(target)}>Regenerate</button>
                   <button type="button" disabled={!generatedAsset || review.isPending} onClick={() => review.mutate({ targetId: target.target_id, reviewState: 'approved', assetId: generatedAsset })}>Approve latest</button>

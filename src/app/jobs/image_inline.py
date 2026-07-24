@@ -165,9 +165,18 @@ def _store_image_asset(
     mime_type = str(getattr(result, "mime_type", "") or "image/png")
     seed = getattr(result, "seed", request.seed)
     metadata = dict(getattr(result, "metadata", {}) or {})
+    request_metadata = dict(request.metadata or {})
+    is_rpg_world_image = bool(
+        str(request_metadata.get("world_id") or "").strip()
+        and str(request_metadata.get("target_id") or "").strip()
+    )
     asset_id = f"image:image-generation-{job.id.removeprefix('job:')}"
 
-    asset_module = job.module if job.module == "character-avatar" else "image-generation"
+    asset_module = (
+        "rpg-world-authoring"
+        if is_rpg_world_image
+        else job.module if job.module == "character-avatar" else "image-generation"
+    )
     asset = store.upsert_asset(
         AssetRecord(
             id=asset_id,
@@ -191,6 +200,9 @@ def _store_image_asset(
                 "guidance_scale": request.guidance_scale,
                 "cache_hit": bool(metadata.get("cache_hit")),
                 "source_module": job.module,
+                "rpg_world_image": is_rpg_world_image,
+                "rpg_world_id": str(request_metadata.get("world_id") or ""),
+                "rpg_world_target_id": str(request_metadata.get("target_id") or ""),
             },
             compat={"contract": "image_generation_asset_v1"},
         )

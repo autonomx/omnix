@@ -14,6 +14,7 @@ from .library_service import read_world_detail
 from .lifecycle_service import require_world_writable
 
 _ROLE_BY_TOPIC: Mapping[str, str] = {
+    "realm": "landscape",
     "regions": "landscape",
     "locations": "scene",
     "points_of_interest": "scene",
@@ -85,6 +86,100 @@ def _entity_rows(content: Mapping[str, Any]) -> Iterable[dict[str, Any]]:
                 yield dict(value)
 
 
+def _clip(value: Any, maximum: int) -> str:
+    text = _text(value)
+    return text[:maximum].rstrip() if text else ""
+
+
+def _location_details(entity: Mapping[str, Any]) -> str:
+    dossier = _record(entity.get("dossier"))
+    metadata = _record(entity.get("metadata"))
+    metadata_dossier = _record(metadata.get("dossier"))
+    for value in (
+        entity.get("description"),
+        entity.get("short_summary"),
+        entity.get("summary"),
+        entity.get("sensory_profile"),
+        dossier.get("description"),
+        dossier.get("sensory_profile"),
+        metadata.get("description"),
+        metadata.get("summary"),
+        metadata_dossier.get("description"),
+    ):
+        if _text(value):
+            return _clip(value, 220)
+    return ""
+
+
+def _location_landmark(entity: Mapping[str, Any]) -> dict[str, str]:
+    """Turn a semantic location into a visual instruction for regional map art."""
+    name = _text(entity.get("name") or entity.get("title"), "Unnamed location")
+    explicit_type = _text(
+        entity.get("location_type")
+        or entity.get("subtype")
+        or entity.get("category")
+        or entity.get("type")
+    )
+    details = _location_details(entity)
+    cues = " ".join((name, explicit_type, details)).lower()
+    landmark_by_cue = (
+        (("town", "city", "village", "settlement", "market", "port"), "a compact settlement with streets, roofs, and a clear civic centre"),
+        (("castle", "fortress", "keep", "citadel", "gate", "watchtower"), "a fortified stronghold with walls and towers"),
+        (("mountain", "peak", "pass", "ridge", "highland"), "a dramatic mountain landmark with a visible pass or ridge"),
+        (("forest", "wood", "grove", "jungle"), "a dense forest landmark with a distinctive canopy"),
+        (("river", "lake", "waterfall", "coast", "harbor", "harbour"), "a prominent waterway or shoreline landmark"),
+        (("ruin", "temple", "shrine", "monastery"), "ancient ruins or a sacred complex"),
+        (("mine", "quarry", "cavern", "cave"), "a mine or cave entrance set into the terrain"),
+        (("swamp", "marsh", "bog"), "a winding wetland with dark pools and reed beds"),
+        (("desert", "dune", "wasteland"), "a desert landmark with dunes or weathered stone"),
+        (("bridge", "crossroads", "road", "trail"), "a travel landmark with a visible bridge, crossroads, or route"),
+    )
+    visual = next(
+        (description for keywords, description in landmark_by_cue if any(keyword in cues for keyword in keywords)),
+        "a distinct regional landmark that reflects its canonical setting",
+    )
+    return {"name": name, "visual": visual, "details": details}
+
+
+def _map_locations(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Merge lightweight topic rows with canonical locations for map-art direction."""
+    entities: dict[str, dict[str, Any]] = {}
+
+    def merge(entity_id: Any, entity: Mapping[str, Any]) -> None:
+        identifier = _text(entity_id)
+        if identifier:
+            entities[identifier] = {**entities.get(identifier, {}), **dict(entity)}
+
+    for topic in detail.get("topics") or ():
+        topic = _record(topic)
+        if _text(topic.get("topic_id")) not in {"locations", "regions", "points_of_interest"}:
+            continue
+        for entity in _entity_rows(_record(topic.get("content"))):
+            merge(entity.get("id") or entity.get("entity_id"), entity)
+
+    revisions = detail.get("revisions") or ()
+    revision = _record(revisions[0]) if revisions else {}
+    document = _record(revision.get("document"))
+    topology_locations = {
+        _text(location)
+        for location in _record(document.get("topology")).get("locations") or ()
+        if _text(location)
+    }
+    for source in (
+        _record(_record(document.get("entity_manifest")).get("entities")),
+        _record(_record(document.get("canon")).get("entities")),
+    ):
+        for entity_id, raw_entity in source.items():
+            entity = _record(raw_entity)
+            if (
+                entity_id in entities
+                or entity_id in topology_locations
+                or _text(entity.get("kind")).lower() == "location"
+            ):
+                merge(entity_id, entity)
+    return list(entities.values())
+
+
 def _prompt(
     *,
     world: Mapping[str, Any],
@@ -114,6 +209,7 @@ def _prompt(
         "icon": "clean readable inventory icon on a simple background",
         "emblem": "distinct heraldic faction emblem, readable silhouette",
         "landscape": "wide environmental landscape concept art",
+        "map": "top-down illustrated regional RPG map with legible terrain, landmarks, and travel routes; no labels or text",
         "scene": "environmental scene concept art with story details",
         "illustration": "polished RPG sourcebook illustration",
     }.get(role, "polished RPG concept art")
@@ -126,6 +222,31 @@ def _prompt(
 
 def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
     world = _record(detail.get("world"))
+    map_blueprints = [
+        {
+            "map_id": _text(blueprint.get("map_id")),
+            "revision": blueprint.get("blueprint_revision"),
+            "document": _record(blueprint.get("document")),
+        }
+        for blueprint in (_record(row) for row in detail.get("map_blueprints") or ())
+    ]
+    map_landmarks = [_location_landmark(entity) for entity in _map_locations(detail)][:12]
+    map_context = {"landmarks": map_landmarks, "blueprints": map_blueprints}
+    landmark_directions = "; ".join(
+        f"{landmark['name']}: show {landmark['visual']}"
+        + (f"; canonical cues: {landmark['details']}" if landmark["details"] else "")
+        for landmark in map_landmarks
+    )
+    map_subject = {
+        "name": f"{_text(world.get('title'), 'Fantasy World')} world map",
+        "description": (
+            "A coherent regional atlas. Depict every listed canonical location as "
+            "a distinct visible landmark at map scale, but do not render location names "
+            "as labels: " + landmark_directions
+            if landmark_directions
+            else "A coherent regional atlas showing the world’s major areas."
+        ),
+    }
     targets = [
         {
             "target_id": "world:cover",
@@ -168,6 +289,30 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                 role="banner",
             ),
             "metadata": {"topic_id": "overview", "aspect": "landscape"},
+        },
+        {
+            "target_id": "world:map",
+            "target_type": "map",
+            "entity_id": str(world.get("id") or ""),
+            "role": "map",
+            "source_content_hash": canonical_hash(
+                {
+                    "world": {
+                        "title": world.get("title"),
+                        "description": world.get("description"),
+                        "genre": world.get("genre"),
+                        "tone": world.get("tone"),
+                    },
+                    "map": map_context,
+                }
+            ),
+            "suggested_prompt": _prompt(
+                world=world,
+                target_type="map",
+                role="map",
+                entity=map_subject,
+            ),
+            "metadata": {"topic_id": "map", "aspect": "landscape", "entity_name": "World map"},
         },
     ]
     for topic in detail.get("topics") or []:
@@ -303,18 +448,44 @@ def _sync_jobs(work: Any, context: Any, world_id: str) -> None:
                 str(job_id),
             ),
         )
+        if mapped == "ready" and asset_id and str(target_id) in {"world:cover", "world:banner"}:
+            metadata_key = (
+                "cover_image_asset_id"
+                if str(target_id) == "world:cover"
+                else "hero_image_asset_id"
+            )
+            work.connection.execute(
+                "UPDATE omnix_rpg_worlds SET metadata_jsonb = "
+                "COALESCE(metadata_jsonb, '{}'::jsonb) || %s::jsonb, "
+                "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND id = %s "
+                "AND EXISTS (SELECT 1 FROM omnix_rpg_world_image_targets "
+                "WHERE workspace_id = %s AND world_id = %s AND target_id = %s "
+                "AND review_state <> 'rejected')",
+                (
+                    json.dumps({metadata_key: asset_id}, sort_keys=True),
+                    context.workspace_id,
+                    world_id,
+                    context.workspace_id,
+                    world_id,
+                    str(target_id),
+                ),
+            )
         if mapped == "ready" and not asset_id:
             mapped = "failed"
         work.connection.execute(
             "UPDATE omnix_rpg_world_image_targets SET status = %s, "
-            "active_asset_id = CASE WHEN %s = 'ready' AND %s IS NOT NULL "
-            "AND review_state = 'approved' THEN %s ELSE active_asset_id END, "
+            "active_asset_id = CASE WHEN %s = 'ready' AND %s::text IS NOT NULL "
+            "AND review_state <> 'rejected' THEN %s ELSE active_asset_id END, "
+            "review_state = CASE WHEN %s = 'ready' AND %s::text IS NOT NULL "
+            "AND review_state = 'pending' THEN 'approved' ELSE review_state END, "
             "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
             "AND world_id = %s AND target_id = %s",
             (
                 mapped,
                 mapped,
                 asset_id,
+                asset_id,
+                mapped,
                 asset_id,
                 context.workspace_id,
                 world_id,
@@ -398,12 +569,14 @@ def generate_world_images(
                 (prompts or {}).get(str(target["target_id"])),
                 str(target["suggested_prompt"]),
             )
-            target_width = 1024 if target["role"] == "banner" else width
-            target_height = 576 if target["role"] == "banner" else height
+            target_width = 1024 if target["role"] in {"banner", "map"} else width
+            target_height = 576 if target["role"] == "banner" else 768 if target["role"] == "map" else height
             job = enqueue_image_job(
                 default_job_store(),
-                owner_id=str(context.workspace_id),
-                module="rpg-world-authoring",
+                # Job ownership is a user foreign key.  The workspace ID scopes
+                # the record separately in the PostgreSQL job store, but is not
+                # itself a valid job owner.
+                owner_id=str(context.user_id),
                 payload={
                     "prompt": prompt,
                     "provider_id": provider_id,
