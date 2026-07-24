@@ -20,6 +20,7 @@ from .world_forge_domains import (
 from .world_forge_fact_pipeline import compile_structured_entity_facts
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_integrity import validate_and_normalize_provider_topic
+from .world_forge_presentation import render_fact_derived_presentations
 from .world_forge_regeneration import generate_with_targeted_regeneration
 from .world_forge_semantic_quality import require_topic_semantic_quality
 
@@ -126,6 +127,8 @@ class ReferenceSafeWorldForgeGenerator:
                 },
             )
         validate_world_brief_grounding(node, topic, campaign_context)
+        if node.metadata.get("field_definitions"):
+            return render_fact_derived_presentations(node, topic)
         return self._normalize_entity_dossiers(node, topic)
 
     @staticmethod
@@ -133,7 +136,7 @@ class ReferenceSafeWorldForgeGenerator:
         node: CampaignTopicNode,
         topic: GeneratedTopic,
     ) -> GeneratedTopic:
-        """Project, enrich, and validate dossiers for every entity-bearing topic."""
+        """Project and validate legacy fixed-domain dossiers."""
 
         if not topic.entities:
             return topic
