@@ -1,4 +1,4 @@
-"""Lease-backed worker for reusable-world topic jobs."""
+"""Lease-backed worker for reusable-world generation jobs."""
 from __future__ import annotations
 
 import logging
@@ -15,6 +15,10 @@ from .generation_coordinator import execute_claimed_world_topic_job
 from .generation_diagnostics import log_world_generation_event
 from .generation_jobs import WORLD_TOPIC_JOB_TYPE, WORLD_TOPIC_RESOURCE_CLASS
 from .generation_validation import PublicationValidatedWorldForgeGenerator
+from .profile_generation_jobs import (
+    WORLD_PROFILE_JOB_TYPE,
+    execute_claimed_world_profile_job,
+)
 
 _DEFAULT_LEASE_SECONDS = 3600
 _DEFAULT_MAX_WORLD_GENERATION_WORKERS = 4
@@ -24,6 +28,7 @@ _DATABASE_RECOVERY_POLL_SECONDS = 5.0
 _LOGGER = logging.getLogger(__name__)
 _worker_lock = threading.Lock()
 _worker_active = False
+_SUPPORTED_JOB_TYPES = (WORLD_TOPIC_JOB_TYPE, WORLD_PROFILE_JOB_TYPE)
 
 
 @dataclass
@@ -105,6 +110,7 @@ def _job_fields(job: Mapping[str, Any], *, worker_id: str) -> dict[str, Any]:
         "attempt_count": job.get("attempt_count"),
         "max_attempts": job.get("max_attempts"),
         "status": job.get("status"),
+        "job_type": job.get("job_type"),
         "provider_route": settings.get("provider_route"),
         "model": settings.get("model"),
         "generator_version": settings.get("generator_version"),
@@ -123,23 +129,36 @@ def _recover_interrupted_jobs(*, database: Any | None = None) -> dict[str, int]:
     context = bootstrap_local_tenant(db)
     with unit_of_work(db) as work:
         discarded = work.connection.execute(
-            "DELETE FROM omnix_jobs AS job WHERE job.workspace_id = %s "
-            "AND job.job_type = %s AND ("
+            "DELETE FROM omnix_jobs AS job WHERE job.workspace_id = %s AND ("
+            "(job.job_type = %s AND ("
             "NOT EXISTS (SELECT 1 FROM omnix_rpg_world_generation_runs AS run "
             "WHERE run.workspace_id = job.workspace_id "
             "AND run.run_id = job.metadata->>'run_id') "
             "OR NOT EXISTS (SELECT 1 FROM omnix_rpg_worlds AS world "
             "WHERE world.workspace_id = job.workspace_id "
-            "AND world.id = job.metadata->>'world_id'))",
-            (context.workspace_id, WORLD_TOPIC_JOB_TYPE),
+            "AND world.id = job.metadata->>'world_id'))) "
+            "OR (job.job_type = %s AND NOT EXISTS ("
+            "SELECT 1 FROM omnix_rpg_worlds AS world "
+            "WHERE world.workspace_id = job.workspace_id "
+            "AND world.id = job.metadata->>'world_id')))",
+            (
+                context.workspace_id,
+                WORLD_TOPIC_JOB_TYPE,
+                WORLD_PROFILE_JOB_TYPE,
+            ),
         ).rowcount
         requeued = work.connection.execute(
             "UPDATE omnix_jobs SET status = 'retrying', available_at = CURRENT_TIMESTAMP, "
             "lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, "
             "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
-            "AND job_type = %s AND status IN ('leased', 'running', 'cancel_requested') "
+            "AND job_type IN (%s, %s) "
+            "AND status IN ('leased', 'running', 'cancel_requested') "
             "AND lease_owner LIKE 'rpg-world-generation:local:%%'",
-            (context.workspace_id, WORLD_TOPIC_JOB_TYPE),
+            (
+                context.workspace_id,
+                WORLD_TOPIC_JOB_TYPE,
+                WORLD_PROFILE_JOB_TYPE,
+            ),
         ).rowcount
         work.commit()
     return {"discarded": int(discarded), "requeued": int(requeued)}
@@ -150,13 +169,7 @@ def _recover_worker_database_interruption(
     *,
     database: Any | None = None,
 ) -> int:
-    """Release only this worker's leases after PostgreSQL comes back.
-
-    Claiming a job increments its attempt count before a provider call. A database
-    outage is infrastructure state, not a provider attempt, so return that lease to
-    the queue without consuming an attempt. Restricting the update to one worker
-    avoids disturbing other slots that may still be completing provider calls.
-    """
+    """Release only this worker's leases after PostgreSQL comes back."""
 
     db = _database(database)
     from app.persistence.identity_service import bootstrap_local_tenant
@@ -170,9 +183,15 @@ def _recover_worker_database_interruption(
             "error = jsonb_build_object('code', 'database_unavailable'), "
             "lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, "
             "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
-            "AND job_type = %s AND status IN ('leased', 'running', 'cancel_requested') "
+            "AND job_type IN (%s, %s) "
+            "AND status IN ('leased', 'running', 'cancel_requested') "
             "AND lease_owner = %s",
-            (context.workspace_id, WORLD_TOPIC_JOB_TYPE, worker_id),
+            (
+                context.workspace_id,
+                WORLD_TOPIC_JOB_TYPE,
+                WORLD_PROFILE_JOB_TYPE,
+                worker_id,
+            ),
         ).rowcount
         work.commit()
     return int(recovered)
@@ -183,8 +202,9 @@ def run_world_generation_worker_once(
     worker_id: str = "rpg-world-generation:local",
     database: Any | None = None,
     generator: WorldForgeTopicGenerator | None = None,
+    profile_generator: Any | None = None,
 ) -> dict[str, Any] | None:
-    """Claim and execute one world-topic job without touching campaign Genesis jobs."""
+    """Claim and execute one world profile or topic job."""
 
     db = _database(database)
     from app.persistence.identity_service import bootstrap_local_tenant
@@ -201,24 +221,34 @@ def run_world_generation_worker_once(
         if job is None:
             work.rollback()
             return None
+        job_type = str(job.get("job_type") or "")
         metadata = dict(job.get("metadata") or {})
         run_id = str(metadata.get("run_id") or "")
         world_id = str(metadata.get("world_id") or "")
-        run = work.world_generation.get(context, run_id) if run_id else None
-        world = work.world_scenarios.get_world(context, world_id) if world_id else None
-        discard_reason = (
-            "missing_run_id"
-            if not run_id
-            else "missing_world_id"
-            if not world_id
-            else "world_generation_run_not_found"
-            if run is None
-            else "world_not_found"
-            if world is None
-            else "world_generation_run_world_mismatch"
-            if str(run["world_id"]) != world_id
-            else ""
+        run = (
+            work.world_generation.get(context, run_id)
+            if run_id and job_type == WORLD_TOPIC_JOB_TYPE
+            else None
         )
+        world = work.world_scenarios.get_world(context, world_id) if world_id else None
+        if job_type not in _SUPPORTED_JOB_TYPES:
+            discard_reason = "unsupported_world_generation_job_type"
+        elif not world_id:
+            discard_reason = "missing_world_id"
+        elif world is None:
+            discard_reason = "world_not_found"
+        elif job_type == WORLD_TOPIC_JOB_TYPE and not run_id:
+            discard_reason = "missing_run_id"
+        elif job_type == WORLD_TOPIC_JOB_TYPE and run is None:
+            discard_reason = "world_generation_run_not_found"
+        elif (
+            job_type == WORLD_TOPIC_JOB_TYPE
+            and run is not None
+            and str(run["world_id"]) != world_id
+        ):
+            discard_reason = "world_generation_run_world_mismatch"
+        else:
+            discard_reason = ""
         if discard_reason:
             work.connection.execute(
                 "DELETE FROM omnix_jobs WHERE id = %s AND workspace_id = %s "
@@ -238,7 +268,11 @@ def run_world_generation_worker_once(
                 run_id=run_id,
                 topic_id=str(metadata.get("topic_id") or ""),
                 job_id=str(job.get("id") or ""),
-                fields={"reason": discard_reason, "worker_id": worker_id},
+                fields={
+                    "reason": discard_reason,
+                    "worker_id": worker_id,
+                    "job_type": job_type,
+                },
             )
             return {
                 "ok": True,
@@ -258,6 +292,7 @@ def run_world_generation_worker_once(
     run_id = str(metadata.get("run_id") or "")
     world_id = str(metadata.get("world_id") or "")
     topic_id = str(metadata.get("topic_id") or "")
+    job_type = str(job.get("job_type") or "")
     log_world_generation_event(
         "world_generation.job_started",
         world_id=world_id,
@@ -266,20 +301,28 @@ def run_world_generation_worker_once(
         job_id=str(job.get("id") or ""),
         fields=_job_fields(job, worker_id=worker_id),
     )
-    selected_generator = generator
-    if selected_generator is None:
-        from .generation_routing import build_world_forge_generator_from_settings
-
-        selected_generator = build_world_forge_generator_from_settings(
-            dict(dict(job.get("input_payload") or {}).get("settings") or {})
+    if job_type == WORLD_PROFILE_JOB_TYPE:
+        result = execute_claimed_world_profile_job(
+            job=job,
+            worker_id=worker_id,
+            database=db,
+            generator=profile_generator,
         )
-    selected_generator = PublicationValidatedWorldForgeGenerator(selected_generator)
-    result = execute_claimed_world_topic_job(
-        job=job,
-        worker_id=worker_id,
-        generator=selected_generator,
-        database=db,
-    )
+    else:
+        selected_generator = generator
+        if selected_generator is None:
+            from .generation_routing import build_world_forge_generator_from_settings
+
+            selected_generator = build_world_forge_generator_from_settings(
+                dict(dict(job.get("input_payload") or {}).get("settings") or {})
+            )
+        selected_generator = PublicationValidatedWorldForgeGenerator(selected_generator)
+        result = execute_claimed_world_topic_job(
+            job=job,
+            worker_id=worker_id,
+            generator=selected_generator,
+            database=db,
+        )
     status = str(result.get("status") or "unknown")
     ok = bool(result.get("ok"))
     fields = {
