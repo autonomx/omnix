@@ -49,6 +49,7 @@ describe('RpgWorldVisualMapPanel', () => {
     const regenerate = await screen.findByRole('button', { name: 'Regenerate Map Artwork' });
     expect(container.querySelector('.rpg-atlas-world')).toHaveStyle({ backgroundImage: expect.stringContaining('image%3Aaurelia-map') });
     expect(screen.getByRole('button', { name: 'Open Moon Market (location:moon_market)' })).toHaveClass('has-artwork');
+    expect(screen.getByRole('button', { name: 'Enter full screen map' })).toBeInTheDocument();
     expect(screen.getByText('All area artwork ready (1)')).toBeInTheDocument();
     fireEvent.click(regenerate);
 
@@ -68,6 +69,47 @@ describe('RpgWorldVisualMapPanel', () => {
     expect(screen.getByRole('heading', { name: 'Moon Market (location:moon_market)' })).toBeInTheDocument();
     expect(screen.getByText(/generated semantic baseline/i)).toBeInTheDocument();
     expect(screen.getByText(/130%/)).toBeInTheDocument();
+  });
+
+  it('switches to a selected location map at deep zoom', async () => {
+    const targetsWithDetailMap = {
+      ...imageTargets,
+      targets: [
+        ...imageTargets.targets,
+        {
+          world_id: worldId,
+          target_id: 'entity:location:moon_market:map',
+          target_type: 'map',
+          entity_id: 'location:moon_market',
+          role: 'map',
+          source_content_hash: 'sha256:moon-market-map',
+          status: 'ready',
+          review_state: 'approved',
+          suggested_prompt: 'Moon Market detail map',
+          active_asset_id: 'image:moon-market-map',
+          latest_job_id: 'job:moon-market-map',
+          metadata: { topic_id: 'map', map_level: 'location' },
+          attempts: [],
+          created_at: '2026-07-20T00:00:00Z',
+          updated_at: '2026-07-20T00:00:00Z',
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/image-targets')) return response(targetsWithDetailMap);
+      return response(detail);
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const { container } = render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Moon Market (location:moon_market)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enter Moon Market Map' }));
+
+    const atlas = container.querySelector('.rpg-atlas-world');
+    expect(atlas).toHaveAttribute('data-map-level', 'location');
+    expect(atlas).toHaveStyle({ backgroundImage: expect.stringContaining('image%3Amoon-market-map') });
+    expect(screen.getByText('Local detail map')).toBeInTheDocument();
   });
 
   it('shows the authored canonical description when the topic row is lightweight', async () => {

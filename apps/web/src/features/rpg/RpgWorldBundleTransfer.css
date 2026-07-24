@@ -105,7 +105,8 @@
   text-transform: uppercase;
 }
 
-.rpg-world-bundle-card input:not([type='file']) {
+.rpg-world-bundle-card input:not([type='file']),
+.rpg-world-bundle-card select {
   width: 100%;
   min-height: 40px;
   box-sizing: border-box;
@@ -118,10 +119,17 @@
 }
 
 .rpg-world-bundle-card input:not([type='file']):focus-visible,
+.rpg-world-bundle-card select:focus-visible,
 .rpg-world-bundle-file-picker:focus-within .rpg-world-bundle-file-control {
   border-color: #e4bf64;
   outline: 2px solid rgba(227, 189, 104, 0.16);
   outline-offset: 1px;
+}
+
+.rpg-world-bundle-load-error {
+  margin: 0;
+  color: #fca5a5;
+  font-size: 0.78rem;
 }
 
 .rpg-world-bundle-file-picker {

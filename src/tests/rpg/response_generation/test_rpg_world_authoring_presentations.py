@@ -161,6 +161,7 @@ def test_manifest_uses_user_facing_sections_and_hides_pipeline_nodes(monkeypatch
     assert sections["images"]["entity_count"] == 3
     assert "areas" not in sections
     assert "canon_compile" not in sections
+    assert manifest["world"]["generation"] == manifest["generation"]
 
 
 def test_world_token_usage_prefers_provider_usage_and_marks_estimates() -> None:

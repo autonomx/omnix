@@ -388,7 +388,11 @@ def read_authoring_manifest(
         )
     return {
         "ok": True,
-        "world": detail["world"],
+        # Keep the overview dashboard on the same durable generation snapshot as
+        # the dedicated Generation page.  Without this, the overview falls back
+        # to counting every authoring section (including auxiliary sections),
+        # which can disagree with the run's topic progress.
+        "world": {**detail["world"], "generation": latest_run or None},
         "sections": sections,
         "generation": latest_run,
         "token_usage": _world_token_usage(

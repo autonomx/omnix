@@ -148,7 +148,7 @@ def _map_locations(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
     def merge(entity_id: Any, entity: Mapping[str, Any]) -> None:
         identifier = _text(entity_id)
         if identifier:
-            entities[identifier] = {**entities.get(identifier, {}), **dict(entity)}
+            entities[identifier] = {"id": identifier, **entities.get(identifier, {}), **dict(entity)}
 
     for topic in detail.get("topics") or ():
         topic = _record(topic)
@@ -230,7 +230,8 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
         }
         for blueprint in (_record(row) for row in detail.get("map_blueprints") or ())
     ]
-    map_landmarks = [_location_landmark(entity) for entity in _map_locations(detail)][:12]
+    map_locations = _map_locations(detail)
+    map_landmarks = [_location_landmark(entity) for entity in map_locations][:12]
     map_context = {"landmarks": map_landmarks, "blueprints": map_blueprints}
     landmark_directions = "; ".join(
         f"{landmark['name']}: show {landmark['visual']}"
@@ -315,6 +316,54 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
             "metadata": {"topic_id": "map", "aspect": "landscape", "entity_name": "World map"},
         },
     ]
+    blueprints_by_location = {
+        _text(blueprint["document"].get("location_id")): blueprint
+        for blueprint in map_blueprints
+        if _text(blueprint["document"].get("location_id"))
+    }
+    for location in map_locations:
+        location_id = _text(location.get("id") or location.get("entity_id"))
+        if not location_id:
+            continue
+        landmark = _location_landmark(location)
+        blueprint = blueprints_by_location.get(location_id, {})
+        local_map_subject = {
+            "name": f"{landmark['name']} local map",
+            "description": (
+                "A detailed, navigable local RPG map for a single canonical location. "
+                f"Show {landmark['visual']} as the central place. "
+                "Include distinct roads, paths, districts, approaches, and landmarks that "
+                "follow the canonical cues; no labels or text. "
+                + (f"Canonical cues: {landmark['details']}" if landmark["details"] else "")
+            ),
+        }
+        targets.append(
+            {
+                "target_id": f"entity:{location_id}:map",
+                "target_type": "map",
+                "entity_id": location_id,
+                "role": "map",
+                "source_content_hash": canonical_hash(
+                    {
+                        "location": location,
+                        "blueprint": blueprint,
+                        "role": "location_map",
+                    }
+                ),
+                "suggested_prompt": _prompt(
+                    world=world,
+                    target_type="location map",
+                    role="map",
+                    entity=local_map_subject,
+                ),
+                "metadata": {
+                    "topic_id": "map",
+                    "map_level": "location",
+                    "parent_target_id": "world:map",
+                    "entity_name": landmark["name"],
+                },
+            }
+        )
     for topic in detail.get("topics") or []:
         topic = _record(topic)
         topic_id = _text(topic.get("topic_id"))
@@ -569,8 +618,14 @@ def generate_world_images(
                 (prompts or {}).get(str(target["target_id"])),
                 str(target["suggested_prompt"]),
             )
-            target_width = 1024 if target["role"] in {"banner", "map"} else width
-            target_height = 576 if target["role"] == "banner" else 768 if target["role"] == "map" else height
+            is_location_map = _text(_record(target.get("metadata")).get("map_level")) == "location"
+            # Flux Klein caps requests at 1,048,576 pixels. Keep local maps square
+            # at the maximum supported resolution so they remain useful for deep zoom.
+            if is_location_map:
+                target_width, target_height = 1024, 1024
+            else:
+                target_width = 1024 if target["role"] in {"banner", "map"} else width
+                target_height = 576 if target["role"] == "banner" else 768 if target["role"] == "map" else height
             job = enqueue_image_job(
                 default_job_store(),
                 # Job ownership is a user foreign key.  The workspace ID scopes

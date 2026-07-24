@@ -282,6 +282,9 @@ def test_desired_targets_include_a_regenerable_world_map() -> None:
     assert "Moon Market" in map_target["suggested_prompt"]
     assert "compact settlement with streets, roofs, and a clear civic centre" in map_target["suggested_prompt"]
     assert "walled market town on the old trade road" in map_target["suggested_prompt"]
+    local_map_target = next(target for target in targets if target["target_id"] == "entity:location:moon_market:map")
+    assert local_map_target["metadata"]["map_level"] == "location"
+    assert "detailed, navigable local RPG map" in local_map_target["suggested_prompt"]
 
 
 def test_rpg_world_images_are_marked_for_the_rpg_asset_boundary(tmp_path) -> None:

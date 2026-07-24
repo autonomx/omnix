@@ -62,7 +62,9 @@ export function RpgWorldCard({ actions, children, facts, footer, world }: RpgWor
       <div className="rpg-world-card-body">
         <div>
           <h5>{world.title}</h5>
-          <p>{world.description || 'A reusable world ready for authoring and campaign play.'}</p>
+          <p className="rpg-world-card-description">
+            {world.description || 'A reusable world ready for authoring and campaign play.'}
+          </p>
         </div>
         {facts ? <div className="rpg-world-card-facts">{facts}</div> : null}
         {children}

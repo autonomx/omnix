@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
 import { rpgWorldImageClient } from '../../api/rpgWorldImageClient';
@@ -17,8 +17,10 @@ const ATLAS_WIDTH = 1600;
 const ATLAS_HEIGHT = 1040;
 const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 2.8;
+const LOCATION_MAP_ZOOM = 1.7;
 
 interface AtlasPoint { x: number; y: number; }
+interface LocalMapOverlay { id: string; label: string; kind: string; x: number; y: number; }
 
 function numeric(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -116,13 +118,44 @@ function locationDescription(entity: Record<string, unknown> | undefined): strin
     ?? 'This Area has a generated semantic baseline and is ready for further authoring.';
 }
 
+function localMapOverlays(blueprint: unknown): LocalMapOverlay[] {
+  const document = record(record(blueprint).document);
+  const groups: Array<[string, unknown]> = [
+    ['Zone', document.required_zone_ids],
+    ['Portal', document.required_portal_ids],
+    ['Route', document.required_route_ids],
+    ['Spawn', document.required_spawn_point_ids],
+  ];
+  return groups.flatMap(([kind, values]) => array(values).map((value) => ({ kind, id: text(value) })))
+    .filter((overlay) => overlay.id)
+    .slice(0, 12)
+    .map((overlay) => {
+      const hash = stableHash(overlay.id);
+      const suffix = overlay.id.split(':').pop()?.replace(/[_-]+/g, ' ') ?? overlay.id;
+      return {
+        ...overlay,
+        label: `${overlay.kind}: ${suffix}`,
+        x: 14 + (hash % 72),
+        y: 18 + ((hash >>> 8) % 64),
+      };
+    });
+}
+
 export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps) {
   const queryClient = useQueryClient();
   const [selectedLocationId, setSelectedLocationId] = useState('');
+  const [activeLocationMapId, setActiveLocationMapId] = useState('');
   const [feedback, setFeedback] = useState('');
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const viewport = useRef<HTMLDivElement>(null);
   const drag = useRef<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
+  useEffect(() => {
+    const syncFullscreenState = () => setIsFullscreen(document.fullscreenElement === viewport.current);
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
+  }, []);
   const detailQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-library', 'visual-map', worldId],
     queryFn: () => rpgWorldLibraryClient.detail(worldId),
@@ -157,8 +190,17 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
       .filter((target) => target.metadata.topic_id === 'locations' && target.review_state === 'approved' && target.active_asset_id)
       .map((target) => [target.entity_id, String(target.active_asset_id)]),
   ), [imagesQuery.data?.targets]);
+  const locationMapArtwork = useMemo(() => new Map(
+    (imagesQuery.data?.targets ?? [])
+      .filter((target) => target.metadata.map_level === 'location' && target.review_state === 'approved' && target.active_asset_id)
+      .map((target) => [target.entity_id, String(target.active_asset_id)]),
+  ), [imagesQuery.data?.targets]);
   const missingLocationArtwork = (imagesQuery.data?.targets ?? [])
     .filter((target) => target.metadata.topic_id === 'locations' && !(
+      target.review_state === 'approved' && target.active_asset_id
+    ));
+  const missingLocationMaps = (imagesQuery.data?.targets ?? [])
+    .filter((target) => target.metadata.map_level === 'location' && !(
       target.review_state === 'approved' && target.active_asset_id
     ));
   const missingBlueprints = locations.filter((location) => !blueprints.some(
@@ -191,6 +233,18 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
     },
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Area artwork could not be generated.'),
   });
+  const generateMissingLocationMaps = useMutation({
+    mutationFn: () => rpgWorldImageClient.generate(worldId, {
+      target_ids: missingLocationMaps.map((target) => target.target_id),
+      style: 'detailed illustrated local RPG map',
+      no_cache: false,
+    }),
+    onSuccess: async (result) => {
+      setFeedback(`Queued ${result.jobs.length} detailed local map${result.jobs.length === 1 ? '' : 's'}.`);
+      await queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-image-targets', worldId] });
+    },
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Detailed local maps could not be generated.'),
+  });
   const generateMissingBlueprints = useMutation({
     mutationFn: () => rpgWorldLibraryClient.materializeMapBlueprints(worldId),
     onSuccess: async (result) => {
@@ -201,8 +255,14 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
     },
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Area blueprints could not be generated.'),
   });
-  const canvasStyle = mapAssetId ? {
-    backgroundImage: `linear-gradient(rgba(3, 7, 18, 0.32), rgba(3, 7, 18, 0.68)), url(${JSON.stringify(assetUrl(mapAssetId))})`,
+  const detailMapAssetId = activeLocationMapId && selected?.id === activeLocationMapId
+    ? locationMapArtwork.get(activeLocationMapId)
+    : undefined;
+  const isLocationMap = Boolean(detailMapAssetId);
+  const activeMapAssetId = detailMapAssetId ?? mapAssetId;
+  const displayZoom = zoom;
+  const canvasStyle = activeMapAssetId ? {
+    backgroundImage: `linear-gradient(rgba(3, 7, 18, 0.32), rgba(3, 7, 18, 0.68)), url(${JSON.stringify(assetUrl(activeMapAssetId))})`,
   } : undefined;
   const selectedDescription = locationDescription(selected?.entity);
   const handleZoom = (event: WheelEvent<HTMLDivElement>) => {
@@ -226,6 +286,28 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
     setZoom(1);
     setPan({ x: 0, y: 0 });
   };
+  const enterLocationMap = () => {
+    if (!selected || !locationMapArtwork.has(selected.id)) {
+      setFeedback('This location does not have an approved detailed map yet.');
+      return;
+    }
+    setActiveLocationMapId(selected.id);
+    setZoom(MIN_ZOOM);
+    setPan({ x: 0, y: 0 });
+  };
+  const returnToWorldMap = () => {
+    setActiveLocationMapId('');
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await viewport.current?.requestFullscreen();
+    } catch (cause) {
+      setFeedback(cause instanceof Error ? cause.message : 'Full-screen map mode is unavailable in this browser.');
+    }
+  };
 
   return (
     <div className="rpg-visual-map-page">
@@ -233,6 +315,7 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
         <div className="rpg-authoring-page-heading">
           <div><p className="eyebrow">World atlas</p><h2>Map</h2><p>Generated Areas receive baseline semantic blueprints automatically; open the editor only when you need to refine one.</p></div>
           <div className="rpg-visual-map-actions">
+            {missingLocationMaps.length ? <button className="rpg-secondary-button" type="button" disabled={generateMissingLocationMaps.isPending || imagesQuery.isPending} onClick={() => generateMissingLocationMaps.mutate()}>{generateMissingLocationMaps.isPending ? 'Queuing detailed maps' : `Generate Detail Maps (${missingLocationMaps.length})`}</button> : <span className="rpg-visual-map-artwork-ready">Detailed maps ready ({locationMapArtwork.size})</span>}
             <button type="button" disabled={regenerateMap.isPending || imagesQuery.isPending} onClick={() => regenerateMap.mutate()}>{regenerateMap.isPending ? 'Queuing map artwork…' : mapAssetId ? 'Regenerate Map Artwork' : 'Generate Map Artwork'}</button>
             {missingLocationArtwork.length ? <button className="rpg-secondary-button" type="button" disabled={generateMissingLocationArtwork.isPending || imagesQuery.isPending} onClick={() => generateMissingLocationArtwork.mutate()}>{generateMissingLocationArtwork.isPending ? 'Queuing area artwork…' : `Generate Missing Area Artwork (${missingLocationArtwork.length})`}</button> : <span className="rpg-visual-map-artwork-ready">All area artwork ready ({locationArtwork.size})</span>}
             {missingBlueprints.length ? <button className="rpg-secondary-button" type="button" disabled={generateMissingBlueprints.isPending} onClick={() => generateMissingBlueprints.mutate()}>{generateMissingBlueprints.isPending ? 'Generating area blueprints…' : `Generate Area Blueprints (${missingBlueprints.length})`}</button> : null}
@@ -247,6 +330,7 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
           <div className="rpg-visual-map-layout">
             <div
               className="rpg-atlas-viewport"
+              ref={viewport}
               aria-label="Interactive world atlas. Drag to pan and use the mouse wheel to zoom."
               onPointerDown={startPan}
               onPointerMove={movePan}
@@ -260,13 +344,16 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
                 <button type="button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_ZOOM, value + 0.2))}>+</button>
                 <button type="button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_ZOOM, value - 0.2))}>−</button>
                 <button type="button" aria-label="Reset map view" onClick={resetView}>⌖</button>
+                {isLocationMap ? <button type="button" aria-label="Return to world map" onClick={returnToWorldMap}>World</button> : null}
+                <button type="button" aria-label={isFullscreen ? 'Exit full screen map' : 'Enter full screen map'} onClick={() => void toggleFullscreen()}>{isFullscreen ? 'Exit' : 'Full'}</button>
               </div>
               <div
-                className={`rpg-atlas-world${mapAssetId ? ' has-image' : ''}`}
-                style={{ ...canvasStyle, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
+                className={`rpg-atlas-world${activeMapAssetId ? ' has-image' : ''}${isLocationMap ? ' is-location-map' : ''}`}
+                data-map-level={isLocationMap ? 'location' : 'world'}
+                style={{ ...canvasStyle, transform: `translate(${pan.x}px, ${pan.y}px) scale(${displayZoom})` }}
               >
-                <div className="rpg-atlas-world-title"><strong>{detail?.world.title}</strong><small>World atlas</small></div>
-                {atlasLocations.map((location) => {
+                <div className="rpg-atlas-world-title"><strong>{isLocationMap ? selected?.label : detail?.world.title}</strong><small>{isLocationMap ? 'Local detail map' : 'World atlas'}</small></div>
+                {!isLocationMap && atlasLocations.map((location) => {
                   const blueprint = blueprints.find((row) => text(record(row.document).location_id) === location.id);
                   const locationAssetId = locationArtwork.get(location.id);
                   return (
@@ -289,6 +376,18 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
                     </button>
                   );
                 })}
+                {isLocationMap && localMapOverlays(selectedBlueprint).map((overlay) => (
+                  <button
+                    aria-label={`Open ${overlay.label}`}
+                    className="rpg-atlas-local-overlay"
+                    key={overlay.id}
+                    style={{ left: `${overlay.x}%`, top: `${overlay.y}%` }}
+                    type="button"
+                    onClick={() => setFeedback(`${overlay.label} selected on ${selected?.label ?? 'the local map'}.`)}
+                  >
+                    <span>{overlay.kind}</span><strong>{overlay.label.split(': ')[1]}</strong>
+                  </button>
+                ))}
               </div>
             </div>
             <aside className="rpg-visual-map-inspector">
@@ -296,6 +395,8 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
               <h3>{selected?.label}</h3>
               {selected && locationArtwork.get(selected.id) ? <img alt="" src={assetUrl(locationArtwork.get(selected.id) ?? '')} /> : null}
               <p className="rpg-atlas-location-description">{selectedDescription}</p>
+              {selected ? <div className="rpg-atlas-map-entry">{isLocationMap ? <button type="button" onClick={returnToWorldMap}>Return to World Map</button> : locationMapArtwork.has(selected.id) ? <button type="button" onClick={enterLocationMap}>Enter {selected.label.split(' (')[0]} Map</button> : <p>Generate this location's detailed map to open its local view.</p>}</div> : null}
+              {selected ? <p className="rpg-atlas-zoom-hint">{locationMapArtwork.has(selected.id) ? `Zoom past ${Math.round(LOCATION_MAP_ZOOM * 100)}% to inspect this location in detail.` : 'Generate this location’s detailed map to enable deep zoom.'}</p> : null}
               <dl>
                 <div><dt>Area ID</dt><dd>{selected?.id}</dd></div>
                 <div><dt>Blueprint</dt><dd>{selectedBlueprint?.map_id ?? 'Not authored'}</dd></div>

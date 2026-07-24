@@ -14,7 +14,17 @@ afterEach(() => {
 describe('RpgWorldBundleTransfer', () => {
   it('downloads an exported world bundle', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      expect(requestUrl(input).pathname).toBe('/api/rpg/worlds/world%3Aportable/export');
+      const pathname = requestUrl(input).pathname;
+      if (pathname === '/api/rpg/world-library') {
+        return Response.json({
+          ok: true,
+          worlds: [{ id: 'world:portable', title: 'Portable World' }],
+          scenarios: [],
+          campaigns: [],
+          generation_runs: [],
+        });
+      }
+      expect(pathname).toBe('/api/rpg/worlds/world%3Aportable/export');
       return new Response(new Blob(['portable']), {
         headers: {
           'content-type': 'application/zip',
@@ -28,16 +38,20 @@ describe('RpgWorldBundleTransfer', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
 
     render(<RpgWorldBundleTransfer initialWorldId="world:portable" />);
+    expect(await screen.findByRole('option', { name: 'Portable World (world:portable)' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Export world bundle' }));
 
     expect(await screen.findByText('World bundle exported: portable.omnix-world.zip')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('imports a bundle under an optional clone world id', async () => {
     const onImported = vi.fn();
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = requestUrl(input);
+      if (url.pathname === '/api/rpg/world-library') {
+        return Response.json({ ok: true, worlds: [], scenarios: [], campaigns: [], generation_runs: [] });
+      }
       expect(url.pathname).toBe('/api/rpg/worlds/import');
       expect(url.searchParams.get('target_world_id')).toBe('world:clone');
       expect(init?.method).toBe('POST');

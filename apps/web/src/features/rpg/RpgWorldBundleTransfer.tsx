@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 import { rpgWorldBundleClient } from '../../api/rpgWorldBundleClient';
+import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
 import './RpgWorldBundleTransfer.css';
 
 interface RpgWorldBundleTransferProps {
   initialWorldId?: string;
   onImported?: (worldId: string) => Promise<void> | void;
+}
+
+interface WorldOption {
+  id: string;
+  title: string;
 }
 
 export function RpgWorldBundleTransfer({
@@ -15,6 +21,9 @@ export function RpgWorldBundleTransfer({
   const [importFile, setImportFile] = useState<File>();
   const [targetWorldId, setTargetWorldId] = useState('');
   const [fileInputKey, setFileInputKey] = useState(0);
+  const [worldOptions, setWorldOptions] = useState<WorldOption[]>([]);
+  const [worldsLoading, setWorldsLoading] = useState(true);
+  const [worldsError, setWorldsError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [error, setError] = useState<string>();
   const [exporting, setExporting] = useState(false);
@@ -23,6 +32,32 @@ export function RpgWorldBundleTransfer({
   useEffect(() => {
     if (initialWorldId) setExportWorldId(initialWorldId);
   }, [initialWorldId]);
+
+  useEffect(() => {
+    let active = true;
+    void rpgWorldLibraryClient.list()
+      .then((result) => {
+        if (!active) return;
+        const options = result.worlds.map((world) => ({ id: world.id, title: world.title }));
+        setWorldOptions(options);
+        setExportWorldId((current) => (
+          options.some((world) => world.id === current)
+            ? current
+            : options[0]?.id ?? ''
+        ));
+        setWorldsError(undefined);
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setWorldsError(cause instanceof Error ? cause.message : 'Worlds could not be loaded.');
+      })
+      .finally(() => {
+        if (active) setWorldsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const exportWorld = async () => {
     const worldId = exportWorldId.trim();
@@ -58,6 +93,9 @@ export function RpgWorldBundleTransfer({
       );
       setError(undefined);
       setExportWorldId(result.world_id);
+      setWorldOptions((current) => current.some((world) => world.id === result.world_id)
+        ? current
+        : [...current, { id: result.world_id, title: result.world_id }]);
       setImportFile(undefined);
       setFileInputKey((value) => value + 1);
       setTargetWorldId('');
@@ -92,17 +130,26 @@ export function RpgWorldBundleTransfer({
             </div>
           </div>
           <label>
-            <span>World id to export</span>
-            <input
+            <span>World to export</span>
+            <select
+              aria-label="World to export"
               value={exportWorldId}
-              placeholder="world:my-world"
               onChange={(event) => setExportWorldId(event.currentTarget.value)}
-            />
+              disabled={worldsLoading || !worldOptions.length}
+            >
+              <option value="">
+                {worldsLoading ? 'Loading worlds…' : 'No worlds available'}
+              </option>
+              {worldOptions.map((world) => (
+                <option key={world.id} value={world.id}>{world.title} ({world.id})</option>
+              ))}
+            </select>
           </label>
+          {worldsError ? <p className="rpg-world-bundle-load-error">{worldsError}</p> : null}
           <button
             type="button"
             className="rpg-secondary-button"
-            disabled={!exportWorldId.trim() || exporting}
+            disabled={!exportWorldId.trim() || exporting || worldsLoading}
             onClick={() => void exportWorld()}
           >
             {exporting ? 'Preparing export…' : 'Export world bundle'}
