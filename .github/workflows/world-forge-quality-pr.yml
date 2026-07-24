@@ -56,6 +56,7 @@ jobs:
             src/tests/rpg/worlds/test_world_library_profile_generation.py \
             src/tests/rpg/worlds/test_world_runtime_seed.py \
             src/tests/rpg/worlds/test_world_generation_artifact_pipeline.py \
+            src/tests/rpg/worlds/test_world_release_artifacts.py \
             -q --tb=short 2>&1 | tee world-forge-quality-pytest-output.txt
 
       - name: Upload World Forge diagnostics
