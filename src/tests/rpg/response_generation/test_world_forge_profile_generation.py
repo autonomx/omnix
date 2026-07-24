@@ -1,3 +1,8 @@
+from app.rpg.session.genesis.world_forge_profile_binding import (
+    bind_world_genre_profile_metadata,
+    genre_profile_from_payload,
+    resolve_bound_world_genre_profile,
+)
 from app.rpg.session.genesis.world_forge_profile_generation import (
     GenreProfileRegistry,
     HeuristicWorldLocalProfileGenerator,
@@ -62,3 +67,28 @@ def test_heuristic_generator_records_world_specific_guidance() -> None:
     guidance = profile.domain_map()["genre_elements"].generation_guidance
     assert guidance["requested_genre"] == "clockwork pastoral"
     assert "mechanical roots" in guidance["description"]
+
+
+def test_world_metadata_pins_and_restores_exact_cyberpunk_profile() -> None:
+    metadata = bind_world_genre_profile_metadata(
+        {"campaign_mode": "persistent_living_world"},
+        genre="cyberpunk",
+        description="A corporate neon sprawl.",
+    )
+    payload = metadata["resolved_genre_profile"]
+    restored = genre_profile_from_payload(payload)
+    resolution = resolve_bound_world_genre_profile(
+        {
+            "genre": "cyberpunk",
+            "description": "This description can change later.",
+            "metadata": metadata,
+        }
+    )
+
+    assert restored.content_hash == metadata["resolved_profile_hash"]
+    assert resolution.source == "world_metadata_binding"
+    assert resolution.profile.content_hash == restored.content_hash
+    assert {"networks", "augmentations"}.issubset(
+        resolution.profile.domain_map()
+    )
+    assert "spells" not in resolution.profile.domain_map()
