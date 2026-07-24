@@ -68,7 +68,10 @@ WORLD_FORGE_DEPTH_PROFILES: dict[WorldGenerationDepth, WorldForgeDepthProfile] =
 
 def world_forge_depth_profile(depth: str | None) -> WorldForgeDepthProfile:
     normalized = str(depth or "standard").strip().casefold()
-    return WORLD_FORGE_DEPTH_PROFILES.get(normalized, WORLD_FORGE_DEPTH_PROFILES["standard"])  # type: ignore[arg-type]
+    return WORLD_FORGE_DEPTH_PROFILES.get(
+        normalized,
+        WORLD_FORGE_DEPTH_PROFILES["standard"],
+    )  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
@@ -128,7 +131,11 @@ class CampaignTopicGraph:
         pending = {node.topic_id: set(node.dependencies) for node in self.nodes}
         ordered: list[CampaignTopicNode] = []
         while pending:
-            ready = sorted(topic_id for topic_id, dependencies in pending.items() if not dependencies)
+            ready = sorted(
+                topic_id
+                for topic_id, dependencies in pending.items()
+                if not dependencies
+            )
             if not ready:
                 raise ValueError("campaign topic graph contains a dependency cycle")
             for topic_id in ready:
@@ -139,7 +146,11 @@ class CampaignTopicGraph:
         return tuple(ordered)
 
     def launch_required_topic_ids(self) -> tuple[str, ...]:
-        return tuple(node.topic_id for node in self.topological_order() if node.required_before_launch)
+        return tuple(
+            node.topic_id
+            for node in self.topological_order()
+            if node.required_before_launch
+        )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -189,7 +200,10 @@ def build_launch_topic_graph(graph: CampaignTopicGraph) -> CampaignTopicGraph:
             generator_role=node.generator_role,
             required_before_launch=True,
             visibility=node.visibility,
-            target_count=min(node.target_count, caps.get(node.topic_id, node.target_count)),
+            target_count=min(
+                node.target_count,
+                caps.get(node.topic_id, node.target_count),
+            ),
             metadata=dict(node.metadata),
         )
         for node in graph.nodes
@@ -237,7 +251,12 @@ def _target(profile: WorldForgeDepthProfile, category: str) -> int:
     return lower if profile.depth == "quick" else round((lower + upper) / 2)
 
 
-def _scenario_target(profile: WorldForgeDepthProfile, quick: int, standard: int, epic: int) -> int:
+def _scenario_target(
+    profile: WorldForgeDepthProfile,
+    quick: int,
+    standard: int,
+    epic: int,
+) -> int:
     return {"quick": quick, "standard": standard, "epic": epic}[profile.depth]
 
 
@@ -292,7 +311,7 @@ def _domain_node(
     )
 
 
-def build_campaign_topic_graph(
+def _build_legacy_campaign_topic_graph(
     *,
     campaign_template: str,
     genre: str | None,
@@ -301,104 +320,376 @@ def build_campaign_topic_graph(
     starting_location: str = "",
     background_expansion: bool = False,
 ) -> CampaignTopicGraph:
-    """Create a deterministic prose-free dependency graph for campaign genesis."""
+    """Create the legacy fantasy dependency graph for fantasy-compatible worlds."""
 
     profile = world_forge_depth_profile(depth)
-    allow_deferred = bool(background_expansion and profile.background_expansion_allowed)
+    allow_deferred = bool(
+        background_expansion and profile.background_expansion_allowed
+    )
     optional_required = not allow_deferred
     nodes = (
-        _node("realm", "Realm Overview", "lore", role="realm_architect", target_count=1, visibility="public"),
-        _node("cosmology", "Cosmology and World Laws", "lore", ("realm",), role="metaphysics_architect", visibility="public"),
-        _node("magic_technology", "Magic and Technology", "lore", ("cosmology",), role="systems_architect", visibility="public"),
-        _node("history", "History", "lore", ("realm", "cosmology"), role="historian", visibility="public"),
-        _node("calendar", "Calendar and Eras", "lore", ("history",), role="historian", visibility="public"),
         _node(
-            "regions", "Regions and Geography", "regions", ("realm", "history"),
-            role="geography_architect", target_count=_target(profile, "regions"), visibility="public",
-        ),
-        _node("cultures", "Cultures and Peoples", "lore", ("regions", "history"), role="culture_architect", required=optional_required, visibility="public"),
-        _domain_node(
-            "races", "Races and Ancestries", ("cultures", "regions", "history", "cosmology"),
-            role="ancestry_architect", target_count=_target(profile, "races"), required=optional_required,
-            visibility="public", required_fields=("name", "homelands", "cultures", "traits", "languages"),
+            "realm",
+            "Realm Overview",
+            "lore",
+            role="realm_architect",
+            target_count=1,
+            visibility="public",
         ),
         _node(
-            "factions", "Factions and Powers", "factions", ("regions", "history", "cultures"),
-            role="faction_architect", target_count=_target(profile, "factions"), visibility="partially_known",
+            "cosmology",
+            "Cosmology and World Laws",
+            "lore",
+            ("realm",),
+            role="metaphysics_architect",
+            visibility="public",
         ),
-        _node("institutions", "Institutions", "lore", ("factions", "cultures"), role="institution_architect", visibility="public"),
-        _node("pantheon", "Religions and Pantheon", "lore", ("cosmology", "cultures"), role="religion_architect", required=optional_required, visibility="partially_known"),
-        _node("hero_system", "Heroes, Summoning, and Exceptional Powers", "lore", ("cosmology", "magic_technology", "institutions"), role="hero_system_architect", visibility="public"),
-        _domain_node(
-            "classes", "Classes and Disciplines", ("hero_system", "cultures", "institutions", "magic_technology"),
-            role="class_architect", target_count=_target(profile, "classes"), required=optional_required,
-            visibility="public", required_fields=("name", "capabilities", "progression", "equipment", "institution_ids"),
-        ),
-        _domain_node(
-            "spells", "Spells and Rituals", ("magic_technology", "cosmology", "institutions"),
-            role="spell_architect", target_count=_target(profile, "spells"), required=optional_required,
-            visibility="partially_known", required_fields=("name", "school", "tier", "costs", "effects", "range"),
-        ),
-        _domain_node(
-            "feats", "Feats and Talents", ("classes", "hero_system", "cultures"),
-            role="feat_architect", target_count=_target(profile, "feats"), required=optional_required,
-            visibility="public", required_fields=("name", "prerequisites", "benefits", "limitations"),
-        ),
-        _node("current_conflicts", "Current Conflicts", "lore", ("factions", "institutions", "regions"), role="conflict_architect", visibility="partially_known"),
         _node(
-            "locations", "Major Locations", "locations", ("regions", "factions", "current_conflicts"),
-            role="location_dossier_generator", target_count=_target(profile, "locations"), visibility="partially_known",
+            "magic_technology",
+            "Magic and Technology",
+            "lore",
+            ("cosmology",),
+            role="systems_architect",
+            visibility="public",
+        ),
+        _node(
+            "history",
+            "History",
+            "lore",
+            ("realm", "cosmology"),
+            role="historian",
+            visibility="public",
+        ),
+        _node(
+            "calendar",
+            "Calendar and Eras",
+            "lore",
+            ("history",),
+            role="historian",
+            visibility="public",
+        ),
+        _node(
+            "regions",
+            "Regions and Geography",
+            "regions",
+            ("realm", "history"),
+            role="geography_architect",
+            target_count=_target(profile, "regions"),
+            visibility="public",
+        ),
+        _node(
+            "cultures",
+            "Cultures and Peoples",
+            "lore",
+            ("regions", "history"),
+            role="culture_architect",
+            required=optional_required,
+            visibility="public",
+        ),
+        _domain_node(
+            "races",
+            "Races and Ancestries",
+            ("cultures", "regions", "history", "cosmology"),
+            role="ancestry_architect",
+            target_count=_target(profile, "races"),
+            required=optional_required,
+            visibility="public",
+            required_fields=(
+                "name",
+                "homelands",
+                "cultures",
+                "traits",
+                "languages",
+            ),
+        ),
+        _node(
+            "factions",
+            "Factions and Powers",
+            "factions",
+            ("regions", "history", "cultures"),
+            role="faction_architect",
+            target_count=_target(profile, "factions"),
+            visibility="partially_known",
+        ),
+        _node(
+            "institutions",
+            "Institutions",
+            "lore",
+            ("factions", "cultures"),
+            role="institution_architect",
+            visibility="public",
+        ),
+        _node(
+            "pantheon",
+            "Religions and Pantheon",
+            "lore",
+            ("cosmology", "cultures"),
+            role="religion_architect",
+            required=optional_required,
+            visibility="partially_known",
+        ),
+        _node(
+            "hero_system",
+            "Heroes, Summoning, and Exceptional Powers",
+            "lore",
+            ("cosmology", "magic_technology", "institutions"),
+            role="hero_system_architect",
+            visibility="public",
+        ),
+        _domain_node(
+            "classes",
+            "Classes and Disciplines",
+            ("hero_system", "cultures", "institutions", "magic_technology"),
+            role="class_architect",
+            target_count=_target(profile, "classes"),
+            required=optional_required,
+            visibility="public",
+            required_fields=(
+                "name",
+                "capabilities",
+                "progression",
+                "equipment",
+                "institution_ids",
+            ),
+        ),
+        _domain_node(
+            "spells",
+            "Spells and Rituals",
+            ("magic_technology", "cosmology", "institutions"),
+            role="spell_architect",
+            target_count=_target(profile, "spells"),
+            required=optional_required,
+            visibility="partially_known",
+            required_fields=("name", "school", "tier", "costs", "effects", "range"),
+        ),
+        _domain_node(
+            "feats",
+            "Feats and Talents",
+            ("classes", "hero_system", "cultures"),
+            role="feat_architect",
+            target_count=_target(profile, "feats"),
+            required=optional_required,
+            visibility="public",
+            required_fields=("name", "prerequisites", "benefits", "limitations"),
+        ),
+        _node(
+            "current_conflicts",
+            "Current Conflicts",
+            "lore",
+            ("factions", "institutions", "regions"),
+            role="conflict_architect",
+            visibility="partially_known",
+        ),
+        _node(
+            "locations",
+            "Major Locations",
+            "locations",
+            ("regions", "factions", "current_conflicts"),
+            role="location_dossier_generator",
+            target_count=_target(profile, "locations"),
+            visibility="partially_known",
             starting_location=starting_location,
         ),
         _domain_node(
-            "points_of_interest", "Points of Interest", ("locations", "regions", "history", "current_conflicts"),
-            role="point_of_interest_architect", target_count=_target(profile, "points_of_interest"), required=optional_required,
-            required_fields=("name", "location_id", "region_id", "purpose", "hooks", "sensory_profile"),
+            "points_of_interest",
+            "Points of Interest",
+            ("locations", "regions", "history", "current_conflicts"),
+            role="point_of_interest_architect",
+            target_count=_target(profile, "points_of_interest"),
+            required=optional_required,
+            required_fields=(
+                "name",
+                "location_id",
+                "region_id",
+                "purpose",
+                "hooks",
+                "sensory_profile",
+            ),
         ),
         _domain_node(
-            "monsters", "Monsters and Creatures", ("regions", "cosmology", "magic_technology"),
-            role="creature_architect", target_count=_target(profile, "monsters"), required=optional_required,
-            required_fields=("name", "region_ids", "habitats", "threat_level", "abilities", "weaknesses"),
+            "monsters",
+            "Monsters and Creatures",
+            ("regions", "cosmology", "magic_technology"),
+            role="creature_architect",
+            target_count=_target(profile, "monsters"),
+            required=optional_required,
+            required_fields=(
+                "name",
+                "region_ids",
+                "habitats",
+                "threat_level",
+                "abilities",
+                "weaknesses",
+            ),
         ),
         _domain_node(
-            "items", "Items and Relics", ("magic_technology", "cultures", "factions", "locations"),
-            role="item_architect", target_count=_target(profile, "items"), required=optional_required,
-            required_fields=("name", "item_type", "rarity", "value", "effects", "origin_ids"),
+            "items",
+            "Items and Relics",
+            ("magic_technology", "cultures", "factions", "locations"),
+            role="item_architect",
+            target_count=_target(profile, "items"),
+            required=optional_required,
+            required_fields=(
+                "name",
+                "item_type",
+                "rarity",
+                "value",
+                "effects",
+                "origin_ids",
+            ),
         ),
         _node(
-            "npcs", "Central NPC Cast", "npcs", ("factions", "institutions", "locations", "current_conflicts"),
-            role="npc_dossier_generator", target_count=_target(profile, "npcs"), visibility="game_master_canon",
+            "npcs",
+            "Central NPC Cast",
+            "npcs",
+            ("factions", "institutions", "locations", "current_conflicts"),
+            role="npc_dossier_generator",
+            target_count=_target(profile, "npcs"),
+            visibility="game_master_canon",
         ),
         _domain_node(
-            "quests", "Quest Catalog", ("current_conflicts", "npcs", "locations", "factions", "points_of_interest"),
-            role="quest_architect", target_count=_target(profile, "quests"), required=optional_required,
-            visibility="game_master_canon", required_fields=("name", "giver_id", "location_ids", "faction_ids", "objectives", "rewards", "stakes"),
-        ),
-        _node("opening_threads", "Opening Story Threads", "story", ("npcs", "locations", "current_conflicts"), role="story_thread_architect", visibility="game_master_canon"),
-        _domain_node(
-            "encounter_seeds", "Encounter Seeds", ("monsters", "npcs", "locations", "current_conflicts"),
-            role="encounter_architect", target_count=_scenario_target(profile, 4, 8, 12), required=optional_required,
-            visibility="game_master_canon", required_fields=("name", "location_ids", "actor_ids", "threat_ids", "setup", "complications", "outcomes"),
-        ),
-        _domain_node(
-            "one_shots", "One-Shot Adventures", ("quests", "opening_threads", "npcs", "locations", "encounter_seeds"),
-            role="one_shot_architect", target_count=_scenario_target(profile, 2, 4, 8), required=optional_required,
-            visibility="game_master_canon", required_fields=("name", "premise", "location_ids", "actor_ids", "quest_ids", "beats", "rewards"),
-        ),
-        _domain_node(
-            "opening_scenarios", "Opening Scenarios", ("opening_threads", "quests", "npcs", "locations", "one_shots"),
-            role="opening_scenario_architect", target_count=_scenario_target(profile, 2, 3, 5), required=optional_required,
-            visibility="game_master_canon", required_fields=("name", "starting_location_id", "initial_npc_ids", "opening_seed_ids", "starting_resources", "premise"),
+            "quests",
+            "Quest Catalog",
+            (
+                "current_conflicts",
+                "npcs",
+                "locations",
+                "factions",
+                "points_of_interest",
+            ),
+            role="quest_architect",
+            target_count=_target(profile, "quests"),
+            required=optional_required,
+            visibility="game_master_canon",
+            required_fields=(
+                "name",
+                "giver_id",
+                "location_ids",
+                "faction_ids",
+                "objectives",
+                "rewards",
+                "stakes",
+            ),
         ),
         _node(
-            "relationships", "Cross-domain Relationships", "compiler",
-            ("regions", "races", "factions", "institutions", "classes", "spells", "feats", "locations", "points_of_interest", "monsters", "items", "npcs", "quests", "encounter_seeds", "one_shots", "opening_scenarios"),
+            "opening_threads",
+            "Opening Story Threads",
+            "story",
+            ("npcs", "locations", "current_conflicts"),
+            role="story_thread_architect",
+            visibility="game_master_canon",
+        ),
+        _domain_node(
+            "encounter_seeds",
+            "Encounter Seeds",
+            ("monsters", "npcs", "locations", "current_conflicts"),
+            role="encounter_architect",
+            target_count=_scenario_target(profile, 4, 8, 12),
+            required=optional_required,
+            visibility="game_master_canon",
+            required_fields=(
+                "name",
+                "location_ids",
+                "actor_ids",
+                "threat_ids",
+                "setup",
+                "complications",
+                "outcomes",
+            ),
+        ),
+        _domain_node(
+            "one_shots",
+            "One-Shot Adventures",
+            ("quests", "opening_threads", "npcs", "locations", "encounter_seeds"),
+            role="one_shot_architect",
+            target_count=_scenario_target(profile, 2, 4, 8),
+            required=optional_required,
+            visibility="game_master_canon",
+            required_fields=(
+                "name",
+                "premise",
+                "location_ids",
+                "actor_ids",
+                "quest_ids",
+                "beats",
+                "rewards",
+            ),
+        ),
+        _domain_node(
+            "opening_scenarios",
+            "Opening Scenarios",
+            ("opening_threads", "quests", "npcs", "locations", "one_shots"),
+            role="opening_scenario_architect",
+            target_count=_scenario_target(profile, 2, 3, 5),
+            required=optional_required,
+            visibility="game_master_canon",
+            required_fields=(
+                "name",
+                "starting_location_id",
+                "initial_npc_ids",
+                "opening_seed_ids",
+                "starting_resources",
+                "premise",
+            ),
+        ),
+        _node(
+            "relationships",
+            "Cross-domain Relationships",
+            "compiler",
+            (
+                "regions",
+                "races",
+                "factions",
+                "institutions",
+                "classes",
+                "spells",
+                "feats",
+                "locations",
+                "points_of_interest",
+                "monsters",
+                "items",
+                "npcs",
+                "quests",
+                "encounter_seeds",
+                "one_shots",
+                "opening_scenarios",
+            ),
             role="relationship_compiler",
         ),
-        _node("consistency_audit", "Canon Consistency Audit", "audit", ("calendar", "relationships", "opening_threads", "hero_system", "pantheon"), role="canon_critic"),
-        _node("canon_compile", "Canon Compilation", "compiler", ("consistency_audit",), role="canon_compiler"),
-        _node("retrieval_index", "Lore Retrieval Index", "index", ("canon_compile",), role="retrieval_index_compiler"),
-        _node("opening_materialization", "Opening Scene Materialization", "bootstrap", ("canon_compile", "retrieval_index"), role="campaign_materializer"),
+        _node(
+            "consistency_audit",
+            "Canon Consistency Audit",
+            "audit",
+            (
+                "calendar",
+                "relationships",
+                "opening_threads",
+                "hero_system",
+                "pantheon",
+            ),
+            role="canon_critic",
+        ),
+        _node(
+            "canon_compile",
+            "Canon Compilation",
+            "compiler",
+            ("consistency_audit",),
+            role="canon_compiler",
+        ),
+        _node(
+            "retrieval_index",
+            "Lore Retrieval Index",
+            "index",
+            ("canon_compile",),
+            role="retrieval_index_compiler",
+        ),
+        _node(
+            "opening_materialization",
+            "Opening Scene Materialization",
+            "bootstrap",
+            ("canon_compile", "retrieval_index"),
+            role="campaign_materializer",
+        ),
     )
     graph = CampaignTopicGraph(
         graph_version=_GRAPH_VERSION,
@@ -417,3 +708,52 @@ def build_campaign_topic_graph(
     if issues:
         raise ValueError("invalid campaign topic graph: " + ",".join(issues))
     return graph
+
+
+def build_campaign_topic_graph(
+    *,
+    campaign_template: str,
+    genre: str | None,
+    tone: str,
+    depth: str | None = "standard",
+    starting_location: str = "",
+    background_expansion: bool = False,
+) -> CampaignTopicGraph:
+    """Build a profile graph for non-fantasy genres and retain legacy fantasy parity."""
+
+    requested_genre = str(genre or campaign_template or "classic_fantasy")
+    from .world_forge_profile_generation import (
+        normalize_genre_key,
+        resolve_or_generate_genre_profile,
+    )
+
+    normalized = normalize_genre_key(requested_genre)
+    if "fantasy" in normalized or normalized in {
+        "summoned_heroes",
+        "classic_fantasy",
+        "high_fantasy",
+        "medieval_fantasy",
+    }:
+        return _build_legacy_campaign_topic_graph(
+            campaign_template=campaign_template,
+            genre=genre,
+            tone=tone,
+            depth=depth,
+            starting_location=starting_location,
+            background_expansion=background_expansion,
+        )
+
+    from .world_forge_profile_graph import build_profile_topic_graph
+
+    resolution = resolve_or_generate_genre_profile(
+        genre=requested_genre,
+        campaign_mode="persistent_living_world",
+    )
+    return build_profile_topic_graph(
+        resolution.profile,
+        campaign_template=str(campaign_template or resolution.profile.profile_id),
+        depth=str(depth or "standard"),
+        tone=tone,
+        starting_location=starting_location,
+        background_expansion=background_expansion,
+    )
