@@ -20,23 +20,37 @@ from .world_forge_domains import (
 from .world_forge_fact_pipeline import compile_structured_entity_facts
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_integrity import validate_and_normalize_provider_topic
+from .world_forge_regeneration import generate_with_targeted_regeneration
 from .world_forge_semantic_quality import require_topic_semantic_quality
 
 
 class ReferenceSafeWorldForgeGenerator:
-    """Validate live provider references without inventing semantic repairs.
-
-    Deterministic fallback generation keeps isolated synthetic completion for tests
-    and offline development. Live provider output is fail-closed: references must
-    be exact IDs, explicit aliases, or unique exact names before dossier projection
-    or schema completion occurs.
-    """
+    """Validate and improve generated topics without inventing semantic repairs."""
 
     def __init__(
         self,
         generator: WorldForgeTopicGenerator | None = None,
     ) -> None:
         self.generator = generator or DeterministicWorldForgeGenerator()
+
+    @staticmethod
+    def _provider_generated(topic: GeneratedTopic) -> bool:
+        return str(dict(topic.provenance).get("generator") or "").startswith(
+            "structured_world_forge_provider_"
+        )
+
+    @staticmethod
+    def _max_regeneration_attempts(campaign_context: Mapping[str, Any]) -> int:
+        try:
+            return max(
+                1,
+                min(
+                    int(campaign_context.get("targeted_regeneration_max_attempts") or 3),
+                    5,
+                ),
+            )
+        except (TypeError, ValueError):
+            return 3
 
     def generate(
         self,
@@ -46,15 +60,33 @@ class ReferenceSafeWorldForgeGenerator:
         campaign_context: Mapping[str, Any],
         dependency_topics: Mapping[str, GeneratedTopic],
     ) -> GeneratedTopic:
-        topic = self.generator.generate(
+        def process(topic: GeneratedTopic) -> GeneratedTopic:
+            return self._process_topic(
+                node,
+                topic,
+                campaign_context=campaign_context,
+                dependency_topics=dependency_topics,
+            )
+
+        return generate_with_targeted_regeneration(
+            self.generator,
             node,
             seed=seed,
             campaign_context=campaign_context,
             dependency_topics=dependency_topics,
+            process=process,
+            max_attempts=self._max_regeneration_attempts(campaign_context),
         )
-        provider_generated = str(
-            dict(topic.provenance).get("generator") or ""
-        ).startswith("structured_world_forge_provider_")
+
+    def _process_topic(
+        self,
+        node: CampaignTopicNode,
+        topic: GeneratedTopic,
+        *,
+        campaign_context: Mapping[str, Any],
+        dependency_topics: Mapping[str, GeneratedTopic],
+    ) -> GeneratedTopic:
+        provider_generated = self._provider_generated(topic)
         if provider_generated:
             aliases = campaign_context.get("reference_aliases")
             topic = validate_and_normalize_provider_topic(
