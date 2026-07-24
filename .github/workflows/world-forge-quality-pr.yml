@@ -45,13 +45,16 @@ jobs:
             src/tests/rpg/response_generation/test_world_forge_semantic_quality.py \
             src/tests/rpg/response_generation/test_world_forge_presentation.py \
             src/tests/rpg/response_generation/test_world_forge_presentation_compilation.py \
+            src/tests/rpg/response_generation/test_world_forge_contradictions.py \
             src/tests/rpg/response_generation/test_world_forge_fact_pipeline.py \
             src/tests/rpg/response_generation/test_world_forge_profile_generation.py \
             src/tests/rpg/response_generation/test_world_forge_profile_graph.py \
             src/tests/rpg/response_generation/test_world_forge_profile_relationships.py \
             src/tests/rpg/response_generation/test_world_forge_profiles.py \
+            src/tests/rpg/response_generation/test_rpg_world_scenario_phase3_publication.py \
             src/tests/rpg/worlds/test_canon_repair.py \
             src/tests/rpg/worlds/test_world_library_profile_generation.py \
+            src/tests/rpg/worlds/test_world_runtime_seed.py \
             -q --tb=short 2>&1 | tee world-forge-quality-pytest-output.txt
 
       - name: Upload World Forge diagnostics
