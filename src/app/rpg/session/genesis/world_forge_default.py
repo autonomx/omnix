@@ -21,6 +21,7 @@ from .world_forge_fact_pipeline import compile_structured_entity_facts
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_integrity import validate_and_normalize_provider_topic
 from .world_forge_presentation import render_fact_derived_presentations
+from .world_forge_profile_deterministic import generate_deterministic_profile_topic
 from .world_forge_regeneration import generate_with_targeted_regeneration
 from .world_forge_semantic_quality import require_topic_semantic_quality
 
@@ -102,7 +103,13 @@ class ReferenceSafeWorldForgeGenerator:
             dependency_topics,
             allow_synthetic_completion=not provider_generated,
         )
-        if not provider_generated:
+        if not provider_generated and node.metadata.get("field_definitions"):
+            topic = generate_deterministic_profile_topic(
+                node,
+                campaign_context=campaign_context,
+                dependency_topics=dependency_topics,
+            )
+        elif not provider_generated:
             topic = complete_deterministic_references(
                 node,
                 topic,
