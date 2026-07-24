@@ -263,48 +263,63 @@ def initialize_starting_map_snapshot(
         if operation.map_id == definition.map_id
     )
     protagonist_placed = any(
-        operation.type == "place_actor"
-        and operation.target_id in _PROTAGONIST_IDS
+        operation.type == "place_actor" and operation.target_id in _PROTAGONIST_IDS
         for operation in operations
     )
-    actor_placements: list[GridActorPlacement] = []
-    if not protagonist_placed:
-        actor_placements.append(
+    initial_actors = (
+        ()
+        if protagonist_placed
+        else (
             GridActorPlacement(
                 actor_id=protagonist_actor_id,
                 cell=_default_spawn(definition),
-                facing="south",
-            )
+            ),
         )
-    for operation in operations:
-        if operation.type != "place_actor":
-            continue
-        actor_id = (
-            protagonist_actor_id
-            if operation.target_id in _PROTAGONIST_IDS
-            else operation.target_id
-        )
-        actor_placements.append(
-            GridActorPlacement(
-                actor_id=actor_id,
-                cell=_operation_cell(definition, operation),
-                facing=str(operation.payload.get("facing") or "south"),
-            )
-        )
+    )
     snapshot = create_map_instance_snapshot(
         map_instance_id=map_instance_id,
         campaign_id=campaign_id,
+        location_id=scenario.starting_location_id,
         definition=definition,
-        actor_placements=tuple(actor_placements),
+        actors=initial_actors,
     )
-    mutable = snapshot.model_dump(mode="json")
+    actors = list(snapshot.actors)
+    object_states = dict(snapshot.object_states)
+    route_states = dict(snapshot.route_states)
+    hazard_states = dict(snapshot.hazard_states)
+    applied: list[str] = []
     for operation in operations:
-        if operation.type == "set_object_state":
-            mutable["object_states"][operation.target_id] = dict(operation.payload)
+        if operation.type == "place_actor":
+            actor_id = (
+                protagonist_actor_id
+                if operation.target_id in _PROTAGONIST_IDS
+                else operation.target_id
+            )
+            if any(actor.actor_id == actor_id for actor in actors):
+                raise WorldSemanticError("scenario_actor_placed_twice", actor_id)
+            actors.append(
+                GridActorPlacement(
+                    actor_id=actor_id,
+                    cell=_operation_cell(definition, operation),
+                    facing=str(operation.payload.get("facing") or "south"),
+                    hidden=bool(operation.payload.get("hidden", False)),
+                )
+            )
+        elif operation.type == "set_object_state":
+            object_states[operation.target_id] = dict(operation.payload)
         elif operation.type == "set_route_state":
-            mutable["route_states"][operation.target_id] = dict(operation.payload)
+            route_states[operation.target_id] = dict(operation.payload)
         elif operation.type == "set_hazard_state":
-            mutable["hazard_states"][operation.target_id] = dict(operation.payload)
-    mutable["snapshot_hash"] = ""
-    mutable["snapshot_hash"] = canonical_content_hash(mutable)
-    return CampaignMapInstanceSnapshot.model_validate(mutable)
+            hazard_states[operation.target_id] = dict(operation.payload)
+        applied.append(operation.operation_id)
+    payload = snapshot.model_dump(mode="json")
+    payload.update(
+        {
+            "actors": [actor.model_dump(mode="json") for actor in actors],
+            "object_states": object_states,
+            "route_states": route_states,
+            "hazard_states": hazard_states,
+            "initialization_operation_ids": applied,
+        }
+    )
+    return CampaignMapInstanceSnapshot.model_validate(payload)
