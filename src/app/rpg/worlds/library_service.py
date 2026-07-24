@@ -5,7 +5,6 @@ from typing import Any, Mapping
 
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
 from app.rpg.session.genesis.world_forge_profile_generation import (
     ProfileResolution,
     resolve_or_generate_genre_profile,
@@ -231,31 +230,22 @@ def start_world_library_generation(
     route = resolve_world_forge_route(provider_route, model)
     metadata = dict(world.get("metadata") or {})
     campaign_template = str(metadata.get("campaign_template") or "classic_fantasy")
-    profile_resolution: ProfileResolution | None = None
-    if route.is_deterministic:
-        graph = build_campaign_topic_graph(
-            campaign_template=campaign_template,
-            genre=str(world.get("genre") or "classic_fantasy"),
-            tone=str(world.get("tone") or "heroic adventure"),
-            depth=depth,
-            starting_location=starting_location,
-            background_expansion=background_expansion,
-        )
-    else:
-        profile_resolution = resolve_or_generate_genre_profile(
-            genre=str(world.get("genre") or campaign_template),
-            description=str(world.get("description") or ""),
-            campaign_mode=str(metadata.get("campaign_mode") or "persistent_living_world"),
-        )
-        graph = build_profile_topic_graph(
-            profile_resolution.profile,
-            campaign_template=campaign_template,
-            depth=depth,
-            tone=str(world.get("tone") or ""),
-            starting_location=starting_location,
-            background_expansion=background_expansion,
-            runtime_capabilities=dict(metadata.get("runtime_capabilities") or {}),
-        )
+    profile_resolution = resolve_or_generate_genre_profile(
+        genre=str(world.get("genre") or campaign_template),
+        description=str(world.get("description") or ""),
+        campaign_mode=str(
+            metadata.get("campaign_mode") or "persistent_living_world"
+        ),
+    )
+    graph = build_profile_topic_graph(
+        profile_resolution.profile,
+        campaign_template=campaign_template,
+        depth=depth,
+        tone=str(world.get("tone") or ""),
+        starting_location=starting_location,
+        background_expansion=background_expansion,
+        runtime_capabilities=dict(metadata.get("runtime_capabilities") or {}),
+    )
 
     target_topic_ids, forced_topic_ids, normalized_scope = resolve_generation_scope(
         graph,
@@ -312,7 +302,7 @@ def start_world_library_generation(
             "model": route.model,
             "source": route.source,
         },
-        "genre_profile": profile_resolution.as_dict() if profile_resolution else None,
+        "genre_profile": profile_resolution.as_dict(),
     }
 
 
