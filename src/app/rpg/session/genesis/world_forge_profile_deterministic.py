@@ -260,6 +260,29 @@ def _value_for_field(
     return _string_value(field_id, name=name, anchor=anchor, index=index)
 
 
+def _fixture_identity(
+    node: CampaignTopicNode,
+    *,
+    campaign_context: Mapping[str, Any],
+    entity_kind: str,
+    anchor: str,
+    index: int,
+) -> tuple[str, str]:
+    starting_location = str(campaign_context.get("starting_location") or "").strip()
+    is_place_domain = (
+        node.topic_id in {"places", "locations", "settlements"}
+        or entity_kind in {"place", "location", "settlement"}
+    )
+    if index == 0 and starting_location and is_place_domain:
+        local_id = starting_location.split(":", 1)[-1]
+        name = local_id.replace("_", " ").replace("-", " ").title()
+        return f"{_slug(entity_kind)}:{_slug(local_id)}", name
+    distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
+    name = f"{anchor} {distinction} {entity_kind.replace('_', ' ').title()}"
+    entity_id = f"{_slug(entity_kind)}:{_slug(distinction)}_{index + 1}"
+    return entity_id, name
+
+
 def generate_deterministic_profile_topic(
     node: CampaignTopicNode,
     *,
@@ -277,9 +300,13 @@ def generate_deterministic_profile_topic(
     entities: list[dict[str, Any]] = []
     documents: list[dict[str, Any]] = []
     for index in range(node.target_count):
-        distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
-        name = f"{anchor} {distinction} {entity_kind.replace('_', ' ').title()}"
-        entity_id = f"{_slug(entity_kind)}:{_slug(distinction)}_{index + 1}"
+        entity_id, name = _fixture_identity(
+            node,
+            campaign_context=campaign_context,
+            entity_kind=entity_kind,
+            anchor=anchor,
+            index=index,
+        )
         entity: dict[str, Any] = {
             "id": entity_id,
             "kind": entity_kind,
