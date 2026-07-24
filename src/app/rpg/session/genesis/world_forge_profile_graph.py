@@ -1,0 +1,224 @@
+"""Compile full and launch CampaignTopicGraph objects from validated profiles."""
+from __future__ import annotations
+
+from typing import Any, Iterable
+
+from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
+from .world_forge_profiles import DomainDefinition, GenreProfile
+
+_PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
+
+
+def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
+    required_fields = [field.field_id for field in domain.fields if field.required]
+    reference_fields = {
+        field.field_id: {
+            "value_type": field.value_type,
+            "allowed_target_domains": list(field.allowed_target_domains),
+        }
+        for field in domain.fields
+        if field.value_type in {"entity_ref", "entity_ref_list"}
+    }
+    return {
+        "entity_kind": domain.entity_kind,
+        "required_entity_fields": required_fields,
+        "field_definitions": [field.as_dict() for field in domain.fields],
+        "reference_fields": reference_fields,
+        "semantic_roles": list(domain.semantic_roles),
+        "generation_guidance": dict(domain.generation_guidance),
+        "schema_version": f"rpg_profile_domain_{domain.domain_id}_v1",
+    }
+
+
+def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
+    return CampaignTopicNode(
+        topic_id=domain.domain_id,
+        title=domain.title,
+        category=domain.category,
+        dependencies=domain.dependencies,
+        generator_role=domain.generator_role,
+        required_before_launch=domain.required_before_launch,
+        visibility=domain.visibility_default,
+        target_count=max(1, domain.target_range.target(depth)),
+        metadata=_field_metadata(domain),
+    )
+
+
+def _pipeline_nodes(domain_ids: tuple[str, ...]) -> tuple[CampaignTopicNode, ...]:
+    return (
+        CampaignTopicNode(
+            topic_id="relationships",
+            title="Cross-domain Relationships",
+            category="compiler",
+            dependencies=domain_ids,
+            generator_role="relationship_compiler",
+        ),
+        CampaignTopicNode(
+            topic_id="consistency_audit",
+            title="Canon Consistency Audit",
+            category="audit",
+            dependencies=("relationships",),
+            generator_role="canon_critic",
+        ),
+        CampaignTopicNode(
+            topic_id="canon_compile",
+            title="Canon Compilation",
+            category="compiler",
+            dependencies=("consistency_audit",),
+            generator_role="canon_compiler",
+        ),
+        CampaignTopicNode(
+            topic_id="retrieval_index",
+            title="Lore Retrieval Index",
+            category="index",
+            dependencies=("canon_compile",),
+            generator_role="retrieval_index_compiler",
+        ),
+        CampaignTopicNode(
+            topic_id="opening_materialization",
+            title="Opening Scene Materialization",
+            category="bootstrap",
+            dependencies=("canon_compile", "retrieval_index"),
+            generator_role="campaign_materializer",
+        ),
+    )
+
+
+def build_profile_topic_graph(
+    profile: GenreProfile,
+    *,
+    campaign_template: str,
+    depth: str = "standard",
+    tone: str = "",
+    starting_location: str = "",
+    background_expansion: bool = False,
+    runtime_capabilities: dict[str, bool] | None = None,
+) -> CampaignTopicGraph:
+    """Build a deterministic graph from the exact validated profile revision."""
+
+    profile.require_valid()
+    domain_nodes = tuple(_domain_node(domain, depth=depth) for domain in profile.domains)
+    domain_ids = tuple(domain.domain_id for domain in profile.domains)
+    graph = CampaignTopicGraph(
+        graph_version="rpg_profile_topic_graph_v1",
+        campaign_template=str(campaign_template or profile.profile_id),
+        depth=str(depth or "standard"),  # type: ignore[arg-type]
+        nodes=(*domain_nodes, *_pipeline_nodes(domain_ids)),
+        metadata={
+            "genre_profile_id": profile.profile_id,
+            "genre_profile_version": profile.version,
+            "resolved_profile_hash": profile.content_hash,
+            "resolved_profile": profile.as_dict(),
+            "genre_tags": list(profile.genre_tags),
+            "tone": str(tone or ""),
+            "starting_location": str(starting_location or ""),
+            "background_expansion": bool(background_expansion),
+            "runtime_capabilities": {
+                **profile.runtime_capability_defaults.as_dict(),
+                **dict(runtime_capabilities or {}),
+            },
+            "launch_requirements": profile.launch_requirements.as_dict(),
+        },
+    )
+    issues = graph.validate()
+    if issues:
+        raise ValueError("invalid_profile_campaign_topic_graph:" + ",".join(issues))
+    return graph
+
+
+def _dependency_closure(
+    graph: CampaignTopicGraph,
+    selected_ids: Iterable[str],
+) -> set[str]:
+    node_map = graph.node_map()
+    selected = {str(topic_id) for topic_id in selected_ids}
+    pending = list(selected)
+    while pending:
+        topic_id = pending.pop()
+        node = node_map.get(topic_id)
+        if node is None:
+            continue
+        for dependency in node.dependencies:
+            if dependency not in selected:
+                selected.add(dependency)
+                pending.append(dependency)
+    return selected
+
+
+def build_profile_launch_topic_graph(
+    graph: CampaignTopicGraph,
+    profile: GenreProfile,
+) -> CampaignTopicGraph:
+    """Project the first-turn graph from profile launch requirements."""
+
+    profile.require_valid()
+    node_map = graph.node_map()
+    selected = set(profile.launch_requirements.required_domain_ids)
+    selected.update(
+        domain.domain_id
+        for domain in profile.domains
+        if domain.required_before_launch
+        or set(domain.semantic_roles)
+        & set(profile.launch_requirements.required_semantic_roles)
+    )
+    selected = _dependency_closure(graph, selected)
+    selected.update(_PIPELINE_CATEGORIES)
+    pipeline_ids = {
+        node.topic_id
+        for node in graph.nodes
+        if node.category in _PIPELINE_CATEGORIES
+    }
+    selected.update(pipeline_ids)
+
+    nodes: list[CampaignTopicNode] = []
+    for node in graph.topological_order():
+        if node.topic_id not in selected:
+            continue
+        dependencies = tuple(
+            dependency for dependency in node.dependencies if dependency in selected
+        )
+        if node.topic_id == "relationships":
+            dependencies = tuple(
+                domain.domain_id
+                for domain in profile.domains
+                if domain.domain_id in selected
+            )
+        nodes.append(
+            CampaignTopicNode(
+                topic_id=node.topic_id,
+                title=node.title,
+                category=node.category,
+                dependencies=dependencies,
+                generator_role=node.generator_role,
+                required_before_launch=True,
+                visibility=node.visibility,
+                target_count=node.target_count,
+                metadata=dict(node.metadata),
+            )
+        )
+
+    projected = CampaignTopicGraph(
+        graph_version=graph.graph_version,
+        campaign_template=graph.campaign_template,
+        depth=graph.depth,
+        nodes=tuple(nodes),
+        metadata={
+            **dict(graph.metadata),
+            "generation_tier": "launch_canon",
+            "deferred_topic_ids": [
+                node.topic_id
+                for node in graph.topological_order()
+                if node.topic_id not in selected
+                and node.category not in _PIPELINE_CATEGORIES
+            ],
+        },
+    )
+    issues = projected.validate()
+    if issues:
+        raise ValueError("invalid_profile_launch_topic_graph:" + ",".join(issues))
+    missing = set(profile.launch_requirements.required_domain_ids) - set(
+        projected.node_map()
+    )
+    if missing:
+        raise ValueError("profile_launch_topics_missing:" + ",".join(sorted(missing)))
+    return projected
