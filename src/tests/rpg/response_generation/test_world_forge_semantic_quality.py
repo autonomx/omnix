@@ -143,6 +143,33 @@ def test_declared_central_broker_is_allowed() -> None:
     assert report.passed, [issue.as_dict() for issue in report.issues]
 
 
+def test_declared_broker_and_hub_tuple_is_allowed() -> None:
+    entities = [_entity(index, giver_id="actor:central_broker") for index in range(4)]
+    for entity in entities:
+        entity["location_id"] = "place:contract_hall"
+    report = audit_topic_semantic_quality(
+        _node(),
+        _topic(entities),
+        {
+            "intentional_reference_clusters": [
+                {
+                    "topic_id": "contracts",
+                    "field": "giver_id",
+                    "entity_id": "actor:central_broker",
+                    "reason": "All contracts are routed through one broker.",
+                },
+                {
+                    "topic_id": "contracts",
+                    "field": "location_id",
+                    "entity_id": "place:contract_hall",
+                    "reason": "All contracts are posted in the same hall.",
+                },
+            ]
+        },
+    )
+    assert report.passed, [issue.as_dict() for issue in report.issues]
+
+
 def test_weak_next_action_and_evidence_fail_operational_usefulness() -> None:
     entity = _entity(0)
     entity["next_action"] = "Wait."
