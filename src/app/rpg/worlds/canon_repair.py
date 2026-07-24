@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from app.rpg.session.genesis.canon_audit import audit_generated_canon
 from app.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
@@ -87,28 +87,96 @@ def _normalize_relationship(row: Mapping[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _item_id(row: Mapping[str, Any], collection: str, index: int) -> str:
+    return str(
+        row.get("id")
+        or row.get("entity_id")
+        or row.get("document_id")
+        or row.get("fact_id")
+        or row.get("relationship_id")
+        or f"{collection}:{index}"
+    )
+
+
+def _normalize_rows(
+    rows: tuple[Mapping[str, Any], ...],
+    *,
+    collection: str,
+    normalizer: Callable[[Mapping[str, Any]], dict[str, Any]],
+) -> tuple[tuple[dict[str, Any], ...], list[dict[str, Any]]]:
+    normalized_rows: list[dict[str, Any]] = []
+    actions: list[dict[str, Any]] = []
+    for index, source in enumerate(rows, start=1):
+        before = dict(source)
+        after = normalizer(before)
+        normalized_rows.append(after)
+        item_id = _item_id(after, collection, index)
+        for field_id in sorted(set(before) | set(after)):
+            if before.get(field_id) == after.get(field_id):
+                continue
+            actions.append(
+                {
+                    "operation": "representation_alias_normalization",
+                    "collection": collection,
+                    "item_id": item_id,
+                    "field": field_id,
+                    "before": before.get(field_id),
+                    "after": after.get(field_id),
+                    "semantic_change": False,
+                }
+            )
+    return tuple(normalized_rows), actions
+
+
 def normalize_generation_contracts(
     generation: WorldForgeGenerationResult,
 ) -> WorldForgeGenerationResult:
     """Normalize declared field aliases without changing semantic meaning."""
 
-    topics = tuple(
-        replace(
-            topic,
-            documents=tuple(_normalize_document(row) for row in topic.documents),
-            entities=tuple(_normalize_entity(row) for row in topic.entities),
-            facts=tuple(_normalize_fact(row) for row in topic.facts),
-            relationships=tuple(
-                _normalize_relationship(row) for row in topic.relationships
-            ),
-            provenance={
-                **dict(topic.provenance),
-                "publication_normalization": "representation_only_v1",
-            },
+    topics: list[GeneratedTopic] = []
+    for topic in generation.topics:
+        documents, document_actions = _normalize_rows(
+            topic.documents,
+            collection="documents",
+            normalizer=_normalize_document,
         )
-        for topic in generation.topics
-    )
-    return replace(generation, topics=topics)
+        entities, entity_actions = _normalize_rows(
+            topic.entities,
+            collection="entities",
+            normalizer=_normalize_entity,
+        )
+        facts, fact_actions = _normalize_rows(
+            topic.facts,
+            collection="facts",
+            normalizer=_normalize_fact,
+        )
+        relationships, relationship_actions = _normalize_rows(
+            topic.relationships,
+            collection="relationships",
+            normalizer=_normalize_relationship,
+        )
+        actions = [
+            *document_actions,
+            *entity_actions,
+            *fact_actions,
+            *relationship_actions,
+        ]
+        topics.append(
+            replace(
+                topic,
+                documents=documents,
+                entities=entities,
+                facts=facts,
+                relationships=relationships,
+                provenance={
+                    **dict(topic.provenance),
+                    "publication_normalization": "representation_only_v1",
+                    "publication_normalization_actions": actions,
+                    "publication_normalization_action_count": len(actions),
+                },
+            )
+        )
+    return replace(generation, topics=tuple(topics))
 
 
 def _profile_revalidated_generation(
@@ -131,17 +199,20 @@ def _profile_revalidated_generation(
             for dependency_id in node.dependencies
             if dependency_id in processed
         }
+        validation_stages: list[str] = []
         if node.metadata.get("field_definitions"):
             topic = compile_structured_entity_facts(
                 node,
                 topic,
                 dependencies,
             )
+            validation_stages.append("structured_facts_validated")
             semantic_report = require_topic_semantic_quality(
                 node,
                 topic,
                 generation_context,
             )
+            validation_stages.append("semantic_quality_validated")
             topic = replace(
                 topic,
                 provenance={
@@ -150,6 +221,14 @@ def _profile_revalidated_generation(
                 },
             )
             topic = render_fact_derived_presentations(node, topic)
+            validation_stages.append("presentation_rebuilt_from_facts")
+            topic = replace(
+                topic,
+                provenance={
+                    **dict(topic.provenance),
+                    "publication_validation_stages": validation_stages,
+                },
+            )
         processed[node.topic_id] = topic
 
     ordered_topics = tuple(
