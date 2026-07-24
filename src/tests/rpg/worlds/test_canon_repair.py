@@ -1,15 +1,24 @@
-from app.rpg.session.genesis.canon_audit import audit_generated_canon
-from app.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
+import pytest
+
 from app.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeGenerationResult,
     WorldForgeJobRecord,
 )
-from app.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
+from app.rpg.session.genesis.world_forge_integrity import WorldForgeIntegrityError
 from app.rpg.worlds.canon_repair import repair_generation_contracts
 
 
-def test_repair_normalizes_live_provider_aliases_into_launch_quality_canon() -> None:
+def _generation(topic: GeneratedTopic) -> WorldForgeGenerationResult:
+    return WorldForgeGenerationResult(
+        topics=(topic,),
+        jobs=(WorldForgeJobRecord(topic.topic_id, "completed", (), "world_forge"),),
+        failed_topic_ids=(),
+        generation_order=((topic.topic_id,),),
+    )
+
+
+def test_publication_normalizes_alias_fields_without_changing_meaning() -> None:
     topic = GeneratedTopic(
         topic_id="locations",
         documents=(
@@ -17,56 +26,119 @@ def test_repair_normalizes_live_provider_aliases_into_launch_quality_canon() -> 
                 "document_id": "doc:glitch_bar",
                 "title": "The Glitch Bar",
                 "content": "A crowded neon bar where mercenaries exchange secrets and contracts.",
+                "summary_120": "A neon mercenary bar.",
+                "summary_500": "A crowded neon bar used by mercenaries and rival crews.",
+                "visibility": "public",
+                "entities": ["location:glitch_bar"],
             },
         ),
         entities=(
             {
-                "entity_id": "loc:glitch_bar",
-                "type": "venue",
+                "entity_id": "location:glitch_bar",
+                "kind": "location",
                 "name": "The Glitch Bar",
-                "description": "A crowded neon bar filled with flickering signs and synth music.",
+                "region_id": "region:night_city",
+                "sensory_profile": "Flickering signs, synth music, hot circuitry, and crowded booths.",
+                "dossier_status": "complete",
+                "visibility": "public",
+            },
+            {
+                "id": "region:night_city",
+                "kind": "region",
+                "name": "Night City",
+                "visibility": "public",
             },
         ),
         facts=(
             {
                 "fact_id": "fact:glitch_bar_safehouse",
                 "statement": "The back room is a neutral meeting place for rival crews.",
-                "entity_refs": ["loc:glitch_bar"],
+                "entity_refs": ["location:glitch_bar"],
+                "authority": "generated_proposal",
+                "approved_authority": "objective_canon",
+                "visibility": "game_master_canon",
             },
         ),
         provenance={"generator": "test_provider"},
     )
-    generation = WorldForgeGenerationResult(
-        topics=(topic,),
-        jobs=(WorldForgeJobRecord("locations", "completed", (), "world_forge"),),
-        failed_topic_ids=(),
-        generation_order=(("locations",),),
+
+    normalized = repair_generation_contracts(
+        _generation(topic),
+        starting_location="location:glitch_bar",
     )
 
-    repaired = repair_generation_contracts(
-        generation,
-        starting_location="loc:glitch_bar",
-    )
-    relationships = compile_cross_domain_relationships(repaired.topics)
-    audit = apply_world_forge_quality_audit(
-        repaired.topics,
-        audit_generated_canon(
-            repaired.topics,
-            compiled_relationships=relationships,
-        ),
-    )
-
-    location = next(
-        row
-        for row in repaired.topics[0].entities
-        if row["id"] == "loc:glitch_bar"
-    )
-    document = repaired.topics[0].documents[0]
-    fact = repaired.topics[0].facts[0]
-    assert audit.passed, [issue.as_dict() for issue in audit.issues]
-    assert location["kind"] == "location"
-    assert location["dossier_status"] == "complete"
-    assert document["summary_120"]
-    assert document["summary_500"]
+    location = normalized.topics[0].entities[0]
+    document = normalized.topics[0].documents[0]
+    fact = normalized.topics[0].facts[0]
+    assert location["id"] == "location:glitch_bar"
+    assert document["full_text"].startswith("A crowded neon bar")
     assert fact["id"] == "fact:glitch_bar_safehouse"
-    assert fact["authority"] == "generated_proposal"
+    assert fact["content"].startswith("The back room")
+
+
+def test_publication_does_not_reparent_invalid_location() -> None:
+    topic = GeneratedTopic(
+        topic_id="locations",
+        entities=(
+            {
+                "id": "location:glitch_bar",
+                "kind": "location",
+                "name": "The Glitch Bar",
+                "region_id": "region:missing",
+                "sensory_profile": "Flickering signs, synth music, hot circuitry, and crowded booths.",
+                "dossier_status": "complete",
+                "visibility": "public",
+            },
+        ),
+        provenance={"generator": "test_provider"},
+    )
+
+    with pytest.raises(WorldForgeIntegrityError) as raised:
+        repair_generation_contracts(
+            _generation(topic),
+            starting_location="location:glitch_bar",
+        )
+
+    assert any(issue.code == "unknown_geographic_parent" for issue in raised.value.issues)
+
+
+def test_publication_does_not_drop_dangling_relationship() -> None:
+    topic = GeneratedTopic(
+        topic_id="relationships",
+        entities=(
+            {
+                "id": "npc:ada",
+                "kind": "npc",
+                "name": "Ada",
+                "appearance": "A weathered courier in a patched radiation cloak.",
+                "personality": "Alert, patient, and unwilling to trust easy promises.",
+                "backstory": "Ada survived the eastern evacuation and now carries messages between isolated settlements.",
+                "speech_style": "Measured and precise.",
+                "goals": ["reopen the eastern route"],
+                "motives": ["duty"],
+                "faction_ids": [],
+                "secrets": [],
+                "known_facts": [],
+                "mobility_status": "itinerant",
+                "dossier_status": "complete",
+                "visibility": "game_master_canon",
+            },
+        ),
+        relationships=(
+            {
+                "id": "relationship:ada:missing",
+                "source_id": "npc:ada",
+                "target_id": "faction:missing",
+                "kind": "opposes",
+                "visibility": "game_master_canon",
+            },
+        ),
+        provenance={"generator": "test_provider"},
+    )
+
+    with pytest.raises(WorldForgeIntegrityError) as raised:
+        repair_generation_contracts(_generation(topic), starting_location="")
+
+    assert any(
+        issue.code == "dangling_relationship_endpoint" for issue in raised.value.issues
+    )
