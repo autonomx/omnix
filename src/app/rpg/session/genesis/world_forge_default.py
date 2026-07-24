@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_deterministic import DeterministicWorldForgeGenerator
+from .world_forge_deterministic_completion import complete_deterministic_references
 from .world_forge_dossier_quality import (
     dossier_word_count,
     enrich_fallback_dossier,
@@ -23,10 +24,10 @@ from .world_forge_integrity import validate_and_normalize_provider_topic
 class ReferenceSafeWorldForgeGenerator:
     """Validate live provider references without inventing semantic repairs.
 
-    Deterministic fallback generation keeps its synthetic completion behaviour for
-    tests and offline development. Live provider output is fail-closed: references
-    must be exact IDs, explicit aliases, or unique exact names before any dossier
-    projection or schema completion occurs.
+    Deterministic fallback generation keeps isolated synthetic completion for tests
+    and offline development. Live provider output is fail-closed: references must
+    be exact IDs, explicit aliases, or unique exact names before dossier projection
+    or schema completion occurs.
     """
 
     def __init__(
@@ -66,6 +67,12 @@ class ReferenceSafeWorldForgeGenerator:
             dependency_topics,
             allow_synthetic_completion=not provider_generated,
         )
+        if not provider_generated:
+            topic = complete_deterministic_references(
+                node,
+                topic,
+                dependency_topics,
+            )
         validate_world_brief_grounding(node, topic, campaign_context)
         return self._normalize_entity_dossiers(node, topic)
 
