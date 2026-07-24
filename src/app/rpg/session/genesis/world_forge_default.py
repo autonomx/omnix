@@ -17,6 +17,7 @@ from .world_forge_domains import (
     normalize_structured_domain,
     validate_world_brief_grounding,
 )
+from .world_forge_fact_pipeline import compile_structured_entity_facts
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_integrity import validate_and_normalize_provider_topic
 
@@ -73,6 +74,11 @@ class ReferenceSafeWorldForgeGenerator:
                 topic,
                 dependency_topics,
             )
+        topic = compile_structured_entity_facts(
+            node,
+            topic,
+            dependency_topics,
+        )
         validate_world_brief_grounding(node, topic, campaign_context)
         return self._normalize_entity_dossiers(node, topic)
 
