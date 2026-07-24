@@ -11,6 +11,8 @@ on:
       - "apps/web/src/features/rpg/RpgWorldCompletionModels.ts"
       - "apps/web/src/features/rpg/RpgWorldCompletionModels.test.ts"
       - ".github/workflows/world-forge-quality-pr.yml"
+  push:
+    branches: [agent/profile-aware-authoring-navigation]
   workflow_dispatch:
 
 permissions:
