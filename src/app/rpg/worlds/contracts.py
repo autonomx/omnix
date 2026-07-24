@@ -11,6 +11,12 @@ WORLD_CONTRACT_VERSION = "rpg_world_contract_v1"
 WORLD_RELEASE_VERSION = "rpg_world_release_v1"
 SCENARIO_CONTRACT_VERSION = "rpg_scenario_contract_v1"
 CAMPAIGN_LAUNCH_VERSION = "rpg_campaign_launch_v1"
+WorldArtifactStage = Literal[
+    "canon_validated",
+    "runtime_seeded",
+    "materialized",
+    "playtested",
+]
 
 
 def canonical_payload(value: BaseModel | Mapping[str, Any]) -> dict[str, Any]:
@@ -102,6 +108,10 @@ class WorldReleaseDocument(FrozenContract):
     asset_bindings: dict[str, Any] = Field(default_factory=dict)
     compiler_provenance: dict[str, Any] = Field(default_factory=dict)
     certification: dict[str, Any] = Field(default_factory=dict)
+    artifact_stage: WorldArtifactStage = "canon_validated"
+    runtime_seed: dict[str, Any] = Field(default_factory=dict)
+    materialization: dict[str, Any] = Field(default_factory=dict)
+    playtest_report: dict[str, Any] = Field(default_factory=dict)
     release_hash: str = ""
 
     @model_validator(mode="after")
@@ -111,6 +121,11 @@ class WorldReleaseDocument(FrozenContract):
             raise ValueError("duplicate_world_release_map_binding")
         if self.release_hash and not self.release_hash.startswith("sha256:"):
             raise ValueError("world_release_hash_invalid")
+        for field_name in ("runtime_seed", "materialization", "playtest_report"):
+            payload = getattr(self, field_name)
+            content_hash = str(payload.get("content_hash") or "")
+            if content_hash and not content_hash.startswith("sha256:"):
+                raise ValueError(f"{field_name}_hash_invalid")
         return self
 
 
@@ -152,6 +167,7 @@ class ScenarioRevisionDocument(FrozenContract):
     starting_resources: dict[str, Any] = Field(default_factory=dict)
     opening_seed_ids: tuple[str, ...] = ()
     map_initialization: tuple[MapInitializationOperation, ...] = ()
+    runtime_seed_hash: str = ""
     content_hash: str = ""
 
     @model_validator(mode="after")
@@ -159,6 +175,8 @@ class ScenarioRevisionDocument(FrozenContract):
         ids = [operation.operation_id for operation in self.map_initialization]
         if len(ids) != len(set(ids)):
             raise ValueError("duplicate_scenario_map_initialization_operation")
+        if self.runtime_seed_hash and not self.runtime_seed_hash.startswith("sha256:"):
+            raise ValueError("scenario_runtime_seed_hash_invalid")
         if self.content_hash and not self.content_hash.startswith("sha256:"):
             raise ValueError("scenario_revision_hash_invalid")
         return self
