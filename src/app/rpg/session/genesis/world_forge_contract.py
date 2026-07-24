@@ -417,3 +417,55 @@ def build_campaign_topic_graph(
     if issues:
         raise ValueError("invalid campaign topic graph: " + ",".join(issues))
     return graph
+
+
+_build_legacy_campaign_topic_graph = build_campaign_topic_graph
+
+
+def build_campaign_topic_graph(
+    *,
+    campaign_template: str,
+    genre: str | None,
+    tone: str,
+    depth: str | None = "standard",
+    starting_location: str = "",
+    background_expansion: bool = False,
+) -> CampaignTopicGraph:
+    """Use genre profiles for non-fantasy fallbacks while preserving fantasy parity."""
+
+    requested_genre = str(genre or campaign_template or "classic_fantasy")
+    from .world_forge_profile_generation import (
+        normalize_genre_key,
+        resolve_or_generate_genre_profile,
+    )
+
+    normalized = normalize_genre_key(requested_genre)
+    if "fantasy" in normalized or normalized in {
+        "summoned_heroes",
+        "classic_fantasy",
+        "high_fantasy",
+        "medieval_fantasy",
+    }:
+        return _build_legacy_campaign_topic_graph(
+            campaign_template=campaign_template,
+            genre=genre,
+            tone=tone,
+            depth=depth,
+            starting_location=starting_location,
+            background_expansion=background_expansion,
+        )
+
+    from .world_forge_profile_graph import build_profile_topic_graph
+
+    resolution = resolve_or_generate_genre_profile(
+        genre=requested_genre,
+        campaign_mode="persistent_living_world",
+    )
+    return build_profile_topic_graph(
+        resolution.profile,
+        campaign_template=str(campaign_template or resolution.profile.profile_id),
+        depth=str(depth or "standard"),
+        tone=tone,
+        starting_location=starting_location,
+        background_expansion=background_expansion,
+    )

@@ -8,6 +8,8 @@ on:
       - "src/app/rpg/worlds/**"
       - "src/tests/rpg/response_generation/test_world_forge_*.py"
       - "src/tests/rpg/worlds/test_*world*.py"
+      - "apps/web/src/features/rpg/RpgWorldCompletionModels.ts"
+      - "apps/web/src/features/rpg/RpgWorldCompletionModels.test.ts"
       - ".github/workflows/world-forge-quality-pr.yml"
   workflow_dispatch:
 
@@ -41,6 +43,7 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest \
+            src/tests/rpg/response_generation/test_world_forge_authoring_navigation.py \
             src/tests/rpg/response_generation/test_world_forge_regeneration.py \
             src/tests/rpg/response_generation/test_world_forge_semantic_quality.py \
             src/tests/rpg/response_generation/test_world_forge_presentation.py \
@@ -65,3 +68,25 @@ jobs:
         with:
           name: world-forge-quality-pytest-output
           path: world-forge-quality-pytest-output.txt
+
+  authoring-navigation-web:
+    name: Profile-aware authoring navigation web test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install web dependencies
+        run: npm install
+
+      - name: Run authoring navigation test
+        run: >-
+          npm --workspace @omnix/web run test --
+          --run src/features/rpg/RpgWorldCompletionModels.test.ts
