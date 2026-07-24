@@ -274,9 +274,36 @@ def publish_scenario_revision(
                 "scenario_revision_sequence_mismatch",
                 f"expected={next_revision}:received={document.revision}",
             )
+        world_revision = _world_revision_from_work(
+            work,
+            context,
+            document.world_id,
+            document.world_revision,
+        )
+        if document.world_revision_hash != world_revision.content_hash:
+            raise WorldSemanticError("scenario_world_hash_mismatch")
+        if document.compatible_release is not None:
+            release_row = work.world_scenarios.get_world_release(
+                context,
+                document.world_id,
+                document.world_revision,
+                document.compatible_release,
+            )
+            if release_row is None:
+                raise KeyError(
+                    "world_release_not_found:"
+                    f"{document.world_id}:{document.world_revision}:"
+                    f"{document.compatible_release}"
+                )
+            release = WorldReleaseDocument.model_validate(release_row["document"])
+            definitions = _definitions_from_work(work, context, release)
+            validate_release_bindings(world_revision, release, definitions)
+            validate_scenario_against_release(document, release, definitions)
         stored = work.world_scenarios.publish_scenario_revision(
             context,
             scenario_id=document.scenario_id,
+            world_id=document.world_id,
+            world_revision=document.world_revision,
             document=document.model_dump(mode="json"),
             content_hash=document.content_hash,
         )
@@ -291,9 +318,15 @@ def bind_campaign_world(
 ) -> dict[str, Any]:
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
-        stored = work.world_scenarios.bind_campaign_world(
+        require_scenario_writable(work, context, binding.scenario_id)
+        stored = work.world_scenarios.bind_campaign(
             context,
             campaign_id=binding.campaign_id,
+            world_id=binding.world_id,
+            world_revision=binding.world_revision,
+            world_release=binding.world_release,
+            scenario_id=binding.scenario_id,
+            scenario_revision=binding.scenario_revision,
             binding=binding.model_dump(mode="json"),
         )
         work.commit()
@@ -310,3 +343,55 @@ def read_campaign_world_binding(
         binding = work.world_scenarios.get_campaign_binding(context, campaign_id)
         work.rollback()
     return binding
+
+
+def load_release_definitions(
+    world_revision: WorldRevisionDocument,
+    release: WorldReleaseDocument,
+    *,
+    database: Any | None = None,
+) -> dict[str, GridMapDefinition]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        definitions = _definitions_from_work(work, context, release)
+        work.rollback()
+    validate_release_bindings(world_revision, release, definitions)
+    return definitions
+
+
+def load_published_resources(
+    *,
+    world_id: str,
+    world_revision: int,
+    world_release: int,
+    scenario_id: str,
+    scenario_revision: int,
+    database: Any | None = None,
+) -> tuple[WorldRevisionDocument, WorldReleaseDocument, ScenarioRevisionDocument]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        revision = work.world_scenarios.get_world_revision(
+            context, world_id, world_revision
+        )
+        release = work.world_scenarios.get_world_release(
+            context, world_id, world_revision, world_release
+        )
+        scenario = work.world_scenarios.get_scenario_revision(
+            context, scenario_id, scenario_revision
+        )
+        work.rollback()
+    if revision is None:
+        raise KeyError(f"world_revision_not_found:{world_id}:{world_revision}")
+    if release is None:
+        raise KeyError(
+            f"world_release_not_found:{world_id}:{world_revision}:{world_release}"
+        )
+    if scenario is None:
+        raise KeyError(
+            f"scenario_revision_not_found:{scenario_id}:{scenario_revision}"
+        )
+    return (
+        WorldRevisionDocument.model_validate(revision["document"]),
+        WorldReleaseDocument.model_validate(release["document"]),
+        ScenarioRevisionDocument.model_validate(scenario["document"]),
+    )
