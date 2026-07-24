@@ -183,6 +183,8 @@ def compile_world_generation_publication(
     generation = repair_generation_contracts(
         generation,
         starting_location=starting_location,
+        topic_graph=graph,
+        generation_context=generation_context,
     )
     relationships = compile_cross_domain_relationships(generation.topics)
     audit = audit_generated_canon(
