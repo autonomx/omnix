@@ -8,6 +8,7 @@ from .contracts import (
     MapDefinitionBinding,
     MapInitializationOperation,
     ScenarioRevisionDocument,
+    WorldArtifactStage,
     WorldReleaseDocument,
     WorldRevisionDocument,
     canonical_content_hash,
@@ -58,6 +59,10 @@ def compile_world_release(
     asset_bindings: Mapping[str, Any] | None = None,
     compiler_provenance: Mapping[str, Any] | None = None,
     certification: Mapping[str, Any] | None = None,
+    artifact_stage: WorldArtifactStage = "canon_validated",
+    runtime_seed: Mapping[str, Any] | None = None,
+    materialization: Mapping[str, Any] | None = None,
+    playtest_report: Mapping[str, Any] | None = None,
 ) -> WorldReleaseDocument:
     revision_hash = world_revision.content_hash or canonical_content_hash(world_revision)
     payload = {
@@ -72,6 +77,10 @@ def compile_world_release(
         "asset_bindings": dict(asset_bindings or {}),
         "compiler_provenance": dict(compiler_provenance or {}),
         "certification": dict(certification or {}),
+        "artifact_stage": artifact_stage,
+        "runtime_seed": dict(runtime_seed or {}),
+        "materialization": dict(materialization or {}),
+        "playtest_report": dict(playtest_report or {}),
     }
     return WorldReleaseDocument.model_validate(
         _hashed_payload(payload, "release_hash")
@@ -92,6 +101,7 @@ def compile_scenario_revision(
     starting_resources: Mapping[str, Any] | None = None,
     opening_seed_ids: Iterable[str] = (),
     map_initialization: Iterable[MapInitializationOperation] = (),
+    runtime_seed_hash: str = "",
 ) -> ScenarioRevisionDocument:
     revision_hash = world_revision.content_hash or canonical_content_hash(world_revision)
     payload = {
@@ -111,6 +121,7 @@ def compile_scenario_revision(
         "map_initialization": tuple(
             operation.model_dump(mode="json") for operation in map_initialization
         ),
+        "runtime_seed_hash": runtime_seed_hash,
     }
     return ScenarioRevisionDocument.model_validate(
         _hashed_payload(payload, "content_hash")
@@ -141,6 +152,12 @@ def resolve_campaign_binding(
         and scenario_revision.compatible_release != world_release.release
     ):
         raise ValueError("scenario_release_incompatible")
+    if (
+        scenario_revision.runtime_seed_hash
+        and scenario_revision.runtime_seed_hash
+        != str(world_release.runtime_seed.get("content_hash") or "")
+    ):
+        raise ValueError("scenario_runtime_seed_hash_mismatch")
 
     pins = {
         binding.map_id: binding.definition_hash
