@@ -6,6 +6,10 @@ from typing import Any, Mapping
 
 from app.rpg.session.genesis.canon_audit import audit_generated_canon
 from app.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
+from app.rpg.session.genesis.world_forge_contract import CampaignTopicGraph
+from app.rpg.session.genesis.world_forge_fact_pipeline import (
+    compile_structured_entity_facts,
+)
 from app.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeGenerationResult,
@@ -14,7 +18,15 @@ from app.rpg.session.genesis.world_forge_integrity import (
     WorldForgeIntegrityError,
     WorldForgeIntegrityIssue,
 )
+from app.rpg.session.genesis.world_forge_presentation import (
+    render_fact_derived_presentations,
+)
 from app.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
+from app.rpg.session.genesis.world_forge_semantic_quality import (
+    require_topic_semantic_quality,
+)
+
+_NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 
 
 def _text(value: Any) -> str:
@@ -44,7 +56,9 @@ def _normalize_document(row: Mapping[str, Any]) -> dict[str, Any]:
 def _normalize_fact(row: Mapping[str, Any]) -> dict[str, Any]:
     normalized = dict(row)
     fact_id = _text(
-        normalized.get("id") or normalized.get("fact_id") or normalized.get("evidence_id")
+        normalized.get("id")
+        or normalized.get("fact_id")
+        or normalized.get("evidence_id")
     )
     if fact_id:
         normalized["id"] = fact_id
@@ -55,11 +69,17 @@ def _normalize_fact(row: Mapping[str, Any]) -> dict[str, Any]:
 
 def _normalize_relationship(row: Mapping[str, Any]) -> dict[str, Any]:
     normalized = dict(row)
-    relationship_id = _text(normalized.get("id") or normalized.get("relationship_id"))
+    relationship_id = _text(
+        normalized.get("id") or normalized.get("relationship_id")
+    )
     if relationship_id:
         normalized["id"] = relationship_id
-    source_id = _text(normalized.get("source_id") or normalized.get("source_entity_id"))
-    target_id = _text(normalized.get("target_id") or normalized.get("target_entity_id"))
+    source_id = _text(
+        normalized.get("source_id") or normalized.get("source_entity_id")
+    )
+    target_id = _text(
+        normalized.get("target_id") or normalized.get("target_entity_id")
+    )
     if source_id:
         normalized["source_id"] = source_id
     if target_id:
@@ -91,19 +111,78 @@ def normalize_generation_contracts(
     return replace(generation, topics=topics)
 
 
+def _profile_revalidated_generation(
+    generation: WorldForgeGenerationResult,
+    topic_graph: CampaignTopicGraph,
+    generation_context: Mapping[str, Any],
+) -> WorldForgeGenerationResult:
+    """Re-run Phase 4-7 gates from the pinned graph before publication."""
+
+    source_topics = {topic.topic_id: topic for topic in generation.topics}
+    processed: dict[str, GeneratedTopic] = {}
+    for node in topic_graph.topological_order():
+        if node.category in _NON_GENERATION_CATEGORIES:
+            continue
+        topic = source_topics.get(node.topic_id)
+        if topic is None:
+            continue
+        dependencies = {
+            dependency_id: processed[dependency_id]
+            for dependency_id in node.dependencies
+            if dependency_id in processed
+        }
+        if node.metadata.get("field_definitions"):
+            topic = compile_structured_entity_facts(
+                node,
+                topic,
+                dependencies,
+            )
+            semantic_report = require_topic_semantic_quality(
+                node,
+                topic,
+                generation_context,
+            )
+            topic = replace(
+                topic,
+                provenance={
+                    **dict(topic.provenance),
+                    "publication_semantic_quality": semantic_report.as_dict(),
+                },
+            )
+            topic = render_fact_derived_presentations(node, topic)
+        processed[node.topic_id] = topic
+
+    ordered_topics = tuple(
+        processed.get(topic.topic_id, topic)
+        for topic in generation.topics
+    )
+    return replace(generation, topics=ordered_topics)
+
+
 def validate_generation_contracts(
     generation: WorldForgeGenerationResult,
-) -> None:
-    relationships = compile_cross_domain_relationships(generation.topics)
+    *,
+    topic_graph: CampaignTopicGraph | None = None,
+    generation_context: Mapping[str, Any] | None = None,
+) -> WorldForgeGenerationResult:
+    validated = generation
+    if topic_graph is not None:
+        validated = _profile_revalidated_generation(
+            validated,
+            topic_graph,
+            dict(generation_context or {}),
+        )
+
+    relationships = compile_cross_domain_relationships(validated.topics)
     report = apply_world_forge_quality_audit(
-        generation.topics,
+        validated.topics,
         audit_generated_canon(
-            generation.topics,
+            validated.topics,
             compiled_relationships=relationships,
         ),
     )
     if report.passed:
-        return
+        return validated
     issues = tuple(
         WorldForgeIntegrityIssue(
             code=issue.code,
@@ -123,8 +202,10 @@ def repair_generation_contracts(
     generation: WorldForgeGenerationResult,
     *,
     starting_location: str,
+    topic_graph: CampaignTopicGraph | None = None,
+    generation_context: Mapping[str, Any] | None = None,
 ) -> WorldForgeGenerationResult:
-    """Deprecated entry point retained only as a fail-closed publication gate.
+    """Deprecated repair entry point retained as a strict publication gate.
 
     ``starting_location`` is intentionally ignored. Publication may not move an
     entity or choose a fallback location to make a proposal appear valid.
@@ -132,5 +213,8 @@ def repair_generation_contracts(
 
     del starting_location
     normalized = normalize_generation_contracts(generation)
-    validate_generation_contracts(normalized)
-    return normalized
+    return validate_generation_contracts(
+        normalized,
+        topic_graph=topic_graph,
+        generation_context=generation_context,
+    )
