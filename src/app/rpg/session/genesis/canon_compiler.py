@@ -73,6 +73,13 @@ def _document_cards(
 ) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     for document in documents:
+        authority = str(
+            document.get("approved_authority")
+            or document.get("authority")
+            or "objective_canon"
+        )
+        if authority == "presentation_only":
+            continue
         document_id = str(document.get("document_id") or "")
         title = str(document.get("title") or document_id)
         visibility = str(document.get("visibility") or "game_master_canon")
@@ -81,6 +88,11 @@ def _document_cards(
         ]
         keywords = [
             str(value) for value in document.get("keywords") or () if str(value)
+        ]
+        source_fact_ids = [
+            str(value)
+            for value in document.get("canonical_source_fact_ids") or ()
+            if str(value)
         ]
         for size, field_name in (
             ("short", "summary_120"),
@@ -96,10 +108,11 @@ def _document_cards(
                     "title": title,
                     "content": content,
                     "summary_size": size,
-                    "authority": "objective_canon",
+                    "authority": authority,
                     "visibility": visibility,
                     "entity_refs": entity_refs,
                     "keywords": keywords,
+                    "canonical_source_fact_ids": source_fact_ids,
                     "canon_revision": canon_revision,
                     "category": str(document.get("topic_id") or "lore"),
                 }
