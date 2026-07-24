@@ -17,7 +17,9 @@ const AUTHORING_GROUP_ORDER: RpgAuthoringSection['group'][] = [
 ];
 
 export function completeAuthoringSections(sections: RpgAuthoringSection[]): RpgAuthoringSection[] {
-  const groupRank = new Map(AUTHORING_GROUP_ORDER.map((group, index) => [group, index]));
+  const groupRank = new Map<RpgAuthoringSection['group'], number>(
+    AUTHORING_GROUP_ORDER.map((group, index) => [group, index] as const),
+  );
   return sections
     .map((section, index) => ({ section, index }))
     .sort((left, right) => {
