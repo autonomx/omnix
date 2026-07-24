@@ -20,7 +20,9 @@ from .contracts import (
     WorldRevisionDocument,
     canonical_content_hash,
 )
+from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_scenario_writable, require_world_writable
+from .profile_generation_jobs import plan_world_profile_creation
 from .semantic_validation import (
     WorldSemanticError,
     certify_world_release,
@@ -104,6 +106,7 @@ def create_world_project(
     database: Any | None = None,
 ) -> dict[str, Any]:
     context = bootstrap_local_tenant(database)
+    profile_plan = None
     with unit_of_work(database) as work:
         world_id = str(request.world_id or "").strip()
         if world_id:
@@ -120,6 +123,22 @@ def create_world_project(
                     "WHERE workspace_id = %s AND id = %s"
                 ),
             )
+        request_metadata = dict(request.metadata or {})
+        profile_plan = plan_world_profile_creation(
+            world_id=world_id,
+            title=request.title,
+            genre=request.genre,
+            description=request.description,
+            tone=request.tone,
+            campaign_mode=str(
+                request_metadata.get("campaign_mode") or "persistent_living_world"
+            ),
+            seed=request.seed,
+        )
+        metadata = {
+            **request_metadata,
+            "genre_profile_binding": dict(profile_plan.binding),
+        }
         world = work.world_scenarios.create_world(
             context,
             world_id=world_id,
@@ -129,9 +148,16 @@ def create_world_project(
             genre=request.genre,
             tone=request.tone,
             seed=request.seed,
-            metadata=request.metadata,
+            metadata=metadata,
         )
+        if profile_plan.job_payload is not None:
+            work.jobs.create_job(context, dict(profile_plan.job_payload))
         work.commit()
+    if profile_plan is not None and profile_plan.job_payload is not None:
+        kick_world_generation_worker(
+            database=database,
+            provider_route=profile_plan.provider_route,
+        )
     return world
 
 

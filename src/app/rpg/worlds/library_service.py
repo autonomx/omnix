@@ -19,6 +19,7 @@ from .generation_scope import resolve_generation_scope
 from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_world_writable
 from .map_blueprint_authoring import list_map_blueprints
+from .profile_generation_jobs import profile_manifest_run, profile_resolution_from_world
 
 
 def _database(value: Any | None) -> Any | None:
@@ -127,6 +128,10 @@ def read_world_detail(
             for scenario in scenarios
         }
         work.rollback()
+    if not runs:
+        manifest_run = profile_manifest_run(world)
+        if manifest_run is not None:
+            runs = [manifest_run]
     return {
         "ok": True,
         "world": world,
@@ -230,13 +235,15 @@ def start_world_library_generation(
     route = resolve_world_forge_route(provider_route, model)
     metadata = dict(world.get("metadata") or {})
     campaign_template = str(metadata.get("campaign_template") or "classic_fantasy")
-    profile_resolution = resolve_or_generate_genre_profile(
-        genre=str(world.get("genre") or campaign_template),
-        description=str(world.get("description") or ""),
-        campaign_mode=str(
-            metadata.get("campaign_mode") or "persistent_living_world"
-        ),
-    )
+    profile_resolution = profile_resolution_from_world(world)
+    if profile_resolution is None:
+        profile_resolution = resolve_or_generate_genre_profile(
+            genre=str(world.get("genre") or campaign_template),
+            description=str(world.get("description") or ""),
+            campaign_mode=str(
+                metadata.get("campaign_mode") or "persistent_living_world"
+            ),
+        )
     graph = build_profile_topic_graph(
         profile_resolution.profile,
         campaign_template=campaign_template,

@@ -1,3 +1,4 @@
+from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
 from app.rpg.session.genesis.world_forge_profile_graph import (
     build_profile_launch_topic_graph,
     build_profile_topic_graph,
@@ -132,3 +133,25 @@ def test_reference_schema_is_embedded_in_node_metadata() -> None:
         "value_type": "entity_ref_list",
         "allowed_target_domains": ["settlements"],
     }
+
+
+def test_cyberpunk_fallback_graph_uses_only_cyberpunk_profile_domains() -> None:
+    graph = build_campaign_topic_graph(
+        campaign_template="cyberpunk",
+        genre="cyberpunk",
+        tone="neon noir",
+        depth="standard",
+        background_expansion=True,
+    )
+    nodes = graph.node_map()
+
+    assert graph.graph_version == "rpg_profile_topic_graph_v1"
+    assert {"networks", "augmentations", "places", "groups", "actors"}.issubset(nodes)
+    assert {
+        "spells",
+        "races",
+        "classes",
+        "pantheon",
+        "hero_system",
+        "monsters",
+    }.isdisjoint(nodes)

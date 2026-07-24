@@ -9,49 +9,25 @@ export interface RpgWorldEditorRoute {
   entityId?: string;
 }
 
-const CANONICAL_LORE: Array<Pick<RpgAuthoringSection, 'id' | 'label' | 'dependencies'>> = [
-  { id: 'realm', label: 'Realm Overview', dependencies: [] },
-  { id: 'cosmology', label: 'Cosmology and World Laws', dependencies: ['realm'] },
-  { id: 'magic_technology', label: 'Magic and Technology', dependencies: ['cosmology'] },
-  { id: 'history', label: 'History', dependencies: ['realm', 'cosmology'] },
-  { id: 'calendar', label: 'Calendar and Eras', dependencies: ['history'] },
-  { id: 'cultures', label: 'Cultures and Peoples', dependencies: ['regions', 'history'] },
-  { id: 'institutions', label: 'Institutions', dependencies: ['factions', 'cultures'] },
-  { id: 'pantheon', label: 'Religions and Pantheon', dependencies: ['cosmology', 'cultures'] },
-  { id: 'hero_system', label: 'Heroes, Summoning, and Exceptional Powers', dependencies: ['cosmology', 'magic_technology', 'institutions'] },
-  { id: 'current_conflicts', label: 'Current Conflicts', dependencies: ['factions', 'institutions', 'regions'] },
+const AUTHORING_GROUP_ORDER: RpgAuthoringSection['group'][] = [
+  'workspace',
+  'world',
+  'lore',
+  'game-master',
 ];
 
-function syntheticLoreSection(
-  definition: Pick<RpgAuthoringSection, 'id' | 'label' | 'dependencies'>,
-): RpgAuthoringSection {
-  return {
-    ...definition,
-    group: 'lore',
-    page_kind: 'document',
-    topic_ids: [definition.id],
-    required_before_launch: true,
-    supports_generation: true,
-    supports_images: definition.id === 'realm',
-    supports_entity_editing: false,
-    operational_status: 'waiting',
-    editorial_status: 'unreviewed',
-    entity_count: 0,
-  };
-}
-
 export function completeAuthoringSections(sections: RpgAuthoringSection[]): RpgAuthoringSection[] {
-  const byId = new Map(sections.map((section) => [section.id, section]));
-  const canonicalIds = new Set(CANONICAL_LORE.map((section) => section.id));
-  const groups: RpgAuthoringSection[] = [];
-
-  for (const group of ['workspace', 'world'] as const) {
-    groups.push(...sections.filter((section) => section.group === group));
-  }
-  groups.push(...CANONICAL_LORE.map((definition) => byId.get(definition.id) ?? syntheticLoreSection(definition)));
-  groups.push(...sections.filter((section) => section.group === 'lore' && !canonicalIds.has(section.id)));
-  groups.push(...sections.filter((section) => section.group === 'game-master'));
-  return groups;
+  const groupRank = new Map<RpgAuthoringSection['group'], number>(
+    AUTHORING_GROUP_ORDER.map((group, index) => [group, index] as const),
+  );
+  return sections
+    .map((section, index) => ({ section, index }))
+    .sort((left, right) => {
+      const groupDifference = (groupRank.get(left.section.group) ?? 99)
+        - (groupRank.get(right.section.group) ?? 99);
+      return groupDifference || left.index - right.index;
+    })
+    .map(({ section }) => section);
 }
 
 export function parseWorldEditorRoute(search = typeof window === 'undefined' ? '' : window.location.search): RpgWorldEditorRoute | null {

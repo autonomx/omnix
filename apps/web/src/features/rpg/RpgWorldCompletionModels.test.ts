@@ -27,25 +27,39 @@ function section(id: string, group: RpgAuthoringSection['group']): RpgAuthoringS
 }
 
 describe('world authoring completion models', () => {
-  it('restores every canonical lore section for historical manifests', () => {
+  it('uses only profile-backed sections supplied by the authoring manifest', () => {
     const completed = completeAuthoringSections([
       section('overview', 'workspace'),
-      section('realm', 'lore'),
-      section('history', 'lore'),
+      section('networks', 'world'),
+      section('augmentations', 'world'),
+      section('opening_threads', 'game-master'),
     ]);
-    expect(completed.filter((row) => row.group === 'lore').map((row) => row.id)).toEqual([
-      'realm',
-      'cosmology',
-      'magic_technology',
-      'history',
-      'calendar',
-      'cultures',
-      'institutions',
-      'pantheon',
-      'hero_system',
-      'current_conflicts',
+
+    expect(completed.map((row) => row.id)).toEqual([
+      'overview',
+      'networks',
+      'augmentations',
+      'opening_threads',
     ]);
-    expect(completed.find((row) => row.id === 'pantheon')?.operational_status).toBe('waiting');
+    expect(completed.some((row) => row.id === 'spells')).toBe(false);
+    expect(completed.some((row) => row.id === 'pantheon')).toBe(false);
+    expect(completed.some((row) => row.id === 'hero_system')).toBe(false);
+  });
+
+  it('keeps manifest order within each navigation group', () => {
+    const completed = completeAuthoringSections([
+      section('pressures', 'lore'),
+      section('overview', 'workspace'),
+      section('actors', 'world'),
+      section('places', 'world'),
+    ]);
+
+    expect(completed.map((row) => row.id)).toEqual([
+      'overview',
+      'actors',
+      'places',
+      'pressures',
+    ]);
   });
 
   it('creates unique anchors when lore sections repeat a title', () => {
