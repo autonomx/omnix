@@ -7,6 +7,7 @@ from app.rpg.session.genesis.world_forge_fact_pipeline import (
 )
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg.session.genesis.world_forge_regeneration import (
+    enforce_targeted_regeneration,
     generate_with_targeted_regeneration,
     regeneration_request_from_error,
 )
@@ -29,8 +30,10 @@ class RecordingGenerator:
         del seed, dependency_topics
         self.contexts.append(dict(campaign_context))
         targeted = campaign_context.get("targeted_regeneration")
-        action = "Wait." if self.always_bad or not targeted else (
-            "Inspect the flooded relay chamber before the evening tide."
+        action = (
+            "Wait."
+            if self.always_bad or not targeted
+            else "Inspect the flooded relay chamber before the evening tide."
         )
         return GeneratedTopic(
             topic_id=node.topic_id,
@@ -38,14 +41,18 @@ class RecordingGenerator:
                 {
                     "id": "actor:ada",
                     "kind": "actor",
-                    "name": "Ada",
+                    "name": "Mutated Ada" if targeted else "Ada",
                     "next_action": action,
                 },
                 {
                     "id": "actor:bram",
                     "kind": "actor",
-                    "name": "Bram",
-                    "next_action": "Recalibrate the harbor crane after the noon shift.",
+                    "name": "Mutated Bram" if targeted else "Bram",
+                    "next_action": (
+                        "Abandon the harbor without warning."
+                        if targeted
+                        else "Recalibrate the harbor crane after the noon shift."
+                    ),
                 },
             ),
             provenance={
@@ -98,8 +105,39 @@ def test_live_failure_generates_targeted_request_and_retries() -> None:
     assert request["fields"] == ["next_action"]
     assert request["preserve_entity_ids"] == ["actor:bram"]
     assert request["prior_failing_entities"][0]["next_action"] == "Wait."
+    assert result.entities[0]["name"] == "Ada"
+    assert result.entities[0]["next_action"].startswith("Inspect the flooded")
+    assert result.entities[1]["name"] == "Bram"
+    assert result.entities[1]["next_action"].startswith("Recalibrate the harbor")
+    assert result.provenance["targeted_regeneration_enforced"] is True
     assert result.provenance["targeted_regeneration_succeeded"] is True
     assert result.provenance["targeted_regeneration_attempt_count"] == 2
+
+
+def test_targeted_merge_rejects_missing_selected_entity() -> None:
+    prior = GeneratedTopic(
+        topic_id="actors",
+        entities=(
+            {"id": "actor:ada", "kind": "actor", "next_action": "Wait."},
+        ),
+    )
+    candidate = GeneratedTopic(topic_id="actors", entities=())
+    error = StructuredFactValidationError(
+        (
+            StructuredFactIssue(
+                code="weak_operational_state",
+                topic_id="actors",
+                entity_id="actor:ada",
+                field_id="next_action",
+                message="Replace the placeholder.",
+            ),
+        )
+    )
+    request = regeneration_request_from_error(_node(), error, attempt=2)
+    assert request is not None
+    with pytest.raises(StructuredFactValidationError) as raised:
+        enforce_targeted_regeneration(prior, candidate, request)
+    assert raised.value.issues[0].code == "targeted_regeneration_invariant"
 
 
 def test_deterministic_generation_never_retries_semantic_failures() -> None:
