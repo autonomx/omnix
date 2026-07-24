@@ -112,6 +112,7 @@ def _place_topic() -> GeneratedTopic:
                 "visibility": "public",
             },
         ),
+        provenance={"generator": "world_library_manual_authoring"},
     )
 
 
@@ -144,6 +145,7 @@ def _actor_topic(*, location_id: object = "place:harbor") -> GeneratedTopic:
                 "visibility": "game_master_canon",
             },
         ),
+        provenance={"generator": "world_library_manual_authoring"},
     )
 
 
