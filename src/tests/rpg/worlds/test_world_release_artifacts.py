@@ -3,10 +3,7 @@ from app.rpg.session.genesis.world_forge_generation import (
     WorldForgeGenerationResult,
 )
 from app.rpg.worlds.canon_repair import normalize_generation_contracts
-from app.rpg.worlds.contracts import (
-    VerticalSliceMaterializationDocument if False else WorldReleaseDocument,
-    canonical_content_hash,
-)
+from app.rpg.worlds.contracts import WorldReleaseDocument, canonical_content_hash
 from app.rpg.worlds.map_blueprint_publication import merge_authored_blueprints
 from app.rpg.worlds.runtime_seed import (
     VerticalSliceMaterializationDocument,
@@ -216,9 +213,9 @@ def test_release_certification_rebuilds_remapped_runtime_artifacts() -> None:
     assert certified.playtest_report["runtime_seed_hash"] == certified.runtime_seed[
         "content_hash"
     ]
-    assert certified.playtest_report["direct_final_state_hash"] == certified.playtest_report[
-        "reloaded_final_state_hash"
-    ]
+    assert certified.playtest_report["direct_final_state_hash"] == (
+        certified.playtest_report["reloaded_final_state_hash"]
+    )
     assert certified.playtest_report["daily_events"][0]["events"][0][
         "agent_id"
     ] == "actor:clone"
