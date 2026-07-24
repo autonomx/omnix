@@ -20,6 +20,7 @@ from .world_forge_domains import (
 from .world_forge_fact_pipeline import compile_structured_entity_facts
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_integrity import validate_and_normalize_provider_topic
+from .world_forge_semantic_quality import require_topic_semantic_quality
 
 
 class ReferenceSafeWorldForgeGenerator:
@@ -79,6 +80,19 @@ class ReferenceSafeWorldForgeGenerator:
             topic,
             dependency_topics,
         )
+        if provider_generated:
+            semantic_report = require_topic_semantic_quality(
+                node,
+                topic,
+                campaign_context,
+            )
+            topic = replace(
+                topic,
+                provenance={
+                    **dict(topic.provenance),
+                    "semantic_quality": semantic_report.as_dict(),
+                },
+            )
         validate_world_brief_grounding(node, topic, campaign_context)
         return self._normalize_entity_dossiers(node, topic)
 
