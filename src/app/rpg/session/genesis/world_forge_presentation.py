@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
 from .world_forge_contract import CampaignTopicNode
+from .world_forge_contradictions import audit_presentation_contradictions
 from .world_forge_fact_pipeline import (
     StructuredFactIssue,
     StructuredFactValidationError,
@@ -13,7 +14,6 @@ from .world_forge_fact_pipeline import (
 from .world_forge_generation import GeneratedTopic
 
 _DOSSIER_SCHEMA = "rpg_world_entity_dossier_v1"
-_IDENTITY_FIELDS = {"id", "entity_id", "kind", "visibility"}
 _PRESENTATION_SOURCE_FIELDS = {
     "description",
     "summary",
@@ -47,7 +47,9 @@ def _display(value: Any) -> str:
             if _display(item)
         )
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        return ", ".join(rendered for item in value if (rendered := _display(item)))
+        return ", ".join(
+            rendered for item in value if (rendered := _display(item))
+        )
     return " ".join(str(value).split())
 
 
@@ -61,11 +63,35 @@ def _sentence(label: str, value: Any) -> str:
 def _section_for_field(field_id: str, value_type: str) -> tuple[str, str]:
     if value_type in {"entity_ref", "entity_ref_list"}:
         return "connections", "Connections"
-    if any(marker in field_id for marker in ("observable", "evidence", "sign", "rumor", "rumour")):
+    if any(
+        marker in field_id
+        for marker in ("observable", "evidence", "sign", "rumor", "rumour")
+    ):
         return "evidence", "Observable Evidence"
-    if any(marker in field_id for marker in ("next_action", "next_tick", "reaction", "failure", "aftermath", "escalation")):
+    if any(
+        marker in field_id
+        for marker in (
+            "next_action",
+            "next_tick",
+            "reaction",
+            "failure",
+            "aftermath",
+            "escalation",
+        )
+    ):
         return "plans", "Plans and Consequences"
-    if any(marker in field_id for marker in ("goal", "objective", "pressure", "dependency", "resource", "cost", "scarcity")):
+    if any(
+        marker in field_id
+        for marker in (
+            "goal",
+            "objective",
+            "pressure",
+            "dependency",
+            "resource",
+            "cost",
+            "scarcity",
+        )
+    ):
         return "pressures", "Goals, Pressures, and Dependencies"
     if any(marker in field_id for marker in ("history", "origin", "former", "cause")):
         return "context", "History and Context"
@@ -135,7 +161,9 @@ def _canonical_entity(
     entity_id = _entity_id(original)
     entity: dict[str, Any] = {
         "id": entity_id,
-        "kind": str(node.metadata.get("entity_kind") or original.get("kind") or "entity"),
+        "kind": str(
+            node.metadata.get("entity_kind") or original.get("kind") or "entity"
+        ),
         "visibility": str(original.get("visibility") or node.visibility),
     }
     for fact in facts:
@@ -178,7 +206,9 @@ def _build_dossier(
         if field_id in {"name", "title"}:
             continue
         definition = definitions.get(field_id, {})
-        value_type = str(definition.get("value_type") or fact.get("value_type") or "")
+        value_type = str(
+            definition.get("value_type") or fact.get("value_type") or ""
+        )
         section_id, section_title = _section_for_field(field_id, value_type)
         section = grouped.setdefault(
             section_id,
@@ -188,9 +218,19 @@ def _build_dossier(
         if paragraph:
             section["paragraphs"].append(paragraph)
             represented_fields.append(field_id)
-        if value_type in {"string", "integer", "number", "boolean", "enum", "entity_ref"}:
+        if value_type in {
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "enum",
+            "entity_ref",
+        }:
             quick_facts.append(
-                {"label": field_id.replace("_", " ").title(), "value": fact.get("object")}
+                {
+                    "label": field_id.replace("_", " ").title(),
+                    "value": fact.get("object"),
+                }
             )
         for reference in fact.get("entity_refs") or ():
             reference_id = str(reference)
@@ -202,7 +242,14 @@ def _build_dossier(
         "title": "Overview",
         "paragraphs": [short_summary.rstrip(".") + "."],
     }
-    ordered_ids = ("context", "details", "pressures", "plans", "evidence", "connections")
+    ordered_ids = (
+        "context",
+        "details",
+        "pressures",
+        "plans",
+        "evidence",
+        "connections",
+    )
     sections = [overview, *(grouped[key] for key in ordered_ids if key in grouped)]
     source_fact_ids = tuple(str(fact.get("id") or "") for fact in facts)
     dossier = {
@@ -245,6 +292,7 @@ def render_fact_derived_presentations(
     definition_rows = _definitions(node)
     if not definition_rows:
         return topic
+    contradiction_report = audit_presentation_contradictions(node, topic)
     definitions = {
         str(definition.get("field_id") or ""): definition
         for definition in definition_rows
@@ -290,11 +338,20 @@ def render_fact_derived_presentations(
         raise StructuredFactValidationError(issues)
 
     proposals = _presentation_fact_proposals(topic)
+    contradiction_rows = contradiction_report.as_dict()["contradictions"]
     documents = tuple(
         {
             **dict(document),
             "authority": "presentation_only",
-            "canonical_source_fact_ids": [str(fact.get("id") or "") for fact in facts],
+            "canonical_source_fact_ids": [
+                str(fact.get("id") or "") for fact in facts
+            ],
+            "presentation_contradictions": [
+                row
+                for row in contradiction_rows
+                if row["source"]
+                == f"document:{document.get('document_id') or document.get('id') or ''}"
+            ],
         }
         for document in topic.documents
     )
@@ -308,6 +365,7 @@ def render_fact_derived_presentations(
             "presentation_schema": "rpg_fact_derived_presentation_v1",
             "presentation_derived_from_structured_facts": True,
             "presentation_fact_proposals": proposals,
+            "presentation_contradiction_report": contradiction_report.as_dict(),
             "discarded_noncanonical_fact_count": sum(
                 1
                 for proposal in proposals
