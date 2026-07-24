@@ -19,13 +19,18 @@ from app.rpg.session.genesis.world_forge_generation import (
 from app.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
 
 from .canon_repair import repair_generation_contracts
-from .contracts import WorldReleaseDocument, WorldRevisionDocument
+from .contracts import WorldArtifactStage, WorldReleaseDocument, WorldRevisionDocument
 from .lifecycle_service import require_world_writable
 from .map_blueprint_authoring import (
     latest_ready_blueprint_requirements,
     materialize_generated_location_blueprints,
 )
 from .map_blueprint_publication import merge_authored_blueprints
+from .runtime_seed import (
+    compile_runtime_seed,
+    compile_vertical_slice,
+    run_player_absent_playtest,
+)
 from .service import compile_world_release, compile_world_revision
 from .world_image_bindings import approved_world_asset_bindings
 
@@ -115,7 +120,9 @@ def _generation_result(
         )
         generation_order.append((node.topic_id,))
     if missing:
-        raise ValueError("world_generation_topics_incomplete:" + ",".join(sorted(missing)))
+        raise ValueError(
+            "world_generation_topics_incomplete:" + ",".join(sorted(missing))
+        )
     return WorldForgeGenerationResult(
         topics=tuple(topics),
         jobs=tuple(jobs),
@@ -124,39 +131,73 @@ def _generation_result(
     )
 
 
-def _topology(canon: Mapping[str, Any]) -> dict[str, Any]:
+def _profile_place_kinds(graph: CampaignTopicGraph) -> set[str]:
+    profile = dict(graph.metadata.get("resolved_profile") or {})
+    return {
+        str(domain.get("entity_kind") or "")
+        for domain in profile.get("domains") or ()
+        if isinstance(domain, Mapping)
+        and str(domain.get("domain_id") or "") == "places"
+        and str(domain.get("entity_kind") or "")
+    } or {"location"}
+
+
+def _place_ids(canon: Mapping[str, Any], graph: CampaignTopicGraph) -> tuple[str, ...]:
     entities = canon.get("entities") if isinstance(canon.get("entities"), Mapping) else {}
-    locations = [
+    kinds = _profile_place_kinds(graph)
+    return tuple(
         str(entity_id)
         for entity_id, entity in sorted(dict(entities).items())
-        if isinstance(entity, Mapping) and str(entity.get("kind") or "") == "location"
-    ]
+        if isinstance(entity, Mapping) and str(entity.get("kind") or "") in kinds
+    )
+
+
+def _topology(
+    canon: Mapping[str, Any],
+    graph: CampaignTopicGraph,
+) -> dict[str, Any]:
     relationships = [
         dict(row)
         for row in canon.get("relationships") or ()
         if isinstance(row, Mapping)
         and str(row.get("kind") or row.get("type") or "").casefold()
-        in {"route", "travel", "portal", "road", "path"}
+        in {"route", "travel", "portal", "road", "path", "access_route"}
     ]
     return {
         "schema_version": "rpg_world_topology_v1",
-        "locations": locations,
+        "locations": list(_place_ids(canon, graph)),
         "routes": relationships,
     }
 
 
-def _blueprint_requirements(canon: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
-    entities = canon.get("entities") if isinstance(canon.get("entities"), Mapping) else {}
+def _blueprint_requirements(
+    canon: Mapping[str, Any],
+    graph: CampaignTopicGraph,
+) -> tuple[dict[str, Any], ...]:
     return tuple(
         {
             "map_id": f"map:{entity_id}",
-            "location_id": str(entity_id),
+            "location_id": entity_id,
             "simulation_readiness": "semantic",
             "presentation_readiness": "placeholder",
         }
-        for entity_id, entity in sorted(dict(entities).items())
-        if isinstance(entity, Mapping) and str(entity.get("kind") or "") == "location"
+        for entity_id in _place_ids(canon, graph)
     )
+
+
+def _artifact_stage(
+    *,
+    runtime_seed_passed: bool,
+    materialization_passed: bool,
+    playtest_passed: bool,
+) -> WorldArtifactStage:
+    if playtest_passed:
+        return "playtested"
+    if materialization_passed:
+        return "materialized"
+    if runtime_seed_passed:
+        return "runtime_seeded"
+    return "canon_validated"
 
 
 def compile_world_generation_publication(
@@ -208,28 +249,19 @@ def compile_world_generation_publication(
         "entities": dict(canon.get("entities") or {}),
         "manifest": dict(canon.get("manifest") or {}),
     }
-    certification = {
-        "schema_version": "rpg_world_release_certification_v1",
-        "launch_ready": compilation.launch_ready,
-        "missing_requirements": list(compilation.missing_requirements),
-        "completeness": dict(compilation.completeness),
-        "consistency_report": audit.as_dict(),
-        "generation_run_id": str(run.get("run_id") or ""),
-        "draft_revision": int(run.get("draft_revision") or 1),
-    }
     world_revision = compile_world_revision(
         world_id=str(world["id"]),
         revision=revision,
         title=str(world.get("title") or world["id"]),
         canon=canon,
         entity_manifest=entity_manifest,
-        topology=_topology(canon),
+        topology=_topology(canon, graph),
         adventure_seeds=tuple(
             dict(row)
             for row in canon.get("story_threads") or ()
             if isinstance(row, Mapping)
         ),
-        blueprint_requirements=_blueprint_requirements(canon),
+        blueprint_requirements=_blueprint_requirements(canon, graph),
         provenance={
             "source": "durable_world_generation",
             "generation_run_id": str(run.get("run_id") or ""),
@@ -240,16 +272,66 @@ def compile_world_generation_publication(
             },
         },
     )
+    runtime_seed = compile_runtime_seed(
+        world_id=world_revision.world_id,
+        world_revision=world_revision.revision,
+        source_canon_hash=world_revision.content_hash,
+        canon=canon,
+        seed=int(world.get("seed") or 0),
+    )
+    materialization = compile_vertical_slice(
+        runtime_seed=runtime_seed,
+        canon=canon,
+        starting_location=starting_location,
+    )
+    playtest = run_player_absent_playtest(runtime_seed, days=7)
+    stage = _artifact_stage(
+        runtime_seed_passed=runtime_seed.passed,
+        materialization_passed=materialization.passed,
+        playtest_passed=playtest.passed,
+    )
+    missing = list(compilation.missing_requirements)
+    if not runtime_seed.passed:
+        missing.append("runtime_seed")
+    if not materialization.passed:
+        missing.append("vertical_slice_materialization")
+    if not playtest.passed:
+        missing.append("player_absent_playtest")
+    launch_ready = compilation.launch_ready and not missing
+    artifact_readiness = {
+        "canon_validated": audit.passed,
+        "runtime_seeded": runtime_seed.passed,
+        "materialized": materialization.passed,
+        "playtested": playtest.passed,
+        "highest_stage": stage,
+    }
+    certification = {
+        "schema_version": "rpg_world_release_certification_v2",
+        "launch_ready": launch_ready,
+        "missing_requirements": list(dict.fromkeys(missing)),
+        "completeness": dict(compilation.completeness),
+        "consistency_report": audit.as_dict(),
+        "artifact_readiness": artifact_readiness,
+        "runtime_seed_hash": runtime_seed.content_hash,
+        "materialization_hash": materialization.content_hash,
+        "playtest_report_hash": playtest.content_hash,
+        "generation_run_id": str(run.get("run_id") or ""),
+        "draft_revision": int(run.get("draft_revision") or 1),
+    }
     world_release = compile_world_release(
         world_revision,
         release=1,
         indexes=dict(compilation.retrieval_index),
         asset_bindings=dict(asset_bindings or {}),
         compiler_provenance={
-            "compiler": "rpg_world_generation_publication_v1",
+            "compiler": "rpg_world_generation_publication_v2",
             "generation_run_id": str(run.get("run_id") or ""),
         },
         certification=certification,
+        artifact_stage=stage,
+        runtime_seed=runtime_seed.model_dump(mode="json"),
+        materialization=materialization.model_dump(mode="json"),
+        playtest_report=playtest.model_dump(mode="json"),
     )
     return WorldGenerationPublication(
         world_revision=world_revision,
@@ -309,10 +391,17 @@ def publish_world_generation(
             asset_bindings=asset_bindings,
         )
         canon_entities = compiled.world_revision.canon.get("entities")
+        materialization = dict(compiled.world_release.materialization)
+        selected_locations = {
+            str(materialization.get("hub_location_id") or ""),
+            *(str(item) for item in materialization.get("sublocation_ids") or ()),
+            *(str(item) for item in materialization.get("nearby_location_ids") or ()),
+        }
+        selected_locations.discard("")
         generated_locations = {
             str(entity_id): dict(entity)
             for entity_id, entity in dict(canon_entities or {}).items()
-            if isinstance(entity, Mapping) and str(entity.get("kind") or "") == "location"
+            if isinstance(entity, Mapping) and str(entity_id) in selected_locations
         }
         materialize_generated_location_blueprints(
             work,
@@ -321,15 +410,15 @@ def publish_world_generation(
             generated_locations,
         )
         requirements = latest_ready_blueprint_requirements(work, context, world_id)
-        revision, release = merge_authored_blueprints(
+        revision_document, release_document = merge_authored_blueprints(
             compiled.world_revision,
             compiled.world_release,
             requirements,
         )
         compiled = WorldGenerationPublication(
-            world_revision=revision,
-            world_release=release,
-            certification=dict(release.certification),
+            world_revision=revision_document,
+            world_release=release_document,
+            certification=dict(release_document.certification),
         )
         stored_revision = work.world_scenarios.publish_world_revision(
             context,
@@ -351,6 +440,7 @@ def publish_world_generation(
             "world_revision_hash": str(stored_revision["content_hash"]),
             "world_release": int(stored_release["release"]),
             "world_release_hash": str(stored_release["release_hash"]),
+            "artifact_stage": compiled.world_release.artifact_stage,
             "certification": dict(compiled.certification),
             "authored_map_blueprint_count": len(requirements),
             "approved_image_binding_count": len(asset_bindings),
@@ -359,6 +449,7 @@ def publish_world_generation(
         progress = {
             **dict(run.get("progress") or {}),
             "publication": publication_payload,
+            "artifact_stage": compiled.world_release.artifact_stage,
             "percent": 100,
         }
         updated = work.world_generation.update(
