@@ -183,9 +183,10 @@ def _generic_matches(value: Any) -> tuple[str, ...]:
 def _reference_values(value: Any, value_type: str) -> tuple[str, ...]:
     if value_type == "entity_ref":
         return (str(value).strip(),) if str(value or "").strip() else ()
-    if value_type == "entity_ref_list" and isinstance(value, Sequence) and not isinstance(
-        value, (str, bytes)
-    ):
+    if value_type == "entity_ref_list" and isinstance(
+        value,
+        Sequence,
+    ) and not isinstance(value, (str, bytes)):
         return tuple(str(item).strip() for item in value if str(item).strip())
     return ()
 
@@ -194,7 +195,10 @@ def _declared_clusters(
     campaign_context: Mapping[str, Any],
 ) -> set[tuple[str, str, str]]:
     declarations = campaign_context.get("intentional_reference_clusters")
-    if not isinstance(declarations, Sequence) or isinstance(declarations, (str, bytes)):
+    if not isinstance(declarations, Sequence) or isinstance(
+        declarations,
+        (str, bytes),
+    ):
         return set()
     result: set[tuple[str, str, str]] = set()
     for declaration in declarations:
@@ -208,6 +212,19 @@ def _declared_clusters(
             )
         )
     return result
+
+
+def _reference_tuple_declared(
+    topic_id: str,
+    reference_tuple: tuple[tuple[str, tuple[str, ...]], ...],
+    declarations: set[tuple[str, str, str]],
+) -> bool:
+    members = tuple(
+        (topic_id, field_id, referenced_id)
+        for field_id, referenced_ids in reference_tuple
+        for referenced_id in referenced_ids
+    )
+    return bool(members) and all(member in declarations for member in members)
 
 
 def _has_marker(field_id: str, markers: tuple[str, ...]) -> bool:
@@ -261,7 +278,10 @@ def audit_topic_semantic_quality(
         lambda: defaultdict(list)
     )
     reference_counts: dict[str, Counter[str]] = defaultdict(Counter)
-    reference_tuples: dict[tuple[tuple[str, tuple[str, ...]], ...], list[str]] = defaultdict(list)
+    reference_tuples: dict[
+        tuple[tuple[str, tuple[str, ...]], ...],
+        list[str],
+    ] = defaultdict(list)
     generic_total = 0
 
     for index, entity in enumerate(topic.entities, start=1):
@@ -304,7 +324,8 @@ def audit_topic_semantic_quality(
                     node.topic_id,
                     (entity_id,),
                     descriptive_fields,
-                    "Detected fallback phrases: " + ", ".join(sorted(set(entity_generic))),
+                    "Detected fallback phrases: "
+                    + ", ".join(sorted(set(entity_generic))),
                     regeneration_scope="entity_fields",
                 )
             )
@@ -372,11 +393,17 @@ def audit_topic_semantic_quality(
                             node.topic_id,
                             tuple(
                                 _entity_id(entity, index)
-                                for index, entity in enumerate(topic.entities, start=1)
+                                for index, entity in enumerate(
+                                    topic.entities,
+                                    start=1,
+                                )
                                 if referenced_id
                                 in _reference_values(
                                     entity.get(field_id),
-                                    str(definition_map[field_id].get("value_type") or ""),
+                                    str(
+                                        definition_map[field_id].get("value_type")
+                                        or ""
+                                    ),
                                 )
                             ),
                             (field_id,),
@@ -385,7 +412,11 @@ def audit_topic_semantic_quality(
                         )
                     )
         for reference_tuple, entity_ids in reference_tuples.items():
-            if len(entity_ids) >= threshold:
+            if len(entity_ids) >= threshold and not _reference_tuple_declared(
+                node.topic_id,
+                reference_tuple,
+                declarations,
+            ):
                 issues.append(
                     SemanticQualityIssue(
                         "repeated_reference_tuple",
