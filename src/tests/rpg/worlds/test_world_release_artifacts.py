@@ -95,7 +95,12 @@ def test_representation_normalization_records_field_level_provenance() -> None:
         provenance={"generator": "world_library_manual_authoring"},
     )
     normalized = normalize_generation_contracts(
-        WorldForgeGenerationResult(topics=(topic,))
+        WorldForgeGenerationResult(
+            topics=(topic,),
+            jobs=(),
+            failed_topic_ids=(),
+            generation_order=(("actors",),),
+        )
     ).topics[0]
 
     actions = normalized.provenance["publication_normalization_actions"]
