@@ -7,6 +7,7 @@ on:
       - "src/app/rpg/session/genesis/**"
       - "src/app/rpg/worlds/**"
       - "src/tests/rpg/response_generation/test_world_forge_*.py"
+      - "src/tests/rpg/response_generation/test_world_profile_creation.py"
       - "src/tests/rpg/worlds/test_*world*.py"
       - "apps/web/src/features/rpg/RpgWorldCompletionModels.ts"
       - "apps/web/src/features/rpg/RpgWorldCompletionModels.test.ts"
@@ -43,6 +44,7 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest \
+            src/tests/rpg/response_generation/test_world_profile_creation.py \
             src/tests/rpg/response_generation/test_world_forge_authoring_navigation.py \
             src/tests/rpg/response_generation/test_world_forge_regeneration.py \
             src/tests/rpg/response_generation/test_world_forge_semantic_quality.py \
