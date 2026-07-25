@@ -35,11 +35,13 @@ export interface RpgWorldGenerationTopicResult {
   job_id: string;
   created_at: string;
   updated_at: string;
+  previous_result?: RpgWorldGenerationTopicResult | null;
 }
 
 interface ReviewListResponse {
   ok: boolean;
   run_id: string;
+  parent_run_id?: string | null;
   topic_results: RpgWorldGenerationTopicResult[];
 }
 
@@ -64,7 +66,11 @@ export const rpgWorldGenerationReviewClient = {
     return request(`/api/rpg/world-generation/${encodeURIComponent(runId)}/results`);
   },
 
-  topic(runId: string, topicId: string): Promise<{ ok: boolean; topic_result: RpgWorldGenerationTopicResult }> {
+  topic(runId: string, topicId: string): Promise<{
+    ok: boolean;
+    parent_run_id?: string | null;
+    topic_result: RpgWorldGenerationTopicResult;
+  }> {
     return request(
       `/api/rpg/world-generation/${encodeURIComponent(runId)}/results/${encodeURIComponent(topicId)}`,
     );
