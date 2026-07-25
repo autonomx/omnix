@@ -15,6 +15,7 @@ from .generation_diagnostics import log_world_generation_event
 from .generation_scope import resolve_generation_scope
 from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_world_writable
+from .profile_authoring import require_approved_profile
 
 
 def _execution_summary(run: Mapping[str, Any]) -> dict[str, Any]:
@@ -30,6 +31,28 @@ def _execution_summary(run: Mapping[str, Any]) -> dict[str, Any]:
         "protected_count": len(plan.get("protected_topic_ids") or ()),
         "active_count": len(progress.get("active_topic_ids") or ()),
     }
+
+
+def _require_run_profile_matches_approval(
+    run: Mapping[str, Any],
+    graph: Any,
+    approval: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Reject retries after profile drift or approval invalidation."""
+
+    run_context = dict(run.get("context") or {})
+    generation_context = dict(run_context.get("generation_context") or {})
+    graph_metadata = dict(getattr(graph, "metadata", {}) or {})
+    run_profile_hash = str(
+        generation_context.get("approved_profile_hash")
+        or generation_context.get("resolved_profile_hash")
+        or graph_metadata.get("resolved_profile_hash")
+        or ""
+    )
+    approved_hash = str(approval.get("approved_profile_hash") or "")
+    if not run_profile_hash or run_profile_hash != approved_hash:
+        raise ValueError("world_profile_approval_hash_mismatch")
+    return generation_context
 
 
 def retry_failed_world_generation(
@@ -58,6 +81,7 @@ def retry_failed_world_generation(
         topics = work.world_library.list_topics(context, world_id)
         work.rollback()
 
+    profile_approval = require_approved_profile(world)
     failed_revision = int(failed_run["draft_revision"])
     current_revision = int(world["draft_revision"])
     if failed_revision != current_revision:
@@ -78,6 +102,11 @@ def retry_failed_world_generation(
         raise ValueError("generation_scope_empty:failed")
 
     graph = _graph_from_payload(dict(failed_run.get("graph") or {}))
+    generation_context = _require_run_profile_matches_approval(
+        failed_run,
+        graph,
+        profile_approval,
+    )
     targets, _ignored_forced, normalized_scope = resolve_generation_scope(
         graph,
         scope={"mode": "failed"},
@@ -87,7 +116,6 @@ def retry_failed_world_generation(
         replace_locked=False,
     )
     run_context = dict(failed_run.get("context") or {})
-    generation_context = dict(run_context.get("generation_context") or {})
     topic_directives = {
         str(topic_id): dict(value)
         for topic_id, value in dict(run_context.get("topic_directives") or {}).items()
@@ -114,6 +142,7 @@ def retry_failed_world_generation(
             "generator_version": settings.generator_version,
             "prompt_version": settings.prompt_version,
             "max_attempts": settings.max_attempts,
+            "approved_profile_hash": profile_approval["approved_profile_hash"],
         },
     )
 
@@ -195,6 +224,7 @@ def continue_world_generation(
         topics = work.world_library.list_topics(context, world_id)
         work.rollback()
 
+    profile_approval = require_approved_profile(world)
     previous_revision = int(previous_run["draft_revision"])
     current_revision = int(world["draft_revision"])
     if previous_revision != current_revision:
@@ -215,6 +245,11 @@ def continue_world_generation(
         )
     )
     graph = _graph_from_payload(dict(previous_run.get("graph") or {}))
+    generation_context = _require_run_profile_matches_approval(
+        previous_run,
+        graph,
+        profile_approval,
+    )
     targets, _ignored_forced, normalized_scope = resolve_generation_scope(
         graph,
         scope={"mode": "full"},
@@ -236,7 +271,6 @@ def continue_world_generation(
         raise ValueError("generation_scope_empty:continue")
 
     run_context = dict(previous_run.get("context") or {})
-    generation_context = dict(run_context.get("generation_context") or {})
     topic_directives = {
         str(topic_id): dict(value)
         for topic_id, value in dict(run_context.get("topic_directives") or {}).items()
@@ -263,6 +297,7 @@ def continue_world_generation(
             "resolved_topic_ids": targets,
             "provider_route": settings.provider_route,
             "model": settings.model,
+            "approved_profile_hash": profile_approval["approved_profile_hash"],
         },
     )
     continuation_run = start_world_generation(

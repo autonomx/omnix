@@ -230,7 +230,7 @@ class InvalidReferenceProvider:
         )
 
 
-def test_live_provider_integrity_exhaustion_uses_grounded_deterministic_fallback() -> None:
+def test_live_provider_grounding_exhaustion_uses_grounded_deterministic_fallback() -> None:
     node = CampaignTopicNode(
         topic_id="setting_rules",
         title="Setting Rules",
@@ -258,7 +258,7 @@ def test_live_provider_integrity_exhaustion_uses_grounded_deterministic_fallback
     )
 
     assert result.provenance["provider_fallback"] == {
-        "reason": "WorldForgeIntegrityError",
+        "reason": "ValueError",
         "attempts": 3,
         "source": "reference_safe_world_forge_v1",
     }

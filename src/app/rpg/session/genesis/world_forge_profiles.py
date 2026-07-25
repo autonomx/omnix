@@ -29,6 +29,19 @@ _ALLOWED_FIELD_TYPES: frozenset[str] = frozenset(
         "structured_object",
     }
 )
+_ALLOWED_PAGE_KINDS = {"document", "collection"}
+_ALLOWED_IMAGE_ROLES = {
+    "none",
+    "portrait",
+    "scene",
+    "landscape",
+    "emblem",
+    "icon",
+    "illustration",
+    "cover",
+    "map",
+}
+_ALLOWED_AUTHORING_GROUPS = {"world", "lore", "game-master"}
 
 
 @dataclass(frozen=True)
@@ -92,6 +105,33 @@ class DomainTargetRange:
             "standard": list(self.standard),
             "epic": list(self.epic),
         }
+
+    def validate(self, item_id: str) -> tuple[ProfileValidationIssue, ...]:
+        issues: list[ProfileValidationIssue] = []
+        for name, value in (
+            ("quick", self.quick),
+            ("standard", self.standard),
+            ("epic", self.epic),
+        ):
+            if len(value) != 2:
+                issues.append(
+                    ProfileValidationIssue(
+                        "invalid_target_range",
+                        f"{item_id}.{name}",
+                        "Target range must contain a minimum and maximum.",
+                    )
+                )
+                continue
+            lower, upper = value
+            if lower < 1 or upper < lower or upper > 50:
+                issues.append(
+                    ProfileValidationIssue(
+                        "invalid_target_range",
+                        f"{item_id}.{name}",
+                        "Target range must satisfy 1 <= minimum <= maximum <= 50.",
+                    )
+                )
+        return tuple(issues)
 
 
 @dataclass(frozen=True)
@@ -217,6 +257,7 @@ class GenreProfile:
             semantic_roles.update(domain.semantic_roles)
             if not domain.domain_id or not domain.entity_kind:
                 issues.append(ProfileValidationIssue("invalid_domain_identity", domain.domain_id, "Domain and entity kind are required."))
+            issues.extend(domain.target_range.validate(domain.domain_id))
             for dependency in domain.dependencies:
                 if dependency not in domain_map:
                     issues.append(ProfileValidationIssue("unknown_domain_dependency", domain.domain_id, dependency))
@@ -234,6 +275,24 @@ class GenreProfile:
                     for target in definition.allowed_target_domains:
                         if target not in domain_map:
                             issues.append(ProfileValidationIssue("unknown_reference_target", f"{domain.domain_id}.{definition.field_id}", target))
+
+            presentation = domain.generation_guidance.get("presentation")
+            if presentation is not None:
+                if not isinstance(presentation, Mapping):
+                    issues.append(ProfileValidationIssue("invalid_presentation", domain.domain_id, "Presentation must be an object."))
+                else:
+                    page_kind = str(presentation.get("page_kind") or "")
+                    image_role = str(presentation.get("image_role") or "")
+                    group = str(presentation.get("group") or "")
+                    card_variant = str(presentation.get("card_variant") or "")
+                    if page_kind not in _ALLOWED_PAGE_KINDS:
+                        issues.append(ProfileValidationIssue("unsupported_page_kind", domain.domain_id, page_kind))
+                    if image_role not in _ALLOWED_IMAGE_ROLES:
+                        issues.append(ProfileValidationIssue("unsupported_image_role", domain.domain_id, image_role))
+                    if group not in _ALLOWED_AUTHORING_GROUPS:
+                        issues.append(ProfileValidationIssue("unsupported_authoring_group", domain.domain_id, group))
+                    if page_kind == "collection" and not card_variant:
+                        issues.append(ProfileValidationIssue("card_variant_required", domain.domain_id, "Collection domains require a card variant."))
 
         for required_domain in self.launch_requirements.required_domain_ids:
             if required_domain not in domain_map:
@@ -273,6 +332,15 @@ def field_definition_from_dict(value: Mapping[str, Any]) -> FieldDefinition:
     )
 
 
+def _range(value: Any, fallback: tuple[int, int]) -> tuple[int, int]:
+    if not isinstance(value, (list, tuple)):
+        return fallback
+    try:
+        return tuple(int(item) for item in value)  # type: ignore[return-value]
+    except (TypeError, ValueError):
+        return ()
+
+
 def domain_definition_from_dict(value: Mapping[str, Any]) -> DomainDefinition:
     ranges = dict(value.get("target_range") or {})
     return DomainDefinition(
@@ -285,9 +353,9 @@ def domain_definition_from_dict(value: Mapping[str, Any]) -> DomainDefinition:
         visibility_default=str(value.get("visibility_default") or "game_master_canon"),
         fields=tuple(field_definition_from_dict(item) for item in value.get("fields") or () if isinstance(item, Mapping)),
         target_range=DomainTargetRange(
-            quick=tuple(int(item) for item in ranges.get("quick") or (1, 1)),  # type: ignore[arg-type]
-            standard=tuple(int(item) for item in ranges.get("standard") or (1, 1)),  # type: ignore[arg-type]
-            epic=tuple(int(item) for item in ranges.get("epic") or (1, 1)),  # type: ignore[arg-type]
+            quick=_range(ranges.get("quick"), (1, 1)),
+            standard=_range(ranges.get("standard"), (1, 1)),
+            epic=_range(ranges.get("epic"), (1, 1)),
         ),
         semantic_roles=tuple(str(item) for item in value.get("semantic_roles") or ()),
         category=str(value.get("category") or "domain"),

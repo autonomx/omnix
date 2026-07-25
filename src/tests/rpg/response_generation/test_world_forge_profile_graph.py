@@ -1,4 +1,5 @@
 from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
+from app.rpg.session.genesis.world_forge_profile_generation import STANDARD_DOMAIN_IDS
 from app.rpg.session.genesis.world_forge_profile_graph import (
     build_profile_launch_topic_graph,
     build_profile_topic_graph,
@@ -135,7 +136,7 @@ def test_reference_schema_is_embedded_in_node_metadata() -> None:
     }
 
 
-def test_cyberpunk_fallback_graph_uses_only_cyberpunk_profile_domains() -> None:
+def test_cyberpunk_fallback_graph_uses_standard_catalogue_with_genre_flavour() -> None:
     graph = build_campaign_topic_graph(
         campaign_template="cyberpunk",
         genre="cyberpunk",
@@ -145,13 +146,11 @@ def test_cyberpunk_fallback_graph_uses_only_cyberpunk_profile_domains() -> None:
     )
     nodes = graph.node_map()
 
-    assert graph.graph_version == "rpg_profile_topic_graph_v1"
-    assert {"networks", "augmentations", "places", "groups", "actors"}.issubset(nodes)
-    assert {
-        "spells",
-        "races",
-        "classes",
-        "pantheon",
-        "hero_system",
-        "monsters",
-    }.isdisjoint(nodes)
+    assert graph.graph_version == "rpg_profile_topic_graph_v2"
+    assert set(STANDARD_DOMAIN_IDS).issubset(nodes)
+    assert nodes["groups"].title == "Corporations, Gangs, Governments and Institutions"
+    assert nodes["technology_augmentations"].title == "Technology and Augmentations"
+    assert nodes["actors"].metadata["presentation"]["page_kind"] == "collection"
+    assert nodes["actors"].metadata["presentation"]["image_role"] == "portrait"
+    assert nodes["setting_rules"].metadata["presentation"]["page_kind"] == "document"
+    assert {"spells", "pantheon", "hero_system"}.isdisjoint(nodes)

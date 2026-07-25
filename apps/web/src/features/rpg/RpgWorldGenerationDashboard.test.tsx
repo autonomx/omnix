@@ -37,6 +37,51 @@ const previousRun: RpgWorldGenerationRun = {
   updated_at: '2026-07-20T00:00:00Z',
 };
 
+const approvedProfileResponse = {
+  ok: true,
+  review: {
+    world_id: 'world:aurelia',
+    status: 'approved',
+    profile_revision: 1,
+    profile_hash: 'sha256:profile',
+    approved_profile_hash: 'sha256:profile',
+    approved_at: '2026-07-20T00:00:00Z',
+    approved_by: 'local-author',
+    requested_genre: 'fantasy',
+    normalized_genre: 'classic_fantasy',
+    source: 'registry',
+    generated: false,
+    route: {},
+    review_findings: [],
+    error: {},
+    profile: {
+      profile_id: 'classic_fantasy',
+      version: 2,
+      display_name: 'Classic fantasy',
+      domains: [
+        {
+          domain_id: 'regions',
+          title: 'Realms, Regions and Wild Frontiers',
+          entity_kind: 'region',
+          dependencies: [],
+          required_before_launch: true,
+          fields: [],
+          target_range: { quick: [2, 4], standard: [5, 8], epic: [9, 14] },
+          semantic_roles: [],
+          generation_guidance: {
+            presentation: {
+              page_kind: 'collection',
+              card_variant: 'regions',
+              image_role: 'landscape',
+              group: 'world',
+            },
+          },
+        },
+      ],
+    },
+  },
+};
+
 function renderDashboard() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -55,10 +100,17 @@ function renderDashboard() {
 describe('RpgWorldGenerationDashboard', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('starts generation from the prominent Generate World action even when controls are collapsed', async () => {
+  it('starts generation from the prominent action after the profile is approved', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({ url: String(input), init });
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith('/genre-profile')) {
+        return new Response(JSON.stringify(approvedProfileResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       return new Response(JSON.stringify({
         ok: true,
         worker_started: true,
@@ -83,13 +135,16 @@ describe('RpgWorldGenerationDashboard', () => {
     }));
 
     renderDashboard();
-    fireEvent.click(screen.getByRole('button', { name: '✦ Generate World' }));
+    const generate = await screen.findByRole('button', { name: '✦ Generate World' });
+    await waitFor(() => expect(generate).toBeEnabled());
+    fireEvent.click(generate);
 
-    await waitFor(() => expect(requests).toHaveLength(1));
-    expect(screen.getAllByRole('button', { name: /Generate World/ })[0]).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(requests.some((request) => request.url.includes('/generation'))).toBe(true));
+    expect(generate).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText(/Generate World selected\. Generation controls are open below/)).toBeInTheDocument();
-    expect(requests[0].url).toContain('/api/rpg/worlds/world%3Aaurelia/generation');
-    expect(JSON.parse(String(requests[0].init?.body))).toMatchObject({
+    const generationRequest = requests.find((request) => request.url.includes('/generation'));
+    expect(generationRequest?.url).toContain('/api/rpg/worlds/world%3Aaurelia/generation');
+    expect(JSON.parse(String(generationRequest?.init?.body))).toMatchObject({
       scope: { mode: 'full' },
       provider_route: 'configured',
       model: 'configured',
@@ -97,7 +152,11 @@ describe('RpgWorldGenerationDashboard', () => {
     expect(await screen.findByText(/1 provider topic job queued/)).toBeInTheDocument();
   });
 
-  it('enables continuation for a partial review run', () => {
+  it('enables continuation for an approved partial review run', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(approvedProfileResponse), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
     const partialReviewRun = {
       ...previousRun,
       graph: { nodes: [{ topic_id: 'realm' }, { topic_id: 'places' }] },
@@ -112,12 +171,34 @@ describe('RpgWorldGenerationDashboard', () => {
       </QueryClientProvider>,
     );
 
+    await screen.findByText('Profile Approved');
     expect(screen.getAllByRole('button', { name: 'Continue Generation' })).toEqual(
       expect.arrayContaining([expect.objectContaining({ disabled: false })]),
     );
   });
 
-  it('shows provider-reported and estimated world-generation token usage', () => {
+  it('keeps prominent generation actions locked for an unapproved profile', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      ...approvedProfileResponse,
+      review: {
+        ...approvedProfileResponse.review,
+        status: 'review_required',
+        approved_profile_hash: '',
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    renderDashboard();
+
+    expect(await screen.findByText('Review Required')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '✦ Generate World' })).toBeDisabled();
+    expect(screen.getByText(/Generation is locked while the profile is awaiting approval/)).toBeInTheDocument();
+  });
+
+  it('shows provider-reported and estimated world-generation token usage', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(approvedProfileResponse), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
@@ -145,5 +226,6 @@ describe('RpgWorldGenerationDashboard', () => {
     expect(screen.getByText(/4 completed/)).toBeInTheDocument();
     expect(screen.getByText(/live batches included/i)).toBeInTheDocument();
     expect(screen.getByText('3 provider-reported · 1 estimated')).toBeInTheDocument();
+    await screen.findByText('Profile Approved');
   });
 });

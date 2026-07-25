@@ -19,6 +19,7 @@ from .generation_scope import resolve_generation_scope
 from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_world_writable
 from .map_blueprint_authoring import list_map_blueprints
+from .profile_authoring import require_approved_profile
 from .profile_generation_jobs import profile_manifest_run, profile_resolution_from_world
 
 
@@ -33,6 +34,7 @@ def _world_generation_context(
     background_expansion: bool,
     route: Any,
     profile_resolution: ProfileResolution | None = None,
+    approved_profile_hash: str = "",
 ) -> dict[str, Any]:
     """Build a durable, authoritative setting brief for every topic request."""
 
@@ -55,6 +57,7 @@ def _world_generation_context(
         "requested_provider_route": route.requested_provider,
         "requested_model": route.requested_model,
         "resolved_provider_source": route.source,
+        "approved_profile_hash": approved_profile_hash,
     }
     if profile_resolution is not None:
         context["genre_profile_resolution"] = profile_resolution.as_dict()
@@ -232,6 +235,7 @@ def start_world_library_generation(
         )
         work.rollback()
 
+    profile_review = require_approved_profile(world)
     route = resolve_world_forge_route(provider_route, model)
     metadata = dict(world.get("metadata") or {})
     campaign_template = str(metadata.get("campaign_template") or "classic_fantasy")
@@ -244,6 +248,8 @@ def start_world_library_generation(
                 metadata.get("campaign_mode") or "persistent_living_world"
             ),
         )
+    if profile_resolution.profile.content_hash != str(profile_review["approved_profile_hash"]):
+        raise ValueError("world_profile_approval_hash_mismatch")
     graph = build_profile_topic_graph(
         profile_resolution.profile,
         campaign_template=campaign_template,
@@ -268,6 +274,7 @@ def start_world_library_generation(
         background_expansion=background_expansion,
         route=route,
         profile_resolution=profile_resolution,
+        approved_profile_hash=str(profile_review["approved_profile_hash"]),
     )
     run = start_world_generation(
         world_id=world_id,
@@ -310,6 +317,7 @@ def start_world_library_generation(
             "source": route.source,
         },
         "genre_profile": profile_resolution.as_dict(),
+        "approved_profile_hash": profile_review["approved_profile_hash"],
     }
 
 

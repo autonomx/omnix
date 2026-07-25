@@ -76,6 +76,13 @@ class ReferenceSafeWorldForgeGenerator:
             ),
         ):
             return True
+        # World-brief grounding is another provider-output boundary. It is not
+        # represented by a structured regeneration request, so a provider that
+        # repeatedly ignores it must use the deterministic fallback instead.
+        if isinstance(error, ValueError) and str(error).startswith(
+            ("world_brief_grounding:", "world_generation_placeholder_entity:")
+        ):
+            return True
         return str(error).startswith("structured World Forge provider failed")
 
     def generate(
@@ -92,6 +99,23 @@ class ReferenceSafeWorldForgeGenerator:
                 topic,
                 campaign_context=campaign_context,
                 dependency_topics=dependency_topics,
+            )
+
+        # The legacy deterministic generator dispatches several mature topic IDs
+        # through fixed fantasy-era schemas. Profile-defined topics may intentionally
+        # reuse those IDs with different entity kinds and reference domains. Enter
+        # through the profile generator directly so quests can reference
+        # actor/place/group rather than being rejected for lacking npc/location/faction.
+        if (
+            node.metadata.get("field_definitions")
+            and isinstance(self.generator, DeterministicWorldForgeGenerator)
+        ):
+            return process(
+                generate_deterministic_profile_topic(
+                    node,
+                    campaign_context=campaign_context,
+                    dependency_topics=dependency_topics,
+                )
             )
 
         max_attempts = self._max_regeneration_attempts(campaign_context)
@@ -111,8 +135,7 @@ class ReferenceSafeWorldForgeGenerator:
             # A live model can exhaust its bounded repair budget while still
             # returning unsafe references or breaking its structured response
             # contract. Preserve the fail-closed boundary, but allow the durable
-            # run to continue with the grounded, deterministic topic generator
-            # rather than leaving the whole world blocked behind one failed call.
+            # run to continue with the grounded, deterministic topic generator.
             fallback = DeterministicWorldForgeGenerator().generate(
                 node,
                 seed=seed,
@@ -141,7 +164,8 @@ class ReferenceSafeWorldForgeGenerator:
         dependency_topics: Mapping[str, GeneratedTopic],
     ) -> GeneratedTopic:
         provider_generated = self._provider_generated(topic)
-        if provider_generated:
+        profile_defined = bool(node.metadata.get("field_definitions"))
+        if provider_generated and not profile_defined:
             aliases = campaign_context.get("reference_aliases")
             topic = validate_and_normalize_provider_topic(
                 node,
@@ -149,13 +173,24 @@ class ReferenceSafeWorldForgeGenerator:
                 dependency_topics,
                 aliases=dict(aliases) if isinstance(aliases, Mapping) else None,
             )
-        topic = normalize_structured_domain(
-            node,
-            topic,
-            dependency_topics,
-            allow_synthetic_completion=not provider_generated,
-        )
-        if not provider_generated and node.metadata.get("field_definitions"):
+
+        # Profile field definitions are the authoritative ontology. A profile may
+        # deliberately reuse a mature topic ID such as quests or opening_scenarios
+        # while changing its entity kinds and reference domains. Running those
+        # records through the legacy fixed-domain normalizer or integrity map first
+        # would incorrectly require npc/location/faction IDs and reject
+        # actor/place/group canon. Profile-defined provider output remains fail-closed
+        # below through compile_structured_entity_facts, which validates IDs, kinds,
+        # required fields, value types, allowed target domains, and exact references.
+        if not profile_defined:
+            topic = normalize_structured_domain(
+                node,
+                topic,
+                dependency_topics,
+                allow_synthetic_completion=not provider_generated,
+            )
+
+        if not provider_generated and profile_defined:
             topic = generate_deterministic_profile_topic(
                 node,
                 campaign_context=campaign_context,
@@ -186,7 +221,7 @@ class ReferenceSafeWorldForgeGenerator:
                 },
             )
         validate_world_brief_grounding(node, topic, campaign_context)
-        if node.metadata.get("field_definitions"):
+        if profile_defined:
             return render_fact_derived_presentations(node, topic)
         return self._normalize_entity_dossiers(node, topic)
 

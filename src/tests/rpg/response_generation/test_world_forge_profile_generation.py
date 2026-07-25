@@ -1,4 +1,5 @@
 from app.rpg.session.genesis.world_forge_profile_generation import (
+    STANDARD_DOMAIN_IDS,
     GenreProfileRegistry,
     HeuristicWorldLocalProfileGenerator,
     normalize_genre_key,
@@ -13,8 +14,11 @@ def test_known_genre_resolves_registry_profile() -> None:
     )
     assert resolution.generated is False
     assert resolution.profile.profile_id == "post_apocalyptic"
-    assert "ruins" in resolution.profile.domain_map()
-    assert "spells" not in resolution.profile.domain_map()
+    domains = resolution.profile.domain_map()
+    assert set(STANDARD_DOMAIN_IDS) == set(domains)
+    assert "Ruins" in domains["places"].title
+    assert "Mutations" in domains["technology_augmentations"].title
+    assert "spells" not in domains
 
 
 def test_known_aliases_resolve_same_profile_hash() -> None:
@@ -34,6 +38,7 @@ def test_unknown_genre_generates_valid_world_local_profile() -> None:
     assert resolution.source == "generated_world_local"
     assert resolution.profile.scope == "world_local"
     assert resolution.profile.validate() == ()
+    assert set(STANDARD_DOMAIN_IDS).issubset(resolution.profile.domain_map())
     assert "genre_elements" in resolution.profile.domain_map()
     assert resolution.profile.provenance["campaign_mode"] == "political_mystery"
 

@@ -44,7 +44,7 @@ function jsonResponse(value: unknown): Response {
   });
 }
 
-function renderPanel(generation?: RpgWorldGenerationRun) {
+function renderPanel(generation?: RpgWorldGenerationRun, profileApproved = true) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -52,6 +52,7 @@ function renderPanel(generation?: RpgWorldGenerationRun) {
     <QueryClientProvider client={queryClient}>
       <RpgWorldGenerationPanel
         generation={generation}
+        profileApproved={profileApproved}
         sections={[section]}
         worldId="world:aurelia"
       />
@@ -150,5 +151,13 @@ describe('RpgWorldGenerationPanel', () => {
     await waitFor(() => expect(requests.length).toBe(1));
     expect(requests[0].url).toContain('/api/rpg/world-generation/run%3Areview/publish');
     expect(await screen.findByText('Published world revision 4, release 1.')).toBeInTheDocument();
+  });
+
+  it('locks generation actions until the profile is approved', () => {
+    renderPanel(undefined, false);
+
+    expect(screen.getByRole('button', { name: 'Generate World' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Generate Selected' })).toBeDisabled();
+    expect(screen.getByText(/locked until the profile preview above is approved/i)).toBeInTheDocument();
   });
 });
