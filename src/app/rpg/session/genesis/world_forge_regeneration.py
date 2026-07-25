@@ -276,21 +276,14 @@ def _provider_generated(topic: GeneratedTopic) -> bool:
     )
 
 
-def _quality_attempt(
-    attempt: int,
-    error: WorldForgeLoreQualityError,
-) -> dict[str, Any]:
-    assessment = error.assessment
-    return {
-        "attempt": attempt,
-        "score": assessment.score,
-        "threshold": assessment.threshold,
-        "passed": assessment.passed,
-        "status": assessment.status,
-        "issue_codes": sorted({issue.code for issue in assessment.issues}),
-        "entity_scores": dict(assessment.entity_scores),
-        "dimensions": dict(assessment.dimensions),
-    }
+def _quality_attempt_rows(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return exactly one scored report per provider attempt."""
+
+    return [
+        dict(row)
+        for row in history
+        if row.get("quality_status") is not None
+    ]
 
 
 def _selected_best_candidate(
@@ -303,11 +296,6 @@ def _selected_best_candidate(
         candidates,
         key=lambda value: (value[0], -value[1]),
     )
-    attempt_rows = [
-        dict(row)
-        for row in history
-        if row.get("quality_score") is not None
-    ]
     return replace(
         topic,
         provenance={
@@ -319,7 +307,7 @@ def _selected_best_candidate(
             "lore_quality_selected_score": score,
             "lore_quality_total_attempts": attempts,
             "lore_quality_retry_count": max(0, attempts - 1),
-            "lore_quality_attempts": attempt_rows,
+            "lore_quality_attempts": _quality_attempt_rows(history),
             "targeted_regeneration_history": history,
             "targeted_regeneration_succeeded": False,
         },
@@ -370,9 +358,11 @@ def generate_with_targeted_regeneration(
             processed = process(topic)
         except Exception as error:
             last_error = error
-            failing_topic = generated
+            # Keep the uncompiled provider candidate as the next retry baseline.
+            # The processed/scored candidate remains eligible for best-of selection,
+            # but must not be fed back through compilation as provider input.
+            failing_topic = topic
             if isinstance(error, WorldForgeLoreQualityError):
-                failing_topic = error.candidate_topic
                 quality_candidates.append(
                     (error.assessment.score, attempt, error.candidate_topic)
                 )
@@ -384,6 +374,9 @@ def generate_with_targeted_regeneration(
                         "quality_status": error.assessment.status,
                         "quality_issue_codes": sorted(
                             {issue.code for issue in error.assessment.issues}
+                        ),
+                        "quality_entity_scores": dict(
+                            error.assessment.entity_scores
                         ),
                         "quality_dimensions": dict(error.assessment.dimensions),
                     }
@@ -409,9 +402,6 @@ def generate_with_targeted_regeneration(
                 raise
             request_row = request.as_dict()
             request_row["source_attempt"] = attempt
-            if isinstance(error, WorldForgeLoreQualityError):
-                request_row["quality_score"] = error.assessment.score
-                request_row["quality_threshold"] = error.assessment.threshold
             history.append(request_row)
             if pending_request is None:
                 prior_failed_topic = failing_topic
@@ -432,6 +422,9 @@ def generate_with_targeted_regeneration(
                     "quality_threshold": int(assessment.get("threshold") or 0),
                     "quality_status": str(assessment.get("status") or "accepted"),
                     "quality_issue_codes": list(assessment.get("issue_codes") or ()),
+                    "quality_entity_scores": dict(
+                        assessment.get("entity_scores") or {}
+                    ),
                     "quality_dimensions": dict(assessment.get("dimensions") or {}),
                 }
             )
@@ -443,9 +436,7 @@ def generate_with_targeted_regeneration(
                     "targeted_regeneration_attempt_count": attempt,
                     "targeted_regeneration_history": history,
                     "targeted_regeneration_succeeded": True,
-                    "lore_quality_attempts": [
-                        row for row in history if row.get("quality_score") is not None
-                    ],
+                    "lore_quality_attempts": _quality_attempt_rows(history),
                     "lore_quality_selected_attempt": attempt,
                     "lore_quality_total_attempts": attempt,
                     "lore_quality_retry_count": max(0, attempt - 1),
