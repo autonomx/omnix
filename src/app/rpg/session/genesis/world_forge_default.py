@@ -89,6 +89,7 @@ class ReferenceSafeWorldForgeGenerator:
         dependency_topics: Mapping[str, GeneratedTopic],
     ) -> GeneratedTopic:
         provider_generated = self._provider_generated(topic)
+        profile_defined = bool(node.metadata.get("field_definitions"))
         if provider_generated:
             aliases = campaign_context.get("reference_aliases")
             topic = validate_and_normalize_provider_topic(
@@ -97,13 +98,21 @@ class ReferenceSafeWorldForgeGenerator:
                 dependency_topics,
                 aliases=dict(aliases) if isinstance(aliases, Mapping) else None,
             )
-        topic = normalize_structured_domain(
-            node,
-            topic,
-            dependency_topics,
-            allow_synthetic_completion=not provider_generated,
-        )
-        if not provider_generated and node.metadata.get("field_definitions"):
+
+        # Profile field definitions are the authoritative ontology. A profile may
+        # deliberately reuse a mature topic ID such as quests or opening_scenarios
+        # while changing its entity kinds and reference domains. Running those
+        # records through the legacy fixed-domain normalizer first would incorrectly
+        # require npc/location/faction IDs and reject actor/place/group canon.
+        if not profile_defined:
+            topic = normalize_structured_domain(
+                node,
+                topic,
+                dependency_topics,
+                allow_synthetic_completion=not provider_generated,
+            )
+
+        if not provider_generated and profile_defined:
             topic = generate_deterministic_profile_topic(
                 node,
                 campaign_context=campaign_context,
@@ -134,7 +143,7 @@ class ReferenceSafeWorldForgeGenerator:
                 },
             )
         validate_world_brief_grounding(node, topic, campaign_context)
-        if node.metadata.get("field_definitions"):
+        if profile_defined:
             return render_fact_derived_presentations(node, topic)
         return self._normalize_entity_dossiers(node, topic)
 
