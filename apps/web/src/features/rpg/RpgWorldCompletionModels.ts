@@ -101,8 +101,9 @@ function isSimpleHeading(lines: string[], index: number): boolean {
 }
 
 function splitHeadedSection(block: RpgAuthoringDocumentBlock): RpgAuthoringDocumentBlock[] {
-  if (block.kind !== 'section' || !block.body?.trim()) return [block];
-  const lines = block.body.replace(/\r\n/g, '\n').split('\n');
+  const sourceBody = block.body?.trim();
+  if (block.kind !== 'section' || !sourceBody) return [block];
+  const lines = sourceBody.replace(/\r\n/g, '\n').split('\n');
   const sections: Array<{ title: string; lines: string[] }> = [];
   let current = { title: block.title || 'Overview', lines: [] as string[] };
   let foundHeading = false;
@@ -127,7 +128,7 @@ function splitHeadedSection(block: RpgAuthoringDocumentBlock): RpgAuthoringDocum
   if (finalBody) sections.push({ ...current, lines: [finalBody] });
   if (!foundHeading || sections.length < 2) return [block];
 
-  return sections.map((section) => ({
+  return sections.map<RpgAuthoringDocumentBlock>((section) => ({
     kind: 'section',
     title: section.title,
     body: section.lines.join('\n\n').trim(),
@@ -165,14 +166,15 @@ function chronicleBlock(block: RpgAuthoringDocumentBlock): RpgAuthoringDocumentB
   }
 
   if (block.kind === 'section' && (TEMPORAL_HEADING.test(block.title ?? '') || block.body)) {
+    const timelineItem: Record<string, unknown> = {
+      title: block.title || 'Chronicle entry',
+      era: TEMPORAL_HEADING.test(block.title ?? '') ? block.title : undefined,
+      body: block.body,
+    };
     return {
       kind: 'timeline',
       title: block.title || 'Chronicle',
-      items: [{
-        title: block.title || 'Chronicle entry',
-        era: TEMPORAL_HEADING.test(block.title ?? '') ? block.title : undefined,
-        body: block.body,
-      }],
+      items: [timelineItem],
     };
   }
   return block;
@@ -187,7 +189,7 @@ export function presentLoreBlocks(
     return headed.map(chronicleBlock);
   }
   if (sectionId === 'realm' || sectionId === 'realm_overview') {
-    return headed.map((block, index) => ({
+    return headed.map<RpgAuthoringDocumentBlock>((block, index) => ({
       ...block,
       kind: block.kind === 'json' ? 'json' : index === 0 ? 'realm-summary' : block.kind,
       title: block.title || (index === 0 ? 'Realm identity' : undefined),
