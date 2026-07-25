@@ -82,7 +82,7 @@ class StructuredRegistryRecoveryMixin:
                 allocated_entity_ids=ids,
                 expected_entity_kind="",
                 max_tokens=max_tokens,
-                retain_invalid_topic=False,
+                retain_invalid_kind="registry",
             )
         assert isinstance(recovered.value, WorldForgeEntityRegistryResponse)
         return (
