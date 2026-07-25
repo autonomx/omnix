@@ -170,7 +170,7 @@ def approve_world_profile_review(
         existing = _record(_record(world.get("metadata")).get("genre_profile_binding"))
         binding = {
             **existing,
-            "status": "approved",
+            "status": "ready",
             "profile": validated.as_dict(),
             "profile_hash": validated.content_hash,
             "profile_revision": int(current["profile_revision"]),
