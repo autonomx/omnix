@@ -1,3 +1,5 @@
+import pytest
+
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_contradictions import (
     audit_presentation_contradictions,
@@ -6,12 +8,13 @@ from app.rpg.session.genesis.world_forge_fact_pipeline import (
     compile_structured_entity_facts,
 )
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.rpg.session.genesis.world_forge_integrity import WorldForgeIntegrityError
 from app.rpg.session.genesis.world_forge_presentation import (
     render_fact_derived_presentations,
 )
 
 
-def test_explicit_wrong_reference_in_prose_is_reported_and_quarantined() -> None:
+def test_explicit_wrong_reference_in_prose_is_reported_and_retried() -> None:
     node = CampaignTopicNode(
         topic_id="actors",
         title="Actors",
@@ -47,7 +50,18 @@ def test_explicit_wrong_reference_in_prose_is_reported_and_quarantined() -> None
                 "name": "Ada",
                 "location_id": "place:right",
                 "goal": "Restore the eastern beacon before the storm surge.",
+                "short_summary": "Ada maintains the eastern beacon before each storm surge.",
                 "description": "Ada is permanently stationed at place:wrong.",
+                "dossier": {
+                    "schema_version": "rpg_world_entity_dossier_v1",
+                    "sections": [
+                        {
+                            "id": "overview",
+                            "title": "Overview",
+                            "paragraphs": ["Ada reports every night to place:wrong."],
+                        }
+                    ],
+                },
             },
         ),
         documents=(
@@ -71,7 +85,7 @@ def test_explicit_wrong_reference_in_prose_is_reported_and_quarantined() -> None
     )
     report = audit_presentation_contradictions(node, compiled)
     assert report.passed is False
-    assert len(report.contradictions) == 2
+    assert len(report.contradictions) == 3
     assert all(
         item.canonical_reference_ids == ("place:right",)
         for item in report.contradictions
@@ -81,9 +95,13 @@ def test_explicit_wrong_reference_in_prose_is_reported_and_quarantined() -> None
         for item in report.contradictions
     )
 
-    rendered = render_fact_derived_presentations(node, compiled)
-    stored_report = rendered.provenance["presentation_contradiction_report"]
-    assert stored_report["passed"] is False
-    assert "description" not in rendered.entities[0]
-    assert rendered.documents[0]["authority"] == "presentation_only"
-    assert rendered.documents[0]["presentation_contradictions"]
+    with pytest.raises(WorldForgeIntegrityError) as raised:
+        render_fact_derived_presentations(node, compiled)
+
+    contradiction_issues = [
+        issue
+        for issue in raised.value.issues
+        if issue.code == "provider_presentation_contradiction"
+    ]
+    assert len(contradiction_issues) == 3
+    assert all(issue.field == "entities" for issue in contradiction_issues)
