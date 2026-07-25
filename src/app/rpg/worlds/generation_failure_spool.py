@@ -14,12 +14,26 @@ from app.rpg.session.genesis.world_forge_generation import (
 )
 from app.rpg.session.genesis.world_forge_review import failure_report
 
-from .generation_candidate_spool import spool_path
+from .generation_candidate_spool import (
+    spool_path,
+    write_provider_started_spool,
+)
 
 
 def failure_spool_path(job_id: str) -> Path:
     candidate_path = spool_path(job_id)
     return candidate_path.with_name(candidate_path.name.removesuffix(".json") + ".failure.json")
+
+
+def _fsync_directory(path: Path) -> None:
+    try:
+        directory_fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
 
 
 def write_failure_spool(
@@ -67,6 +81,7 @@ def write_failure_spool(
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, target)
+        _fsync_directory(target.parent)
     finally:
         temporary.unlink(missing_ok=True)
     return target
@@ -94,7 +109,7 @@ class ReplayedGenerationFailure(RuntimeError):
 
 
 class FailureSpoolingWorldForgeGenerator:
-    """Record a terminal provider error before PostgreSQL is touched."""
+    """Record provider-started and terminal provider-error phases durably."""
 
     def __init__(
         self,
@@ -125,6 +140,17 @@ class FailureSpoolingWorldForgeGenerator:
         campaign_context: Mapping[str, Any],
         dependency_topics: Mapping[str, GeneratedTopic],
     ) -> GeneratedTopic:
+        write_provider_started_spool(
+            self.job_id,
+            {
+                "schema_version": "rpg_world_generation_provider_started_v1",
+                "run_id": self.run_id,
+                "world_id": self.world_id,
+                "draft_revision": self.draft_revision,
+                "topic_id": self.topic_id,
+                "job_id": self.job_id,
+            },
+        )
         try:
             return self.generator.generate(
                 node,
