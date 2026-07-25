@@ -15,8 +15,8 @@ from app.rpg.session.genesis.world_forge_contract import (
 
 WORLD_TOPIC_JOB_TYPE = "rpg.world.topic.generate"
 WORLD_TOPIC_RESOURCE_CLASS = ResourceClass.RPG_WORLD_GENERATION.value
-WORLD_TOPIC_JOB_CONTRACT = "rpg_world_topic_job_v1"
-WORLD_TOPIC_OUTPUT_SCHEMA = "rpg_world_topic_output_v1"
+WORLD_TOPIC_JOB_CONTRACT = "rpg_world_topic_job_v2"
+WORLD_TOPIC_OUTPUT_SCHEMA = "rpg_world_topic_output_v2"
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 _SAFE_ID = re.compile(r"[^A-Za-z0-9_.:-]+")
 
@@ -57,8 +57,8 @@ class WorldTopicGenerationSettings:
     topic_contract_version: str = WORLD_TOPIC_JOB_CONTRACT
     output_schema_version: str = WORLD_TOPIC_OUTPUT_SCHEMA
     compiler_version: str = "world-compiler-v1"
-    # One retry after the initial provider call keeps malformed structured
-    # output from holding an entire world-generation DAG for too long.
+    # Attempt one performs the provider call. Attempt two is reserved exclusively
+    # for persistence resume from an existing local spool; it may not call the model.
     max_attempts: int = 2
     priority: int = 10
 
@@ -72,7 +72,8 @@ class WorldTopicGenerationSettings:
             "topic_contract_version": self.topic_contract_version,
             "output_schema_version": self.output_schema_version,
             "compiler_version": self.compiler_version,
-            "max_attempts": max(1, min(int(self.max_attempts), 2)),
+            "max_attempts": 2,
+            "content_generation_attempts": 1,
             "priority": int(self.priority),
         }
 
@@ -200,6 +201,12 @@ def plan_ready_topic_jobs(
             dependency_id: str(completed_topics[dependency_id]["content_hash"])
             for dependency_id in node.dependencies
         }
+        dependency_trust = {
+            dependency_id: str(
+                completed_topics[dependency_id].get("dependency_trust") or "accepted"
+            )
+            for dependency_id in node.dependencies
+        }
         directives = dict(topic_directives.get(node.topic_id) or {})
         fingerprint, input_hash, directive_hash = topic_generation_fingerprint(
             node,
@@ -207,6 +214,7 @@ def plan_ready_topic_jobs(
                 "generation_context": dict(generation_context),
                 "target_count": node.target_count,
                 "visibility": node.visibility,
+                "dependency_trust": dependency_trust,
             },
             dependency_hashes=dependency_hashes,
             directives=directives,
@@ -232,6 +240,7 @@ def plan_ready_topic_jobs(
             "generation_context": dict(generation_context),
             "directives": directives,
             "dependency_hashes": dependency_hashes,
+            "dependency_trust": dependency_trust,
             "fingerprint": fingerprint,
             "input_hash": input_hash,
             "directive_hash": directive_hash,
@@ -255,6 +264,7 @@ def plan_ready_topic_jobs(
                 "topic_id": node.topic_id,
                 "fingerprint": fingerprint,
                 "dependency_ids": list(node.dependencies),
+                "dependency_trust": dependency_trust,
                 "recovery_pass": int(recovery_pass),
             },
         }
@@ -279,22 +289,40 @@ def plan_ready_topic_jobs(
 def generation_progress(
     graph: CampaignTopicGraph,
     *,
-    completed_topic_ids: Sequence[str],
+    completed_topic_ids: Sequence[str] = (),
     active_topic_ids: Sequence[str],
     failed_topic_ids: Sequence[str] = (),
+    flagged_topic_ids: Sequence[str] = (),
+    blocked_topic_ids: Sequence[str] = (),
+    accepted_topic_ids: Sequence[str] = (),
+    issue_counts: Mapping[str, Any] | None = None,
     target_topic_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     generation_ids = list(generation_topic_ids(graph, target_topic_ids))
-    completed = set(completed_topic_ids)
-    failed = set(failed_topic_ids).intersection(generation_ids)
+    targets = set(generation_ids)
+    accepted = set(accepted_topic_ids or completed_topic_ids).intersection(targets)
+    flagged = set(flagged_topic_ids).intersection(targets)
+    failed = set(failed_topic_ids).intersection(targets)
+    blocked = set(blocked_topic_ids).intersection(targets)
+    active = set(active_topic_ids).intersection(targets)
+    terminal = accepted | flagged | failed | blocked
     total = len(generation_ids)
-    complete_count = len(completed.intersection(generation_ids))
+    terminal_count = len(terminal)
     return {
         "total_topics": total,
-        "completed_topics": complete_count,
+        "completed_topics": terminal_count,
+        "accepted_topics": len(accepted),
+        "flagged_topics": len(flagged),
+        "failed_topics": len(failed),
+        "blocked_topics": len(blocked),
         "target_topic_ids": generation_ids,
-        "active_topic_ids": sorted(set(active_topic_ids).intersection(generation_ids)),
+        "accepted_topic_ids": sorted(accepted),
+        "flagged_topic_ids": sorted(flagged),
         "failed_topic_ids": sorted(failed),
-        "percent": 100 if total == 0 else round(complete_count / total * 100),
-        "generation_complete": complete_count == total and not failed,
+        "blocked_topic_ids": sorted(blocked),
+        "active_topic_ids": sorted(active),
+        "issue_counts": dict(issue_counts or {}),
+        "percent": 100 if total == 0 else round(terminal_count / total * 100),
+        "generation_complete": terminal_count == total and not active,
+        "publication_blocked": bool(flagged or failed or blocked),
     }
