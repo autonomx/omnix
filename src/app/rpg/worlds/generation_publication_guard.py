@@ -32,12 +32,20 @@ def _reason_counts(results: list[Mapping[str, Any]]) -> dict[str, int]:
 
 def _generation_nodes(run: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
     graph = dict(run.get("graph") or {})
-    return tuple(
+    rows = tuple(
         dict(row)
         for row in graph.get("nodes") or ()
         if isinstance(row, Mapping)
         and str(row.get("category") or "lore") not in _NON_GENERATION_CATEGORIES
         and str(row.get("topic_id") or "")
+    )
+    if rows:
+        return rows
+    # Runs created before graph persistence are still guarded by their exact target set.
+    return tuple(
+        {"topic_id": str(topic_id), "category": "lore", "dependencies": []}
+        for topic_id in dict(run.get("context") or {}).get("target_topic_ids") or ()
+        if str(topic_id)
     )
 
 
