@@ -108,7 +108,7 @@ describe('world authoring completion models', () => {
     ]);
 
     expect(blocks.map((block) => block.kind)).toEqual(['section', 'timeline', 'timeline']);
-    expect(blocks[1].items?.[0]).toMatchObject({ title: 'First Age', era: 'First Age' });
+    expect(blocks.at(1)?.items?.at(0)).toMatchObject({ title: 'First Age', era: 'First Age' });
   });
 
   it('recognises profile and legacy time-based lore IDs but not active conflicts', () => {
@@ -119,7 +119,7 @@ describe('world authoring completion models', () => {
     expect(isChronicleSection('current_conflicts')).toBe(false);
     expect(presentLoreBlocks('current_conflicts', [
       { kind: 'section', title: 'Escalation', body: 'Two rival courts are mobilising their border levies.' },
-    ])[0].kind).toBe('section');
+    ]).at(0)?.kind).toBe('section');
   });
 
   it('round-trips direct entity routes through query parameters', () => {
