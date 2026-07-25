@@ -1,12 +1,16 @@
 """Compile full and launch CampaignTopicGraph objects from validated profiles."""
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_profiles import DomainDefinition, GenreProfile
 
 _PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
+
+
+def _record(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
@@ -19,28 +23,37 @@ def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
         for field in domain.fields
         if field.value_type in {"entity_ref", "entity_ref_list"}
     }
+    guidance = dict(domain.generation_guidance)
+    presentation = _record(guidance.get("presentation"))
     return {
         "entity_kind": domain.entity_kind,
         "required_entity_fields": required_fields,
         "field_definitions": [field.as_dict() for field in domain.fields],
         "reference_fields": reference_fields,
         "semantic_roles": list(domain.semantic_roles),
-        "generation_guidance": dict(domain.generation_guidance),
+        "generation_guidance": guidance,
+        "presentation": presentation,
         "schema_version": f"rpg_profile_domain_{domain.domain_id}_v1",
     }
 
 
 def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
+    metadata = _field_metadata(domain)
+    presentation = _record(metadata.get("presentation"))
+    page_kind = str(presentation.get("page_kind") or "document")
+    category = domain.category
+    if category == "domain":
+        category = domain.domain_id if page_kind == "collection" else "lore"
     return CampaignTopicNode(
         topic_id=domain.domain_id,
         title=domain.title,
-        category=domain.category,
+        category=category,
         dependencies=domain.dependencies,
         generator_role=domain.generator_role,
         required_before_launch=domain.required_before_launch,
         visibility=domain.visibility_default,
         target_count=max(1, domain.target_range.target(depth)),
-        metadata=_field_metadata(domain),
+        metadata=metadata,
     )
 
 
@@ -100,7 +113,7 @@ def build_profile_topic_graph(
     domain_nodes = tuple(_domain_node(domain, depth=depth) for domain in profile.domains)
     domain_ids = tuple(domain.domain_id for domain in profile.domains)
     graph = CampaignTopicGraph(
-        graph_version="rpg_profile_topic_graph_v1",
+        graph_version="rpg_profile_topic_graph_v2",
         campaign_template=str(campaign_template or profile.profile_id),
         depth=str(depth or "standard"),  # type: ignore[arg-type]
         nodes=(*domain_nodes, *_pipeline_nodes(domain_ids)),
