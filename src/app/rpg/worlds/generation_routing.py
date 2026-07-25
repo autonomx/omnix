@@ -7,19 +7,18 @@ settings for every provider call.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
 import os
+from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
 from app.providers.registry import get_provider
 from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
 from app.rpg_world_forge_provider import (
-    ProviderWorldForgeTopicGenerator,
     UnavailableWorldForgeTopicGenerator,
     WorldForgeProviderConfig,
-    build_production_world_forge_generator,
 )
+from app.rpg_world_forge_single_pass import SinglePassProviderWorldForgeTopicGenerator
 
 _CONFIGURED_VALUES = {"", "auto", "configured", "settings"}
 _DETERMINISTIC_VALUES = {"deterministic", "offline", "reference-safe", "test"}
@@ -138,7 +137,7 @@ def resolve_world_forge_route(
 def build_world_forge_generator_from_settings(
     settings: Mapping[str, Any],
 ) -> WorldForgeTopicGenerator:
-    """Build exactly the provider/model recorded in a claimed topic job."""
+    """Build exactly the single-pass provider/model recorded in a claimed topic job."""
 
     provider_id = _provider_key(settings.get("provider_route"))
     model_id = _model_key(settings.get("model"))
@@ -156,6 +155,8 @@ def build_world_forge_generator_from_settings(
         mode="live",
         provider=provider_id,
         model=model_id,
+        max_retries=0,
+        lmstudio_schema_fallback=False,
     )
     provider = None
     try:
@@ -173,7 +174,7 @@ def build_world_forge_generator_from_settings(
                     "base_url": config.base_url,
                     "model": config.model or None,
                     "timeout": config.timeout_seconds,
-                    "max_retries": config.max_retries,
+                    "max_retries": 0,
                 },
             )
         except Exception as exc:
@@ -185,17 +186,20 @@ def build_world_forge_generator_from_settings(
             f"durable World Forge provider {provider_id} is unavailable"
         )
     return ReferenceSafeWorldForgeGenerator(
-        ProviderWorldForgeTopicGenerator(provider, config)
+        SinglePassProviderWorldForgeTopicGenerator(provider, config)
     )
 
 
 def build_world_forge_generator_for_run(
     run: Mapping[str, Any] | None,
 ) -> WorldForgeTopicGenerator:
-    """Use durable settings when present, with compatibility for legacy unresolved runs."""
+    """Use durable settings when present, resolving legacy runs once for compatibility."""
 
     settings = dict((run or {}).get("settings") or {})
     provider_id = _provider_key(settings.get("provider_route"))
     if provider_id and provider_id not in _CONFIGURED_VALUES:
         return build_world_forge_generator_from_settings(settings)
-    return build_production_world_forge_generator()
+    route = resolve_world_forge_route()
+    return build_world_forge_generator_from_settings(
+        {"provider_route": route.provider, "model": route.model}
+    )
