@@ -11,8 +11,15 @@ from typing import Any, Mapping
 from app.persistence.database import DatabaseUnavailableError
 from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
 
+from .generation_candidate_spool import read_candidate_spool
 from .generation_coordinator import execute_claimed_world_topic_job
 from .generation_diagnostics import log_world_generation_event
+from .generation_failure_spool import (
+    FailureSpoolingWorldForgeGenerator,
+    ReplayedFailureWorldForgeGenerator,
+    delete_failure_spool,
+    read_failure_spool,
+)
 from .generation_jobs import WORLD_TOPIC_JOB_TYPE, WORLD_TOPIC_RESOURCE_CLASS
 from .generation_validation import PublicationValidatedWorldForgeGenerator
 from .profile_generation_jobs import (
@@ -67,9 +74,8 @@ def _configured_world_forge_provider(
             load_effective_profile,
         )
 
-        profile = load_effective_profile()
         provider_id, _model_id = effective_llm_route(
-            profile,
+            load_effective_profile(),
             "rpg",
             "rpg.world_forge.generate",
         )
@@ -154,7 +160,7 @@ def _recover_interrupted_jobs(*, database: Any | None = None) -> dict[str, int]:
             "status = CASE WHEN attempt_count < max_attempts THEN 'retrying' ELSE 'failed' END, "
             "available_at = CASE WHEN attempt_count < max_attempts THEN CURRENT_TIMESTAMP ELSE available_at END, "
             "error = jsonb_build_object('code', 'worker_interrupted', "
-            "'resume_policy', 'spool_before_provider'), "
+            "'resume_policy', 'spool_only'), "
             "lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, "
             "completed_at = CASE WHEN attempt_count >= max_attempts THEN CURRENT_TIMESTAMP ELSE completed_at END, "
             "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
@@ -176,11 +182,7 @@ def _recover_worker_database_interruption(
     *,
     database: Any | None = None,
 ) -> int:
-    """Release this worker's leases without refunding a generation attempt.
-
-    A topic job has two execution leases: the first may call the provider and writes
-    a spool; the second may only resume that spool. No attempt counter is decremented.
-    """
+    """Release leases without refunding an attempt or allowing provider replay."""
 
     db = _database(database)
     from app.persistence.identity_service import bootstrap_local_tenant
@@ -209,6 +211,62 @@ def _recover_worker_database_interruption(
         ).rowcount
         work.commit()
     return int(recovered)
+
+
+def _missing_spool_failure(job: Mapping[str, Any]) -> dict[str, Any]:
+    payload = dict(job.get("input_payload") or {})
+    topic = dict(payload.get("topic") or {})
+    topic_id = str(topic.get("topic_id") or "")
+    return {
+        "schema_version": "rpg_world_generation_failure_spool_v1",
+        "run_id": str(payload.get("run_id") or ""),
+        "world_id": str(payload.get("world_id") or ""),
+        "draft_revision": int(payload.get("draft_revision") or 1),
+        "topic_id": topic_id,
+        "provider": {},
+        "dependency_hashes": dict(payload.get("dependency_hashes") or {}),
+        "dependency_trust": dict(payload.get("dependency_trust") or {}),
+        "error_type": "GenerationSpoolMissing",
+        "error_message": f"world_generation_spool_missing_after_first_attempt:{topic_id}",
+    }
+
+
+def _topic_generator_for_job(
+    job: Mapping[str, Any],
+    supplied: WorldForgeTopicGenerator | None,
+) -> WorldForgeTopicGenerator:
+    """Build a provider only for attempt one; later attempts replay local evidence."""
+
+    job_id = str(job.get("id") or "")
+    payload = dict(job.get("input_payload") or {})
+    topic = dict(payload.get("topic") or {})
+    failure = read_failure_spool(job_id)
+    if failure is not None:
+        return ReplayedFailureWorldForgeGenerator(failure)
+    if int(job.get("attempt_count") or 0) > 1:
+        # Candidate spools are consumed directly by the coordinator. If neither
+        # spool exists, fail closed rather than reconstructing a provider.
+        if read_candidate_spool(job_id) is None:
+            return ReplayedFailureWorldForgeGenerator(_missing_spool_failure(job))
+        return ReplayedFailureWorldForgeGenerator(_missing_spool_failure(job))
+
+    selected = supplied
+    if selected is None:
+        from .generation_routing import build_world_forge_generator_from_settings
+
+        selected = build_world_forge_generator_from_settings(
+            dict(payload.get("settings") or {})
+        )
+    return FailureSpoolingWorldForgeGenerator(
+        selected,
+        job_id=job_id,
+        run_id=str(payload.get("run_id") or ""),
+        world_id=str(payload.get("world_id") or ""),
+        draft_revision=int(payload.get("draft_revision") or 1),
+        topic_id=str(topic.get("topic_id") or ""),
+        dependency_hashes=dict(payload.get("dependency_hashes") or {}),
+        dependency_trust=dict(payload.get("dependency_trust") or {}),
+    )
 
 
 def run_world_generation_worker_once(
@@ -323,20 +381,17 @@ def run_world_generation_worker_once(
             generator=profile_generator,
         )
     else:
-        selected_generator = generator
-        if selected_generator is None:
-            from .generation_routing import build_world_forge_generator_from_settings
-
-            selected_generator = build_world_forge_generator_from_settings(
-                dict(dict(job.get("input_payload") or {}).get("settings") or {})
-            )
-        selected_generator = PublicationValidatedWorldForgeGenerator(selected_generator)
+        selected_generator = PublicationValidatedWorldForgeGenerator(
+            _topic_generator_for_job(job, generator)
+        )
         result = execute_claimed_world_topic_job(
             job=job,
             worker_id=worker_id,
             generator=selected_generator,
             database=db,
         )
+        if str(result.get("status") or "") == "failed":
+            delete_failure_spool(str(job.get("id") or ""))
     status = str(result.get("status") or "unknown")
     ok = bool(result.get("ok"))
     fields = {
