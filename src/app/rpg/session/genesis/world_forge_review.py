@@ -2,14 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any, Iterable, Mapping, Sequence
-
-from app.providers.structured.errors import (
-    StructuredDecodeError,
-    StructuredOutputError,
-    StructuredSchemaError,
-    StructuredSemanticError,
-)
+from typing import Any, Mapping, Sequence
 
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_fact_pipeline import StructuredFactValidationError
@@ -21,6 +14,11 @@ from .world_forge_semantic_quality import WorldForgeSemanticQualityError
 _REVIEW_SCHEMA = "rpg_world_generation_review_v1"
 _MAX_STRING = 500
 _MAX_ITEMS = 20
+_STRUCTURED_OUTPUT_ERROR_NAMES = {
+    "StructuredDecodeError",
+    "StructuredSchemaError",
+    "StructuredSemanticError",
+}
 
 
 def _bounded(value: Any, *, depth: int = 0) -> Any:
@@ -97,7 +95,9 @@ def _expected_from_message(message: str) -> str:
     return ""
 
 
-def _structured_fact_issues(error: StructuredFactValidationError) -> tuple[GenerationReviewIssue, ...]:
+def _structured_fact_issues(
+    error: StructuredFactValidationError,
+) -> tuple[GenerationReviewIssue, ...]:
     return tuple(
         GenerationReviewIssue(
             code=issue.code,
@@ -112,7 +112,9 @@ def _structured_fact_issues(error: StructuredFactValidationError) -> tuple[Gener
     )
 
 
-def _integrity_issues(error: WorldForgeIntegrityError) -> tuple[GenerationReviewIssue, ...]:
+def _integrity_issues(
+    error: WorldForgeIntegrityError,
+) -> tuple[GenerationReviewIssue, ...]:
     return tuple(
         GenerationReviewIssue(
             code=issue.code,
@@ -127,7 +129,9 @@ def _integrity_issues(error: WorldForgeIntegrityError) -> tuple[GenerationReview
     )
 
 
-def _semantic_issues(error: WorldForgeSemanticQualityError) -> tuple[GenerationReviewIssue, ...]:
+def _semantic_issues(
+    error: WorldForgeSemanticQualityError,
+) -> tuple[GenerationReviewIssue, ...]:
     rows: list[GenerationReviewIssue] = []
     for issue in error.report.issues:
         if issue.severity != "error":
@@ -148,7 +152,10 @@ def _semantic_issues(error: WorldForgeSemanticQualityError) -> tuple[GenerationR
     return tuple(rows)
 
 
-def _structured_output_issues(topic_id: str, error: StructuredOutputError) -> tuple[GenerationReviewIssue, ...]:
+def _structured_output_issues(
+    topic_id: str,
+    error: Exception,
+) -> tuple[GenerationReviewIssue, ...]:
     rows = []
     for issue in getattr(error, "issues", ()):
         path = tuple(getattr(issue, "path", ()) or ())
@@ -184,7 +191,9 @@ def report_from_error(
         issues = _integrity_issues(error)
     elif isinstance(error, WorldForgeSemanticQualityError):
         issues = _semantic_issues(error)
-    elif isinstance(error, (StructuredDecodeError, StructuredSchemaError, StructuredSemanticError)):
+    elif type(error).__name__ in _STRUCTURED_OUTPUT_ERROR_NAMES:
+        # Keep deterministic genesis code independent from live-provider packages.
+        # Structured-output failures expose a stable ``issues`` shape and class name.
         issues = _structured_output_issues(topic_id, error)
     else:
         text = str(error)
@@ -245,7 +254,11 @@ def mark_needs_review(
 
 
 def review_report(topic: GeneratedTopic | Mapping[str, Any]) -> dict[str, Any]:
-    provenance = topic.provenance if isinstance(topic, GeneratedTopic) else topic.get("provenance")
+    provenance = (
+        topic.provenance
+        if isinstance(topic, GeneratedTopic)
+        else topic.get("provenance")
+    )
     provenance = provenance if isinstance(provenance, Mapping) else {}
     value = provenance.get("generation_review")
     return dict(value) if isinstance(value, Mapping) else {}
