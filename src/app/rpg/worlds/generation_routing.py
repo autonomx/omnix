@@ -18,7 +18,9 @@ from app.rpg_world_forge_provider import (
     UnavailableWorldForgeTopicGenerator,
     WorldForgeProviderConfig,
 )
-from app.rpg_world_forge_single_pass import SinglePassProviderWorldForgeTopicGenerator
+from app.rpg_world_forge_single_pass_provider import (
+    SinglePassProviderWorldForgeTopicGenerator,
+)
 
 _CONFIGURED_VALUES = {"", "auto", "configured", "settings"}
 _DETERMINISTIC_VALUES = {"deterministic", "offline", "reference-safe", "test"}
