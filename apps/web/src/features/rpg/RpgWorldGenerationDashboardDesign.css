@@ -243,9 +243,9 @@
 .rpg-generation-topic-table-head,
 .rpg-generation-topic-table-row {
   display: grid;
-  grid-template-columns: minmax(170px, 1.3fr) 100px minmax(135px, 0.9fr) 130px minmax(170px, 1.2fr) 70px;
+  grid-template-columns: minmax(170px, 1.3fr) 100px minmax(135px, 0.9fr) minmax(140px, max-content);
   align-items: center;
-  min-width: 900px;
+  min-width: 700px;
   gap: 0.65rem;
   padding: 0.55rem 0.75rem;
 }
@@ -356,18 +356,18 @@
 
 .rpg-generation-topic-table-row > div:last-child {
   display: flex;
+  justify-self: start;
   gap: 0.3rem;
 }
 
 .rpg-generation-topic-table-row > div:last-child button {
-  display: grid;
-  width: 27px;
-  height: 27px;
-  place-items: center;
+  min-height: 27px;
+  padding: 0.3rem 0.55rem;
   border: 1px solid rgba(215, 174, 89, 0.16);
   border-radius: 4px;
   background: transparent;
   color: rgba(226, 232, 240, 0.72);
+  white-space: nowrap;
 }
 
 .rpg-generation-timeline {

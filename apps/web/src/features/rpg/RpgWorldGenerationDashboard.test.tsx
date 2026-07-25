@@ -194,6 +194,47 @@ describe('RpgWorldGenerationDashboard', () => {
     expect(screen.getByText(/Generation is locked while the profile is awaiting approval/)).toBeInTheDocument();
   });
 
+  it('selects a retryable topic without retaining the change event', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/genre-profile')) {
+        return new Response(JSON.stringify(approvedProfileResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        run_id: previousRun.run_id,
+        topic_results: [{
+          run_id: previousRun.run_id,
+          world_id: previousRun.world_id,
+          draft_revision: previousRun.draft_revision,
+          topic_id: section.id,
+          status: 'blocked',
+          candidate: null,
+          candidate_hash: '',
+          validation: { status: 'blocked', blocking: true, reason_codes: ['dependency_no_candidate'], issues: [] },
+          provider: {},
+          dependency_hashes: {},
+          dependency_trust: {},
+          job_id: '',
+          created_at: previousRun.created_at,
+          updated_at: previousRun.updated_at,
+        }],
+        analytics: { status: {}, by_code: {}, by_field: {}, by_topic: {}, by_domain: {}, by_model: {}, by_prompt_version: {}, by_provider: {} },
+        review_decisions: {},
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    renderDashboard();
+    const checkbox = await screen.findByRole('checkbox', { name: 'Select Regions for retry' });
+    fireEvent.click(checkbox);
+
+    expect(checkbox).toBeChecked();
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+  });
+
   it('shows provider-reported and estimated world-generation token usage', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(approvedProfileResponse), {
       status: 200,

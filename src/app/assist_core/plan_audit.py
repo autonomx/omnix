@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -14,7 +14,7 @@ def plan_audit_payload(
     return {
         "source": source,
         "mode": mode,
-        "timestamp": timestamp or datetime.now(UTC).isoformat(),
+        "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
         "detail": detail or {},
         "read_only": True,
         "executes": False,

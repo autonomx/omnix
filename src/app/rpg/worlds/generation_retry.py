@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
 from app.persistence.identity_service import bootstrap_local_tenant
@@ -440,7 +440,7 @@ def decide_world_generation_retry(
         decision_row: dict[str, Any] = {
             "decision": decision,
             "candidate_hash": str(result.get("candidate_hash") or ""),
-            "decided_at": datetime.now(UTC).isoformat(),
+            "decided_at": datetime.now(timezone.utc).isoformat(),
         }
         if decision == "replace":
             candidate_value = result.get("candidate")
