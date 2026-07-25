@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
@@ -8,6 +6,7 @@ from app.rpg.session.genesis.world_forge_fact_pipeline import (
     compile_structured_entity_facts,
 )
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.rpg.session.genesis.world_forge_integrity import WorldForgeIntegrityError
 from app.rpg.session.genesis.world_forge_presentation import (
     render_fact_derived_presentations,
 )
@@ -53,16 +52,21 @@ def _dependencies() -> dict[str, GeneratedTopic]:
     }
 
 
-def _provider_topic() -> GeneratedTopic:
+def _provider_topic(*, contradictory: bool = False) -> GeneratedTopic:
+    location_text = (
+        "Ada works from place:false_moon_base and commands a battleship."
+        if contradictory
+        else "Ada works from the customs office overlooking the eastern beacon."
+    )
     return GeneratedTopic(
         topic_id="actors",
         documents=(
             {
                 "document_id": "document:ada",
-                "title": "An Unverified Biography",
-                "full_text": "Ada secretly commands an orbital fleet that is not present in structured canon.",
-                "summary_120": "An unverified biography.",
-                "summary_500": "An unverified biography containing presentation-only claims.",
+                "title": "Ada Voss Biography",
+                "full_text": "Ada maintains the tidal warning network from the old customs office.",
+                "summary_120": "A harbor engineer under mounting pressure.",
+                "summary_500": "Ada is racing to restore the warning network before the autumn storms.",
                 "visibility": "game_master_canon",
                 "entities": ["actor:ada"],
             },
@@ -80,26 +84,38 @@ def _provider_topic() -> GeneratedTopic:
                     "workbench": "Salt-stained wiring diagrams cover the customs office table",
                     "route": "Fresh orange cable runs toward the eastern beacon",
                 },
-                "description": "Ada is actually based at place:false_moon_base.",
-                "secret_untyped_claim": "Ada owns an orbital battleship.",
+                "short_summary": (
+                    "Ada Voss is the last engineer still maintaining True Harbor's tidal warning grid."
+                ),
+                "description": "A patient engineer with a reputation for repairing impossible systems.",
+                "secret_untyped_claim": "Ada once sabotaged a corporate inspection drone.",
                 "dossier": {
                     "schema_version": "rpg_world_entity_dossier_v1",
+                    "quick_facts": [],
                     "sections": [
                         {
-                            "id": "false",
-                            "title": "False Provider Lore",
-                            "paragraphs": ["Ada lives on a moon base and commands a battleship."],
-                        }
+                            "id": "overview",
+                            "title": "Overview",
+                            "paragraphs": [location_text],
+                        },
+                        {
+                            "id": "backstory",
+                            "title": "Backstory",
+                            "paragraphs": [
+                                "She inherited the station from a retired signal keeper who taught her to read storms by sound."
+                            ],
+                        },
                     ],
+                    "related_entity_ids": ["place:true_harbor"],
                 },
                 "visibility": "game_master_canon",
             },
         ),
         facts=(
             {
-                "id": "fact:unverified_orbit",
+                "id": "fact:unverified_sabotage",
                 "subject": "actor:ada",
-                "content": "Ada commands an orbital fleet.",
+                "content": "Ada once sabotaged a corporate inspection drone.",
                 "authority": "generated_proposal",
                 "approved_authority": "objective_canon",
                 "entity_refs": ["actor:ada"],
@@ -109,30 +125,42 @@ def _provider_topic() -> GeneratedTopic:
     )
 
 
-def _compiled_topic() -> GeneratedTopic:
+def _compiled_topic(*, contradictory: bool = False) -> GeneratedTopic:
     return compile_structured_entity_facts(
         _node(),
-        _provider_topic(),
+        _provider_topic(contradictory=contradictory),
         _dependencies(),
     )
 
 
-def test_dossier_uses_validated_structured_facts_not_provider_prose() -> None:
+def test_contradictory_provider_prose_is_rejected_for_regeneration() -> None:
+    with pytest.raises(WorldForgeIntegrityError) as raised:
+        render_fact_derived_presentations(
+            _node(),
+            _compiled_topic(contradictory=True),
+        )
+
+    assert any(
+        issue.code == "provider_presentation_contradiction"
+        and issue.field == "entities"
+        for issue in raised.value.issues
+    )
+
+
+def test_clean_dossier_preserves_provider_prose_and_structured_fields() -> None:
     rendered = render_fact_derived_presentations(_node(), _compiled_topic())
     entity = rendered.entities[0]
-    dossier_text = json.dumps(entity["dossier"], sort_keys=True)
+    dossier_text = " ".join(
+        paragraph
+        for section in entity["dossier"]["sections"]
+        for paragraph in section.get("paragraphs") or ()
+    )
 
     assert entity["location_id"] == "place:true_harbor"
-    assert "place:false_moon_base" not in dossier_text
-    assert "battleship" not in dossier_text.casefold()
-    assert entity["dossier"]["generated_from_approved_facts"] is True
-    assert set(entity["dossier"]["represented_field_ids"]) == {
-        "location_id",
-        "goal",
-        "dependency",
-        "next_action",
-        "observable_evidence",
-    }
+    assert "customs office overlooking the eastern beacon" in dossier_text
+    assert "Current Pressure:" not in dossier_text
+    assert entity["dossier"]["provider_authored_presentation"] is True
+    assert rendered.provenance["presentation_derived_from_structured_facts"] is False
 
 
 def test_untyped_entity_claims_are_not_canonical_entity_fields() -> None:
@@ -154,7 +182,7 @@ def test_non_structured_facts_are_quarantined_as_proposals() -> None:
     proposals = rendered.provenance["presentation_fact_proposals"]
     assert any(
         proposal["status"] == "non_canonical_fact_proposal"
-        and proposal["value"]["id"] == "fact:unverified_orbit"
+        and proposal["value"]["id"] == "fact:unverified_sabotage"
         for proposal in proposals
     )
     assert rendered.provenance["discarded_noncanonical_fact_count"] == 1

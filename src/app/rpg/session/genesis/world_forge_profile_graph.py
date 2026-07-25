@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
+from .world_forge_lore_quality import lore_quality_contract
 from .world_forge_profiles import DomainDefinition, GenreProfile
 
 _PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
@@ -63,7 +64,7 @@ def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
     category = domain.category
     if category == "domain":
         category = domain.domain_id if page_kind == "collection" else "lore"
-    return CampaignTopicNode(
+    probe = CampaignTopicNode(
         topic_id=domain.domain_id,
         title=domain.title,
         category=category,
@@ -72,6 +73,21 @@ def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
         required_before_launch=domain.required_before_launch,
         visibility=domain.visibility_default,
         target_count=max(1, domain.target_range.target(depth)),
+        metadata=metadata,
+    )
+    configured_lore_quality = _record(
+        _record(domain.generation_guidance).get("lore_quality")
+    )
+    metadata["lore_quality"] = configured_lore_quality or lore_quality_contract(probe)
+    return CampaignTopicNode(
+        topic_id=probe.topic_id,
+        title=probe.title,
+        category=probe.category,
+        dependencies=probe.dependencies,
+        generator_role=probe.generator_role,
+        required_before_launch=probe.required_before_launch,
+        visibility=probe.visibility,
+        target_count=probe.target_count,
         metadata=metadata,
     )
 

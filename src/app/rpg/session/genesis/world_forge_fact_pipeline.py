@@ -249,6 +249,26 @@ def _fact_id(entity_id: str, field_id: str) -> str:
     return f"fact:{safe_entity}:{safe_field}"
 
 
+def _canonical_fact_signature(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the immutable canon payload, excluding lookup/presentation enrichments."""
+
+    return {
+        "id": str(row.get("id") or ""),
+        "subject": str(row.get("subject") or ""),
+        "predicate": str(row.get("predicate") or row.get("field_id") or ""),
+        "object": row.get("object"),
+        "authority": str(row.get("authority") or ""),
+        "approved_authority": str(row.get("approved_authority") or ""),
+        "visibility": str(row.get("visibility") or ""),
+        "entity_refs": list(row.get("entity_refs") or ()),
+        "topic_id": str(row.get("topic_id") or ""),
+        "field_id": str(row.get("field_id") or ""),
+        "value_type": str(row.get("value_type") or ""),
+        "semantic_role": str(row.get("semantic_role") or ""),
+        "source": str(row.get("source") or ""),
+    }
+
+
 def compile_structured_entity_facts(
     node: CampaignTopicNode,
     topic: GeneratedTopic,
@@ -257,7 +277,9 @@ def compile_structured_entity_facts(
     """Emit one canon proposal per validated profile-defined field.
 
     Existing provider facts remain proposals. Generated dossier prose therefore
-    has a complete structured source of truth to consume in later phases.
+    has a complete structured source of truth to consume in later phases. Lookup
+    and display enrichments may be added after compilation; publication revalidation
+    compares only the immutable canon signature and preserves those enrichments.
     """
 
     definitions = _field_definitions(node)
@@ -276,9 +298,13 @@ def compile_structured_entity_facts(
                 continue
             value = entity[field_id]
             fact_id = _fact_id(entity_id, field_id)
-            references = [entity_id, *_reference_values(
-                value, str(definition.get("value_type") or "")
-            )]
+            references = [
+                entity_id,
+                *_reference_values(
+                    value,
+                    str(definition.get("value_type") or ""),
+                ),
+            ]
             row = {
                 "id": fact_id,
                 "subject": entity_id,
@@ -300,20 +326,26 @@ def compile_structured_entity_facts(
                 "source": "profile_structured_fact_compiler_v1",
             }
             current = existing.get(fact_id)
-            if current is not None and current != row:
-                raise StructuredFactValidationError(
-                    (
-                        StructuredFactIssue(
-                            "conflicting_structured_fact",
-                            node.topic_id,
-                            entity_id,
-                            field_id,
-                            "Existing fact conflicts with the validated structured field.",
-                            current,
-                        ),
+            if current is not None:
+                if _canonical_fact_signature(current) != _canonical_fact_signature(row):
+                    raise StructuredFactValidationError(
+                        (
+                            StructuredFactIssue(
+                                "conflicting_structured_fact",
+                                node.topic_id,
+                                entity_id,
+                                field_id,
+                                "Existing fact conflicts with the validated structured field.",
+                                current,
+                            ),
+                        )
                     )
-                )
-            existing[fact_id] = row
+                # Preserve post-compilation fields such as lookup, lookup_schema,
+                # display_text, and compact JSON content after the immutable canon
+                # signature has been proven identical.
+                existing[fact_id] = {**row, **current}
+            else:
+                existing[fact_id] = row
             fact_ids.append(fact_id)
     return replace(
         topic,

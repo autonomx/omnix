@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping
 
+from .world_forge_canon_lookup import attach_structured_canon_lookup
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_deterministic import DeterministicWorldForgeGenerator
 from .world_forge_deterministic_completion import complete_deterministic_references
@@ -20,6 +21,7 @@ from .world_forge_domains import (
 from .world_forge_fact_pipeline import compile_structured_entity_facts
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_integrity import validate_and_normalize_provider_topic
+from .world_forge_lore_scoring import require_preferred_lore_quality
 from .world_forge_presentation import render_fact_derived_presentations
 from .world_forge_profile_deterministic import generate_deterministic_profile_topic
 from .world_forge_regeneration import generate_with_targeted_regeneration
@@ -43,16 +45,18 @@ class ReferenceSafeWorldForgeGenerator:
 
     @staticmethod
     def _max_regeneration_attempts(campaign_context: Mapping[str, Any]) -> int:
+        """Return total attempts: initial generation plus three retries by default."""
+
         try:
             return max(
                 1,
                 min(
-                    int(campaign_context.get("targeted_regeneration_max_attempts") or 3),
+                    int(campaign_context.get("targeted_regeneration_max_attempts") or 4),
                     5,
                 ),
             )
         except (TypeError, ValueError):
-            return 3
+            return 4
 
     def generate(
         self,
@@ -79,15 +83,16 @@ class ReferenceSafeWorldForgeGenerator:
             node.metadata.get("field_definitions")
             and isinstance(self.generator, DeterministicWorldForgeGenerator)
         ):
-            return process(
+            processed = process(
                 generate_deterministic_profile_topic(
                     node,
                     campaign_context=campaign_context,
                     dependency_topics=dependency_topics,
                 )
             )
+            return attach_structured_canon_lookup(processed)
 
-        return generate_with_targeted_regeneration(
+        generated = generate_with_targeted_regeneration(
             self.generator,
             node,
             seed=seed,
@@ -96,6 +101,7 @@ class ReferenceSafeWorldForgeGenerator:
             process=process,
             max_attempts=self._max_regeneration_attempts(campaign_context),
         )
+        return attach_structured_canon_lookup(generated)
 
     def _process_topic(
         self,
@@ -164,7 +170,14 @@ class ReferenceSafeWorldForgeGenerator:
             )
         validate_world_brief_grounding(node, topic, campaign_context)
         if profile_defined:
-            return render_fact_derived_presentations(node, topic)
+            rendered = render_fact_derived_presentations(node, topic)
+            if provider_generated:
+                rendered = require_preferred_lore_quality(
+                    node,
+                    rendered,
+                    campaign_context,
+                )
+            return rendered
         return self._normalize_entity_dossiers(node, topic)
 
     @staticmethod

@@ -1,17 +1,24 @@
-"""Render profile-driven presentation from validated structured canon facts only."""
+"""Render profile-driven presentation without inventing live-provider lore."""
 from __future__ import annotations
 
-import json
 from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
 from .world_forge_contract import CampaignTopicNode
-from .world_forge_contradictions import audit_presentation_contradictions
+from .world_forge_contradictions import (
+    PresentationContradictionReport,
+    audit_presentation_contradictions,
+)
+from .world_forge_dossiers import validate_entity_dossier
 from .world_forge_fact_pipeline import (
     StructuredFactIssue,
     StructuredFactValidationError,
 )
 from .world_forge_generation import GeneratedTopic
+from .world_forge_integrity import (
+    WorldForgeIntegrityError,
+    WorldForgeIntegrityIssue,
+)
 
 _DOSSIER_SCHEMA = "rpg_world_entity_dossier_v1"
 _PRESENTATION_SOURCE_FIELDS = {
@@ -33,6 +40,12 @@ def _definitions(node: CampaignTopicNode) -> tuple[dict[str, Any], ...]:
 
 def _entity_id(entity: Mapping[str, Any]) -> str:
     return str(entity.get("id") or entity.get("entity_id") or "").strip()
+
+
+def _provider_generated(topic: GeneratedTopic) -> bool:
+    return str(dict(topic.provenance).get("generator") or "").startswith(
+        "structured_world_forge_provider_"
+    )
 
 
 def _display(value: Any) -> str:
@@ -123,7 +136,12 @@ def _structured_facts(topic: GeneratedTopic) -> tuple[dict[str, Any], ...]:
     )
 
 
-def _presentation_fact_proposals(topic: GeneratedTopic) -> list[dict[str, Any]]:
+def _presentation_fact_proposals(
+    topic: GeneratedTopic,
+    *,
+    preserved_entity_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    preserved = preserved_entity_ids or set()
     proposals: list[dict[str, Any]] = []
     for entity in topic.entities:
         entity_id = _entity_id(entity)
@@ -131,12 +149,15 @@ def _presentation_fact_proposals(topic: GeneratedTopic) -> list[dict[str, Any]]:
             value = entity.get(field_id)
             if value in (None, "", [], (), {}):
                 continue
+            status = "non_canonical_presentation_proposal"
+            if entity_id in preserved and field_id in {"short_summary", "dossier"}:
+                status = "preserved_provider_presentation"
             proposals.append(
                 {
                     "entity_id": entity_id,
                     "source_field": field_id,
                     "value": value,
-                    "status": "non_canonical_presentation_proposal",
+                    "status": status,
                 }
             )
     for fact in topic.facts:
@@ -178,6 +199,8 @@ def _build_dossier(
     facts: tuple[dict[str, Any], ...],
     definitions: Mapping[str, Mapping[str, Any]],
 ) -> tuple[str, dict[str, Any]]:
+    """Build deterministic presentation only for explicit offline/test generation."""
+
     entity_id = _entity_id(entity)
     name = str(entity.get("name") or entity_id).strip()
     fact_fields = {str(fact.get("field_id") or "") for fact in facts}
@@ -283,16 +306,92 @@ def _build_dossier(
     return short_summary, dossier
 
 
+def _provider_presentation(
+    original: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]] | None:
+    short_summary = " ".join(str(original.get("short_summary") or "").split())
+    raw_dossier = original.get("dossier")
+    if not short_summary or validate_entity_dossier(raw_dossier):
+        return None
+    return short_summary, dict(raw_dossier)
+
+
+def _provider_presentation_issues(
+    node: CampaignTopicNode,
+    topic: GeneratedTopic,
+    contradiction_report: PresentationContradictionReport,
+) -> tuple[WorldForgeIntegrityIssue, ...]:
+    issues: list[WorldForgeIntegrityIssue] = []
+    for contradiction in contradiction_report.contradictions:
+        issues.append(
+            WorldForgeIntegrityIssue(
+                code="provider_presentation_contradiction",
+                topic_id=node.topic_id,
+                item_id=contradiction.entity_id,
+                field="entities",
+                supplied_value=contradiction.source,
+                candidates=contradiction.canonical_reference_ids,
+                message=(
+                    f"{contradiction.message} Regenerate the provider-authored topic; "
+                    "deterministic replacement prose is forbidden."
+                ),
+            )
+        )
+    for entity in topic.entities:
+        entity_id = _entity_id(entity)
+        short_summary = " ".join(str(entity.get("short_summary") or "").split())
+        dossier_issues = validate_entity_dossier(entity.get("dossier"))
+        if not short_summary:
+            issues.append(
+                WorldForgeIntegrityIssue(
+                    code="provider_short_summary_required",
+                    topic_id=node.topic_id,
+                    item_id=entity_id,
+                    field="entities",
+                    supplied_value="<missing>",
+                    message=(
+                        "Live World Forge entities require provider-authored short_summary "
+                        "text. Regenerate the topic instead of synthesizing presentation prose."
+                    ),
+                )
+            )
+        if dossier_issues:
+            issues.append(
+                WorldForgeIntegrityIssue(
+                    code="provider_dossier_invalid",
+                    topic_id=node.topic_id,
+                    item_id=entity_id,
+                    field="entities",
+                    supplied_value=",".join(dossier_issues),
+                    message=(
+                        "Live World Forge entities require a schema-valid provider-authored "
+                        "dossier. Regenerate the topic instead of synthesizing presentation prose."
+                    ),
+                )
+            )
+    return tuple(issues)
+
+
 def render_fact_derived_presentations(
     node: CampaignTopicNode,
     topic: GeneratedTopic,
 ) -> GeneratedTopic:
-    """Replace profile-driven prose with presentation derived from structured facts."""
+    """Render profile canon without replacing live-provider lore with templates."""
 
     definition_rows = _definitions(node)
     if not definition_rows:
         return topic
     contradiction_report = audit_presentation_contradictions(node, topic)
+    provider_generated = _provider_generated(topic)
+    if provider_generated:
+        provider_issues = _provider_presentation_issues(
+            node,
+            topic,
+            contradiction_report,
+        )
+        if provider_issues:
+            raise WorldForgeIntegrityError(provider_issues)
+
     definitions = {
         str(definition.get("field_id") or ""): definition
         for definition in definition_rows
@@ -304,6 +403,7 @@ def render_fact_derived_presentations(
 
     entities: list[dict[str, Any]] = []
     issues: list[StructuredFactIssue] = []
+    preserved_entity_ids: set[str] = set()
     for original in topic.entities:
         entity_id = _entity_id(original)
         entity_facts = tuple(facts_by_entity.get(entity_id, ()))
@@ -319,25 +419,40 @@ def render_fact_derived_presentations(
             )
             continue
         canonical = _canonical_entity(node, original, entity_facts)
-        short_summary, dossier = _build_dossier(
-            node,
-            canonical,
-            entity_facts,
-            definitions,
-        )
+        if provider_generated:
+            provider_presentation = _provider_presentation(original)
+            assert provider_presentation is not None
+            short_summary, provider_dossier = provider_presentation
+            dossier = {
+                **provider_dossier,
+                "provider_authored_presentation": True,
+            }
+            preserved_entity_ids.add(entity_id)
+        else:
+            short_summary, dossier = _build_dossier(
+                node,
+                canonical,
+                entity_facts,
+                definitions,
+            )
         canonical.update(
             {
                 "short_summary": short_summary,
                 "dossier": dossier,
                 "dossier_status": "complete",
-                "presentation_source_fact_ids": dossier["source_fact_ids"],
+                "presentation_source_fact_ids": [
+                    str(fact.get("id") or "") for fact in entity_facts
+                ],
             }
         )
         entities.append(canonical)
     if issues:
         raise StructuredFactValidationError(issues)
 
-    proposals = _presentation_fact_proposals(topic)
+    proposals = _presentation_fact_proposals(
+        topic,
+        preserved_entity_ids=preserved_entity_ids,
+    )
     contradiction_rows = contradiction_report.as_dict()["contradictions"]
     documents = tuple(
         {
@@ -362,8 +477,15 @@ def render_fact_derived_presentations(
         documents=documents,
         provenance={
             **dict(topic.provenance),
-            "presentation_schema": "rpg_fact_derived_presentation_v1",
-            "presentation_derived_from_structured_facts": True,
+            "presentation_schema": (
+                "rpg_provider_authored_presentation_v1"
+                if provider_generated
+                else "rpg_fact_derived_presentation_v1"
+            ),
+            "presentation_derived_from_structured_facts": not provider_generated,
+            "provider_authored_presentation": provider_generated,
+            "provider_presentations_preserved": bool(preserved_entity_ids),
+            "provider_presentation_entity_ids": sorted(preserved_entity_ids),
             "presentation_fact_proposals": proposals,
             "presentation_contradiction_report": contradiction_report.as_dict(),
             "discarded_noncanonical_fact_count": sum(
