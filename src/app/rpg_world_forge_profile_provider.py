@@ -32,7 +32,9 @@ from app.rpg.session.genesis.world_forge_profiles import (
 from app.rpg_world_forge_provider import WorldForgeProviderConfig
 
 _PROFILE_CALLS = BoundedSemaphore(1)
-_ALLOWED_CORE_IDS = tuple(domain.domain_id for domain in _core_domains())
+_CORE_DOMAINS = _core_domains()
+_ALLOWED_CORE_IDS = tuple(domain.domain_id for domain in _CORE_DOMAINS)
+_LAUNCH_CORE_IDS = tuple(domain.domain_id for domain in _CORE_DOMAINS if domain.required_before_launch)
 FieldValueType = Literal[
     "string",
     "integer",
@@ -43,6 +45,19 @@ FieldValueType = Literal[
     "entity_ref_list",
     "structured_object",
 ]
+PageKind = Literal["document", "collection"]
+ImageRole = Literal[
+    "none",
+    "portrait",
+    "scene",
+    "landscape",
+    "emblem",
+    "icon",
+    "illustration",
+    "cover",
+    "map",
+]
+AuthoringGroup = Literal["world", "lore", "game-master"]
 
 
 class ProfileTargetRangeResponse(BaseModel):
@@ -74,6 +89,12 @@ class ProfileDomainResponse(BaseModel):
     dependencies: list[str] = Field(default_factory=list)
     generator_role: str = "world_forge"
     visibility_default: str = "game_master_canon"
+    required_before_launch: bool = False
+    semantic_roles: list[str] = Field(default_factory=list)
+    page_kind: PageKind = "collection"
+    card_variant: str = "entity"
+    image_role: ImageRole = "illustration"
+    authoring_group: AuthoringGroup = "world"
     fields: list[ProfileFieldResponse] = Field(default_factory=list)
     target_range: ProfileTargetRangeResponse = Field(
         default_factory=ProfileTargetRangeResponse
@@ -175,6 +196,8 @@ def profile_from_proposal(
                 dependencies=tuple(domain.dependencies),
                 generator_role=domain.generator_role,
                 visibility_default=domain.visibility_default,
+                required_before_launch=domain.required_before_launch,
+                semantic_roles=tuple(domain.semantic_roles),
                 fields=tuple(fields),
                 target_range=DomainTargetRange(
                     quick=domain.target_range.quick,
@@ -183,6 +206,12 @@ def profile_from_proposal(
                 ),
                 generation_guidance={
                     **domain.generation_guidance,
+                    "presentation": {
+                        "page_kind": domain.page_kind,
+                        "card_variant": domain.card_variant or domain.entity_kind,
+                        "image_role": domain.image_role,
+                        "group": domain.authoring_group,
+                    },
                     "requested_genre": genre,
                     "world_description": description,
                     "campaign_mode": campaign_mode,
@@ -192,19 +221,19 @@ def profile_from_proposal(
 
     return GenreProfile(
         profile_id=f"world_local:{normalize_genre_key(genre)}",
-        version=1,
+        version=2,
         display_name=proposal.display_name,
         aliases=tuple(dict.fromkeys((genre, *proposal.aliases))),
         domains=(*core_domains, *domains),
         genre_tags=tuple(dict.fromkeys(proposal.genre_tags)),
         launch_requirements=LaunchRequirements(
-            required_domain_ids=_ALLOWED_CORE_IDS,
+            required_domain_ids=_LAUNCH_CORE_IDS,
         ),
         runtime_capability_defaults=RuntimeCapabilityDefaults(
             proposal.runtime_capability_defaults
         ),
         provenance={
-            "source": "llm_world_local_profile_v1",
+            "source": "llm_world_local_profile_v2",
             "requested_genre": genre,
             "requested_description": description,
             "campaign_mode": campaign_mode,
@@ -228,7 +257,7 @@ def _proposal_contract(
 
     return StructuredContract(
         contract_id="rpg.world_forge.genre_profile",
-        version=1,
+        version=2,
         output_model=GenreProfileProposalResponse,
         semantic_validator=validate,
         schema_profile="canon_strict",
@@ -253,25 +282,29 @@ class ProviderGenreProfileGenerator:
         system = (
             "You are the Omnix World Forge ontology architect. Return strict JSON only. "
             "Design a reusable ontology for the requested genre before any lore is generated. "
-            "Return only setting-specific additional domains; the engine already owns these "
-            f"core domains: {', '.join(_ALLOWED_CORE_IDS)}. Do not redefine them. "
-            "Do not invent named factions, characters, locations, events, or lore. Define the "
-            "kinds of records the later lore generator must create, their dependencies, typed "
-            "fields, reference targets, target ranges, and runtime capability defaults. Use only "
-            "these field types: string, integer, number, boolean, enum, entity_ref, "
-            "entity_ref_list, structured_object. Reference fields must name valid core or proposed "
-            "domains. Create two to eight distinctive domains when the genre needs them. Do not "
-            "import fantasy, magic, races, classes, pantheons, spells, monsters, or summoning "
-            "unless the request explicitly requires those concepts."
+            "The engine already owns a complete standard world-authoring catalogue with these "
+            f"domains: {', '.join(_ALLOWED_CORE_IDS)}. Do not redefine or omit them. Return only "
+            "setting-specific extension domains that add capabilities the standard catalogue cannot "
+            "represent. Do not invent named factions, characters, locations, events, or lore. Define "
+            "the kinds of records the later lore generator must create, their dependencies, typed "
+            "fields, reference targets, target ranges, and runtime capability defaults. For each "
+            "extension domain choose page_kind document or collection, a card_variant, an image_role "
+            "from none, portrait, scene, landscape, emblem, icon, illustration, cover, map, and an "
+            "authoring_group from world, lore, game-master. Use only these field types: string, "
+            "integer, number, boolean, enum, entity_ref, entity_ref_list, structured_object. Reference "
+            "fields must name valid standard or proposed domains. Create zero to eight distinctive "
+            "extension domains only when the genre genuinely needs them. Do not import unrelated "
+            "fantasy, magic, races, classes, pantheons, spells, monsters, or summoning concepts."
         )
         payload = {
             "genre": genre,
             "description": description,
             "campaign_mode": campaign_mode,
-            "core_domain_ids": list(_ALLOWED_CORE_IDS),
+            "standard_domain_ids": list(_ALLOWED_CORE_IDS),
             "instruction": (
-                "Describe ontology only. The result must be useful for structured canon, "
-                "causal world simulation, observable evidence, and later dossier generation."
+                "Describe ontology and presentation only. The result must be useful for structured "
+                "canon, causal world simulation, observable evidence, dossier generation, authoring "
+                "cards, and image planning."
             ),
         }
         messages = [

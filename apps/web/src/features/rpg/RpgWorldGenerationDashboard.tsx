@@ -5,6 +5,7 @@ import {
   RpgWorldGenerationPanel,
   type RpgWorldGenerationPanelHandle,
 } from './RpgWorldGenerationPanel';
+import { RpgWorldProfilePreview } from './RpgWorldProfilePreview';
 import './RpgWorldGenerationDashboardDesign.css';
 
 interface RpgWorldGenerationDashboardProps {
@@ -66,6 +67,7 @@ export function RpgWorldGenerationDashboard({
   const [view, setView] = useState<'board' | 'timeline'>('board');
   const [controlsOpen, setControlsOpen] = useState(false);
   const [selectedAction, setSelectedAction] = useState<PrimaryAction | null>(null);
+  const [profileApproved, setProfileApproved] = useState(false);
   const panelRef = useRef<RpgWorldGenerationPanelHandle>(null);
   const run = generation && 'run_id' in generation ? generation as RpgWorldGenerationRun : undefined;
   const progress = record(run?.progress);
@@ -113,9 +115,12 @@ export function RpgWorldGenerationDashboard({
   };
 
   const isSelectedAction = (action: PrimaryAction) => selectedAction === action;
+  const profileLocked = !profileApproved;
 
   return (
     <div className="rpg-generation-dashboard is-operational-dashboard">
+      <RpgWorldProfilePreview onApprovalChange={setProfileApproved} worldId={worldId} />
+
       <section className="rpg-generation-dashboard-header" aria-label="Generation status dashboard">
         <div className="rpg-generation-dashboard-title">
           <span className="rpg-generation-dashboard-emblem" aria-hidden="true">✥</span>
@@ -123,9 +128,9 @@ export function RpgWorldGenerationDashboard({
             <p className="eyebrow">World forge</p>
             <h2>World Generation</h2>
             <div className="rpg-generation-dashboard-live-status">
-              <strong>{run ? label(run.status) : 'Not started'}</strong>
+              <strong>{profileLocked ? 'Profile review' : run ? label(run.status) : 'Ready'}</strong>
               <span>·</span>
-              <span>{run ? `Generating world content across ${topicRows.length} topics` : 'Configure a generation run to begin.'}</span>
+              <span>{profileLocked ? 'Approve the proposed topic catalogue before content generation.' : run ? `Generating world content across ${topicRows.length} topics` : 'The approved profile is ready for generation.'}</span>
               <div aria-label={`${Math.round(percent)} percent complete`}><i style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
               <b>{Math.round(percent)}%</b>
             </div>
@@ -139,15 +144,15 @@ export function RpgWorldGenerationDashboard({
       </section>
 
       <div className="rpg-generation-primary-actions">
-        <button className={isSelectedAction('full') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('full')} onClick={() => runPrimaryAction('full', () => panelRef.current?.generateWorld())}>✦ Generate World</button>
-        <button className={isSelectedAction('selected') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('selected')} onClick={() => { setSelectedAction('selected'); openControls(); }}>Generate Selected</button>
-        <button className={isSelectedAction('stale') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('stale')} onClick={() => runPrimaryAction('stale', () => panelRef.current?.regenerateStale())}>Regenerate Stale</button>
-        <button className={isSelectedAction('retry') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('retry')} disabled={!failed.size} onClick={() => runPrimaryAction('retry', () => panelRef.current?.retryFailed())}>Retry Failed{failed.size ? ` (${failed.size})` : ''}</button>
-        <button className={isSelectedAction('continue') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('continue')} disabled={run?.status !== 'failed'} onClick={() => runPrimaryAction('continue', () => panelRef.current?.continueGeneration())}>Continue Generation</button>
+        <button className={isSelectedAction('full') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('full')} disabled={profileLocked} onClick={() => runPrimaryAction('full', () => panelRef.current?.generateWorld())}>✦ Generate World</button>
+        <button className={isSelectedAction('selected') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('selected')} disabled={profileLocked} onClick={() => { setSelectedAction('selected'); openControls(); }}>Generate Selected</button>
+        <button className={isSelectedAction('stale') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('stale')} disabled={profileLocked} onClick={() => runPrimaryAction('stale', () => panelRef.current?.regenerateStale())}>Regenerate Stale</button>
+        <button className={isSelectedAction('retry') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('retry')} disabled={profileLocked || !failed.size} onClick={() => runPrimaryAction('retry', () => panelRef.current?.retryFailed())}>Retry Failed{failed.size ? ` (${failed.size})` : ''}</button>
+        <button className={isSelectedAction('continue') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('continue')} disabled={profileLocked || run?.status !== 'failed'} onClick={() => runPrimaryAction('continue', () => panelRef.current?.continueGeneration())}>Continue Generation</button>
         <button className={isSelectedAction('publish') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('publish')} disabled={run?.status !== 'review'} onClick={() => runPrimaryAction('publish', () => panelRef.current?.publish())}>Publish World</button>
         {onOpenImages ? <button className={isSelectedAction('images') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('images')} onClick={() => runPrimaryAction('images', onOpenImages)}>Generate Images</button> : null}
       </div>
-      {selectedAction ? <p className="rpg-generation-primary-action-feedback" aria-live="polite">{primaryActionLabel(selectedAction)} selected. Generation controls are open below with the operation result.</p> : null}
+      {profileLocked ? <p className="rpg-generation-primary-action-feedback" aria-live="polite">Generation is locked while the profile is awaiting approval.</p> : selectedAction ? <p className="rpg-generation-primary-action-feedback" aria-live="polite">{primaryActionLabel(selectedAction)} selected. Generation controls are open below with the operation result.</p> : null}
 
       <div className="rpg-generation-dashboard-layout">
         <section className="rpg-generation-topic-board">
@@ -180,7 +185,7 @@ export function RpgWorldGenerationDashboard({
                     <span role="cell" className="rpg-generation-topic-status">{label(section.displayStatus)}</span>
                     <div role="cell" className={`rpg-generation-row-progress${generatingRow ? ' is-indeterminate' : ''}`}><i style={{ width: completeRow || generatingRow ? '100%' : '0%' }} /><small>{completeRow ? '100%' : generatingRow ? 'Provider call in progress' : '0%'}</small></div>
                     <span role="cell">{active.has(section.id) || failed.has(section.id) ? (run?.updated_at ? new Date(run.updated_at).toLocaleString() : '—') : '—'}</span>
-                    <span role="cell">{section.entity_count ? `${section.entity_count} structured entries` : section.displayStatus === 'failed' ? errorText : 'Queued for generation'}</span>
+                    <span role="cell">{section.entity_count ? `${section.entity_count} structured entries` : section.displayStatus === 'failed' ? errorText : profileLocked ? 'Awaiting profile approval' : 'Queued for generation'}</span>
                     <div role="cell">
                       <button type="button" aria-label={`View ${section.label}`} onClick={() => onOpenSection?.(section.id)}>◉</button>
                       <button type="button" aria-label={`Generation settings for ${section.label}`} onClick={openControls}>⋮</button>
@@ -200,7 +205,7 @@ export function RpgWorldGenerationDashboard({
           <section className="rpg-generation-diagnostics-card">
             <header><h3>Diagnostics &amp; Activity</h3><span>{run?.updated_at ? new Date(run.updated_at).toLocaleTimeString() : '—'}</span></header>
             {failed.size ? (
-              <article className="rpg-generation-last-error"><small>Last Error</small><strong>{Array.from(failed).map(label).join(', ')} failed</strong><p>{errorText}</p><button type="button" onClick={() => panelRef.current?.retryFailed()}>Retry Now</button></article>
+              <article className="rpg-generation-last-error"><small>Last Error</small><strong>{Array.from(failed).map(label).join(', ')} failed</strong><p>{errorText}</p><button type="button" disabled={profileLocked} onClick={() => panelRef.current?.retryFailed()}>Retry Now</button></article>
             ) : <p className="rpg-generation-no-error">No terminal topic failures.</p>}
             <div className="rpg-generation-activity-stream">
               {rows.filter((section) => section.displayStatus !== 'waiting' && section.displayStatus !== 'empty').slice(0, 7).map((section) => <div key={section.id}><span>{statusIcon(section.displayStatus)}</span><p><strong>{section.label}</strong> {label(section.displayStatus).toLowerCase()}</p></div>)}
@@ -243,6 +248,7 @@ export function RpgWorldGenerationDashboard({
           ref={panelRef}
           generation={generation}
           onOpenImages={onOpenImages}
+          profileApproved={profileApproved}
           sections={sections}
           worldId={worldId}
         />

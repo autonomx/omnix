@@ -52,6 +52,11 @@ def test_profile_world_publication_reaches_playtested_stage() -> None:
         seed=17,
         campaign_context=generation_context,
     )
+    assert generated.passed, {
+        job.topic_id: job.error
+        for job in generated.jobs
+        if job.status != "completed"
+    }
     topic_rows = [
         {
             "topic_id": topic.topic_id,

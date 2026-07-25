@@ -24,7 +24,7 @@ function run(status: string, failedTopicIds: string[] = []): RpgWorldGenerationR
   };
 }
 
-function renderPanel(generation: RpgWorldGenerationRun) {
+function renderPanel(generation: RpgWorldGenerationRun, profileApproved = true) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -32,6 +32,7 @@ function renderPanel(generation: RpgWorldGenerationRun) {
     <QueryClientProvider client={queryClient}>
       <RpgWorldGenerationPanel
         generation={generation}
+        profileApproved={profileApproved}
         sections={[]}
         worldId="world:aurelia"
       />
@@ -143,5 +144,12 @@ describe('RpgWorldGenerationPanel failed-topic retry guards', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry Failed (1)' }));
 
     expect(await screen.findByText(/database credential was rejected/)).toBeInTheDocument();
+  });
+
+  it('keeps retry and continuation locked when the current profile is unapproved', () => {
+    renderPanel(run('failed', ['points_of_interest']), false);
+
+    expect(screen.getByRole('button', { name: 'Retry Failed (1)' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Continue Generation' })).toBeDisabled();
   });
 });

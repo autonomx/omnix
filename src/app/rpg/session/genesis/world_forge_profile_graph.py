@@ -1,12 +1,16 @@
 """Compile full and launch CampaignTopicGraph objects from validated profiles."""
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_profiles import DomainDefinition, GenreProfile
 
 _PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
+
+
+def _record(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
@@ -19,28 +23,56 @@ def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
         for field in domain.fields
         if field.value_type in {"entity_ref", "entity_ref_list"}
     }
+    guidance = dict(domain.generation_guidance)
+    presentation = _record(guidance.get("presentation"))
     return {
         "entity_kind": domain.entity_kind,
         "required_entity_fields": required_fields,
         "field_definitions": [field.as_dict() for field in domain.fields],
         "reference_fields": reference_fields,
         "semantic_roles": list(domain.semantic_roles),
-        "generation_guidance": dict(domain.generation_guidance),
+        "generation_guidance": guidance,
+        "presentation": presentation,
         "schema_version": f"rpg_profile_domain_{domain.domain_id}_v1",
     }
 
 
+def _effective_dependencies(domain: DomainDefinition) -> tuple[str, ...]:
+    """Make every cross-domain typed reference available to the generator.
+
+    Profile fields are validated against the dependency topics passed into a single
+    generation job. Authors should not have to duplicate every reference target in
+    the handwritten dependency list, and self-references such as parent_place_id do
+    not require a separate graph edge.
+    """
+
+    reference_domains = (
+        target
+        for field in domain.fields
+        if field.value_type in {"entity_ref", "entity_ref_list"}
+        for target in field.allowed_target_domains
+        if target != domain.domain_id
+    )
+    return tuple(dict.fromkeys((*domain.dependencies, *reference_domains)))
+
+
 def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
+    metadata = _field_metadata(domain)
+    presentation = _record(metadata.get("presentation"))
+    page_kind = str(presentation.get("page_kind") or "document")
+    category = domain.category
+    if category == "domain":
+        category = domain.domain_id if page_kind == "collection" else "lore"
     return CampaignTopicNode(
         topic_id=domain.domain_id,
         title=domain.title,
-        category=domain.category,
-        dependencies=domain.dependencies,
+        category=category,
+        dependencies=_effective_dependencies(domain),
         generator_role=domain.generator_role,
         required_before_launch=domain.required_before_launch,
         visibility=domain.visibility_default,
         target_count=max(1, domain.target_range.target(depth)),
-        metadata=_field_metadata(domain),
+        metadata=metadata,
     )
 
 
@@ -100,7 +132,7 @@ def build_profile_topic_graph(
     domain_nodes = tuple(_domain_node(domain, depth=depth) for domain in profile.domains)
     domain_ids = tuple(domain.domain_id for domain in profile.domains)
     graph = CampaignTopicGraph(
-        graph_version="rpg_profile_topic_graph_v1",
+        graph_version="rpg_profile_topic_graph_v2",
         campaign_template=str(campaign_template or profile.profile_id),
         depth=str(depth or "standard"),  # type: ignore[arg-type]
         nodes=(*domain_nodes, *_pipeline_nodes(domain_ids)),
@@ -152,7 +184,6 @@ def build_profile_launch_topic_graph(
     """Project the first-turn graph from profile launch requirements."""
 
     profile.require_valid()
-    node_map = graph.node_map()
     selected = set(profile.launch_requirements.required_domain_ids)
     selected.update(
         domain.domain_id
