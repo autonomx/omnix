@@ -19,6 +19,7 @@ WORLD_TOPIC_JOB_CONTRACT = "rpg_world_topic_job_v2"
 WORLD_TOPIC_OUTPUT_SCHEMA = "rpg_world_topic_output_v2"
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 _SAFE_ID = re.compile(r"[^A-Za-z0-9_.:-]+")
+_PROMPT_ONLY_DIRECTIVE_KEYS = {"manual_retry"}
 
 
 def canonical_hash(value: Any) -> str:
@@ -29,6 +30,16 @@ def canonical_hash(value: Any) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def canonical_generation_directives(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Remove run-specific prompt evidence from reusable authoring fingerprints."""
+
+    return {
+        str(key): item
+        for key, item in value.items()
+        if str(key) not in _PROMPT_ONLY_DIRECTIVE_KEYS
+    }
 
 
 def world_generation_run_id(
@@ -57,8 +68,8 @@ class WorldTopicGenerationSettings:
     topic_contract_version: str = WORLD_TOPIC_JOB_CONTRACT
     output_schema_version: str = WORLD_TOPIC_OUTPUT_SCHEMA
     compiler_version: str = "world-compiler-v1"
-    # Attempt one performs the provider call. Attempt two is reserved exclusively
-    # for persistence resume from an existing local spool; it may not call the model.
+    # Attempt one performs the provider call. Later queue leases are persistence or
+    # phase replay only and are extended from durable spool evidence by the worker.
     max_attempts: int = 2
     priority: int = 10
 
@@ -122,7 +133,7 @@ def topic_generation_fingerprint(
         "input": dict(normalized_topic_input),
     }
     input_hash = canonical_hash(topic_input)
-    directive_hash = canonical_hash(dict(directives))
+    directive_hash = canonical_hash(canonical_generation_directives(directives))
     fingerprint_payload = {
         "topic_id": node.topic_id,
         "input_hash": input_hash,
@@ -208,6 +219,7 @@ def plan_ready_topic_jobs(
             for dependency_id in node.dependencies
         }
         directives = dict(topic_directives.get(node.topic_id) or {})
+        canonical_directives = canonical_generation_directives(directives)
         fingerprint, input_hash, directive_hash = topic_generation_fingerprint(
             node,
             normalized_topic_input={
@@ -239,6 +251,7 @@ def plan_ready_topic_jobs(
             "topic": node.as_dict(),
             "generation_context": dict(generation_context),
             "directives": directives,
+            "canonical_directives": canonical_directives,
             "dependency_hashes": dependency_hashes,
             "dependency_trust": dependency_trust,
             "fingerprint": fingerprint,
