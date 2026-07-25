@@ -138,6 +138,16 @@ def delete_raw_candidate_spool(job_id: str) -> None:
     raw_candidate_spool_path(job_id).unlink(missing_ok=True)
 
 
+def _raw_candidate_payload(value: Any) -> tuple[str, Any]:
+    if isinstance(value, GeneratedTopic):
+        return "generated_topic", value.as_dict()
+    if isinstance(value, Mapping):
+        return "mapping", dict(value)
+    if value is None or isinstance(value, (str, bool, int, float, list, tuple)):
+        return "raw_json", value
+    return "repr", repr(value)
+
+
 class RawCandidateSpoolingWorldForgeGenerator:
     """Checkpoint the first provider candidate before outer validation work."""
 
@@ -169,22 +179,24 @@ class RawCandidateSpoolingWorldForgeGenerator:
         seed: int,
         campaign_context: Mapping[str, Any],
         dependency_topics: Mapping[str, GeneratedTopic],
-    ) -> GeneratedTopic:
+    ) -> Any:
         generated = self.generator.generate(
             node,
             seed=seed,
             campaign_context=campaign_context,
             dependency_topics=dependency_topics,
         )
+        candidate_type, candidate = _raw_candidate_payload(generated)
         write_raw_candidate_spool(
             self.job_id,
             {
-                "schema_version": "rpg_world_generation_raw_candidate_spool_v1",
+                "schema_version": "rpg_world_generation_raw_candidate_spool_v2",
                 "run_id": self.run_id,
                 "world_id": self.world_id,
                 "draft_revision": self.draft_revision,
                 "topic_id": self.topic_id,
-                "candidate": generated.as_dict(),
+                "candidate_type": candidate_type,
+                "candidate": candidate,
                 "dependency_hashes": self.dependency_hashes,
                 "dependency_trust": self.dependency_trust,
                 "job_id": self.job_id,
@@ -194,7 +206,7 @@ class RawCandidateSpoolingWorldForgeGenerator:
 
 
 class ReplayedRawCandidateWorldForgeGenerator:
-    """Return a previously checkpointed candidate without invoking a provider."""
+    """Return checkpointed output without invoking a provider or changing its type."""
 
     def __init__(self, payload: Mapping[str, Any]) -> None:
         self.payload = dict(payload)
@@ -206,15 +218,21 @@ class ReplayedRawCandidateWorldForgeGenerator:
         seed: int,
         campaign_context: Mapping[str, Any],
         dependency_topics: Mapping[str, GeneratedTopic],
-    ) -> GeneratedTopic:
+    ) -> Any:
         del seed, campaign_context, dependency_topics
-        topic = GeneratedTopic.from_dict(dict(self.payload.get("candidate") or {}))
-        expected = str(self.payload.get("topic_id") or node.topic_id)
-        if topic.topic_id != expected or topic.topic_id != node.topic_id:
-            raise RuntimeError(
-                f"world_generation_raw_spool_identity_mismatch:{topic.topic_id}:{expected}:{node.topic_id}"
-            )
-        return topic
+        candidate_type = str(self.payload.get("candidate_type") or "generated_topic")
+        candidate = self.payload.get("candidate")
+        if candidate_type == "generated_topic":
+            topic = GeneratedTopic.from_dict(dict(candidate or {}))
+            expected = str(self.payload.get("topic_id") or node.topic_id)
+            if topic.topic_id != expected or topic.topic_id != node.topic_id:
+                raise RuntimeError(
+                    f"world_generation_raw_spool_identity_mismatch:{topic.topic_id}:{expected}:{node.topic_id}"
+                )
+            return topic
+        if candidate_type == "mapping":
+            return dict(candidate or {})
+        return candidate
 
 
 __all__ = [
