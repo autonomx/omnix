@@ -1,18 +1,24 @@
-"""Render profile-driven presentation from validated structured canon facts."""
+"""Render profile-driven presentation without inventing live-provider lore."""
 from __future__ import annotations
 
-import json
 from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
 from .world_forge_contract import CampaignTopicNode
-from .world_forge_contradictions import audit_presentation_contradictions
+from .world_forge_contradictions import (
+    PresentationContradictionReport,
+    audit_presentation_contradictions,
+)
 from .world_forge_dossiers import validate_entity_dossier
 from .world_forge_fact_pipeline import (
     StructuredFactIssue,
     StructuredFactValidationError,
 )
 from .world_forge_generation import GeneratedTopic
+from .world_forge_integrity import (
+    WorldForgeIntegrityError,
+    WorldForgeIntegrityIssue,
+)
 
 _DOSSIER_SCHEMA = "rpg_world_entity_dossier_v1"
 _PRESENTATION_SOURCE_FIELDS = {
@@ -193,6 +199,8 @@ def _build_dossier(
     facts: tuple[dict[str, Any], ...],
     definitions: Mapping[str, Mapping[str, Any]],
 ) -> tuple[str, dict[str, Any]]:
+    """Build deterministic presentation only for explicit offline/test generation."""
+
     entity_id = _entity_id(entity)
     name = str(entity.get("name") or entity_id).strip()
     fact_fields = {str(fact.get("field_id") or "") for fact in facts}
@@ -308,101 +316,82 @@ def _provider_presentation(
     return short_summary, dict(raw_dossier)
 
 
-def _merge_provider_dossier(
-    provider_dossier: Mapping[str, Any],
-    canonical_dossier: Mapping[str, Any],
-) -> dict[str, Any]:
-    merged = dict(provider_dossier)
-    sections = [
-        {
-            **dict(section),
-            "paragraphs": list(section.get("paragraphs") or ()),
-        }
-        for section in provider_dossier.get("sections") or ()
-        if isinstance(section, Mapping)
-    ]
-    existing_ids = {str(section.get("id") or "") for section in sections}
-    canonical_paragraphs = [
-        paragraph
-        for section in canonical_dossier.get("sections") or ()
-        if isinstance(section, Mapping) and str(section.get("id") or "") != "overview"
-        for paragraph in section.get("paragraphs") or ()
-        if str(paragraph).strip()
-    ]
-    if canonical_paragraphs:
-        section_id = "canonical-details"
-        suffix = 2
-        while section_id in existing_ids:
-            section_id = f"canonical-details-{suffix}"
-            suffix += 1
-        sections.append(
-            {
-                "id": section_id,
-                "title": "Canonical Details",
-                "paragraphs": list(dict.fromkeys(canonical_paragraphs)),
-            }
-        )
-
-    provider_quick_facts = [
-        dict(item)
-        for item in provider_dossier.get("quick_facts") or ()
-        if isinstance(item, Mapping)
-    ]
-    canonical_quick_facts = [
-        dict(item)
-        for item in canonical_dossier.get("quick_facts") or ()
-        if isinstance(item, Mapping)
-    ]
-    quick_facts: list[dict[str, Any]] = []
-    seen_quick_facts: set[str] = set()
-    for item in (*canonical_quick_facts, *provider_quick_facts):
-        key = json.dumps(item, sort_keys=True, ensure_ascii=False, default=str)
-        if key in seen_quick_facts:
-            continue
-        seen_quick_facts.add(key)
-        quick_facts.append(item)
-
-    related = list(
-        dict.fromkeys(
-            str(value)
-            for value in (
-                *(canonical_dossier.get("related_entity_ids") or ()),
-                *(provider_dossier.get("related_entity_ids") or ()),
+def _provider_presentation_issues(
+    node: CampaignTopicNode,
+    topic: GeneratedTopic,
+    contradiction_report: PresentationContradictionReport,
+) -> tuple[WorldForgeIntegrityIssue, ...]:
+    issues: list[WorldForgeIntegrityIssue] = []
+    for contradiction in contradiction_report.contradictions:
+        issues.append(
+            WorldForgeIntegrityIssue(
+                code="provider_presentation_contradiction",
+                topic_id=node.topic_id,
+                item_id=contradiction.entity_id,
+                field="entities",
+                supplied_value=contradiction.source,
+                candidates=contradiction.canonical_reference_ids,
+                message=(
+                    f"{contradiction.message} Regenerate the provider-authored topic; "
+                    "deterministic replacement prose is forbidden."
+                ),
             )
-            if str(value)
         )
-    )
-    merged.update(
-        {
-            "schema_version": _DOSSIER_SCHEMA,
-            "quick_facts": quick_facts[:20],
-            "sections": sections,
-            "related_entity_ids": related,
-            "generated_from_legacy": False,
-            "generated_from_approved_facts": True,
-            "provider_authored_presentation": True,
-            "source_fact_ids": list(canonical_dossier.get("source_fact_ids") or ()),
-            "represented_field_ids": list(
-                canonical_dossier.get("represented_field_ids") or ()
-            ),
-        }
-    )
-    return merged
+    for entity in topic.entities:
+        entity_id = _entity_id(entity)
+        short_summary = " ".join(str(entity.get("short_summary") or "").split())
+        dossier_issues = validate_entity_dossier(entity.get("dossier"))
+        if not short_summary:
+            issues.append(
+                WorldForgeIntegrityIssue(
+                    code="provider_short_summary_required",
+                    topic_id=node.topic_id,
+                    item_id=entity_id,
+                    field="entities",
+                    supplied_value="<missing>",
+                    message=(
+                        "Live World Forge entities require provider-authored short_summary "
+                        "text. Regenerate the topic instead of synthesizing presentation prose."
+                    ),
+                )
+            )
+        if dossier_issues:
+            issues.append(
+                WorldForgeIntegrityIssue(
+                    code="provider_dossier_invalid",
+                    topic_id=node.topic_id,
+                    item_id=entity_id,
+                    field="entities",
+                    supplied_value=",".join(dossier_issues),
+                    message=(
+                        "Live World Forge entities require a schema-valid provider-authored "
+                        "dossier. Regenerate the topic instead of synthesizing presentation prose."
+                    ),
+                )
+            )
+    return tuple(issues)
 
 
 def render_fact_derived_presentations(
     node: CampaignTopicNode,
     topic: GeneratedTopic,
 ) -> GeneratedTopic:
-    """Render canonical facts while retaining clean provider-authored lore."""
+    """Render profile canon without replacing live-provider lore with templates."""
 
     definition_rows = _definitions(node)
     if not definition_rows:
         return topic
     contradiction_report = audit_presentation_contradictions(node, topic)
-    contradicted_entity_ids = {
-        contradiction.entity_id for contradiction in contradiction_report.contradictions
-    }
+    provider_generated = _provider_generated(topic)
+    if provider_generated:
+        provider_issues = _provider_presentation_issues(
+            node,
+            topic,
+            contradiction_report,
+        )
+        if provider_issues:
+            raise WorldForgeIntegrityError(provider_issues)
+
     definitions = {
         str(definition.get("field_id") or ""): definition
         for definition in definition_rows
@@ -415,7 +404,6 @@ def render_fact_derived_presentations(
     entities: list[dict[str, Any]] = []
     issues: list[StructuredFactIssue] = []
     preserved_entity_ids: set[str] = set()
-    provider_generated = _provider_generated(topic)
     for original in topic.entities:
         entity_id = _entity_id(original)
         entity_facts = tuple(facts_by_entity.get(entity_id, ()))
@@ -431,30 +419,30 @@ def render_fact_derived_presentations(
             )
             continue
         canonical = _canonical_entity(node, original, entity_facts)
-        fact_summary, fact_dossier = _build_dossier(
-            node,
-            canonical,
-            entity_facts,
-            definitions,
-        )
-        provider_presentation = (
-            _provider_presentation(original)
-            if provider_generated and entity_id not in contradicted_entity_ids
-            else None
-        )
-        if provider_presentation is not None:
+        if provider_generated:
+            provider_presentation = _provider_presentation(original)
+            assert provider_presentation is not None
             short_summary, provider_dossier = provider_presentation
-            dossier = _merge_provider_dossier(provider_dossier, fact_dossier)
+            dossier = {
+                **provider_dossier,
+                "provider_authored_presentation": True,
+            }
             preserved_entity_ids.add(entity_id)
         else:
-            short_summary = fact_summary
-            dossier = fact_dossier
+            short_summary, dossier = _build_dossier(
+                node,
+                canonical,
+                entity_facts,
+                definitions,
+            )
         canonical.update(
             {
                 "short_summary": short_summary,
                 "dossier": dossier,
                 "dossier_status": "complete",
-                "presentation_source_fact_ids": fact_dossier["source_fact_ids"],
+                "presentation_source_fact_ids": [
+                    str(fact.get("id") or "") for fact in entity_facts
+                ],
             }
         )
         entities.append(canonical)
@@ -489,8 +477,13 @@ def render_fact_derived_presentations(
         documents=documents,
         provenance={
             **dict(topic.provenance),
-            "presentation_schema": "rpg_fact_derived_presentation_v2",
-            "presentation_derived_from_structured_facts": True,
+            "presentation_schema": (
+                "rpg_provider_authored_presentation_v1"
+                if provider_generated
+                else "rpg_fact_derived_presentation_v1"
+            ),
+            "presentation_derived_from_structured_facts": not provider_generated,
+            "provider_authored_presentation": provider_generated,
             "provider_presentations_preserved": bool(preserved_entity_ids),
             "provider_presentation_entity_ids": sorted(preserved_entity_ids),
             "presentation_fact_proposals": proposals,
