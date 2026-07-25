@@ -48,6 +48,13 @@ class ReferenceSafeWorldForgeGenerator:
         )
 
     @staticmethod
+    def _max_regeneration_attempts(campaign_context: Mapping[str, Any]) -> int:
+        """Compatibility surface: automatic content regeneration is always disabled."""
+
+        del campaign_context
+        return 1
+
+    @staticmethod
     def _manual_retry_candidate(
         topic: GeneratedTopic,
         campaign_context: Mapping[str, Any],
