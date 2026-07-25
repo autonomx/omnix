@@ -23,6 +23,7 @@ from app.rpg.worlds.postgres_service import (
     create_world_project,
     publish_world_revision,
 )
+from app.rpg.worlds.profile_authoring import approve_world_profile_review
 from app.rpg.worlds.service import compile_world_revision
 
 pytestmark = pytest.mark.skipif(
@@ -88,6 +89,11 @@ def test_disposable_draft_world_is_deleted_with_audit_record() -> None:
                 world_id=world_id,
                 title="Draft Opening",
             ),
+            database=database,
+        )
+        approve_world_profile_review(
+            world_id,
+            expected_profile_revision=1,
             database=database,
         )
         start_world_library_generation(
