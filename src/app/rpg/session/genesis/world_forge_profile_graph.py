@@ -37,6 +37,25 @@ def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
     }
 
 
+def _effective_dependencies(domain: DomainDefinition) -> tuple[str, ...]:
+    """Make every cross-domain typed reference available to the generator.
+
+    Profile fields are validated against the dependency topics passed into a single
+    generation job. Authors should not have to duplicate every reference target in
+    the handwritten dependency list, and self-references such as parent_place_id do
+    not require a separate graph edge.
+    """
+
+    reference_domains = (
+        target
+        for field in domain.fields
+        if field.value_type in {"entity_ref", "entity_ref_list"}
+        for target in field.allowed_target_domains
+        if target != domain.domain_id
+    )
+    return tuple(dict.fromkeys((*domain.dependencies, *reference_domains)))
+
+
 def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
     metadata = _field_metadata(domain)
     presentation = _record(metadata.get("presentation"))
@@ -48,7 +67,7 @@ def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
         topic_id=domain.domain_id,
         title=domain.title,
         category=category,
-        dependencies=domain.dependencies,
+        dependencies=_effective_dependencies(domain),
         generator_role=domain.generator_role,
         required_before_launch=domain.required_before_launch,
         visibility=domain.visibility_default,
@@ -165,7 +184,6 @@ def build_profile_launch_topic_graph(
     """Project the first-turn graph from profile launch requirements."""
 
     profile.require_valid()
-    node_map = graph.node_map()
     selected = set(profile.launch_requirements.required_domain_ids)
     selected.update(
         domain.domain_id
