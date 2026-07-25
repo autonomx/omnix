@@ -17,24 +17,23 @@ from app.rpg.worlds.generation_first_pass_provider import (
     _identity_contract,
     _identity_instruction,
     _strict_profile_contract,
-    _strict_registry_contract,
     _strict_topic_contract,
 )
+from app.rpg.worlds.generation_recovery_registry import (
+    StructuredRegistryRecoveryMixin,
+)
+from app.rpg.worlds.generation_recovery_review import StructuredRecoveryReviewMixin
 from app.rpg.worlds.generation_structured_recovery import (
     CapturingStructuredProvider,
     decode_candidate,
     deterministic_repair,
     merge_diagnostics,
     recovery_messages,
-    recovery_review,
     retained_topic_response,
     validate_payload,
 )
 from app.rpg_world_forge_provider import (
-    WorldForgeEntityRegistryResponse,
     WorldForgeTopicResponse,
-    _entity_registry_payload,
-    _entity_registry_system_prompt,
     _payload,
     _system_prompt,
     _token_estimate,
@@ -55,8 +54,14 @@ class _RecoveredValue:
     completion_tokens: int
 
 
-class RecoveringFirstPassWorldForgeTopicGenerator(FirstPassWorldForgeTopicGenerator):
+class RecoveringFirstPassWorldForgeTopicGenerator(
+    StructuredRecoveryReviewMixin,
+    StructuredRegistryRecoveryMixin,
+    FirstPassWorldForgeTopicGenerator,
+):
     """Use the configured model once more only to restructure its own candidate."""
+
+    _recovered_value_type = _RecoveredValue
 
     def _provider_call(
         self,
@@ -327,113 +332,6 @@ class RecoveringFirstPassWorldForgeTopicGenerator(FirstPassWorldForgeTopicGenera
             recovered.diagnostics,
             recovered.prompt_tokens,
             recovered.completion_tokens,
-        )
-
-    def _generate_entity_registry(
-        self,
-        node: CampaignTopicNode,
-        *,
-        seed: int,
-        campaign_context: Mapping[str, Any],
-        dependency_topics: Mapping[str, GeneratedTopic],
-    ) -> tuple[WorldForgeEntityRegistryResponse, Mapping[str, Any], int, int]:
-        ids = self._allocated_entity_ids(node)
-        request = _entity_registry_payload(
-            node,
-            seed=seed,
-            campaign_context=campaign_context,
-            dependency_topics=dependency_topics,
-            assigned_entity_ids=ids,
-        )
-        request["required_output"]["identity_contract"] = _identity_contract(
-            node.topic_id,
-            ids,
-        )
-        messages = [
-            ChatMessage(
-                role="system",
-                content=_entity_registry_system_prompt(node)
-                + _identity_instruction(node.topic_id, ids),
-            ),
-            ChatMessage(
-                role="user",
-                content=json.dumps(request, ensure_ascii=False, sort_keys=True),
-            ),
-        ]
-        contract = _strict_registry_contract(
-            node.topic_id,
-            expected_entity_ids=ids,
-        )
-        max_tokens = min(self.config.max_tokens, 2048)
-        outcome, raw_text = self._provider_call(
-            messages,
-            contract=contract,
-            max_tokens=max_tokens,
-            temperature=self.config.temperature,
-        )
-        if outcome.error is None and outcome.value is not None:
-            recovered = _RecoveredValue(
-                outcome.value,
-                outcome.diagnostics.as_dict(),
-                sum(_token_estimate(message.content) for message in messages),
-                _token_estimate(raw_text),
-            )
-        else:
-            recovered = self._recover(
-                contract=contract,
-                outcome=outcome,
-                raw_text=raw_text,
-                original_messages=messages,
-                expected_topic_id=node.topic_id,
-                allocated_entity_ids=ids,
-                expected_entity_kind="",
-                max_tokens=max_tokens,
-                retain_invalid_topic=False,
-            )
-        assert isinstance(recovered.value, WorldForgeEntityRegistryResponse)
-        return (
-            recovered.value,
-            recovered.diagnostics,
-            recovered.prompt_tokens,
-            recovered.completion_tokens,
-        )
-
-    def _to_generated_topic(
-        self,
-        node: CampaignTopicNode,
-        *,
-        values: tuple[WorldForgeTopicResponse, ...],
-        diagnostics: tuple[Mapping[str, Any], ...],
-        prompt_tokens: int,
-        completion_tokens: int,
-        batch_size: int | None = None,
-        entity_registry: tuple[Mapping[str, Any], ...] = (),
-    ) -> GeneratedTopic:
-        topic = super()._to_generated_topic(
-            node,
-            values=values,
-            diagnostics=diagnostics,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            batch_size=batch_size,
-            entity_registry=entity_registry,
-        )
-        records = tuple(
-            dict(record)
-            for row in diagnostics
-            for record in (row.get("structured_recovery"),)
-            if isinstance(record, Mapping)
-        )
-        if not records:
-            return topic
-        return replace(
-            topic,
-            provenance={
-                **dict(topic.provenance),
-                "structured_recovery": {"records": [dict(row) for row in records]},
-                "generation_status": "needs_review",
-                "generation_review": recovery_review(node.topic_id, records),
-            },
         )
 
 
