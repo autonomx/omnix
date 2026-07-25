@@ -3,6 +3,7 @@ import type { RpgAuthoringSection } from '../../api/rpgWorldAuthoringClient';
 import {
   completeAuthoringSections,
   documentAnchors,
+  isChronicleSection,
   parseWorldEditorRoute,
   presentLoreBlocks,
   worldEditorSearch,
@@ -74,12 +75,51 @@ describe('world authoring completion models', () => {
     ]);
   });
 
-  it('projects history blocks into typed timeline entries', () => {
-    const blocks = presentLoreBlocks('history', [
-      { kind: 'section', title: 'First Age', body: 'The first age begins.' },
-      { kind: 'facts', title: 'Turning Points', items: [{ label: 'The Sundering', statement: 'The realm divides.' }] },
+  it('splits generated lore into proper headed paragraph sections', () => {
+    const blocks = presentLoreBlocks('cultures', [{
+      kind: 'section',
+      title: 'Cultures and Peoples',
+      body: '## Origins\n\nThe river clans trace their shared identity to the first flood.\n\n## Customs\n\nSeasonal oath feasts renew alliances between families.',
+    }]);
+
+    expect(blocks).toEqual([
+      {
+        kind: 'section',
+        title: 'Origins',
+        body: 'The river clans trace their shared identity to the first flood.',
+      },
+      {
+        kind: 'section',
+        title: 'Customs',
+        body: 'Seasonal oath feasts renew alliances between families.',
+      },
     ]);
-    expect(blocks.map((block) => block.kind)).toEqual(['timeline', 'timeline']);
+  });
+
+  it('uses hybrid prose and timeline presentation for history', () => {
+    const blocks = presentLoreBlocks('history', [
+      { kind: 'section', title: 'Overview', body: 'The realm records history through royal and monastic archives.' },
+      { kind: 'section', title: 'First Age', body: 'The first age begins when the river kingdoms unite.' },
+      {
+        kind: 'facts',
+        title: 'Turning Points',
+        items: [{ label: 'The Sundering', year: 431, statement: 'The realm divides after the western succession war.' }],
+      },
+    ]);
+
+    expect(blocks.map((block) => block.kind)).toEqual(['section', 'timeline', 'timeline']);
+    expect(blocks[1].items?.[0]).toMatchObject({ title: 'First Age', era: 'First Age' });
+  });
+
+  it('recognises profile and legacy time-based lore IDs but not active conflicts', () => {
+    expect(isChronicleSection('history')).toBe(true);
+    expect(isChronicleSection('history_timeline')).toBe(true);
+    expect(isChronicleSection('calendar')).toBe(true);
+    expect(isChronicleSection('calendar_and_eras')).toBe(true);
+    expect(isChronicleSection('current_conflicts')).toBe(false);
+    expect(presentLoreBlocks('current_conflicts', [
+      { kind: 'section', title: 'Escalation', body: 'Two rival courts are mobilising their border levies.' },
+    ])[0].kind).toBe('section');
   });
 
   it('round-trips direct entity routes through query parameters', () => {
