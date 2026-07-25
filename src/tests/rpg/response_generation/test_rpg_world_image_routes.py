@@ -245,6 +245,8 @@ def test_desired_targets_include_realm_entities_for_document_card_art() -> None:
     realm_target = next(target for target in targets if target["entity_id"] == "ent:realm:001")
     assert realm_target["role"] == "landscape"
     assert realm_target["target_id"] == "entity:ent:realm:001:landscape"
+    assert "poster-quality illustration" in realm_target["suggested_prompt"]
+    assert "theatrical lighting" in realm_target["suggested_prompt"]
 
 
 def test_desired_targets_include_a_regenerable_world_map() -> None:
@@ -282,6 +284,7 @@ def test_desired_targets_include_a_regenerable_world_map() -> None:
     assert "Moon Market" in map_target["suggested_prompt"]
     assert "compact settlement with streets, roofs, and a clear civic centre" in map_target["suggested_prompt"]
     assert "walled market town on the old trade road" in map_target["suggested_prompt"]
+    assert "cinematic colour grading" in map_target["suggested_prompt"]
     local_map_target = next(target for target in targets if target["target_id"] == "entity:location:moon_market:map")
     assert local_map_target["metadata"]["map_level"] == "location"
     assert "detailed, navigable local RPG map" in local_map_target["suggested_prompt"]

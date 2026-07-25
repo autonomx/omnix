@@ -202,8 +202,9 @@ def continue_world_generation(
             "world_generation_continue_revision_conflict:"
             f"run={previous_revision}:current={current_revision}"
         )
-    if str(previous_run.get("status") or "") != "failed":
-        raise ValueError("world_generation_continue_not_failed")
+    previous_status = str(previous_run.get("status") or "")
+    if previous_status not in {"failed", "review"}:
+        raise ValueError("world_generation_continue_not_resumable")
 
     progress = dict(previous_run.get("progress") or {})
     failed_topic_ids = tuple(

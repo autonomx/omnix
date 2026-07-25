@@ -100,6 +100,22 @@ describe('RpgWorldGenerationPanel failed-topic retry guards', () => {
     expect(await screen.findByText(/Continuation started from run:failed/)).toBeInTheDocument();
   });
 
+  it('continues a partial review run instead of disabling recovery', async () => {
+    const partialReview = {
+      ...run('review'),
+      graph: { nodes: [{ topic_id: 'realm' }, { topic_id: 'places' }] },
+      plan: { topic_ids: ['realm'] },
+    };
+    renderPanel(partialReview);
+
+    const continueButton = screen.getByRole('button', { name: 'Continue Generation' });
+    expect(continueButton).toBeEnabled();
+    fireEvent.click(continueButton);
+
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0].url).toBe('/api/rpg/world-generation/run%3Areview/continue');
+  });
+
   it('explains that the compact log omits generated content', () => {
     renderPanel(run('failed', ['points_of_interest']));
 

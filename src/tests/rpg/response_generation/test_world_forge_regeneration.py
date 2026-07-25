@@ -1,6 +1,7 @@
 import pytest
 
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_fact_pipeline import (
     StructuredFactIssue,
     StructuredFactValidationError,
@@ -189,3 +190,123 @@ def test_validation_issue_maps_to_machine_readable_request() -> None:
     assert request.entity_ids == ("actor:ada",)
     assert request.fields == ("location_id",)
     assert request.scope == "entity_fields"
+
+
+class InvalidReferenceProvider:
+    def generate(
+        self,
+        node: CampaignTopicNode,
+        *,
+        seed: int,
+        campaign_context: dict,
+        dependency_topics: dict,
+    ) -> GeneratedTopic:
+        del seed, campaign_context, dependency_topics
+        return GeneratedTopic(
+            topic_id=node.topic_id,
+            entities=(
+                {
+                    "id": "setting_rule:corp_hegemony",
+                    "kind": "setting_rule",
+                    "name": "Corporate Hegemony",
+                    "rule": "Corporate law governs access to every secure district.",
+                    "observable_consequences": {"detail": "Security gates scan every traveler."},
+                },
+            ),
+            facts=(
+                {
+                    "id": "fact:corp_hegemony",
+                    "entity_refs": ["group:omnicorp"],
+                },
+            ),
+            relationships=(
+                {
+                    "id": "relationship:corp_hegemony",
+                    "source_id": "setting_rule:corp_hegemony",
+                    "target_id": "group:omnicorp",
+                },
+            ),
+            provenance={"generator": "structured_world_forge_provider_v1"},
+        )
+
+
+def test_live_provider_integrity_exhaustion_uses_grounded_deterministic_fallback() -> None:
+    node = CampaignTopicNode(
+        topic_id="setting_rules",
+        title="Setting Rules",
+        category="domain",
+        target_count=1,
+        metadata={
+            "entity_kind": "setting_rule",
+            "field_definitions": [
+                {"field_id": "name", "value_type": "string", "required": True},
+                {"field_id": "rule", "value_type": "string", "required": True},
+                {
+                    "field_id": "observable_consequences",
+                    "value_type": "structured_object",
+                    "required": True,
+                },
+            ],
+        },
+    )
+
+    result = ReferenceSafeWorldForgeGenerator(InvalidReferenceProvider()).generate(
+        node,
+        seed=7,
+        campaign_context={"world_brief": {"title": "Neon Harbor", "description": "A corporate port city."}},
+        dependency_topics={},
+    )
+
+    assert result.provenance["provider_fallback"] == {
+        "reason": "WorldForgeIntegrityError",
+        "attempts": 3,
+        "source": "reference_safe_world_forge_v1",
+    }
+    assert result.entities[0]["kind"] == "setting_rule"
+    assert result.facts[0]["entity_refs"] == [result.entities[0]["id"]]
+
+
+class ExhaustedStructuredProvider:
+    def generate(
+        self,
+        node: CampaignTopicNode,
+        *,
+        seed: int,
+        campaign_context: dict,
+        dependency_topics: dict,
+    ) -> GeneratedTopic:
+        del node, seed, campaign_context, dependency_topics
+        raise RuntimeError(
+            "structured World Forge provider failed for places batch 1/18 after 3 attempts"
+        )
+
+
+def test_exhausted_structured_provider_uses_grounded_deterministic_fallback() -> None:
+    node = CampaignTopicNode(
+        topic_id="setting_rules",
+        title="Setting Rules",
+        category="domain",
+        target_count=1,
+        metadata={
+            "entity_kind": "setting_rule",
+            "field_definitions": [
+                {"field_id": "name", "value_type": "string", "required": True},
+                {"field_id": "rule", "value_type": "string", "required": True},
+                {
+                    "field_id": "observable_consequences",
+                    "value_type": "structured_object",
+                    "required": True,
+                },
+            ],
+        },
+    )
+
+    result = ReferenceSafeWorldForgeGenerator(ExhaustedStructuredProvider()).generate(
+        node,
+        seed=7,
+        campaign_context={"world_brief": {"title": "Neon Harbor", "description": "A corporate port city."}},
+        dependency_topics={},
+    )
+
+    assert result.provenance["provider_fallback"]["reason"] == "RuntimeError"
+    assert result.entities[0]["kind"] == "setting_rule"

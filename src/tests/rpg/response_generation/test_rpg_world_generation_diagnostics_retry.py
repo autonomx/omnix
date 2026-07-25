@@ -272,7 +272,7 @@ def test_failed_retry_reuses_original_graph_provider_and_prompt_settings(
     assert worker_call["provider_route"] == "lmstudio"
 
 
-def test_continue_generation_restores_the_full_run_and_reuses_completed_topics(
+def test_continue_generation_restores_a_partial_review_run_and_reuses_completed_topics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     graph = CampaignTopicGraph(
@@ -296,7 +296,7 @@ def test_continue_generation_restores_the_full_run_and_reuses_completed_topics(
         "run_id": "run:failed",
         "world_id": "world:aurelia",
         "draft_revision": 4,
-        "status": "failed",
+        "status": "review",
         "graph": graph.as_dict(),
         "settings": settings.as_dict(),
         "progress": {"failed_topic_ids": ["classes"]},

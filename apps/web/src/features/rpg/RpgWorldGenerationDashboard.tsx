@@ -39,6 +39,13 @@ function statusIcon(status: string): string {
   return '◷';
 }
 
+function isPartialReviewRun(run: RpgWorldGenerationRun | undefined): boolean {
+  if (run?.status !== 'review') return false;
+  const planned = stringArray(record(run.plan).topic_ids);
+  const nodes = Array.isArray(record(run.graph).nodes) ? record(run.graph).nodes : [];
+  return planned.length > 0 && nodes.length > planned.length;
+}
+
 function primaryActionLabel(action: PrimaryAction): string {
   return {
     full: 'Generate World',
@@ -143,7 +150,7 @@ export function RpgWorldGenerationDashboard({
         <button className={isSelectedAction('selected') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('selected')} onClick={() => { setSelectedAction('selected'); openControls(); }}>Generate Selected</button>
         <button className={isSelectedAction('stale') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('stale')} onClick={() => runPrimaryAction('stale', () => panelRef.current?.regenerateStale())}>Regenerate Stale</button>
         <button className={isSelectedAction('retry') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('retry')} disabled={!failed.size} onClick={() => runPrimaryAction('retry', () => panelRef.current?.retryFailed())}>Retry Failed{failed.size ? ` (${failed.size})` : ''}</button>
-        <button className={isSelectedAction('continue') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('continue')} disabled={run?.status !== 'failed'} onClick={() => runPrimaryAction('continue', () => panelRef.current?.continueGeneration())}>Continue Generation</button>
+        <button className={isSelectedAction('continue') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('continue')} disabled={run?.status !== 'failed' && !isPartialReviewRun(run)} onClick={() => runPrimaryAction('continue', () => panelRef.current?.continueGeneration())}>Continue Generation</button>
         <button className={isSelectedAction('publish') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('publish')} disabled={run?.status !== 'review'} onClick={() => runPrimaryAction('publish', () => panelRef.current?.publish())}>Publish World</button>
         {onOpenImages ? <button className={isSelectedAction('images') ? 'is-active' : ''} type="button" aria-pressed={isSelectedAction('images')} onClick={() => runPrimaryAction('images', onOpenImages)}>Generate Images</button> : null}
       </div>

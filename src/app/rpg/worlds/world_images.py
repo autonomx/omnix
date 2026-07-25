@@ -32,6 +32,8 @@ _ROLE_BY_TOPIC: Mapping[str, str] = {
     "opening_scenarios": "cover",
 }
 
+_IMAGE_PROMPT_VERSION = "world-cinematic-poster-v2"
+
 
 def _record(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
@@ -203,20 +205,22 @@ def _prompt(
             f"structured {target_type.replace('_', ' ')} canon",
         )
     format_hint = {
-        "cover": "cinematic vertical RPG cover art with clear central composition",
-        "banner": "wide cinematic RPG banner art with room for title typography",
-        "portrait": "detailed character portrait, shoulders and face visible",
-        "icon": "clean readable inventory icon on a simple background",
-        "emblem": "distinct heraldic faction emblem, readable silhouette",
-        "landscape": "wide environmental landscape concept art",
-        "map": "top-down illustrated regional RPG map with legible terrain, landmarks, and travel routes; no labels or text",
-        "scene": "environmental scene concept art with story details",
-        "illustration": "polished RPG sourcebook illustration",
-    }.get(role, "polished RPG concept art")
+        "cover": "vertical cinematic key art for a premium RPG poster, with an iconic central composition",
+        "banner": "widescreen cinematic key art for a premium RPG poster, with a bold focal point and negative space for title treatment",
+        "portrait": "cinematic character key art, shoulders and face visible, expressive pose and dramatic rim lighting",
+        "icon": "premium collectible RPG inventory icon, dramatically lit with a clean readable silhouette",
+        "emblem": "premium heraldic faction emblem, dramatically lit with a distinct readable silhouette",
+        "landscape": "cinematic establishing shot, sweeping environmental key art with a strong foreground, midground, and background",
+        "map": "premium illustrated top-down RPG atlas with cinematic colour grading, legible terrain, landmarks, and travel routes; no labels or text",
+        "scene": "cinematic environmental key art with a strong focal point, story details, and a sense of scale",
+        "illustration": "cinematic editorial RPG key art with a striking, poster-quality composition",
+    }.get(role, "cinematic RPG key art with a striking, poster-quality composition")
     return (
         f"{format_hint}. Subject: {subject}. World: {title}. Genre: {genre}. "
-        f"Tone: {tone}. Canon details: {details}. Preserve canonical features and "
-        "avoid text, logos, watermarks, UI, or modern photography artifacts."
+        f"Tone: {tone}. Canon details: {details}. Premium cinematic, poster-quality illustration, "
+        "dramatic composition, theatrical lighting, volumetric atmosphere, rich colour grading, "
+        "intricate but readable detail, cohesive art direction. Preserve canonical features and "
+        "avoid rendered text, logos, watermarks, UI, or modern photography artifacts."
     )
 
 
@@ -261,6 +265,7 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                     "genre": world.get("genre"),
                     "tone": world.get("tone"),
                     "role": "cover",
+                    "image_prompt_version": _IMAGE_PROMPT_VERSION,
                 }
             ),
             "suggested_prompt": _prompt(
@@ -282,6 +287,7 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                     "genre": world.get("genre"),
                     "tone": world.get("tone"),
                     "role": "banner",
+                    "image_prompt_version": _IMAGE_PROMPT_VERSION,
                 }
             ),
             "suggested_prompt": _prompt(
@@ -305,6 +311,7 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                         "tone": world.get("tone"),
                     },
                     "map": map_context,
+                    "image_prompt_version": _IMAGE_PROMPT_VERSION,
                 }
             ),
             "suggested_prompt": _prompt(
@@ -348,6 +355,7 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                         "location": location,
                         "blueprint": blueprint,
                         "role": "location_map",
+                        "image_prompt_version": _IMAGE_PROMPT_VERSION,
                     }
                 ),
                 "suggested_prompt": _prompt(
@@ -381,7 +389,9 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                     "target_type": entity_type,
                     "entity_id": entity_id,
                     "role": role,
-                    "source_content_hash": canonical_hash(entity),
+                    "source_content_hash": canonical_hash(
+                        {"entity": entity, "image_prompt_version": _IMAGE_PROMPT_VERSION}
+                    ),
                     "suggested_prompt": _prompt(
                         world=world,
                         target_type=entity_type,

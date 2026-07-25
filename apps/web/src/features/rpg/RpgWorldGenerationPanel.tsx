@@ -66,6 +66,13 @@ function generationResultFeedback(result: unknown, prefix: string): string {
   return `${prefix}: ${String(run.run_id ?? 'unknown run')} · ${work} Route: ${routeLabel}.`;
 }
 
+function isPartialReviewRun(run: RpgWorldGenerationRun | undefined): boolean {
+  if (run?.status !== 'review') return false;
+  const planned = stringArray(record(run.plan).topic_ids);
+  const nodes = Array.isArray(record(run.graph).nodes) ? record(run.graph).nodes : [];
+  return planned.length > 0 && nodes.length > planned.length;
+}
+
 function generationErrorFeedback(cause: unknown, fallback: string): string {
   if (
     cause instanceof RpgWorldGenerationRequestError
@@ -110,7 +117,9 @@ export const RpgWorldGenerationPanel = forwardRef<
   const failedTopicIds = stringArray(progress.failed_topic_ids);
   const generationBusy = currentRun?.status === 'running' || currentRun?.status === 'planned';
   const canRetryFailed = !generationBusy && failedTopicIds.length > 0;
-  const canContinueGeneration = !generationBusy && currentRun?.status === 'failed';
+  const canContinueGeneration = !generationBusy && (
+    currentRun?.status === 'failed' || isPartialReviewRun(currentRun)
+  );
 
   const refresh = async () => {
     await Promise.all([
@@ -163,7 +172,7 @@ export const RpgWorldGenerationPanel = forwardRef<
 
   const continueGeneration = useMutation({
     mutationFn: () => {
-      if (!currentRun) throw new Error('No failed generation run is available to continue.');
+      if (!currentRun) throw new Error('No resumable generation run is available.');
       return rpgWorldLibraryClient.continueGeneration(currentRun.run_id);
     },
     onSuccess: async (result) => {
@@ -208,7 +217,7 @@ export const RpgWorldGenerationPanel = forwardRef<
     }
     if (mode === 'continue') {
       if (!canContinueGeneration) {
-        setFeedback('Only a failed generation run can be continued.');
+        setFeedback('Only a failed or partial-review generation run can be continued.');
         return;
       }
       continueGeneration.mutate();
@@ -285,7 +294,7 @@ export const RpgWorldGenerationPanel = forwardRef<
           className="rpg-secondary-button"
           type="button"
           disabled={generate.isPending || retryFailed.isPending || continueGeneration.isPending || !canContinueGeneration}
-          title={canContinueGeneration ? 'Resume this failed run, preserving completed topics and generating what remains' : 'A failed generation run is required'}
+          title={canContinueGeneration ? 'Resume this run, preserving completed topics and generating what remains' : 'A failed or partial review generation run is required'}
           onClick={() => start('continue')}
         >
           {continueGeneration.isPending ? 'Continuing…' : 'Continue Generation'}

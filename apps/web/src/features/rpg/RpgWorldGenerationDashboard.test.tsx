@@ -97,6 +97,26 @@ describe('RpgWorldGenerationDashboard', () => {
     expect(await screen.findByText(/1 provider topic job queued/)).toBeInTheDocument();
   });
 
+  it('enables continuation for a partial review run', () => {
+    const partialReviewRun = {
+      ...previousRun,
+      graph: { nodes: [{ topic_id: 'realm' }, { topic_id: 'places' }] },
+      plan: { topic_ids: ['realm'] },
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RpgWorldGenerationDashboard generation={partialReviewRun} sections={[section]} worldId="world:aurelia" />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getAllByRole('button', { name: 'Continue Generation' })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ disabled: false })]),
+    );
+  });
+
   it('shows provider-reported and estimated world-generation token usage', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

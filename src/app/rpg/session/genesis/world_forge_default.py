@@ -17,13 +17,22 @@ from .world_forge_domains import (
     normalize_structured_domain,
     validate_world_brief_grounding,
 )
-from .world_forge_fact_pipeline import compile_structured_entity_facts
+from .world_forge_fact_pipeline import (
+    StructuredFactValidationError,
+    compile_structured_entity_facts,
+)
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
-from .world_forge_integrity import validate_and_normalize_provider_topic
+from .world_forge_integrity import (
+    WorldForgeIntegrityError,
+    validate_and_normalize_provider_topic,
+)
 from .world_forge_presentation import render_fact_derived_presentations
 from .world_forge_profile_deterministic import generate_deterministic_profile_topic
 from .world_forge_regeneration import generate_with_targeted_regeneration
-from .world_forge_semantic_quality import require_topic_semantic_quality
+from .world_forge_semantic_quality import (
+    WorldForgeSemanticQualityError,
+    require_topic_semantic_quality,
+)
 
 
 class ReferenceSafeWorldForgeGenerator:
@@ -54,6 +63,21 @@ class ReferenceSafeWorldForgeGenerator:
         except (TypeError, ValueError):
             return 3
 
+    @staticmethod
+    def _recoverable_provider_failure(error: Exception) -> bool:
+        """Return whether a live provider exhausted its own structured retries."""
+
+        if isinstance(
+            error,
+            (
+                WorldForgeIntegrityError,
+                StructuredFactValidationError,
+                WorldForgeSemanticQualityError,
+            ),
+        ):
+            return True
+        return str(error).startswith("structured World Forge provider failed")
+
     def generate(
         self,
         node: CampaignTopicNode,
@@ -70,15 +94,43 @@ class ReferenceSafeWorldForgeGenerator:
                 dependency_topics=dependency_topics,
             )
 
-        return generate_with_targeted_regeneration(
-            self.generator,
-            node,
-            seed=seed,
-            campaign_context=campaign_context,
-            dependency_topics=dependency_topics,
-            process=process,
-            max_attempts=self._max_regeneration_attempts(campaign_context),
-        )
+        max_attempts = self._max_regeneration_attempts(campaign_context)
+        try:
+            return generate_with_targeted_regeneration(
+                self.generator,
+                node,
+                seed=seed,
+                campaign_context=campaign_context,
+                dependency_topics=dependency_topics,
+                process=process,
+                max_attempts=max_attempts,
+            )
+        except Exception as exc:
+            if not self._recoverable_provider_failure(exc):
+                raise
+            # A live model can exhaust its bounded repair budget while still
+            # returning unsafe references or breaking its structured response
+            # contract. Preserve the fail-closed boundary, but allow the durable
+            # run to continue with the grounded, deterministic topic generator
+            # rather than leaving the whole world blocked behind one failed call.
+            fallback = DeterministicWorldForgeGenerator().generate(
+                node,
+                seed=seed,
+                campaign_context=campaign_context,
+                dependency_topics=dependency_topics,
+            )
+            processed = process(fallback)
+            return replace(
+                processed,
+                provenance={
+                    **dict(processed.provenance),
+                    "provider_fallback": {
+                        "reason": type(exc).__name__,
+                        "attempts": max_attempts,
+                        "source": "reference_safe_world_forge_v1",
+                    },
+                },
+            )
 
     def _process_topic(
         self,
