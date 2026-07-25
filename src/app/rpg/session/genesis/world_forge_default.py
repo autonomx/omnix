@@ -27,6 +27,7 @@ from .world_forge_lore_scoring import (
 )
 from .world_forge_presentation import render_fact_derived_presentations
 from .world_forge_profile_deterministic import generate_deterministic_profile_topic
+from .world_forge_regeneration import RegenerationRequest, enforce_targeted_regeneration
 from .world_forge_review import is_reviewable_candidate_error, mark_needs_review
 from .world_forge_semantic_quality import require_topic_semantic_quality
 
@@ -46,6 +47,31 @@ class ReferenceSafeWorldForgeGenerator:
             "structured_world_forge_provider_"
         )
 
+    @staticmethod
+    def _manual_retry_candidate(
+        topic: GeneratedTopic,
+        campaign_context: Mapping[str, Any],
+    ) -> GeneratedTopic:
+        directives = campaign_context.get("topic_directives")
+        directives = directives if isinstance(directives, Mapping) else {}
+        retry = directives.get("manual_retry")
+        if not isinstance(retry, Mapping):
+            return topic
+        prior_value = retry.get("prior_candidate")
+        if not isinstance(prior_value, Mapping):
+            return topic
+        prior = GeneratedTopic.from_dict(prior_value)
+        request = RegenerationRequest(
+            topic_id=topic.topic_id,
+            attempt=1,
+            reason_codes=tuple(str(value) for value in retry.get("reason_codes") or ()),
+            entity_ids=tuple(str(value) for value in retry.get("entity_ids") or ()),
+            fields=tuple(str(value) for value in retry.get("fields") or ()),
+            scope=str(retry.get("scope") or "topic"),
+            instructions=tuple(str(value) for value in retry.get("instructions") or ()),
+        )
+        return enforce_targeted_regeneration(prior, topic, request)
+
     def generate(
         self,
         node: CampaignTopicNode,
@@ -62,11 +88,6 @@ class ReferenceSafeWorldForgeGenerator:
                 dependency_topics=dependency_topics,
             )
 
-        # The legacy deterministic generator dispatches several mature topic IDs
-        # through fixed fantasy-era schemas. Profile-defined topics may intentionally
-        # reuse those IDs with different entity kinds and reference domains. Enter
-        # through the profile generator directly so quests can reference
-        # actor/place/group rather than being rejected for lacking npc/location/faction.
         if (
             node.metadata.get("field_definitions")
             and isinstance(self.generator, DeterministicWorldForgeGenerator)
@@ -87,7 +108,8 @@ class ReferenceSafeWorldForgeGenerator:
             dependency_topics=dependency_topics,
         )
         try:
-            processed = process(generated)
+            scoped = self._manual_retry_candidate(generated, campaign_context)
+            processed = process(scoped)
         except Exception as exc:
             if not self._provider_generated(generated) or not is_reviewable_candidate_error(exc):
                 raise
@@ -120,14 +142,6 @@ class ReferenceSafeWorldForgeGenerator:
                 aliases=dict(aliases) if isinstance(aliases, Mapping) else None,
             )
 
-        # Profile field definitions are the authoritative ontology. A profile may
-        # deliberately reuse a mature topic ID such as quests or opening_scenarios
-        # while changing its entity kinds and reference domains. Running those
-        # records through the legacy fixed-domain normalizer or integrity map first
-        # would incorrectly require npc/location/faction IDs and reject
-        # actor/place/group canon. Profile-defined provider output remains fail-closed
-        # below through compile_structured_entity_facts, which validates IDs, kinds,
-        # required fields, value types, allowed target domains, and exact references.
         if not profile_defined:
             topic = normalize_structured_domain(
                 node,
