@@ -109,6 +109,7 @@ def _job_fields(job: Mapping[str, Any], *, worker_id: str) -> dict[str, Any]:
         "worker_id": worker_id,
         "attempt_count": job.get("attempt_count"),
         "max_attempts": job.get("max_attempts"),
+        "content_generation_attempts": settings.get("content_generation_attempts", 1),
         "status": job.get("status"),
         "job_type": job.get("job_type"),
         "provider_route": settings.get("provider_route"),
@@ -116,11 +117,12 @@ def _job_fields(job: Mapping[str, Any], *, worker_id: str) -> dict[str, Any]:
         "generator_version": settings.get("generator_version"),
         "prompt_version": settings.get("prompt_version"),
         "dependency_ids": metadata.get("dependency_ids") or [],
+        "dependency_trust": metadata.get("dependency_trust") or {},
     }
 
 
 def _recover_interrupted_jobs(*, database: Any | None = None) -> dict[str, int]:
-    """Remove orphaned jobs and release local leases left by a stopped worker pool."""
+    """Discard orphaned jobs and release local leases after a stopped worker pool."""
 
     db = _database(database)
     from app.persistence.identity_service import bootstrap_local_tenant
@@ -148,8 +150,11 @@ def _recover_interrupted_jobs(*, database: Any | None = None) -> dict[str, int]:
             ),
         ).rowcount
         requeued = work.connection.execute(
-            "UPDATE omnix_jobs SET status = CASE WHEN attempt_count < max_attempts THEN 'retrying' ELSE 'failed' END, "
+            "UPDATE omnix_jobs SET "
+            "status = CASE WHEN attempt_count < max_attempts THEN 'retrying' ELSE 'failed' END, "
             "available_at = CASE WHEN attempt_count < max_attempts THEN CURRENT_TIMESTAMP ELSE available_at END, "
+            "error = jsonb_build_object('code', 'worker_interrupted', "
+            "'resume_policy', 'spool_before_provider'), "
             "lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, "
             "completed_at = CASE WHEN attempt_count >= max_attempts THEN CURRENT_TIMESTAMP ELSE completed_at END, "
             "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
@@ -171,7 +176,11 @@ def _recover_worker_database_interruption(
     *,
     database: Any | None = None,
 ) -> int:
-    """Release only this worker's leases after PostgreSQL comes back."""
+    """Release this worker's leases without refunding a generation attempt.
+
+    A topic job has two execution leases: the first may call the provider and writes
+    a spool; the second may only resume that spool. No attempt counter is decremented.
+    """
 
     db = _database(database)
     from app.persistence.identity_service import bootstrap_local_tenant
@@ -180,10 +189,13 @@ def _recover_worker_database_interruption(
     context = bootstrap_local_tenant(db)
     with unit_of_work(db) as work:
         recovered = work.connection.execute(
-            "UPDATE omnix_jobs SET status = 'retrying', available_at = CURRENT_TIMESTAMP, "
-            "attempt_count = GREATEST(0, attempt_count - 1), "
-            "error = jsonb_build_object('code', 'database_unavailable'), "
+            "UPDATE omnix_jobs SET "
+            "status = CASE WHEN attempt_count < max_attempts THEN 'retrying' ELSE 'failed' END, "
+            "available_at = CASE WHEN attempt_count < max_attempts THEN CURRENT_TIMESTAMP ELSE available_at END, "
+            "error = jsonb_build_object('code', 'database_unavailable', "
+            "'resume_policy', 'persist_existing_spool'), "
             "lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, "
+            "completed_at = CASE WHEN attempt_count >= max_attempts THEN CURRENT_TIMESTAMP ELSE completed_at END, "
             "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
             "AND job_type IN (%s, %s) "
             "AND status IN ('leased', 'running', 'cancel_requested') "
@@ -329,7 +341,7 @@ def run_world_generation_worker_once(
     ok = bool(result.get("ok"))
     fields = {
         **_job_fields(dict(result.get("job") or job), worker_id=worker_id),
-        "result_status": status,
+        "result_status": result.get("result_status") or status,
         "detail": result.get("detail"),
     }
     log_world_generation_event(
