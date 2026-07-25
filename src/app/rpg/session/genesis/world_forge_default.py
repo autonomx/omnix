@@ -83,15 +83,16 @@ class ReferenceSafeWorldForgeGenerator:
             node.metadata.get("field_definitions")
             and isinstance(self.generator, DeterministicWorldForgeGenerator)
         ):
-            return process(
+            processed = process(
                 generate_deterministic_profile_topic(
                     node,
                     campaign_context=campaign_context,
                     dependency_topics=dependency_topics,
                 )
             )
+            return attach_structured_canon_lookup(processed)
 
-        return generate_with_targeted_regeneration(
+        generated = generate_with_targeted_regeneration(
             self.generator,
             node,
             seed=seed,
@@ -100,6 +101,7 @@ class ReferenceSafeWorldForgeGenerator:
             process=process,
             max_attempts=self._max_regeneration_attempts(campaign_context),
         )
+        return attach_structured_canon_lookup(generated)
 
     def _process_topic(
         self,
@@ -153,8 +155,6 @@ class ReferenceSafeWorldForgeGenerator:
             topic,
             dependency_topics,
         )
-        if profile_defined:
-            topic = attach_structured_canon_lookup(topic)
         if provider_generated:
             semantic_report = require_topic_semantic_quality(
                 node,
