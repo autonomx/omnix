@@ -149,8 +149,8 @@ def _entity_model(
                 description=str(definition.get("description") or ""),
             ),
         )
-    # Shared presentation fields are allowed but do not weaken profile requirements.
-    fields.setdefault("name", (StrictStr, ...))
+    # Presentation fields remain optional unless the approved profile declares them.
+    fields.setdefault("name", (StrictStr | None, None))
     fields.setdefault("entity_id", (StrictStr | None, None))
     fields.setdefault("short_summary", (StrictStr | None, None))
     fields.setdefault("dossier", (dict[str, Any] | None, None))
