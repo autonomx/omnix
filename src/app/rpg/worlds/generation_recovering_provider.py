@@ -19,8 +19,9 @@ from app.rpg.worlds.generation_first_pass_provider import (
     _strict_profile_contract,
     _strict_topic_contract,
 )
-from app.rpg.worlds.generation_recovery_registry import (
-    StructuredRegistryRecoveryMixin,
+from app.rpg.worlds.generation_recovery_registry import StructuredRegistryRecoveryMixin
+from app.rpg.worlds.generation_recovery_retained_registry import (
+    retained_registry_response,
 )
 from app.rpg.worlds.generation_recovery_review import StructuredRecoveryReviewMixin
 from app.rpg.worlds.generation_structured_recovery import (
@@ -97,7 +98,7 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
         allocated_entity_ids: tuple[str, ...],
         expected_entity_kind: str,
         max_tokens: int,
-        retain_invalid_topic: bool,
+        retain_invalid_kind: str,
     ) -> _RecoveredValue:
         original_error = outcome.error
         assert isinstance(original_error, Exception)
@@ -106,7 +107,7 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
                 expected_topic_id,
                 original_error,
                 outcome.diagnostics.as_dict(),
-                unit="topic" if retain_invalid_topic else "registry",
+                unit=retain_invalid_kind,
             ) from original_error
 
         decoded = decode_candidate(raw_text)
@@ -176,7 +177,24 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
             )
 
         final_error = corrected.error or correction_error
-        if not retain_invalid_topic:
+        if retain_invalid_kind == "registry":
+            retained = retained_registry_response(
+                expected_topic_id=expected_topic_id,
+                allocated_entity_ids=allocated_entity_ids,
+                decoded_payload=repaired.payload or decoded,
+                raw_text=raw_text,
+                error=final_error,
+            )
+            method = "retained_invalid_registry"
+        elif retain_invalid_kind == "topic":
+            retained = retained_topic_response(
+                expected_topic_id=expected_topic_id,
+                decoded_payload=repaired.payload or decoded,
+                raw_text=raw_text,
+                error=final_error,
+            )
+            method = "retained_invalid_candidate"
+        else:
             diagnostics = merge_diagnostics(
                 outcome.diagnostics.as_dict(),
                 corrected.diagnostics.as_dict(),
@@ -189,19 +207,12 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
                 expected_topic_id,
                 final_error,
                 diagnostics,
-                unit="registry",
+                unit=retain_invalid_kind,
             ) from final_error
-
-        retained = retained_topic_response(
-            expected_topic_id=expected_topic_id,
-            decoded_payload=repaired.payload or decoded,
-            raw_text=raw_text,
-            error=final_error,
-        )
         diagnostics = merge_diagnostics(
             outcome.diagnostics.as_dict(),
             corrected.diagnostics.as_dict(),
-            method="retained_invalid_candidate",
+            method=method,
             repair_codes=repaired.codes,
             raw_text=raw_text,
             error=final_error,
@@ -317,7 +328,7 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
                     node.metadata.get("entity_kind") or node.topic_id
                 ),
                 max_tokens=self.config.max_tokens,
-                retain_invalid_topic=True,
+                retain_invalid_kind="topic",
             )
         value = recovered.value
         assert isinstance(value, WorldForgeTopicResponse)
