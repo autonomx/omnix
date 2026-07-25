@@ -67,7 +67,7 @@
 .rpg-generation-review-inspector-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(16rem, 0.8fr) minmax(20rem, 1.2fr);
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
   margin: 1rem 0;
 }
 
@@ -101,8 +101,40 @@
   margin: 0.35rem 0 0;
 }
 
+.rpg-generation-review-retry-controls {
+  border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  padding-top: 1rem;
+}
+
+.rpg-generation-review-retry-controls label {
+  display: grid;
+  font-size: 0.85rem;
+  font-weight: 700;
+  gap: 0.35rem;
+}
+
+.rpg-generation-review-retry-controls select,
+.rpg-generation-review-retry-controls textarea {
+  font: inherit;
+  min-height: 2.5rem;
+  padding: 0.55rem;
+}
+
+.rpg-generation-review-retry-controls textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.rpg-generation-review-retry-controls button {
+  align-self: end;
+}
+
 @media (max-width: 900px) {
-  .rpg-generation-review-inspector-grid {
+  .rpg-generation-review-inspector-grid,
+  .rpg-generation-review-retry-controls {
     grid-template-columns: 1fr;
   }
 }
