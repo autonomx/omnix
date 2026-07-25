@@ -145,16 +145,14 @@ describe('RpgWorldProfilePreview', () => {
 
   it('approves the exact current profile revision', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
+    let approved = false;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       requests.push({ url, init });
       if (url.endsWith('/approve')) {
-        return new Response(JSON.stringify(response('approved')), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        approved = true;
       }
-      return new Response(JSON.stringify(response()), {
+      return new Response(JSON.stringify(response(approved ? 'approved' : 'review_required')), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
