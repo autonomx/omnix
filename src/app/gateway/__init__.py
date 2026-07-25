@@ -40,6 +40,9 @@ from .rpg_world_authoring_routes import install_rpg_world_authoring_route_hook
 from .rpg_world_bundle_routes import install_rpg_world_bundle_route_hook
 from .rpg_world_deletion_routes import install_rpg_world_deletion_route_hook
 from .rpg_world_dossier_routes import install_rpg_world_dossier_route_hook
+from .rpg_world_generation_review_routes import (
+    install_rpg_world_generation_review_hook,
+)
 from .rpg_world_image_routes import install_rpg_world_image_route_hook
 from .rpg_world_profile_routes import install_rpg_world_profile_route_hook
 from .rpg_world_routes import install_rpg_world_route_hook
@@ -82,6 +85,7 @@ install_rpg_map_editor_route_hook()
 install_rpg_map_route_hook()
 install_rpg_world_bundle_route_hook()
 install_rpg_world_route_hook()
+install_rpg_world_generation_review_hook()
 install_rpg_world_deletion_route_hook()
 install_rpg_world_authoring_route_hook()
 install_rpg_world_dossier_route_hook()
