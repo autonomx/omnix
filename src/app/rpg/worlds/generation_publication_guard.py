@@ -167,7 +167,13 @@ def publication_review_report(
             current = authoring.get(dependency_id)
             current_hash = str(current.get("content_hash") or "") if current else ""
             stored_hash = stored_hashes.get(dependency_id, "")
-            if not current_hash or stored_hash != current_hash:
+            acceptable_hashes = {current_hash} if current_hash else set()
+            dependency_decision = decisions.get(dependency_id, {})
+            if str(dependency_decision.get("decision") or "") == "replace":
+                source_candidate_hash = str(dependency_decision.get("candidate_hash") or "")
+                if source_candidate_hash:
+                    acceptable_hashes.add(source_candidate_hash)
+            if not acceptable_hashes or stored_hash not in acceptable_hashes:
                 dependency_mismatches.append(
                     {
                         "topic_id": topic_id,
