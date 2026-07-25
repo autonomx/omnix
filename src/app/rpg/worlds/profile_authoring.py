@@ -90,13 +90,24 @@ def _replacement_binding(
 ) -> dict[str, Any] | None:
     """Create a review draft for legacy or superseded registry profiles."""
 
+    # A durable profile job owns these states. Replacing its empty profile payload
+    # with a heuristic migration while it is still running would discard the
+    # provider result and make the UI claim review is ready too early.
+    existing_status = str(existing.get("status") or "")
+    if existing_status in {"generating", "validation_failed"}:
+        return None
+
     genre = str(world.get("genre") or "classic_fantasy")
     registry_profile = default_profile_registry().resolve(genre)
     current_profile = _record(existing.get("profile"))
     current_source = str(existing.get("source") or "")
     should_replace = not current_profile
     if registry_profile is not None and current_source in {"", "registry"}:
-        should_replace = should_replace or str(existing.get("profile_hash") or "") != registry_profile.content_hash
+        should_replace = (
+            should_replace
+            or str(existing.get("profile_hash") or "")
+            != registry_profile.content_hash
+        )
     if not should_replace:
         return None
 
@@ -110,7 +121,9 @@ def _replacement_binding(
         resolution = resolve_or_generate_genre_profile(
             genre=genre,
             description=str(world.get("description") or ""),
-            campaign_mode=str(metadata.get("campaign_mode") or "persistent_living_world"),
+            campaign_mode=str(
+                metadata.get("campaign_mode") or "persistent_living_world"
+            ),
         )
         profile = resolution.profile
         source = resolution.source
@@ -128,11 +141,13 @@ def _replacement_binding(
         "profile_version": profile.version,
         "profile_hash": profile.content_hash,
         "profile": profile.as_dict(),
-        "profile_revision": _integer(existing.get("profile_revision"), 0) + (1 if existing else 0),
+        "profile_revision": _integer(existing.get("profile_revision"), 0)
+        + (1 if existing else 0),
         "approved_profile_hash": "",
         "approved_at": None,
         "approved_by": None,
-        "route": _record(existing.get("route")) or {
+        "route": _record(existing.get("route"))
+        or {
             "provider": "registry" if registry_profile is not None else "deterministic",
             "model": "",
             "source": "profile_review_migration",
@@ -158,7 +173,9 @@ def read_world_profile_review(
         if world is None:
             work.rollback()
             raise KeyError(f"world_not_found:{world_id}")
-        existing = _record(_record(world.get("metadata")).get("genre_profile_binding"))
+        existing = _record(
+            _record(world.get("metadata")).get("genre_profile_binding")
+        )
         replacement = _replacement_binding(world, existing)
         if replacement is not None:
             _store_binding(work, context, world=world, binding=replacement)
@@ -194,7 +211,9 @@ def update_world_profile_review(
                 "world_profile_revision_conflict:"
                 f"expected={expected_profile_revision}:current={current['profile_revision']}"
             )
-        existing = _record(_record(world.get("metadata")).get("genre_profile_binding"))
+        existing = _record(
+            _record(world.get("metadata")).get("genre_profile_binding")
+        )
         next_revision = int(current["profile_revision"]) + 1
         binding = {
             **existing,
@@ -217,7 +236,13 @@ def update_world_profile_review(
         ).fetchall()
         work.commit()
     review = profile_review_from_world(
-        {**dict(world), "metadata": {**_record(world.get("metadata")), "genre_profile_binding": binding}}
+        {
+            **dict(world),
+            "metadata": {
+                **_record(world.get("metadata")),
+                "genre_profile_binding": binding,
+            },
+        }
     )
     return {
         "ok": True,
@@ -249,7 +274,9 @@ def approve_world_profile_review(
         validated = genre_profile_from_dict(_record(current["profile"])).require_valid()
         if validated.content_hash != str(current["profile_hash"]):
             raise ValueError("world_profile_hash_mismatch")
-        existing = _record(_record(world.get("metadata")).get("genre_profile_binding"))
+        existing = _record(
+            _record(world.get("metadata")).get("genre_profile_binding")
+        )
         binding = {
             **existing,
             "status": "ready",
@@ -266,7 +293,13 @@ def approve_world_profile_review(
         _store_binding(work, context, world=world, binding=binding)
         work.commit()
     review = profile_review_from_world(
-        {**dict(world), "metadata": {**_record(world.get("metadata")), "genre_profile_binding": binding}}
+        {
+            **dict(world),
+            "metadata": {
+                **_record(world.get("metadata")),
+                "genre_profile_binding": binding,
+            },
+        }
     )
     return {"ok": True, "review": review}
 
