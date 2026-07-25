@@ -1,0 +1,108 @@
+.rpg-generation-status-chips .is-review,
+.rpg-generation-topic-table-row.is-needs_review .rpg-generation-topic-status {
+  font-weight: 700;
+}
+
+.rpg-generation-status-chips .is-blocked,
+.rpg-generation-topic-table-row.is-blocked .rpg-generation-topic-status {
+  opacity: 0.85;
+}
+
+.rpg-generation-topic-table-row.is-needs_review,
+.rpg-generation-topic-table-row.is-failed,
+.rpg-generation-topic-table-row.is-blocked {
+  outline: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  outline-offset: -1px;
+}
+
+.rpg-generation-topic-table-row input[type='checkbox'] {
+  margin-right: 0.55rem;
+}
+
+.rpg-generation-review-selection {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin: 0.75rem 0;
+}
+
+.rpg-generation-review-reasons {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.rpg-generation-review-reasons span {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.rpg-generation-review-inspector {
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 0.75rem;
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.rpg-generation-review-inspector > header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.rpg-generation-review-inspector > header h3 {
+  margin: 0.1rem 0 0.35rem;
+}
+
+.rpg-generation-review-inspector > header span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.rpg-generation-review-inspector-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(16rem, 0.8fr) minmax(20rem, 1.2fr);
+  margin: 1rem 0;
+}
+
+.rpg-generation-review-inspector article {
+  min-width: 0;
+}
+
+.rpg-generation-review-inspector pre {
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 0.5rem;
+  margin: 0;
+  max-height: 34rem;
+  overflow: auto;
+  padding: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rpg-generation-review-issue {
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  padding: 0.65rem 0;
+}
+
+.rpg-generation-review-issue span {
+  display: block;
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.rpg-generation-review-issue p {
+  margin: 0.35rem 0 0;
+}
+
+@media (max-width: 900px) {
+  .rpg-generation-review-inspector-grid {
+    grid-template-columns: 1fr;
+  }
+}
