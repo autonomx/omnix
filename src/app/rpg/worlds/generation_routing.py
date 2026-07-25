@@ -18,9 +18,8 @@ from app.rpg_world_forge_provider import (
     UnavailableWorldForgeTopicGenerator,
     WorldForgeProviderConfig,
 )
-from app.rpg_world_forge_single_pass_provider import (
-    SinglePassProviderWorldForgeTopicGenerator,
-)
+
+from .generation_first_pass_provider import FirstPassWorldForgeTopicGenerator
 
 _CONFIGURED_VALUES = {"", "auto", "configured", "settings"}
 _DETERMINISTIC_VALUES = {"deterministic", "offline", "reference-safe", "test"}
@@ -188,7 +187,7 @@ def build_world_forge_generator_from_settings(
             f"durable World Forge provider {provider_id} is unavailable"
         )
     return ReferenceSafeWorldForgeGenerator(
-        SinglePassProviderWorldForgeTopicGenerator(provider, config)
+        FirstPassWorldForgeTopicGenerator(provider, config)
     )
 
 
