@@ -56,6 +56,13 @@ export function worldEditorSearch(route: RpgWorldEditorRoute | null, currentSear
   return query ? `?${query}` : '';
 }
 
+export function pushWorldEditorRoute(route: RpgWorldEditorRoute | null, replace = false): void {
+  if (typeof window === 'undefined') return;
+  const next = `${window.location.pathname}${worldEditorSearch(route, window.location.search)}`;
+  if (replace) window.history.replaceState(route, '', next);
+  else window.history.pushState(route, '', next);
+}
+
 function slug(value: string, fallback: string): string {
   const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return normalized || fallback;
