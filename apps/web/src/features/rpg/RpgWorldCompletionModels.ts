@@ -95,8 +95,8 @@ function cleanHeading(value: string): string {
 function isSimpleHeading(lines: string[], index: number): boolean {
   const line = lines[index]?.trim() ?? '';
   if (!line || !SIMPLE_HEADING.test(line) || line.split(/\s+/).length > 10) return false;
-  const beforeBlank = index === 0 || !lines[index - 1].trim();
-  const afterBlank = index === lines.length - 1 || !lines[index + 1].trim();
+  const beforeBlank = index === 0 || !(lines[index - 1] ?? '').trim();
+  const afterBlank = index === lines.length - 1 || !(lines[index + 1] ?? '').trim();
   return beforeBlank && afterBlank;
 }
 
