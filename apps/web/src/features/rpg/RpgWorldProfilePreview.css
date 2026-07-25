@@ -1,0 +1,204 @@
+.rpg-profile-preview {
+  border: 1px solid rgba(225, 183, 76, 0.28);
+  border-radius: 18px;
+  background: rgba(7, 10, 28, 0.86);
+  padding: 22px;
+  margin-bottom: 22px;
+}
+
+.rpg-profile-preview > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.rpg-profile-preview > header h3 {
+  margin: 2px 0 8px;
+  font-size: 1.45rem;
+}
+
+.rpg-profile-preview > header p:last-child {
+  margin: 0;
+  color: var(--rpg-muted, #a9adc4);
+  max-width: 780px;
+}
+
+.rpg-profile-preview-status {
+  border: 1px solid rgba(225, 183, 76, 0.35);
+  border-radius: 999px;
+  padding: 7px 12px;
+  color: #f3d36d;
+  white-space: nowrap;
+}
+
+.rpg-profile-preview.is-approved .rpg-profile-preview-status {
+  border-color: rgba(88, 205, 145, 0.45);
+  color: #80e1ad;
+}
+
+.rpg-profile-preview-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.rpg-profile-preview-summary span {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 12px 14px;
+}
+
+.rpg-profile-preview-summary small,
+.rpg-profile-preview-summary strong {
+  display: block;
+}
+
+.rpg-profile-preview-summary small {
+  color: var(--rpg-muted, #a9adc4);
+  margin-bottom: 5px;
+}
+
+.rpg-profile-domain-table {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.rpg-profile-domain-head,
+.rpg-profile-domain-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) minmax(135px, 1fr) minmax(150px, 1fr) minmax(130px, 0.85fr) minmax(130px, 0.8fr) minmax(100px, 0.65fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.rpg-profile-domain-head {
+  padding: 11px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #c9cce0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.rpg-profile-domain-row {
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.075);
+}
+
+.rpg-profile-domain-row label,
+.rpg-profile-domain-row [role='cell'] {
+  min-width: 0;
+}
+
+.rpg-profile-domain-row input[type='text'],
+.rpg-profile-domain-row input:not([type]),
+.rpg-profile-domain-row select,
+.rpg-profile-json-preview textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background: rgba(3, 5, 18, 0.86);
+  color: inherit;
+  padding: 9px 10px;
+}
+
+.rpg-profile-domain-row input:disabled,
+.rpg-profile-domain-row select:disabled,
+.rpg-profile-json-preview textarea:disabled {
+  opacity: 0.82;
+  cursor: default;
+}
+
+.rpg-profile-domain-row small,
+.rpg-profile-domain-row em {
+  display: block;
+  margin-top: 5px;
+  color: var(--rpg-muted, #9ca1bb);
+  font-size: 0.72rem;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rpg-profile-range-inputs {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.rpg-profile-range-inputs input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background: rgba(3, 5, 18, 0.86);
+  color: inherit;
+  padding: 9px 6px;
+}
+
+.rpg-profile-required-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rpg-profile-json-preview {
+  margin-top: 16px;
+}
+
+.rpg-profile-json-preview summary {
+  cursor: pointer;
+  color: #d7d9e8;
+}
+
+.rpg-profile-json-preview textarea {
+  margin-top: 10px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  line-height: 1.45;
+}
+
+.rpg-profile-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.rpg-profile-preview-actions small {
+  color: #f3d36d;
+}
+
+@media (max-width: 1200px) {
+  .rpg-profile-domain-table {
+    overflow-x: auto;
+  }
+
+  .rpg-profile-domain-head,
+  .rpg-profile-domain-row {
+    min-width: 1020px;
+  }
+}
+
+@media (max-width: 760px) {
+  .rpg-profile-preview > header {
+    display: block;
+  }
+
+  .rpg-profile-preview-status {
+    display: inline-block;
+    margin-top: 12px;
+  }
+
+  .rpg-profile-preview-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
