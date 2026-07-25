@@ -52,4 +52,33 @@ describe('RpgWorldDocumentBlock', () => {
     expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
     expect(screen.getByText('Magic is part of public life and civic duty.')).toBeInTheDocument();
   });
+
+  it('renders dated events on an ordered chronological rail', () => {
+    render(<RpgWorldDocumentBlock block={{
+      kind: 'timeline',
+      title: 'Turning Points',
+      items: [
+        {
+          name: 'The Second Accord',
+          year: 2091,
+          chronology_index: 2,
+          body: 'The second accord ended the district blockade and established elected relay stewards.',
+        },
+        {
+          name: 'The Broken Antennas',
+          date_label: '17 Rainfall 2084',
+          chronology_index: 1,
+          body: 'Technicians severed the corporate antenna trunks and opened the first civic mesh network.',
+        },
+      ],
+    }} />);
+
+    const list = screen.getByRole('list');
+    const entries = within(list).getAllByRole('listitem');
+    expect(entries).toHaveLength(2);
+    expect(within(entries[0] as HTMLElement).getByText('17 Rainfall 2084')).toBeInTheDocument();
+    expect(within(entries[0] as HTMLElement).getByText('The Broken Antennas')).toBeInTheDocument();
+    expect(within(entries[1] as HTMLElement).getByText('2091')).toBeInTheDocument();
+    expect(within(entries[1] as HTMLElement).getByText('The Second Accord')).toBeInTheDocument();
+  });
 });
