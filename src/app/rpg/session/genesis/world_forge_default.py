@@ -55,14 +55,22 @@ class ReferenceSafeWorldForgeGenerator:
         return 1
 
     @staticmethod
-    def _manual_retry_candidate(
-        topic: GeneratedTopic,
+    def _manual_retry_config(
         campaign_context: Mapping[str, Any],
-    ) -> GeneratedTopic:
+    ) -> Mapping[str, Any] | None:
         directives = campaign_context.get("topic_directives")
         directives = directives if isinstance(directives, Mapping) else {}
         retry = directives.get("manual_retry")
-        if not isinstance(retry, Mapping):
+        return retry if isinstance(retry, Mapping) else None
+
+    @classmethod
+    def _manual_retry_candidate(
+        cls,
+        topic: GeneratedTopic,
+        campaign_context: Mapping[str, Any],
+    ) -> GeneratedTopic:
+        retry = cls._manual_retry_config(campaign_context)
+        if retry is None:
             return topic
         prior_value = retry.get("prior_candidate")
         if not isinstance(prior_value, Mapping):
@@ -78,6 +86,46 @@ class ReferenceSafeWorldForgeGenerator:
             instructions=tuple(str(value) for value in retry.get("instructions") or ()),
         )
         return enforce_targeted_regeneration(prior, topic, request)
+
+    @classmethod
+    def _mark_manual_decision_required(
+        cls,
+        node: CampaignTopicNode,
+        topic: GeneratedTopic,
+        campaign_context: Mapping[str, Any],
+    ) -> GeneratedTopic:
+        retry = cls._manual_retry_config(campaign_context)
+        if retry is None:
+            return topic
+        return replace(
+            topic,
+            provenance={
+                **dict(topic.provenance),
+                "generation_status": "needs_review",
+                "manual_retry_pending_decision": True,
+                "manual_retry_parent_run_id": str(retry.get("parent_run_id") or ""),
+                "generation_review": {
+                    "schema_version": "rpg_world_generation_review_v1",
+                    "status": "needs_review",
+                    "blocking": True,
+                    "error_type": "ManualRetryDecisionRequired",
+                    "reason_codes": ["manual_retry_decision_required"],
+                    "issues": [
+                        {
+                            "code": "manual_retry_decision_required",
+                            "topic_id": node.topic_id,
+                            "entity_id": "",
+                            "field_id": "",
+                            "message": (
+                                "The retry candidate passed validation and requires an explicit "
+                                "Game Master keep or replace decision."
+                            ),
+                        }
+                    ],
+                    "summary": "Valid retry candidate awaits explicit Game Master promotion.",
+                },
+            },
+        )
 
     def generate(
         self,
@@ -106,6 +154,11 @@ class ReferenceSafeWorldForgeGenerator:
                     dependency_topics=dependency_topics,
                 )
             )
+            processed = self._mark_manual_decision_required(
+                node,
+                processed,
+                campaign_context,
+            )
             return attach_structured_canon_lookup(processed)
 
         generated = self.generator.generate(
@@ -114,6 +167,7 @@ class ReferenceSafeWorldForgeGenerator:
             campaign_context=campaign_context,
             dependency_topics=dependency_topics,
         )
+        scoped = generated
         try:
             scoped = self._manual_retry_candidate(generated, campaign_context)
             processed = process(scoped)
@@ -123,11 +177,16 @@ class ReferenceSafeWorldForgeGenerator:
             candidate = (
                 exc.candidate_topic
                 if isinstance(exc, WorldForgeLoreQualityError)
-                else generated
+                else scoped
             )
             return attach_structured_canon_lookup(
                 mark_needs_review(node, candidate, exc)
             )
+        processed = self._mark_manual_decision_required(
+            node,
+            processed,
+            campaign_context,
+        )
         return attach_structured_canon_lookup(processed)
 
     def _process_topic(
