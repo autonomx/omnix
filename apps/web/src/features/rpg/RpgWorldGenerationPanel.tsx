@@ -11,6 +11,7 @@ import './RpgWorldGenerationPanel.css';
 interface RpgWorldGenerationPanelProps {
   generation?: RpgWorldGenerationRun | Record<string, never>;
   onOpenImages?: () => void;
+  profileApproved: boolean;
   sections: RpgAuthoringSection[];
   worldId: string;
 }
@@ -85,7 +86,7 @@ function generationErrorFeedback(cause: unknown, fallback: string): string {
 export const RpgWorldGenerationPanel = forwardRef<
   RpgWorldGenerationPanelHandle,
   RpgWorldGenerationPanelProps
->(function RpgWorldGenerationPanel({ generation, onOpenImages, sections, worldId }, ref) {
+>(function RpgWorldGenerationPanel({ generation, onOpenImages, profileApproved, sections, worldId }, ref) {
   const queryClient = useQueryClient();
   const [depth, setDepth] = useState('standard');
   const [startingLocation, setStartingLocation] = useState('');
@@ -109,8 +110,8 @@ export const RpgWorldGenerationPanel = forwardRef<
   const progress = record(currentRun?.progress);
   const failedTopicIds = stringArray(progress.failed_topic_ids);
   const generationBusy = currentRun?.status === 'running' || currentRun?.status === 'planned';
-  const canRetryFailed = !generationBusy && failedTopicIds.length > 0;
-  const canContinueGeneration = !generationBusy && currentRun?.status === 'failed';
+  const canRetryFailed = profileApproved && !generationBusy && failedTopicIds.length > 0;
+  const canContinueGeneration = profileApproved && !generationBusy && currentRun?.status === 'failed';
 
   const refresh = async () => {
     await Promise.all([
@@ -194,6 +195,10 @@ export const RpgWorldGenerationPanel = forwardRef<
   });
 
   const start = (mode: string) => {
+    if (!profileApproved) {
+      setFeedback('Review and approve the current world profile before generating content.');
+      return;
+    }
     if (generationBusy) {
       setFeedback('World generation is still running. Wait for it to finish before starting another scope.');
       return;
@@ -242,12 +247,20 @@ export const RpgWorldGenerationPanel = forwardRef<
     setDirections((current) => ({ ...current, [topicId]: value }));
   };
 
+  const generationDisabled = generate.isPending
+    || retryFailed.isPending
+    || continueGeneration.isPending
+    || generationBusy
+    || !profileApproved;
+
   return (
     <section className="rpg-authoring-page rpg-generation-panel" aria-label="World generation">
       <div className="rpg-authoring-page-heading">
         <div><p className="eyebrow">Workspace</p><h2>World Generation</h2><p>Generate the full world or safely target selected, stale, or failed topics.</p></div>
         {currentRun ? <span>{statusLabel(currentRun.status)} · {Number(progress.percent || 0)}%</span> : <span>Not generated</span>}
       </div>
+
+      {!profileApproved ? <p className="rpg-authoring-feedback">World-content controls are locked until the profile preview above is approved.</p> : null}
 
       <div className="rpg-generation-settings">
         <label><span>Depth</span><select aria-label="Depth" value={depth} onChange={(event) => setDepth(event.currentTarget.value)}><option value="quick">Quick</option><option value="standard">Standard</option><option value="epic">Epic</option></select></label>
@@ -269,9 +282,9 @@ export const RpgWorldGenerationPanel = forwardRef<
       </details>
 
       <div className="rpg-generation-actions">
-        <button type="button" disabled={generate.isPending || retryFailed.isPending || continueGeneration.isPending || generationBusy} onClick={() => start('full')}>Generate World</button>
-        <button type="button" disabled={generate.isPending || retryFailed.isPending || continueGeneration.isPending || generationBusy || !selected.length} onClick={() => start('selected')}>Generate Selected</button>
-        <button className="rpg-secondary-button" type="button" disabled={generate.isPending || retryFailed.isPending || continueGeneration.isPending || generationBusy} onClick={() => start('stale')}>Regenerate Stale</button>
+        <button type="button" disabled={generationDisabled} onClick={() => start('full')}>Generate World</button>
+        <button type="button" disabled={generationDisabled || !selected.length} onClick={() => start('selected')}>Generate Selected</button>
+        <button className="rpg-secondary-button" type="button" disabled={generationDisabled} onClick={() => start('stale')}>Regenerate Stale</button>
         <button
           className="rpg-secondary-button"
           type="button"
