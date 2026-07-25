@@ -9,6 +9,10 @@ from fastapi import FastAPI, HTTPException, Request
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.debug_logging import new_rpg_trace_id
+from app.rpg.worlds.generation_acceptance import (
+    accept_world_generation_candidate,
+    accept_world_generation_candidates,
+)
 from app.rpg.worlds.generation_retry import (
     decide_world_generation_retry,
     retry_failed_world_generation,
@@ -91,6 +95,16 @@ def _run_with_results(
     return run, augmented, world_generation_review_analytics(augmented, run)
 
 
+def _topic_ids(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    values = payload.get("topic_ids") or ()
+    if not isinstance(values, (list, tuple)):
+        raise HTTPException(
+            status_code=422,
+            detail={"ok": False, "error": "topic_ids_must_be_array"},
+        )
+    return tuple(str(value) for value in values if str(value))
+
+
 def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
     if getattr(app.state, _ROUTE_SENTINEL, False):
         return
@@ -154,11 +168,7 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
         request: Request,
     ) -> dict[str, Any]:
         payload = dict(_body(await request.json()))
-        topic_ids = tuple(
-            str(value)
-            for value in payload.get("topic_ids") or ()
-            if str(value)
-        )
+        topic_ids = _topic_ids(payload)
         retry_scopes = payload.get("retry_scopes")
         if retry_scopes is not None and not isinstance(retry_scopes, Mapping):
             raise HTTPException(
@@ -174,6 +184,49 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
                     retry_scopes if isinstance(retry_scopes, Mapping) else {}
                 ),
                 diagnostic_id=diagnostic_id,
+            )
+        except Exception as exc:
+            raise _error(exc) from exc
+
+    @app.post(
+        "/api/rpg/world-generation/{run_id}/results/{topic_id}/accept",
+        include_in_schema=False,
+    )
+    async def rpg_world_generation_accept_candidate(
+        run_id: str,
+        topic_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        candidate = payload.get("candidate")
+        if candidate is not None and not isinstance(candidate, Mapping):
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "candidate_must_be_object"},
+            )
+        try:
+            return accept_world_generation_candidate(
+                run_id,
+                topic_id,
+                candidate=candidate if isinstance(candidate, Mapping) else None,
+                expected_candidate_hash=str(payload.get("expected_candidate_hash") or ""),
+            )
+        except Exception as exc:
+            raise _error(exc) from exc
+
+    @app.post(
+        "/api/rpg/world-generation/{run_id}/accept-all",
+        include_in_schema=False,
+    )
+    async def rpg_world_generation_accept_all(
+        run_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        try:
+            return accept_world_generation_candidates(
+                run_id,
+                topic_ids=_topic_ids(payload),
             )
         except Exception as exc:
             raise _error(exc) from exc
