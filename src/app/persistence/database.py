@@ -167,11 +167,10 @@ class PostgresDatabase:
             except Exception as exc:
                 self.close()
                 classified = _classified_postgres_error(exc)
-                if isinstance(classified, DatabaseUnavailableError):
+                if classified.sqlstate is not None:
                     raise classified from exc
                 raise DatabaseUnavailableError(
                     f"PostgreSQL is unavailable at {self.settings.redacted_url}",
-                    sqlstate=getattr(exc, "sqlstate", None),
                 ) from exc
 
     def close(self) -> None:
