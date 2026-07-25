@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
@@ -12,7 +14,11 @@ from app.rpg.session.genesis.world_forge_presentation import (
 )
 
 
-def _node() -> CampaignTopicNode:
+def _node(
+    *,
+    preferred_score: int = 80,
+    minimum_words: int = 40,
+) -> CampaignTopicNode:
     return CampaignTopicNode(
         topic_id="actors",
         title="Actors and NPCs",
@@ -37,9 +43,10 @@ def _node() -> CampaignTopicNode:
                 },
             ],
             "lore_quality": {
-                "minimum_words": 40,
+                "minimum_words": minimum_words,
                 "minimum_paragraph_words": 12,
                 "minimum_summary_words": 8,
+                "preferred_score": preferred_score,
                 "required_sections": ["overview", "backstory"],
             },
         },
@@ -115,6 +122,42 @@ def _topic(*, contradictory: bool = False, valid_dossier: bool = True) -> Genera
     )
 
 
+def _quality_variant(kind: str) -> GeneratedTopic:
+    topic = _topic()
+    entity = dict(topic.entities[0])
+    dossier = dict(entity["dossier"])
+    sections = [
+        {**dict(section), "paragraphs": list(section.get("paragraphs") or ())}
+        for section in dossier["sections"]
+    ]
+    if kind == "summary_too_short":
+        entity["short_summary"] = "Nyra remembers stolen lives."
+    elif kind == "paragraph_too_short":
+        entity["short_summary"] = (
+            "Best candidate: Nyra is a former mnemonic auditor racing to expose the "
+            "Helix Directorate before its extraction team reaches her safehouse."
+        )
+        sections[1]["paragraphs"] = [
+            "In place:true_harbor, corporate extraction agents reach her safehouse before dawn."
+        ]
+    elif kind == "duplicate_heading":
+        entity["short_summary"] = (
+            "Nyra remains a capable mnemonic auditor whose stolen evidence threatens the "
+            "Helix Directorate and everyone protecting its memory market."
+        )
+        sections[1]["id"] = "overview"
+        sections[1]["title"] = "Overview"
+    elif kind == "summary_fragment":
+        entity["short_summary"] = (
+            "Nyra is a former mnemonic auditor carrying evidence against the Helix Directorate"
+        )
+    else:
+        raise AssertionError(kind)
+    dossier["sections"] = sections
+    entity["dossier"] = dossier
+    return replace(topic, entities=(entity,))
+
+
 def test_clean_provider_dossier_is_preserved_without_template_prose() -> None:
     topic = _topic()
     compiled = compile_structured_entity_facts(_node(), topic, _dependencies())
@@ -182,7 +225,7 @@ def test_contradictory_provider_lore_retries_llm_instead_of_falling_back() -> No
     assert generated.provenance["targeted_regeneration_attempt_count"] == 2
 
 
-def test_exhausted_provider_retries_fail_without_synthetic_lore() -> None:
+def test_exhausted_hard_invalid_retries_still_fail() -> None:
     class _AlwaysContradictory:
         def generate(self, *args, **kwargs) -> GeneratedTopic:
             return _topic(contradictory=True)
@@ -195,3 +238,38 @@ def test_exhausted_provider_retries_fail_without_synthetic_lore() -> None:
             campaign_context={"targeted_regeneration_max_attempts": 2},
             dependency_topics=_dependencies(),
         )
+
+
+def test_best_structurally_valid_lore_is_kept_after_three_quality_retries() -> None:
+    variants = (
+        "summary_too_short",
+        "paragraph_too_short",
+        "duplicate_heading",
+        "summary_fragment",
+    )
+
+    class _AlwaysBelowPreferredScore:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def generate(self, *args, **kwargs) -> GeneratedTopic:
+            variant = variants[self.calls]
+            self.calls += 1
+            return _quality_variant(variant)
+
+    provider = _AlwaysBelowPreferredScore()
+    generator = ReferenceSafeWorldForgeGenerator(provider)
+    generated = generator.generate(
+        _node(preferred_score=100, minimum_words=30),
+        seed=7,
+        campaign_context={"targeted_regeneration_max_attempts": 4},
+        dependency_topics=_dependencies(),
+    )
+
+    assert provider.calls == 4
+    assert generated.provenance["lore_quality_status"] == "needs_review"
+    assert generated.provenance["lore_quality_needs_review"] is True
+    assert generated.provenance["lore_quality_selected_attempt"] == 2
+    assert generated.provenance["lore_quality_retry_count"] == 3
+    assert "Best candidate" in generated.entities[0]["short_summary"]
+    assert len(generated.provenance["lore_quality_attempts"]) >= 4
