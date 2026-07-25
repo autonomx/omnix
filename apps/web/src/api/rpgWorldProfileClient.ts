@@ -118,4 +118,8 @@ export const rpgWorldProfileClient = {
       expected_profile_revision: expectedProfileRevision,
     }));
   },
+
+  retry(worldId: string): Promise<RpgWorldProfileResponse> {
+    return request(`${profilePath(worldId)}/retry`, { method: 'POST' });
+  },
 };

@@ -172,6 +172,32 @@ describe('RpgWorldProfilePreview', () => {
     expect(document.getElementById(toggle.getAttribute('aria-controls') ?? '')).toHaveAttribute('hidden');
   });
 
+  it('retries a terminal profile validation failure from the preview', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const failed = {
+      ...response('validation_failed'),
+      review: {
+        ...response('validation_failed').review,
+        profile: {},
+        error: { code: 'world_profile_generation_failed' },
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ url: String(input), init });
+      const result = String(input).endsWith('/retry') ? response('generating') : failed;
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }));
+
+    renderPreview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry Profile Generation' }));
+
+    await waitFor(() => expect(requests.some((request) => request.url.endsWith('/retry'))).toBe(true));
+    expect(await screen.findByText(/Profile generation restarted/)).toBeInTheDocument();
+  });
+
   it('allows an approved profile preview to be expanded after loading collapsed', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(response('approved')), {
       status: 200,

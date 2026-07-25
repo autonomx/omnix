@@ -1288,7 +1288,9 @@ def build_production_world_forge_generator(
         except Exception:
             pass
     if not resolved.live_enabled:
-        return ReferenceSafeWorldForgeGenerator()
+        return UnavailableWorldForgeTopicGenerator(
+            "World Forge requires a configured provider; deterministic lore is disabled"
+        )
     provider_ids = [resolved.provider]
     if (
         settings_routed

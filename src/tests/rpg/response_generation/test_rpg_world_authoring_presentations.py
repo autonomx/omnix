@@ -260,6 +260,49 @@ def test_lore_with_entities_stays_a_document_page(monkeypatch) -> None:
     assert page["related_entities"][0]["title"] == "Aurelia"
 
 
+def test_failed_lore_shows_a_retry_note_instead_of_fallback_canon(monkeypatch) -> None:
+    detail = _detail()
+    detail["topics"][0] = {
+        "topic_id": "realm",
+        "status": "failed",
+        "content": {
+            "provenance": {
+                "retry_note": {
+                    "message": "The provider could not complete this topic. Retry it after generation finishes.",
+                }
+            }
+        },
+        "provenance": {},
+    }
+    monkeypatch.setattr(
+        "app.rpg.worlds.authoring_service.read_world_detail",
+        lambda world_id, database=None: detail,
+    )
+
+    page = read_authoring_section("world:aurelia", "realm")
+
+    assert page["page_kind"] == "document"
+    assert page["summary"] == "Generation needs retry"
+    assert page["body"][0]["title"] == "Generation needs retry"
+    assert "Retry it" in page["body"][0]["body"]
+
+
+def test_legacy_deterministic_lore_is_hidden_pending_provider_retry(monkeypatch) -> None:
+    detail = _detail()
+    detail["topics"][0]["content"]["provenance"] = {
+        "generator": "deterministic_profile_fixture_v1",
+    }
+    monkeypatch.setattr(
+        "app.rpg.worlds.authoring_service.read_world_detail",
+        lambda world_id, database=None: detail,
+    )
+
+    page = read_authoring_section("world:aurelia", "realm")
+
+    assert page["summary"] == "Generation needs retry"
+    assert "retired deterministic fallback" in page["body"][0]["body"]
+
+
 def test_realm_card_uses_a_readable_dossier_label_when_source_canon_omits_a_name() -> None:
     card = entity_card(
         {

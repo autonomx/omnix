@@ -108,7 +108,10 @@ class GenreProfileProposalResponse(BaseModel):
     display_name: str = Field(min_length=1)
     aliases: list[str] = Field(default_factory=list)
     genre_tags: list[str] = Field(default_factory=list)
-    domains: list[ProfileDomainResponse] = Field(min_length=1, max_length=12)
+    # The standard catalogue is always supplied by the engine.  A provider may
+    # correctly conclude that the requested genre needs no additional domains,
+    # so extensions are optional (and the prompt explicitly permits zero).
+    domains: list[ProfileDomainResponse] = Field(default_factory=list, max_length=8)
     runtime_capability_defaults: dict[str, bool] = Field(default_factory=dict)
     rationale: str = Field(min_length=1)
 
@@ -340,10 +343,29 @@ class ProviderGenreProfileGenerator:
                 ),
             )
         if outcome.error is not None:
-            raise RuntimeError(
-                "structured genre profile provider failed: "
-                f"{type(outcome.error).__name__}: {outcome.error}"
-            ) from outcome.error
+            # A profile is an approval-gated ontology, not authored world lore.
+            # When a provider cannot satisfy the schema after its bounded repair
+            # attempts, retain a usable engine-owned catalogue for review instead
+            # of trapping the world before any lore can be generated.  The
+            # provenance makes this explicit, and the profile still requires
+            # author approval before it can unlock World Forge generation.
+            fallback = HeuristicWorldLocalProfileGenerator().generate_profile(
+                genre=genre,
+                description=description,
+                campaign_mode=campaign_mode,
+            )
+            return replace(
+                fallback,
+                provenance={
+                    **dict(fallback.provenance),
+                    "source": "profile_schema_safe_fallback_v1",
+                    "provider_failure": {
+                        "type": type(outcome.error).__name__,
+                        "contract": "rpg.world_forge.genre_profile.v2",
+                    },
+                    "structured_diagnostics": outcome.diagnostics.as_dict(),
+                },
+            )
         assert outcome.value is not None
         return profile_from_proposal(
             outcome.value,

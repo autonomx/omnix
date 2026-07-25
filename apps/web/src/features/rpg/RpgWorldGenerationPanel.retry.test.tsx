@@ -71,7 +71,7 @@ describe('RpgWorldGenerationPanel failed-topic retry guards', () => {
     expect(screen.getByRole('button', { name: 'Generate World' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Regenerate Stale' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Retry Failed' })).toBeDisabled();
-    expect(screen.getByText(/Failed-topic retry becomes available/)).toBeInTheDocument();
+    expect(screen.getByText(/Failed-topic and Game Master lore retry become available/)).toBeInTheDocument();
   });
 
   it('retries the exact failed run instead of rebuilding a failed scope from UI defaults', async () => {

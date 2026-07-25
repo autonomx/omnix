@@ -11,6 +11,7 @@ from app.rpg.worlds.profile_authoring import (
     read_world_profile_review,
     update_world_profile_review,
 )
+from app.rpg.worlds.profile_generation_jobs import retry_world_profile_creation
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_profile_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_profile_route_hook_installed"
@@ -110,6 +111,18 @@ def register_rpg_world_profile_routes(app: FastAPI) -> None:
                 expected_profile_revision=expected_revision,
                 approved_by=str(payload.get("approved_by") or "local-author"),
             )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/genre-profile/retry",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    def rpg_retry_world_genre_profile(world_id: str) -> dict[str, Any]:
+        try:
+            return retry_world_profile_creation(world_id)
         except Exception as exc:
             _raise_domain_error(exc)
             raise

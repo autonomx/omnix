@@ -57,7 +57,9 @@ class WorldTopicGenerationSettings:
     topic_contract_version: str = WORLD_TOPIC_JOB_CONTRACT
     output_schema_version: str = WORLD_TOPIC_OUTPUT_SCHEMA
     compiler_version: str = "world-compiler-v1"
-    max_attempts: int = 3
+    # One retry after the initial provider call keeps malformed structured
+    # output from holding an entire world-generation DAG for too long.
+    max_attempts: int = 2
     priority: int = 10
 
     def as_dict(self) -> dict[str, Any]:
@@ -70,7 +72,7 @@ class WorldTopicGenerationSettings:
             "topic_contract_version": self.topic_contract_version,
             "output_schema_version": self.output_schema_version,
             "compiler_version": self.compiler_version,
-            "max_attempts": max(1, int(self.max_attempts)),
+            "max_attempts": max(1, min(int(self.max_attempts), 2)),
             "priority": int(self.priority),
         }
 

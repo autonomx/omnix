@@ -133,7 +133,7 @@ def plan_world_profile_creation(
         "provider_route": resolved_route.provider,
         "model": resolved_route.model,
         "seed": int(seed),
-        "max_attempts": 3,
+        "max_attempts": 2,
     }
     job_payload = {
         "id": job_id,
@@ -141,7 +141,7 @@ def plan_world_profile_creation(
         "job_type": WORLD_PROFILE_JOB_TYPE,
         "resource_class": WORLD_PROFILE_RESOURCE_CLASS,
         "priority": 5,
-        "max_attempts": 3,
+        "max_attempts": 2,
         "input_payload": {
             "contract_version": WORLD_PROFILE_JOB_CONTRACT,
             "world_id": world_id,
@@ -179,6 +179,80 @@ def plan_world_profile_creation(
         job_payload=job_payload,
         provider_route=resolved_route.provider,
     )
+
+
+def retry_world_profile_creation(
+    world_id: str,
+    *,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    """Queue a fresh profile-provider attempt after terminal validation failure."""
+
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        world = work.world_scenarios.get_world(context, world_id)
+        if world is None:
+            raise KeyError(f"world_not_found:{world_id}")
+        existing = dict(
+            dict(world.get("metadata") or {}).get("genre_profile_binding") or {}
+        )
+        if str(existing.get("status") or "") != "validation_failed":
+            raise ValueError("world_profile_retry_not_available")
+        route_data = dict(existing.get("route") or {})
+        route = ResolvedWorldForgeRoute(
+            provider=str(route_data.get("provider") or ""),
+            model=str(route_data.get("model") or ""),
+            source=str(route_data.get("source") or "profile_retry"),
+            requested_provider=str(route_data.get("provider") or ""),
+            requested_model=str(route_data.get("model") or ""),
+        )
+        metadata = dict(world.get("metadata") or {})
+        plan = plan_world_profile_creation(
+            world_id=world_id,
+            title=str(world.get("title") or ""),
+            genre=str(world.get("genre") or ""),
+            description=str(world.get("description") or ""),
+            tone=str(world.get("tone") or ""),
+            campaign_mode=str(metadata.get("campaign_mode") or "persistent_living_world"),
+            seed=int(world.get("seed") or 0),
+            route=route,
+        )
+        if plan.job_payload is None:
+            raise ValueError("world_profile_retry_provider_not_required")
+        retry_count = int(existing.get("retry_count") or 0) + 1
+        payload = dict(plan.job_payload)
+        payload["id"] = f"{payload['id']}:retry:{retry_count}"
+        payload["input_payload"] = {
+            **dict(payload.get("input_payload") or {}),
+            "retry_of_job_id": str(existing.get("job_id") or ""),
+        }
+        payload["metadata"] = {
+            **dict(payload.get("metadata") or {}),
+            "retry_count": retry_count,
+        }
+        binding = {
+            **dict(plan.binding),
+            "profile_revision": int(existing.get("profile_revision") or 1),
+            "retry_count": retry_count,
+            "retry_of_job_id": str(existing.get("job_id") or ""),
+        }
+        _set_binding(work, context, world=world, binding=binding)
+        work.jobs.create_job(context, payload)
+        work.commit()
+
+    from .generation_worker import kick_world_generation_worker
+    from .profile_authoring import profile_review_from_world
+
+    kick_world_generation_worker(database=database, provider_route=plan.provider_route)
+    return {
+        "ok": True,
+        "review": profile_review_from_world(
+            {
+                **dict(world),
+                "metadata": {**metadata, "genre_profile_binding": binding},
+            }
+        ),
+    }
 
 
 def profile_resolution_from_world(

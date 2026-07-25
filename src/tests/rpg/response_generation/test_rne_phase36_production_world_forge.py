@@ -322,7 +322,7 @@ def test_reference_safety_wraps_live_provider_output() -> None:
     assert topic.facts[0]["entity_refs"] == ["location:gate", "region:known"]
 
 
-def test_offline_mode_deliberately_uses_reference_safe_deterministic_generator() -> None:
+def test_offline_mode_never_publishes_deterministic_lore() -> None:
     called = False
 
     def factory(name, config):
@@ -334,7 +334,7 @@ def test_offline_mode_deliberately_uses_reference_safe_deterministic_generator()
         WorldForgeProviderConfig(mode="offline", provider="phase36"),
         provider_factory=factory,
     )
-    assert isinstance(generator, ReferenceSafeWorldForgeGenerator)
+    assert isinstance(generator, UnavailableWorldForgeTopicGenerator)
     assert called is False
 
 

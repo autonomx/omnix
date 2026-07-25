@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import pytest
 
+from app.providers.base import ChatResponse, ProviderConfig
+
 from app.rpg.session.genesis.world_forge_profile_generation import STANDARD_DOMAIN_IDS
 from app.rpg.session.genesis.world_forge_profile_provider import (
     GenreProfileProposalResponse,
+    ProviderGenreProfileGenerator,
     ProfileDomainResponse,
     ProfileFieldResponse,
     ProfileTargetRangeResponse,
     profile_from_proposal,
 )
+from app.rpg_world_forge_provider import WorldForgeProviderConfig
 from app.rpg.worlds.generation_routing import ResolvedWorldForgeRoute
 from app.rpg.worlds.profile_authoring import profile_review_from_world
 from app.rpg.worlds.profile_generation_jobs import (
@@ -28,6 +32,16 @@ def _route() -> ResolvedWorldForgeRoute:
         requested_provider="configured",
         requested_model="configured",
     )
+
+
+class _SchemaFailingProfileProvider:
+    provider_name = "test"
+
+    def __init__(self) -> None:
+        self.config = ProviderConfig(provider_type="test", model="test-model")
+
+    def chat_completion(self, *args, **kwargs) -> ChatResponse:
+        return ChatResponse(content='{"display_name":"Incomplete"}', model="test-model")
 
 
 def test_known_genre_binds_profile_without_provider_job_but_requires_review() -> None:
@@ -143,6 +157,29 @@ def test_llm_profile_proposal_compiles_with_standard_and_setting_domains() -> No
     assert profile.validate() == ()
 
 
+def test_llm_profile_proposal_allows_no_extension_domains() -> None:
+    proposal = GenreProfileProposalResponse(
+        display_name="Industrial gothic mystery",
+        genre_tags=["gothic", "industrial"],
+        domains=[],
+        rationale=(
+            "The engine-owned catalogue already represents the setting without "
+            "requiring an additional domain."
+        ),
+    )
+
+
+    profile = profile_from_proposal(
+        proposal,
+        genre="industrial gothic mystery",
+        description="A city of soot, secrets, and inherited debt.",
+        campaign_mode="investigation",
+    )
+
+    assert set(profile.domain_map()) == set(STANDARD_DOMAIN_IDS)
+    assert profile.validate() == ()
+
+
 def test_profile_proposal_cannot_redefine_core_domain() -> None:
     proposal = GenreProfileProposalResponse(
         display_name="Invalid",
@@ -222,3 +259,24 @@ def test_ready_profile_manifest_uses_pinned_cyberpunk_standard_graph() -> None:
     actors = next(node for node in run["graph"]["nodes"] if node["topic_id"] == "actors")
     assert actors["metadata"]["presentation"]["page_kind"] == "collection"
     assert actors["metadata"]["presentation"]["image_role"] == "portrait"
+
+
+def test_invalid_provider_profile_uses_reviewable_schema_safe_catalogue() -> None:
+    profile = ProviderGenreProfileGenerator(
+        _SchemaFailingProfileProvider(),  # type: ignore[arg-type]
+        WorldForgeProviderConfig(
+            mode="live",
+            provider="test",
+            model="test-model",
+            max_retries=0,
+            lmstudio_schema_fallback=False,
+        ),
+    ).generate_profile(
+        genre="industrial gothic mystery",
+        description="A city of soot, secrets, and inherited debt.",
+        campaign_mode="investigation",
+    )
+
+    assert set(STANDARD_DOMAIN_IDS).issubset(profile.domain_map())
+    assert profile.provenance["source"] == "profile_schema_safe_fallback_v1"
+    assert profile.provenance["provider_failure"]["type"] == "StructuredSchemaError"

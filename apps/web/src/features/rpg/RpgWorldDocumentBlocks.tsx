@@ -1,5 +1,6 @@
 import type { RpgAuthoringDocumentBlock } from '../../api/rpgWorldAuthoringClient';
 import { formatAuthoringValue } from './RpgWorldEntityCard';
+import './RpgWorldTimeline.css';
 
 const PRIMARY_FIELDS = new Set([
   'id',
@@ -19,6 +20,7 @@ const PRIMARY_FIELDS = new Set([
   'object',
   'description',
   'summary',
+  'body',
   'expanded_description',
   'long_description',
   'lore',
@@ -32,6 +34,22 @@ const PRIMARY_FIELDS = new Set([
   'authority',
   'approved_authority',
   'status',
+]);
+
+const TIMELINE_METADATA_FIELDS = new Set([
+  'date_label',
+  'date',
+  'year',
+  'era',
+  'epoch',
+  'period',
+  'range',
+  'start_year',
+  'end_year',
+  'season',
+  'month',
+  'chronology_index',
+  'sequence',
 ]);
 
 function humanize(value: string): string {
@@ -73,13 +91,12 @@ function visibleBadge(value: unknown): unknown | undefined {
   return value;
 }
 
-function recordBadges(item: Record<string, unknown>): unknown[] {
+function recordBadges(item: Record<string, unknown>, timeline = false): unknown[] {
   const explicit = Array.isArray(item.badges) ? item.badges : [];
   const authority = visibleBadge(item.approved_authority ?? item.authority);
   return [
     ...explicit,
-    item.era,
-    item.date,
+    ...(timeline ? [] : [item.era, item.date]),
     item.visibility,
     authority,
     item.status,
@@ -104,7 +121,10 @@ function referenceRows(value: unknown): Array<{ id: string; role: string }> {
   });
 }
 
-function detailRows(item: Record<string, unknown>): Array<{ label: string; value: unknown }> {
+function detailRows(
+  item: Record<string, unknown>,
+  timeline = false,
+): Array<{ label: string; value: unknown }> {
   if (Array.isArray(item.details)) {
     return item.details.flatMap((entry) => {
       if (!entry || typeof entry !== 'object') return [];
@@ -115,7 +135,11 @@ function detailRows(item: Record<string, unknown>): Array<{ label: string; value
     });
   }
   return Object.entries(item)
-    .filter(([key, value]) => !PRIMARY_FIELDS.has(key) && meaningful(value))
+    .filter(([key, value]) => (
+      !PRIMARY_FIELDS.has(key)
+      && !(timeline && TIMELINE_METADATA_FIELDS.has(key))
+      && meaningful(value)
+    ))
     .map(([key, value]) => ({ label: humanize(key), value }));
 }
 
@@ -181,18 +205,20 @@ function StructuredRecord({
   fallback,
   index,
   item,
+  timeline = false,
 }: {
   fallback: string;
   index: number;
   item: Record<string, unknown>;
+  timeline?: boolean;
 }) {
   const references = referenceRows(item.references ?? item.entity_refs ?? item.entities);
-  const details = detailRows(item);
+  const details = detailRows(item, timeline);
   return (
     <article className="rpg-authoring-record-card">
       <header>
         <p className="rpg-authoring-card-eyebrow">{recordLabel(item, index, fallback)}</p>
-        <MetaChips values={recordBadges(item)} />
+        <MetaChips values={recordBadges(item, timeline)} />
       </header>
       <Prose className="rpg-authoring-record-statement" value={recordValue(item)} />
       <ExpandableLore item={item} />
@@ -219,18 +245,66 @@ function StructuredRecord({
   );
 }
 
+function timelineMarker(item: Record<string, unknown>, index: number): string {
+  const start = item.start_year;
+  const end = item.end_year;
+  if (meaningful(start) && meaningful(end)) return `${String(start)}–${String(end)}`;
+  const value = item.date_label
+    ?? item.date
+    ?? item.year
+    ?? item.era
+    ?? item.epoch
+    ?? item.period
+    ?? item.range
+    ?? item.season
+    ?? item.month;
+  return meaningful(value) ? String(value) : `Entry ${index + 1}`;
+}
+
+function timelineOrder(item: Record<string, unknown>, index: number): number {
+  const value = item.chronology_index
+    ?? item.sequence
+    ?? item.start_year
+    ?? item.year;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : Number.MAX_SAFE_INTEGER + index;
+}
+
 function timelineItems(block: RpgAuthoringDocumentBlock): Array<Record<string, unknown>> {
-  if (block.items?.length) return block.items;
-  if (block.body) return [{ title: block.title ?? 'Chronicle entry', body: block.body }];
-  return [];
+  let items: Array<Record<string, unknown>> = [];
+  if (block.items?.length) items = [...block.items];
+  else if (block.body) items = [{ title: block.title ?? 'Chronicle entry', body: block.body }];
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => timelineOrder(left.item, left.index) - timelineOrder(right.item, right.index))
+    .map(({ item }) => item);
+}
+
+function TimelineBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
+  const items = timelineItems(block);
+  return (
+    <section className="rpg-authoring-document-block is-record-collection is-timeline">
+      {block.title ? <h3>{block.title}</h3> : null}
+      <ol className="rpg-authoring-timeline-list">
+        {items.map((item, index) => (
+          <li key={`${recordLabel(item, index, 'Event')}:${index}`}>
+            <div className="rpg-authoring-timeline-marker">
+              <span>{timelineMarker(item, index)}</span>
+            </div>
+            <StructuredRecord fallback="Event" index={index} item={item} timeline />
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
 }
 
 function RecordBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
-  const isTimeline = block.kind === 'timeline';
-  const items = isTimeline ? timelineItems(block) : block.items ?? [];
-  const fallback = isTimeline ? 'Era' : block.kind === 'facts' ? 'Fact' : 'Entry';
+  if (block.kind === 'timeline') return <TimelineBlock block={block} />;
+  const items = block.items ?? [];
+  const fallback = block.kind === 'facts' ? 'Fact' : 'Entry';
   return (
-    <section className={`rpg-authoring-document-block is-record-collection${isTimeline ? ' is-timeline' : ''}`}>
+    <section className="rpg-authoring-document-block is-record-collection">
       {block.title ? <h3>{block.title}</h3> : null}
       <div className="rpg-authoring-record-grid">
         {items.map((item, index) => (

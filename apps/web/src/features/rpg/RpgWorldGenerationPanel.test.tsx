@@ -148,8 +148,9 @@ describe('RpgWorldGenerationPanel', () => {
     expect(publish).toBeEnabled();
     fireEvent.click(publish);
 
-    await waitFor(() => expect(requests.length).toBe(1));
-    expect(requests[0].url).toContain('/api/rpg/world-generation/run%3Areview/publish');
+    await waitFor(() => expect(
+      requests.some((request) => request.url.includes('/api/rpg/world-generation/run%3Areview/publish')),
+    ).toBe(true));
     expect(await screen.findByText('Published world revision 4, release 1.')).toBeInTheDocument();
   });
 

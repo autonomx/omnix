@@ -17,6 +17,7 @@ from app.rpg.worlds.generation_jobs import (
     topic_generation_fingerprint,
 )
 from app.rpg.worlds import generation_worker
+from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
 
 
 class _ConcurrentGenerator:
@@ -85,6 +86,16 @@ def test_world_forge_respects_a_lower_parallel_limit() -> None:
 
     assert result.passed is True
     assert generator.peak == 2
+
+
+def test_world_forge_limits_targeted_regeneration_to_one_retry() -> None:
+    assert ReferenceSafeWorldForgeGenerator._max_regeneration_attempts({}) == 2
+    assert (
+        ReferenceSafeWorldForgeGenerator._max_regeneration_attempts(
+            {"targeted_regeneration_max_attempts": 5}
+        )
+        == 2
+    )
 
 
 def test_completed_forced_topic_from_current_run_unblocks_dependents() -> None:

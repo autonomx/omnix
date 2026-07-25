@@ -147,7 +147,9 @@ def build_world_forge_generator_from_settings(
             "durable World Forge job contains an unresolved provider route"
         )
     if provider_id in _DETERMINISTIC_VALUES or provider_id == "deterministic":
-        return ReferenceSafeWorldForgeGenerator()
+        return UnavailableWorldForgeTopicGenerator(
+            "deterministic World Forge lore is disabled; configure a provider and retry"
+        )
 
     config = replace(
         WorldForgeProviderConfig.from_environment(),

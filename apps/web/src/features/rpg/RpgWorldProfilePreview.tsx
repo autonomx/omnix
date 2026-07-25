@@ -106,6 +106,15 @@ export function RpgWorldProfilePreview({ onApprovalChange, worldId }: RpgWorldPr
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Profile could not be approved.'),
   });
 
+  const retry = useMutation({
+    mutationFn: () => rpgWorldProfileClient.retry(worldId),
+    onSuccess: async () => {
+      setFeedback('Profile generation restarted. This preview will refresh when the provider returns a result.');
+      await refresh();
+    },
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Profile generation could not be retried.'),
+  });
+
   const updateDomain = (index: number, changes: Partial<RpgWorldProfileDomain>) => {
     setDraft((current) => {
       if (!current) return current;
@@ -185,6 +194,16 @@ export function RpgWorldProfilePreview({ onApprovalChange, worldId }: RpgWorldPr
         {status === 'generating' ? <p>The profile architect is still generating the proposed catalogue.</p> : null}
         {status === 'validation_failed' ? <p className="rpg-authoring-feedback">Profile generation failed validation. Review the error details before retrying.</p> : null}
         {review?.error && Object.keys(review.error).length ? <pre>{JSON.stringify(review.error, null, 2)}</pre> : null}
+        {status === 'validation_failed' ? (
+          <button
+            className="rpg-secondary-button"
+            disabled={retry.isPending}
+            onClick={() => retry.mutate()}
+            type="button"
+          >
+            {retry.isPending ? 'Retrying Profile…' : 'Retry Profile Generation'}
+          </button>
+        ) : null}
 
         {draft?.domains.length ? (
           <>

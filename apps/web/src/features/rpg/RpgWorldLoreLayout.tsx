@@ -13,6 +13,20 @@ interface RpgWorldLoreLayoutProps {
   toc: Array<{ id: string; label: string }>;
 }
 
+const HISTORY_LAYOUT = {
+  eyebrow: 'Living chronicle',
+  icon: '▣',
+  mode: 'chronicle',
+  note: 'Introductory history remains readable prose, while eras and turning points follow an ordered timeline of cause and consequence.',
+};
+
+const CALENDAR_LAYOUT = {
+  eyebrow: 'Calendar and eras',
+  icon: '◷',
+  mode: 'chronicle',
+  note: 'Timekeeping is explained in prose, with eras, seasons, festivals, and recurring observances arranged chronologically.',
+};
+
 const LAYOUTS: Record<string, { eyebrow: string; icon: string; mode: string; note: string }> = {
   realm: {
     eyebrow: 'Realm dossier',
@@ -38,18 +52,10 @@ const LAYOUTS: Record<string, { eyebrow: string; icon: string; mode: string; not
     mode: 'systems',
     note: 'Sources, practices, costs, institutions, and consequences of exceptional power.',
   },
-  history: {
-    eyebrow: 'Living chronicle',
-    icon: '▣',
-    mode: 'chronicle',
-    note: 'Eras and turning points arranged as a readable record of cause and consequence.',
-  },
-  calendar: {
-    eyebrow: 'Calendar and eras',
-    icon: '◷',
-    mode: 'chronicle',
-    note: 'How inhabitants measure time, remember eras, and organize recurring observances.',
-  },
+  history: HISTORY_LAYOUT,
+  history_timeline: HISTORY_LAYOUT,
+  calendar: CALENDAR_LAYOUT,
+  calendar_and_eras: CALENDAR_LAYOUT,
   cultures: {
     eyebrow: 'Peoples and traditions',
     icon: '♙',

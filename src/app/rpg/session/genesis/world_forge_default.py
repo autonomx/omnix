@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping
 
+from .world_forge_canon_lookup import attach_structured_canon_lookup
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_deterministic import DeterministicWorldForgeGenerator
 from .world_forge_deterministic_completion import complete_deterministic_references
@@ -26,6 +27,7 @@ from .world_forge_integrity import (
     WorldForgeIntegrityError,
     validate_and_normalize_provider_topic,
 )
+from .world_forge_lore_scoring import require_preferred_lore_quality
 from .world_forge_presentation import render_fact_derived_presentations
 from .world_forge_profile_deterministic import generate_deterministic_profile_topic
 from .world_forge_regeneration import generate_with_targeted_regeneration
@@ -52,16 +54,18 @@ class ReferenceSafeWorldForgeGenerator:
 
     @staticmethod
     def _max_regeneration_attempts(campaign_context: Mapping[str, Any]) -> int:
+        """Return total attempts: initial generation plus one retry by default."""
+
         try:
             return max(
                 1,
                 min(
-                    int(campaign_context.get("targeted_regeneration_max_attempts") or 3),
-                    5,
+                    int(campaign_context.get("targeted_regeneration_max_attempts") or 2),
+                    2,
                 ),
             )
         except (TypeError, ValueError):
-            return 3
+            return 2
 
     @staticmethod
     def _recoverable_provider_failure(error: Exception) -> bool:
@@ -110,17 +114,18 @@ class ReferenceSafeWorldForgeGenerator:
             node.metadata.get("field_definitions")
             and isinstance(self.generator, DeterministicWorldForgeGenerator)
         ):
-            return process(
+            processed = process(
                 generate_deterministic_profile_topic(
                     node,
                     campaign_context=campaign_context,
                     dependency_topics=dependency_topics,
                 )
             )
+            return attach_structured_canon_lookup(processed)
 
         max_attempts = self._max_regeneration_attempts(campaign_context)
         try:
-            return generate_with_targeted_regeneration(
+            generated = generate_with_targeted_regeneration(
                 self.generator,
                 node,
                 seed=seed,
@@ -132,28 +137,16 @@ class ReferenceSafeWorldForgeGenerator:
         except Exception as exc:
             if not self._recoverable_provider_failure(exc):
                 raise
-            # A live model can exhaust its bounded repair budget while still
-            # returning unsafe references or breaking its structured response
-            # contract. Preserve the fail-closed boundary, but allow the durable
-            # run to continue with the grounded, deterministic topic generator.
-            fallback = DeterministicWorldForgeGenerator().generate(
-                node,
-                seed=seed,
-                campaign_context=campaign_context,
-                dependency_topics=dependency_topics,
-            )
-            processed = process(fallback)
-            return replace(
-                processed,
-                provenance={
-                    **dict(processed.provenance),
-                    "provider_fallback": {
-                        "reason": type(exc).__name__,
-                        "attempts": max_attempts,
-                        "source": "reference_safe_world_forge_v1",
-                    },
-                },
-            )
+            # Never replace failed provider lore with deterministic prose.  A
+            # caller may retain the best structurally valid provider candidate
+            # (the regeneration coordinator does this for quality misses), but
+            # an invalid or unavailable provider result must remain a retryable
+            # failure instead of becoming visible canon.
+            raise RuntimeError(
+                f"world_forge_provider_generation_failed:{node.topic_id}:"
+                f"{type(exc).__name__}"
+            ) from exc
+        return attach_structured_canon_lookup(generated)
 
     def _process_topic(
         self,
@@ -222,7 +215,14 @@ class ReferenceSafeWorldForgeGenerator:
             )
         validate_world_brief_grounding(node, topic, campaign_context)
         if profile_defined:
-            return render_fact_derived_presentations(node, topic)
+            rendered = render_fact_derived_presentations(node, topic)
+            if provider_generated:
+                rendered = require_preferred_lore_quality(
+                    node,
+                    rendered,
+                    campaign_context,
+                )
+            return rendered
         return self._normalize_entity_dossiers(node, topic)
 
     @staticmethod

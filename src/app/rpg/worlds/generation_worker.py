@@ -148,8 +148,10 @@ def _recover_interrupted_jobs(*, database: Any | None = None) -> dict[str, int]:
             ),
         ).rowcount
         requeued = work.connection.execute(
-            "UPDATE omnix_jobs SET status = 'retrying', available_at = CURRENT_TIMESTAMP, "
+            "UPDATE omnix_jobs SET status = CASE WHEN attempt_count < max_attempts THEN 'retrying' ELSE 'failed' END, "
+            "available_at = CASE WHEN attempt_count < max_attempts THEN CURRENT_TIMESTAMP ELSE available_at END, "
             "lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, "
+            "completed_at = CASE WHEN attempt_count >= max_attempts THEN CURRENT_TIMESTAMP ELSE completed_at END, "
             "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
             "AND job_type IN (%s, %s) "
             "AND status IN ('leased', 'running', 'cancel_requested') "
