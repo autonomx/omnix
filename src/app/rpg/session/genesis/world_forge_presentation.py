@@ -1,4 +1,4 @@
-"""Render profile-driven presentation from validated structured canon facts only."""
+"""Render profile-driven presentation from validated structured canon facts."""
 from __future__ import annotations
 
 import json
@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_contradictions import audit_presentation_contradictions
+from .world_forge_dossiers import validate_entity_dossier
 from .world_forge_fact_pipeline import (
     StructuredFactIssue,
     StructuredFactValidationError,
@@ -33,6 +34,12 @@ def _definitions(node: CampaignTopicNode) -> tuple[dict[str, Any], ...]:
 
 def _entity_id(entity: Mapping[str, Any]) -> str:
     return str(entity.get("id") or entity.get("entity_id") or "").strip()
+
+
+def _provider_generated(topic: GeneratedTopic) -> bool:
+    return str(dict(topic.provenance).get("generator") or "").startswith(
+        "structured_world_forge_provider_"
+    )
 
 
 def _display(value: Any) -> str:
@@ -123,7 +130,12 @@ def _structured_facts(topic: GeneratedTopic) -> tuple[dict[str, Any], ...]:
     )
 
 
-def _presentation_fact_proposals(topic: GeneratedTopic) -> list[dict[str, Any]]:
+def _presentation_fact_proposals(
+    topic: GeneratedTopic,
+    *,
+    preserved_entity_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    preserved = preserved_entity_ids or set()
     proposals: list[dict[str, Any]] = []
     for entity in topic.entities:
         entity_id = _entity_id(entity)
@@ -131,12 +143,15 @@ def _presentation_fact_proposals(topic: GeneratedTopic) -> list[dict[str, Any]]:
             value = entity.get(field_id)
             if value in (None, "", [], (), {}):
                 continue
+            status = "non_canonical_presentation_proposal"
+            if entity_id in preserved and field_id in {"short_summary", "dossier"}:
+                status = "preserved_provider_presentation"
             proposals.append(
                 {
                     "entity_id": entity_id,
                     "source_field": field_id,
                     "value": value,
-                    "status": "non_canonical_presentation_proposal",
+                    "status": status,
                 }
             )
     for fact in topic.facts:
@@ -283,16 +298,111 @@ def _build_dossier(
     return short_summary, dossier
 
 
+def _provider_presentation(
+    original: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]] | None:
+    short_summary = " ".join(str(original.get("short_summary") or "").split())
+    raw_dossier = original.get("dossier")
+    if not short_summary or validate_entity_dossier(raw_dossier):
+        return None
+    return short_summary, dict(raw_dossier)
+
+
+def _merge_provider_dossier(
+    provider_dossier: Mapping[str, Any],
+    canonical_dossier: Mapping[str, Any],
+) -> dict[str, Any]:
+    merged = dict(provider_dossier)
+    sections = [
+        {
+            **dict(section),
+            "paragraphs": list(section.get("paragraphs") or ()),
+        }
+        for section in provider_dossier.get("sections") or ()
+        if isinstance(section, Mapping)
+    ]
+    existing_ids = {str(section.get("id") or "") for section in sections}
+    canonical_paragraphs = [
+        paragraph
+        for section in canonical_dossier.get("sections") or ()
+        if isinstance(section, Mapping) and str(section.get("id") or "") != "overview"
+        for paragraph in section.get("paragraphs") or ()
+        if str(paragraph).strip()
+    ]
+    if canonical_paragraphs:
+        section_id = "canonical-details"
+        suffix = 2
+        while section_id in existing_ids:
+            section_id = f"canonical-details-{suffix}"
+            suffix += 1
+        sections.append(
+            {
+                "id": section_id,
+                "title": "Canonical Details",
+                "paragraphs": list(dict.fromkeys(canonical_paragraphs)),
+            }
+        )
+
+    provider_quick_facts = [
+        dict(item)
+        for item in provider_dossier.get("quick_facts") or ()
+        if isinstance(item, Mapping)
+    ]
+    canonical_quick_facts = [
+        dict(item)
+        for item in canonical_dossier.get("quick_facts") or ()
+        if isinstance(item, Mapping)
+    ]
+    quick_facts: list[dict[str, Any]] = []
+    seen_quick_facts: set[str] = set()
+    for item in (*canonical_quick_facts, *provider_quick_facts):
+        key = json.dumps(item, sort_keys=True, ensure_ascii=False, default=str)
+        if key in seen_quick_facts:
+            continue
+        seen_quick_facts.add(key)
+        quick_facts.append(item)
+
+    related = list(
+        dict.fromkeys(
+            str(value)
+            for value in (
+                *(canonical_dossier.get("related_entity_ids") or ()),
+                *(provider_dossier.get("related_entity_ids") or ()),
+            )
+            if str(value)
+        )
+    )
+    merged.update(
+        {
+            "schema_version": _DOSSIER_SCHEMA,
+            "quick_facts": quick_facts[:20],
+            "sections": sections,
+            "related_entity_ids": related,
+            "generated_from_legacy": False,
+            "generated_from_approved_facts": True,
+            "provider_authored_presentation": True,
+            "source_fact_ids": list(canonical_dossier.get("source_fact_ids") or ()),
+            "represented_field_ids": list(
+                canonical_dossier.get("represented_field_ids") or ()
+            ),
+        }
+    )
+    return merged
+
+
 def render_fact_derived_presentations(
     node: CampaignTopicNode,
     topic: GeneratedTopic,
 ) -> GeneratedTopic:
-    """Replace profile-driven prose with presentation derived from structured facts."""
+    """Render canonical facts while retaining clean provider-authored lore."""
 
     definition_rows = _definitions(node)
     if not definition_rows:
         return topic
     contradiction_report = audit_presentation_contradictions(node, topic)
+    contradicted_entity_ids = {
+        contradiction.entity_id for contradiction in contradiction_report.contradictions
+    }
     definitions = {
         str(definition.get("field_id") or ""): definition
         for definition in definition_rows
@@ -304,6 +414,8 @@ def render_fact_derived_presentations(
 
     entities: list[dict[str, Any]] = []
     issues: list[StructuredFactIssue] = []
+    preserved_entity_ids: set[str] = set()
+    provider_generated = _provider_generated(topic)
     for original in topic.entities:
         entity_id = _entity_id(original)
         entity_facts = tuple(facts_by_entity.get(entity_id, ()))
@@ -319,25 +431,40 @@ def render_fact_derived_presentations(
             )
             continue
         canonical = _canonical_entity(node, original, entity_facts)
-        short_summary, dossier = _build_dossier(
+        fact_summary, fact_dossier = _build_dossier(
             node,
             canonical,
             entity_facts,
             definitions,
         )
+        provider_presentation = (
+            _provider_presentation(original)
+            if provider_generated and entity_id not in contradicted_entity_ids
+            else None
+        )
+        if provider_presentation is not None:
+            short_summary, provider_dossier = provider_presentation
+            dossier = _merge_provider_dossier(provider_dossier, fact_dossier)
+            preserved_entity_ids.add(entity_id)
+        else:
+            short_summary = fact_summary
+            dossier = fact_dossier
         canonical.update(
             {
                 "short_summary": short_summary,
                 "dossier": dossier,
                 "dossier_status": "complete",
-                "presentation_source_fact_ids": dossier["source_fact_ids"],
+                "presentation_source_fact_ids": fact_dossier["source_fact_ids"],
             }
         )
         entities.append(canonical)
     if issues:
         raise StructuredFactValidationError(issues)
 
-    proposals = _presentation_fact_proposals(topic)
+    proposals = _presentation_fact_proposals(
+        topic,
+        preserved_entity_ids=preserved_entity_ids,
+    )
     contradiction_rows = contradiction_report.as_dict()["contradictions"]
     documents = tuple(
         {
@@ -362,8 +489,10 @@ def render_fact_derived_presentations(
         documents=documents,
         provenance={
             **dict(topic.provenance),
-            "presentation_schema": "rpg_fact_derived_presentation_v1",
+            "presentation_schema": "rpg_fact_derived_presentation_v2",
             "presentation_derived_from_structured_facts": True,
+            "provider_presentations_preserved": bool(preserved_entity_ids),
+            "provider_presentation_entity_ids": sorted(preserved_entity_ids),
             "presentation_fact_proposals": proposals,
             "presentation_contradiction_report": contradiction_report.as_dict(),
             "discarded_noncanonical_fact_count": sum(
