@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.rpg.session.genesis.world_forge_profile_generation import STANDARD_DOMAIN_IDS
 from app.rpg.worlds.authoring_service import read_authoring_manifest
 
 
@@ -24,7 +25,7 @@ def _empty_cyberpunk_detail() -> dict[str, object]:
     }
 
 
-def test_empty_cyberpunk_world_uses_profile_sections_before_generation(
+def test_empty_cyberpunk_world_uses_standard_profile_sections_before_generation(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
@@ -37,17 +38,13 @@ def test_empty_cyberpunk_world_uses_profile_sections_before_generation(
     )
 
     manifest = read_authoring_manifest("world:cyberpunk-2099")
-    section_ids = {str(section["id"]) for section in manifest["sections"]}
+    sections = {str(section["id"]): section for section in manifest["sections"]}
 
-    assert {"networks", "augmentations", "places", "groups", "actors"}.issubset(
-        section_ids
-    )
-    assert {
-        "spells",
-        "races",
-        "classes",
-        "pantheon",
-        "hero_system",
-        "monsters",
-    }.isdisjoint(section_ids)
+    assert set(STANDARD_DOMAIN_IDS).issubset(sections)
+    assert sections["actors"]["page_kind"] == "collection"
+    assert sections["actors"]["supports_images"] is True
+    assert sections["places"]["page_kind"] == "collection"
+    assert sections["groups"]["page_kind"] == "collection"
+    assert sections["setting_rules"]["page_kind"] == "document"
+    assert {"spells", "pantheon", "hero_system"}.isdisjoint(sections)
     assert manifest["generation"] == {}
