@@ -56,13 +56,6 @@ export function worldEditorSearch(route: RpgWorldEditorRoute | null, currentSear
   return query ? `?${query}` : '';
 }
 
-export function pushWorldEditorRoute(route: RpgWorldEditorRoute | null, replace = false): void {
-  if (typeof window === 'undefined') return;
-  const next = `${window.location.pathname}${worldEditorSearch(route, window.location.search)}`;
-  if (replace) window.history.replaceState(route, '', next);
-  else window.history.pushState(route, '', next);
-}
-
 function slug(value: string, fallback: string): string {
   const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return normalized || fallback;
@@ -79,25 +72,126 @@ export function documentAnchors(blocks: RpgAuthoringDocumentBlock[]): Array<{ id
   });
 }
 
-const CHRONICLE_IDS = new Set(['history', 'calendar', 'calendar_and_eras', 'current_conflicts']);
+const CHRONICLE_IDS = new Set([
+  'history',
+  'history_timeline',
+  'calendar',
+  'calendar_and_eras',
+]);
+
+const PROSE_CHRONICLE_HEADINGS = /^(?:overview|introduction|how time is measured|timekeeping|calendar structure|cycles|days and weeks|months and seasons|dating conventions|historical context)$/i;
+const TEMPORAL_HEADING = /(?:\b\d{2,4}\b|\bage\b|\bera\b|\bepoch\b|\bperiod\b|\bcentury\b|\byear\b|\btimeline\b|\bchronology\b|\bturning points?\b|\bobservances?\b|\bfestivals?\b)/i;
+const MARKDOWN_HEADING = /^(#{1,6})\s+(.+?)\s*$/;
+const SIMPLE_HEADING = /^[A-Z][^.!?]{1,78}:?$/;
 
 export function isChronicleSection(sectionId: string): boolean {
   return CHRONICLE_IDS.has(sectionId);
+}
+
+function cleanHeading(value: string): string {
+  return value.replace(/^#{1,6}\s+/, '').replace(/:\s*$/, '').trim();
+}
+
+function isSimpleHeading(lines: string[], index: number): boolean {
+  const line = lines[index]?.trim() ?? '';
+  if (!line || !SIMPLE_HEADING.test(line) || line.split(/\s+/).length > 10) return false;
+  const beforeBlank = index === 0 || !lines[index - 1].trim();
+  const afterBlank = index === lines.length - 1 || !lines[index + 1].trim();
+  return beforeBlank && afterBlank;
+}
+
+function splitHeadedSection(block: RpgAuthoringDocumentBlock): RpgAuthoringDocumentBlock[] {
+  if (block.kind !== 'section' || !block.body?.trim()) return [block];
+  const lines = block.body.replace(/\r\n/g, '\n').split('\n');
+  const sections: Array<{ title: string; lines: string[] }> = [];
+  let current = { title: block.title || 'Overview', lines: [] as string[] };
+  let foundHeading = false;
+
+  lines.forEach((line, index) => {
+    const markdown = line.trim().match(MARKDOWN_HEADING);
+    const simple = !markdown && isSimpleHeading(lines, index);
+    if (markdown || simple) {
+      const body = current.lines.join('\n').trim();
+      if (body) sections.push({ ...current, lines: [body] });
+      current = {
+        title: cleanHeading(markdown?.[2] ?? line.trim()),
+        lines: [],
+      };
+      foundHeading = true;
+      return;
+    }
+    current.lines.push(line);
+  });
+
+  const finalBody = current.lines.join('\n').trim();
+  if (finalBody) sections.push({ ...current, lines: [finalBody] });
+  if (!foundHeading || sections.length < 2) return [block];
+
+  return sections.map((section) => ({
+    kind: 'section',
+    title: section.title,
+    body: section.lines.join('\n\n').trim(),
+  }));
+}
+
+function hasTemporalMetadata(item: Record<string, unknown>): boolean {
+  return [
+    item.date,
+    item.year,
+    item.era,
+    item.epoch,
+    item.period,
+    item.range,
+    item.start_year,
+    item.end_year,
+    item.season,
+    item.month,
+  ].some((value) => value != null && String(value).trim());
+}
+
+function isChronicleProse(block: RpgAuthoringDocumentBlock): boolean {
+  return Boolean(block.title && PROSE_CHRONICLE_HEADINGS.test(block.title.trim()));
+}
+
+function chronicleBlock(block: RpgAuthoringDocumentBlock): RpgAuthoringDocumentBlock {
+  if (block.kind === 'json' || block.kind === 'timeline') return block;
+  if (block.kind === 'section' && isChronicleProse(block)) return block;
+
+  if (block.items?.length) {
+    const temporal = block.items.some((item) => hasTemporalMetadata(item));
+    if (temporal || block.kind === 'facts' || block.kind === 'records' || TEMPORAL_HEADING.test(block.title ?? '')) {
+      return { ...block, kind: 'timeline' };
+    }
+  }
+
+  if (block.kind === 'section' && (TEMPORAL_HEADING.test(block.title ?? '') || block.body)) {
+    return {
+      kind: 'timeline',
+      title: block.title || 'Chronicle',
+      items: [{
+        title: block.title || 'Chronicle entry',
+        era: TEMPORAL_HEADING.test(block.title ?? '') ? block.title : undefined,
+        body: block.body,
+      }],
+    };
+  }
+  return block;
 }
 
 export function presentLoreBlocks(
   sectionId: string,
   blocks: RpgAuthoringDocumentBlock[],
 ): RpgAuthoringDocumentBlock[] {
+  const headed = blocks.flatMap(splitHeadedSection);
   if (CHRONICLE_IDS.has(sectionId)) {
-    return blocks.map((block) => block.kind === 'json' ? block : { ...block, kind: 'timeline' });
+    return headed.map(chronicleBlock);
   }
-  if (sectionId === 'realm') {
-    return blocks.map((block, index) => ({
+  if (sectionId === 'realm' || sectionId === 'realm_overview') {
+    return headed.map((block, index) => ({
       ...block,
       kind: block.kind === 'json' ? 'json' : index === 0 ? 'realm-summary' : block.kind,
       title: block.title || (index === 0 ? 'Realm identity' : undefined),
     }));
   }
-  return blocks;
+  return headed;
 }
