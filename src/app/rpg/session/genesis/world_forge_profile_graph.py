@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
+from .world_forge_lore_quality import lore_quality_contract
 from .world_forge_profiles import DomainDefinition, GenreProfile
 
 _PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
@@ -63,7 +64,7 @@ def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
     category = domain.category
     if category == "domain":
         category = domain.domain_id if page_kind == "collection" else "lore"
-    return CampaignTopicNode(
+    probe = CampaignTopicNode(
         topic_id=domain.domain_id,
         title=domain.title,
         category=category,
@@ -72,6 +73,21 @@ def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
         required_before_launch=domain.required_before_launch,
         visibility=domain.visibility_default,
         target_count=max(1, domain.target_range.target(depth)),
+        metadata=metadata,
+    )
+    configured_lore_quality = _record(
+        _record(domain.generation_guidance).get("lore_quality")
+    )
+    metadata["lore_quality"] = configured_lore_quality or lore_quality_contract(probe)
+    return CampaignTopicNode(
+        topic_id=probe.topic_id,
+        title=probe.title,
+        category=probe.category,
+        dependencies=probe.dependencies,
+        generator_role=probe.generator_role,
+        required_before_launch=probe.required_before_launch,
+        visibility=probe.visibility,
+        target_count=probe.target_count,
         metadata=metadata,
     )
 
@@ -160,41 +176,41 @@ def build_profile_topic_graph(
 
 def _dependency_closure(
     graph: CampaignTopicGraph,
-    selected_ids: Iterable[str],
-) -> set[str]:
-    node_map = graph.node_map()
-    selected = {str(topic_id) for topic_id in selected_ids}
-    pending = list(selected)
-    while pending:
-        topic_id = pending.pop()
-        node = node_map.get(topic_id)
-        if node is None:
-            continue
-        for dependency in node.dependencies:
-            if dependency not in selected:
-                selected.add(dependency)
-                pending.append(dependency)
-    return selected
+   
+        nodes.append(
+            CampaignTopicNode(
+                topic_id=node.topic_id,
+                title=node.title,
+                category=node.category,
+                dependencies=dependencies,
+                generator_role=node.generator_role,
+                required_before_launch=True,
+                visibility=node.visibility,
+                target_count=node.target_count,
+                metadata=dict(node.metadata),
+            )
+        )
 
-
-def build_profile_launch_topic_graph(
-    graph: CampaignTopicGraph,
-    profile: GenreProfile,
-) -> CampaignTopicGraph:
-    """Project the first-turn graph from profile launch requirements."""
-
-    profile.require_valid()
-    selected = set(profile.launch_requirements.required_domain_ids)
-    selected.update(
-        domain.domain_id
-        for domain in profile.domains
-        if domain.required_before_launch
-        or set(domain.semantic_roles)
-        & set(profile.launch_requirements.required_semantic_roles)
+    projected = CampaignTopicGraph(
+        graph_version=graph.graph_version,
+        campaign_template=graph.campaign_template,
+        depth=graph.depth,
+        nodes=tuple(nodes),
+        metadata={
+            **dict(graph.metadata),
+            "generation_tier": "launch_canon",
+            "deferred_topic_ids": [
+                node.topic_id
+                for node in graph.topological_order()
+                if node.topic_id not in selected
+                and node.category not in _PIPELINE_CATEGORIES
+            ],
+        },
     )
-    selected = _dependency_closure(graph, selected)
-    selected.update(_PIPELINE_CATEGORIES)
-    pipeline_ids = {
+    issues = projected.validate()
+    if issues:
+        raise ValueError("invalid_profile_launch_topic_graph:" + ",".join(issues))
+    missing = set(profile.launch_requirements.required_domain_ids pipeline_ids = {
         node.topic_id
         for node in graph.nodes
         if node.category in _PIPELINE_CATEGORIES
