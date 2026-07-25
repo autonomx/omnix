@@ -9,7 +9,13 @@ from fastapi import FastAPI, HTTPException, Request
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.debug_logging import new_rpg_trace_id
-from app.rpg.worlds.generation_retry import retry_failed_world_generation
+from app.rpg.worlds.generation_retry import (
+    decide_world_generation_retry,
+    retry_failed_world_generation,
+)
+from app.rpg.worlds.generation_review_analytics import (
+    world_generation_review_analytics,
+)
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_generation_review_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_generation_review_hook_installed"
@@ -41,7 +47,21 @@ def _error(exc: Exception) -> HTTPException:
     )
 
 
-def _run_with_results(run_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _decisions(run: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    lineage = dict(run.get("lineage") or {})
+    value = lineage.get("review_decisions")
+    if not isinstance(value, Mapping):
+        value = dict(run.get("plan") or {}).get("review_decisions")
+    return {
+        str(key): dict(row)
+        for key, row in dict(value or {}).items()
+        if isinstance(row, Mapping)
+    }
+
+
+def _run_with_results(
+    run_id: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
     context = bootstrap_local_tenant(None)
     with unit_of_work(None) as work:
         run = work.world_generation.get(context, run_id)
@@ -59,18 +79,16 @@ def _run_with_results(run_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]
     parent_by_topic = {
         str(row.get("topic_id") or ""): row for row in parent_results
     }
+    decisions = _decisions(run)
     augmented = [
         {
             **row,
             "previous_result": parent_by_topic.get(str(row.get("topic_id") or "")),
+            "decision": decisions.get(str(row.get("topic_id") or "")),
         }
         for row in results
     ]
-    return run, augmented
-
-
-def _results(run_id: str) -> list[dict[str, Any]]:
-    return _run_with_results(run_id)[1]
+    return run, augmented, world_generation_review_analytics(augmented, run)
 
 
 def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
@@ -84,12 +102,14 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
     )
     def rpg_world_generation_results(run_id: str) -> dict[str, Any]:
         try:
-            run, results = _run_with_results(run_id)
+            run, results, analytics = _run_with_results(run_id)
             return {
                 "ok": True,
                 "run_id": run_id,
                 "parent_run_id": run.get("parent_run_id"),
                 "topic_results": results,
+                "analytics": analytics,
+                "review_decisions": _decisions(run),
             }
         except Exception as exc:
             raise _error(exc) from exc
@@ -103,7 +123,7 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
         topic_id: str,
     ) -> dict[str, Any]:
         try:
-            run, results = _run_with_results(run_id)
+            run, results, _analytics = _run_with_results(run_id)
             result = next(
                 (
                     row
@@ -154,6 +174,26 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
                     retry_scopes if isinstance(retry_scopes, Mapping) else {}
                 ),
                 diagnostic_id=diagnostic_id,
+            )
+        except Exception as exc:
+            raise _error(exc) from exc
+
+    @app.post(
+        "/api/rpg/world-generation/{run_id}/results/{topic_id}/decision",
+        include_in_schema=False,
+    )
+    async def rpg_world_generation_retry_decision(
+        run_id: str,
+        topic_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        decision = str(payload.get("decision") or "")
+        try:
+            return decide_world_generation_retry(
+                run_id,
+                topic_id,
+                decision=decision,
             )
         except Exception as exc:
             raise _error(exc) from exc
