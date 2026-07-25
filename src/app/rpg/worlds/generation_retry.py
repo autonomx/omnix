@@ -1,6 +1,7 @@
 """Explicit Game Master retry for reviewed World Forge topic candidates."""
 from __future__ import annotations
 
+import json
 from typing import Any, Mapping, Sequence
 
 from app.persistence.identity_service import bootstrap_local_tenant
@@ -89,12 +90,18 @@ def _manual_retry_directives(
         previous = dict(previous_results.get(topic_id) or {})
         validation = dict(previous.get("validation") or {})
         requested = dict(retry_scopes.get(topic_id) or {})
+        prior_candidate = previous.get("candidate")
         directives[topic_id] = {
             **directives.get(topic_id, {}),
             "manual_retry": {
                 "parent_run_id": parent_run_id,
                 "prior_status": str(previous.get("status") or ""),
                 "prior_candidate_hash": str(previous.get("candidate_hash") or ""),
+                "prior_candidate": (
+                    dict(prior_candidate)
+                    if isinstance(prior_candidate, Mapping)
+                    else None
+                ),
                 "reason_codes": list(validation.get("reason_codes") or ()),
                 "issues": list(validation.get("issues") or ()),
                 "scope": str(requested.get("scope") or "topic"),
@@ -138,7 +145,7 @@ def _pin_parent_run(
             "WHERE workspace_id = %s AND run_id = %s",
             (
                 parent_run_id,
-                __import__("json").dumps(lineage, sort_keys=True),
+                json.dumps(lineage, sort_keys=True),
                 context.workspace_id,
                 child_run_id,
             ),
@@ -184,7 +191,9 @@ def retry_failed_world_generation(
         )
 
     reviewable = _reviewable_topic_ids(parent_run)
-    requested = tuple(dict.fromkeys(str(value) for value in selected_topic_ids if str(value)))
+    requested = tuple(
+        dict.fromkeys(str(value) for value in selected_topic_ids if str(value))
+    )
     if requested:
         invalid = sorted(set(requested) - set(reviewable))
         if invalid:
