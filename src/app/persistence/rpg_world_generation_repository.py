@@ -13,6 +13,13 @@ context_jsonb, settings_jsonb, plan_jsonb, progress_jsonb, error_jsonb,
 parent_run_id, lineage_jsonb, created_at, updated_at, completed_at
 """
 
+_RESULT_COLUMNS = """
+workspace_id, run_id, world_id, draft_revision, topic_id, status,
+candidate_jsonb, candidate_hash, validation_jsonb, provider_jsonb,
+dependency_hashes_jsonb, dependency_trust_jsonb, job_id,
+created_at, updated_at
+"""
+
 
 def _run_row(row: Any) -> dict[str, Any]:
     return {
@@ -35,8 +42,28 @@ def _run_row(row: Any) -> dict[str, Any]:
     }
 
 
+def _result_row(row: Any) -> dict[str, Any]:
+    return {
+        "workspace_id": str(row[0]),
+        "run_id": str(row[1]),
+        "world_id": str(row[2]),
+        "draft_revision": int(row[3]),
+        "topic_id": str(row[4]),
+        "status": str(row[5]),
+        "candidate": dict(row[6]) if row[6] is not None else None,
+        "candidate_hash": str(row[7]),
+        "validation": dict(row[8]),
+        "provider": dict(row[9]),
+        "dependency_hashes": dict(row[10]),
+        "dependency_trust": dict(row[11]),
+        "job_id": str(row[12]),
+        "created_at": row[13].isoformat(),
+        "updated_at": row[14].isoformat(),
+    }
+
+
 class PostgresRpgWorldGenerationRepository:
-    """Durable coordination state for world-owned topic generation DAGs."""
+    """Durable coordination state and immutable topic results for World Forge DAGs."""
 
     def __init__(self, connection: Any) -> None:
         self.connection = connection
@@ -153,9 +180,9 @@ class PostgresRpgWorldGenerationRepository:
                    progress_jsonb = COALESCE(%s::jsonb, progress_jsonb),
                    error_jsonb = COALESCE(%s::jsonb, error_jsonb),
                    completed_at = CASE
-                       WHEN COALESCE(%s, status) IN ('ready', 'failed', 'canceled')
+                       WHEN COALESCE(%s, status) IN ('review', 'ready', 'failed', 'canceled')
                        THEN COALESCE(completed_at, CURRENT_TIMESTAMP)
-                       ELSE completed_at
+                       ELSE NULL
                    END,
                    updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND run_id = %s
@@ -174,6 +201,99 @@ class PostgresRpgWorldGenerationRepository:
         if row is None:
             raise EntityNotFound(run_id)
         return _run_row(row)
+
+    def put_topic_result(
+        self,
+        context: TenantContext,
+        *,
+        run_id: str,
+        world_id: str,
+        draft_revision: int,
+        topic_id: str,
+        status: str,
+        candidate: Mapping[str, Any] | None,
+        candidate_hash: str,
+        validation: Mapping[str, Any],
+        provider: Mapping[str, Any],
+        dependency_hashes: Mapping[str, Any],
+        dependency_trust: Mapping[str, Any],
+        job_id: str = "",
+    ) -> dict[str, Any]:
+        row = self.connection.execute(
+            f"""
+            INSERT INTO omnix_rpg_world_generation_topic_results (
+                workspace_id, run_id, world_id, draft_revision, topic_id, status,
+                candidate_jsonb, candidate_hash, validation_jsonb, provider_jsonb,
+                dependency_hashes_jsonb, dependency_trust_jsonb, job_id
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb,
+                %s::jsonb, %s::jsonb, %s
+            )
+            ON CONFLICT (workspace_id, run_id, topic_id) DO NOTHING
+            RETURNING {_RESULT_COLUMNS}
+            """,
+            (
+                context.workspace_id,
+                run_id,
+                world_id,
+                int(draft_revision),
+                topic_id,
+                status,
+                canonical_json(dict(candidate)) if candidate is not None else None,
+                candidate_hash,
+                canonical_json(dict(validation)),
+                canonical_json(dict(provider)),
+                canonical_json(dict(dependency_hashes)),
+                canonical_json(dict(dependency_trust)),
+                job_id,
+            ),
+        ).fetchone()
+        if row is not None:
+            return _result_row(row)
+        existing = self.get_topic_result(context, run_id=run_id, topic_id=topic_id)
+        if existing is None:
+            raise RuntimeError("world_generation_topic_result_insert_failed")
+        same = (
+            existing["status"] == status
+            and existing["candidate_hash"] == candidate_hash
+            and existing["validation"] == dict(validation)
+            and existing["dependency_hashes"] == dict(dependency_hashes)
+            and existing["dependency_trust"] == dict(dependency_trust)
+        )
+        if not same:
+            raise RuntimeError(
+                f"world_generation_topic_result_conflict:{run_id}:{topic_id}"
+            )
+        return existing
+
+    def get_topic_result(
+        self,
+        context: TenantContext,
+        *,
+        run_id: str,
+        topic_id: str,
+    ) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            f"SELECT {_RESULT_COLUMNS} "
+            "FROM omnix_rpg_world_generation_topic_results "
+            "WHERE workspace_id = %s AND run_id = %s AND topic_id = %s",
+            (context.workspace_id, run_id, topic_id),
+        ).fetchone()
+        return _result_row(row) if row is not None else None
+
+    def list_topic_results(
+        self,
+        context: TenantContext,
+        *,
+        run_id: str,
+    ) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            f"SELECT {_RESULT_COLUMNS} "
+            "FROM omnix_rpg_world_generation_topic_results "
+            "WHERE workspace_id = %s AND run_id = %s ORDER BY topic_id",
+            (context.workspace_id, run_id),
+        ).fetchall()
+        return [_result_row(row) for row in rows]
 
     def get_topic(
         self,

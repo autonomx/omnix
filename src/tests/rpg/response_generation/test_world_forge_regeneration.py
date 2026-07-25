@@ -230,7 +230,7 @@ class InvalidReferenceProvider:
         )
 
 
-def test_live_provider_grounding_exhaustion_never_publishes_deterministic_fallback() -> None:
+def test_live_provider_grounding_failure_retains_candidate_for_review() -> None:
     node = CampaignTopicNode(
         topic_id="setting_rules",
         title="Setting Rules",
@@ -250,13 +250,24 @@ def test_live_provider_grounding_exhaustion_never_publishes_deterministic_fallba
         },
     )
 
-    with pytest.raises(RuntimeError, match="world_forge_provider_generation_failed:setting_rules"):
-        ReferenceSafeWorldForgeGenerator(InvalidReferenceProvider()).generate(
-            node,
-            seed=7,
-            campaign_context={"world_brief": {"title": "Neon Harbor", "description": "A corporate port city."}},
-            dependency_topics={},
-        )
+    result = ReferenceSafeWorldForgeGenerator(InvalidReferenceProvider()).generate(
+        node,
+        seed=7,
+        campaign_context={
+            "world_brief": {
+                "title": "Neon Harbor",
+                "description": "A corporate port city.",
+            }
+        },
+        dependency_topics={},
+    )
+
+    assert result.entities[0]["name"] == "Corporate Hegemony"
+    assert result.provenance["generation_status"] == "needs_review"
+    review = result.provenance["generation_review"]
+    assert review["blocking"] is True
+    assert review["reason_codes"]
+    assert result.provenance["generator"].startswith("structured_world_forge_provider_")
 
 
 class ExhaustedStructuredProvider:
@@ -274,7 +285,7 @@ class ExhaustedStructuredProvider:
         )
 
 
-def test_exhausted_structured_provider_never_publishes_deterministic_fallback() -> None:
+def test_provider_failure_without_candidate_remains_terminal() -> None:
     node = CampaignTopicNode(
         topic_id="setting_rules",
         title="Setting Rules",
@@ -294,10 +305,18 @@ def test_exhausted_structured_provider_never_publishes_deterministic_fallback() 
         },
     )
 
-    with pytest.raises(RuntimeError, match="world_forge_provider_generation_failed:setting_rules"):
+    with pytest.raises(
+        RuntimeError,
+        match="structured World Forge provider failed for places batch 1/18 after 3 attempts",
+    ):
         ReferenceSafeWorldForgeGenerator(ExhaustedStructuredProvider()).generate(
             node,
             seed=7,
-            campaign_context={"world_brief": {"title": "Neon Harbor", "description": "A corporate port city."}},
+            campaign_context={
+                "world_brief": {
+                    "title": "Neon Harbor",
+                    "description": "A corporate port city.",
+                }
+            },
             dependency_topics={},
         )

@@ -18,27 +18,22 @@ from .world_forge_domains import (
     normalize_structured_domain,
     validate_world_brief_grounding,
 )
-from .world_forge_fact_pipeline import (
-    StructuredFactValidationError,
-    compile_structured_entity_facts,
-)
+from .world_forge_fact_pipeline import compile_structured_entity_facts
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
-from .world_forge_integrity import (
-    WorldForgeIntegrityError,
-    validate_and_normalize_provider_topic,
+from .world_forge_integrity import validate_and_normalize_provider_topic
+from .world_forge_lore_scoring import (
+    WorldForgeLoreQualityError,
+    require_preferred_lore_quality,
 )
-from .world_forge_lore_scoring import require_preferred_lore_quality
 from .world_forge_presentation import render_fact_derived_presentations
 from .world_forge_profile_deterministic import generate_deterministic_profile_topic
-from .world_forge_regeneration import generate_with_targeted_regeneration
-from .world_forge_semantic_quality import (
-    WorldForgeSemanticQualityError,
-    require_topic_semantic_quality,
-)
+from .world_forge_regeneration import RegenerationRequest, enforce_targeted_regeneration
+from .world_forge_review import is_reviewable_candidate_error, mark_needs_review
+from .world_forge_semantic_quality import require_topic_semantic_quality
 
 
 class ReferenceSafeWorldForgeGenerator:
-    """Validate and improve generated topics without inventing semantic repairs."""
+    """Validate one generated candidate without automatic content regeneration."""
 
     def __init__(
         self,
@@ -54,40 +49,83 @@ class ReferenceSafeWorldForgeGenerator:
 
     @staticmethod
     def _max_regeneration_attempts(campaign_context: Mapping[str, Any]) -> int:
-        """Return total attempts: initial generation plus one retry by default."""
+        """Compatibility surface: automatic content regeneration is always disabled."""
 
-        try:
-            return max(
-                1,
-                min(
-                    int(campaign_context.get("targeted_regeneration_max_attempts") or 2),
-                    2,
-                ),
-            )
-        except (TypeError, ValueError):
-            return 2
+        del campaign_context
+        return 1
 
     @staticmethod
-    def _recoverable_provider_failure(error: Exception) -> bool:
-        """Return whether a live provider exhausted its own structured retries."""
+    def _manual_retry_config(
+        campaign_context: Mapping[str, Any],
+    ) -> Mapping[str, Any] | None:
+        directives = campaign_context.get("topic_directives")
+        directives = directives if isinstance(directives, Mapping) else {}
+        retry = directives.get("manual_retry")
+        return retry if isinstance(retry, Mapping) else None
 
-        if isinstance(
-            error,
-            (
-                WorldForgeIntegrityError,
-                StructuredFactValidationError,
-                WorldForgeSemanticQualityError,
-            ),
-        ):
-            return True
-        # World-brief grounding is another provider-output boundary. It is not
-        # represented by a structured regeneration request, so a provider that
-        # repeatedly ignores it must use the deterministic fallback instead.
-        if isinstance(error, ValueError) and str(error).startswith(
-            ("world_brief_grounding:", "world_generation_placeholder_entity:")
-        ):
-            return True
-        return str(error).startswith("structured World Forge provider failed")
+    @classmethod
+    def _manual_retry_candidate(
+        cls,
+        topic: GeneratedTopic,
+        campaign_context: Mapping[str, Any],
+    ) -> GeneratedTopic:
+        retry = cls._manual_retry_config(campaign_context)
+        if retry is None:
+            return topic
+        prior_value = retry.get("prior_candidate")
+        if not isinstance(prior_value, Mapping):
+            return topic
+        prior = GeneratedTopic.from_dict(prior_value)
+        request = RegenerationRequest(
+            topic_id=topic.topic_id,
+            attempt=1,
+            reason_codes=tuple(str(value) for value in retry.get("reason_codes") or ()),
+            entity_ids=tuple(str(value) for value in retry.get("entity_ids") or ()),
+            fields=tuple(str(value) for value in retry.get("fields") or ()),
+            scope=str(retry.get("scope") or "topic"),
+            instructions=tuple(str(value) for value in retry.get("instructions") or ()),
+        )
+        return enforce_targeted_regeneration(prior, topic, request)
+
+    @classmethod
+    def _mark_manual_decision_required(
+        cls,
+        node: CampaignTopicNode,
+        topic: GeneratedTopic,
+        campaign_context: Mapping[str, Any],
+    ) -> GeneratedTopic:
+        retry = cls._manual_retry_config(campaign_context)
+        if retry is None:
+            return topic
+        return replace(
+            topic,
+            provenance={
+                **dict(topic.provenance),
+                "generation_status": "needs_review",
+                "manual_retry_pending_decision": True,
+                "manual_retry_parent_run_id": str(retry.get("parent_run_id") or ""),
+                "generation_review": {
+                    "schema_version": "rpg_world_generation_review_v1",
+                    "status": "needs_review",
+                    "blocking": True,
+                    "error_type": "ManualRetryDecisionRequired",
+                    "reason_codes": ["manual_retry_decision_required"],
+                    "issues": [
+                        {
+                            "code": "manual_retry_decision_required",
+                            "topic_id": node.topic_id,
+                            "entity_id": "",
+                            "field_id": "",
+                            "message": (
+                                "The retry candidate passed validation and requires an explicit "
+                                "Game Master keep or replace decision."
+                            ),
+                        }
+                    ],
+                    "summary": "Valid retry candidate awaits explicit Game Master promotion.",
+                },
+            },
+        )
 
     def generate(
         self,
@@ -105,11 +143,6 @@ class ReferenceSafeWorldForgeGenerator:
                 dependency_topics=dependency_topics,
             )
 
-        # The legacy deterministic generator dispatches several mature topic IDs
-        # through fixed fantasy-era schemas. Profile-defined topics may intentionally
-        # reuse those IDs with different entity kinds and reference domains. Enter
-        # through the profile generator directly so quests can reference
-        # actor/place/group rather than being rejected for lacking npc/location/faction.
         if (
             node.metadata.get("field_definitions")
             and isinstance(self.generator, DeterministicWorldForgeGenerator)
@@ -121,32 +154,40 @@ class ReferenceSafeWorldForgeGenerator:
                     dependency_topics=dependency_topics,
                 )
             )
+            processed = self._mark_manual_decision_required(
+                node,
+                processed,
+                campaign_context,
+            )
             return attach_structured_canon_lookup(processed)
 
-        max_attempts = self._max_regeneration_attempts(campaign_context)
+        generated = self.generator.generate(
+            node,
+            seed=seed,
+            campaign_context=campaign_context,
+            dependency_topics=dependency_topics,
+        )
+        scoped = generated
         try:
-            generated = generate_with_targeted_regeneration(
-                self.generator,
-                node,
-                seed=seed,
-                campaign_context=campaign_context,
-                dependency_topics=dependency_topics,
-                process=process,
-                max_attempts=max_attempts,
-            )
+            scoped = self._manual_retry_candidate(generated, campaign_context)
+            processed = process(scoped)
         except Exception as exc:
-            if not self._recoverable_provider_failure(exc):
+            if not self._provider_generated(generated) or not is_reviewable_candidate_error(exc):
                 raise
-            # Never replace failed provider lore with deterministic prose.  A
-            # caller may retain the best structurally valid provider candidate
-            # (the regeneration coordinator does this for quality misses), but
-            # an invalid or unavailable provider result must remain a retryable
-            # failure instead of becoming visible canon.
-            raise RuntimeError(
-                f"world_forge_provider_generation_failed:{node.topic_id}:"
-                f"{type(exc).__name__}"
-            ) from exc
-        return attach_structured_canon_lookup(generated)
+            candidate = (
+                exc.candidate_topic
+                if isinstance(exc, WorldForgeLoreQualityError)
+                else scoped
+            )
+            return attach_structured_canon_lookup(
+                mark_needs_review(node, candidate, exc)
+            )
+        processed = self._mark_manual_decision_required(
+            node,
+            processed,
+            campaign_context,
+        )
+        return attach_structured_canon_lookup(processed)
 
     def _process_topic(
         self,
@@ -167,14 +208,6 @@ class ReferenceSafeWorldForgeGenerator:
                 aliases=dict(aliases) if isinstance(aliases, Mapping) else None,
             )
 
-        # Profile field definitions are the authoritative ontology. A profile may
-        # deliberately reuse a mature topic ID such as quests or opening_scenarios
-        # while changing its entity kinds and reference domains. Running those
-        # records through the legacy fixed-domain normalizer or integrity map first
-        # would incorrectly require npc/location/faction IDs and reject
-        # actor/place/group canon. Profile-defined provider output remains fail-closed
-        # below through compile_structured_entity_facts, which validates IDs, kinds,
-        # required fields, value types, allowed target domains, and exact references.
         if not profile_defined:
             topic = normalize_structured_domain(
                 node,

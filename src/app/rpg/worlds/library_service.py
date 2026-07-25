@@ -13,7 +13,7 @@ from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topi
 
 from .generation_coordinator import reconcile_world_generation, start_world_generation
 from .generation_jobs import WorldTopicGenerationSettings, canonical_hash
-from .generation_publication import publish_world_generation
+from .generation_publication_guard import publish_world_generation
 from .generation_routing import resolve_world_forge_route
 from .generation_scope import resolve_generation_scope
 from .generation_worker import kick_world_generation_worker
@@ -123,6 +123,13 @@ def read_world_detail(
         releases = work.world_library.list_world_releases(context, world_id)
         scenarios = work.world_library.list_scenarios(context, world_id=world_id)
         runs = work.world_library.list_generation_runs(context, world_id=world_id)
+        generation_topic_results = {
+            str(run["run_id"]): work.world_generation.list_topic_results(
+                context,
+                run_id=str(run["run_id"]),
+            )
+            for run in runs
+        }
         scenario_revisions = {
             scenario["id"]: work.world_library.list_scenario_revisions(
                 context,
@@ -145,6 +152,7 @@ def read_world_detail(
         "scenarios": scenarios,
         "scenario_revisions": scenario_revisions,
         "generation_runs": runs,
+        "generation_topic_results": generation_topic_results,
     }
 
 
@@ -201,6 +209,10 @@ def _execution_summary(run: Mapping[str, Any]) -> dict[str, Any]:
         "reused_count": len(plan.get("reusable_topic_ids") or ()),
         "protected_count": len(plan.get("protected_topic_ids") or ()),
         "active_count": len(active_topics),
+        "accepted_count": len(progress.get("accepted_topic_ids") or ()),
+        "flagged_count": len(progress.get("flagged_topic_ids") or ()),
+        "failed_count": len(progress.get("failed_topic_ids") or ()),
+        "blocked_count": len(progress.get("blocked_topic_ids") or ()),
     }
 
 
@@ -342,7 +354,14 @@ def read_world_generation(
             database=database,
             provider_route=str(settings.get("provider_route") or ""),
         )
-    return {"ok": True, "run": run}
+    context = bootstrap_local_tenant(_database(database))
+    with unit_of_work(database) as work:
+        topic_results = work.world_generation.list_topic_results(
+            context,
+            run_id=run_id,
+        )
+        work.rollback()
+    return {"ok": True, "run": run, "topic_results": topic_results}
 
 
 def publish_world_library_generation(

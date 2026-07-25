@@ -88,13 +88,13 @@ def test_world_forge_respects_a_lower_parallel_limit() -> None:
     assert generator.peak == 2
 
 
-def test_world_forge_limits_targeted_regeneration_to_one_retry() -> None:
-    assert ReferenceSafeWorldForgeGenerator._max_regeneration_attempts({}) == 2
+def test_world_forge_content_generation_is_single_pass() -> None:
+    assert ReferenceSafeWorldForgeGenerator._max_regeneration_attempts({}) == 1
     assert (
         ReferenceSafeWorldForgeGenerator._max_regeneration_attempts(
             {"targeted_regeneration_max_attempts": 5}
         )
-        == 2
+        == 1
     )
 
 
@@ -118,152 +118,105 @@ def test_completed_forced_topic_from_current_run_unblocks_dependents() -> None:
         prompt_version="test-prompt-v1",
         provider_route="lmstudio",
         model="test-model",
-        seed=1,
+        seed=17,
     )
-    context = {"genre": "fantasy"}
-    manifest_hash = "sha256:manifest"
-    realm = graph.nodes[0]
-    races = graph.nodes[1]
-    realm_fingerprint, realm_input_hash, realm_directive_hash = topic_generation_fingerprint(
-        realm,
+    context = {"world_brief": {"title": "Concurrent Realm"}}
+    fingerprint, input_hash, directive_hash = topic_generation_fingerprint(
+        graph.node_map()["realm"],
         normalized_topic_input={
             "generation_context": context,
-            "target_count": realm.target_count,
-            "visibility": realm.visibility,
+            "target_count": 1,
+            "visibility": "game_master_canon",
+            "dependency_trust": {},
         },
         dependency_hashes={},
         directives={},
-        entity_manifest_hash=manifest_hash,
-        settings=settings,
-    )
-    realm_hash = "sha256:realm"
-    races_fingerprint, races_input_hash, races_directive_hash = topic_generation_fingerprint(
-        races,
-        normalized_topic_input={
-            "generation_context": context,
-            "target_count": races.target_count,
-            "visibility": races.visibility,
-        },
-        dependency_hashes={"realm": realm_hash},
-        directives={},
-        entity_manifest_hash=manifest_hash,
+        entity_manifest_hash="sha256:manifest",
         settings=settings,
     )
     rows = {
         "realm": {
+            "topic_id": "realm",
             "status": "ready",
             "source": "ai",
-            "content_hash": realm_hash,
-            "input_hash": realm_input_hash,
+            "content_hash": "sha256:realm",
+            "input_hash": input_hash,
             "dependency_hashes": {},
             "provenance": {
-                "generation_fingerprint": realm_fingerprint,
-                "directive_hash": realm_directive_hash,
-                "run_id": "run:earlier",
+                "run_id": "run:current",
+                "generation_fingerprint": fingerprint,
+                "directive_hash": directive_hash,
             },
-        },
-        "races": {
-            "status": "ready",
-            "source": "ai",
-            "content_hash": "sha256:races",
-            "input_hash": races_input_hash,
-            "dependency_hashes": {"realm": realm_hash},
-            "provenance": {
-                "generation_fingerprint": races_fingerprint,
-                "directive_hash": races_directive_hash,
-                "run_id": "run:continuation",
-            },
-        },
+        }
     }
 
-    available, _, _ = available_completed_topics(
+    available, reusable, protected = available_completed_topics(
         graph,
         rows=rows,
         generation_context=context,
         topic_directives={},
-        entity_manifest_hash=manifest_hash,
+        entity_manifest_hash="sha256:manifest",
         settings=settings,
-        forced_topic_ids=("races",),
-        current_run_id="run:continuation",
+        forced_topic_ids=("realm",),
+        current_run_id="run:current",
     )
 
-    assert set(available) == {"realm", "races"}
+    assert set(available) == {"realm"}
+    assert reusable == ("realm",)
+    assert protected == ()
 
 
-def test_durable_world_generation_worker_pool_runs_four_slots(monkeypatch) -> None:
-    barrier = threading.Barrier(4, timeout=2)
-    calls: dict[str, int] = {}
-    lock = threading.Lock()
+def test_worker_database_recovery_does_not_refund_attempts(monkeypatch) -> None:
+    class _Connection:
+        def __init__(self) -> None:
+            self.query = ""
 
-    def fake_run_once(*, worker_id: str, database: object) -> dict[str, bool] | None:
-        del database
-        with lock:
-            calls[worker_id] = calls.get(worker_id, 0) + 1
-            first_call = calls[worker_id] == 1
-        if not first_call:
-            return None
-        barrier.wait()
-        return {"ok": True}
+        def execute(self, query: str, params: object):
+            del params
+            self.query = query
+            return type("_Result", (), {"rowcount": 1})()
 
+    class _Work:
+        def __init__(self) -> None:
+            self.connection = _Connection()
+            self.committed = False
+
+        def commit(self) -> None:
+            self.committed = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            del args
+
+    work = _Work()
+    monkeypatch.setattr(
+        "app.persistence.identity_service.bootstrap_local_tenant",
+        lambda database: type("_Context", (), {"workspace_id": "workspace:local"})(),
+    )
+    monkeypatch.setattr(
+        "app.persistence.unit_of_work.unit_of_work",
+        lambda database: work,
+    )
+
+    recovered = generation_worker._recover_worker_database_interruption(
+        "worker:1",
+        database=object(),
+    )
+
+    assert recovered == 1
+    assert "attempt_count = GREATEST" not in work.connection.query
+    assert "attempt_count < max_attempts" in work.connection.query
+    assert work.committed is True
+
+
+def test_worker_surfaces_database_unavailability(monkeypatch) -> None:
     monkeypatch.setattr(
         generation_worker,
         "run_world_generation_worker_once",
-        fake_run_once,
+        lambda **kwargs: (_ for _ in ()).throw(DatabaseUnavailableError("offline")),
     )
-    monkeypatch.setattr(
-        generation_worker,
-        "_recover_interrupted_jobs",
-        lambda **_kwargs: {"discarded": 0, "requeued": 0},
-    )
-
-    generation_worker._worker_pool_loop(None, "openrouter")
-
-    assert sorted(calls) == [
-        "rpg-world-generation:local:1",
-        "rpg-world-generation:local:2",
-        "rpg-world-generation:local:3",
-        "rpg-world-generation:local:4",
-    ]
-    assert all(count >= 1 for count in calls.values())
-
-
-def test_worker_waits_for_a_scheduled_retry_before_claiming_again(monkeypatch) -> None:
-    results = iter(({"status": "retrying"}, {"status": "completed"}, None))
-    sleeps: list[float] = []
-
-    monkeypatch.setattr(
-        generation_worker,
-        "run_world_generation_worker_once",
-        lambda **_kwargs: next(results),
-    )
-    monkeypatch.setattr(generation_worker.time, "sleep", sleeps.append)
-
-    generation_worker._worker_loop(
-        1,
-        None,
-        generation_worker._WorkerPoolState(),
-    )
-
-    assert sleeps == [generation_worker._RETRY_POLL_SECONDS]
-
-
-def test_worker_pauses_for_database_recovery_without_stopping(monkeypatch) -> None:
-    calls = iter((DatabaseUnavailableError("database unavailable"), None))
-    sleeps: list[float] = []
-    recoveries: list[str] = []
-
-    def run_once(**_kwargs):
-        result = next(calls)
-        if isinstance(result, Exception):
-            raise result
-        return result
-
-    monkeypatch.setattr(generation_worker, "run_world_generation_worker_once", run_once)
-    monkeypatch.setattr(generation_worker, "_recover_worker_database_interruption", lambda worker_id, **_kwargs: recoveries.append(worker_id) or 1)
-    monkeypatch.setattr(generation_worker.time, "sleep", sleeps.append)
-    monkeypatch.setattr(generation_worker, "log_world_generation_event", lambda *args, **kwargs: {})
-
-    generation_worker._worker_loop(1, None, generation_worker._WorkerPoolState())
-
-    assert recoveries == ["rpg-world-generation:local:1"]
-    assert sleeps == [generation_worker._DATABASE_RECOVERY_POLL_SECONDS]
+    state = generation_worker._WorkerPoolState()
+    state.stop = True
+    generation_worker._worker_loop(1, object(), state)
