@@ -1,5 +1,6 @@
 import type { RpgAuthoringDocumentBlock } from '../../api/rpgWorldAuthoringClient';
 import { formatAuthoringValue } from './RpgWorldEntityCard';
+import './RpgWorldTimeline.css';
 
 const PRIMARY_FIELDS = new Set([
   'id',
@@ -219,18 +220,68 @@ function StructuredRecord({
   );
 }
 
+function timelineMarker(item: Record<string, unknown>, index: number): string {
+  const start = item.start_year;
+  const end = item.end_year;
+  if (meaningful(start) && meaningful(end)) return `${String(start)}–${String(end)}`;
+  const value = item.date_label
+    ?? item.date
+    ?? item.year
+    ?? item.era
+    ?? item.epoch
+    ?? item.period
+    ?? item.range
+    ?? item.season
+    ?? item.month;
+  return meaningful(value) ? String(value) : `Entry ${index + 1}`;
+}
+
+function timelineOrder(item: Record<string, unknown>, index: number): number {
+  const value = item.chronology_index
+    ?? item.sequence
+    ?? item.start_year
+    ?? item.year;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : Number.MAX_SAFE_INTEGER + index;
+}
+
 function timelineItems(block: RpgAuthoringDocumentBlock): Array<Record<string, unknown>> {
-  if (block.items?.length) return block.items;
-  if (block.body) return [{ title: block.title ?? 'Chronicle entry', body: block.body }];
-  return [];
+  const items = block.items?.length
+    ? block.items
+    : block.body
+      ? [{ title: block.title ?? 'Chronicle entry', body: block.body }]
+      : [];
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => timelineOrder(left.item, left.index) - timelineOrder(right.item, right.index))
+    .map(({ item }) => item);
+}
+
+function TimelineBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
+  const items = timelineItems(block);
+  return (
+    <section className="rpg-authoring-document-block is-record-collection is-timeline">
+      {block.title ? <h3>{block.title}</h3> : null}
+      <ol className="rpg-authoring-timeline-list">
+        {items.map((item, index) => (
+          <li key={`${recordLabel(item, index, 'Event')}:${index}`}>
+            <div className="rpg-authoring-timeline-marker">
+              <span>{timelineMarker(item, index)}</span>
+            </div>
+            <StructuredRecord fallback="Event" index={index} item={item} />
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
 }
 
 function RecordBlock({ block }: { block: RpgAuthoringDocumentBlock }) {
-  const isTimeline = block.kind === 'timeline';
-  const items = isTimeline ? timelineItems(block) : block.items ?? [];
-  const fallback = isTimeline ? 'Era' : block.kind === 'facts' ? 'Fact' : 'Entry';
+  if (block.kind === 'timeline') return <TimelineBlock block={block} />;
+  const items = block.items ?? [];
+  const fallback = block.kind === 'facts' ? 'Fact' : 'Entry';
   return (
-    <section className={`rpg-authoring-document-block is-record-collection${isTimeline ? ' is-timeline' : ''}`}>
+    <section className="rpg-authoring-document-block is-record-collection">
       {block.title ? <h3>{block.title}</h3> : null}
       <div className="rpg-authoring-record-grid">
         {items.map((item, index) => (
