@@ -1,0 +1,201 @@
+"""Editable world-local genre profile review and approval services."""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+import json
+from typing import Any, Mapping
+
+from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.unit_of_work import unit_of_work
+from app.rpg.session.genesis.world_forge_profiles import genre_profile_from_dict
+
+from .lifecycle_service import require_world_writable
+
+
+def _record(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _integer(value: Any, fallback: int) -> int:
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def profile_review_from_world(world: Mapping[str, Any]) -> dict[str, Any]:
+    """Project the durable binding into a stable author-review contract."""
+
+    metadata = _record(world.get("metadata"))
+    binding = _record(metadata.get("genre_profile_binding"))
+    profile_payload = _record(binding.get("profile"))
+    profile_hash = str(binding.get("profile_hash") or "")
+    approved_hash = str(binding.get("approved_profile_hash") or "")
+    raw_status = str(binding.get("status") or "unresolved")
+    revision = _integer(binding.get("profile_revision"), 1)
+
+    if raw_status == "ready":
+        status = "approved" if approved_hash and approved_hash == profile_hash else "review_required"
+    elif raw_status == "approved" and approved_hash != profile_hash:
+        status = "review_required"
+    else:
+        status = raw_status
+
+    return {
+        "world_id": str(world.get("id") or ""),
+        "status": status,
+        "profile_revision": revision,
+        "profile_hash": profile_hash,
+        "approved_profile_hash": approved_hash,
+        "approved_at": binding.get("approved_at"),
+        "approved_by": binding.get("approved_by"),
+        "profile": profile_payload,
+        "requested_genre": str(binding.get("requested_genre") or world.get("genre") or ""),
+        "normalized_genre": str(binding.get("normalized_genre") or ""),
+        "source": str(binding.get("source") or ""),
+        "generated": bool(binding.get("generated", False)),
+        "route": _record(binding.get("route")),
+        "review_findings": list(binding.get("review_findings") or ()),
+        "error": _record(binding.get("error")),
+    }
+
+
+def read_world_profile_review(
+    world_id: str,
+    *,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        world = work.world_scenarios.get_world(context, world_id)
+        if world is None:
+            work.rollback()
+            raise KeyError(f"world_not_found:{world_id}")
+        work.rollback()
+    return {"ok": True, "review": profile_review_from_world(world)}
+
+
+def _store_binding(
+    work: Any,
+    context: Any,
+    *,
+    world: Mapping[str, Any],
+    binding: Mapping[str, Any],
+) -> None:
+    metadata = {
+        **_record(world.get("metadata")),
+        "genre_profile_binding": dict(binding),
+    }
+    updated = work.connection.execute(
+        "UPDATE omnix_rpg_worlds SET metadata_jsonb = %s::jsonb, "
+        "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND id = %s RETURNING id",
+        (json.dumps(metadata, sort_keys=True), context.workspace_id, str(world["id"])),
+    ).fetchone()
+    if updated is None:
+        raise RuntimeError("world_profile_binding_update_failed")
+
+
+def update_world_profile_review(
+    world_id: str,
+    *,
+    expected_profile_revision: int,
+    profile: Mapping[str, Any],
+    database: Any | None = None,
+) -> dict[str, Any]:
+    """Validate and save an edited profile, invalidating prior approval."""
+
+    validated = genre_profile_from_dict(profile).require_valid()
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        world = require_world_writable(work, context, world_id)
+        current = profile_review_from_world(world)
+        if int(current["profile_revision"]) != int(expected_profile_revision):
+            raise ValueError(
+                "world_profile_revision_conflict:"
+                f"expected={expected_profile_revision}:current={current['profile_revision']}"
+            )
+        existing = _record(_record(world.get("metadata")).get("genre_profile_binding"))
+        next_revision = int(current["profile_revision"]) + 1
+        binding = {
+            **existing,
+            "status": "review_required",
+            "profile": validated.as_dict(),
+            "profile_hash": validated.content_hash,
+            "profile_revision": next_revision,
+            "approved_profile_hash": "",
+            "approved_at": None,
+            "approved_by": None,
+            "review_findings": [],
+        }
+        _store_binding(work, context, world=world, binding=binding)
+        stale_rows = work.connection.execute(
+            "UPDATE omnix_rpg_world_topics SET status = 'stale', updated_at = CURRENT_TIMESTAMP "
+            "WHERE workspace_id = %s AND world_id = %s AND status = 'ready' RETURNING topic_id",
+            (context.workspace_id, world_id),
+        ).fetchall()
+        work.commit()
+    review = profile_review_from_world(
+        {**dict(world), "metadata": {**_record(world.get("metadata")), "genre_profile_binding": binding}}
+    )
+    return {
+        "ok": True,
+        "review": review,
+        "stale_topic_ids": [str(row[0]) for row in stale_rows],
+    }
+
+
+def approve_world_profile_review(
+    world_id: str,
+    *,
+    expected_profile_revision: int,
+    approved_by: str = "local-author",
+    database: Any | None = None,
+) -> dict[str, Any]:
+    """Approve exactly one validated profile revision and hash."""
+
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        world = require_world_writable(work, context, world_id)
+        current = profile_review_from_world(world)
+        if int(current["profile_revision"]) != int(expected_profile_revision):
+            raise ValueError(
+                "world_profile_revision_conflict:"
+                f"expected={expected_profile_revision}:current={current['profile_revision']}"
+            )
+        if not current["profile"]:
+            raise ValueError("world_profile_not_ready")
+        validated = genre_profile_from_dict(_record(current["profile"])).require_valid()
+        if validated.content_hash != str(current["profile_hash"]):
+            raise ValueError("world_profile_hash_mismatch")
+        existing = _record(_record(world.get("metadata")).get("genre_profile_binding"))
+        binding = {
+            **existing,
+            "status": "approved",
+            "profile": validated.as_dict(),
+            "profile_hash": validated.content_hash,
+            "profile_revision": int(current["profile_revision"]),
+            "approved_profile_hash": validated.content_hash,
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+            "approved_by": str(approved_by or "local-author"),
+            "review_findings": [],
+        }
+        _store_binding(work, context, world=world, binding=binding)
+        work.commit()
+    review = profile_review_from_world(
+        {**dict(world), "metadata": {**_record(world.get("metadata")), "genre_profile_binding": binding}}
+    )
+    return {"ok": True, "review": review}
+
+
+def require_approved_profile(world: Mapping[str, Any]) -> dict[str, Any]:
+    """Reject lore generation unless the current profile hash is approved."""
+
+    review = profile_review_from_world(world)
+    if (
+        review["status"] != "approved"
+        or not review["profile_hash"]
+        or review["approved_profile_hash"] != review["profile_hash"]
+    ):
+        raise ValueError("world_profile_approval_required")
+    genre_profile_from_dict(_record(review["profile"])).require_valid()
+    return review
