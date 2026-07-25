@@ -75,8 +75,8 @@ def _topic(*, contradictory: bool = False, valid_dossier: bool = True) -> Genera
                 "title": "Overview",
                 "paragraphs": [
                     "Nyra once certified personality backups for the Helix Directorate. "
-                    "She defected after discovering that the company was editing witnesses "
-                    "and reselling the removed experiences as executive training data."
+                    "She defected after discovering that the company was editing witnesses, "
+                    "and she now intends to expose its memory-auction ledger before it is erased."
                 ],
             },
             {
@@ -84,7 +84,8 @@ def _topic(*, contradictory: bool = False, valid_dossier: bool = True) -> Genera
                 "title": "Backstory",
                 "paragraphs": [
                     "She operates from borrowed rooms above a night market in "
-                    f"{location_reference}, paying couriers with harmless childhood recollections."
+                    f"{location_reference}, paying couriers with harmless childhood recollections. "
+                    "A corporate extraction team will reach her safehouse before dawn."
                 ],
             },
         ],
