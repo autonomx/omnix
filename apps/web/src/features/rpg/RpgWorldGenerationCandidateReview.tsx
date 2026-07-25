@@ -14,7 +14,7 @@ import { RpgWorldEntityCard } from './RpgWorldEntityCard';
 import { RpgWorldLoreLayout } from './RpgWorldLoreLayout';
 import './RpgWorldGenerationCandidateReview.css';
 
-interface RpgWorldGenerationCandidateReviewProps {
+interface Props {
   onAccepted: () => Promise<void> | void;
   onClose: () => void;
   onRetryStarted: () => Promise<void> | void;
@@ -51,11 +51,22 @@ function meaningful(value: unknown): boolean {
   return true;
 }
 
-function entityCards(candidate: Record<string, unknown>, section: RpgAuthoringSection): RpgAuthoringEntityCard[] {
+function entityCards(
+  candidate: Record<string, unknown>,
+  section: RpgAuthoringSection,
+): RpgAuthoringEntityCard[] {
+  const defaultKind = section.entity_kind || section.id.replace(/s$/, '') || 'entity';
   return rows(candidate.entities).map((metadata, index) => {
-    const kind = text(metadata.kind ?? metadata.type, section.entity_kind ?? section.id.replace(/s$/, '') || 'entity');
-    const id = text(metadata.id ?? metadata.entity_id, `ent:${section.id}:${String(index + 1).padStart(3, '0')}`);
-    const title = text(metadata.name ?? metadata.title ?? metadata.label, label(id.split(':').at(-1) ?? id));
+    const kind = text(metadata.kind ?? metadata.type, defaultKind);
+    const id = text(
+      metadata.id ?? metadata.entity_id,
+      `ent:${section.id}:${String(index + 1).padStart(3, '0')}`,
+    );
+    const idParts = id.split(':');
+    const title = text(
+      metadata.name ?? metadata.title ?? metadata.label,
+      label(idParts[idParts.length - 1] || id),
+    );
     const summary = text(
       metadata.short_summary
       ?? metadata.summary
@@ -151,9 +162,8 @@ export function RpgWorldGenerationCandidateReview({
   runId,
   section,
   worldId,
-}: RpgWorldGenerationCandidateReviewProps) {
-  const initialJson = JSON.stringify(result.candidate ?? {}, null, 2);
-  const [contentJson, setContentJson] = useState(initialJson);
+}: Props) {
+  const [contentJson, setContentJson] = useState(JSON.stringify(result.candidate ?? {}, null, 2));
   const [preview, setPreview] = useState<Record<string, unknown>>(result.candidate ?? {});
   const [editing, setEditing] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -180,16 +190,22 @@ export function RpgWorldGenerationCandidateReview({
       setFeedback('Candidate accepted and promoted to editable authoring canon.');
       await onAccepted();
     },
-    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Candidate could not be accepted.'),
+    onError: (cause) => setFeedback(
+      cause instanceof Error ? cause.message : 'Candidate could not be accepted.',
+    ),
   });
 
   const retryMutation = useMutation({
-    mutationFn: () => rpgWorldGenerationReviewClient.retry(runId, { topic_ids: [result.topic_id] }),
+    mutationFn: () => rpgWorldGenerationReviewClient.retry(runId, {
+      topic_ids: [result.topic_id],
+    }),
     onSuccess: async () => {
-      setFeedback('A targeted retry run was started. The retained candidate remains available until replaced.');
+      setFeedback('A targeted retry run was started. The retained candidate remains available.');
       await onRetryStarted();
     },
-    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Retry could not be started.'),
+    onError: (cause) => setFeedback(
+      cause instanceof Error ? cause.message : 'Retry could not be started.',
+    ),
   });
 
   const applyPreview = () => {
@@ -220,14 +236,20 @@ export function RpgWorldGenerationCandidateReview({
           <button type="button" disabled={retryMutation.isPending} onClick={() => retryMutation.mutate()}>
             {retryMutation.isPending ? 'Starting Retry…' : 'Retry Generation'}
           </button>
-          <button type="button" disabled={acceptMutation.isPending || !result.candidate} onClick={() => acceptMutation.mutate()}>
+          <button
+            type="button"
+            disabled={acceptMutation.isPending || !result.candidate}
+            onClick={() => acceptMutation.mutate()}
+          >
             {acceptMutation.isPending ? 'Accepting…' : 'Accept Candidate'}
           </button>
           <button type="button" onClick={onClose}>Close</button>
         </div>
       </header>
 
-      {feedback ? <p className="rpg-generation-candidate-review-feedback" aria-live="polite">{feedback}</p> : null}
+      {feedback ? (
+        <p className="rpg-generation-candidate-review-feedback" aria-live="polite">{feedback}</p>
+      ) : null}
 
       {editing ? (
         <section className="rpg-generation-candidate-review-editor">
@@ -247,7 +269,10 @@ export function RpgWorldGenerationCandidateReview({
 
       {result.validation.issues.length ? (
         <details className="rpg-generation-candidate-review-issues">
-          <summary>{result.validation.issues.length} validation issue{result.validation.issues.length === 1 ? '' : 's'}</summary>
+          <summary>
+            {result.validation.issues.length} validation issue
+            {result.validation.issues.length === 1 ? '' : 's'}
+          </summary>
           {result.validation.issues.map((issue, index) => (
             <article key={`${issue.code}-${index}`}>
               <strong>{label(issue.code)}</strong>
@@ -261,12 +286,16 @@ export function RpgWorldGenerationCandidateReview({
       {section.page_kind === 'collection' ? (
         <section className="rpg-authoring-page rpg-generation-candidate-collection">
           <div className="rpg-authoring-page-heading">
-            <div><p className="eyebrow">Review candidate</p><h2>{candidateTitle(preview, section)}</h2><p>{candidateSummary(preview, section)}</p></div>
+            <div>
+              <p className="eyebrow">Review candidate</p>
+              <h2>{candidateTitle(preview, section)}</h2>
+              <p>{candidateSummary(preview, section)}</p>
+            </div>
             <span>{entities.length} entr{entities.length === 1 ? 'y' : 'ies'}</span>
           </div>
           <div className="rpg-authoring-entity-grid">
             {entities.map((entity) => (
-              <RpgWorldEntityCard entity={entity} key={entity.id} topic={undefined} worldId={worldId} />
+              <RpgWorldEntityCard entity={entity} key={entity.id} worldId={worldId} />
             ))}
           </div>
         </section>
@@ -281,10 +310,13 @@ export function RpgWorldGenerationCandidateReview({
           >
             {entities.length ? (
               <section className="rpg-authoring-related-entities">
-                <div className="rpg-authoring-page-heading"><div><p className="eyebrow">Connected canon</p><h3>Related entries</h3></div><span>{entities.length}</span></div>
+                <div className="rpg-authoring-page-heading">
+                  <div><p className="eyebrow">Connected canon</p><h3>Related entries</h3></div>
+                  <span>{entities.length}</span>
+                </div>
                 <div className="rpg-authoring-entity-grid">
                   {entities.map((entity) => (
-                    <RpgWorldEntityCard entity={entity} key={entity.id} topic={undefined} worldId={worldId} />
+                    <RpgWorldEntityCard entity={entity} key={entity.id} worldId={worldId} />
                   ))}
                 </div>
               </section>
