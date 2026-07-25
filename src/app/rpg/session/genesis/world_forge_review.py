@@ -88,6 +88,37 @@ class GenerationReviewReport:
         }
 
 
+def _report_from_mapping(value: Mapping[str, Any]) -> GenerationReviewReport | None:
+    issues_value = value.get("issues")
+    if not isinstance(issues_value, Sequence) or isinstance(
+        issues_value,
+        (str, bytes, bytearray),
+    ):
+        return None
+    issues = tuple(
+        GenerationReviewIssue(
+            code=str(row.get("code") or "unknown"),
+            topic_id=str(row.get("topic_id") or ""),
+            entity_id=str(row.get("entity_id") or ""),
+            field_id=str(row.get("field_id") or ""),
+            message=str(row.get("message") or ""),
+            expected=str(row.get("expected") or ""),
+            allowed_domains=tuple(str(item) for item in row.get("allowed_domains") or ()),
+            candidates=tuple(str(item) for item in row.get("candidates") or ()),
+            supplied_value=row.get("supplied_value"),
+        )
+        for row in issues_value
+        if isinstance(row, Mapping)
+    )
+    return GenerationReviewReport(
+        status=str(value.get("status") or "failed"),
+        blocking=bool(value.get("blocking", True)),
+        error_type=str(value.get("error_type") or "GenerationFailure"),
+        issues=issues,
+        summary=str(value.get("summary") or ""),
+    )
+
+
 def _expected_from_message(message: str) -> str:
     prefix = "Expected "
     if message.startswith(prefix):
@@ -183,6 +214,19 @@ def report_from_error(
     *,
     status: str = "needs_review",
 ) -> GenerationReviewReport:
+    replay_payload = getattr(error, "payload", None)
+    if isinstance(replay_payload, Mapping):
+        stored_validation = replay_payload.get("validation")
+        if isinstance(stored_validation, Mapping):
+            stored = _report_from_mapping(stored_validation)
+            if stored is not None:
+                return replace(stored, status=status)
+
+    wrapped = getattr(error, "error", None)
+    if isinstance(wrapped, Exception) and wrapped is not error:
+        nested = report_from_error(topic_id, wrapped, status=status)
+        return replace(nested, summary=str(error))
+
     if isinstance(error, StructuredFactValidationError):
         issues = _structured_fact_issues(error)
     elif isinstance(error, WorldForgeLoreQualityError):
@@ -192,8 +236,6 @@ def report_from_error(
     elif isinstance(error, WorldForgeSemanticQualityError):
         issues = _semantic_issues(error)
     elif type(error).__name__ in _STRUCTURED_OUTPUT_ERROR_NAMES:
-        # Keep deterministic genesis code independent from live-provider packages.
-        # Structured-output failures expose a stable ``issues`` shape and class name.
         issues = _structured_output_issues(topic_id, error)
     else:
         text = str(error)
