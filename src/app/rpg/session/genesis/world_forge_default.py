@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping
 
+from .world_forge_canon_lookup import attach_structured_canon_lookup
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_deterministic import DeterministicWorldForgeGenerator
 from .world_forge_deterministic_completion import complete_deterministic_references
@@ -152,6 +153,8 @@ class ReferenceSafeWorldForgeGenerator:
             topic,
             dependency_topics,
         )
+        if profile_defined:
+            topic = attach_structured_canon_lookup(topic)
         if provider_generated:
             semantic_report = require_topic_semantic_quality(
                 node,
