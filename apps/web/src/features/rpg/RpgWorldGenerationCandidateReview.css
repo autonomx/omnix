@@ -1,0 +1,98 @@
+.rpg-generation-candidate-review {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.rpg-generation-candidate-review-banner {
+  align-items: flex-start;
+  background: linear-gradient(135deg, rgba(126, 92, 255, 0.16), rgba(24, 30, 48, 0.94));
+  border: 1px solid rgba(163, 143, 255, 0.45);
+  border-radius: 18px;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1.15rem;
+}
+
+.rpg-generation-candidate-review-banner h2,
+.rpg-generation-candidate-review-banner p {
+  margin: 0;
+}
+
+.rpg-generation-candidate-review-banner > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+
+.rpg-generation-candidate-review-banner button,
+.rpg-generation-candidate-review-editor button {
+  min-height: 38px;
+}
+
+.rpg-generation-candidate-review-feedback {
+  background: rgba(96, 187, 151, 0.12);
+  border: 1px solid rgba(96, 187, 151, 0.32);
+  border-radius: 12px;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+}
+
+.rpg-generation-candidate-review-editor {
+  background: rgba(12, 17, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.rpg-generation-candidate-review-editor h3,
+.rpg-generation-candidate-review-editor p {
+  margin: 0;
+}
+
+.rpg-generation-candidate-review-editor textarea {
+  background: rgba(3, 7, 14, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 0.85rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.rpg-generation-candidate-review-issues {
+  background: rgba(255, 179, 71, 0.08);
+  border: 1px solid rgba(255, 179, 71, 0.26);
+  border-radius: 14px;
+  padding: 0.8rem 1rem;
+}
+
+.rpg-generation-candidate-review-issues article {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem 0;
+}
+
+.rpg-generation-candidate-review-issues article p {
+  margin: 0;
+}
+
+.rpg-generation-candidate-collection {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .rpg-generation-candidate-review-banner {
+    flex-direction: column;
+  }
+
+  .rpg-generation-candidate-review-banner > div:last-child {
+    justify-content: flex-start;
+  }
+}

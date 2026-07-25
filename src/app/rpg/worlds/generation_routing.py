@@ -18,8 +18,9 @@ from app.rpg_world_forge_provider import (
     UnavailableWorldForgeTopicGenerator,
     WorldForgeProviderConfig,
 )
-from app.rpg_world_forge_single_pass_provider import (
-    SinglePassProviderWorldForgeTopicGenerator,
+
+from .generation_recovering_provider import (
+    RecoveringFirstPassWorldForgeTopicGenerator,
 )
 
 _CONFIGURED_VALUES = {"", "auto", "configured", "settings"}
@@ -139,7 +140,7 @@ def resolve_world_forge_route(
 def build_world_forge_generator_from_settings(
     settings: Mapping[str, Any],
 ) -> WorldForgeTopicGenerator:
-    """Build exactly the single-pass provider/model recorded in a claimed topic job."""
+    """Build the recorded model with bounded same-model structural recovery."""
 
     provider_id = _provider_key(settings.get("provider_route"))
     model_id = _model_key(settings.get("model"))
@@ -188,7 +189,7 @@ def build_world_forge_generator_from_settings(
             f"durable World Forge provider {provider_id} is unavailable"
         )
     return ReferenceSafeWorldForgeGenerator(
-        SinglePassProviderWorldForgeTopicGenerator(provider, config)
+        RecoveringFirstPassWorldForgeTopicGenerator(provider, config)
     )
 
 

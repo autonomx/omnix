@@ -21,10 +21,11 @@ export interface RpgWorldGenerationReviewReport {
 }
 
 export interface RpgWorldGenerationReviewDecision {
-  decision: 'keep' | 'replace';
+  decision: 'accept' | 'keep' | 'replace';
   candidate_hash: string;
   promoted_hash?: string;
   decided_at?: string;
+  edited?: boolean;
 }
 
 export interface RpgWorldGenerationTopicResult {
@@ -106,6 +107,38 @@ export const rpgWorldGenerationReviewClient = {
   ): Promise<Record<string, unknown>> {
     return request(
       `/api/rpg/world-generation/${encodeURIComponent(runId)}/retry-review`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+  },
+
+  accept(
+    runId: string,
+    topicId: string,
+    body: {
+      candidate?: Record<string, unknown>;
+      expected_candidate_hash?: string;
+    } = {},
+  ): Promise<Record<string, unknown>> {
+    return request(
+      `/api/rpg/world-generation/${encodeURIComponent(runId)}/results/${encodeURIComponent(topicId)}/accept`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+  },
+
+  acceptAll(
+    runId: string,
+    body: { topic_ids?: string[] } = {},
+  ): Promise<Record<string, unknown>> {
+    return request(
+      `/api/rpg/world-generation/${encodeURIComponent(runId)}/accept-all`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

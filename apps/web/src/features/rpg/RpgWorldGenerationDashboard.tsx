@@ -6,6 +6,7 @@ import {
   type RpgWorldGenerationTopicResult,
 } from '../../api/rpgWorldGenerationReviewClient';
 import type { RpgWorldGenerationRun } from '../../api/rpgWorldLibraryClient';
+import { RpgWorldGenerationCandidateReview } from './RpgWorldGenerationCandidateReview';
 import {
   RpgWorldGenerationPanel,
   type RpgWorldGenerationPanelHandle,
@@ -50,7 +51,7 @@ function label(value: string): string {
 }
 
 function statusIcon(status: string): string {
-  if (status === 'complete' || status === 'accepted' || status === 'replaced') return '✓';
+  if (['complete', 'accepted', 'accept', 'replaced'].includes(status)) return '✓';
   if (status === 'pending_decision' || status === 'needs_review') return '⚑';
   if (status === 'kept') return '↶';
   if (status === 'failed') return '!';
@@ -67,8 +68,15 @@ function hasManualDecisionIssue(result: RpgWorldGenerationTopicResult): boolean 
   return result.validation.reason_codes.includes('manual_retry_decision_required');
 }
 
+function isPromoted(result: RpgWorldGenerationTopicResult): boolean {
+  return result.status === 'accepted'
+    || result.decision?.decision === 'accept'
+    || result.decision?.decision === 'replace';
+}
+
 function resultStatus(result: RpgWorldGenerationTopicResult | undefined): string | undefined {
   if (!result) return undefined;
+  if (result.decision?.decision === 'accept') return 'complete';
   if (result.decision?.decision === 'replace') return 'replaced';
   if (result.decision?.decision === 'keep') return 'kept';
   if (hasManualDecisionIssue(result)) return 'pending_decision';
@@ -103,6 +111,7 @@ export function RpgWorldGenerationDashboard({
   const [selectedReviewTopics, setSelectedReviewTopics] = useState<string[]>([]);
   const [inspectedTopicId, setInspectedTopicId] = useState('');
   const [reviewFeedback, setReviewFeedback] = useState('');
+  const [acceptAllArmed, setAcceptAllArmed] = useState(false);
   const [retryScope, setRetryScope] = useState<RetryScope>('topic');
   const [retryEntityIds, setRetryEntityIds] = useState('');
   const [retryFields, setRetryFields] = useState('');
@@ -131,13 +140,23 @@ export function RpgWorldGenerationDashboard({
     [results],
   );
   const inspectedResult = resultByTopic.get(inspectedTopicId);
-  const accepted = new Set(results.filter((result) => result.status === 'accepted' || result.decision?.decision === 'replace').map((result) => result.topic_id));
-  const pendingDecision = new Set(results.filter((result) => hasManualDecisionIssue(result) && !result.decision).map((result) => result.topic_id));
-  const kept = new Set(results.filter((result) => result.decision?.decision === 'keep').map((result) => result.topic_id));
-  const flagged = new Set(results.filter((result) => result.status === 'needs_review' && !hasManualDecisionIssue(result)).map((result) => result.topic_id));
+  const inspectedSection = sections.find((section) => section.id === inspectedTopicId);
+  const accepted = new Set(results.filter(isPromoted).map((result) => result.topic_id));
+  const pendingDecision = new Set(results
+    .filter((result) => hasManualDecisionIssue(result) && !result.decision)
+    .map((result) => result.topic_id));
+  const kept = new Set(results
+    .filter((result) => result.decision?.decision === 'keep')
+    .map((result) => result.topic_id));
+  const flagged = new Set(results
+    .filter((result) => result.status === 'needs_review' && !result.decision && !hasManualDecisionIssue(result))
+    .map((result) => result.topic_id));
   const failed = new Set(results.filter((result) => result.status === 'failed').map((result) => result.topic_id));
   const blocked = new Set(results.filter((result) => result.status === 'blocked').map((result) => result.topic_id));
   const retryable = new Set([...flagged, ...failed, ...blocked]);
+  const acceptAllEligible = results.filter((result) => (
+    result.status === 'needs_review' && Boolean(result.candidate) && !result.decision
+  ));
   const publicationBlocked = Boolean(retryable.size || pendingDecision.size || kept.size);
   const terminalCount = accepted.size + pendingDecision.size + kept.size + flagged.size + failed.size + blocked.size;
   const percent = topicRows.length ? Math.round(terminalCount / topicRows.length * 100) : 0;
@@ -145,6 +164,7 @@ export function RpgWorldGenerationDashboard({
   const invalidateReview = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-generation-review'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-section', worldId] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-workspace'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-manifest', worldId] }),
     ]);
@@ -166,6 +186,23 @@ export function RpgWorldGenerationDashboard({
     onError: (cause) => setReviewFeedback(cause instanceof Error ? cause.message : 'Retry failed.'),
   });
 
+  const acceptAllReview = useMutation({
+    mutationFn: () => {
+      if (!run) throw new Error('No completed generation run is available.');
+      return rpgWorldGenerationReviewClient.acceptAll(run.run_id);
+    },
+    onSuccess: async () => {
+      setAcceptAllArmed(false);
+      setInspectedTopicId('');
+      setReviewFeedback('All retained review candidates were accepted and promoted to editable authoring canon.');
+      await invalidateReview();
+    },
+    onError: (cause) => {
+      setAcceptAllArmed(false);
+      setReviewFeedback(cause instanceof Error ? cause.message : 'Review candidates could not be accepted.');
+    },
+  });
+
   const decideReview = useMutation({
     mutationFn: ({ topicId, decision }: { topicId: string; decision: 'keep' | 'replace' }) => {
       if (!run) throw new Error('No completed generation run is available.');
@@ -175,6 +212,7 @@ export function RpgWorldGenerationDashboard({
       setReviewFeedback(variables.decision === 'replace'
         ? 'The validated retry candidate was promoted. Publication remains blocked until every affected topic is decided.'
         : 'The previous authoring content was kept. Publication remains blocked for this retry run.');
+      setInspectedTopicId('');
       await invalidateReview();
     },
     onError: (cause) => setReviewFeedback(cause instanceof Error ? cause.message : 'Decision failed.'),
@@ -213,6 +251,44 @@ export function RpgWorldGenerationDashboard({
     });
   };
 
+  const handleAcceptAll = () => {
+    if (!acceptAllArmed) {
+      setAcceptAllArmed(true);
+      setReviewFeedback(`Confirm acceptance of ${acceptAllEligible.length} generated candidate${acceptAllEligible.length === 1 ? '' : 's'} by clicking Accept All again.`);
+      return;
+    }
+    acceptAllReview.mutate();
+  };
+
+  if (inspectedResult?.candidate && inspectedSection && run) {
+    return (
+      <div className="rpg-generation-dashboard is-operational-dashboard">
+        {hasManualDecisionIssue(inspectedResult) && !inspectedResult.decision ? (
+          <div className="rpg-generation-review-retry-controls">
+            <strong>This retry candidate can replace the prior authoring topic, or the prior topic can be kept.</strong>
+            <button type="button" disabled={decideReview.isPending} onClick={() => decideReview.mutate({ topicId: inspectedResult.topic_id, decision: 'keep' })}>Keep Previous</button>
+          </div>
+        ) : null}
+        <RpgWorldGenerationCandidateReview
+          onAccepted={async () => {
+            setInspectedTopicId('');
+            setReviewFeedback('Candidate accepted and promoted to editable authoring canon.');
+            await invalidateReview();
+          }}
+          onClose={() => setInspectedTopicId('')}
+          onRetryStarted={async () => {
+            setReviewFeedback('Targeted retry started.');
+            await invalidateReview();
+          }}
+          result={inspectedResult}
+          runId={run.run_id}
+          section={inspectedSection}
+          worldId={worldId}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="rpg-generation-dashboard is-operational-dashboard">
       <RpgWorldProfilePreview onApprovalChange={setProfileApproved} worldId={worldId} />
@@ -226,6 +302,13 @@ export function RpgWorldGenerationDashboard({
         <button type="button" disabled={!profileApproved} onClick={() => setControlsOpen(true)}>Generate Selected</button>
         <button type="button" disabled={!profileApproved} onClick={() => panelRef.current?.regenerateStale()}>Regenerate Stale</button>
         <button type="button" disabled={!retryable.size || retryReview.isPending} onClick={() => retryReview.mutate({ topicIds: [] })}>Retry Review ({retryable.size})</button>
+        <button type="button" disabled={!acceptAllEligible.length || acceptAllReview.isPending} onClick={handleAcceptAll}>
+          {acceptAllReview.isPending
+            ? 'Accepting All…'
+            : acceptAllArmed
+              ? `Confirm Accept All (${acceptAllEligible.length})`
+              : `Accept All Generated (${acceptAllEligible.length})`}
+        </button>
         <button type="button" disabled={run?.status !== 'review' || publicationBlocked} onClick={() => panelRef.current?.publish()}>Publish World</button>
         {onOpenImages ? <button type="button" onClick={onOpenImages}>Generate Images</button> : null}
       </div>
@@ -235,17 +318,39 @@ export function RpgWorldGenerationDashboard({
         <section className="rpg-generation-topic-board">
           <header><h3>Topic Generation Progress</h3><div className="rpg-generation-status-chips"><span>Total <b>{topicRows.length}</b></span><span className="is-complete">Accepted <b>{accepted.size}</b></span><span className="is-review">Decision <b>{pendingDecision.size}</b></span><span className="is-review">Flagged <b>{flagged.size}</b></span><span className="is-generating">Active <b>{active.size}</b></span><span className="is-failed">Failed <b>{failed.size}</b></span><span className="is-blocked">Blocked <b>{blocked.size}</b></span></div><div className="rpg-generation-view-toggle"><button className={view === 'board' ? 'is-active' : ''} type="button" onClick={() => setView('board')}>Board</button><button className={view === 'timeline' ? 'is-active' : ''} type="button" onClick={() => setView('timeline')}>Timeline</button></div></header>
           {selectedReviewTopics.length ? <div className="rpg-generation-review-selection"><strong>{selectedReviewTopics.length} selected</strong><button type="button" onClick={() => retryReview.mutate({ topicIds: selectedReviewTopics })}>Retry selected</button><button type="button" onClick={() => setSelectedReviewTopics([])}>Clear</button></div> : null}
-          {view === 'board' ? <div className="rpg-generation-topic-table" role="table"><div className="rpg-generation-topic-table-head" role="row"><span>Topic</span><span>Status</span><span>Details</span><span>Actions</span></div>{rows.map((section) => { const result = section.result; const selectable = retryable.has(section.id); return <div className={`rpg-generation-topic-table-row is-${section.displayStatus}`} role="row" key={section.id}><div>{selectable ? <input aria-label={`Select ${section.label} for retry`} type="checkbox" checked={selectedReviewTopics.includes(section.id)} onChange={(event) => { const isChecked = event.currentTarget.checked; setSelectedReviewTopics((current) => isChecked ? [...new Set([...current, section.id])] : current.filter((value) => value !== section.id)); }} /> : null}<span className="rpg-generation-topic-icon">{statusIcon(section.displayStatus)}</span><strong>{section.label}</strong></div><span className="rpg-generation-topic-status">{label(section.displayStatus)}</span><span>{result?.decision ? `Decision: ${label(result.decision.decision)}` : result?.validation.reason_codes.map(label).join(', ') || `${section.entity_count || 0} entries`}</span><div>{result ? <button type="button" onClick={() => setInspectedTopicId(section.id)}>Inspect</button> : null}<button type="button" onClick={() => onOpenSection?.(section.id)}>Open</button></div></div>; })}</div> : <ol className="rpg-generation-timeline">{rows.map((section) => <li className={`is-${section.displayStatus}`} key={section.id}><span>{statusIcon(section.displayStatus)}</span><div><strong>{section.label}</strong><p>{label(section.displayStatus)}</p></div></li>)}</ol>}
+          {view === 'board' ? (
+            <div className="rpg-generation-topic-table" role="table">
+              <div className="rpg-generation-topic-table-head" role="row"><span>Topic</span><span>Status</span><span>Details</span><span>Actions</span></div>
+              {rows.map((section) => {
+                const result = section.result;
+                const selectable = retryable.has(section.id);
+                return (
+                  <div className={`rpg-generation-topic-table-row is-${section.displayStatus}`} role="row" key={section.id}>
+                    <div>{selectable ? <input aria-label={`Select ${section.label} for retry`} type="checkbox" checked={selectedReviewTopics.includes(section.id)} onChange={(event) => { const isChecked = event.currentTarget.checked; setSelectedReviewTopics((current) => isChecked ? [...new Set([...current, section.id])] : current.filter((value) => value !== section.id)); }} /> : null}<span className="rpg-generation-topic-icon">{statusIcon(section.displayStatus)}</span><strong>{section.label}</strong></div>
+                    <span className="rpg-generation-topic-status">{label(section.displayStatus)}</span>
+                    <span>{result?.decision ? `Decision: ${label(result.decision.decision)}` : result?.validation.reason_codes.map(label).join(', ') || `${section.entity_count || 0} entries`}</span>
+                    <div>{result ? <button type="button" onClick={() => setInspectedTopicId(section.id)}>{result.candidate ? 'Review' : 'Inspect'}</button> : null}<button type="button" onClick={() => onOpenSection?.(section.id)}>Open Canon</button></div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : <ol className="rpg-generation-timeline">{rows.map((section) => <li className={`is-${section.displayStatus}`} key={section.id}><span>{statusIcon(section.displayStatus)}</span><div><strong>{section.label}</strong><p>{label(section.displayStatus)}</p></div></li>)}</ol>}
         </section>
 
         <aside className="rpg-generation-dashboard-side">
           <section className="rpg-generation-diagnostics-card"><header><h3>Validation analytics</h3><span>{results.length} attempted</span></header><AnalyticsGroup title="Reason code" values={analytics?.by_code ?? {}} /><AnalyticsGroup title="Field" values={analytics?.by_field ?? {}} /><AnalyticsGroup title="Domain" values={analytics?.by_domain ?? {}} /><AnalyticsGroup title="Model" values={analytics?.by_model ?? {}} /><AnalyticsGroup title="Prompt version" values={analytics?.by_prompt_version ?? {}} />{!Object.keys(analytics?.by_code ?? {}).length ? <p className="rpg-generation-no-error">No blocking validation issues recorded.</p> : null}</section>
-          <section className="rpg-generation-token-card"><header><h3>Token usage</h3><span>{tokenUsage?.topic_count ?? 0} completed</span></header><div className="rpg-generation-token-total"><strong>{tokenLabel(tokenUsage?.total_tokens ?? 0)}</strong><span>tokens accounted</span></div></section>
+          <section className="rpg-generation-token-card" aria-label="World generation token usage"><header><h3>Token usage</h3><span>{tokenUsage?.topic_count ?? 0} completed</span></header><div className="rpg-generation-token-total"><strong>{tokenLabel(tokenUsage?.total_tokens ?? 0)}</strong><span>tokens accounted</span></div><small>{tokenUsage?.provider_reported_topics ?? 0} provider-reported · {tokenUsage?.estimated_topics ?? 0} estimated{tokenUsage?.in_flight_topics ? ' · live batches included' : ''}</small></section>
           <section className="rpg-generation-image-card"><header><h3>Image Generation</h3></header><div><article><small>Targets</small><strong>{imageSections.length}</strong></article><article><small>Ready</small><strong>{imageReady}</strong></article></div></section>
         </aside>
       </div>
 
-      {inspectedResult ? <section className="rpg-generation-review-inspector" aria-label="Generation candidate review"><header><div><p className="eyebrow">Retained candidate</p><h3>{label(inspectedResult.topic_id)}</h3><span className={`is-${resultStatus(inspectedResult)}`}>{label(resultStatus(inspectedResult) ?? inspectedResult.status)}</span></div><button type="button" onClick={() => setInspectedTopicId('')}>Close</button></header><div className="rpg-generation-review-inspector-grid"><article><h4>Validation issues</h4>{inspectedResult.validation.issues.length ? inspectedResult.validation.issues.map((issue, index) => <div className="rpg-generation-review-issue" key={`${issue.code}-${index}`}><strong>{label(issue.code)}</strong><span>{[issue.entity_id, issue.field_id].filter(Boolean).join(' · ') || inspectedResult.topic_id}</span><p>{issue.message || inspectedResult.validation.summary}</p></div>) : <p>No blocking issues.</p>}</article><article><h4>New candidate</h4><pre>{JSON.stringify(inspectedResult.candidate, null, 2)}</pre></article>{inspectedResult.previous_result ? <article><h4>Previous candidate</h4><pre>{JSON.stringify(inspectedResult.previous_result.candidate, null, 2)}</pre></article> : null}</div>{hasManualDecisionIssue(inspectedResult) ? <div className="rpg-generation-review-retry-controls">{inspectedResult.decision ? <p>Decision recorded: <strong>{label(inspectedResult.decision.decision)}</strong></p> : <><button type="button" disabled={decideReview.isPending} onClick={() => decideReview.mutate({ topicId: inspectedResult.topic_id, decision: 'keep' })}>Keep previous</button><button type="button" disabled={decideReview.isPending} onClick={() => decideReview.mutate({ topicId: inspectedResult.topic_id, decision: 'replace' })}>Replace with new</button></>}</div> : retryable.has(inspectedResult.topic_id) ? <div className="rpg-generation-review-retry-controls"><label>Retry scope<select value={retryScope} onChange={(event) => setRetryScope(event.currentTarget.value as RetryScope)}><option value="topic">Whole topic</option><option value="entities">Selected entities</option><option value="entity_fields">Selected fields</option></select></label>{retryScope !== 'topic' ? <label>Entity IDs<textarea value={retryEntityIds} onChange={(event) => setRetryEntityIds(event.currentTarget.value)} /></label> : null}{retryScope === 'entity_fields' ? <label>Fields<textarea value={retryFields} onChange={(event) => setRetryFields(event.currentTarget.value)} /></label> : null}<label>Instructions<textarea value={retryInstructions} onChange={(event) => setRetryInstructions(event.currentTarget.value)} /></label><button type="button" onClick={retryInspectedTopic}>Retry this scope</button></div> : null}</section> : null}
+      {inspectedResult ? (
+        <section className="rpg-generation-review-inspector" aria-label="Generation candidate review">
+          <header><div><p className="eyebrow">Generation result</p><h3>{label(inspectedResult.topic_id)}</h3><span className={`is-${resultStatus(inspectedResult)}`}>{label(resultStatus(inspectedResult) ?? inspectedResult.status)}</span></div><button type="button" onClick={() => setInspectedTopicId('')}>Close</button></header>
+          <div className="rpg-generation-review-inspector-grid"><article><h4>Validation issues</h4>{inspectedResult.validation.issues.length ? inspectedResult.validation.issues.map((issue, index) => <div className="rpg-generation-review-issue" key={`${issue.code}-${index}`}><strong>{label(issue.code)}</strong><span>{[issue.entity_id, issue.field_id].filter(Boolean).join(' · ') || inspectedResult.topic_id}</span><p>{issue.message || inspectedResult.validation.summary}</p></div>) : <p>No blocking issues.</p>}</article></div>
+          {retryable.has(inspectedResult.topic_id) ? <div className="rpg-generation-review-retry-controls"><label>Retry scope<select value={retryScope} onChange={(event) => setRetryScope(event.currentTarget.value as RetryScope)}><option value="topic">Whole topic</option><option value="entities">Selected entities</option><option value="entity_fields">Selected fields</option></select></label>{retryScope !== 'topic' ? <label>Entity IDs<textarea value={retryEntityIds} onChange={(event) => setRetryEntityIds(event.currentTarget.value)} /></label> : null}{retryScope === 'entity_fields' ? <label>Fields<textarea value={retryFields} onChange={(event) => setRetryFields(event.currentTarget.value)} /></label> : null}<label>Instructions<textarea value={retryInstructions} onChange={(event) => setRetryInstructions(event.currentTarget.value)} /></label><button type="button" onClick={retryInspectedTopic}>Retry this scope</button></div> : null}
+        </section>
+      ) : null}
 
       <details className="rpg-generation-dashboard-controls" id="generation-controls" open={!run || controlsOpen} onToggle={(event) => setControlsOpen(event.currentTarget.open)}><summary>Generation controls and advanced settings</summary><RpgWorldGenerationPanel ref={panelRef} generation={generation} onOpenImages={onOpenImages} profileApproved={profileApproved} sections={sections} worldId={worldId} /></details>
     </div>
