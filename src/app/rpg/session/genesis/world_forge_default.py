@@ -90,7 +90,7 @@ class ReferenceSafeWorldForgeGenerator:
     ) -> GeneratedTopic:
         provider_generated = self._provider_generated(topic)
         profile_defined = bool(node.metadata.get("field_definitions"))
-        if provider_generated:
+        if provider_generated and not profile_defined:
             aliases = campaign_context.get("reference_aliases")
             topic = validate_and_normalize_provider_topic(
                 node,
@@ -102,8 +102,11 @@ class ReferenceSafeWorldForgeGenerator:
         # Profile field definitions are the authoritative ontology. A profile may
         # deliberately reuse a mature topic ID such as quests or opening_scenarios
         # while changing its entity kinds and reference domains. Running those
-        # records through the legacy fixed-domain normalizer first would incorrectly
-        # require npc/location/faction IDs and reject actor/place/group canon.
+        # records through the legacy fixed-domain normalizer or integrity map first
+        # would incorrectly require npc/location/faction IDs and reject
+        # actor/place/group canon. Profile-defined provider output remains fail-closed
+        # below through compile_structured_entity_facts, which validates IDs, kinds,
+        # required fields, value types, allowed target domains, and exact references.
         if not profile_defined:
             topic = normalize_structured_domain(
                 node,
