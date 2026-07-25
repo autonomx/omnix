@@ -41,7 +41,7 @@ def _error(exc: Exception) -> HTTPException:
     )
 
 
-def _results(run_id: str) -> list[dict[str, Any]]:
+def _run_with_results(run_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     context = bootstrap_local_tenant(None)
     with unit_of_work(None) as work:
         run = work.world_generation.get(context, run_id)
@@ -49,8 +49,28 @@ def _results(run_id: str) -> list[dict[str, Any]]:
             work.rollback()
             raise KeyError(f"world_generation_run_not_found:{run_id}")
         results = work.world_generation.list_topic_results(context, run_id=run_id)
+        parent_run_id = str(run.get("parent_run_id") or "")
+        parent_results = (
+            work.world_generation.list_topic_results(context, run_id=parent_run_id)
+            if parent_run_id
+            else []
+        )
         work.rollback()
-    return results
+    parent_by_topic = {
+        str(row.get("topic_id") or ""): row for row in parent_results
+    }
+    augmented = [
+        {
+            **row,
+            "previous_result": parent_by_topic.get(str(row.get("topic_id") or "")),
+        }
+        for row in results
+    ]
+    return run, augmented
+
+
+def _results(run_id: str) -> list[dict[str, Any]]:
+    return _run_with_results(run_id)[1]
 
 
 def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
@@ -64,7 +84,13 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
     )
     def rpg_world_generation_results(run_id: str) -> dict[str, Any]:
         try:
-            return {"ok": True, "run_id": run_id, "topic_results": _results(run_id)}
+            run, results = _run_with_results(run_id)
+            return {
+                "ok": True,
+                "run_id": run_id,
+                "parent_run_id": run.get("parent_run_id"),
+                "topic_results": results,
+            }
         except Exception as exc:
             raise _error(exc) from exc
 
@@ -77,15 +103,25 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
         topic_id: str,
     ) -> dict[str, Any]:
         try:
+            run, results = _run_with_results(run_id)
             result = next(
-                (row for row in _results(run_id) if str(row.get("topic_id") or "") == topic_id),
+                (
+                    row
+                    for row in results
+                    if str(row.get("topic_id") or "") == topic_id
+                ),
                 None,
             )
             if result is None:
                 raise KeyError(
                     f"world_generation_topic_result_not_found:{run_id}:{topic_id}"
                 )
-            return {"ok": True, "run_id": run_id, "topic_result": result}
+            return {
+                "ok": True,
+                "run_id": run_id,
+                "parent_run_id": run.get("parent_run_id"),
+                "topic_result": result,
+            }
         except Exception as exc:
             raise _error(exc) from exc
 
