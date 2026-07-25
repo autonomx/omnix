@@ -16,6 +16,11 @@ interface RpgWorldGenerationPanelProps {
   worldId: string;
 }
 
+interface GenerationMutationInput {
+  scope: Record<string, unknown>;
+  strategyOverride?: string;
+}
+
 export interface RpgWorldGenerationPanelHandle {
   generateWorld: () => void;
   regenerateStale: () => void;
@@ -123,12 +128,12 @@ export const RpgWorldGenerationPanel = forwardRef<
   };
 
   const generate = useMutation({
-    mutationFn: (scope: Record<string, unknown>) => rpgWorldLibraryClient.startGeneration(worldId, {
+    mutationFn: ({ scope, strategyOverride }: GenerationMutationInput) => rpgWorldLibraryClient.startGeneration(worldId, {
       depth,
       starting_location: startingLocation,
       background_expansion: backgroundExpansion,
       scope,
-      strategy,
+      strategy: strategyOverride ?? strategy,
       replace_locked: replaceLocked,
       directives: Object.fromEntries(
         Object.entries(directions)
@@ -226,7 +231,22 @@ export const RpgWorldGenerationPanel = forwardRef<
     const scope = mode === 'selected'
       ? { mode, topic_ids: selected }
       : { mode };
-    generate.mutate(scope);
+    generate.mutate({ scope });
+  };
+
+  const retrySelectedLore = () => {
+    if (!selected.length) {
+      setFeedback('Select at least one completed topic to retry.');
+      return;
+    }
+    if (generationBusy) {
+      setFeedback('Wait for world generation to finish before retrying lore.');
+      return;
+    }
+    generate.mutate({
+      scope: { mode: 'selected', topic_ids: selected },
+      strategyOverride: 'force',
+    });
   };
 
   useImperativeHandle(ref, () => ({
@@ -256,7 +276,7 @@ export const RpgWorldGenerationPanel = forwardRef<
   return (
     <section className="rpg-authoring-page rpg-generation-panel" aria-label="World generation">
       <div className="rpg-authoring-page-heading">
-        <div><p className="eyebrow">Workspace</p><h2>World Generation</h2><p>Generate the full world or safely target selected, stale, or failed topics.</p></div>
+        <div><p className="eyebrow">Workspace</p><h2>World Generation</h2><p>Generate the full world or safely target selected, stale, failed, or low-scoring topics.</p></div>
         {currentRun ? <span>{statusLabel(currentRun.status)} · {Number(progress.percent || 0)}%</span> : <span>Not generated</span>}
       </div>
 
@@ -284,6 +304,15 @@ export const RpgWorldGenerationPanel = forwardRef<
       <div className="rpg-generation-actions">
         <button type="button" disabled={generationDisabled} onClick={() => start('full')}>Generate World</button>
         <button type="button" disabled={generationDisabled || !selected.length} onClick={() => start('selected')}>Generate Selected</button>
+        <button
+          className="rpg-secondary-button"
+          type="button"
+          disabled={generationDisabled || !selected.length}
+          title="Force a fresh three-retry lore generation for the selected completed topics"
+          onClick={retrySelectedLore}
+        >
+          Retry Selected Lore
+        </button>
         <button className="rpg-secondary-button" type="button" disabled={generationDisabled} onClick={() => start('stale')}>Regenerate Stale</button>
         <button
           className="rpg-secondary-button"
@@ -306,7 +335,7 @@ export const RpgWorldGenerationPanel = forwardRef<
         <button type="button" disabled={publish.isPending || currentRun?.status !== 'review'} onClick={() => publish.mutate()}>{publish.isPending ? 'Publishing…' : 'Publish World'}</button>
         {onOpenImages ? <button className="rpg-secondary-button" type="button" onClick={onOpenImages}>Generate Images</button> : null}
       </div>
-      {generationBusy ? <small>Generation is running. Failed-topic retry becomes available only after a topic exhausts its automatic attempts.</small> : null}
+      {generationBusy ? <small>Generation is running. Failed-topic and Game Master lore retry become available after the current run finishes.</small> : null}
       {currentRun && currentRun.status !== 'review' && !generationBusy ? <small>Publishing becomes available when generation reaches Review.</small> : null}
       {feedback ? <p className="rpg-authoring-feedback" aria-live="polite">{feedback}</p> : null}
       <small className="rpg-generation-diagnostic-hint">
@@ -326,7 +355,7 @@ export const RpgWorldGenerationPanel = forwardRef<
             </label>
             <textarea
               aria-label={`Generation direction for ${section.label}`}
-              placeholder="Optional direction for this topic…"
+              placeholder="Optional direction for this topic or retry…"
               rows={2}
               value={directions[section.id] ?? ''}
               onChange={(event) => updateDirection(section.id, event.currentTarget.value)}
