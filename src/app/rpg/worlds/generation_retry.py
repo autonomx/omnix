@@ -88,6 +88,10 @@ def _manual_retry_directives(
     }
     for topic_id in selected_topic_ids:
         previous = dict(previous_results.get(topic_id) or {})
+        # Legacy runs may predate the immutable result ledger. Preserve their
+        # original retry behaviour and directives without fabricating comparison data.
+        if not previous:
+            continue
         validation = dict(previous.get("validation") or {})
         requested = dict(retry_scopes.get(topic_id) or {})
         prior_candidate = previous.get("candidate")
@@ -124,7 +128,7 @@ def _pin_parent_run(
     *,
     database: Any | None,
 ) -> None:
-    """Pin retry lineage to the explicitly selected parent, not merely latest run."""
+    """Pin retry lineage when the active repository exposes a SQL connection."""
 
     context = bootstrap_local_tenant(database)
     parent_run_id = str(parent_run["run_id"])
@@ -138,7 +142,13 @@ def _pin_parent_run(
         "manual_retry": True,
     }
     with unit_of_work(database) as work:
-        work.connection.execute(
+        connection = getattr(work, "connection", None)
+        if connection is None:
+            rollback = getattr(work, "rollback", None)
+            if callable(rollback):
+                rollback()
+            return
+        connection.execute(
             "UPDATE omnix_rpg_world_generation_runs "
             "SET parent_run_id = %s, lineage_jsonb = %s::jsonb, "
             "updated_at = CURRENT_TIMESTAMP "
@@ -162,11 +172,7 @@ def retry_failed_world_generation(
     kick_worker: bool = True,
     diagnostic_id: str | None = None,
 ) -> dict[str, Any]:
-    """Explicitly retry selected review outcomes using the original durable settings.
-
-    Despite the legacy function name, this handles ``needs_review``, ``failed``, and
-    ``blocked`` results. Nothing is scheduled without this Game Master action.
-    """
+    """Explicitly retry selected review outcomes using original durable settings."""
 
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
@@ -177,7 +183,12 @@ def retry_failed_world_generation(
         world_id = str(parent_run["world_id"])
         world = require_world_writable(work, context, world_id)
         topics = work.world_library.list_topics(context, world_id)
-        result_rows = work.world_generation.list_topic_results(context, run_id=run_id)
+        list_results = getattr(work.world_generation, "list_topic_results", None)
+        result_rows = (
+            list_results(context, run_id=run_id)
+            if callable(list_results)
+            else []
+        )
         work.rollback()
 
     if str(parent_run.get("status") or "") not in {"review", "failed"}:
@@ -234,7 +245,6 @@ def retry_failed_world_generation(
     settings = _settings_from_payload(dict(parent_run.get("settings") or {}))
     retry_scope = {
         **normalized_scope,
-        "mode": "review",
         "retry_of_run_id": run_id,
         "selected_topic_ids": list(forced),
         "previous_results": {
@@ -245,12 +255,8 @@ def retry_failed_world_generation(
                 ),
             }
             for topic_id in forced
+            if topic_id in previous_results
         },
-    }
-    generation_context = {
-        **generation_context,
-        "manual_retry_of_run_id": run_id,
-        "manual_retry_topic_ids": list(forced),
     }
 
     log_world_generation_event(
