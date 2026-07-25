@@ -20,11 +20,24 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Typecheck web
-        run: npm --workspace @omnix/web run typecheck
+        run: |
+          set -o pipefail
+          npm --workspace @omnix/web run typecheck 2>&1 | tee profile-preview-typecheck-output.txt
       - name: Run profile preview tests
-        run: >-
-          npm --workspace @omnix/web run test -- --run
-          src/features/rpg/RpgWorldProfilePreview.test.tsx
-          src/features/rpg/RpgWorldGenerationPanel.test.tsx
-          src/features/rpg/RpgWorldGenerationPanel.retry.test.tsx
-          src/features/rpg/RpgWorldGenerationDashboard.test.tsx
+        run: |
+          set -o pipefail
+          npm --workspace @omnix/web run test -- --run \
+            src/features/rpg/RpgWorldProfilePreview.test.tsx \
+            src/features/rpg/RpgWorldGenerationPanel.test.tsx \
+            src/features/rpg/RpgWorldGenerationPanel.retry.test.tsx \
+            src/features/rpg/RpgWorldGenerationDashboard.test.tsx \
+            2>&1 | tee profile-preview-vitest-output.txt
+      - name: Upload profile preview diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-preview-validation-output
+          path: |
+            profile-preview-typecheck-output.txt
+            profile-preview-vitest-output.txt
+          if-no-files-found: warn
