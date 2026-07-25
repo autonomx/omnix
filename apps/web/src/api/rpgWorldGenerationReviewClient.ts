@@ -20,6 +20,13 @@ export interface RpgWorldGenerationReviewReport {
   summary?: string;
 }
 
+export interface RpgWorldGenerationReviewDecision {
+  decision: 'keep' | 'replace';
+  candidate_hash: string;
+  promoted_hash?: string;
+  decided_at?: string;
+}
+
 export interface RpgWorldGenerationTopicResult {
   run_id: string;
   world_id: string;
@@ -36,6 +43,18 @@ export interface RpgWorldGenerationTopicResult {
   created_at: string;
   updated_at: string;
   previous_result?: RpgWorldGenerationTopicResult | null;
+  decision?: RpgWorldGenerationReviewDecision | null;
+}
+
+export interface RpgWorldGenerationReviewAnalytics {
+  status: Record<string, number>;
+  by_code: Record<string, number>;
+  by_field: Record<string, number>;
+  by_topic: Record<string, number>;
+  by_domain: Record<string, number>;
+  by_model: Record<string, number>;
+  by_prompt_version: Record<string, number>;
+  by_provider: Record<string, number>;
 }
 
 interface ReviewListResponse {
@@ -43,6 +62,8 @@ interface ReviewListResponse {
   run_id: string;
   parent_run_id?: string | null;
   topic_results: RpgWorldGenerationTopicResult[];
+  analytics: RpgWorldGenerationReviewAnalytics;
+  review_decisions: Record<string, RpgWorldGenerationReviewDecision>;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -89,6 +110,21 @@ export const rpgWorldGenerationReviewClient = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+      },
+    );
+  },
+
+  decide(
+    runId: string,
+    topicId: string,
+    decision: 'keep' | 'replace',
+  ): Promise<Record<string, unknown>> {
+    return request(
+      `/api/rpg/world-generation/${encodeURIComponent(runId)}/results/${encodeURIComponent(topicId)}/decision`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
       },
     );
   },
