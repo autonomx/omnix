@@ -36,6 +36,12 @@ def _node() -> CampaignTopicNode:
                     "required": True,
                 },
             ],
+            "lore_quality": {
+                "minimum_words": 40,
+                "minimum_paragraph_words": 12,
+                "minimum_summary_words": 8,
+                "required_sections": ["overview", "backstory"],
+            },
         },
     )
 
