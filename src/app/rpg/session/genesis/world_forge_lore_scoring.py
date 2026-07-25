@@ -15,6 +15,7 @@ from .world_forge_contract import CampaignTopicNode
 from .world_forge_generation import GeneratedTopic
 from .world_forge_integrity import WorldForgeIntegrityError, WorldForgeIntegrityIssue
 from .world_forge_lore_quality import provider_lore_quality_issues
+from .world_forge_timeline_quality import timeline_lore_quality_issues
 
 _DEFAULT_THRESHOLD = 80
 
@@ -34,6 +35,22 @@ _ISSUE_WEIGHTS: Mapping[str, int] = {
     "provider_lore_field_not_explained": 8,
     "provider_lore_world_brief_echo_name": 20,
     "provider_lore_duplicate_entity_prose": 20,
+    "provider_timeline_document_too_short": 25,
+    "provider_timeline_entries_missing": 30,
+    "provider_timeline_temporal_marker_missing": 18,
+    "provider_timeline_duplicate_temporal_marker": 8,
+    "provider_timeline_entry_too_short": 18,
+    "provider_timeline_entry_insufficient_narrative": 12,
+    "provider_timeline_cause_missing": 10,
+    "provider_timeline_event_missing": 12,
+    "provider_timeline_participants_missing": 10,
+    "provider_timeline_consequences_missing": 12,
+    "provider_timeline_legacy_missing": 12,
+    "provider_timeline_sources_or_uncertainty_missing": 8,
+    "provider_timeline_timekeeping_missing": 12,
+    "provider_timeline_cycle_missing": 10,
+    "provider_timeline_observance_missing": 10,
+    "provider_timeline_social_impact_missing": 10,
 }
 
 _DIMENSION_CODES: Mapping[str, frozenset[str]] = {
@@ -44,6 +61,9 @@ _DIMENSION_CODES: Mapping[str, frozenset[str]] = {
             "provider_lore_empty_section",
             "provider_lore_paragraph_fragment",
             "provider_lore_summary_fragment",
+            "provider_timeline_entries_missing",
+            "provider_timeline_temporal_marker_missing",
+            "provider_timeline_duplicate_temporal_marker",
         }
     ),
     "detail": frozenset(
@@ -51,6 +71,9 @@ _DIMENSION_CODES: Mapping[str, frozenset[str]] = {
             "provider_lore_summary_too_short",
             "provider_lore_paragraph_too_short",
             "provider_lore_total_too_short",
+            "provider_timeline_document_too_short",
+            "provider_timeline_entry_too_short",
+            "provider_timeline_entry_insufficient_narrative",
         }
     ),
     "natural_prose": frozenset(
@@ -63,6 +86,16 @@ _DIMENSION_CODES: Mapping[str, frozenset[str]] = {
         {
             "provider_lore_reference_not_explained",
             "provider_lore_field_not_explained",
+            "provider_timeline_cause_missing",
+            "provider_timeline_event_missing",
+            "provider_timeline_participants_missing",
+            "provider_timeline_consequences_missing",
+            "provider_timeline_legacy_missing",
+            "provider_timeline_sources_or_uncertainty_missing",
+            "provider_timeline_timekeeping_missing",
+            "provider_timeline_cycle_missing",
+            "provider_timeline_observance_missing",
+            "provider_timeline_social_impact_missing",
         }
     ),
     "distinctiveness": frozenset(
@@ -135,7 +168,10 @@ def assess_provider_lore_quality(
     topic: GeneratedTopic,
     campaign_context: Mapping[str, Any] | None = None,
 ) -> LoreQualityAssessment:
-    issues = provider_lore_quality_issues(node, topic, campaign_context)
+    issues = (
+        *provider_lore_quality_issues(node, topic, campaign_context),
+        *timeline_lore_quality_issues(node, topic),
+    )
     entity_ids = _entity_ids(topic)
     penalties = {entity_id: 0 for entity_id in entity_ids}
     global_penalty = 0
