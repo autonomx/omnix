@@ -70,6 +70,23 @@ class ReferenceSafeWorldForgeGenerator:
                 dependency_topics=dependency_topics,
             )
 
+        # The legacy deterministic generator dispatches several mature topic IDs
+        # through fixed fantasy-era schemas. Profile-defined topics may intentionally
+        # reuse those IDs with different entity kinds and reference domains. Enter
+        # through the profile generator directly so quests can reference
+        # actor/place/group rather than being rejected for lacking npc/location/faction.
+        if (
+            node.metadata.get("field_definitions")
+            and isinstance(self.generator, DeterministicWorldForgeGenerator)
+        ):
+            return process(
+                generate_deterministic_profile_topic(
+                    node,
+                    campaign_context=campaign_context,
+                    dependency_topics=dependency_topics,
+                )
+            )
+
         return generate_with_targeted_regeneration(
             self.generator,
             node,
