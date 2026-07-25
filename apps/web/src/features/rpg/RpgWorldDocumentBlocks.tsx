@@ -246,11 +246,9 @@ function timelineOrder(item: Record<string, unknown>, index: number): number {
 }
 
 function timelineItems(block: RpgAuthoringDocumentBlock): Array<Record<string, unknown>> {
-  const items = block.items?.length
-    ? block.items
-    : block.body
-      ? [{ title: block.title ?? 'Chronicle entry', body: block.body }]
-      : [];
+  let items: Array<Record<string, unknown>> = [];
+  if (block.items?.length) items = [...block.items];
+  else if (block.body) items = [{ title: block.title ?? 'Chronicle entry', body: block.body }];
   return items
     .map((item, index) => ({ item, index }))
     .sort((left, right) => timelineOrder(left.item, left.index) - timelineOrder(right.item, right.index))
