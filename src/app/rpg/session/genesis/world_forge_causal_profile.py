@@ -11,6 +11,10 @@ from .world_forge_profiles import (
     GenreProfile,
 )
 
+_REQUIRED_CAUSAL_DOMAINS = frozenset(
+    {"history_timeline", "regions", "places", "groups", "cultures", "actors"}
+)
+
 _LEGACY_STATUSES = (
     "continuing",
     "mixed",
@@ -240,7 +244,10 @@ def _causal_links_domain() -> DomainDefinition:
 def augment_profile_with_causal_traceability(profile: GenreProfile) -> GenreProfile:
     """Return a validated additive causal schema without mutating stored profiles."""
 
-    if profile.domain_map().get("causal_links") is not None:
+    domain_map = profile.domain_map()
+    if domain_map.get("causal_links") is not None:
+        return profile.require_valid()
+    if not _REQUIRED_CAUSAL_DOMAINS.issubset(domain_map):
         return profile.require_valid()
 
     domains: list[DomainDefinition] = []
