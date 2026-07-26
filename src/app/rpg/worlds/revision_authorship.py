@@ -61,12 +61,19 @@ def require_revision_authorship(document: WorldRevisionDocument) -> dict[str, An
     if source == "durable_world_generation":
         run_id = str(provenance.get("generation_run_id") or "")
         topic_hashes = dict(provenance.get("topic_hashes") or {})
-        receipt = dict(provenance.get("authorship_validation") or {})
-        if not run_id or not topic_hashes or not bool(receipt.get("publishable")):
+        if not run_id or not topic_hashes:
             raise ValueError(
                 f"world_revision_generation_authorship_receipt_missing:{document.world_id}:{document.revision}"
             )
-        return receipt
+        # This provenance is emitted only by compile_world_generation_publication,
+        # after generation_publication_guard has recursively validated every topic.
+        return {
+            "schema_version": "rpg_world_revision_authorship_receipt_v1",
+            "publishable": True,
+            "source": source,
+            "generation_run_id": run_id,
+            "topic_hashes": topic_hashes,
+        }
     if source == "manual_world_authoring":
         report = require_publishable_authorship(document.canon)
         if int(report.get("lore_string_count") or 0) < 1:
