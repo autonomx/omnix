@@ -9,11 +9,13 @@ from app.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 
-from .generation_authorship_runtime import generation_artifact
-from .generation_authorship_signing import (
-    attach_signed_human_authorship,
-    require_signed_authorship,
+from .generation_authorship_policy_signing import (
+    bind_signed_authorship_policy,
+    require_policy_bound_authorship,
+    signed_authorship_policy,
 )
+from .generation_authorship_runtime import generation_artifact
+from .generation_authorship_signing import attach_signed_human_authorship
 from .generation_coordinator import (
     _graph_from_payload,
     _settings_from_payload,
@@ -50,6 +52,7 @@ def _accepted_candidate(
         )
     GeneratedTopic.from_dict(payload)
 
+    policy = signed_authorship_policy(original_candidate)
     artifact = generation_artifact(original_candidate)
     if edited:
         event_id = f"humanedit:{run_id}:{topic_id}:{accepted_at}"
@@ -58,10 +61,12 @@ def _accepted_candidate(
             event_id=event_id,
             prior_candidate=original_candidate,
             edited_llm=bool(artifact),
+            policy=policy,
         )
+        payload = bind_signed_authorship_policy(payload, policy)
         source = "manual"
     else:
-        require_signed_authorship(payload)
+        require_policy_bound_authorship(payload, policy=policy)
         source = "ai"
 
     provenance = _mapping(payload.get("provenance"))
@@ -92,7 +97,7 @@ def _accepted_candidate(
         }
     )
     payload["provenance"] = provenance
-    require_signed_authorship(payload)
+    require_policy_bound_authorship(payload, policy=policy)
     return payload, source
 
 
