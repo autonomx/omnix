@@ -2,8 +2,8 @@
 
 The existing recovery adapter is intentionally conservative and review-gated. This
 wrapper adds the server evidence required by trusted authorship: hashes for every
-accepted provider response, a mechanical proof that deterministic normalisation did
-not add or remove lore strings, and one combined response fingerprint for batched
+accepted provider response, a path-aware proof that deterministic normalisation did
+not move or alter lore strings, and one combined response fingerprint for batched
 provider calls.
 """
 from __future__ import annotations
@@ -15,11 +15,9 @@ from typing import Any, Mapping
 
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.generation_authorship_runtime import (
-    prove_structural_repair_non_authoring,
-)
 from app.rpg_world_forge_provider import WorldForgeTopicResponse
 
+from .generation_authorship_signing import prove_path_aware_structural_repair
 from .generation_recovering_provider import (
     RecoveringFirstPassWorldForgeTopicGenerator,
 )
@@ -103,7 +101,7 @@ class EvidenceBackedRecoveringWorldForgeTopicGenerator(
         )
         proof = None
         if decoded is not None and repaired.payload is not None:
-            proof = prove_structural_repair_non_authoring(decoded, repaired.payload)
+            proof = prove_path_aware_structural_repair(decoded, repaired.payload)
 
         recovered = super()._recover(
             contract=contract,
