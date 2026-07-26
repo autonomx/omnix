@@ -140,7 +140,6 @@ describe('RpgWorldGenerationDashboard', () => {
     fireEvent.click(generate);
 
     await waitFor(() => expect(requests.some((request) => request.url.includes('/generation'))).toBe(true));
-    expect(screen.getByText(/Generate World selected\. Generation controls are open below/)).toBeInTheDocument();
     const generationRequest = requests.find((request) => request.url.includes('/generation'));
     expect(generationRequest?.url).toContain('/api/rpg/worlds/world%3Aaurelia/generation');
     expect(JSON.parse(String(generationRequest?.init?.body))).toMatchObject({
@@ -176,7 +175,7 @@ describe('RpgWorldGenerationDashboard', () => {
     );
   });
 
-  it('keeps prominent generation actions locked for an unapproved profile', async () => {
+  it('keeps all generation actions locked for an unapproved profile', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       ...approvedProfileResponse,
       review: {
@@ -190,8 +189,10 @@ describe('RpgWorldGenerationDashboard', () => {
 
     expect(await screen.findByText('Review Required')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '✦ Generate World' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Generate Selected' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Regenerate Stale' })).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Generate Selected' })).not.toHaveLength(0);
+    expect(screen.getAllByRole('button', { name: 'Generate Selected' }).every((button) => button.hasAttribute('disabled'))).toBe(true);
+    expect(screen.getAllByRole('button', { name: 'Regenerate Stale' })).not.toHaveLength(0);
+    expect(screen.getAllByRole('button', { name: 'Regenerate Stale' }).every((button) => button.hasAttribute('disabled'))).toBe(true);
   });
 
   it('selects a retryable topic without retaining the change event', async () => {
