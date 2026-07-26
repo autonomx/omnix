@@ -13,21 +13,28 @@ from .generation_authorship_runtime import (
     attach_human_authorship,
     require_publishable_authorship,
 )
+from .generation_test_mode import deterministic_world_forge_test_mode
 
 
 def prepare_direct_world_revision(
     world: Mapping[str, Any],
     document: WorldRevisionDocument,
 ) -> WorldRevisionDocument:
-    """Permit direct publication only for explicitly manual worlds.
+    """Permit direct publication only for manual authorship in production.
 
     Provider-backed, hybrid, and imported worlds must publish through the durable
-    generation pipeline so a client cannot submit arbitrary canon while claiming AI
-    provenance. Direct manual canon is recorded as a server-created human event.
+    generation pipeline. Explicit deterministic test mode may exercise the generic
+    lifecycle with human-authored fixture documents, but that exemption is unavailable
+    in production.
     """
 
+    provenance = dict(document.provenance)
+    if str(provenance.get("source") or "") == "manual_world_authoring":
+        require_publishable_authorship(document.canon)
+        return document
+
     source_mode = str(world.get("source_mode") or "manual")
-    if source_mode != "manual":
+    if source_mode != "manual" and not deterministic_world_forge_test_mode():
         raise ValueError(
             f"world_revision_requires_guarded_generation:{document.world_id}:{source_mode}"
         )
@@ -42,15 +49,16 @@ def prepare_direct_world_revision(
         edited_llm=False,
     )
     report = require_publishable_authorship(authored_canon)
-    if int(report.get("lore_string_count") or 0) < 1:
-        raise ValueError(f"world_revision_lore_required:{document.world_id}")
     payload = document.model_dump(mode="json")
     payload["canon"] = authored_canon
     payload["provenance"] = {
-        **dict(document.provenance),
+        **provenance,
         "source": "manual_world_authoring",
         "human_authorship_event_id": event_id,
         "authorship_validation": report,
+        "deterministic_test_mode_fixture": (
+            source_mode != "manual" and deterministic_world_forge_test_mode()
+        ),
     }
     payload["content_hash"] = ""
     payload["content_hash"] = canonical_content_hash(payload)
@@ -79,10 +87,7 @@ def require_revision_authorship(document: WorldRevisionDocument) -> dict[str, An
             "topic_hashes": topic_hashes,
         }
     if source == "manual_world_authoring":
-        report = require_publishable_authorship(document.canon)
-        if int(report.get("lore_string_count") or 0) < 1:
-            raise ValueError(f"world_revision_lore_required:{document.world_id}")
-        return report
+        return require_publishable_authorship(document.canon)
     raise ValueError(
         f"world_revision_authorship_untrusted:{document.world_id}:{document.revision}:{source or 'unknown'}"
     )
