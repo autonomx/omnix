@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 from .world_forge_authorship_policy import field_policy_row, topic_authorship_policy
+from .world_forge_causal_profile import augment_profile_with_causal_traceability
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_lore_quality import lore_quality_contract
 from .world_forge_profiles import DomainDefinition, GenreProfile
@@ -146,11 +147,11 @@ def build_profile_topic_graph(
 ) -> CampaignTopicGraph:
     """Build a deterministic graph from the exact validated profile revision."""
 
-    profile.require_valid()
+    profile = augment_profile_with_causal_traceability(profile)
     domain_nodes = tuple(_domain_node(domain, depth=depth) for domain in profile.domains)
     domain_ids = tuple(domain.domain_id for domain in profile.domains)
     graph = CampaignTopicGraph(
-        graph_version="rpg_profile_topic_graph_v2",
+        graph_version="rpg_profile_topic_graph_v3",
         campaign_template=str(campaign_template or profile.profile_id),
         depth=str(depth or "standard"),  # type: ignore[arg-type]
         nodes=(*domain_nodes, *_pipeline_nodes(domain_ids)),
@@ -201,7 +202,7 @@ def build_profile_launch_topic_graph(
 ) -> CampaignTopicGraph:
     """Project the first-turn graph from profile launch requirements."""
 
-    profile.require_valid()
+    profile = augment_profile_with_causal_traceability(profile)
     selected = set(profile.launch_requirements.required_domain_ids)
     selected.update(
         domain.domain_id
