@@ -18,6 +18,7 @@ from .world_forge_generation import (
     WorldForgeTopicGenerator,
     generate_campaign_topics,
 )
+from .world_forge_historical_planning import build_historical_planning_topics
 from .world_forge_profile_generation import resolve_or_generate_genre_profile
 from .world_forge_profile_graph import (
     build_profile_launch_topic_graph,
@@ -174,6 +175,14 @@ def run_campaign_world_forge(
         seed=seed,
         world_key=campaign_id,
     )
+    planning_topics = {
+        "anchor_registry": anchor_registry,
+        **build_historical_planning_topics(
+            anchor_registry,
+            seed=seed,
+            world_key=campaign_id,
+        ),
+    }
     generation = generate_campaign_topics(
         graph,
         generator=generator or _default_generator(),
@@ -194,7 +203,7 @@ def run_campaign_world_forge(
             },
             "resolved_genre_profile": profile_payload,
             "resolved_profile_hash": profile.content_hash,
-            "planning_topics": {"anchor_registry": anchor_registry},
+            "planning_topics": planning_topics,
         },
         max_parallel_jobs=max_parallel_jobs,
         existing_topics=existing_topics,
