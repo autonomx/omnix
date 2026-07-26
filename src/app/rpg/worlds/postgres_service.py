@@ -25,6 +25,7 @@ from .lifecycle_service import require_scenario_writable, require_world_writable
 from .profile_generation_jobs import plan_world_profile_creation
 from .revision_authorship import (
     prepare_direct_world_revision,
+    require_release_authorship,
     require_revision_authorship,
 )
 from .semantic_validation import (
@@ -329,11 +330,7 @@ def publish_scenario_revision(
                     f"{document.compatible_release}"
                 )
             release = WorldReleaseDocument.model_validate(release_row["document"])
-            if not bool(dict(release.certification).get("authorship_validated")):
-                raise ValueError(
-                    f"world_release_authorship_uncertified:{document.world_id}:"
-                    f"{document.world_revision}:{document.compatible_release}"
-                )
+            require_release_authorship(world_revision, release)
             definitions = _definitions_from_work(work, context, release)
             validate_release_bindings(world_revision, release, definitions)
             validate_scenario_against_release(document, release, definitions)
@@ -376,11 +373,7 @@ def bind_campaign_world(
                 f"{binding.world_revision}:{binding.world_release}"
             )
         release = WorldReleaseDocument.model_validate(release_row["document"])
-        if not bool(dict(release.certification).get("authorship_validated")):
-            raise ValueError(
-                f"world_release_authorship_uncertified:{binding.world_id}:"
-                f"{binding.world_revision}:{binding.world_release}"
-            )
+        require_release_authorship(world_revision, release)
         stored = work.world_scenarios.bind_campaign(
             context,
             campaign_id=binding.campaign_id,
@@ -413,12 +406,7 @@ def load_release_definitions(
     *,
     database: Any | None = None,
 ) -> dict[str, GridMapDefinition]:
-    require_revision_authorship(world_revision)
-    if not bool(dict(release.certification).get("authorship_validated")):
-        raise ValueError(
-            f"world_release_authorship_uncertified:{world_revision.world_id}:"
-            f"{world_revision.revision}:{release.release}"
-        )
+    require_release_authorship(world_revision, release)
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         definitions = _definitions_from_work(work, context, release)
@@ -461,9 +449,5 @@ def load_published_resources(
     revision_document = WorldRevisionDocument.model_validate(revision["document"])
     release_document = WorldReleaseDocument.model_validate(release["document"])
     scenario_document = ScenarioRevisionDocument.model_validate(scenario["document"])
-    require_revision_authorship(revision_document)
-    if not bool(dict(release_document.certification).get("authorship_validated")):
-        raise ValueError(
-            f"world_release_authorship_uncertified:{world_id}:{world_revision}:{world_release}"
-        )
+    require_release_authorship(revision_document, release_document)
     return revision_document, release_document, scenario_document
