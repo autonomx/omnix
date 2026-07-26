@@ -2,18 +2,134 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .contracts import (
     WorldReleaseDocument,
     WorldRevisionDocument,
     canonical_content_hash,
 )
-from .generation_authorship_runtime import (
-    attach_human_authorship,
-    require_publishable_authorship,
-)
+from .generation_authorship import AuthorshipValidationError
+from .generation_authorship_runtime import lore_string_leaves
 from .generation_test_mode import deterministic_world_forge_test_mode
+
+_REVISION_LEDGER_SCHEMA = "rpg_world_revision_origin_ledger_v1"
+
+
+def _revision_origin_ledger(
+    canon: Mapping[str, Any],
+    *,
+    event_id: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": _REVISION_LEDGER_SCHEMA,
+        "authorship_class": "human_authored",
+        "human_edit_event_id": event_id,
+        "origin_ledger": [
+            {
+                "path": str(row["path"]),
+                "content_hash": str(row["content_hash"]),
+                "authorship_class": "human_authored",
+                "human_edit_event_id": event_id,
+                "source_json_pointer": str(row["path"]),
+                "generation_artifact_id": "",
+            }
+            for row in lore_string_leaves(canon)
+        ],
+    }
+
+
+def attach_revision_human_authorship(
+    canon: Mapping[str, Any],
+    provenance: Mapping[str, Any] | None,
+    *,
+    event_id: str,
+) -> dict[str, Any]:
+    """Attach origin evidence to revision provenance without changing canon."""
+
+    payload = dict(provenance or {})
+    payload["source"] = "manual_world_authoring"
+    payload["human_authorship_event_id"] = event_id
+    payload["authorship"] = _revision_origin_ledger(canon, event_id=event_id)
+    payload["authorship_validation"] = validate_revision_origin_ledger(
+        canon,
+        payload["authorship"],
+    )
+    return payload
+
+
+def validate_revision_origin_ledger(
+    canon: Mapping[str, Any],
+    authorship: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Verify exact canon string hashes against a server-created human ledger."""
+
+    row = dict(authorship or {})
+    event_id = str(row.get("human_edit_event_id") or "")
+    blockers: list[dict[str, str]] = []
+    if str(row.get("schema_version") or "") != _REVISION_LEDGER_SCHEMA:
+        blockers.append(
+            {"path": "/provenance/authorship", "code": "revision_authorship_schema_invalid"}
+        )
+    if str(row.get("authorship_class") or "") != "human_authored":
+        blockers.append(
+            {"path": "/provenance/authorship", "code": "revision_authorship_class_invalid"}
+        )
+    if not event_id:
+        blockers.append(
+            {"path": "/provenance/authorship", "code": "revision_human_event_missing"}
+        )
+
+    current = {
+        str(value["path"]): str(value["content_hash"])
+        for value in lore_string_leaves(canon)
+    }
+    ledger_values = row.get("origin_ledger")
+    ledger_values = (
+        ledger_values
+        if isinstance(ledger_values, Sequence)
+        and not isinstance(ledger_values, (str, bytes, bytearray))
+        else ()
+    )
+    ledger: dict[str, dict[str, Any]] = {}
+    for value in ledger_values:
+        if not isinstance(value, Mapping):
+            continue
+        origin = dict(value)
+        path = str(origin.get("path") or "")
+        if path:
+            ledger[path] = origin
+    for path, value_hash in current.items():
+        origin = ledger.get(path)
+        if origin is None:
+            blockers.append({"path": path, "code": "revision_origin_missing"})
+            continue
+        if str(origin.get("content_hash") or "") != value_hash:
+            blockers.append({"path": path, "code": "revision_origin_hash_mismatch"})
+        if str(origin.get("authorship_class") or "") != "human_authored":
+            blockers.append({"path": path, "code": "revision_origin_class_invalid"})
+        if str(origin.get("human_edit_event_id") or "") != event_id:
+            blockers.append({"path": path, "code": "revision_origin_event_mismatch"})
+    for path in sorted(set(ledger) - set(current)):
+        blockers.append({"path": path, "code": "revision_origin_stale"})
+
+    unique = {
+        (str(blocker["path"]), str(blocker["code"])): blocker
+        for blocker in blockers
+    }
+    ordered = [unique[key] for key in sorted(unique)]
+    report = {
+        "schema_version": "rpg_world_revision_authorship_report_v1",
+        "publishable": not ordered,
+        "authorship_class": "human_authored",
+        "human_edit_event_id": event_id,
+        "lore_string_count": len(current),
+        "origin_count": len(ledger),
+        "blocked_paths": ordered,
+    }
+    if ordered:
+        raise AuthorshipValidationError(report)
+    return report
 
 
 def prepare_direct_world_revision(
@@ -30,7 +146,12 @@ def prepare_direct_world_revision(
 
     provenance = dict(document.provenance)
     if str(provenance.get("source") or "") == "manual_world_authoring":
-        require_publishable_authorship(document.canon)
+        validate_revision_origin_ledger(
+            document.canon,
+            provenance.get("authorship")
+            if isinstance(provenance.get("authorship"), Mapping)
+            else None,
+        )
         return document
 
     source_mode = str(world.get("source_mode") or "manual")
@@ -42,20 +163,13 @@ def prepare_direct_world_revision(
         f"humanrevision:{document.world_id}:{document.revision}:"
         f"{datetime.now(timezone.utc).isoformat()}"
     )
-    authored_canon = attach_human_authorship(
-        document.canon,
-        event_id=event_id,
-        prior_candidate=None,
-        edited_llm=False,
-    )
-    report = require_publishable_authorship(authored_canon)
     payload = document.model_dump(mode="json")
-    payload["canon"] = authored_canon
     payload["provenance"] = {
-        **provenance,
-        "source": "manual_world_authoring",
-        "human_authorship_event_id": event_id,
-        "authorship_validation": report,
+        **attach_revision_human_authorship(
+            document.canon,
+            provenance,
+            event_id=event_id,
+        ),
         "deterministic_test_mode_fixture": (
             source_mode != "manual" and deterministic_world_forge_test_mode()
         ),
@@ -77,8 +191,6 @@ def require_revision_authorship(document: WorldRevisionDocument) -> dict[str, An
             raise ValueError(
                 f"world_revision_generation_authorship_receipt_missing:{document.world_id}:{document.revision}"
             )
-        # This provenance is emitted only by compile_world_generation_publication,
-        # after generation_publication_guard has recursively validated every topic.
         return {
             "schema_version": "rpg_world_revision_authorship_receipt_v1",
             "publishable": True,
@@ -87,7 +199,12 @@ def require_revision_authorship(document: WorldRevisionDocument) -> dict[str, An
             "topic_hashes": topic_hashes,
         }
     if source == "manual_world_authoring":
-        return require_publishable_authorship(document.canon)
+        return validate_revision_origin_ledger(
+            document.canon,
+            provenance.get("authorship")
+            if isinstance(provenance.get("authorship"), Mapping)
+            else None,
+        )
     raise ValueError(
         f"world_revision_authorship_untrusted:{document.world_id}:{document.revision}:{source or 'unknown'}"
     )
@@ -133,7 +250,9 @@ def require_release_authorship(
 
 
 __all__ = [
+    "attach_revision_human_authorship",
     "prepare_direct_world_revision",
     "require_release_authorship",
     "require_revision_authorship",
+    "validate_revision_origin_ledger",
 ]
