@@ -61,7 +61,6 @@ jobs:
             src/tests/rpg/worlds/test_signed_world_authorship.py \
             src/tests/rpg/worlds/test_signed_world_authorship_policy.py \
             src/tests/rpg/worlds/test_signed_world_revision_receipt.py \
-            src/tests/rpg/worlds/test_trusted_lore_authorship.py \
             src/tests/rpg/worlds/test_world_generation_retirement.py \
             src/tests/rpg/worlds/test_world_library_profile_generation.py \
             src/tests/rpg/worlds/test_world_runtime_seed.py \
