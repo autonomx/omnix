@@ -10,12 +10,16 @@ from app.rpg.session.genesis.world_forge_generation import (
 )
 
 from .generation_authorship_runtime import (
-    attach_partial_llm_authorship,
     build_generation_artifact,
     generation_artifact,
     generation_artifacts,
-    lore_string_leaves,
-    require_publishable_authorship,
+)
+from .generation_authorship_signing import (
+    attach_signed_partial_llm_authorship,
+    harden_and_sign_generation_artifact,
+    require_signed_authorship,
+    strict_lore_string_leaves,
+    verify_record_signature,
 )
 from .generation_validation import PublicationValidatedWorldForgeGenerator
 
@@ -65,12 +69,12 @@ def changed_lore_paths(
 ) -> tuple[str, ...]:
     prior = {
         str(row["path"]): str(row["content_hash"])
-        for row in lore_string_leaves(before)
+        for row in strict_lore_string_leaves(before)
     }
     return tuple(
         sorted(
             str(row["path"])
-            for row in lore_string_leaves(after)
+            for row in strict_lore_string_leaves(after)
             if prior.get(str(row["path"])) != str(row["content_hash"])
         )
     )
@@ -84,11 +88,13 @@ def attach_targeted_regeneration_authorship(
     topic_id: str,
     operation: str,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
-    """Attest only changed lore paths to the new provider response."""
+    """Attest only changed lore paths to the new signed provider response."""
 
+    require_signed_authorship(before)
     generated_payload = generated.as_dict()
+    require_signed_authorship(generated_payload)
     provider_artifact = generation_artifact(generated_payload)
-    if not provider_artifact:
+    if not provider_artifact or not verify_record_signature(provider_artifact):
         raise ValueError(
             f"targeted_generation_artifact_required:{topic_id}:{operation}"
         )
@@ -110,7 +116,7 @@ def attach_targeted_regeneration_authorship(
         ),
         "transformations": ["targeted_regeneration_merge"],
     }
-    artifact = build_generation_artifact(
+    unsigned = build_generation_artifact(
         after,
         run_id=str(provider_artifact.get("generation_run_id") or ""),
         job_id=str(provider_artifact.get("job_id") or ""),
@@ -124,13 +130,18 @@ def attach_targeted_regeneration_authorship(
         authored_paths=changed,
         parent_artifact_ids=parent_ids,
     )
-    payload = attach_partial_llm_authorship(
+    artifact = harden_and_sign_generation_artifact(
+        after,
+        unsigned,
+        authored_paths=changed,
+    )
+    payload = attach_signed_partial_llm_authorship(
         after,
         artifact,
         llm_paths=changed,
         prior_candidate=before,
     )
-    require_publishable_authorship(payload)
+    require_signed_authorship(payload)
     return payload, changed
 
 
