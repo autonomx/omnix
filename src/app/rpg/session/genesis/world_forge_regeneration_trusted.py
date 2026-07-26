@@ -16,6 +16,7 @@ from .world_forge_regeneration import (
     regeneration_request_from_error as _base_request_from_error,
     targeted_regeneration_context,
 )
+from .world_forge_review import is_reviewable_candidate_error, mark_needs_review
 
 
 def regeneration_request_from_error(
@@ -96,6 +97,30 @@ def _repair_context(
     return context
 
 
+def _review_candidate(
+    node: CampaignTopicNode,
+    topic: GeneratedTopic,
+    error: Exception,
+    *,
+    attempt: int,
+    history: list[dict[str, Any]],
+) -> GeneratedTopic:
+    reviewed = mark_needs_review(node, topic, error)
+    return replace(
+        reviewed,
+        provenance={
+            **dict(reviewed.provenance),
+            "targeted_regeneration_attempt_count": attempt,
+            "targeted_regeneration_history": list(history),
+            "targeted_regeneration_succeeded": False,
+            "lore_quality_attempts": _quality_attempt_rows(history),
+            "lore_quality_selected_attempt": attempt,
+            "lore_quality_total_attempts": attempt,
+            "lore_quality_retry_count": max(0, attempt - 1),
+        },
+    )
+
+
 def generate_with_targeted_regeneration(
     generator: WorldForgeTopicGenerator,
     node: CampaignTopicNode,
@@ -106,7 +131,13 @@ def generate_with_targeted_regeneration(
     process: Callable[[GeneratedTopic], GeneratedTopic],
     max_attempts: int = 3,
 ) -> GeneratedTopic:
-    """Run one initial generation plus at most two narrowly scoped LLM repairs."""
+    """Run one initial generation plus at most two narrowly scoped LLM repairs.
+
+    Provider candidates that are structurally usable but fail a reviewable grounding,
+    placeholder, or dossier-quality check are retained as ``needs_review`` when no
+    safe targeted repair request can be derived. They never become ready canon, but
+    their provider-authored lore is not discarded or replaced by application prose.
+    """
 
     attempts = max(1, min(int(max_attempts), 3))
     context = dict(campaign_context)
@@ -164,14 +195,6 @@ def generate_with_targeted_regeneration(
 
             if not _provider_generated(generated):
                 raise
-            if attempt >= attempts:
-                if quality_candidates:
-                    return _selected_best_candidate(
-                        quality_candidates,
-                        attempts=attempt,
-                        history=history,
-                    )
-                raise
 
             request = regeneration_request_from_error(
                 node,
@@ -179,7 +202,50 @@ def generate_with_targeted_regeneration(
                 attempt=attempt + 1,
             )
             if request is None:
+                if is_reviewable_candidate_error(error):
+                    history.append(
+                        {
+                            "candidate_id": f"candidate:{node.topic_id}:attempt:{attempt}",
+                            "parent_candidate_id": (
+                                f"candidate:{node.topic_id}:attempt:{attempt - 1}"
+                                if attempt > 1
+                                else ""
+                            ),
+                            "generation_type": (
+                                "initial" if attempt == 1 else "targeted_repair"
+                            ),
+                            "attempt": attempt,
+                            "review_status": "needs_review",
+                            "review_reason": str(error).split(":", 1)[0],
+                            "repair_available": False,
+                        }
+                    )
+                    return _review_candidate(
+                        node,
+                        failing_topic,
+                        error,
+                        attempt=attempt,
+                        history=history,
+                    )
                 raise
+
+            if attempt >= attempts:
+                if quality_candidates:
+                    return _selected_best_candidate(
+                        quality_candidates,
+                        attempts=attempt,
+                        history=history,
+                    )
+                if is_reviewable_candidate_error(error):
+                    return _review_candidate(
+                        node,
+                        failing_topic,
+                        error,
+                        attempt=attempt,
+                        history=history,
+                    )
+                raise
+
             request_row = request.as_dict()
             request_row.update(
                 {
