@@ -28,8 +28,8 @@ from .world_forge_profile_deterministic import generate_deterministic_profile_to
 from .world_forge_regeneration import (
     RegenerationRequest,
     enforce_targeted_regeneration,
-    generate_with_targeted_regeneration,
 )
+from .world_forge_regeneration_trusted import generate_with_targeted_regeneration
 from .world_forge_semantic_quality import require_topic_semantic_quality
 
 
@@ -163,7 +163,7 @@ class ReferenceSafeWorldForgeGenerator:
                 campaign_context=campaign_context,
                 dependency_topics=dependency_topics,
                 process=process,
-                max_attempts=2,
+                max_attempts=3,
             )
         processed = self._mark_manual_decision_required(
             node,
