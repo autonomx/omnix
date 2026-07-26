@@ -16,10 +16,12 @@ from .generation_authorship_runtime import (
 )
 from .generation_authorship_signing import (
     attach_signed_partial_llm_authorship,
-    harden_and_sign_generation_artifact,
     require_signed_authorship,
     strict_lore_string_leaves,
     verify_record_signature,
+)
+from .generation_authorship_targeted_signing import (
+    harden_and_sign_targeted_artifact,
 )
 from .generation_validation import PublicationValidatedWorldForgeGenerator
 
@@ -130,7 +132,7 @@ def attach_targeted_regeneration_authorship(
         authored_paths=changed,
         parent_artifact_ids=parent_ids,
     )
-    artifact = harden_and_sign_generation_artifact(
+    artifact = harden_and_sign_targeted_artifact(
         after,
         unsigned,
         authored_paths=changed,
