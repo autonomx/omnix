@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, replace
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from pydantic import BaseModel
 
@@ -24,6 +24,9 @@ from app.rpg.worlds.generation_recovery_retained_registry import (
     retained_registry_response,
 )
 from app.rpg.worlds.generation_recovery_review import StructuredRecoveryReviewMixin
+from app.rpg.worlds.generation_recovery_validation import (
+    validate_recovered_profile_payload,
+)
 from app.rpg.worlds.generation_structured_recovery import (
     CapturingStructuredProvider,
     decode_candidate,
@@ -87,6 +90,31 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
             )
         return outcome, capture.raw_text
 
+    @staticmethod
+    def _validate_recovered_candidate(
+        *,
+        contract: StructuredContract[Any],
+        payload: Mapping[str, Any] | None,
+        field_definitions: Sequence[Mapping[str, Any]],
+        expected_topic_id: str,
+        allocated_entity_ids: tuple[str, ...],
+        expected_entity_kind: str,
+    ) -> tuple[BaseModel | None, Exception | None]:
+        value, error = validate_payload(contract, payload)
+        if value is not None:
+            return value, None
+        if not field_definitions:
+            return value, error
+        fallback, fallback_error = validate_recovered_profile_payload(
+            payload,
+            field_definitions=field_definitions,
+            expected_topic_id=expected_topic_id,
+            allocated_entity_ids=allocated_entity_ids,
+            expected_entity_kind=expected_entity_kind,
+            semantic_validator=contract.semantic_validator,
+        )
+        return fallback, fallback_error or error
+
     def _recover(
         self,
         *,
@@ -97,6 +125,7 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
         expected_topic_id: str,
         allocated_entity_ids: tuple[str, ...],
         expected_entity_kind: str,
+        field_definitions: Sequence[Mapping[str, Any]],
         max_tokens: int,
         retain_invalid_kind: str,
     ) -> _RecoveredValue:
@@ -117,7 +146,14 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
             allocated_entity_ids=allocated_entity_ids,
             expected_entity_kind=expected_entity_kind,
         )
-        value, repair_error = validate_payload(contract, repaired.payload)
+        value, repair_error = self._validate_recovered_candidate(
+            contract=contract,
+            payload=repaired.payload,
+            field_definitions=field_definitions,
+            expected_topic_id=expected_topic_id,
+            allocated_entity_ids=allocated_entity_ids,
+            expected_entity_kind=expected_entity_kind,
+        )
         original_prompt_tokens = sum(
             _token_estimate(message.content) for message in original_messages
         )
@@ -176,7 +212,42 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
                 completion_tokens,
             )
 
-        final_error = corrected.error or correction_error
+        corrected_decoded = decode_candidate(corrected_raw)
+        corrected_repair = deterministic_repair(
+            corrected_decoded,
+            expected_topic_id=expected_topic_id,
+            allocated_entity_ids=allocated_entity_ids,
+            expected_entity_kind=expected_entity_kind,
+        )
+        corrected_value, corrected_validation_error = self._validate_recovered_candidate(
+            contract=contract,
+            payload=corrected_repair.payload,
+            field_definitions=field_definitions,
+            expected_topic_id=expected_topic_id,
+            allocated_entity_ids=allocated_entity_ids,
+            expected_entity_kind=expected_entity_kind,
+        )
+        if corrected_value is not None:
+            diagnostics = merge_diagnostics(
+                outcome.diagnostics.as_dict(),
+                corrected.diagnostics.as_dict(),
+                method="same_model_extraction",
+                repair_codes=(*repaired.codes, *corrected_repair.codes),
+                raw_text=raw_text,
+                error=original_error,
+            )
+            return _RecoveredValue(
+                corrected_value,
+                diagnostics,
+                prompt_tokens,
+                completion_tokens,
+            )
+
+        final_error = (
+            corrected_validation_error
+            or corrected.error
+            or correction_error
+        )
         if retain_invalid_kind == "registry":
             retained = retained_registry_response(
                 expected_topic_id=expected_topic_id,
@@ -327,6 +398,7 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
                 expected_entity_kind=str(
                     node.metadata.get("entity_kind") or node.topic_id
                 ),
+                field_definitions=_definitions(node),
                 max_tokens=self.config.max_tokens,
                 retain_invalid_kind="topic",
             )
