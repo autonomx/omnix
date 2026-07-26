@@ -26,6 +26,7 @@ from .world_forge_profile_graph import (
 )
 from .world_forge_profiles import GenreProfile, genre_profile_from_dict
 from .world_forge_quality import apply_world_forge_quality_audit
+from .world_forge_social_planning import build_social_planning_topics
 
 
 @dataclass(frozen=True)
@@ -175,12 +176,20 @@ def run_campaign_world_forge(
         seed=seed,
         world_key=campaign_id,
     )
+    historical_topics = build_historical_planning_topics(
+        anchor_registry,
+        seed=seed,
+        world_key=campaign_id,
+    )
     planning_topics = {
         "anchor_registry": anchor_registry,
-        **build_historical_planning_topics(
+        **historical_topics,
+        **build_social_planning_topics(
             anchor_registry,
+            historical_topics["geography_resource_plan"],
+            historical_topics["historical_epoch_plan"],
+            historical_topics["present_day_state"],
             seed=seed,
-            world_key=campaign_id,
         ),
     }
     generation = generate_campaign_topics(
