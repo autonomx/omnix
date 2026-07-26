@@ -5,7 +5,7 @@ import json
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_generation import GeneratedTopic
@@ -231,6 +231,10 @@ def _has_marker(field_id: str, markers: tuple[str, ...]) -> bool:
     return any(marker in field_id for marker in markers)
 
 
+def _has_substantive_value(value: Any) -> bool:
+    return value not in (None, "", [], (), {})
+
+
 def audit_topic_semantic_quality(
     node: CampaignTopicNode,
     topic: GeneratedTopic,
@@ -349,7 +353,8 @@ def audit_topic_semantic_quality(
             weak = tuple(
                 field_id
                 for field_id in field_group
-                if len(set(_meaningful_tokens(entity.get(field_id)))) < 3
+                if _has_substantive_value(entity.get(field_id))
+                and len(set(_meaningful_tokens(entity.get(field_id)))) < 3
             )
             if weak:
                 issues.append(
@@ -400,10 +405,7 @@ def audit_topic_semantic_quality(
                                 if referenced_id
                                 in _reference_values(
                                     entity.get(field_id),
-                                    str(
-                                        definition_map[field_id].get("value_type")
-                                        or ""
-                                    ),
+                                    str(definition_map[field_id].get("value_type") or ""),
                                 )
                             ),
                             (field_id,),
