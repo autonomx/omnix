@@ -151,7 +151,7 @@ def build_profile_topic_graph(
     domain_nodes = tuple(_domain_node(domain, depth=depth) for domain in profile.domains)
     domain_ids = tuple(domain.domain_id for domain in profile.domains)
     graph = CampaignTopicGraph(
-        graph_version="rpg_profile_topic_graph_v3",
+        graph_version="rpg_profile_topic_graph_v2",
         campaign_template=str(campaign_template or profile.profile_id),
         depth=str(depth or "standard"),  # type: ignore[arg-type]
         nodes=(*domain_nodes, *_pipeline_nodes(domain_ids)),
