@@ -23,7 +23,8 @@ from .tenant import TenantContext
 
 
 def _hash(value: Mapping[str, Any]) -> str:
-    return hashlib.sha256(canonical_json(dict(value)).encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(canonical_json(dict(value)).encode("utf-8")).hexdigest()
+    return f"sha256:{digest}"
 
 
 def _fixture_exempt(payload: Mapping[str, Any]) -> bool:
