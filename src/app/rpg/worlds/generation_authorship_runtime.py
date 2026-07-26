@@ -8,7 +8,7 @@ from typing import Any, Mapping
 from .generation_authorship import (
     AuthorshipClass,
     AuthorshipValidationError,
-    attach_human_authorship,
+    attach_human_authorship as _attach_human_authorship,
     attach_llm_authorship,
     content_hash,
     lore_string_leaves,
@@ -115,14 +115,68 @@ def generation_artifact(candidate: Mapping[str, Any]) -> dict[str, Any]:
     return dict(artifact) if isinstance(artifact, Mapping) else {}
 
 
+def attach_human_authorship(
+    candidate: Mapping[str, Any],
+    *,
+    event_id: str,
+    prior_candidate: Mapping[str, Any] | None = None,
+    edited_llm: bool = False,
+) -> dict[str, Any]:
+    """Attach human origins and retain the immutable provider artifact for mixed lore."""
+
+    prior = dict(prior_candidate or {})
+    artifact = generation_artifact(prior)
+    payload = _attach_human_authorship(
+        candidate,
+        event_id=event_id,
+        prior_candidate=prior,
+        edited_llm=edited_llm,
+    )
+    if artifact:
+        provenance = dict(payload.get("provenance") or {})
+        authorship = dict(provenance.get("authorship") or {})
+        authorship["generation_artifact"] = artifact
+        provenance["authorship"] = authorship
+        payload["provenance"] = provenance
+    return payload
+
+
+def _artifact_origin_hash(
+    candidate: Mapping[str, Any],
+    artifact_id: str,
+) -> str:
+    authorship = dict(dict(candidate.get("provenance") or {}).get("authorship") or {})
+    rows: list[dict[str, str]] = []
+    for value in authorship.get("origin_ledger") or ():
+        if not isinstance(value, Mapping):
+            continue
+        row = dict(value)
+        path = str(row.get("path") or "")
+        if (
+            str(row.get("authorship_class") or "") == AuthorshipClass.LLM_AUTHORED.value
+            and str(row.get("generation_artifact_id") or "") == artifact_id
+        ):
+            rows.append({"path": path, "content_hash": str(row.get("content_hash") or "")})
+            continue
+        parent = row.get("parent_origin")
+        if not isinstance(parent, Mapping):
+            continue
+        if (
+            str(parent.get("authorship_class") or "") == AuthorshipClass.LLM_AUTHORED.value
+            and str(parent.get("generation_artifact_id") or "") == artifact_id
+        ):
+            rows.append({"path": path, "content_hash": str(parent.get("content_hash") or "")})
+    return content_hash(sorted(rows, key=lambda row: (row["path"], row["content_hash"])))
+
+
 def validate_publishable_authorship(
     candidate: Mapping[str, Any],
     *,
     server_artifact: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Verify origins, artifact integrity, and exact authored-string payload hashes."""
+    """Verify origins, artifact integrity, and exact authored-string hashes."""
 
-    artifact = dict(server_artifact or {})
+    artifact = dict(server_artifact or generation_artifact(candidate) or {})
     origin_report = _validate_origins(candidate, server_artifact=None)
     blockers = [
         dict(row)
@@ -134,25 +188,56 @@ def validate_publishable_authorship(
         row
         for row in dict(dict(candidate.get("provenance") or {}).get("authorship") or {}).get("origin_ledger") or ()
         if isinstance(row, Mapping)
-        and str(row.get("authorship_class") or "") == AuthorshipClass.LLM_AUTHORED.value
+        and (
+            str(row.get("authorship_class") or "") == AuthorshipClass.LLM_AUTHORED.value
+            or str(dict(row.get("parent_origin") or {}).get("authorship_class") or "")
+            == AuthorshipClass.LLM_AUTHORED.value
+        )
     ]
     if llm_origins:
         if not artifact:
-            blockers.append({"path": "/provenance/authorship", "code": "server_generation_artifact_missing"})
+            blockers.append(
+                {"path": "/provenance/authorship", "code": "server_generation_artifact_missing"}
+            )
         else:
             expected_artifact_hash = content_hash(_artifact_without_hash(artifact))
             if str(artifact.get("artifact_hash") or "") != expected_artifact_hash:
-                blockers.append({"path": "/provenance/authorship", "code": "generation_artifact_hash_mismatch"})
-            if str(artifact.get("parsed_payload_hash") or "") != _authored_payload_hash(candidate):
-                blockers.append({"path": "/", "code": "generation_artifact_payload_hash_mismatch"})
-            if not str(artifact.get("provider") or "") or not str(artifact.get("model") or ""):
-                blockers.append({"path": "/provenance/authorship", "code": "generation_artifact_provider_or_model_missing"})
-            if str(artifact.get("authorship_class") or "") != AuthorshipClass.LLM_AUTHORED.value:
-                blockers.append({"path": "/provenance/authorship", "code": "generation_artifact_not_llm_authored"})
+                blockers.append(
+                    {"path": "/provenance/authorship", "code": "generation_artifact_hash_mismatch"}
+                )
             artifact_id = str(artifact.get("generation_artifact_id") or "")
+            if str(artifact.get("parsed_payload_hash") or "") != _artifact_origin_hash(
+                candidate, artifact_id
+            ):
+                blockers.append(
+                    {"path": "/", "code": "generation_artifact_payload_hash_mismatch"}
+                )
+            if not str(artifact.get("provider") or "") or not str(artifact.get("model") or ""):
+                blockers.append(
+                    {
+                        "path": "/provenance/authorship",
+                        "code": "generation_artifact_provider_or_model_missing",
+                    }
+                )
+            if str(artifact.get("authorship_class") or "") != AuthorshipClass.LLM_AUTHORED.value:
+                blockers.append(
+                    {
+                        "path": "/provenance/authorship",
+                        "code": "generation_artifact_not_llm_authored",
+                    }
+                )
             for origin in llm_origins:
-                if str(origin.get("generation_artifact_id") or "") != artifact_id:
-                    blockers.append({"path": str(origin.get("path") or "/"), "code": "origin_artifact_mismatch"})
+                current_id = str(origin.get("generation_artifact_id") or "")
+                parent_id = str(
+                    dict(origin.get("parent_origin") or {}).get("generation_artifact_id") or ""
+                )
+                if artifact_id not in {current_id, parent_id}:
+                    blockers.append(
+                        {
+                            "path": str(origin.get("path") or "/"),
+                            "code": "origin_artifact_mismatch",
+                        }
+                    )
 
     unique: dict[tuple[str, str], dict[str, Any]] = {}
     for blocker in blockers:
