@@ -25,10 +25,22 @@ def _hash(value: Mapping[str, Any]) -> str:
 def _fixture_exempt(payload: Mapping[str, Any]) -> bool:
     provenance = payload.get("provenance")
     provenance = dict(provenance) if isinstance(provenance, Mapping) else {}
-    return deterministic_world_forge_test_mode() and (
-        bool(provenance.get("deterministic_fixture_only"))
-        or bool(provenance.get("test_authorship_exemption"))
-        or str(provenance.get("generator") or "").startswith("deterministic_")
+    exemption = provenance.get("test_authorship_exemption")
+    exemption = dict(exemption) if isinstance(exemption, Mapping) else {}
+    server_attested = (
+        bool(exemption.get("server_attested"))
+        and str(exemption.get("schema_version") or "")
+        == "rpg_deterministic_fixture_exemption_v1"
+        and str(exemption.get("recorded_provider_route") or "").strip().casefold()
+        in {"deterministic", "offline", "reference-safe", "test"}
+    )
+    return server_attested or (
+        deterministic_world_forge_test_mode()
+        and (
+            bool(provenance.get("deterministic_fixture_only"))
+            or bool(exemption)
+            or str(provenance.get("generator") or "").startswith("deterministic_")
+        )
     )
 
 
@@ -67,9 +79,6 @@ class PostgresTrustedRpgWorldScenarioRepository(PostgresRpgWorldScenarioReposito
         payload = dict(content)
         row_provenance = dict(provenance or {})
         embedded = dict(payload.get("provenance") or {})
-        # The candidate owns its field-origin ledger. Row-level authoring, restore,
-        # and dependency metadata remains separate so restoring a historical draft
-        # does not mutate the historical content itself.
         supplied_authorship = row_provenance.get("authorship")
         if supplied_authorship is not None and "authorship" not in embedded:
             embedded["authorship"] = supplied_authorship
