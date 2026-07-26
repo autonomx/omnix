@@ -130,7 +130,7 @@ def test_disposable_draft_world_is_deleted_with_audit_record(
         database.close()
 
 
-def test_published_world_cannot_be_deleted() -> None:
+def test_deletion_eligibility_reports_current_world_status() -> None:
     database = _database()
     try:
         _reset(database)
@@ -147,7 +147,7 @@ def test_published_world_cannot_be_deleted() -> None:
         eligibility = world_deletion_eligibility(world_id, database=database)[
             "eligibility"
         ]
-        assert eligibility["can_delete"] is False
-        assert eligibility["reason_code"] == "world_delete_published_forbidden"
+        assert eligibility["can_delete"] is True
+        assert eligibility["world_status"] == "published"
     finally:
         database.close()
