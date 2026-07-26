@@ -105,6 +105,7 @@ def audit_causal_canon(
         for row in by_topic.get("history_timeline", ())
         if _entity_id(row)
     }
+    has_causal_links_topic = "causal_links" in by_topic
     links = tuple(by_topic.get("causal_links", ()))
     findings: list[CausalAuditFinding] = []
     event_edges: dict[str, set[str]] = {}
@@ -215,7 +216,11 @@ def audit_causal_canon(
     for event_id, event in history.items():
         status = str(event.get("legacy_status") or "").strip()
         legacies = event.get("present_day_legacies")
-        if event_id not in linked_events and status not in _TERMINAL_LEGACY_STATUSES:
+        if (
+            has_causal_links_topic
+            and event_id not in linked_events
+            and status not in _TERMINAL_LEGACY_STATUSES
+        ):
             findings.append(
                 CausalAuditFinding(
                     "historical_event_without_legacy_resolution",
@@ -244,7 +249,10 @@ def audit_causal_canon(
                             entity_id,
                         )
                     )
-                if (event_id, entity_id) not in formation_signatures:
+                if (
+                    has_causal_links_topic
+                    and (event_id, entity_id) not in formation_signatures
+                ):
                     findings.append(
                         CausalAuditFinding(
                             "formation_event_without_causal_link",
