@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Iterable, Mapping, Any
+from typing import Any, Iterable, Mapping
 
 from .generation_authorship import content_hash
 from .generation_authorship_signing import (
