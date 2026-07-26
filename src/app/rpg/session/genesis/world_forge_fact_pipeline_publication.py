@@ -2,13 +2,16 @@
 
 Publication must never regenerate presentation prose. Already compiled facts are
 checked against current structured entity values while compiler-version metadata is
-ignored; uncompiled topics use the trusted machine-only compiler.
+ignored; uncompiled topics use the trusted machine-only compiler. Every validated
+structured fact receives a compact machine lookup so generic canon consumers do not
+mistake a prose-free typed fact for an incomplete narrative fact.
 """
 from __future__ import annotations
 
 from dataclasses import replace
 from typing import Any, Mapping
 
+from .world_forge_canon_lookup_trusted import attach_structured_canon_lookup
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_fact_pipeline import (
     StructuredFactIssue,
@@ -54,7 +57,9 @@ def validate_or_compile_structured_entity_facts(
         return topic
     validate_structured_entity_records(node, topic, dependencies)
     if not bool(dict(topic.provenance).get("structured_facts_validated")):
-        return _compile_machine_facts(node, topic, dependencies)
+        return attach_structured_canon_lookup(
+            _compile_machine_facts(node, topic, dependencies)
+        )
 
     existing = {str(row.get("id") or ""): dict(row) for row in topic.facts}
     fact_ids: list[str] = []
@@ -101,7 +106,7 @@ def validate_or_compile_structured_entity_facts(
             fact_ids.append(fact_id)
     if issues:
         raise StructuredFactValidationError(issues)
-    return replace(
+    validated = replace(
         topic,
         provenance={
             **dict(topic.provenance),
@@ -110,6 +115,7 @@ def validate_or_compile_structured_entity_facts(
             "publication_structured_fact_validation": "semantic_signature_v1",
         },
     )
+    return attach_structured_canon_lookup(validated)
 
 
 __all__ = ["validate_or_compile_structured_entity_facts"]
