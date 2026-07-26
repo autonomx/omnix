@@ -35,18 +35,20 @@ def _relationship(
         "compiled_by": source,
     }
     if metadata:
-        row.update(dict(metadata))
+        extra_refs = tuple(
+            str(value)
+            for value in metadata.get("entity_refs") or ()
+            if str(value)
+        )
+        row.update(
+            {
+                key: value
+                for key, value in metadata.items()
+                if key != "entity_refs"
+            }
+        )
         row["entity_refs"] = list(
-            dict.fromkeys(
-                [
-                    *row["entity_refs"],
-                    *(
-                        str(value)
-                        for value in metadata.get("entity_refs") or ()
-                        if str(value)
-                    ),
-                ]
-            )
+            dict.fromkeys([source_id, target_id, *extra_refs])
         )
     return row
 
