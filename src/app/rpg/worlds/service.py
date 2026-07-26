@@ -13,10 +13,7 @@ from .contracts import (
     WorldRevisionDocument,
     canonical_content_hash,
 )
-from .generation_authorship_runtime import (
-    attach_human_authorship,
-    require_publishable_authorship,
-)
+from .revision_authorship import attach_revision_human_authorship
 
 
 def _hashed_payload(payload: Mapping[str, Any], hash_field: str) -> dict[str, Any]:
@@ -41,20 +38,11 @@ def compile_world_revision(
     revision_provenance = dict(provenance or {})
     compiled_canon = dict(canon)
     if str(revision_provenance.get("source") or "") != "durable_world_generation":
-        event_id = f"humancompile:{world_id}:{revision}"
-        compiled_canon = attach_human_authorship(
+        revision_provenance = attach_revision_human_authorship(
             compiled_canon,
-            event_id=event_id,
-            prior_candidate=None,
-            edited_llm=False,
+            revision_provenance,
+            event_id=f"humancompile:{world_id}:{revision}",
         )
-        report = require_publishable_authorship(compiled_canon)
-        revision_provenance = {
-            **revision_provenance,
-            "source": "manual_world_authoring",
-            "human_authorship_event_id": event_id,
-            "authorship_validation": report,
-        }
     payload = {
         "world_id": world_id,
         "revision": revision,
