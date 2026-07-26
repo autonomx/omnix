@@ -9,6 +9,7 @@ from .canon_audit import CanonAuditReport, audit_generated_canon
 from .canon_compiler import CanonCompilationResult, compile_campaign_bible
 from .canon_relationships import compile_cross_domain_relationships
 from .contract import CampaignGenesisContract
+from .world_forge_anchor_registry import allocate_global_anchor_registry
 from .world_forge_causal_evaluation import attach_causal_evaluation
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_generation import (
@@ -168,6 +169,11 @@ def run_campaign_world_forge(
     )
     max_parallel_jobs = max(1, min(max_parallel_jobs, 4))
     profile_payload = profile.as_dict()
+    anchor_registry = allocate_global_anchor_registry(
+        graph,
+        seed=seed,
+        world_key=campaign_id,
+    )
     generation = generate_campaign_topics(
         graph,
         generator=generator or _default_generator(),
@@ -188,6 +194,7 @@ def run_campaign_world_forge(
             },
             "resolved_genre_profile": profile_payload,
             "resolved_profile_hash": profile.content_hash,
+            "planning_topics": {"anchor_registry": anchor_registry},
         },
         max_parallel_jobs=max_parallel_jobs,
         existing_topics=existing_topics,
