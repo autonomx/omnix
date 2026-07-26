@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 from .world_forge_authorship_policy import field_policy_row, topic_authorship_policy
+from .world_forge_causal_generation import causal_generation_contract
 from .world_forge_causal_profile import augment_profile_with_causal_traceability
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_lore_quality import lore_quality_contract
@@ -82,6 +83,9 @@ def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
         _record(domain.generation_guidance).get("lore_quality")
     )
     metadata["lore_quality"] = configured_lore_quality or lore_quality_contract(probe)
+    causal_contract = causal_generation_contract(probe)
+    if causal_contract:
+        metadata["causal_generation_contract"] = causal_contract
     return CampaignTopicNode(
         topic_id=probe.topic_id,
         title=probe.title,
