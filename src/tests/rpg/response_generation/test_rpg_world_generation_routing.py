@@ -109,8 +109,9 @@ def test_unresolved_job_route_fails_closed() -> None:
         )
 
 
-def test_configured_route_without_provider_and_model_never_falls_back(monkeypatch) -> None:
+def test_configured_route_without_provider_and_model_fails_when_lmstudio_is_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(generation_routing, "_settings_route", lambda: ("", ""))
+    monkeypatch.setattr(generation_routing, "_auto_detect_lmstudio_route", lambda: ("", ""))
 
     with pytest.raises(
         generation_routing.WorldForgeRouteUnavailableError,
@@ -121,6 +122,25 @@ def test_configured_route_without_provider_and_model_never_falls_back(monkeypatc
             "configured",
             environ={},
         )
+
+
+def test_configured_route_auto_detects_loaded_lmstudio_model(monkeypatch) -> None:
+    monkeypatch.setattr(generation_routing, "_settings_route", lambda: ("", ""))
+    monkeypatch.setattr(
+        generation_routing,
+        "_auto_detect_lmstudio_route",
+        lambda: ("lmstudio", "loaded-local-model"),
+    )
+
+    route = generation_routing.resolve_world_forge_route(
+        "configured",
+        "configured",
+        environ={},
+    )
+
+    assert route.provider == "lmstudio"
+    assert route.model == "loaded-local-model"
+    assert route.source == "lmstudio_auto_detected"
 
 
 def test_deterministic_route_is_explicit_test_only() -> None:

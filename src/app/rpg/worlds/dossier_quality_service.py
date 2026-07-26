@@ -148,6 +148,7 @@ def enrich_world_dossiers(
     world_id: str,
     *,
     limit: int = 10,
+    all_candidates: bool = False,
     dry_run: bool = True,
     directives: Mapping[str, Any] | None = None,
     generator: WorldForgeTopicGenerator | None = None,
@@ -156,7 +157,12 @@ def enrich_world_dossiers(
     """Plan or execute bounded dossier-only enrichment for existing world entries."""
 
     report = world_dossier_quality(world_id, database=database)
-    candidates = list(report["enrichment_candidates"])[: max(1, min(int(limit), 25))]
+    available_candidates = list(report["enrichment_candidates"])
+    candidates = (
+        available_candidates
+        if all_candidates
+        else available_candidates[: max(1, min(int(limit), 25))]
+    )
     if dry_run:
         return {
             "ok": True,

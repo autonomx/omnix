@@ -96,6 +96,7 @@ def register_rpg_world_dossier_routes(app: FastAPI) -> None:
             return enrich_world_dossiers(
                 world_id,
                 limit=max(1, min(int(payload.get("limit") or 10), 25)),
+                all_candidates=bool(payload.get("all_candidates", False)),
                 dry_run=bool(payload.get("dry_run", True)),
                 directives=dict(directives or {}),
             )

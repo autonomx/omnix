@@ -6,8 +6,18 @@ import json
 from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timezone
-from enum import StrEnum
+from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
+
+
+# ``enum.StrEnum`` was added in Python 3.11.  The RPG launcher still supports
+# Python 3.10 environments, so provide its small required surface locally.
+try:
+    from enum import StrEnum
+except ImportError:
+    class StrEnum(str, Enum):
+        def __str__(self) -> str:
+            return str(self.value)
 
 
 class AuthorshipClass(StrEnum):

@@ -244,6 +244,7 @@ def test_quality_and_enrichment_routes_are_hidden_and_bounded(monkeypatch) -> No
             {
                 "world_id": "world:aurelia",
                 "limit": 25,
+                "all_candidates": False,
                 "dry_run": True,
                 "directives": {"focus": "history"},
             },
@@ -251,6 +252,36 @@ def test_quality_and_enrichment_routes_are_hidden_and_bounded(monkeypatch) -> No
     ]
     assert "/api/rpg/worlds/{world_id}/dossier-quality" not in app.openapi()["paths"]
     assert "/api/rpg/worlds/{world_id}/enrich-dossiers" not in app.openapi()["paths"]
+
+
+def test_enrichment_route_can_explicitly_process_all_candidates(monkeypatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_enrich(world_id: str, **kwargs):
+        calls.append({"world_id": world_id, **kwargs})
+        return {"ok": True, "world_id": world_id, "dry_run": False}
+
+    monkeypatch.setattr(
+        "app.gateway.rpg_world_dossier_routes.enrich_world_dossiers",
+        fake_enrich,
+    )
+    app = FastAPI()
+    register_rpg_world_dossier_routes(app)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/rpg/worlds/world:aurelia/enrich-dossiers",
+        json={"all_candidates": True, "dry_run": False},
+    )
+
+    assert response.status_code == 200
+    assert calls == [{
+        "world_id": "world:aurelia",
+        "limit": 10,
+        "all_candidates": True,
+        "dry_run": False,
+        "directives": {},
+    }]
 
 
 def test_dossier_routes_require_concurrency_tokens_and_structured_dossier() -> None:

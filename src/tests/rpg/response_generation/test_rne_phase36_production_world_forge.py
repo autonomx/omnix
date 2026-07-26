@@ -101,6 +101,19 @@ def _payload(topic_id: str = "realm") -> str:
                     "name": "Test Realm",
                     "kind": "realm",
                     "visibility": "public",
+                    "short_summary": "A connected realm shaped by old alliances.",
+                    "dossier": {
+                        "schema_version": "rpg_world_entity_dossier_v1",
+                        "sections": [
+                            {
+                                "id": "overview",
+                                "title": "Overview",
+                                "paragraphs": [
+                                    "Test Realm is a connected realm shaped by old alliances."
+                                ],
+                            }
+                        ],
+                    },
                 }
             ],
             "facts": [
@@ -254,6 +267,21 @@ def test_lmstudio_uses_supported_json_schema_response_format() -> None:
         "story_threads",
         "provenance",
     }
+    entity_schema = schema["properties"]["entities"]["items"]
+    assert {"short_summary", "dossier"} <= set(entity_schema["required"])
+
+
+def test_provider_response_without_dossier_fails_schema_validation() -> None:
+    payload = json.loads(_payload())
+    payload["entities"][0].pop("dossier")
+    provider = _Provider([json.dumps(payload)])
+    generator = ProviderWorldForgeTopicGenerator(
+        provider,
+        WorldForgeProviderConfig(mode="live", provider="phase36", max_retries=0),
+    )
+
+    with pytest.raises(RuntimeError, match="schema validation"):
+        generator.generate(_node(), seed=36, campaign_context={}, dependency_topics={})
 
 
 def test_provider_topic_identity_mismatch_fails_closed() -> None:

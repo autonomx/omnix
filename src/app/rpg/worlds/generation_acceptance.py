@@ -8,6 +8,7 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.rpg.session.genesis.world_forge_dossiers import validate_entity_dossier
 
 from .generation_authorship_policy_signing import (
     bind_signed_authorship_policy,
@@ -35,6 +36,30 @@ def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+def _require_reviewable_entity_dossiers(
+    candidate: Mapping[str, Any],
+    *,
+    topic_id: str,
+) -> None:
+    entities = candidate.get("entities")
+    if not isinstance(entities, Sequence) or isinstance(entities, (str, bytes)):
+        return
+    issues: list[str] = []
+    for index, value in enumerate(entities):
+        if not isinstance(value, Mapping):
+            continue
+        entity_id = str(value.get("id") or value.get("entity_id") or index)
+        if not str(value.get("short_summary") or "").strip():
+            issues.append(f"{entity_id}:short_summary_required")
+        for issue in validate_entity_dossier(value.get("dossier")):
+            issues.append(f"{entity_id}:{issue}")
+    if issues:
+        raise ValueError(
+            f"world_generation_accept_dossiers_required:{topic_id}:"
+            + ",".join(issues)
+        )
+
+
 def _accepted_candidate(
     candidate: Mapping[str, Any],
     *,
@@ -51,6 +76,7 @@ def _accepted_candidate(
             f"world_generation_accept_topic_mismatch:{payload.get('topic_id')}:{topic_id}"
         )
     GeneratedTopic.from_dict(payload)
+    _require_reviewable_entity_dossiers(payload, topic_id=topic_id)
 
     policy = signed_authorship_policy(original_candidate)
     artifact = generation_artifact(original_candidate)
@@ -330,17 +356,21 @@ def accept_world_generation_candidates(
             if node.topic_id in selected_set
         ]
         decision_rows: dict[str, dict[str, Any]] = {}
-        for topic_id in ordered:
-            decision_rows[topic_id] = _promote(
-                work,
-                context,
-                run=run,
-                result=by_topic[topic_id],
-                topic_id=topic_id,
-                candidate_override=overrides.get(topic_id),
-                expected_candidate_hash=str(expected_hashes.get(topic_id) or ""),
-                accepted_at=accepted_at,
-            )
+        try:
+            for topic_id in ordered:
+                decision_rows[topic_id] = _promote(
+                    work,
+                    context,
+                    run=run,
+                    result=by_topic[topic_id],
+                    topic_id=topic_id,
+                    candidate_override=overrides.get(topic_id),
+                    expected_candidate_hash=str(expected_hashes.get(topic_id) or ""),
+                    accepted_at=accepted_at,
+                )
+        except Exception:
+            work.rollback()
+            raise
         decisions.update(decision_rows)
         plan["review_decisions"] = decisions
         work.world_generation.update(context, run_id=run_id, plan=plan)

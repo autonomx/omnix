@@ -118,6 +118,7 @@ describe('RpgWorldEntityDetail', () => {
     render(<RpgWorldEntityDetail entity={fallbackEntity} onClose={vi.fn()} worldId="world:aurelia" />);
 
     expect(screen.getByRole('heading', { name: 'LLM-authored lore required' })).toBeInTheDocument();
+    expect(screen.getByText(/structured canon was accepted/i)).toBeInTheDocument();
     expect(screen.queryByText(/raw fallback representation/)).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Ward Runner sections' })).not.toBeInTheDocument();
   });

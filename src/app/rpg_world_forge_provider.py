@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from threading import BoundedSemaphore, Lock
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -37,7 +37,7 @@ _COLLECTIONS = (
     "knowledge_rules",
     "story_threads",
 )
-_LMSTUDIO_WORLD_FORGE_CALLS = BoundedSemaphore(2)
+_LMSTUDIO_WORLD_FORGE_CALLS = BoundedSemaphore(4)
 _ENTITY_ID_PREFIXES = {
     "areas": "area",
     "classes": "class",
@@ -68,8 +68,34 @@ class WorldForgeDocument(_WorldForgeRow):
     pass
 
 
+class WorldForgeDossierSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    paragraphs: list[str] = Field(min_length=1)
+
+
+class WorldForgeDossier(BaseModel):
+    """Provider-authored reading prose required for every generated entity."""
+
+    model_config = ConfigDict(extra="allow")
+
+    schema_version: Literal["rpg_world_entity_dossier_v1"]
+    subtitle: str = ""
+    quote: dict[str, Any] | None = None
+    quick_facts: list[dict[str, Any]] = Field(default_factory=list)
+    sections: list[WorldForgeDossierSection] = Field(min_length=1)
+    related_entity_ids: list[str] = Field(default_factory=list)
+
+
 class WorldForgeEntity(_WorldForgeRow):
     pass
+
+
+class WorldForgeAuthoredEntity(_WorldForgeRow):
+    short_summary: str = Field(min_length=1)
+    dossier: WorldForgeDossier
 
 
 class WorldForgeFact(_WorldForgeRow):
@@ -101,6 +127,12 @@ class WorldForgeTopicResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class WorldForgeAuthoredTopicResponse(WorldForgeTopicResponse):
+    """Live-generation response whose entities always carry reviewable lore."""
+
+    entities: list[WorldForgeAuthoredEntity]
+
+
 class WorldForgeEntityRegistryItem(BaseModel):
     """A compact, canonical slot that a later dossier call must expand."""
 
@@ -126,8 +158,8 @@ def _topic_contract(
     expected_entity_count: int | None = None,
     expected_entity_ids: tuple[str, ...] = (),
     expected_entity_names: tuple[str, ...] = (),
-) -> StructuredContract[WorldForgeTopicResponse]:
-    def validate_topic(value: WorldForgeTopicResponse) -> None:
+) -> StructuredContract[WorldForgeAuthoredTopicResponse]:
+    def validate_topic(value: WorldForgeAuthoredTopicResponse) -> None:
         if value.topic_id != expected_topic_id:
             raise ValueError(
                 f"World Forge provider returned {value.topic_id or '<missing>'} "
@@ -169,7 +201,7 @@ def _topic_contract(
     return StructuredContract(
         contract_id="rpg.world_forge.topic",
         version=3,
-        output_model=WorldForgeTopicResponse,
+        output_model=WorldForgeAuthoredTopicResponse,
         semantic_validator=validate_topic,
         schema_profile="canon_strict",
         schema_name="rpg_world_forge_topic",
@@ -188,7 +220,10 @@ class WorldForgeProviderConfig:
     temperature: float = 0.6
     max_tokens: int = 8192
     entity_batch_size: int = 1
-    entity_batch_workers: int = 2
+    # Local models can repeat allocated entity IDs when sibling batches are
+    # generated at once. Serial generation is the reliable default; operators
+    # who have validated their provider can opt back into two workers.
+    entity_batch_workers: int = 1
     retry_backoff_seconds: float = 1.0
     lmstudio_schema_fallback: bool = True
 
@@ -246,7 +281,7 @@ class WorldForgeProviderConfig:
                 min(
                     int(
                         env.get("OMNIX_RPG_WORLD_FORGE_ENTITY_BATCH_WORKERS")
-                        or 2
+                        or 1
                     ),
                     2,
                 ),
@@ -653,10 +688,15 @@ class ProviderWorldForgeTopicGenerator:
                     batch_index: future.result()
                     for batch_index, future in futures.items()
                 }
-            self._validate_distinct_batch_entities(
-                tuple(value for value, _, _, _ in wave_results.values()),
-                existing_entities=completed_entities,
-            )
+            # A batch response is already checked against its assigned registry
+            # slot by ``_topic_contract``.  Cross-batch comparison is needed only
+            # for genuinely concurrent waves; applying it to a serial wave can
+            # falsely reject a valid allocated ID carried in local-model output.
+            if len(wave_indexes) > 1:
+                self._validate_distinct_batch_entities(
+                    tuple(value for value, _, _, _ in wave_results.values()),
+                    existing_entities=completed_entities,
+                )
             for batch_index in wave_indexes:
                 value, trusted, batch_prompt_tokens, batch_completion_tokens = (
                     wave_results[batch_index]

@@ -28,6 +28,7 @@ from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg_world_forge_provider import (
     ProviderWorldForgeTopicGenerator,
+    WorldForgeDossier,
     WorldForgeEntityRegistryResponse,
     WorldForgeTopicResponse,
     _LMSTUDIO_WORLD_FORGE_CALLS,
@@ -149,11 +150,12 @@ def _entity_model(
                 description=str(definition.get("description") or ""),
             ),
         )
-    # Presentation fields remain optional unless the approved profile declares them.
+    # Identity aliases remain optional because approved profiles may use ``id`` or
+    # ``entity_id``. Reading prose is mandatory for every generated entity.
     fields.setdefault("name", (StrictStr | None, None))
     fields.setdefault("entity_id", (StrictStr | None, None))
-    fields.setdefault("short_summary", (StrictStr | None, None))
-    fields.setdefault("dossier", (dict[str, Any] | None, None))
+    fields["short_summary"] = (StrictStr, ...)
+    fields["dossier"] = (WorldForgeDossier, ...)
     fields.setdefault("registry_role", (StrictStr | None, None))
     fields.setdefault("registry_distinction", (StrictStr | None, None))
     safe = _SAFE_MODEL.sub("_", node.topic_id).strip("_") or "topic"

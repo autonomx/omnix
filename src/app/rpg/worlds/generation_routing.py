@@ -1,9 +1,11 @@
 """Resolve the concrete provider route stored with a durable World Forge run."""
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, replace
 from typing import Any, Mapping
+from urllib.request import urlopen
 
 from app.providers.registry import get_provider
 from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
@@ -67,6 +69,36 @@ def _settings_route() -> tuple[str, str]:
         return _provider_key(provider_id), _model_key(model_id)
     except Exception:
         return "", ""
+
+
+def _auto_detect_lmstudio_route() -> tuple[str, str]:
+    """Return the currently loaded LM Studio LLM, without persisting a setting."""
+
+    try:
+        from app import shared
+
+        settings = shared.load_settings()
+        base_url = str(
+            dict(settings.get("lmstudio") or {}).get("base_url")
+            or "http://localhost:1234"
+        ).rstrip("/")
+        with urlopen(f"{base_url}/api/v1/models", timeout=2) as response:  # nosec B310
+            payload = json.load(response)
+        for entry in payload.get("models") or ():
+            if not isinstance(entry, Mapping) or str(entry.get("type") or "") != "llm":
+                continue
+            instances = entry.get("loaded_instances") or ()
+            if not isinstance(instances, list) or not instances:
+                continue
+            instance = instances[0]
+            model = str(
+                instance.get("id") if isinstance(instance, Mapping) else ""
+            ).strip() or str(entry.get("key") or "").strip()
+            if model:
+                return "lmstudio", model
+    except Exception:
+        pass
+    return "", ""
 
 
 def resolve_world_forge_route(
@@ -134,6 +166,16 @@ def resolve_world_forge_route(
             settings_provider,
             requested_model if explicit_model else settings_model,
             "settings_control_center",
+            requested_provider,
+            requested_model,
+        )
+
+    detected_provider, detected_model = _auto_detect_lmstudio_route()
+    if detected_provider and detected_model:
+        return ResolvedWorldForgeRoute(
+            detected_provider,
+            detected_model,
+            "lmstudio_auto_detected",
             requested_provider,
             requested_model,
         )

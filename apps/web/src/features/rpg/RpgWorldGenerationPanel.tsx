@@ -107,6 +107,10 @@ function isPartialReviewRun(run: RpgWorldGenerationRun | undefined): boolean {
 }
 
 function generationErrorFeedback(cause: unknown, fallback: string): string {
+  const message = cause instanceof Error ? cause.message : '';
+  if (message.includes('world_forge_provider_and_model_required')) {
+    return 'World generation needs an AI provider and model. Open Settings, choose a Default LLM provider and its model under AI Providers, save, then return here and generate the world.';
+  }
   if (
     cause instanceof RpgWorldGenerationRequestError
     && cause.retryable
@@ -119,7 +123,7 @@ function generationErrorFeedback(cause: unknown, fallback: string): string {
     }
     return 'World generation is paused because Omnix cannot reach PostgreSQL. Completed topics remain safe. Restore database connectivity, then retry this same run.';
   }
-  return cause instanceof Error ? cause.message : fallback;
+  return message || fallback;
 }
 
 export const RpgWorldGenerationPanel = forwardRef<
@@ -399,7 +403,7 @@ export const RpgWorldGenerationPanel = forwardRef<
       </div>
       {generationBusy ? <small>Generation is running. Failed-topic and Game Master lore retry become available after the current run finishes.</small> : null}
       {currentRun && currentRun.status !== 'review' && !generationBusy ? <small>Publishing becomes available when generation reaches Review.</small> : null}
-      {feedback ? <p className="rpg-authoring-feedback" aria-live="polite">{feedback}</p> : null}
+      {feedback ? <p className="rpg-authoring-feedback" aria-live="polite">{feedback}{feedback.includes('Open Settings') ? <> <a href="/settings">Open AI Provider Settings</a></> : null}</p> : null}
       <small className="rpg-generation-diagnostic-hint">
         Compact diagnostics: <code>{diagnosticLog}</code>. Prompts, completions, and generated world content are omitted.
       </small>

@@ -99,6 +99,22 @@ def _history_node() -> CampaignTopicNode:
 
 
 def _topic_payload(topic_id: str, entity: dict[str, Any]) -> str:
+    entity = {
+        **entity,
+        "short_summary": entity.get("short_summary")
+        or "A provider-authored historical summary.",
+        "dossier": entity.get("dossier")
+        or {
+            "schema_version": "rpg_world_entity_dossier_v1",
+            "sections": [
+                {
+                    "id": "overview",
+                    "title": "Overview",
+                    "paragraphs": ["Provider-authored long-form historical lore."],
+                }
+            ],
+        },
+    }
     return json.dumps(
         {
             "topic_id": topic_id,

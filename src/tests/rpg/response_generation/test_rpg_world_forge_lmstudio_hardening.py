@@ -109,7 +109,6 @@ class _ParallelBatchProvider(_Provider):
                 ),
                 model=model or "local-model",
             )
-        batch_index = int(request["generation_batch"]["index"])
         slot = request["generation_batch"]["assigned_entities"][0]
         with self._lock:
             self.calls.append(
@@ -157,11 +156,34 @@ def _node(topic_id: str = "realm") -> CampaignTopicNode:
 
 
 def _payload(*, topic_id: str = "realm", entities: object | None = None) -> str:
+    normalized_entities = entities
+    if isinstance(entities, list):
+        normalized_entities = [
+            {
+                **entity,
+                "short_summary": entity.get("short_summary")
+                or f"Provider-authored summary for {entity.get('name') or entity.get('entity_id') or entity.get('id') or 'entity'}.",
+                "dossier": entity.get("dossier")
+                or {
+                    "schema_version": "rpg_world_entity_dossier_v1",
+                    "sections": [
+                        {
+                            "id": "overview",
+                            "title": "Overview",
+                            "paragraphs": ["Provider-authored long-form lore for this entity."],
+                        }
+                    ],
+                },
+            }
+            if isinstance(entity, dict)
+            else entity
+            for entity in entities
+        ]
     return json.dumps(
         {
             "topic_id": topic_id,
             "documents": [],
-            "entities": [] if entities is None else entities,
+            "entities": [] if normalized_entities is None else normalized_entities,
             "facts": [],
             "relationships": [],
             "knowledge_rules": [],

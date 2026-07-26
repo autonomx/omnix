@@ -1,6 +1,10 @@
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { RpgAuthoringSection, RpgWorldTokenUsage } from '../../api/rpgWorldAuthoringClient';
+import {
+  rpgWorldAuthoringClient,
+  type RpgAuthoringSection,
+  type RpgWorldTokenUsage,
+} from '../../api/rpgWorldAuthoringClient';
 import {
   rpgWorldGenerationReviewClient,
   type RpgWorldGenerationTopicResult,
@@ -112,6 +116,7 @@ export function RpgWorldGenerationDashboard({
   const [inspectedTopicId, setInspectedTopicId] = useState('');
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [acceptAllArmed, setAcceptAllArmed] = useState(false);
+  const [acceptAllDossiersArmed, setAcceptAllDossiersArmed] = useState(false);
   const [retryScope, setRetryScope] = useState<RetryScope>('topic');
   const [retryEntityIds, setRetryEntityIds] = useState('');
   const [retryFields, setRetryFields] = useState('');
@@ -121,8 +126,8 @@ export function RpgWorldGenerationDashboard({
   const progress = record(run?.progress);
   const active = new Set(stringArray(progress.active_topic_ids));
   const topicRows = sections.filter((section) => section.supports_generation);
-  const provider = String(record(run?.settings).provider_route ?? 'configured');
-  const model = String(record(run?.settings).model ?? 'configured');
+  const provider = String(record(run?.settings).provider_route ?? 'Not configured');
+  const model = String(record(run?.settings).model ?? 'Not configured');
   const imageSections = sections.filter((section) => section.supports_images);
   const imageReady = imageSections.filter((section) => section.operational_status === 'complete').length;
 
@@ -132,6 +137,12 @@ export function RpgWorldGenerationDashboard({
     enabled: Boolean(run?.run_id),
     staleTime: run?.status === 'running' ? 2_000 : 10_000,
     refetchInterval: run?.status === 'running' ? 2_000 : false,
+  });
+  const dossierQualityQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'world-dossier-quality', worldId],
+    queryFn: () => rpgWorldAuthoringClient.dossierQuality(worldId),
+    enabled: Boolean(run?.run_id),
+    staleTime: 10_000,
   });
   const results = reviewQuery.data?.topic_results ?? [];
   const analytics = reviewQuery.data?.analytics;
@@ -157,6 +168,8 @@ export function RpgWorldGenerationDashboard({
   const acceptAllEligible = results.filter((result) => (
     result.status === 'needs_review' && Boolean(result.candidate) && !result.decision
   ));
+  const dossierCandidates = dossierQualityQuery.data?.enrichment_candidates ?? [];
+  const allTopicsAccepted = topicRows.length > 0 && accepted.size >= topicRows.length;
   const publicationBlocked = Boolean(retryable.size || pendingDecision.size || kept.size);
   const terminalCount = accepted.size + pendingDecision.size + kept.size + flagged.size + failed.size + blocked.size;
   const percent = topicRows.length ? Math.round(terminalCount / topicRows.length * 100) : 0;
@@ -167,6 +180,7 @@ export function RpgWorldGenerationDashboard({
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-section', worldId] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-workspace'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-manifest', worldId] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-dossier-quality', worldId] }),
     ]);
   };
 
@@ -194,7 +208,7 @@ export function RpgWorldGenerationDashboard({
     onSuccess: async () => {
       setAcceptAllArmed(false);
       setInspectedTopicId('');
-      setReviewFeedback('All retained review candidates were accepted and promoted to editable authoring canon.');
+      setReviewFeedback('All reviewed canon and its generated dossiers were accepted together and promoted to editable world authoring.');
       await invalidateReview();
     },
     onError: (cause) => {
@@ -216,6 +230,31 @@ export function RpgWorldGenerationDashboard({
       await invalidateReview();
     },
     onError: (cause) => setReviewFeedback(cause instanceof Error ? cause.message : 'Decision failed.'),
+  });
+
+  const acceptAllDossiers = useMutation({
+    mutationFn: () => rpgWorldAuthoringClient.enrichDossiers(worldId, {
+      all_candidates: true,
+      dry_run: false,
+      directives: {
+        generation_dashboard_bulk_acceptance: true,
+        focus: 'Write complete, distinct long-form lore from accepted canon without changing structured facts, IDs, mechanics, or relationships.',
+      },
+    }),
+    onMutate: () => {
+      setReviewFeedback(`Generating and accepting ${dossierCandidates.length} dossiers. This runs one at a time to preserve canon; keep Omnix open until it finishes.`);
+    },
+    onSuccess: async (result) => {
+      setAcceptAllDossiersArmed(false);
+      const completed = result.completed?.length ?? 0;
+      const failed = result.failed?.length ?? 0;
+      setReviewFeedback(`Accepted ${completed} generated dossier${completed === 1 ? '' : 's'}${failed ? `; ${failed} could not be generated and remain available for individual regeneration.` : '.'}`);
+      await invalidateReview();
+    },
+    onError: (cause) => {
+      setAcceptAllDossiersArmed(false);
+      setReviewFeedback(cause instanceof Error ? cause.message : 'Dossiers could not be generated and accepted.');
+    },
   });
 
   const rows = topicRows.map((section) => {
@@ -254,10 +293,19 @@ export function RpgWorldGenerationDashboard({
   const handleAcceptAll = () => {
     if (!acceptAllArmed) {
       setAcceptAllArmed(true);
-      setReviewFeedback(`Confirm acceptance of ${acceptAllEligible.length} generated candidate${acceptAllEligible.length === 1 ? '' : 's'} by clicking Accept All again.`);
+      setReviewFeedback(`Confirm acceptance of ${acceptAllEligible.length} generated canon-and-dossier candidate${acceptAllEligible.length === 1 ? '' : 's'} by clicking Accept All again.`);
       return;
     }
     acceptAllReview.mutate();
+  };
+
+  const handleAcceptAllDossiers = () => {
+    if (!acceptAllDossiersArmed) {
+      setAcceptAllDossiersArmed(true);
+      setReviewFeedback(`Confirm generation and acceptance of ${dossierCandidates.length} dossier${dossierCandidates.length === 1 ? '' : 's'} by clicking Generate & Accept All Dossiers again.`);
+      return;
+    }
+    acceptAllDossiers.mutate();
   };
 
   if (inspectedResult?.candidate && inspectedSection && run) {
@@ -307,7 +355,14 @@ export function RpgWorldGenerationDashboard({
             ? 'Accepting All…'
             : acceptAllArmed
               ? `Confirm Accept All (${acceptAllEligible.length})`
-              : `Accept All Generated (${acceptAllEligible.length})`}
+              : `Accept All Canon & Dossiers (${acceptAllEligible.length})`}
+        </button>
+        <button type="button" disabled={!allTopicsAccepted || !dossierCandidates.length || acceptAllDossiers.isPending} onClick={handleAcceptAllDossiers}>
+          {acceptAllDossiers.isPending
+            ? `Generating Dossiers (${dossierCandidates.length})…`
+            : acceptAllDossiersArmed
+              ? `Confirm Generate & Accept (${dossierCandidates.length})`
+              : `Repair Missing Dossiers (${dossierCandidates.length})`}
         </button>
         <button type="button" disabled={run?.status !== 'review' || publicationBlocked} onClick={() => panelRef.current?.publish()}>Publish World</button>
         {onOpenImages ? <button type="button" onClick={onOpenImages}>Generate Images</button> : null}

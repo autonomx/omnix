@@ -10,11 +10,27 @@ from app.rpg.session.genesis.world_forge_contract import (
 )
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg.worlds import generation_acceptance
+from app.rpg.worlds.generation_authorship_policy_signing import (
+    bind_signed_authorship_policy,
+)
+from app.rpg.worlds.generation_authorship_runtime import build_generation_artifact
+from app.rpg.worlds.generation_authorship_signing import (
+    attach_signed_llm_authorship,
+    harden_and_sign_generation_artifact,
+)
 from app.rpg.worlds.generation_jobs import WorldTopicGenerationSettings, canonical_hash
 
 
+@pytest.fixture(autouse=True)
+def signing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "OMNIX_RPG_AUTHORSHIP_SIGNING_KEY",
+        "test-only-world-review-signing-key-with-more-than-thirty-two-bytes",
+    )
+
+
 def _candidate(topic_id: str, entity_id: str, name: str) -> dict:
-    return GeneratedTopic(
+    candidate = GeneratedTopic(
         topic_id=topic_id,
         entities=(
             {
@@ -22,9 +38,25 @@ def _candidate(topic_id: str, entity_id: str, name: str) -> dict:
                 "kind": topic_id.rstrip("s"),
                 "name": name,
                 "description": f"Lore for {name}.",
+                "short_summary": f"Lore for {name}.",
+                "dossier": {
+                    "schema_version": "rpg_world_entity_dossier_v1",
+                    "sections": [
+                        {
+                            "id": "overview",
+                            "title": "Overview",
+                            "paragraphs": [f"Long-form lore for {name}."],
+                        }
+                    ],
+                },
             },
         ),
         provenance={
+            "generator": "structured_world_forge_provider_v1",
+            "provider": "lmstudio",
+            "model": "model",
+            "raw_response_hash": "a" * 64,
+            "raw_response_hash_kind": "provider_response",
             "generation_status": "needs_review",
             "generation_review": {
                 "status": "needs_review",
@@ -32,6 +64,17 @@ def _candidate(topic_id: str, entity_id: str, name: str) -> dict:
             },
         },
     ).as_dict()
+    unsigned = build_generation_artifact(
+        candidate,
+        run_id="run:review",
+        job_id=f"job:{topic_id}",
+        topic_id=topic_id,
+        provider=candidate["provenance"],
+        settings={"generator_version": "g1", "prompt_version": "p1"},
+    )
+    artifact = harden_and_sign_generation_artifact(candidate, unsigned)
+    authored = attach_signed_llm_authorship(candidate, artifact)
+    return bind_signed_authorship_policy(authored, {})
 
 
 def _run() -> dict:
@@ -260,3 +303,30 @@ def test_accept_rejects_stale_candidate_hash(monkeypatch: pytest.MonkeyPatch) ->
 
     assert work.world_scenarios.promotions == []
     assert work.rolled_back is True
+
+
+def test_accept_rejects_candidate_without_reviewable_dossiers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    work = _Work()
+    _install(monkeypatch, work)
+    original = work.world_generation.results["rules"]
+    incomplete = dict(original["candidate"])
+    incomplete["entities"] = [{
+        **incomplete["entities"][0],
+        "short_summary": "",
+        "dossier": None,
+    }]
+
+    with pytest.raises(
+        ValueError,
+        match="world_generation_accept_dossiers_required:rules",
+    ):
+        generation_acceptance.accept_world_generation_candidate(
+            "run:review",
+            "rules",
+            candidate=incomplete,
+            expected_candidate_hash=original["candidate_hash"],
+        )
+
+    assert work.world_scenarios.promotions == []

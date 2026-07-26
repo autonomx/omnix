@@ -97,6 +97,22 @@ def _setting_rules_node() -> CampaignTopicNode:
 
 
 def _topic_payload(entity: dict) -> str:
+    entity = {
+        **entity,
+        "short_summary": entity.get("short_summary")
+        or "A provider-authored catalogue summary.",
+        "dossier": entity.get("dossier")
+        or {
+            "schema_version": "rpg_world_entity_dossier_v1",
+            "sections": [
+                {
+                    "id": "overview",
+                    "title": "Overview",
+                    "paragraphs": ["Provider-authored long-form setting lore."],
+                }
+            ],
+        },
+    }
     return json.dumps(
         {
             "topic_id": "setting_rules",
@@ -165,6 +181,8 @@ def test_setting_rules_schema_requires_profile_fields_and_calls_provider_once() 
         "name",
         "rule",
         "observable_consequences",
+        "short_summary",
+        "dossier",
     }
     assert entity_schema["properties"]["kind"]["const"] == "setting_rule"
     assert entity_schema["additionalProperties"] is False

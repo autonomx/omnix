@@ -3,16 +3,16 @@ from __future__ import annotations
 from app.rpg.worlds.generation_worker import world_generation_worker_limit
 
 
-def test_lmstudio_world_generation_defaults_to_two_workers() -> None:
+def test_lmstudio_world_generation_defaults_to_four_workers() -> None:
     assert world_generation_worker_limit(
         {"OMNIX_RPG_WORLD_FORGE_PROVIDER": "lmstudio"}
-    ) == 2
+    ) == 4
 
 
-def test_lmstudio_namespaced_provider_defaults_to_two_workers() -> None:
+def test_lmstudio_namespaced_provider_defaults_to_four_workers() -> None:
     assert world_generation_worker_limit(
         {"OMNIX_RPG_WORLD_FORGE_PROVIDER": "llm:lmstudio"}
-    ) == 2
+    ) == 4
 
 
 def test_cloud_world_generation_keeps_bounded_parallelism() -> None:

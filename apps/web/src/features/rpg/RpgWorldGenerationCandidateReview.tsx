@@ -11,6 +11,7 @@ import {
 } from '../../api/rpgWorldGenerationReviewClient';
 import { documentAnchors, presentLoreBlocks } from './RpgWorldCompletionModels';
 import { RpgWorldEntityCard } from './RpgWorldEntityCard';
+import { RpgWorldEntityDetail } from './RpgWorldEntityDetail';
 import { RpgWorldLoreLayout } from './RpgWorldLoreLayout';
 import './RpgWorldGenerationCandidateReview.css';
 
@@ -177,6 +178,7 @@ export function RpgWorldGenerationCandidateReview({
   const [preview, setPreview] = useState<Record<string, unknown>>(result.candidate ?? {});
   const [editing, setEditing] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [inspectedEntityId, setInspectedEntityId] = useState('');
 
   useEffect(() => {
     const next = result.candidate ?? {};
@@ -184,9 +186,11 @@ export function RpgWorldGenerationCandidateReview({
     setPreview(next);
     setEditing(false);
     setFeedback('');
+    setInspectedEntityId('');
   }, [result]);
 
   const entities = useMemo(() => entityCards(preview, section), [preview, section]);
+  const inspectedEntity = entities.find((entity) => entity.id === inspectedEntityId);
   const body = useMemo(() => documentBody(preview), [preview]);
   const blocks = useMemo(() => presentLoreBlocks(section.id, body), [body, section.id]);
   const toc = useMemo(() => documentAnchors(blocks), [blocks]);
@@ -305,7 +309,12 @@ export function RpgWorldGenerationCandidateReview({
           </div>
           <div className="rpg-authoring-entity-grid">
             {entities.map((entity) => (
-              <RpgWorldEntityCard entity={entity} key={entity.id} worldId={worldId} />
+              <RpgWorldEntityCard
+                entity={entity}
+                key={entity.id}
+                onOpen={() => setInspectedEntityId(entity.id)}
+                worldId={worldId}
+              />
             ))}
           </div>
         </section>
@@ -326,7 +335,12 @@ export function RpgWorldGenerationCandidateReview({
                 </div>
                 <div className="rpg-authoring-entity-grid">
                   {entities.map((entity) => (
-                    <RpgWorldEntityCard entity={entity} key={entity.id} worldId={worldId} />
+                    <RpgWorldEntityCard
+                      entity={entity}
+                      key={entity.id}
+                      onOpen={() => setInspectedEntityId(entity.id)}
+                      worldId={worldId}
+                    />
                   ))}
                 </div>
               </section>
@@ -334,6 +348,13 @@ export function RpgWorldGenerationCandidateReview({
           </RpgWorldLoreLayout>
         </section>
       )}
+      {inspectedEntity ? (
+        <RpgWorldEntityDetail
+          entity={inspectedEntity}
+          onClose={() => setInspectedEntityId('')}
+          worldId={worldId}
+        />
+      ) : null}
     </section>
   );
 }

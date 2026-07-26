@@ -156,7 +156,8 @@ export function RpgWorldEntityDetail({
             {dossierNeedsLlmLore ? (
               <section className="rpg-authoring-detail-section rpg-authoring-feedback" aria-label="LLM dossier required">
                 <h3>LLM-authored lore required</h3>
-                <p>This entry has structured canon, but no approved long-form lore yet. Generate and review an LLM dossier before publishing it as a reading page.</p>
+                <p>This entry's structured canon was accepted, but it has no approved long-form lore yet. Generate a dossier preview, review it, then apply it to publish this as a reading page.</p>
+                {topic ? <RpgWorldEntityEditor entity={entity} topic={topic} worldId={worldId} /> : null}
               </section>
             ) : null}
             {dossier?.quick_facts.length ? (
@@ -234,7 +235,7 @@ export function RpgWorldEntityDetail({
               </details>
             ) : null}
 
-            {topic ? <RpgWorldEntityEditor entity={entity} topic={topic} worldId={worldId} /> : null}
+            {!dossierNeedsLlmLore && topic ? <RpgWorldEntityEditor entity={entity} topic={topic} worldId={worldId} /> : null}
             <details className="rpg-authoring-structured-data">
               <summary>Advanced structured data</summary>
               <pre>{JSON.stringify(entity.metadata, null, 2)}</pre>

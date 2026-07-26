@@ -30,6 +30,18 @@ const candidate = {
     kind: 'historical_event',
     name: 'The Blackout Accords',
     description: 'The city grids were divided among corporate utilities.',
+    short_summary: 'The accords divided the city grids among corporate utilities.',
+    dossier: {
+      schema_version: 'rpg_world_entity_dossier_v1',
+      subtitle: 'The treaty that ended one war and privatized the next',
+      quick_facts: [],
+      sections: [{
+        id: 'aftermath',
+        title: 'Aftermath',
+        paragraphs: ['Each utility inherited a district and the obligation to keep its lights alive.'],
+      }],
+      related_entity_ids: [],
+    },
   }],
   facts: [{ id: 'fact:history:001', content: 'The accords ended the grid war.' }],
   relationships: [],
@@ -154,5 +166,16 @@ describe('RpgWorldGenerationCandidateReview', () => {
 
     expect(screen.getByText(/Generation completed with validation issues/)).toBeInTheDocument();
     expect(screen.queryByText(/world_forge_integrity_failed/)).not.toBeInTheDocument();
+  });
+
+  it('opens each generated dossier for full review before acceptance', () => {
+    renderReview();
+
+    fireEvent.click(screen.getByRole('button', { name: 'View details' }));
+
+    expect(screen.getByRole('main', { name: 'The Blackout Accords details' })).toBeInTheDocument();
+    expect(screen.getByText('The treaty that ended one war and privatized the next')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Aftermath' })).toBeInTheDocument();
+    expect(screen.getAllByText(/Each utility inherited a district/).length).toBeGreaterThan(0);
   });
 });

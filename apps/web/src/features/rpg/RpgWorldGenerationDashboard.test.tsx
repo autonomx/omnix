@@ -236,6 +236,56 @@ describe('RpgWorldGenerationDashboard', () => {
     expect(screen.getByText('1 selected')).toBeInTheDocument();
   });
 
+  it('bulk-generates and accepts every missing dossier after all topics are accepted', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith('/genre-profile')) {
+        return new Response(JSON.stringify(approvedProfileResponse), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.endsWith('/results')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          topic_results: [{
+            run_id: previousRun.run_id,
+            world_id: previousRun.world_id,
+            draft_revision: previousRun.draft_revision,
+            topic_id: section.id,
+            status: 'accepted',
+            candidate: { topic_id: section.id },
+            candidate_hash: 'sha256:accepted',
+            validation: { status: 'accepted', blocking: false, reason_codes: [], issues: [] },
+            provider: {}, dependency_hashes: {}, dependency_trust: {}, job_id: '',
+            created_at: previousRun.created_at, updated_at: previousRun.updated_at,
+          }],
+          analytics: { by_code: {}, by_field: {}, by_topic: {}, by_domain: {}, by_model: {}, by_prompt_version: {} },
+          review_decisions: {},
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.endsWith('/dossier-quality')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          enrichment_candidates: [{ topic_id: section.id, entity_id: 'region:one', title: 'One', word_count: 0, generated_from_legacy: true, issues: ['dossier_sections_required'] }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.endsWith('/enrich-dossiers')) {
+        return new Response(JSON.stringify({ ok: true, completed: [{ topic_id: section.id, entity_id: 'region:one', content_hash: 'sha256:lore' }], failed: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    renderDashboard();
+    const action = await screen.findByRole('button', { name: 'Repair Missing Dossiers (1)' });
+    expect(action).toBeEnabled();
+    fireEvent.click(action);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Generate & Accept (1)' }));
+
+    await waitFor(() => expect(requests.some((request) => request.url.endsWith('/enrich-dossiers'))).toBe(true));
+    const request = requests.find((entry) => entry.url.endsWith('/enrich-dossiers'));
+    expect(JSON.parse(String(request?.init?.body))).toMatchObject({ all_candidates: true, dry_run: false });
+  });
+
   it('shows provider-reported and estimated world-generation token usage', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(approvedProfileResponse), {
       status: 200,
