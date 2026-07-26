@@ -9,9 +9,9 @@ from typing import Any, Mapping
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
-from .generation_authorship import lore_string_leaves
 from .generation_authorship_runtime import (
     generation_artifact,
+    lore_string_leaves,
     validate_publishable_authorship,
 )
 
@@ -127,10 +127,20 @@ def _topic_audit(topic: Mapping[str, Any]) -> dict[str, Any]:
     artifact = generation_artifact(payload)
     report = validate_publishable_authorship(payload, server_artifact=artifact)
     blocked_paths = [dict(row) for row in report.get("blocked_paths") or ()]
+    entity_rows = _entity_rows(payload, blocked_paths)
+    generation_required = any(
+        bool(row.get("generation_required")) for row in entity_rows
+    )
     codes = {str(row.get("code") or "") for row in blocked_paths}
+    if generation_required:
+        codes.add("generated_from_legacy")
     classification = _classification(
-        publishable=bool(report.get("publishable")),
-        lore_count=int(report.get("lore_string_count") or 0),
+        publishable=bool(report.get("publishable")) and not generation_required,
+        lore_count=(
+            0
+            if generation_required
+            else int(report.get("lore_string_count") or 0)
+        ),
         origin_count=int(report.get("origin_count") or 0),
         codes=codes,
     )
@@ -139,7 +149,7 @@ def _topic_audit(topic: Mapping[str, Any]) -> dict[str, Any]:
         "source": str(topic.get("source") or ""),
         "status": str(topic.get("status") or ""),
         "classification": classification,
-        "publishable": bool(report.get("publishable")),
+        "publishable": bool(report.get("publishable")) and not generation_required,
         "artifact_status": _artifact_status(artifact, codes),
         "generation_artifact_id": str(
             artifact.get("generation_artifact_id") or ""
@@ -147,7 +157,7 @@ def _topic_audit(topic: Mapping[str, Any]) -> dict[str, Any]:
         "lore_string_count": int(report.get("lore_string_count") or 0),
         "origin_count": int(report.get("origin_count") or 0),
         "blocked_paths": blocked_paths,
-        "entities": _entity_rows(payload, blocked_paths),
+        "entities": entity_rows,
     }
 
 
