@@ -26,7 +26,7 @@ from .world_forge_fact_pipeline_trusted import (
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_integrity import validate_and_normalize_provider_topic
 from .world_forge_lore_scoring import require_preferred_lore_quality
-from .world_forge_presentation import render_fact_derived_presentations
+from .world_forge_presentation_trusted import render_fact_derived_presentations
 from .world_forge_profile_deterministic import generate_deterministic_profile_topic
 from .world_forge_regeneration import (
     RegenerationRequest,
@@ -141,8 +141,6 @@ class ReferenceSafeWorldForgeGenerator:
             )
 
         if isinstance(self.generator, DeterministicWorldForgeGenerator):
-            # Explicit deterministic generators remain useful for tests and fixtures.
-            # Publication authorship validation prevents their output reaching players.
             generated = (
                 generate_deterministic_profile_topic(
                     node,
@@ -264,8 +262,6 @@ class ReferenceSafeWorldForgeGenerator:
         *,
         allow_fixture_enrichment: bool,
     ) -> GeneratedTopic:
-        """Validate authored dossiers; deterministic filler is test-fixture only."""
-
         if not topic.entities:
             return topic
         content = topic.as_dict()
