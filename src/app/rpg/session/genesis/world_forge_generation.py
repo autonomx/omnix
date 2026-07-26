@@ -10,7 +10,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol
 
+from .world_forge_anchor_registry import anchor_slice_for_domain
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
+from .world_forge_planning import planning_slice_for_topic
 
 _COLLECTION_NAMES = (
     "documents",
@@ -215,6 +217,26 @@ def _counts(topic: GeneratedTopic) -> dict[str, int]:
     }
 
 
+def _topic_campaign_context(
+    topic_id: str,
+    context: Mapping[str, Any],
+) -> dict[str, Any]:
+    scoped = dict(context)
+    planning_topics = context.get("planning_topics")
+    if not isinstance(planning_topics, Mapping):
+        return scoped
+    planning_slice = planning_slice_for_topic(topic_id, planning_topics)
+    anchor_registry = planning_slice.get("anchor_registry")
+    if isinstance(anchor_registry, Mapping):
+        planning_slice["anchor_registry"] = anchor_slice_for_domain(
+            topic_id,
+            anchor_registry,
+        )
+    scoped["planning_slice"] = planning_slice
+    scoped.pop("planning_topics", None)
+    return scoped
+
+
 def _default_generator() -> WorldForgeTopicGenerator:
     from .world_forge_deterministic import DeterministicWorldForgeGenerator
 
@@ -295,7 +317,7 @@ def generate_campaign_topics(
                     selected_generator.generate,
                     node,
                     seed=seed,
-                    campaign_context=context,
+                    campaign_context=_topic_campaign_context(topic_id, context),
                     dependency_topics=dependencies,
                 )
                 futures[future] = node
