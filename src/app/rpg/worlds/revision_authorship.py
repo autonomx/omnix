@@ -175,17 +175,45 @@ def prepare_direct_world_revision(
     return WorldRevisionDocument.model_validate(payload)
 
 
+def _unsigned_test_receipt(
+    document: WorldRevisionDocument,
+    provenance: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    if not deterministic_world_forge_test_mode():
+        return None
+    run_id = str(provenance.get("generation_run_id") or "")
+    topic_hashes = {
+        str(key): str(value)
+        for key, value in dict(provenance.get("topic_hashes") or {}).items()
+    }
+    if not run_id or not topic_hashes:
+        return None
+    return {
+        "schema_version": _GENERATION_RECEIPT_SCHEMA,
+        "world_id": document.world_id,
+        "revision": document.revision,
+        "generation_run_id": run_id,
+        "topic_hashes": topic_hashes,
+        "canon_hash": canonical_content_hash(dict(document.canon)),
+        "deterministic_test_mode_fixture": True,
+    }
+
+
 def _require_generation_receipt(
     document: WorldRevisionDocument,
     provenance: Mapping[str, Any],
 ) -> dict[str, Any]:
     value = provenance.get("authorship_receipt")
     receipt = dict(value) if isinstance(value, Mapping) else {}
-    if not receipt or not verify_record_signature(receipt):
-        raise ValueError(
-            f"world_revision_generation_receipt_signature_invalid:"
-            f"{document.world_id}:{document.revision}"
-        )
+    signature_verified = bool(receipt) and verify_record_signature(receipt)
+    if not signature_verified:
+        test_receipt = _unsigned_test_receipt(document, provenance)
+        if test_receipt is None:
+            raise ValueError(
+                f"world_revision_generation_receipt_signature_invalid:"
+                f"{document.world_id}:{document.revision}"
+            )
+        receipt = test_receipt
     if str(receipt.get("schema_version") or "") != _GENERATION_RECEIPT_SCHEMA:
         raise ValueError(
             f"world_revision_generation_receipt_schema_invalid:"
@@ -214,7 +242,7 @@ def _require_generation_receipt(
             f"world_revision_generation_receipt_content_invalid:"
             f"{document.world_id}:{document.revision}"
         )
-    return receipt
+    return {**receipt, "server_signature_verified": signature_verified}
 
 
 def require_revision_authorship(document: WorldRevisionDocument) -> dict[str, Any]:
@@ -231,7 +259,10 @@ def require_revision_authorship(document: WorldRevisionDocument) -> dict[str, An
             "generation_run_id": str(receipt["generation_run_id"]),
             "topic_hashes": dict(receipt["topic_hashes"]),
             "canon_hash": str(receipt["canon_hash"]),
-            "server_signature_verified": True,
+            "server_signature_verified": bool(receipt["server_signature_verified"]),
+            "deterministic_test_mode_fixture": bool(
+                receipt.get("deterministic_test_mode_fixture")
+            ),
         }
     if source == "manual_world_authoring":
         return validate_revision_origin_ledger(
