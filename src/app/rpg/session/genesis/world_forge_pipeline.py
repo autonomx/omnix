@@ -19,6 +19,7 @@ from .world_forge_generation import (
     generate_campaign_topics,
 )
 from .world_forge_historical_planning import build_historical_planning_topics
+from .world_forge_pressure_planning import build_pressure_planning_topics
 from .world_forge_profile_generation import resolve_or_generate_genre_profile
 from .world_forge_profile_graph import (
     build_profile_launch_topic_graph,
@@ -181,16 +182,25 @@ def run_campaign_world_forge(
         seed=seed,
         world_key=campaign_id,
     )
+    social_topics = build_social_planning_topics(
+        anchor_registry,
+        historical_topics["geography_resource_plan"],
+        historical_topics["historical_epoch_plan"],
+        historical_topics["present_day_state"],
+        seed=seed,
+    )
+    pressure_topics = build_pressure_planning_topics(
+        anchor_registry,
+        historical_topics["present_day_state"],
+        social_topics["political_claim_graph"],
+        social_topics["settlement_origin_plan"],
+        seed=seed,
+    )
     planning_topics = {
         "anchor_registry": anchor_registry,
         **historical_topics,
-        **build_social_planning_topics(
-            anchor_registry,
-            historical_topics["geography_resource_plan"],
-            historical_topics["historical_epoch_plan"],
-            historical_topics["present_day_state"],
-            seed=seed,
-        ),
+        **social_topics,
+        **pressure_topics,
     }
     generation = generate_campaign_topics(
         graph,
