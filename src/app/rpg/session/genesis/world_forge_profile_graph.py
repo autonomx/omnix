@@ -8,6 +8,7 @@ from .world_forge_causal_generation import causal_generation_contract
 from .world_forge_causal_profile import augment_profile_with_causal_traceability
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_lore_quality import lore_quality_contract
+from .world_forge_planning import planning_contract_metadata
 from .world_forge_profiles import DomainDefinition, GenreProfile
 
 _PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
@@ -177,6 +178,7 @@ def build_profile_topic_graph(
                 **dict(runtime_capabilities or {}),
             },
             "launch_requirements": profile.launch_requirements.as_dict(),
+            "planning_contract": planning_contract_metadata(),
         },
     )
     issues = graph.validate()
