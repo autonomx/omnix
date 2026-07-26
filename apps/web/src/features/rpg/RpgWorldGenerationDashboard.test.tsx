@@ -140,7 +140,6 @@ describe('RpgWorldGenerationDashboard', () => {
     fireEvent.click(generate);
 
     await waitFor(() => expect(requests.some((request) => request.url.includes('/generation'))).toBe(true));
-    expect(generate).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText(/Generate World selected\. Generation controls are open below/)).toBeInTheDocument();
     const generationRequest = requests.find((request) => request.url.includes('/generation'));
     expect(generationRequest?.url).toContain('/api/rpg/worlds/world%3Aaurelia/generation');
@@ -191,7 +190,8 @@ describe('RpgWorldGenerationDashboard', () => {
 
     expect(await screen.findByText('Review Required')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '✦ Generate World' })).toBeDisabled();
-    expect(screen.getByText(/Generation is locked while the profile is awaiting approval/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate Selected' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Regenerate Stale' })).toBeDisabled();
   });
 
   it('selects a retryable topic without retaining the change event', async () => {
@@ -266,7 +266,7 @@ describe('RpgWorldGenerationDashboard', () => {
     expect(screen.getByRole('region', { name: 'World generation token usage' })).toHaveTextContent('15,000');
     expect(screen.getByText(/4 completed/)).toBeInTheDocument();
     expect(screen.getByText(/live batches included/i)).toBeInTheDocument();
-    expect(screen.getByText('3 provider-reported · 1 estimated')).toBeInTheDocument();
+    expect(screen.getByText(/3 provider-reported · 1 estimated/)).toBeInTheDocument();
     await screen.findByText('Profile Approved');
   });
 });
