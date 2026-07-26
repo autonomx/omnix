@@ -4,8 +4,8 @@ from app.rpg.session.genesis.canon_relationships import (
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 
 
-def test_typed_reference_facts_compile_cross_domain_relationships() -> None:
-    topic = GeneratedTopic(
+def _typed_reference_topic(source: str) -> GeneratedTopic:
+    return GeneratedTopic(
         topic_id="actors",
         entities=(
             {
@@ -25,7 +25,7 @@ def test_typed_reference_facts_compile_cross_domain_relationships() -> None:
                 "object": "place:harbor",
                 "value_type": "entity_ref",
                 "content": "Ada is located at the harbor.",
-                "source": "profile_structured_fact_compiler_v1",
+                "source": source,
                 "visibility": "game_master_canon",
             },
             {
@@ -36,12 +36,14 @@ def test_typed_reference_facts_compile_cross_domain_relationships() -> None:
                 "object": ["group:wardens"],
                 "value_type": "entity_ref_list",
                 "content": "Ada belongs to the Wardens.",
-                "source": "profile_structured_fact_compiler_v1",
+                "source": source,
                 "visibility": "game_master_canon",
             },
         ),
     )
 
+
+def _assert_typed_relationships(topic: GeneratedTopic) -> None:
     relationships = compile_cross_domain_relationships((topic,))
     by_kind = {row["kind"]: row for row in relationships}
 
@@ -52,3 +54,11 @@ def test_typed_reference_facts_compile_cross_domain_relationships() -> None:
     )
     assert by_kind["group"]["target_id"] == "group:wardens"
     assert "present_at" not in by_kind
+
+
+def test_typed_reference_facts_compile_cross_domain_relationships() -> None:
+    _assert_typed_relationships(_typed_reference_topic("profile_structured_fact_compiler_v1"))
+
+
+def test_trusted_v2_facts_compile_cross_domain_relationships() -> None:
+    _assert_typed_relationships(_typed_reference_topic("profile_structured_fact_compiler_v2"))
