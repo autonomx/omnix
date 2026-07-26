@@ -14,6 +14,7 @@ from .generation_authorship_runtime import (
     attach_server_llm_authorship,
     build_generation_artifact,
 )
+from .generation_test_mode import deterministic_world_forge_test_mode
 
 
 class TrustedAuthorshipWorldForgeGenerator:
@@ -68,6 +69,25 @@ class TrustedAuthorshipWorldForgeGenerator:
         generator_name = str(provenance.get("generator") or "")
         provider_generated = generator_name.startswith("structured_world_forge_provider_")
         if not provider_generated or not provider or not model:
+            if deterministic_world_forge_test_mode() and (
+                generator_name.startswith("deterministic_")
+                or bool(provenance.get("deterministic_fixture_only"))
+                or bool(provenance.get("deterministic_fixture_fact_presentation"))
+            ):
+                return replace(
+                    topic,
+                    provenance={
+                        **provenance,
+                        "used_llm": False,
+                        "deterministic_fixture_only": True,
+                        "generation_status": "accepted",
+                        "test_authorship_exemption": {
+                            "schema_version": "rpg_deterministic_fixture_exemption_v1",
+                            "reason": "explicit_rpg_test_mode",
+                            "publishable_outside_test_mode": False,
+                        },
+                    },
+                )
             return replace(
                 topic,
                 provenance={
