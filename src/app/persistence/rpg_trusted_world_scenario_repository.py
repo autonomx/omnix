@@ -5,11 +5,10 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-from app.rpg.worlds.generation_authorship import AuthorshipValidationError
-from app.rpg.worlds.generation_authorship_runtime import (
-    attach_human_authorship,
-    generation_artifact,
-    require_publishable_authorship,
+from app.rpg.worlds.generation_authorship_signing import (
+    attach_signed_human_authorship,
+    require_signed_authorship,
+    sanitize_untrusted_candidate,
 )
 from app.rpg.worlds.generation_test_mode import deterministic_world_forge_test_mode
 
@@ -23,29 +22,26 @@ def _hash(value: Mapping[str, Any]) -> str:
 
 
 def _fixture_exempt(payload: Mapping[str, Any]) -> bool:
+    if not deterministic_world_forge_test_mode():
+        return False
     provenance = payload.get("provenance")
     provenance = dict(provenance) if isinstance(provenance, Mapping) else {}
-    exemption = provenance.get("test_authorship_exemption")
-    exemption = dict(exemption) if isinstance(exemption, Mapping) else {}
-    server_attested = (
-        bool(exemption.get("server_attested"))
-        and str(exemption.get("schema_version") or "")
-        == "rpg_deterministic_fixture_exemption_v1"
-        and str(exemption.get("recorded_provider_route") or "").strip().casefold()
-        in {"deterministic", "offline", "reference-safe", "test"}
-    )
-    return server_attested or (
-        deterministic_world_forge_test_mode()
-        and (
-            bool(provenance.get("deterministic_fixture_only"))
-            or bool(exemption)
-            or str(provenance.get("generator") or "").startswith("deterministic_")
-        )
-    )
+    return bool(provenance.get("deterministic_fixture_only")) or str(
+        provenance.get("generator") or ""
+    ).startswith("deterministic_")
+
+
+def _has_llm_lineage(payload: Mapping[str, Any]) -> bool:
+    provenance = payload.get("provenance")
+    provenance = dict(provenance) if isinstance(provenance, Mapping) else {}
+    authorship = provenance.get("authorship")
+    authorship = dict(authorship) if isinstance(authorship, Mapping) else {}
+    artifacts = authorship.get("generation_artifacts")
+    return isinstance(artifacts, Mapping) and bool(artifacts)
 
 
 class PostgresTrustedRpgWorldScenarioRepository(PostgresRpgWorldScenarioRepository):
-    """Attach human origins and reject untrusted ready AI content before storage."""
+    """Create human evidence server-side and reject unsigned ready AI content."""
 
     def _current_topic_content(
         self,
@@ -77,44 +73,35 @@ class PostgresTrustedRpgWorldScenarioRepository(PostgresRpgWorldScenarioReposito
         provenance: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         payload = dict(content)
-        row_provenance = dict(provenance or {})
-        embedded = dict(payload.get("provenance") or {})
-        supplied_authorship = row_provenance.get("authorship")
-        if supplied_authorship is not None and "authorship" not in embedded:
-            embedded["authorship"] = supplied_authorship
-        payload["provenance"] = embedded
+        row_provenance = {
+            key: value
+            for key, value in dict(provenance or {}).items()
+            if key not in {"authorship", "test_authorship_exemption"}
+        }
 
         if source == "manual":
-            try:
-                require_publishable_authorship(payload)
-                already_authored = True
-            except AuthorshipValidationError:
-                already_authored = False
-            if not already_authored:
-                prior = self._current_topic_content(context, world_id, topic_id)
-                event_id = (
-                    f"humanedit:{world_id}:{topic_id}:{draft_revision}:"
-                    f"{datetime.now(timezone.utc).isoformat()}"
-                )
-                payload = attach_human_authorship(
-                    payload,
-                    event_id=event_id,
-                    prior_candidate=prior,
-                    edited_llm=bool(generation_artifact(prior)),
-                )
-                require_publishable_authorship(payload)
+            prior = self._current_topic_content(context, world_id, topic_id)
+            event_id = (
+                f"humanedit:{world_id}:{topic_id}:{draft_revision}:"
+                f"{datetime.now(timezone.utc).isoformat()}"
+            )
+            payload = attach_signed_human_authorship(
+                sanitize_untrusted_candidate(payload),
+                event_id=event_id,
+                prior_candidate=prior,
+                edited_llm=_has_llm_lineage(prior),
+            )
+            require_signed_authorship(payload)
             content_hash = _hash(payload)
-            embedded = dict(payload.get("provenance") or {})
-            if "authorship" in embedded:
-                row_provenance["authorship"] = embedded["authorship"]
         elif source == "ai" and status == "ready":
             if not _fixture_exempt(payload):
-                artifact = generation_artifact(payload)
-                require_publishable_authorship(payload, server_artifact=artifact)
+                require_signed_authorship(payload)
             content_hash = _hash(payload)
-            embedded = dict(payload.get("provenance") or {})
-            if "authorship" in embedded:
-                row_provenance["authorship"] = embedded["authorship"]
+
+        embedded = payload.get("provenance")
+        embedded = dict(embedded) if isinstance(embedded, Mapping) else {}
+        if "authorship" in embedded:
+            row_provenance["authorship"] = embedded["authorship"]
 
         return super().put_topic(
             context,
