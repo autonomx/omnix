@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
+from .world_forge_authorship_policy import field_policy_row, topic_authorship_policy
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_lore_quality import lore_quality_contract
 from .world_forge_profiles import DomainDefinition, GenreProfile
@@ -29,7 +30,8 @@ def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
     return {
         "entity_kind": domain.entity_kind,
         "required_entity_fields": required_fields,
-        "field_definitions": [field.as_dict() for field in domain.fields],
+        "field_definitions": [field_policy_row(field) for field in domain.fields],
+        "authorship_policy": topic_authorship_policy(domain.fields),
         "reference_fields": reference_fields,
         "semantic_roles": list(domain.semantic_roles),
         "generation_guidance": guidance,
