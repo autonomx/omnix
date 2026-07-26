@@ -9,10 +9,10 @@ from app.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 
-from .generation_authorship_runtime import (
-    attach_human_authorship,
-    generation_artifact,
-    require_publishable_authorship,
+from .generation_authorship_runtime import generation_artifact
+from .generation_authorship_signing import (
+    attach_signed_human_authorship,
+    require_signed_authorship,
 )
 from .generation_coordinator import (
     _graph_from_payload,
@@ -53,7 +53,7 @@ def _accepted_candidate(
     artifact = generation_artifact(original_candidate)
     if edited:
         event_id = f"humanedit:{run_id}:{topic_id}:{accepted_at}"
-        payload = attach_human_authorship(
+        payload = attach_signed_human_authorship(
             payload,
             event_id=event_id,
             prior_candidate=original_candidate,
@@ -61,7 +61,7 @@ def _accepted_candidate(
         )
         source = "manual"
     else:
-        require_publishable_authorship(payload, server_artifact=artifact)
+        require_signed_authorship(payload)
         source = "ai"
 
     provenance = _mapping(payload.get("provenance"))
@@ -92,7 +92,7 @@ def _accepted_candidate(
         }
     )
     payload["provenance"] = provenance
-    require_publishable_authorship(payload, server_artifact=artifact)
+    require_signed_authorship(payload)
     return payload, source
 
 
