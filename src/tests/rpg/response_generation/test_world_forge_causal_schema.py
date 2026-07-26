@@ -5,7 +5,11 @@ from app.rpg.session.genesis.world_forge_profile_graph import (
     build_profile_launch_topic_graph,
     build_profile_topic_graph,
 )
-from app.rpg.session.genesis.world_forge_profiles import DomainDefinition, GenreProfile
+from app.rpg.session.genesis.world_forge_profiles import (
+    DomainDefinition,
+    GenreProfile,
+    LaunchRequirements,
+)
 
 
 def _profile():
@@ -69,6 +73,10 @@ def test_custom_profiles_without_standard_domains_are_not_augmented() -> None:
         version=1,
         display_name="Minimal",
         domains=(DomainDefinition("rules", "Rules", "rule"),),
+        launch_requirements=LaunchRequirements(
+            required_domain_ids=(),
+            required_semantic_roles=(),
+        ),
     )
     graph = build_profile_topic_graph(profile, campaign_template="minimal")
 
