@@ -1,4 +1,4 @@
-"""Fail-closed publication guard for single-pass World Forge runs."""
+"""Fail-closed publication guard for durable World Forge runs."""
 from __future__ import annotations
 
 import json
@@ -8,6 +8,10 @@ from typing import Any, Mapping
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
+from .generation_authorship_runtime import (
+    generation_artifact,
+    validate_publishable_authorship,
+)
 from .generation_publication import publish_world_generation as _publish_legacy
 
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
@@ -41,7 +45,6 @@ def _generation_nodes(run: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
     )
     if rows:
         return rows
-    # Runs created before graph persistence are still guarded by their exact target set.
     return tuple(
         {"topic_id": str(topic_id), "category": "lore", "dependencies": []}
         for topic_id in dict(run.get("context") or {}).get("target_topic_ids") or ()
@@ -59,6 +62,39 @@ def _review_decisions(run: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
         for key, row in dict(value or {}).items()
         if isinstance(row, Mapping)
     }
+
+
+def _authorship_reports(
+    graph_topic_ids: tuple[str, ...],
+    *,
+    authoring: Mapping[str, Mapping[str, Any]],
+    results: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    reports: list[dict[str, Any]] = []
+    for topic_id in graph_topic_ids:
+        topic = authoring.get(topic_id)
+        if topic is None or str(topic.get("status") or "") != "ready":
+            continue
+        content = topic.get("content")
+        if not isinstance(content, Mapping):
+            reports.append(
+                {
+                    "topic_id": topic_id,
+                    "publishable": False,
+                    "blocked_paths": [{"path": "/", "code": "topic_content_missing"}],
+                }
+            )
+            continue
+        artifact: Mapping[str, Any] | None = None
+        if str(topic.get("source") or "") == "ai":
+            result = results.get(topic_id)
+            candidate = result.get("candidate") if isinstance(result, Mapping) else None
+            if isinstance(candidate, Mapping):
+                artifact = generation_artifact(candidate)
+        report = validate_publishable_authorship(content, server_artifact=artifact)
+        if not report["publishable"]:
+            reports.append({"topic_id": topic_id, **report})
+    return reports
 
 
 def publication_review_report(
@@ -191,6 +227,11 @@ def publication_review_report(
                     }
                 )
 
+    authorship_failures = _authorship_reports(
+        graph_topic_ids,
+        authoring=authoring,
+        results=by_topic,
+    )
     blockers = (
         set(missing)
         | set(flagged)
@@ -201,9 +242,10 @@ def publication_review_report(
         | set(pending_decisions)
         | set(missing_authoring)
         | {row["topic_id"] for row in dependency_mismatches}
+        | {row["topic_id"] for row in authorship_failures}
     )
     return {
-        "schema_version": "rpg_world_generation_publication_review_v2",
+        "schema_version": "rpg_world_generation_publication_review_v3",
         "run_id": run_id,
         "world_id": str(run["world_id"]),
         "draft_revision": int(run["draft_revision"]),
@@ -220,6 +262,7 @@ def publication_review_report(
         "hash_mismatch_topic_ids": sorted(hash_mismatches),
         "missing_authoring_topic_ids": missing_authoring,
         "dependency_hash_mismatches": dependency_mismatches,
+        "authorship_failures": authorship_failures,
         "reason_counts": _reason_counts(results),
     }
 
