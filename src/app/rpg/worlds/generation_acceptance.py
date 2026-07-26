@@ -1,4 +1,4 @@
-"""Promote retained World Forge review candidates into editable authoring canon."""
+"""Promote retained World Forge candidates without relabelling their authorship."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -9,6 +9,11 @@ from app.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 
+from .generation_authorship_runtime import (
+    attach_human_authorship,
+    generation_artifact,
+    require_publishable_authorship,
+)
 from .generation_coordinator import (
     _graph_from_payload,
     _settings_from_payload,
@@ -31,18 +36,34 @@ def _mapping(value: Any) -> dict[str, Any]:
 def _accepted_candidate(
     candidate: Mapping[str, Any],
     *,
+    original_candidate: Mapping[str, Any],
     run_id: str,
     topic_id: str,
     accepted_at: str,
     original_candidate_hash: str,
     edited: bool,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], str]:
     payload = dict(candidate)
     if str(payload.get("topic_id") or "") != topic_id:
         raise ValueError(
             f"world_generation_accept_topic_mismatch:{payload.get('topic_id')}:{topic_id}"
         )
     GeneratedTopic.from_dict(payload)
+
+    artifact = generation_artifact(original_candidate)
+    if edited:
+        event_id = f"humanedit:{run_id}:{topic_id}:{accepted_at}"
+        payload = attach_human_authorship(
+            payload,
+            event_id=event_id,
+            prior_candidate=original_candidate,
+            edited_llm=bool(artifact),
+        )
+        source = "manual"
+    else:
+        require_publishable_authorship(payload, server_artifact=artifact)
+        source = "ai"
+
     provenance = _mapping(payload.get("provenance"))
     provenance.pop("generation_review", None)
     authoring = _mapping(provenance.get("authoring"))
@@ -51,8 +72,9 @@ def _accepted_candidate(
             "approved_at": accepted_at,
             "approved_by": "local-game-master",
             "edit_state": (
-                "review_candidate_edited" if edited else "review_candidate_accepted"
+                "review_candidate_human_edited" if edited else "review_candidate_accepted"
             ),
+            "authorship_preserved": True,
         }
     )
     provenance.update(
@@ -65,11 +87,13 @@ def _accepted_candidate(
                 "accepted_at": accepted_at,
                 "original_candidate_hash": original_candidate_hash,
                 "edited_before_acceptance": edited,
+                "source_after_acceptance": source,
             },
         }
     )
     payload["provenance"] = provenance
-    return payload
+    require_publishable_authorship(payload, server_artifact=artifact)
+    return payload, source
 
 
 def _promotion_inputs(
@@ -138,7 +162,7 @@ def _mark_result_accepted(
         "error_type": "",
         "reason_codes": [],
         "issues": [],
-        "summary": "Candidate accepted by the Game Master.",
+        "summary": "Candidate accepted by the Game Master with authorship preserved.",
         "accepted_at": accepted_at,
         "previous_validation": dict(previous_validation),
     }
@@ -182,10 +206,11 @@ def _promote(
             "world_generation_candidate_hash_conflict:"
             f"expected={expected_candidate_hash}:current={original_hash}"
         )
-    source = candidate_override if candidate_override is not None else original_candidate
-    edited = candidate_override is not None and dict(source) != dict(original_candidate)
-    candidate = _accepted_candidate(
-        source,
+    source_candidate = candidate_override if candidate_override is not None else original_candidate
+    edited = candidate_override is not None and dict(source_candidate) != dict(original_candidate)
+    candidate, source = _accepted_candidate(
+        source_candidate,
+        original_candidate=original_candidate,
         run_id=str(run["run_id"]),
         topic_id=topic_id,
         accepted_at=accepted_at,
@@ -201,7 +226,7 @@ def _promote(
         world_id=str(run["world_id"]),
         topic_id=topic_id,
         draft_revision=int(run["draft_revision"]),
-        source="ai",
+        source=source,
         status="ready",
         content=candidate,
         directives=directives,
@@ -226,6 +251,7 @@ def _promote(
         "promoted_hash": promoted_hash,
         "decided_at": accepted_at,
         "edited": edited,
+        "source": source,
     }
 
 
@@ -237,7 +263,7 @@ def accept_world_generation_candidates(
     expected_candidate_hashes: Mapping[str, str] | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    """Accept selected retained candidates, or every unresolved candidate when empty."""
+    """Accept selected retained candidates, preserving or explicitly changing origin."""
 
     context = bootstrap_local_tenant(database)
     overrides = dict(candidate_overrides or {})
