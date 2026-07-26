@@ -5,6 +5,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from app.rpg.worlds.generation_authorship import AuthorshipValidationError
 from app.rpg.worlds.generation_authorship_signing import (
     attach_signed_human_authorship,
     require_signed_authorship,
@@ -80,18 +81,21 @@ class PostgresTrustedRpgWorldScenarioRepository(PostgresRpgWorldScenarioReposito
         }
 
         if source == "manual":
-            prior = self._current_topic_content(context, world_id, topic_id)
-            event_id = (
-                f"humanedit:{world_id}:{topic_id}:{draft_revision}:"
-                f"{datetime.now(timezone.utc).isoformat()}"
-            )
-            payload = attach_signed_human_authorship(
-                sanitize_untrusted_candidate(payload),
-                event_id=event_id,
-                prior_candidate=prior,
-                edited_llm=_has_llm_lineage(prior),
-            )
-            require_signed_authorship(payload)
+            try:
+                require_signed_authorship(payload)
+            except AuthorshipValidationError:
+                prior = self._current_topic_content(context, world_id, topic_id)
+                event_id = (
+                    f"humanedit:{world_id}:{topic_id}:{draft_revision}:"
+                    f"{datetime.now(timezone.utc).isoformat()}"
+                )
+                payload = attach_signed_human_authorship(
+                    sanitize_untrusted_candidate(payload),
+                    event_id=event_id,
+                    prior_candidate=prior,
+                    edited_llm=_has_llm_lineage(prior),
+                )
+                require_signed_authorship(payload)
             content_hash = _hash(payload)
         elif source == "ai" and status == "ready":
             if not _fixture_exempt(payload):
