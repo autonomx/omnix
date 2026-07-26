@@ -16,9 +16,10 @@ def harden_and_sign_targeted_artifact(
     artifact: Mapping[str, Any],
     *,
     authored_paths: Iterable[str],
+    policy: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     selected = {str(path) for path in authored_paths}
-    row = harden_and_sign_generation_artifact(candidate, artifact)
+    row = harden_and_sign_generation_artifact(candidate, artifact, policy=policy)
     row = deepcopy(dict(row))
     row.pop("server_signature", None)
     row["authored_strings"] = [
