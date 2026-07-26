@@ -11,10 +11,98 @@ from .generation_authorship import (
     attach_human_authorship as _attach_human_authorship,
     attach_llm_authorship,
     content_hash,
-    lore_string_leaves,
+    lore_string_leaves as _base_lore_string_leaves,
     prove_structural_repair_non_authoring,
     validate_publishable_authorship as _validate_origins,
 )
+
+_MACHINE_FACT_FIELDS = {
+    "id",
+    "subject",
+    "predicate",
+    "object",
+    "authority",
+    "approved_authority",
+    "visibility",
+    "entity_refs",
+    "topic_id",
+    "field_id",
+    "value_type",
+    "semantic_role",
+    "source",
+    "authorship_class",
+    "lookup",
+    "lookup_schema",
+}
+_MACHINE_ORIGIN_BLOCKER_CODES = {
+    "authorship_class_not_publishable",
+    "server_generation_artifact_missing",
+    "origin_artifact_mismatch",
+    "human_authorship_event_missing",
+}
+
+
+def _machine_structured_fact_paths(candidate: Mapping[str, Any]) -> set[str]:
+    paths: set[str] = set()
+    facts = candidate.get("facts")
+    if not isinstance(facts, (list, tuple)):
+        return paths
+    for index, value in enumerate(facts):
+        if not isinstance(value, Mapping):
+            continue
+        row = dict(value)
+        machine = (
+            str(row.get("authorship_class") or "")
+            == AuthorshipClass.MACHINE_STRUCTURED.value
+            or str(row.get("source") or "").startswith(
+                "profile_structured_fact_compiler_"
+            )
+        )
+        if not machine:
+            continue
+        prefix = f"/facts/{index}/"
+        for leaf in _base_lore_string_leaves({"facts": [row]}):
+            path = str(leaf["path"])
+            parts = [part for part in path.split("/") if part]
+            if len(parts) >= 3 and parts[2] in _MACHINE_FACT_FIELDS:
+                suffix = "/".join(parts[2:])
+                paths.add(prefix + suffix)
+    return paths
+
+
+def lore_string_leaves(candidate: Mapping[str, Any]) -> tuple[dict[str, str], ...]:
+    machine_paths = _machine_structured_fact_paths(candidate)
+    return tuple(
+        row
+        for row in _base_lore_string_leaves(candidate)
+        if str(row["path"]) not in machine_paths
+    )
+
+
+def _reclassify_machine_origins(candidate: Mapping[str, Any]) -> dict[str, Any]:
+    payload = deepcopy(dict(candidate))
+    machine_paths = _machine_structured_fact_paths(payload)
+    provenance = dict(payload.get("provenance") or {})
+    authorship = dict(provenance.get("authorship") or {})
+    ledger: list[dict[str, Any]] = []
+    for value in authorship.get("origin_ledger") or ():
+        if not isinstance(value, Mapping):
+            continue
+        row = dict(value)
+        if str(row.get("path") or "") in machine_paths:
+            row.update(
+                {
+                    "authorship_class": AuthorshipClass.MACHINE_STRUCTURED.value,
+                    "generation_artifact_id": "",
+                    "human_edit_event_id": "",
+                }
+            )
+            row.pop("parent_origin", None)
+        ledger.append(row)
+    authorship["origin_ledger"] = ledger
+    provenance["authorship"] = authorship
+    payload["provenance"] = provenance
+    return payload
 
 
 def _authored_payload_rows(candidate: Mapping[str, Any]) -> list[dict[str, str]]:
@@ -55,10 +143,13 @@ def build_generation_artifact(
     raw_hash = str(
         provider_row.get("raw_response_hash")
         or provider_row.get("provider_response_hash")
+        or recovery.get("accepted_response_hash")
         or recovery.get("original_candidate_hash")
         or ""
     )
-    raw_hash_kind = "provider_response"
+    raw_hash_kind = str(
+        provider_row.get("raw_response_hash_kind") or "provider_response"
+    )
     if not raw_hash:
         raw_hash = parsed_hash
         raw_hash_kind = "authored_payload_fallback"
@@ -102,7 +193,7 @@ def attach_server_llm_authorship(
     candidate: Mapping[str, Any],
     artifact: Mapping[str, Any],
 ) -> dict[str, Any]:
-    payload = attach_llm_authorship(candidate, artifact)
+    payload = _reclassify_machine_origins(attach_llm_authorship(candidate, artifact))
     provenance = dict(payload.get("provenance") or {})
     authorship = dict(provenance.get("authorship") or {})
     authorship["generation_artifact"] = dict(artifact)
@@ -131,11 +222,13 @@ def attach_human_authorship(
 
     prior = dict(prior_candidate or {})
     artifact = generation_artifact(prior)
-    payload = _attach_human_authorship(
-        candidate,
-        event_id=event_id,
-        prior_candidate=prior,
-        edited_llm=edited_llm,
+    payload = _reclassify_machine_origins(
+        _attach_human_authorship(
+            candidate,
+            event_id=event_id,
+            prior_candidate=prior,
+            edited_llm=edited_llm,
+        )
     )
     if artifact:
         provenance = dict(payload.get("provenance") or {})
@@ -158,7 +251,8 @@ def _artifact_origin_hash(
         row = dict(value)
         path = str(row.get("path") or "")
         if (
-            str(row.get("authorship_class") or "") == AuthorshipClass.LLM_AUTHORED.value
+            str(row.get("authorship_class") or "")
+            == AuthorshipClass.LLM_AUTHORED.value
             and str(row.get("generation_artifact_id") or "") == artifact_id
         ):
             rows.append({"path": path, "content_hash": str(row.get("content_hash") or "")})
@@ -167,7 +261,8 @@ def _artifact_origin_hash(
         if not isinstance(parent, Mapping):
             continue
         if (
-            str(parent.get("authorship_class") or "") == AuthorshipClass.LLM_AUTHORED.value
+            str(parent.get("authorship_class") or "")
+            == AuthorshipClass.LLM_AUTHORED.value
             and str(parent.get("generation_artifact_id") or "") == artifact_id
         ):
             rows.append({"path": path, "content_hash": str(parent.get("content_hash") or "")})
@@ -184,19 +279,28 @@ def validate_publishable_authorship(
     """Verify origins, artifact integrity, and exact authored-string hashes."""
 
     artifact = dict(server_artifact or generation_artifact(candidate) or {})
+    machine_paths = _machine_structured_fact_paths(candidate)
     origin_report = _validate_origins(candidate, server_artifact=None)
     blockers = [
         dict(row)
         for row in origin_report.get("blocked_paths") or ()
         if str(dict(row).get("code") or "") != "server_generation_artifact_missing"
+        and not (
+            str(dict(row).get("path") or "") in machine_paths
+            and str(dict(row).get("code") or "") in _MACHINE_ORIGIN_BLOCKER_CODES
+        )
     ]
     leaves = lore_string_leaves(candidate)
     llm_origins = [
         row
-        for row in dict(dict(candidate.get("provenance") or {}).get("authorship") or {}).get("origin_ledger") or ()
+        for row in dict(
+            dict(candidate.get("provenance") or {}).get("authorship") or {}
+        ).get("origin_ledger")
+        or ()
         if isinstance(row, Mapping)
         and (
-            str(row.get("authorship_class") or "") == AuthorshipClass.LLM_AUTHORED.value
+            str(row.get("authorship_class") or "")
+            == AuthorshipClass.LLM_AUTHORED.value
             or str(dict(row.get("parent_origin") or {}).get("authorship_class") or "")
             == AuthorshipClass.LLM_AUTHORED.value
         )
@@ -236,7 +340,8 @@ def validate_publishable_authorship(
             for origin in llm_origins:
                 current_id = str(origin.get("generation_artifact_id") or "")
                 parent_id = str(
-                    dict(origin.get("parent_origin") or {}).get("generation_artifact_id") or ""
+                    dict(origin.get("parent_origin") or {}).get("generation_artifact_id")
+                    or ""
                 )
                 if artifact_id not in {current_id, parent_id}:
                     blockers.append(
@@ -250,11 +355,22 @@ def validate_publishable_authorship(
     for blocker in blockers:
         unique[(str(blocker.get("path") or ""), str(blocker.get("code") or ""))] = blocker
     ordered = [unique[key] for key in sorted(unique)]
+    ledger = dict(
+        dict(candidate.get("provenance") or {}).get("authorship") or {}
+    ).get("origin_ledger") or ()
+    authored_origin_count = sum(
+        1
+        for row in ledger
+        if isinstance(row, Mapping)
+        and str(row.get("authorship_class") or "")
+        != AuthorshipClass.MACHINE_STRUCTURED.value
+    )
     return {
         "schema_version": "rpg_world_publishable_authorship_report_v1",
         "publishable": not ordered,
         "lore_string_count": len(leaves),
-        "origin_count": int(origin_report.get("origin_count") or 0),
+        "origin_count": authored_origin_count,
+        "machine_structured_string_count": len(machine_paths),
         "generation_artifact_id": str(artifact.get("generation_artifact_id") or ""),
         "blocked_paths": ordered,
     }
@@ -278,6 +394,7 @@ __all__ = [
     "attach_server_llm_authorship",
     "build_generation_artifact",
     "generation_artifact",
+    "lore_string_leaves",
     "prove_structural_repair_non_authoring",
     "require_publishable_authorship",
     "validate_publishable_authorship",
