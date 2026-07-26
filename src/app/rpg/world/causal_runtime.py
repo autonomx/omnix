@@ -190,14 +190,28 @@ def install_causal_runtime(
     return installed
 
 
+def ensure_causal_runtime_installed(
+    simulation_state: dict[str, Any],
+) -> dict[str, Any]:
+    runtime = simulation_state.get("causal_world_runtime")
+    if isinstance(runtime, Mapping):
+        return dict(runtime)
+    campaign_bible = simulation_state.get("campaign_bible")
+    if isinstance(campaign_bible, Mapping):
+        manifest = campaign_bible.get("manifest")
+        if isinstance(manifest, Mapping):
+            bootstrap = manifest.get("causal_runtime_bootstrap")
+            if isinstance(bootstrap, Mapping):
+                return install_causal_runtime(simulation_state, bootstrap)
+    raise ValueError("causal_world_runtime_not_installed")
+
+
 def advance_installed_causal_runtime(
     simulation_state: dict[str, Any],
     *,
     tick: int,
 ) -> tuple[dict[str, Any], tuple[CausalWorldEvent, ...]]:
-    runtime = simulation_state.get("causal_world_runtime")
-    if not isinstance(runtime, Mapping):
-        raise ValueError("causal_world_runtime_not_installed")
+    runtime = ensure_causal_runtime_installed(simulation_state)
     next_runtime, emitted = advance_causal_runtime(runtime, tick=tick)
     simulation_state["causal_world_runtime"] = next_runtime
     for event in emitted:
@@ -228,6 +242,7 @@ __all__ = [
     "advance_causal_runtime",
     "advance_installed_causal_runtime",
     "bootstrap_causal_runtime",
+    "ensure_causal_runtime_installed",
     "install_causal_runtime",
     "replay_causal_events",
 ]
