@@ -7,8 +7,8 @@ from typing import Any, Callable, Mapping
 from app.rpg.session.genesis.canon_audit import audit_generated_canon
 from app.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicGraph
-from app.rpg.session.genesis.world_forge_fact_pipeline import (
-    compile_structured_entity_facts,
+from app.rpg.session.genesis.world_forge_fact_pipeline_publication import (
+    validate_or_compile_structured_entity_facts,
 )
 from app.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
@@ -201,7 +201,7 @@ def _profile_revalidated_generation(
         }
         validation_stages: list[str] = []
         if node.metadata.get("field_definitions"):
-            topic = compile_structured_entity_facts(
+            topic = validate_or_compile_structured_entity_facts(
                 node,
                 topic,
                 dependencies,
