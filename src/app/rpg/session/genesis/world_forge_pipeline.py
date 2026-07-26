@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from .canon_audit import CanonAuditReport, audit_generated_canon
@@ -28,6 +28,7 @@ from .world_forge_profile_graph import (
 from .world_forge_profiles import GenreProfile, genre_profile_from_dict
 from .world_forge_quality import apply_world_forge_quality_audit
 from .world_forge_social_planning import build_social_planning_topics
+from app.rpg.world.causal_runtime import bootstrap_causal_runtime
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class CampaignWorldForgeResult:
     relationships: tuple[Mapping[str, Any], ...]
     audit: CanonAuditReport
     compilation: CanonCompilationResult
+    runtime_bootstrap: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def launch_ready(self) -> bool:
@@ -54,6 +56,7 @@ class CampaignWorldForgeResult:
             "relationships": [dict(row) for row in self.relationships],
             "audit": self.audit.as_dict(),
             "compilation": self.compilation.as_dict(),
+            "runtime_bootstrap": dict(self.runtime_bootstrap),
         }
 
 
@@ -202,6 +205,7 @@ def run_campaign_world_forge(
         **social_topics,
         **pressure_topics,
     }
+    runtime_bootstrap = bootstrap_causal_runtime(planning_topics)
     generation = generate_campaign_topics(
         graph,
         generator=generator or _default_generator(),
@@ -250,4 +254,5 @@ def run_campaign_world_forge(
         relationships=relationships,
         audit=audit,
         compilation=compilation,
+        runtime_bootstrap=runtime_bootstrap,
     )
