@@ -59,6 +59,7 @@ jobs:
             src/tests/rpg/response_generation/test_rpg_world_scenario_phase3_publication.py \
             src/tests/rpg/worlds/test_canon_repair.py \
             src/tests/rpg/worlds/test_signed_world_authorship.py \
+            src/tests/rpg/worlds/test_signed_world_authorship_policy.py \
             src/tests/rpg/worlds/test_signed_world_revision_receipt.py \
             src/tests/rpg/worlds/test_trusted_lore_authorship.py \
             src/tests/rpg/worlds/test_world_generation_retirement.py \
