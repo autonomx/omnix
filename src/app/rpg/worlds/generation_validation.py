@@ -12,6 +12,7 @@ from app.rpg.session.genesis.world_forge_generation import (
 )
 
 from .generation_authorship import AuthorshipValidationError
+from .generation_authorship_policy_signing import bind_signed_authorship_policy
 from .generation_authorship_runtime import build_generation_artifact
 from .generation_authorship_signing import (
     AuthorshipSigningKeyUnavailable,
@@ -169,6 +170,7 @@ class PublicationValidatedWorldForgeGenerator:
                 artifact,
                 policy=policy,
             )
+            authored = bind_signed_authorship_policy(authored, policy)
         except (AuthorshipValidationError, AuthorshipSigningKeyUnavailable) as exc:
             return _review_blocked(
                 topic,
