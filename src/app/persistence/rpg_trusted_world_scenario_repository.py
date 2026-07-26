@@ -5,11 +5,13 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from app.rpg.worlds.generation_authorship import AuthorshipValidationError
 from app.rpg.worlds.generation_authorship_runtime import (
     attach_human_authorship,
     generation_artifact,
     require_publishable_authorship,
 )
+from app.rpg.worlds.generation_test_mode import deterministic_world_forge_test_mode
 
 from .rpg_repository import canonical_json
 from .rpg_world_scenario_repository import PostgresRpgWorldScenarioRepository
@@ -18,6 +20,16 @@ from .tenant import TenantContext
 
 def _hash(value: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_json(dict(value)).encode("utf-8")).hexdigest()
+
+
+def _fixture_exempt(payload: Mapping[str, Any]) -> bool:
+    provenance = payload.get("provenance")
+    provenance = dict(provenance) if isinstance(provenance, Mapping) else {}
+    return deterministic_world_forge_test_mode() and (
+        bool(provenance.get("deterministic_fixture_only"))
+        or bool(provenance.get("test_authorship_exemption"))
+        or str(provenance.get("generator") or "").startswith("deterministic_")
+    )
 
 
 class PostgresTrustedRpgWorldScenarioRepository(PostgresRpgWorldScenarioRepository):
@@ -53,38 +65,47 @@ class PostgresTrustedRpgWorldScenarioRepository(PostgresRpgWorldScenarioReposito
         provenance: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         payload = dict(content)
-        supplied_provenance = dict(provenance or {})
+        row_provenance = dict(provenance or {})
         embedded = dict(payload.get("provenance") or {})
-        # Preserve the field-origin ledger carried by the candidate while accepting
-        # authoring metadata supplied separately by existing service APIs.
-        supplied_authorship = supplied_provenance.pop("authorship", None)
-        embedded.update(supplied_provenance)
+        # The candidate owns its field-origin ledger. Row-level authoring, restore,
+        # and dependency metadata remains separate so restoring a historical draft
+        # does not mutate the historical content itself.
+        supplied_authorship = row_provenance.get("authorship")
         if supplied_authorship is not None and "authorship" not in embedded:
             embedded["authorship"] = supplied_authorship
         payload["provenance"] = embedded
 
         if source == "manual":
-            prior = self._current_topic_content(context, world_id, topic_id)
-            event_id = (
-                f"humanedit:{world_id}:{topic_id}:{draft_revision}:"
-                f"{datetime.now(timezone.utc).isoformat()}"
-            )
-            payload = attach_human_authorship(
-                payload,
-                event_id=event_id,
-                prior_candidate=prior,
-                edited_llm=bool(generation_artifact(prior)),
-            )
-            require_publishable_authorship(payload)
+            try:
+                require_publishable_authorship(payload)
+                already_authored = True
+            except AuthorshipValidationError:
+                already_authored = False
+            if not already_authored:
+                prior = self._current_topic_content(context, world_id, topic_id)
+                event_id = (
+                    f"humanedit:{world_id}:{topic_id}:{draft_revision}:"
+                    f"{datetime.now(timezone.utc).isoformat()}"
+                )
+                payload = attach_human_authorship(
+                    payload,
+                    event_id=event_id,
+                    prior_candidate=prior,
+                    edited_llm=bool(generation_artifact(prior)),
+                )
+                require_publishable_authorship(payload)
             content_hash = _hash(payload)
-            provenance = dict(payload.get("provenance") or {})
+            embedded = dict(payload.get("provenance") or {})
+            if "authorship" in embedded:
+                row_provenance["authorship"] = embedded["authorship"]
         elif source == "ai" and status == "ready":
-            artifact = generation_artifact(payload)
-            require_publishable_authorship(payload, server_artifact=artifact)
+            if not _fixture_exempt(payload):
+                artifact = generation_artifact(payload)
+                require_publishable_authorship(payload, server_artifact=artifact)
             content_hash = _hash(payload)
-            provenance = dict(payload.get("provenance") or {})
-        else:
-            provenance = embedded
+            embedded = dict(payload.get("provenance") or {})
+            if "authorship" in embedded:
+                row_provenance["authorship"] = embedded["authorship"]
 
         return super().put_topic(
             context,
@@ -98,7 +119,7 @@ class PostgresTrustedRpgWorldScenarioRepository(PostgresRpgWorldScenarioReposito
             dependency_hashes=dependency_hashes,
             input_hash=input_hash,
             content_hash=content_hash or _hash(payload),
-            provenance=provenance,
+            provenance=row_provenance,
         )
 
 
