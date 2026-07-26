@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .contracts import WorldArtifactStage, WorldReleaseDocument, WorldRevisionDocument, canonical_content_hash
+from .contracts import (
+    WorldArtifactStage,
+    WorldReleaseDocument,
+    WorldRevisionDocument,
+    canonical_content_hash,
+)
 from .runtime_seed import (
     RuntimeSeedDocument,
     VerticalSliceMaterializationDocument,
@@ -16,6 +21,26 @@ def _hashed_model(model_type: type[Any], payload: Mapping[str, Any]) -> Any:
     value["content_hash"] = ""
     value["content_hash"] = canonical_content_hash(value)
     return model_type.model_validate(value)
+
+
+def _semantic_canon(canon: Mapping[str, Any]) -> dict[str, Any]:
+    """Remove field-origin metadata from the simulation-facing canon hash.
+
+    Authorship ledgers attest how prose was created; they are not world facts and must
+    not change runtime seed identity when otherwise identical canon is compiled or
+    remapped.
+    """
+
+    payload = dict(canon)
+    provenance = payload.get("provenance")
+    if isinstance(provenance, Mapping):
+        semantic_provenance = dict(provenance)
+        semantic_provenance.pop("authorship", None)
+        if semantic_provenance:
+            payload["provenance"] = semantic_provenance
+        else:
+            payload.pop("provenance", None)
+    return payload
 
 
 def _stage(
@@ -52,7 +77,9 @@ def refresh_release_runtime_artifacts(
         {
             "world_id": world_revision.world_id,
             "world_revision": world_revision.revision,
-            "source_canon_hash": canonical_content_hash(world_revision.canon),
+            "source_canon_hash": canonical_content_hash(
+                _semantic_canon(world_revision.canon)
+            ),
         }
     )
     runtime_seed = _hashed_model(RuntimeSeedDocument, runtime_payload)
