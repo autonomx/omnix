@@ -31,6 +31,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def _deterministic_world_forge_test_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RPG_TEST_MODE", "deterministic")
+
+
 def _database() -> PostgresDatabase:
     return PostgresDatabase(
         DatabaseSettings(
