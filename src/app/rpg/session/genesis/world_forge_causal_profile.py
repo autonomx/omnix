@@ -264,6 +264,7 @@ def augment_profile_with_causal_traceability(profile: GenreProfile) -> GenreProf
         **dict(profile.provenance),
         "causal_traceability_schema": "rpg_world_forge_causal_traceability_v1",
         "base_profile_version": profile.version,
+        "base_profile_hash": profile.content_hash,
     }
     return replace(
         profile,
