@@ -5,6 +5,7 @@ from app.rpg.session.genesis.world_forge_profile_graph import (
     build_profile_launch_topic_graph,
     build_profile_topic_graph,
 )
+from app.rpg.session.genesis.world_forge_profiles import DomainDefinition, GenreProfile
 
 
 def _profile():
@@ -21,7 +22,7 @@ def test_causal_traceability_is_added_to_full_profile_graph() -> None:
     )
     nodes = graph.node_map()
 
-    assert graph.graph_version == "rpg_profile_topic_graph_v3"
+    assert graph.graph_version == "rpg_profile_topic_graph_v2"
     assert "causal_links" in nodes
     assert set(nodes["causal_links"].dependencies) == {
         "history_timeline",
@@ -60,3 +61,17 @@ def test_causal_links_remain_deferred_from_launch_graph() -> None:
 
     assert "causal_links" not in launch.node_map()
     assert "causal_links" in launch.metadata["deferred_topic_ids"]
+
+
+def test_custom_profiles_without_standard_domains_are_not_augmented() -> None:
+    profile = GenreProfile(
+        profile_id="minimal",
+        version=1,
+        display_name="Minimal",
+        domains=(DomainDefinition("rules", "Rules", "rule"),),
+    )
+    graph = build_profile_topic_graph(profile, campaign_template="minimal")
+
+    assert tuple(graph.node_map())[:1] == ("rules",)
+    assert "causal_links" not in graph.node_map()
+    assert graph.metadata["resolved_profile_hash"] == profile.content_hash
