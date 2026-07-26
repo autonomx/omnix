@@ -13,13 +13,21 @@ from app.rpg.session.genesis.world_forge_authorship_policy import (
 )
 from app.rpg.session.genesis.world_forge_profiles import FieldDefinition
 from app.rpg.worlds.authorship_audit import _topic_audit
+from app.rpg.worlds.contracts import WorldReleaseDocument, WorldRevisionDocument
 from app.rpg.worlds.generation_authorship import AuthorshipValidationError
 from app.rpg.worlds.generation_authorship_runtime import (
     attach_human_authorship,
+    attach_partial_llm_authorship,
     attach_server_llm_authorship,
     build_generation_artifact,
+    generation_artifacts,
     prove_structural_repair_non_authoring,
     validate_publishable_authorship,
+)
+from app.rpg.worlds.revision_authorship import (
+    prepare_direct_world_revision,
+    require_release_authorship,
+    require_revision_authorship,
 )
 
 
@@ -170,6 +178,83 @@ def test_human_edit_preserves_llm_parent_lineage_without_ai_relabelling() -> Non
     assert origins["/entities/0/short_summary"]["parent_origin"]["authorship_class"] == "llm_authored"
 
 
+def test_targeted_regeneration_uses_a_second_artifact_only_for_changed_paths() -> None:
+    authored, old_artifact = _authored()
+    regenerated = deepcopy(authored)
+    path = "/entities/0/short_summary"
+    regenerated["entities"][0]["short_summary"] = (
+        "A rain-darkened inn where encrypted couriers exchange sealed rumours while "
+        "its proprietor bargains for another week of safety."
+    )
+    new_artifact = build_generation_artifact(
+        regenerated,
+        run_id="run:targeted",
+        job_id="job:targeted",
+        topic_id="places",
+        provider={
+            "generator": "structured_world_forge_provider_v1",
+            "provider": "lmstudio",
+            "model": "qwen-test",
+            "raw_response_hash": "b" * 64,
+            "raw_response_hash_kind": "provider_response",
+            "transformations": ["targeted_regeneration_merge"],
+        },
+        authored_paths=(path,),
+        parent_artifact_ids=(old_artifact["generation_artifact_id"],),
+    )
+
+    merged = attach_partial_llm_authorship(
+        regenerated,
+        new_artifact,
+        llm_paths=(path,),
+        prior_candidate=authored,
+    )
+    report = validate_publishable_authorship(merged)
+    origins = {
+        row["path"]: row
+        for row in merged["provenance"]["authorship"]["origin_ledger"]
+    }
+
+    assert report["publishable"] is True
+    assert report["generation_artifact_count"] == 2
+    assert origins[path]["generation_artifact_id"] == new_artifact["generation_artifact_id"]
+    assert origins["/entities/0/name"]["generation_artifact_id"] == old_artifact["generation_artifact_id"]
+    assert set(generation_artifacts(merged)) == {
+        old_artifact["generation_artifact_id"],
+        new_artifact["generation_artifact_id"],
+    }
+
+
+def test_partial_regeneration_rejects_uncovered_application_text() -> None:
+    authored, old_artifact = _authored()
+    changed = deepcopy(authored)
+    changed["entities"][0]["short_summary"] = "Provider-authored replacement summary."
+    changed["entities"][0]["dossier"]["subtitle"] = "Application-added filler"
+    path = "/entities/0/short_summary"
+    artifact = build_generation_artifact(
+        changed,
+        run_id="run:targeted",
+        job_id="job:targeted",
+        topic_id="places",
+        provider={
+            "generator": "structured_world_forge_provider_v1",
+            "provider": "lmstudio",
+            "model": "qwen-test",
+            "raw_response_hash": "c" * 64,
+        },
+        authored_paths=(path,),
+        parent_artifact_ids=(old_artifact["generation_artifact_id"],),
+    )
+
+    with pytest.raises(AuthorshipValidationError):
+        attach_partial_llm_authorship(
+            changed,
+            artifact,
+            llm_paths=(path,),
+            prior_candidate=authored,
+        )
+
+
 def test_structured_fact_value_is_machine_structured_not_lore_prose() -> None:
     authored, artifact = _authored()
     origins = {
@@ -262,3 +347,81 @@ def test_audit_classifies_verified_and_missing_lore() -> None:
     )
     assert audited["classification"] == "missing_lore"
     assert audited["entities"][0]["generation_required"] is True
+
+
+def test_manual_revision_gets_server_created_human_authorship() -> None:
+    document = WorldRevisionDocument(
+        world_id="world:manual",
+        revision=1,
+        title="Manual World",
+        canon={"summary": "A human-authored world where the old road remembers every traveller."},
+    )
+
+    prepared = prepare_direct_world_revision(
+        {"id": "world:manual", "source_mode": "manual"},
+        document,
+    )
+    report = require_revision_authorship(prepared)
+
+    assert prepared.provenance["source"] == "manual_world_authoring"
+    assert report["publishable"] is True
+    assert prepared.content_hash.startswith("sha256:")
+
+
+def test_direct_ai_revision_is_rejected_in_favour_of_guarded_generation() -> None:
+    document = WorldRevisionDocument(
+        world_id="world:ai",
+        revision=1,
+        title="AI World",
+        canon={"summary": "Client supplied text must not impersonate generated canon."},
+    )
+
+    with pytest.raises(ValueError, match="world_revision_requires_guarded_generation"):
+        prepare_direct_world_revision(
+            {"id": "world:ai", "source_mode": "ai"},
+            document,
+        )
+
+
+def test_guarded_generation_revision_and_release_form_a_trusted_chain() -> None:
+    revision = WorldRevisionDocument(
+        world_id="world:generated",
+        revision=1,
+        title="Generated World",
+        canon={"compiled": True},
+        provenance={
+            "source": "durable_world_generation",
+            "generation_run_id": "run:generated",
+            "topic_hashes": {"places": "sha256:places"},
+        },
+        content_hash="sha256:" + "d" * 64,
+    )
+    release = WorldReleaseDocument(
+        world_id="world:generated",
+        world_revision=1,
+        release=1,
+        world_revision_hash=revision.content_hash,
+        compiler_provenance={
+            "compiler": "rpg_world_generation_publication_v2",
+            "generation_run_id": "run:generated",
+        },
+    )
+
+    receipt = require_release_authorship(revision, release)
+
+    assert receipt["publishable"] is True
+    assert receipt["release_authorship_source"] == "guarded_generation_compiler"
+
+
+def test_unknown_revision_cannot_be_released() -> None:
+    revision = WorldRevisionDocument(
+        world_id="world:legacy",
+        revision=1,
+        title="Legacy World",
+        canon={"summary": "Unknown inherited prose."},
+        provenance={"source": "legacy_import"},
+        content_hash="sha256:" + "e" * 64,
+    )
+
+    with pytest.raises(ValueError, match="world_revision_authorship_untrusted"):
+        require_revision_authorship(revision)
