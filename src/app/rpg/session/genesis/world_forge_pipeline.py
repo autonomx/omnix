@@ -9,6 +9,7 @@ from .canon_audit import CanonAuditReport, audit_generated_canon
 from .canon_compiler import CanonCompilationResult, compile_campaign_bible
 from .canon_relationships import compile_cross_domain_relationships
 from .contract import CampaignGenesisContract
+from .world_forge_causal_evaluation import attach_causal_evaluation
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_generation import (
     GeneratedTopic,
@@ -197,6 +198,7 @@ def run_campaign_world_forge(
         compiled_relationships=relationships,
     )
     audit = apply_world_forge_quality_audit(generation.topics, audit)
+    audit = attach_causal_evaluation(generation.topics, audit)
     compilation = compile_campaign_bible(
         generation,
         compiled_relationships=relationships,
