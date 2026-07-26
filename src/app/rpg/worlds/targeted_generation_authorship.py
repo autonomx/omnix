@@ -9,6 +9,11 @@ from app.rpg.session.genesis.world_forge_generation import (
     WorldForgeTopicGenerator,
 )
 
+from .generation_authorship_policy_signing import (
+    bind_signed_authorship_policy,
+    require_policy_bound_authorship,
+    signed_authorship_policy,
+)
 from .generation_authorship_runtime import (
     build_generation_artifact,
     generation_artifact,
@@ -16,7 +21,6 @@ from .generation_authorship_runtime import (
 )
 from .generation_authorship_signing import (
     attach_signed_partial_llm_authorship,
-    require_signed_authorship,
     strict_lore_string_leaves,
     verify_record_signature,
 )
@@ -68,15 +72,17 @@ def trusted_targeted_generator(
 def changed_lore_paths(
     before: Mapping[str, Any],
     after: Mapping[str, Any],
+    *,
+    policy: Mapping[str, Any] | None = None,
 ) -> tuple[str, ...]:
     prior = {
         str(row["path"]): str(row["content_hash"])
-        for row in strict_lore_string_leaves(before)
+        for row in strict_lore_string_leaves(before, policy=policy)
     }
     return tuple(
         sorted(
             str(row["path"])
-            for row in strict_lore_string_leaves(after)
+            for row in strict_lore_string_leaves(after, policy=policy)
             if prior.get(str(row["path"])) != str(row["content_hash"])
         )
     )
@@ -92,15 +98,17 @@ def attach_targeted_regeneration_authorship(
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Attest only changed lore paths to the new signed provider response."""
 
-    require_signed_authorship(before)
+    policy = signed_authorship_policy(before)
+    require_policy_bound_authorship(before, policy=policy)
     generated_payload = generated.as_dict()
-    require_signed_authorship(generated_payload)
+    generated_policy = signed_authorship_policy(generated_payload)
+    require_policy_bound_authorship(generated_payload, policy=generated_policy)
     provider_artifact = generation_artifact(generated_payload)
     if not provider_artifact or not verify_record_signature(provider_artifact):
         raise ValueError(
             f"targeted_generation_artifact_required:{topic_id}:{operation}"
         )
-    changed = changed_lore_paths(before, after)
+    changed = changed_lore_paths(before, after, policy=policy)
     if not changed:
         raise ValueError(f"targeted_generation_changed_lore_required:{topic_id}:{operation}")
     prior_artifacts = generation_artifacts(before)
@@ -136,14 +144,17 @@ def attach_targeted_regeneration_authorship(
         after,
         unsigned,
         authored_paths=changed,
+        policy=policy,
     )
     payload = attach_signed_partial_llm_authorship(
         after,
         artifact,
         llm_paths=changed,
         prior_candidate=before,
+        policy=policy,
     )
-    require_signed_authorship(payload)
+    payload = bind_signed_authorship_policy(payload, policy)
+    require_policy_bound_authorship(payload, policy=policy)
     return payload, changed
 
 
