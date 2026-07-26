@@ -17,13 +17,18 @@ from .generation_authorship import (
 )
 
 
-def _authored_payload_hash(candidate: Mapping[str, Any]) -> str:
-    return content_hash(
+def _authored_payload_rows(candidate: Mapping[str, Any]) -> list[dict[str, str]]:
+    return sorted(
         [
-            {"path": row["path"], "content_hash": row["content_hash"]}
+            {"path": str(row["path"]), "content_hash": str(row["content_hash"])}
             for row in lore_string_leaves(candidate)
-        ]
+        ],
+        key=lambda row: (row["path"], row["content_hash"]),
     )
+
+
+def _authored_payload_hash(candidate: Mapping[str, Any]) -> str:
+    return content_hash(_authored_payload_rows(candidate))
 
 
 def _artifact_without_hash(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -166,7 +171,9 @@ def _artifact_origin_hash(
             and str(parent.get("generation_artifact_id") or "") == artifact_id
         ):
             rows.append({"path": path, "content_hash": str(parent.get("content_hash") or "")})
-    return content_hash(sorted(rows, key=lambda row: (row["path"], row["content_hash"])))
+    return content_hash(
+        sorted(rows, key=lambda row: (row["path"], row["content_hash"]))
+    )
 
 
 def validate_publishable_authorship(
