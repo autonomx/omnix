@@ -1,24 +1,8 @@
-"""Phase 90 — Adventure Builder API routes.
+"""Adventure Builder setup, preview, inspection, and simulation routes.
 
-Provides endpoints for the adventure creation/editing flow:
-- GET  /api/rpg/adventure/templates          — list available templates
-- POST /api/rpg/adventure/template           — build a template payload
-- POST /api/rpg/adventure/validate           — validate a setup payload
-- POST /api/rpg/adventure/preview            — preview a setup
-- POST /api/rpg/adventure/start              — start a new adventure
-- POST /api/rpg/adventure/regenerate         — regenerate a section
-- POST /api/rpg/adventure/regenerate-item    — regenerate a single item
-- POST /api/rpg/adventure/regenerate-multiple — regenerate multiple items
-- POST /api/rpg/adventure/generate_world     — generate world bootstrap proposal
-- POST /api/rpg/adventure/regenerate_section — regenerate one world section
-- POST /api/rpg/adventure/regenerate_entity  — regenerate one world entity
-- POST /api/rpg/adventure/apply_generated_package — apply generated package
-- POST /api/rpg/adventure/inspect-world      — inspect the world graph
-- POST /api/rpg/adventure/inspect-world-snapshot — build a world snapshot
-- POST /api/rpg/adventure/compare-world      — compare two setups
-- POST /api/rpg/adventure/compare-entity     — compare a single entity
-- POST /api/rpg/adventure/simulate-step      — advance simulation by one tick
-- POST /api/rpg/adventure/simulation-state   — get current simulation state
+Generated world lore is owned exclusively by the durable World Library and World Forge
+APIs. The obsolete Adventure Builder generated-package endpoints are intentionally not
+registered here.
 """
 from __future__ import annotations
 
@@ -29,12 +13,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ..services.adventure_builder_service import (
-    apply_generated_package,
     build_adventure_preview,
     build_template_payload,
     compare_world,
     compute_creator_health,
-    generate_world_proposal,
     get_templates,
     inspect_world,
     inspect_world_snapshot,
@@ -42,8 +24,6 @@ from ..services.adventure_builder_service import (
     regenerate_multiple_items_service,
     regenerate_setup_section,
     regenerate_single_item,
-    regenerate_world_entity,
-    regenerate_world_section,
     start_adventure,
     validate_setup,
 )
@@ -59,455 +39,203 @@ def _safe_list(v: Any) -> list:
     return list(v) if isinstance(v, (list, tuple)) else []
 
 
-def _safe_str(v: Any) -> str:
-    if v is None:
-        return ""
-    if isinstance(v, str):
-        return v
-    return str(v)
-
-
-# ---------------------------------------------------------------------------
-# Template listing / building
-# ---------------------------------------------------------------------------
-
-
 @rpg_adventure_bp.get("/api/rpg/adventure/templates")
 async def adventure_templates():
-    """Return available adventure setup templates with metadata."""
     try:
-        templates = get_templates()
-        return {"success": True, "templates": templates}
-    except Exception as e:
+        return {"success": True, "templates": get_templates()}
+    except Exception as exc:
         return JSONResponse(
-            {
-                "success": False,
-                "error": str(e),
-                "trace": traceback.format_exc(),
-            },
+            {"success": False, "error": str(exc), "trace": traceback.format_exc()},
             status_code=500,
         )
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/template")
 async def adventure_template(request: Request):
-    """Build a full editable setup dict from a named template."""
     try:
         data = await request.json()
         template_name = data.get("template_name", "")
         if not template_name:
             return JSONResponse(
-                {"success": False, "error": "Missing template_name"},
-                status_code=400,
+                {"success": False, "error": "Missing template_name"}, status_code=400
             )
-        result = build_template_payload(template_name)
-        return result
-    except Exception as e:
+        return build_template_payload(template_name)
+    except Exception as exc:
         return JSONResponse(
-            {
-                "success": False,
-                "error": str(e),
-                "trace": traceback.format_exc(),
-            },
+            {"success": False, "error": str(exc), "trace": traceback.format_exc()},
             status_code=500,
         )
 
 
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
-
-
 @rpg_adventure_bp.post("/api/rpg/adventure/validate")
 async def adventure_validate(request: Request):
-    """Validate an adventure setup payload."""
     try:
-        data = await request.json()
-        result = validate_setup(data)
+        result = validate_setup(await request.json())
         validation = _safe_dict(result.get("validation"))
         return {
             "ok": not validation.get("blocking", False),
             "validation": validation,
             "errors": [
-                i for i in _safe_list(validation.get("issues"))
-                if isinstance(i, dict) and i.get("severity") == "error"
+                issue
+                for issue in _safe_list(validation.get("issues"))
+                if isinstance(issue, dict) and issue.get("severity") == "error"
             ],
             "warnings": _safe_list(result.get("warnings")),
             "notices": _safe_list(result.get("notices")),
             "semantic_scores": _safe_dict(result.get("semantic_scores")),
         }
-    except Exception as e:
+    except Exception as exc:
         return JSONResponse(
-            {
-                "success": False,
-                "error": str(e),
-                "trace": traceback.format_exc(),
-            },
+            {"success": False, "error": str(exc), "trace": traceback.format_exc()},
             status_code=500,
         )
 
 
-# ---------------------------------------------------------------------------
-# Preview
-# ---------------------------------------------------------------------------
-
-
 @rpg_adventure_bp.post("/api/rpg/adventure/preview")
 async def adventure_preview(request: Request):
-    """Prepare a rich preview of the adventure setup."""
     try:
         data = await request.json()
         setup = data.get("setup") if isinstance(data, dict) else None
         setup = setup if isinstance(setup, dict) else data
         result = preview_setup(setup)
-        # Ensure adventure_preview is surfaced at top level
         if "adventure_preview" not in result:
             result["adventure_preview"] = _safe_dict(build_adventure_preview(setup))
         return result
-    except Exception as e:
+    except Exception as exc:
         return JSONResponse(
-            {
-                "success": False,
-                "error": str(e),
-                "trace": traceback.format_exc(),
-            },
+            {"success": False, "error": str(exc), "trace": traceback.format_exc()},
             status_code=500,
         )
-
-
-# ---------------------------------------------------------------------------
-# Start adventure
-# ---------------------------------------------------------------------------
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/start")
 async def adventure_start(request: Request):
-    """Create a brand-new adventure using the structured creator pipeline."""
     try:
-        data = await request.json()
-        result = start_adventure(data)
-        return result
-    except Exception as e:
+        return start_adventure(await request.json())
+    except Exception as exc:
         return JSONResponse(
-            {
-                "success": False,
-                "error": str(e),
-                "trace": traceback.format_exc(),
-            },
+            {"success": False, "error": str(exc), "trace": traceback.format_exc()},
             status_code=500,
         )
-
-
-# ---------------------------------------------------------------------------
-# Section-level regeneration
-# ---------------------------------------------------------------------------
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/regenerate")
 async def adventure_regenerate(request: Request):
-    """Regenerate a single section of an adventure setup."""
     try:
         data = await request.json()
         target = data.get("target", "")
-        setup = data.get("setup", {})
-        mode = data.get("mode", "apply")
-        apply_token = data.get("apply_token")
-        apply_strategy = data.get("apply_strategy", "replace")
-        tone = data.get("tone")
-        constraints = data.get("constraints")
-
         if not target:
             return JSONResponse(
-                {"success": False, "error": "Missing target"},
-                status_code=400,
+                {"success": False, "error": "Missing target"}, status_code=400
             )
-
-        result = regenerate_setup_section(
-            payload=setup,
+        return regenerate_setup_section(
+            payload=data.get("setup", {}),
             target=target,
-            mode=mode,
-            apply_token=apply_token,
-            apply_strategy=apply_strategy,
-            tone=tone,
-            constraints=constraints,
+            mode=data.get("mode", "apply"),
+            apply_token=data.get("apply_token"),
+            apply_strategy=data.get("apply_strategy", "replace"),
+            tone=data.get("tone"),
+            constraints=data.get("constraints"),
         )
-        return result
-    except Exception as e:
+    except Exception as exc:
         return JSONResponse(
-            {
-                "success": False,
-                "error": str(e),
-                "trace": traceback.format_exc(),
-            },
+            {"success": False, "error": str(exc), "trace": traceback.format_exc()},
             status_code=500,
         )
 
 
-# ---------------------------------------------------------------------------
-# Single-item regeneration
-# ---------------------------------------------------------------------------
-
-
 @rpg_adventure_bp.post("/api/rpg/adventure/regenerate-item")
 async def adventure_regenerate_item(request: Request):
-    """Regenerate a single entity within a section."""
     try:
         data = await request.json()
         target = data.get("target", "")
         item_id = data.get("item_id", "")
-        setup = data.get("setup", {})
-
         if not target or not item_id:
             return JSONResponse(
                 {"success": False, "error": "Missing target or item_id"},
                 status_code=400,
             )
-
-        result = regenerate_single_item(
-            payload=setup,
-            target=target,
-            item_id=item_id,
+        return regenerate_single_item(
+            payload=data.get("setup", {}), target=target, item_id=item_id
         )
-        return result
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Bulk regeneration
-# ---------------------------------------------------------------------------
+    except Exception as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/regenerate-multiple")
 async def adventure_regenerate_multiple(request: Request):
-    """Regenerate multiple entities within a section."""
     try:
         data = await request.json()
         target = data.get("target", "")
         item_ids = data.get("item_ids", [])
-        setup = data.get("setup", {})
-
         if not target or not item_ids:
             return JSONResponse(
                 {"success": False, "error": "Missing target or item_ids"},
                 status_code=400,
             )
-
-        result = regenerate_multiple_items_service(
-            payload=setup,
-            target=target,
-            item_ids=item_ids,
+        return regenerate_multiple_items_service(
+            payload=data.get("setup", {}), target=target, item_ids=item_ids
         )
-        return result
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
-
-
-# ---------------------------------------------------------------------------
-# World inspection
-# ---------------------------------------------------------------------------
+    except Exception as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/inspect-world")
 async def adventure_inspect_world(request: Request):
-    """Compute a world graph, simulation summary, and entity inspector."""
     try:
         data = await request.json()
-        setup = data.get("setup", {})
-        result = inspect_world(setup)
-        return result
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
+        return inspect_world(data.get("setup", {}))
+    except Exception as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/inspect-world-snapshot")
 async def adventure_inspect_world_snapshot(request: Request):
-    """Build a full snapshot wrapper around the world inspection result."""
     try:
         data = await request.json()
-        setup = data.get("setup", {})
-        label = data.get("label")
-        result = inspect_world_snapshot(setup, label=label)
-        return result
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
+        return inspect_world_snapshot(data.get("setup", {}), label=data.get("label"))
+    except Exception as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/compare-world")
 async def adventure_compare_world(request: Request):
-    """Compare two setup payloads and return a graph diff."""
     try:
         data = await request.json()
-        before_setup = data.get("before_setup", {})
-        after_setup = data.get("after_setup", {})
-        result = compare_world(before_setup, after_setup)
-        return result
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
+        return compare_world(data.get("before_setup", {}), data.get("after_setup", {}))
+    except Exception as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/compare-entity")
 async def adventure_compare_entity(request: Request):
-    """Compare a specific entity between two setup payloads."""
     try:
         data = await request.json()
-        before_setup = data.get("before_setup", {})
-        after_setup = data.get("after_setup", {})
         entity_id = data.get("entity_id", "")
-
         if not entity_id:
             return JSONResponse(
-                {"success": False, "error": "Missing entity_id"},
-                status_code=400,
+                {"success": False, "error": "Missing entity_id"}, status_code=400
             )
-
         from ..creator.world_snapshot import build_world_snapshot, compute_entity_diff
 
-        before = dict(before_setup or {})
-        after = dict(after_setup or {})
-
-        before_snap = build_world_snapshot(before, label="Before")
-        after_snap = build_world_snapshot(after, label="After")
-
-        diff = compute_entity_diff(
-            before_snap.get("inspector", {}),
-            after_snap.get("inspector", {}),
-            entity_id,
-        )
-
+        before = build_world_snapshot(dict(data.get("before_setup") or {}), label="Before")
+        after = build_world_snapshot(dict(data.get("after_setup") or {}), label="After")
         return {
             "success": True,
             "entity_id": entity_id,
-            "diff": diff,
+            "diff": compute_entity_diff(
+                before.get("inspector", {}), after.get("inspector", {}), entity_id
+            ),
         }
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
-
-
-# ---------------------------------------------------------------------------
-# World generation (Phase E)
-# ---------------------------------------------------------------------------
-
-
-@rpg_adventure_bp.post("/api/rpg/adventure/generate_world")
-@rpg_adventure_bp.post("/api/rpg/adventure/generate-world")  # frontend compatibility
-async def adventure_generate_world(request: Request):
-    """Generate a full world bootstrap proposal."""
-    try:
-        data = await request.json()
-        setup = data.get("setup", {})
-        preferences = data.get("preferences")
-        result = generate_world_proposal(setup, preferences=preferences)
-        return result
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
-
-
-@rpg_adventure_bp.post("/api/rpg/adventure/regenerate_section")
-async def adventure_regenerate_world_section(request: Request):
-    """Regenerate one section of the generated package."""
-    try:
-        data = await request.json()
-        setup = data.get("setup", {})
-        section = data.get("section", "")
-        preferences = data.get("preferences")
-
-        if not section:
-            return JSONResponse(
-                {"success": False, "error": "Missing section"},
-                status_code=400,
-            )
-
-        result = regenerate_world_section(setup, section, preferences=preferences)
-        return result
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
-
-
-@rpg_adventure_bp.post("/api/rpg/adventure/regenerate_entity")
-async def adventure_regenerate_world_entity(request: Request):
-    """Regenerate one entity within the generated package."""
-    try:
-        data = await request.json()
-        setup = data.get("setup", {})
-        entity_type = data.get("entity_type", "")
-        entity_id = data.get("entity_id", "")
-
-        if not entity_type or not entity_id:
-            return JSONResponse(
-                {"success": False, "error": "Missing entity_type or entity_id"},
-                status_code=400,
-            )
-
-        result = regenerate_world_entity(setup, entity_type, entity_id)
-        return result
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
-
-
-@rpg_adventure_bp.post("/api/rpg/adventure/apply_generated_package")
-async def adventure_apply_generated_package(request: Request):
-    """Accept and merge generated package into setup."""
-    try:
-        data = await request.json()
-        setup = data.get("setup", {})
-        generated = data.get("generated", {})
-        locked_ids = data.get("locked_ids")
-
-        if not generated:
-            return JSONResponse(
-                {"success": False, "error": "Missing generated package"},
-                status_code=400,
-            )
-
-        result = apply_generated_package(setup, generated, locked_ids=locked_ids)
-        return result
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Simulation
-# ---------------------------------------------------------------------------
+    except Exception as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/simulate-step")
 async def adventure_simulate_step(request: Request):
-    """Advance the world simulation by one tick."""
     try:
         data = await request.json()
         setup = data.get("setup", {})
-        # For now, return the current setup with an incremented tick
         tick = setup.get("simulation_tick", 0) + 1
         setup["simulation_tick"] = tick
         return {
@@ -516,34 +244,12 @@ async def adventure_simulate_step(request: Request):
             "setup": setup,
             "health": compute_creator_health(setup),
         }
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
-
-
-@rpg_adventure_bp.post("/api/rpg/adventure/fill_npc")
-async def adventure_fill_npc(request: Request):
-    """Enrich an NPC seed using AI."""
-    from app.rpg.creator.llm_world_generator import generate_npc_seed_enrichment
-    from app.rpg.llm_app_gateway import build_app_llm_gateway
-
-    data = await request.json()
-    setup = _safe_dict(data.get("setup"))
-    npc_seed = _safe_dict(data.get("npc_seed"))
-
-    gateway = build_app_llm_gateway()
-    enriched = generate_npc_seed_enrichment(setup, npc_seed, llm_gateway=gateway)
-    return {
-        "ok": True,
-        "npc_seed": enriched,
-    }
+    except Exception as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/simulation-state")
 async def adventure_simulation_state(request: Request):
-    """Get the current simulation state without advancing."""
     try:
         data = await request.json()
         setup = data.get("setup", {})
@@ -553,8 +259,5 @@ async def adventure_simulation_state(request: Request):
             "setup": setup,
             "health": compute_creator_health(setup),
         }
-    except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500,
-        )
+    except Exception as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
