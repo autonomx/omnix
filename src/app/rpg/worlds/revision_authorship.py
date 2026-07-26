@@ -11,9 +11,11 @@ from .contracts import (
 )
 from .generation_authorship import AuthorshipValidationError
 from .generation_authorship_runtime import lore_string_leaves
+from .generation_authorship_signing import verify_record_signature
 from .generation_test_mode import deterministic_world_forge_test_mode
 
 _REVISION_LEDGER_SCHEMA = "rpg_world_revision_origin_ledger_v1"
+_GENERATION_RECEIPT_SCHEMA = "rpg_world_revision_generation_receipt_v2"
 
 
 def _revision_origin_ledger(
@@ -136,13 +138,7 @@ def prepare_direct_world_revision(
     world: Mapping[str, Any],
     document: WorldRevisionDocument,
 ) -> WorldRevisionDocument:
-    """Permit direct publication only for manual authorship in production.
-
-    Provider-backed, hybrid, and imported worlds must publish through the durable
-    generation pipeline. Explicit deterministic test mode may exercise the generic
-    lifecycle with human-authored fixture documents, but that exemption is unavailable
-    in production.
-    """
+    """Permit direct publication only for manual authorship in production."""
 
     provenance = dict(document.provenance)
     if str(provenance.get("source") or "") == "manual_world_authoring":
@@ -179,24 +175,63 @@ def prepare_direct_world_revision(
     return WorldRevisionDocument.model_validate(payload)
 
 
+def _require_generation_receipt(
+    document: WorldRevisionDocument,
+    provenance: Mapping[str, Any],
+) -> dict[str, Any]:
+    value = provenance.get("authorship_receipt")
+    receipt = dict(value) if isinstance(value, Mapping) else {}
+    if not receipt or not verify_record_signature(receipt):
+        raise ValueError(
+            f"world_revision_generation_receipt_signature_invalid:"
+            f"{document.world_id}:{document.revision}"
+        )
+    if str(receipt.get("schema_version") or "") != _GENERATION_RECEIPT_SCHEMA:
+        raise ValueError(
+            f"world_revision_generation_receipt_schema_invalid:"
+            f"{document.world_id}:{document.revision}"
+        )
+    run_id = str(receipt.get("generation_run_id") or "")
+    topic_hashes = {
+        str(key): str(value)
+        for key, value in dict(receipt.get("topic_hashes") or {}).items()
+    }
+    if (
+        str(receipt.get("world_id") or "") != document.world_id
+        or int(receipt.get("revision") or 0) != document.revision
+        or not run_id
+        or not topic_hashes
+        or run_id != str(provenance.get("generation_run_id") or "")
+        or topic_hashes
+        != {
+            str(key): str(value)
+            for key, value in dict(provenance.get("topic_hashes") or {}).items()
+        }
+        or str(receipt.get("canon_hash") or "")
+        != canonical_content_hash(dict(document.canon))
+    ):
+        raise ValueError(
+            f"world_revision_generation_receipt_content_invalid:"
+            f"{document.world_id}:{document.revision}"
+        )
+    return receipt
+
+
 def require_revision_authorship(document: WorldRevisionDocument) -> dict[str, Any]:
     """Reject immutable revisions not produced by a trusted server path."""
 
     provenance = dict(document.provenance)
     source = str(provenance.get("source") or "")
     if source == "durable_world_generation":
-        run_id = str(provenance.get("generation_run_id") or "")
-        topic_hashes = dict(provenance.get("topic_hashes") or {})
-        if not run_id or not topic_hashes:
-            raise ValueError(
-                f"world_revision_generation_authorship_receipt_missing:{document.world_id}:{document.revision}"
-            )
+        receipt = _require_generation_receipt(document, provenance)
         return {
-            "schema_version": "rpg_world_revision_authorship_receipt_v1",
+            "schema_version": "rpg_world_revision_authorship_receipt_v2",
             "publishable": True,
             "source": source,
-            "generation_run_id": run_id,
-            "topic_hashes": topic_hashes,
+            "generation_run_id": str(receipt["generation_run_id"]),
+            "topic_hashes": dict(receipt["topic_hashes"]),
+            "canon_hash": str(receipt["canon_hash"]),
+            "server_signature_verified": True,
         }
     if source == "manual_world_authoring":
         return validate_revision_origin_ledger(
@@ -206,7 +241,8 @@ def require_revision_authorship(document: WorldRevisionDocument) -> dict[str, An
             else None,
         )
     raise ValueError(
-        f"world_revision_authorship_untrusted:{document.world_id}:{document.revision}:{source or 'unknown'}"
+        f"world_revision_authorship_untrusted:{document.world_id}:"
+        f"{document.revision}:{source or 'unknown'}"
     )
 
 
