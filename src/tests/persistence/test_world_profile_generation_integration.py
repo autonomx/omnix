@@ -62,6 +62,7 @@ def test_unknown_world_profile_is_generated_and_pinned_before_lore(
     database = _database()
     try:
         _reset(database)
+        monkeypatch.setenv("RPG_TEST_MODE", "deterministic")
         monkeypatch.setattr(
             "app.rpg.worlds.postgres_service.kick_world_generation_worker",
             lambda **_kwargs: False,
