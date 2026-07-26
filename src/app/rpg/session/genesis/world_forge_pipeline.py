@@ -149,6 +149,7 @@ def run_campaign_world_forge(
             starting_location=contract.world_options.starting_location,
             background_expansion=contract.world_forge.background_expansion,
         )
+        profile = _profile_from_graph_or_compiled(graph, world_forge) or profile
     if profile is None:
         raise ValueError("campaign_world_forge_profile_missing")
     if launch_only:
