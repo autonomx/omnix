@@ -21,6 +21,18 @@ _DISTINCTIONS = (
     "Violet",
     "North",
 )
+_OPTIONAL_CAUSAL_REFERENCE_ROLES = frozenset(
+    {
+        "caused_by",
+        "formed_by",
+        "founded_by",
+        "originated_in",
+        "origin_region",
+        "descended_from",
+        "shaped_by",
+        "cultural_affiliation",
+    }
+)
 
 
 def _slug(value: str) -> str:
@@ -313,6 +325,10 @@ def generate_deterministic_profile_topic(
             "visibility": node.visibility,
         }
         for definition in definitions:
+            required = bool(definition.get("required", False))
+            semantic_role = str(definition.get("semantic_role") or "").strip()
+            if not required and semantic_role in _OPTIONAL_CAUSAL_REFERENCE_ROLES:
+                continue
             value = _value_for_field(
                 definition,
                 name=name,
@@ -320,7 +336,6 @@ def generate_deterministic_profile_topic(
                 index=index,
                 known=known,
             )
-            required = bool(definition.get("required", False))
             if value in (None, "", [], (), {}) and not required:
                 continue
             entity[str(definition.get("field_id") or "")] = value
