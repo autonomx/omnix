@@ -8,14 +8,14 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations
 from app.rpg.worlds.contracts import ScenarioProjectCreate, WorldProjectCreate
-from app.rpg.worlds.deletion_service import (
-    delete_world_project,
-    world_deletion_eligibility,
-)
 from app.rpg.worlds.generation_profile_review import approve_world_profile_review
 from app.rpg.worlds.library_service import (
     save_world_topic,
     start_world_library_generation,
+)
+from app.rpg.worlds.lifecycle_service import (
+    delete_world_project,
+    world_deletion_eligibility,
 )
 from app.rpg.worlds.postgres_service import (
     create_scenario_project,
