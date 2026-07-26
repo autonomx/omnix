@@ -234,7 +234,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary>Edit or regenerate</summary>
+      <summary>{entity.dossier?.generated_from_legacy ? 'Generate LLM dossier' : 'Edit or regenerate'}</summary>
       <div className="rpg-authoring-entity-editor-body">
         {entityQuery.isPending ? <p>Loading entity history…</p> : null}
         {entityQuery.isError ? <p className="rpg-world-catalog-error">Unable to load entity history.</p> : null}

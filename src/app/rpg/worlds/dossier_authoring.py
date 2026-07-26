@@ -13,10 +13,10 @@ from typing import Any, Mapping
 
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
+from app.rpg.session.genesis.world_forge_dossier_quality import validate_dossier_quality
 from app.rpg.session.genesis.world_forge_dossiers import (
     DOSSIER_SCHEMA_VERSION,
     compact_summary,
-    project_entity_dossier,
     validate_entity_dossier,
 )
 from app.rpg.session.genesis.world_forge_generation import (
@@ -263,12 +263,21 @@ def regenerate_world_entity_dossier(
         ),
         dict(generated.entities[0]),
     )
-    short_summary, dossier = project_entity_dossier(
-        candidate,
-        card_type=topic_id,
-        content=generated.as_dict(),
-        entity_id=entity_id,
+    short_summary = compact_summary(candidate.get("short_summary"))
+    dossier = candidate.get("dossier")
+    schema_issues = validate_entity_dossier(dossier)
+    quality_issues = (
+        validate_dossier_quality(dossier, topic_id=topic_id)
+        if isinstance(dossier, Mapping)
+        else ()
     )
+    if not candidate.get("short_summary") or schema_issues or quality_issues:
+        raise ValueError(
+            "world_entity_dossier_requires_llm_authored_prose:"
+            + ",".join((*schema_issues, *quality_issues) or ("short_summary_required",))
+        )
+    dossier = dict(dossier)
+    dossier["generated_from_legacy"] = False
     return _store_editorial_replacement(
         world_id,
         topic_id,

@@ -91,7 +91,8 @@ export function RpgWorldEntityDetail({
 }: RpgWorldEntityDetailProps) {
   const presentation = entity.presentation;
   const dossier = entity.dossier;
-  const sections = dossier?.sections ?? [];
+  const dossierNeedsLlmLore = Boolean(dossier?.generated_from_legacy);
+  const sections = dossierNeedsLlmLore ? [] : dossier?.sections ?? [];
   const representedFields = new Set<string>();
   for (const highlight of presentation.highlights) representedFields.add(highlight.label.toLowerCase().replace(/\s+/g, '_'));
   for (const group of presentation.groups) representedFields.add(group.label.toLowerCase().replace(/\s+/g, '_'));
@@ -112,7 +113,7 @@ export function RpgWorldEntityDetail({
             <button className="rpg-authoring-detail-breadcrumb" type="button" onClick={onClose}>← Back to {humanize(entity.card_type || entity.kind)}</button>
             <p className="rpg-authoring-card-eyebrow">{presentation.eyebrow}</p>
             <h2>{entity.title}</h2>
-            {dossier?.subtitle ? <p className="rpg-authoring-dossier-subtitle">{dossier.subtitle}</p> : null}
+            {!dossierNeedsLlmLore && dossier?.subtitle ? <p className="rpg-authoring-dossier-subtitle">{dossier.subtitle}</p> : null}
           </div>
           <button aria-label={`Close ${entity.title} details`} className="rpg-secondary-button" type="button" onClick={onClose}>Back to collection</button>
         </header>
@@ -138,12 +139,12 @@ export function RpgWorldEntityDetail({
                 ))}
               </div>
             ) : null}
-            <p>{entity.short_summary || entity.summary || 'No overview has been written yet.'}</p>
+            {!dossierNeedsLlmLore ? <p>{entity.short_summary || entity.summary || 'No overview has been written yet.'}</p> : null}
             <small>{humanize(entity.kind)} · {entity.id}</small>
           </div>
         </div>
 
-        {dossier?.quote?.text ? (
+        {!dossierNeedsLlmLore && dossier?.quote?.text ? (
           <blockquote className="rpg-authoring-dossier-quote">
             <p>“{dossier.quote.text}”</p>
             {dossier.quote.attribution ? <cite><span aria-hidden="true">— </span><span>{dossier.quote.attribution}</span></cite> : null}
@@ -152,6 +153,12 @@ export function RpgWorldEntityDetail({
 
         <div className="rpg-authoring-dossier-layout">
           <article className="rpg-authoring-dossier-stream">
+            {dossierNeedsLlmLore ? (
+              <section className="rpg-authoring-detail-section rpg-authoring-feedback" aria-label="LLM dossier required">
+                <h3>LLM-authored lore required</h3>
+                <p>This entry has structured canon, but no approved long-form lore yet. Generate and review an LLM dossier before publishing it as a reading page.</p>
+              </section>
+            ) : null}
             {dossier?.quick_facts.length ? (
               <section className="rpg-authoring-detail-section rpg-authoring-dossier-facts" id="quick-facts">
                 <h3>Quick Facts</h3>

@@ -25,11 +25,21 @@
   flex-wrap: wrap;
   gap: 0.55rem;
   justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.rpg-generation-candidate-review-banner > div:first-child {
+  min-width: 0;
+}
+
+.rpg-generation-candidate-review-banner > div:first-child > p:last-child {
+  overflow-wrap: anywhere;
 }
 
 .rpg-generation-candidate-review-banner button,
 .rpg-generation-candidate-review-editor button {
   min-height: 38px;
+  white-space: nowrap;
 }
 
 .rpg-generation-candidate-review-feedback {

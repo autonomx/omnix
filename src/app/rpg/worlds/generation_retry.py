@@ -94,19 +94,22 @@ def _retry_closure(
     graph: Any,
     selected: Sequence[str],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Return all affected topics plus their generation dependency closure."""
+    """Return selected retry topics and only the dependencies they require.
+
+    A manual retry is an explicit editorial action.  It must not requeue every
+    downstream topic merely because it consumes the selected topic; those
+    topics can remain in review until the editor chooses to regenerate them.
+    Dependencies are retained in the target set so a missing prerequisite can
+    still be produced, while already-complete prerequisites are reused.
+    """
 
     node_map = graph.node_map()
-    affected = set(str(value) for value in selected)
-    changed = True
-    while changed:
-        changed = False
-        for node in graph.topological_order():
-            if node.category in _NON_GENERATION_CATEGORIES or node.topic_id in affected:
-                continue
-            if set(node.dependencies).intersection(affected):
-                affected.add(node.topic_id)
-                changed = True
+    affected = {
+        str(topic_id)
+        for topic_id in selected
+        if node_map.get(str(topic_id)) is not None
+        and node_map[str(topic_id)].category not in _NON_GENERATION_CATEGORIES
+    }
     targets = set(affected)
     pending = list(affected)
     while pending:

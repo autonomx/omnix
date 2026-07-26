@@ -128,6 +128,39 @@ def test_authoring_card_keeps_compact_summary_and_exposes_full_dossier() -> None
     }
 
 
+def test_legacy_place_projects_registry_data_into_readable_dossier_sections() -> None:
+    _summary, dossier = project_entity_dossier(
+        {
+            "id": "ent:places:005",
+            "name": "Altair Elite Residential Blocks",
+            "description": "A sealed luxury enclave for Altair's corporate elite.",
+            "region_id": "region:005",
+            "registry_role": "Luxury Enclave",
+            "access_routes": {
+                "primary_access": "Controlled corporate sky-lifts and dedicated maglev lines",
+                "secondary_access": "Restricted private aerial drones and maintenance tunnels",
+            },
+            "current_pressure": "Extreme socioeconomic isolation and perpetual corporate surveillance.",
+            "observable_evidence": {
+                "visuals": "Chromasteel towers and immaculate hydroponic gardens",
+                "auditory": "Muted life-support hum and synthesized ambient music",
+            },
+            "registry_distinction": "The residential districts housing Altair's global corporate elite.",
+        },
+        card_type="places",
+        entity_id="ent:places:005",
+    )
+
+    sections = {section["id"]: section for section in dossier["sections"]}
+    assert set(sections) >= {"overview", "setting", "access", "atmosphere", "pressures", "distinction"}
+    assert sections["access"]["title"] == "Access and Security"
+    assert sections["access"]["paragraphs"] == [
+        "Primary Access: Controlled corporate sky-lifts and dedicated maglev lines.",
+        "Secondary Access: Restricted private aerial drones and maintenance tunnels.",
+    ]
+    assert sections["atmosphere"]["title"] == "Atmosphere and Evidence"
+
+
 def test_prompt_contract_requests_domain_specific_multi_paragraph_content() -> None:
     contract = dossier_prompt_contract("races")
 

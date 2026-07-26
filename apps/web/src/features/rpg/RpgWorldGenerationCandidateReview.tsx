@@ -154,6 +154,16 @@ function candidateSummary(candidate: Record<string, unknown>, section: RpgAuthor
   );
 }
 
+function reviewSummary(result: RpgWorldGenerationTopicResult): string {
+  const summary = result.validation.summary?.trim() ?? '';
+  // Provider validation codes are useful in the issue list, but are not prose
+  // and can be a single enormous unbroken token in the review banner.
+  if (!summary || summary.length > 240 || summary.includes('world_forge_') || summary.includes('provider_')) {
+    return 'Generation completed with validation issues. Review the details below before accepting this topic.';
+  }
+  return summary;
+}
+
 export function RpgWorldGenerationCandidateReview({
   onAccepted,
   onClose,
@@ -227,7 +237,7 @@ export function RpgWorldGenerationCandidateReview({
         <div>
           <p className="eyebrow">Recovered — Needs Review</p>
           <h2>{candidateTitle(preview, section)}</h2>
-          <p>{result.validation.summary || 'The generated lore was retained after automatic structural recovery.'}</p>
+          <p>{reviewSummary(result)}</p>
         </div>
         <div>
           <button type="button" onClick={() => setEditing((value) => !value)}>

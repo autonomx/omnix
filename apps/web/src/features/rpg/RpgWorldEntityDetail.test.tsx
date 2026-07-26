@@ -101,4 +101,24 @@ describe('RpgWorldEntityDetail', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close Ward Runner details' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('does not publish projected fallback prose as a lore reading page', () => {
+    const fallbackEntity = {
+      ...characterClass,
+      dossier: {
+        ...characterClass.dossier,
+        generated_from_legacy: true,
+        sections: [{
+          id: 'canon-details',
+          title: 'Canon Details',
+          paragraphs: ['Registry Role: A raw fallback representation that must not be shown as authored lore.'],
+        }],
+      },
+    } as RpgAuthoringEntityCard;
+    render(<RpgWorldEntityDetail entity={fallbackEntity} onClose={vi.fn()} worldId="world:aurelia" />);
+
+    expect(screen.getByRole('heading', { name: 'LLM-authored lore required' })).toBeInTheDocument();
+    expect(screen.queryByText(/raw fallback representation/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Ward Runner sections' })).not.toBeInTheDocument();
+  });
 });

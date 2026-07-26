@@ -44,6 +44,14 @@ _SECTION_TEMPLATES: Mapping[str, tuple[SectionSpec, ...]] = {
         ("hooks", "Adventure Hooks", ("hooks",)),
         ("connections", "Connections", ("location_id", "region_id", "faction_ids")),
     ),
+    "places": (
+        ("overview", "Overview", ("description", "summary", "purpose")),
+        ("setting", "Setting and Role", ("region_id", "location_type", "registry_role", "function")),
+        ("access", "Access and Security", ("access_routes", "security_protocols", "access_restrictions")),
+        ("atmosphere", "Atmosphere and Evidence", ("observable_evidence", "sensory_profile", "appearance", "atmosphere")),
+        ("pressures", "Current Pressures", ("current_pressure", "pressures", "conflicts", "threats")),
+        ("distinction", "Why It Matters", ("registry_distinction", "significance", "secrets", "hooks")),
+    ),
     "npcs": (
         ("overview", "Overview", ("description", "role", "personality")),
         ("appearance", "Appearance", ("appearance",)),

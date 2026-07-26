@@ -128,4 +128,31 @@ describe('RpgWorldGenerationCandidateReview', () => {
       },
     });
   });
+
+  it('replaces raw provider validation codes in the review banner with readable guidance', () => {
+    const providerFailure = {
+      ...result,
+      validation: {
+        ...result.validation,
+        summary: 'world_forge_integrity_failed:provider_presentation_contradiction:places:ent:places:005:entities:entity.dossier;provider_short_summary_required:places:ent:places:006:entities',
+      },
+    };
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RpgWorldGenerationCandidateReview
+          onAccepted={vi.fn()}
+          onClose={vi.fn()}
+          onRetryStarted={vi.fn()}
+          result={providerFailure}
+          runId="run:review"
+          section={section}
+          worldId="world:1"
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText(/Generation completed with validation issues/)).toBeInTheDocument();
+    expect(screen.queryByText(/world_forge_integrity_failed/)).not.toBeInTheDocument();
+  });
 });
