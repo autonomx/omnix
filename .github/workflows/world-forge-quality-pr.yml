@@ -58,6 +58,9 @@ jobs:
             src/tests/rpg/response_generation/test_world_forge_profiles.py \
             src/tests/rpg/response_generation/test_rpg_world_scenario_phase3_publication.py \
             src/tests/rpg/worlds/test_canon_repair.py \
+            src/tests/rpg/worlds/test_signed_world_authorship.py \
+            src/tests/rpg/worlds/test_trusted_lore_authorship.py \
+            src/tests/rpg/worlds/test_world_generation_retirement.py \
             src/tests/rpg/worlds/test_world_library_profile_generation.py \
             src/tests/rpg/worlds/test_world_runtime_seed.py \
             src/tests/rpg/worlds/test_world_generation_artifact_pipeline.py \
@@ -80,7 +83,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
