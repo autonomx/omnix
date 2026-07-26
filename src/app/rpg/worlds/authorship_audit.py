@@ -9,10 +9,10 @@ from typing import Any, Mapping
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
-from .generation_authorship_runtime import (
-    generation_artifact,
-    lore_string_leaves,
-    validate_publishable_authorship,
+from .generation_authorship_runtime import generation_artifact
+from .generation_authorship_signing import (
+    strict_lore_string_leaves,
+    validate_signed_authorship,
 )
 
 _BLOCKED_DETERMINISTIC_CODES = {
@@ -25,11 +25,13 @@ _BLOCKED_DETERMINISTIC_CODES = {
 }
 _ARTIFACT_FAILURE_CODES = {
     "server_generation_artifact_missing",
+    "server_authorship_signature_invalid",
+    "generation_artifact_signature_invalid",
     "generation_artifact_hash_mismatch",
     "generation_artifact_payload_hash_mismatch",
     "generation_artifact_provider_or_model_missing",
-    "generation_artifact_not_llm_authored",
-    "origin_artifact_mismatch",
+    "genuine_provider_response_hash_required",
+    "origin_artifact_content_mismatch",
 }
 
 
@@ -75,7 +77,7 @@ def _entity_rows(
         for row in content.get("entities") or ()
         if isinstance(row, Mapping)
     ]
-    leaves = lore_string_leaves(content)
+    leaves = strict_lore_string_leaves(content)
     rows: list[dict[str, Any]] = []
     for index, entity in enumerate(entities):
         prefix = f"/entities/{index}/"
@@ -87,8 +89,11 @@ def _entity_rows(
         ]
         codes = {str(row.get("code") or "") for row in entity_blockers}
         dossier = _record(entity.get("dossier"))
-        generation_required = bool(dossier.get("generation_required")) or not bool(
-            dossier.get("sections")
+        generation_required = (
+            bool(dossier.get("generation_required"))
+            or bool(dossier.get("lore_required"))
+            or str(dossier.get("dossier_status") or "") == "generation_required"
+            or not bool(dossier.get("sections"))
         )
         classification = _classification(
             publishable=not entity_blockers and bool(entity_leaves) and not generation_required,
@@ -125,7 +130,7 @@ def _topic_audit(topic: Mapping[str, Any]) -> dict[str, Any]:
         }
     payload = dict(content)
     artifact = generation_artifact(payload)
-    report = validate_publishable_authorship(payload, server_artifact=artifact)
+    report = validate_signed_authorship(payload)
     blocked_paths = [dict(row) for row in report.get("blocked_paths") or ()]
     entity_rows = _entity_rows(payload, blocked_paths)
     generation_required = any(
@@ -189,7 +194,7 @@ def audit_world_authorship(
         if not bool(row["publishable"])
     ]
     return {
-        "schema_version": "rpg_world_authorship_audit_v1",
+        "schema_version": "rpg_world_authorship_audit_v2",
         "ok": True,
         "world_id": world_id,
         "draft_revision": int(world["draft_revision"]),
@@ -236,7 +241,7 @@ def remediate_world_authorship(
                 continue
             provenance = _record(row.get("provenance"))
             provenance["authorship_audit"] = {
-                "schema_version": "rpg_world_authorship_audit_marker_v1",
+                "schema_version": "rpg_world_authorship_audit_marker_v2",
                 "audited_at": audited_at,
                 "classification": next(
                     (
