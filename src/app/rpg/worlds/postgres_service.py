@@ -23,6 +23,11 @@ from .contracts import (
 from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_scenario_writable, require_world_writable
 from .profile_generation_jobs import plan_world_profile_creation
+from .revision_authorship import (
+    prepare_direct_world_revision,
+    require_release_authorship,
+    require_revision_authorship,
+)
 from .semantic_validation import (
     WorldSemanticError,
     certify_world_release,
@@ -179,10 +184,11 @@ def publish_world_revision(
     expected_revision: int,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    document = _ensure_hash(document, "content_hash")
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
-        require_world_writable(work, context, document.world_id)
+        world = require_world_writable(work, context, document.world_id)
+        document = prepare_direct_world_revision(world, document)
+        document = _ensure_hash(document, "content_hash")
         stored = work.world_scenarios.publish_world_revision(
             context,
             world_id=document.world_id,
@@ -208,6 +214,7 @@ def publish_world_release(
             document.world_id,
             document.world_revision,
         )
+        authorship_receipt = require_revision_authorship(world_revision)
         next_row = work.connection.execute(
             "SELECT COALESCE(MAX(release), 0) + 1 FROM omnix_rpg_world_releases "
             "WHERE workspace_id = %s AND world_id = %s AND world_revision = %s",
@@ -219,6 +226,14 @@ def publish_world_release(
                 "world_release_sequence_mismatch",
                 f"expected={next_release}:received={document.release}",
             )
+        release_payload = document.model_dump(mode="json")
+        release_payload["certification"] = {
+            **dict(document.certification),
+            "authorship_validated": True,
+            "authorship_source": str(authorship_receipt.get("source") or "field_origin_ledger"),
+            "authorship_schema_version": str(authorship_receipt.get("schema_version") or ""),
+        }
+        document = WorldReleaseDocument.model_validate(release_payload)
         definitions = _definitions_from_work(work, context, document)
         certified = certify_world_release(world_revision, document, definitions)
         stored = work.world_scenarios.publish_world_release(
@@ -298,6 +313,7 @@ def publish_scenario_revision(
             document.world_id,
             document.world_revision,
         )
+        require_revision_authorship(world_revision)
         if document.world_revision_hash != world_revision.content_hash:
             raise WorldSemanticError("scenario_world_hash_mismatch")
         if document.compatible_release is not None:
@@ -314,6 +330,7 @@ def publish_scenario_revision(
                     f"{document.compatible_release}"
                 )
             release = WorldReleaseDocument.model_validate(release_row["document"])
+            require_release_authorship(world_revision, release)
             definitions = _definitions_from_work(work, context, release)
             validate_release_bindings(world_revision, release, definitions)
             validate_scenario_against_release(document, release, definitions)
@@ -337,6 +354,26 @@ def bind_campaign_world(
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         require_scenario_writable(work, context, binding.scenario_id)
+        world_revision = _world_revision_from_work(
+            work,
+            context,
+            binding.world_id,
+            binding.world_revision,
+        )
+        require_revision_authorship(world_revision)
+        release_row = work.world_scenarios.get_world_release(
+            context,
+            binding.world_id,
+            binding.world_revision,
+            binding.world_release,
+        )
+        if release_row is None:
+            raise KeyError(
+                f"world_release_not_found:{binding.world_id}:"
+                f"{binding.world_revision}:{binding.world_release}"
+            )
+        release = WorldReleaseDocument.model_validate(release_row["document"])
+        require_release_authorship(world_revision, release)
         stored = work.world_scenarios.bind_campaign(
             context,
             campaign_id=binding.campaign_id,
@@ -369,6 +406,7 @@ def load_release_definitions(
     *,
     database: Any | None = None,
 ) -> dict[str, GridMapDefinition]:
+    require_release_authorship(world_revision, release)
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         definitions = _definitions_from_work(work, context, release)
@@ -408,8 +446,8 @@ def load_published_resources(
         raise KeyError(
             f"scenario_revision_not_found:{scenario_id}:{scenario_revision}"
         )
-    return (
-        WorldRevisionDocument.model_validate(revision["document"]),
-        WorldReleaseDocument.model_validate(release["document"]),
-        ScenarioRevisionDocument.model_validate(scenario["document"]),
-    )
+    revision_document = WorldRevisionDocument.model_validate(revision["document"])
+    release_document = WorldReleaseDocument.model_validate(release["document"])
+    scenario_document = ScenarioRevisionDocument.model_validate(scenario["document"])
+    require_release_authorship(revision_document, release_document)
+    return revision_document, release_document, scenario_document

@@ -1,10 +1,10 @@
-"""Reference-safe adapter shared by deterministic and live World Forge generation."""
+"""Reference-safe adapter shared by explicit test and live World Forge generation."""
 from __future__ import annotations
 
 from dataclasses import replace
 from typing import Any, Mapping
 
-from .world_forge_canon_lookup import attach_structured_canon_lookup
+from .world_forge_canon_lookup_trusted import attach_structured_canon_lookup
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_deterministic import DeterministicWorldForgeGenerator
 from .world_forge_deterministic_completion import complete_deterministic_references
@@ -13,46 +13,42 @@ from .world_forge_dossier_quality import (
     enrich_fallback_dossier,
     validate_dossier_quality,
 )
-from .world_forge_dossiers import project_entity_dossier, validate_entity_dossier
+from .world_forge_dossiers import validate_entity_dossier
+from .world_forge_dossiers_trusted import project_entity_dossier
 from .world_forge_domains import (
     normalize_structured_domain,
     validate_world_brief_grounding,
 )
-from .world_forge_fact_pipeline import compile_structured_entity_facts
+from .world_forge_fact_pipeline_fixture import compile_deterministic_fixture_facts
+from .world_forge_fact_pipeline_trusted import (
+    compile_structured_entity_facts as compile_trusted_structured_entity_facts,
+)
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_integrity import validate_and_normalize_provider_topic
-from .world_forge_lore_scoring import (
-    WorldForgeLoreQualityError,
-    require_preferred_lore_quality,
-)
-from .world_forge_presentation import render_fact_derived_presentations
+from .world_forge_lore_scoring import require_preferred_lore_quality
+from .world_forge_presentation_trusted import render_fact_derived_presentations
 from .world_forge_profile_deterministic import generate_deterministic_profile_topic
-from .world_forge_regeneration import RegenerationRequest, enforce_targeted_regeneration
-from .world_forge_review import is_reviewable_candidate_error, mark_needs_review
+from .world_forge_regeneration import (
+    RegenerationRequest,
+    enforce_targeted_regeneration,
+)
+from .world_forge_regeneration_trusted import generate_with_targeted_regeneration
 from .world_forge_semantic_quality import require_topic_semantic_quality
 
 
 class ReferenceSafeWorldForgeGenerator:
-    """Validate one generated candidate without automatic content regeneration."""
+    """Validate a provider candidate and apply bounded, path-restricted repair."""
 
-    def __init__(
-        self,
-        generator: WorldForgeTopicGenerator | None = None,
-    ) -> None:
-        self.generator = generator or DeterministicWorldForgeGenerator()
+    def __init__(self, generator: WorldForgeTopicGenerator) -> None:
+        if generator is None:
+            raise ValueError("world_forge_generator_required")
+        self.generator = generator
 
     @staticmethod
     def _provider_generated(topic: GeneratedTopic) -> bool:
         return str(dict(topic.provenance).get("generator") or "").startswith(
             "structured_world_forge_provider_"
         )
-
-    @staticmethod
-    def _max_regeneration_attempts(campaign_context: Mapping[str, Any]) -> int:
-        """Compatibility surface: automatic content regeneration is always disabled."""
-
-        del campaign_context
-        return 1
 
     @staticmethod
     def _manual_retry_config(
@@ -136,51 +132,39 @@ class ReferenceSafeWorldForgeGenerator:
         dependency_topics: Mapping[str, GeneratedTopic],
     ) -> GeneratedTopic:
         def process(topic: GeneratedTopic) -> GeneratedTopic:
+            scoped = self._manual_retry_candidate(topic, campaign_context)
             return self._process_topic(
                 node,
-                topic,
+                scoped,
                 campaign_context=campaign_context,
                 dependency_topics=dependency_topics,
             )
 
-        if (
-            node.metadata.get("field_definitions")
-            and isinstance(self.generator, DeterministicWorldForgeGenerator)
-        ):
-            processed = process(
+        if isinstance(self.generator, DeterministicWorldForgeGenerator):
+            generated = (
                 generate_deterministic_profile_topic(
                     node,
                     campaign_context=campaign_context,
                     dependency_topics=dependency_topics,
                 )
+                if node.metadata.get("field_definitions")
+                else self.generator.generate(
+                    node,
+                    seed=seed,
+                    campaign_context=campaign_context,
+                    dependency_topics=dependency_topics,
+                )
             )
-            processed = self._mark_manual_decision_required(
+            processed = process(generated)
+        else:
+            processed = generate_with_targeted_regeneration(
+                self.generator,
                 node,
-                processed,
-                campaign_context,
-            )
-            return attach_structured_canon_lookup(processed)
-
-        generated = self.generator.generate(
-            node,
-            seed=seed,
-            campaign_context=campaign_context,
-            dependency_topics=dependency_topics,
-        )
-        scoped = generated
-        try:
-            scoped = self._manual_retry_candidate(generated, campaign_context)
-            processed = process(scoped)
-        except Exception as exc:
-            if not self._provider_generated(generated) or not is_reviewable_candidate_error(exc):
-                raise
-            candidate = (
-                exc.candidate_topic
-                if isinstance(exc, WorldForgeLoreQualityError)
-                else scoped
-            )
-            return attach_structured_canon_lookup(
-                mark_needs_review(node, candidate, exc)
+                seed=seed,
+                campaign_context=campaign_context,
+                dependency_topics=dependency_topics,
+                process=process,
+                max_attempts=3,
             )
         processed = self._mark_manual_decision_required(
             node,
@@ -228,10 +212,19 @@ class ReferenceSafeWorldForgeGenerator:
                 topic,
                 dependency_topics,
             )
-        topic = compile_structured_entity_facts(
-            node,
-            topic,
-            dependency_topics,
+
+        topic = (
+            compile_trusted_structured_entity_facts(
+                node,
+                topic,
+                dependency_topics,
+            )
+            if provider_generated
+            else compile_deterministic_fixture_facts(
+                node,
+                topic,
+                dependency_topics,
+            )
         )
         if provider_generated:
             semantic_report = require_topic_semantic_quality(
@@ -256,15 +249,19 @@ class ReferenceSafeWorldForgeGenerator:
                     campaign_context,
                 )
             return rendered
-        return self._normalize_entity_dossiers(node, topic)
+        return self._normalize_entity_dossiers(
+            node,
+            topic,
+            allow_fixture_enrichment=not provider_generated,
+        )
 
     @staticmethod
     def _normalize_entity_dossiers(
         node: CampaignTopicNode,
         topic: GeneratedTopic,
+        *,
+        allow_fixture_enrichment: bool,
     ) -> GeneratedTopic:
-        """Project and validate legacy fixed-domain dossiers."""
-
         if not topic.entities:
             return topic
         content = topic.as_dict()
@@ -280,7 +277,7 @@ class ReferenceSafeWorldForgeGenerator:
                 entity_id=entity_id,
             )
             quality_issues = validate_dossier_quality(dossier, topic_id=node.topic_id)
-            if quality_issues:
+            if quality_issues and allow_fixture_enrichment:
                 dossier = enrich_fallback_dossier(
                     row,
                     dossier,
@@ -310,5 +307,6 @@ class ReferenceSafeWorldForgeGenerator:
                 "entity_dossier_schema": "rpg_world_entity_dossier_v1",
                 "entity_dossier_quality_validated": True,
                 "entity_dossier_word_counts": word_counts,
+                "deterministic_fixture_enrichment": bool(allow_fixture_enrichment),
             },
         )

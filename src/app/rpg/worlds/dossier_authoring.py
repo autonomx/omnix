@@ -1,7 +1,7 @@
 """Editorial-only authoring for rich reusable-world entity dossiers.
 
 These operations deliberately preserve entity identity, mechanics, references, facts,
-and relationships.  They update only short-form catalogue prose and the versioned
+and relationships. They update only short-form catalogue prose and the versioned
 long-form dossier, so unrelated simulation canon does not become stale.
 """
 from __future__ import annotations
@@ -33,6 +33,10 @@ from .entity_authoring import (
     validate_entity_references,
 )
 from .generation_jobs import canonical_hash
+from .targeted_generation_authorship import (
+    attach_targeted_regeneration_authorship,
+    trusted_targeted_generator,
+)
 from .topic_authoring import (
     _assert_writable_topic,
     _authoring,
@@ -51,6 +55,7 @@ def _store_editorial_replacement(
     short_summary: str,
     dossier: Mapping[str, Any],
     operation: str,
+    generated: GeneratedTopic | None = None,
     metadata: Mapping[str, Any] | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
@@ -68,7 +73,8 @@ def _store_editorial_replacement(
             expected_draft_revision=expected_draft_revision,
             expected_content_hash=expected_content_hash,
         )
-        before = _entity(_record(current.get("content")), entity_id)
+        prior_payload = _record(current.get("content"))
+        before = _entity(prior_payload, entity_id)
         after = {
             **before,
             "id": entity_id,
@@ -85,22 +91,37 @@ def _store_editorial_replacement(
             _known_ids(topic_rows, world_id).union({entity_id}),
         )
         payload = replace_entity_content(
-            _record(current.get("content")),
+            prior_payload,
             entity_id,
             after,
         )
-        content_hash = canonical_hash(payload)
-        provenance = _record(current.get("provenance"))
+        changed_lore_paths: tuple[str, ...] = ()
+        if generated is not None:
+            payload, changed_lore_paths = attach_targeted_regeneration_authorship(
+                prior_payload,
+                payload,
+                generated,
+                topic_id=topic_id,
+                operation=operation,
+            )
+            source = "ai"
+            editorial_state = "llm_regenerated"
+            provenance = _record(payload.get("provenance"))
+        else:
+            source = "manual"
+            editorial_state = "edited"
+            provenance = _record(current.get("provenance"))
         existing_authoring = _authoring(current)
         provenance["authoring"] = {
             **existing_authoring,
-            "editorial_state": "edited",
+            "editorial_state": editorial_state,
             "entity_dossier_schema": DOSSIER_SCHEMA_VERSION,
             "last_entity_edit": {
                 "entity_id": entity_id,
                 "operation": operation,
                 "editorial_only": True,
                 "edited_at": datetime.now(timezone.utc).isoformat(),
+                "llm_changed_paths": list(changed_lore_paths),
             },
         }
         stored = work.world_scenarios.put_topic(
@@ -108,7 +129,7 @@ def _store_editorial_replacement(
             world_id=world_id,
             topic_id=topic_id,
             draft_revision=int(world["draft_revision"]),
-            source=str(current.get("source") or "ai"),
+            source=source,
             status="ready",
             content=payload,
             directives=_record(current.get("directives")),
@@ -121,9 +142,10 @@ def _store_editorial_replacement(
                     "dossier": dict(dossier),
                 }
             ),
-            content_hash=content_hash,
+            content_hash=canonical_hash(payload),
             provenance=provenance,
         )
+        stored_hash = str(stored.get("content_hash") or canonical_hash(payload))
         _record_history(
             work,
             context,
@@ -133,8 +155,12 @@ def _store_editorial_replacement(
             operation=operation,
             before=before,
             after=after,
-            topic_content_hash=content_hash,
-            metadata={"editorial_only": True, **dict(metadata or {})},
+            topic_content_hash=stored_hash,
+            metadata={
+                "editorial_only": True,
+                "llm_changed_paths": list(changed_lore_paths),
+                **dict(metadata or {}),
+            },
         )
         work.commit()
     return {
@@ -216,6 +242,13 @@ def regenerate_world_entity_dossier(
         from .generation_routing import build_world_forge_generator_for_run
 
         selected_generator = build_world_forge_generator_for_run(run)
+    selected_generator = trusted_targeted_generator(
+        selected_generator,
+        world_id=world_id,
+        topic_id=topic_id,
+        entity_id=entity_id,
+        operation="dossier_regeneration",
+    )
     node = replace(
         node,
         target_count=1,
@@ -287,6 +320,7 @@ def regenerate_world_entity_dossier(
         short_summary=short_summary,
         dossier=dossier,
         operation="regenerate_dossier",
+        generated=generated,
         metadata={
             "directives": dict(directives or {}),
             "generation": dict(generated.provenance),

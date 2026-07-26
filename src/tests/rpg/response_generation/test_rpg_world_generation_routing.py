@@ -100,10 +100,45 @@ def test_unresolved_job_route_fails_closed() -> None:
     generator = generation_routing.build_world_forge_generator_from_settings(
         {"provider_route": "configured", "model": "configured"}
     )
-    with pytest.raises(RuntimeError, match="unresolved provider route"):
+    with pytest.raises(RuntimeError, match="no concrete provider and model"):
         generator.generate(
             _node(),
             seed=1,
             campaign_context={},
             dependency_topics={},
         )
+
+
+def test_configured_route_without_provider_and_model_never_falls_back(monkeypatch) -> None:
+    monkeypatch.setattr(generation_routing, "_settings_route", lambda: ("", ""))
+
+    with pytest.raises(
+        generation_routing.WorldForgeRouteUnavailableError,
+        match="world_forge_provider_and_model_required",
+    ):
+        generation_routing.resolve_world_forge_route(
+            "configured",
+            "configured",
+            environ={},
+        )
+
+
+def test_deterministic_route_is_explicit_test_only() -> None:
+    with pytest.raises(
+        generation_routing.WorldForgeRouteUnavailableError,
+        match="deterministic_world_forge_route_is_test_only",
+    ):
+        generation_routing.resolve_world_forge_route(
+            "deterministic",
+            "reference-safe",
+            environ={},
+        )
+
+    route = generation_routing.resolve_world_forge_route(
+        "deterministic",
+        "reference-safe",
+        environ={},
+        allow_deterministic=True,
+    )
+    assert route.provider == "deterministic"
+    assert route.source == "explicit_test"

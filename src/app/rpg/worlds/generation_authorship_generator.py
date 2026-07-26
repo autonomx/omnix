@@ -1,0 +1,209 @@
+"""World Forge generator wrapper that creates signed server authorship artifacts."""
+from __future__ import annotations
+
+from dataclasses import replace
+from typing import Any, Mapping
+
+from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.rpg.session.genesis.world_forge_deterministic import (
+    DeterministicWorldForgeGenerator,
+)
+from app.rpg.session.genesis.world_forge_generation import (
+    GeneratedTopic,
+    WorldForgeTopicGenerator,
+)
+
+from .generation_authorship import AuthorshipValidationError
+from .generation_authorship_policy_signing import bind_signed_authorship_policy
+from .generation_authorship_runtime import build_generation_artifact
+from .generation_authorship_signing import (
+    AuthorshipSigningKeyUnavailable,
+    attach_signed_llm_authorship,
+    harden_and_sign_generation_artifact,
+    sanitize_untrusted_candidate,
+)
+from .generation_test_mode import deterministic_world_forge_test_mode
+
+_DETERMINISTIC_ROUTES = {"deterministic", "offline", "reference-safe", "test"}
+
+
+def _contains_deterministic_generator(value: Any) -> bool:
+    pending = [value]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        identity = id(current)
+        if identity in visited:
+            continue
+        visited.add(identity)
+        if isinstance(current, DeterministicWorldForgeGenerator):
+            return True
+        nested = getattr(current, "generator", None)
+        if nested is not None:
+            pending.append(nested)
+        pending.extend(getattr(current, "generators", ()) or ())
+    return False
+
+
+class TrustedAuthorshipWorldForgeGenerator:
+    """Discard incoming provenance claims and attach signed field origins."""
+
+    def __init__(
+        self,
+        generator: WorldForgeTopicGenerator,
+        *,
+        run_id: str,
+        job_id: str,
+        topic_id: str,
+        settings: Mapping[str, Any],
+        fingerprint: str = "",
+        directive_hash: str = "",
+        entity_manifest_hash: str = "",
+    ) -> None:
+        self.generator = generator
+        self.run_id = run_id
+        self.job_id = job_id
+        self.topic_id = topic_id
+        self.settings = dict(settings)
+        self.fingerprint = fingerprint
+        self.directive_hash = directive_hash
+        self.entity_manifest_hash = entity_manifest_hash
+
+    def _explicit_fixture_mode(self) -> bool:
+        route = str(self.settings.get("provider_route") or "").strip().casefold()
+        return deterministic_world_forge_test_mode() and (
+            route in _DETERMINISTIC_ROUTES
+            or _contains_deterministic_generator(self.generator)
+        )
+
+    def generate(
+        self,
+        node: CampaignTopicNode,
+        *,
+        seed: int,
+        campaign_context: Mapping[str, Any],
+        dependency_topics: Mapping[str, GeneratedTopic],
+    ) -> GeneratedTopic:
+        generated = self.generator.generate(
+            node,
+            seed=seed,
+            campaign_context=campaign_context,
+            dependency_topics=dependency_topics,
+        )
+        payload = sanitize_untrusted_candidate(generated.as_dict())
+        provenance = {
+            **dict(payload.get("provenance") or {}),
+            "generation_fingerprint": self.fingerprint,
+            "directive_hash": self.directive_hash,
+            "entity_manifest_hash": self.entity_manifest_hash,
+            "job_id": self.job_id,
+            "run_id": self.run_id,
+        }
+        payload["provenance"] = provenance
+        topic = GeneratedTopic.from_dict(payload)
+        provider = str(provenance.get("provider") or "")
+        model = str(provenance.get("model") or "")
+        generator_name = str(provenance.get("generator") or "")
+        provider_generated = generator_name.startswith("structured_world_forge_provider_")
+
+        if not provider_generated or not provider or not model:
+            fixture_shape = (
+                generator_name.startswith("deterministic_")
+                or bool(provenance.get("deterministic_fixture_only"))
+                or bool(provenance.get("deterministic_fixture_fact_presentation"))
+            )
+            if self._explicit_fixture_mode() and fixture_shape:
+                return replace(
+                    topic,
+                    provenance={
+                        **provenance,
+                        "used_llm": False,
+                        "deterministic_fixture_only": True,
+                        "generation_status": "accepted",
+                    },
+                )
+            return replace(
+                topic,
+                provenance={
+                    **provenance,
+                    "used_llm": False,
+                    "generation_status": "needs_review",
+                    "generation_review": {
+                        "schema_version": "rpg_world_generation_review_v1",
+                        "status": "needs_review",
+                        "blocking": True,
+                        "error_type": "UntrustedGenerationAuthorship",
+                        "reason_codes": ["production_generation_artifact_untrusted"],
+                        "issues": [
+                            {
+                                "code": "production_generation_artifact_untrusted",
+                                "topic_id": node.topic_id,
+                                "entity_id": "",
+                                "field_id": "provenance",
+                                "message": (
+                                    "Production lore requires an approved provider and model; "
+                                    "deterministic or unknown generation cannot be published."
+                                ),
+                            }
+                        ],
+                        "summary": "Candidate has no publishable LLM authorship artifact.",
+                    },
+                },
+            )
+
+        policy = (
+            dict(node.metadata.get("authorship_policy") or {})
+            if isinstance(node.metadata, Mapping)
+            else {}
+        )
+        try:
+            unsigned = build_generation_artifact(
+                topic.as_dict(),
+                run_id=self.run_id,
+                job_id=self.job_id,
+                topic_id=self.topic_id,
+                provider=provenance,
+                settings=self.settings,
+                attempt=int(provenance.get("attempt_count") or 1),
+            )
+            artifact = harden_and_sign_generation_artifact(
+                topic.as_dict(),
+                unsigned,
+                policy=policy,
+            )
+            authored = attach_signed_llm_authorship(
+                topic.as_dict(),
+                artifact,
+                policy=policy,
+            )
+            authored = bind_signed_authorship_policy(authored, policy)
+        except (AuthorshipValidationError, AuthorshipSigningKeyUnavailable) as exc:
+            return replace(
+                topic,
+                provenance={
+                    **provenance,
+                    "used_llm": False,
+                    "generation_status": "needs_review",
+                    "generation_review": {
+                        "schema_version": "rpg_world_generation_review_v1",
+                        "status": "needs_review",
+                        "blocking": True,
+                        "error_type": "UntrustedGenerationAuthorship",
+                        "reason_codes": ["production_generation_evidence_invalid"],
+                        "issues": [
+                            {
+                                "code": "production_generation_evidence_invalid",
+                                "topic_id": node.topic_id,
+                                "entity_id": "",
+                                "field_id": "provenance",
+                                "message": str(exc),
+                            }
+                        ],
+                        "summary": str(exc),
+                    },
+                },
+            )
+        return GeneratedTopic.from_dict(authored)
+
+
+__all__ = ["TrustedAuthorshipWorldForgeGenerator"]

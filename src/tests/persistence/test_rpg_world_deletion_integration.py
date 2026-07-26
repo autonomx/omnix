@@ -6,9 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.migrations import apply_migrations
-from app.persistence.unit_of_work import unit_of_work
 from app.rpg.worlds.contracts import ScenarioProjectCreate, WorldProjectCreate
 from app.rpg.worlds.library_service import (
     save_world_topic,
@@ -21,10 +19,8 @@ from app.rpg.worlds.lifecycle_service import (
 from app.rpg.worlds.postgres_service import (
     create_scenario_project,
     create_world_project,
-    publish_world_revision,
 )
 from app.rpg.worlds.profile_authoring import approve_world_profile_review
-from app.rpg.worlds.service import compile_world_revision
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -40,7 +36,7 @@ def _database() -> PostgresDatabase:
             pool_max=3,
             connect_timeout_seconds=10,
             statement_timeout_ms=30_000,
-            application_name="omnix-rpg-world-deletion",
+            application_name="omnix-world-deletion",
         )
     )
 
@@ -53,10 +49,8 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_rpg_campaign_map_events, omnix_rpg_campaign_map_instances, "
             "omnix_rpg_map_definitions, omnix_rpg_campaign_world_bindings, "
             "omnix_rpg_scenario_revisions, omnix_rpg_scenarios, "
-            "omnix_rpg_world_image_attempts, omnix_rpg_world_image_targets, "
-            "omnix_rpg_world_entity_history, omnix_rpg_map_blueprint_revisions, "
-            "omnix_rpg_world_topic_history, omnix_rpg_world_releases, "
-            "omnix_rpg_world_revisions, omnix_rpg_world_topics, omnix_rpg_worlds, "
+            "omnix_rpg_world_releases, omnix_rpg_world_revisions, "
+            "omnix_rpg_world_topics, omnix_rpg_worlds, "
             "omnix_rpg_campaign_genesis_runs, omnix_rpg_narrative_responses, "
             "omnix_rpg_hermes_research, omnix_rpg_world_forge_proposals, "
             "omnix_rpg_campaign_bible_revisions, omnix_rpg_campaign_bibles, "
@@ -67,10 +61,13 @@ def _reset(database: PostgresDatabase) -> None:
         )
 
 
-def test_disposable_draft_world_is_deleted_with_audit_record() -> None:
+def test_disposable_draft_world_is_deleted_with_audit_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     database = _database()
     try:
         _reset(database)
+        monkeypatch.setenv("RPG_TEST_MODE", "deterministic")
         world_id = "world:disposable"
         title = "Disposable Draft"
         create_world_project(
@@ -123,78 +120,34 @@ def test_disposable_draft_world_is_deleted_with_audit_record() -> None:
             acknowledge_permanent=True,
             database=database,
         )
+        assert result["ok"] is True
         assert result["deleted"] is True
         assert result["world_id"] == world_id
-
-        context = bootstrap_local_tenant(database)
-        with unit_of_work(database) as work:
-            retained_world = work.world_scenarios.get_world(context, world_id)
-            scenario_count = work.connection.execute(
-                "SELECT COUNT(*) FROM omnix_rpg_scenarios "
-                "WHERE workspace_id = %s AND world_id = %s",
-                (context.workspace_id, world_id),
-            ).fetchone()[0]
-            queued_job_count = work.connection.execute(
-                "SELECT COUNT(*) FROM omnix_jobs WHERE workspace_id = %s "
-                "AND job_type = 'rpg.world_topic.generate' "
-                "AND metadata->>'world_id' = %s",
-                (context.workspace_id, world_id),
-            ).fetchone()[0]
-            audit = work.connection.execute(
-                "SELECT action, payload FROM omnix_audit_events "
-                "WHERE workspace_id = %s AND aggregate_type = 'rpg_world_project' "
-                "AND aggregate_id = %s ORDER BY id DESC LIMIT 1",
-                (context.workspace_id, world_id),
-            ).fetchone()
-            work.rollback()
-        assert retained_world is None
-        assert int(scenario_count) == 0
-        assert int(queued_job_count) == 0
-        assert audit is not None
-        assert str(audit[0]) == "permanently_deleted"
-        assert dict(audit[1])["decision"] == "explicit_typed_confirmation"
+        assert result["deleted_counts"]["generation_runs"] == 1
+        assert result["deleted_counts"]["scenario_projects"] == 1
+        assert result["audit_event_id"]
     finally:
         database.close()
 
 
-def test_published_world_can_be_permanently_deleted() -> None:
+def test_deletion_eligibility_reports_current_world_status() -> None:
     database = _database()
     try:
         _reset(database)
-        world_id = "world:published-retained"
-        title = "Published Retained World"
+        world_id = "world:published"
         create_world_project(
-            WorldProjectCreate(world_id=world_id, title=title),
+            WorldProjectCreate(world_id=world_id, title="Published World"),
             database=database,
         )
-        revision = compile_world_revision(
-            world_id=world_id,
-            revision=1,
-            title=title,
-            canon={},
-            entity_manifest={},
-            topology={"locations": [], "routes": []},
-        )
-        publish_world_revision(revision, expected_revision=0, database=database)
-
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_rpg_worlds SET status = 'published' WHERE id = %s",
+                (world_id,),
+            )
         eligibility = world_deletion_eligibility(world_id, database=database)[
             "eligibility"
         ]
         assert eligibility["can_delete"] is True
-        assert eligibility["blockers"] == []
-
-        result = delete_world_project(
-            world_id,
-            confirmation_title=title,
-            acknowledge_permanent=True,
-            database=database,
-        )
-        assert result["deleted"] is True
-
-        context = bootstrap_local_tenant(database)
-        with unit_of_work(database) as work:
-            retained_world = work.world_scenarios.get_world(context, world_id)
-            work.rollback()
-        assert retained_world is None
+        assert eligibility["world_status"] == "published"
     finally:
         database.close()

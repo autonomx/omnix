@@ -12,6 +12,10 @@ from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 
 from .generation_jobs import canonical_hash
+from .targeted_generation_authorship import (
+    attach_targeted_regeneration_authorship,
+    trusted_targeted_generator,
+)
 from .topic_authoring import (
     _assert_writable_topic,
     _authoring,
@@ -328,7 +332,8 @@ def _store_replacement(
             expected_draft_revision=expected_draft_revision,
             expected_content_hash=expected_content_hash,
         )
-        before = _entity(_record(current.get("content")), entity_id)
+        prior_payload = _record(current.get("content"))
+        before = _entity(prior_payload, entity_id)
         after = {**before, **dict(replacement), "id": entity_id}
         topic_rows = work.world_generation.list_topics(
             context,
@@ -337,19 +342,34 @@ def _store_replacement(
         )
         validate_entity_references(after, _known_ids(topic_rows, world_id).union({entity_id}))
         payload = replace_entity_content(
-            _record(current.get("content")), entity_id, after, generated=generated
+            prior_payload, entity_id, after, generated=generated
         )
         payload, stale_siblings = _mark_sibling_entities_stale(payload, entity_id)
-        content_hash = canonical_hash(payload)
-        provenance = _record(current.get("provenance"))
+        changed_lore_paths: tuple[str, ...] = ()
+        if generated is not None:
+            payload, changed_lore_paths = attach_targeted_regeneration_authorship(
+                prior_payload,
+                payload,
+                generated,
+                topic_id=topic_id,
+                operation=operation,
+            )
+            source = "ai"
+            edit_state = "llm_regenerated"
+            provenance = _record(payload.get("provenance"))
+        else:
+            source = "manual"
+            edit_state = "manually_edited"
+            provenance = _record(current.get("provenance"))
         provenance["authoring"] = {
             **_authoring(current),
-            "edit_state": "manually_edited",
+            "edit_state": edit_state,
             "generation_lock": True,
             "last_entity_edit": {
                 "entity_id": entity_id,
                 "operation": operation,
                 "edited_at": datetime.now(timezone.utc).isoformat(),
+                "llm_changed_paths": list(changed_lore_paths),
             },
             "stale_entity_ids": sorted(stale_siblings),
         }
@@ -358,15 +378,16 @@ def _store_replacement(
             world_id=world_id,
             topic_id=topic_id,
             draft_revision=int(world["draft_revision"]),
-            source="manual",
+            source=source,
             status="ready",
             content=payload,
             directives=_record(current.get("directives")),
             dependency_hashes=_record(current.get("dependency_hashes")),
             input_hash=canonical_hash({"source": operation, "content": payload}),
-            content_hash=content_hash,
+            content_hash=canonical_hash(payload),
             provenance=provenance,
         )
+        stored_hash = str(stored.get("content_hash") or canonical_hash(payload))
         _record_history(
             work,
             context,
@@ -376,8 +397,11 @@ def _store_replacement(
             operation=operation,
             before=before,
             after=after,
-            topic_content_hash=content_hash,
-            metadata=dict(metadata or {}),
+            topic_content_hash=stored_hash,
+            metadata={
+                **dict(metadata or {}),
+                "llm_changed_paths": list(changed_lore_paths),
+            },
         )
         direct_topics, direct_entities = _mark_external_entity_dependents_stale(
             work,
@@ -391,7 +415,7 @@ def _store_replacement(
             context,
             world=world,
             changed_topic_id=topic_id,
-            changed_content_hash=content_hash,
+            changed_content_hash=stored_hash,
         )
         work.commit()
     return {
@@ -481,9 +505,16 @@ def regenerate_world_entity(
 
     selected_generator = generator
     if selected_generator is None:
-        from app.rpg_world_forge_provider import build_production_world_forge_generator
+        from .generation_routing import build_world_forge_generator_for_run
 
-        selected_generator = build_production_world_forge_generator()
+        selected_generator = build_world_forge_generator_for_run(run)
+    selected_generator = trusted_targeted_generator(
+        selected_generator,
+        world_id=world_id,
+        topic_id=topic_id,
+        entity_id=entity_id,
+        operation="entity_regeneration",
+    )
     node = replace(
         node,
         metadata={

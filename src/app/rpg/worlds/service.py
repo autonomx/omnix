@@ -13,6 +13,8 @@ from .contracts import (
     WorldRevisionDocument,
     canonical_content_hash,
 )
+from .generation_authorship_signing import sign_record
+from .revision_authorship import attach_revision_human_authorship
 
 
 def _hashed_payload(payload: Mapping[str, Any], hash_field: str) -> dict[str, Any]:
@@ -20,6 +22,28 @@ def _hashed_payload(payload: Mapping[str, Any], hash_field: str) -> dict[str, An
     value[hash_field] = ""
     value[hash_field] = canonical_content_hash(value)
     return value
+
+
+def _signed_generation_receipt(
+    *,
+    world_id: str,
+    revision: int,
+    canon: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+) -> dict[str, Any]:
+    return sign_record(
+        {
+            "schema_version": "rpg_world_revision_generation_receipt_v2",
+            "world_id": world_id,
+            "revision": revision,
+            "generation_run_id": str(provenance.get("generation_run_id") or ""),
+            "topic_hashes": {
+                str(key): str(value)
+                for key, value in dict(provenance.get("topic_hashes") or {}).items()
+            },
+            "canon_hash": canonical_content_hash(dict(canon)),
+        }
+    )
 
 
 def compile_world_revision(
@@ -34,16 +58,31 @@ def compile_world_revision(
     blueprint_requirements: Iterable[Mapping[str, Any]] = (),
     provenance: Mapping[str, Any] | None = None,
 ) -> WorldRevisionDocument:
+    revision_provenance = dict(provenance or {})
+    compiled_canon = dict(canon)
+    if str(revision_provenance.get("source") or "") == "durable_world_generation":
+        revision_provenance["authorship_receipt"] = _signed_generation_receipt(
+            world_id=world_id,
+            revision=revision,
+            canon=compiled_canon,
+            provenance=revision_provenance,
+        )
+    else:
+        revision_provenance = attach_revision_human_authorship(
+            compiled_canon,
+            revision_provenance,
+            event_id=f"humancompile:{world_id}:{revision}",
+        )
     payload = {
         "world_id": world_id,
         "revision": revision,
         "title": title,
-        "canon": dict(canon),
+        "canon": compiled_canon,
         "entity_manifest": dict(entity_manifest),
         "topology": dict(topology),
         "adventure_seeds": tuple(dict(row) for row in adventure_seeds),
         "blueprint_requirements": tuple(dict(row) for row in blueprint_requirements),
-        "provenance": dict(provenance or {}),
+        "provenance": revision_provenance,
     }
     return WorldRevisionDocument.model_validate(
         _hashed_payload(payload, "content_hash")

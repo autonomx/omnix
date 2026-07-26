@@ -7,6 +7,10 @@ from typing import Any, Callable, Mapping
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import ValidationError
 
+from app.rpg.worlds.authorship_audit import (
+    audit_world_authorship,
+    remediate_world_authorship,
+)
 from app.rpg.worlds.contracts import (
     CampaignWorldBinding,
     ScenarioProjectCreate,
@@ -114,6 +118,35 @@ def register_rpg_world_routes(app: FastAPI) -> None:
     def rpg_restore_world(world_id: str) -> dict[str, Any]:
         try:
             return restore_world_project(world_id)
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
+
+    @app.get(
+        "/api/rpg/worlds/{world_id}/authorship-audit",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    def rpg_audit_world_authorship(world_id: str) -> dict[str, Any]:
+        try:
+            return audit_world_authorship(world_id)
+        except (KeyError, ValueError) as exc:
+            raise _domain_error(exc) from exc
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/authorship-audit/remediate",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    async def rpg_remediate_world_authorship(
+        world_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        try:
+            return remediate_world_authorship(
+                world_id,
+                queue_regeneration=bool(payload.get("queue_regeneration", True)),
+            )
         except (KeyError, ValueError) as exc:
             raise _domain_error(exc) from exc
 
