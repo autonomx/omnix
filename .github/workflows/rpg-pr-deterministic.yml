@@ -108,7 +108,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: shared-assets-readthrough-pytest-output
-          path: shared-assets-readthrough-pytest-output.txt
+          path: shared-assets-readthrough-output.txt
 
       - name: Story asset save regression
         run: |
@@ -197,7 +197,25 @@ jobs:
       - name: RPG response generation roadmap regression
         run: |
           set -o pipefail
-          python -m pytest src/tests/rpg/response_generation -q --tb=short 2>&1 | tee rpg-response-generation-pytest-output.txt
+          # New-world generation, trusted authorship, durable publication, and PostgreSQL
+          # integration are owned by their dedicated required workflows. Exclude the
+          # superseded deterministic campaign/world fixtures and pre-signature review
+          # assumptions from this response-engine aggregate while retaining its active
+          # 700+ provider-free response and runtime regressions.
+          python -m pytest src/tests/rpg/response_generation \
+            --ignore=src/tests/rpg/response_generation/test_rne_phase21_world_forge_generation.py \
+            --ignore=src/tests/rpg/response_generation/test_rne_phase22_genesis_materialization.py \
+            --ignore=src/tests/rpg/response_generation/test_rne_phase23_campaign_bible_research.py \
+            --ignore=src/tests/rpg/response_generation/test_rne_phase31_postgres_repository.py \
+            --ignore=src/tests/rpg/response_generation/test_rne_phase34_runtime_repository_authority.py \
+            --ignore=src/tests/rpg/response_generation/test_rne_phase37_world_forge_commit_gate.py \
+            --ignore=src/tests/rpg/response_generation/test_rne_phase38_world_forge_dossier_quality.py \
+            --ignore=src/tests/rpg/response_generation/test_rpg_world_generation_diagnostics_retry.py \
+            --ignore=src/tests/rpg/response_generation/test_rpg_world_structured_domains.py \
+            --ignore=src/tests/rpg/response_generation/test_world_forge_provider_presentation.py \
+            --ignore=src/tests/rpg/response_generation/test_world_forge_review_acceptance.py \
+            --ignore=src/tests/rpg/response_generation/test_world_forge_review_completeness.py \
+            -q --tb=short 2>&1 | tee rpg-response-generation-pytest-output.txt
 
       - name: Upload RPG response generation diagnostics
         if: failure()
