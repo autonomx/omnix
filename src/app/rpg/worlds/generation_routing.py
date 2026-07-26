@@ -13,7 +13,9 @@ from app.rpg_world_forge_provider import (
     WorldForgeProviderConfig,
 )
 
-from .generation_recovering_provider import RecoveringFirstPassWorldForgeTopicGenerator
+from .generation_recovery_evidence import (
+    EvidenceBackedRecoveringWorldForgeTopicGenerator,
+)
 
 _CONFIGURED_VALUES = {"", "auto", "configured", "settings"}
 _DETERMINISTIC_VALUES = {"deterministic", "offline", "reference-safe", "test"}
@@ -190,7 +192,7 @@ def build_world_forge_generator_from_settings(
             f"durable World Forge provider {provider_id} is unavailable"
         )
     return ReferenceSafeWorldForgeGenerator(
-        RecoveringFirstPassWorldForgeTopicGenerator(provider, config)
+        EvidenceBackedRecoveringWorldForgeTopicGenerator(provider, config)
     )
 
 
