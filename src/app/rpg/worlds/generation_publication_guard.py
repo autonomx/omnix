@@ -13,6 +13,7 @@ from .generation_authorship_runtime import (
     validate_publishable_authorship,
 )
 from .generation_publication import publish_world_generation as _publish_legacy
+from .generation_test_mode import deterministic_world_forge_test_mode
 
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 
@@ -64,6 +65,16 @@ def _review_decisions(run: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     }
 
 
+def _test_fixture_exempt(content: Mapping[str, Any]) -> bool:
+    provenance = content.get("provenance")
+    provenance = dict(provenance) if isinstance(provenance, Mapping) else {}
+    return deterministic_world_forge_test_mode() and (
+        bool(provenance.get("deterministic_fixture_only"))
+        or bool(provenance.get("test_authorship_exemption"))
+        or str(provenance.get("generator") or "").startswith("deterministic_")
+    )
+
+
 def _authorship_reports(
     graph_topic_ids: tuple[str, ...],
     *,
@@ -84,6 +95,8 @@ def _authorship_reports(
                     "blocked_paths": [{"path": "/", "code": "topic_content_missing"}],
                 }
             )
+            continue
+        if _test_fixture_exempt(content):
             continue
         artifact: Mapping[str, Any] | None = None
         if str(topic.get("source") or "") == "ai":
@@ -264,6 +277,7 @@ def publication_review_report(
         "dependency_hash_mismatches": dependency_mismatches,
         "authorship_failures": authorship_failures,
         "reason_counts": _reason_counts(results),
+        "deterministic_test_mode": deterministic_world_forge_test_mode(),
     }
 
 
