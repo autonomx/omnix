@@ -5,6 +5,9 @@ from dataclasses import replace
 from typing import Any, Mapping
 
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.rpg.session.genesis.world_forge_deterministic import (
+    DeterministicWorldForgeGenerator,
+)
 from app.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeTopicGenerator,
@@ -15,6 +18,26 @@ from .generation_authorship_runtime import (
     build_generation_artifact,
 )
 from .generation_test_mode import deterministic_world_forge_test_mode
+
+_DETERMINISTIC_ROUTES = {"deterministic", "offline", "reference-safe", "test"}
+
+
+def _contains_deterministic_generator(value: Any) -> bool:
+    pending = [value]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        identity = id(current)
+        if identity in visited:
+            continue
+        visited.add(identity)
+        if isinstance(current, DeterministicWorldForgeGenerator):
+            return True
+        nested = getattr(current, "generator", None)
+        if nested is not None:
+            pending.append(nested)
+        pending.extend(getattr(current, "generators", ()) or ())
+    return False
 
 
 class TrustedAuthorshipWorldForgeGenerator:
@@ -40,6 +63,13 @@ class TrustedAuthorshipWorldForgeGenerator:
         self.fingerprint = fingerprint
         self.directive_hash = directive_hash
         self.entity_manifest_hash = entity_manifest_hash
+
+    def _explicit_fixture_mode(self) -> bool:
+        route = str(self.settings.get("provider_route") or "").strip().casefold()
+        return deterministic_world_forge_test_mode() or (
+            route in _DETERMINISTIC_ROUTES
+            and _contains_deterministic_generator(self.generator)
+        )
 
     def generate(
         self,
@@ -69,11 +99,12 @@ class TrustedAuthorshipWorldForgeGenerator:
         generator_name = str(provenance.get("generator") or "")
         provider_generated = generator_name.startswith("structured_world_forge_provider_")
         if not provider_generated or not provider or not model:
-            if deterministic_world_forge_test_mode() and (
+            fixture_shape = (
                 generator_name.startswith("deterministic_")
                 or bool(provenance.get("deterministic_fixture_only"))
                 or bool(provenance.get("deterministic_fixture_fact_presentation"))
-            ):
+            )
+            if self._explicit_fixture_mode() and fixture_shape:
                 return replace(
                     topic,
                     provenance={
@@ -83,8 +114,12 @@ class TrustedAuthorshipWorldForgeGenerator:
                         "generation_status": "accepted",
                         "test_authorship_exemption": {
                             "schema_version": "rpg_deterministic_fixture_exemption_v1",
-                            "reason": "explicit_rpg_test_mode",
-                            "publishable_outside_test_mode": False,
+                            "reason": "explicit_supplied_deterministic_generator",
+                            "recorded_provider_route": str(
+                                self.settings.get("provider_route") or ""
+                            ),
+                            "server_attested": True,
+                            "publishable_outside_fixture_contract": False,
                         },
                     },
                 )
