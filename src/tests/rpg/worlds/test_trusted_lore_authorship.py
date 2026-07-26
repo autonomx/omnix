@@ -116,9 +116,7 @@ def _authored() -> tuple[dict, dict]:
 
 def test_round_trip_requires_exact_string_hashes_and_server_artifact() -> None:
     authored, artifact = _authored()
-
     report = validate_publishable_authorship(authored, server_artifact=artifact)
-
     assert report["publishable"] is True
     assert report["generation_artifact_id"] == artifact["generation_artifact_id"]
     assert report["machine_structured_string_count"] >= 1
@@ -126,25 +124,18 @@ def test_round_trip_requires_exact_string_hashes_and_server_artifact() -> None:
     mutated = deepcopy(authored)
     mutated["entities"][0]["dossier"]["sections"][0]["paragraphs"][0] += " Changed."
     invalid = validate_publishable_authorship(mutated, server_artifact=artifact)
-
     assert invalid["publishable"] is False
-    assert {
-        row["path"]
-        for row in invalid["blocked_paths"]
-    } >= {"/entities/0/dossier/sections/0/paragraphs/0"}
+    assert {row["path"] for row in invalid["blocked_paths"]} >= {
+        "/entities/0/dossier/sections/0/paragraphs/0"
+    }
 
 
 def test_forged_topic_level_provenance_is_not_authorship_proof() -> None:
     candidate = _candidate()
     candidate["provenance"].update(
-        {
-            "used_llm": True,
-            "provider_authored_presentation": True,
-        }
+        {"used_llm": True, "provider_authored_presentation": True}
     )
-
     report = validate_publishable_authorship(candidate)
-
     assert report["publishable"] is False
     assert any(
         row["code"] in {"trusted_authorship_missing", "server_generation_artifact_missing"}
@@ -159,7 +150,6 @@ def test_human_edit_preserves_llm_parent_lineage_without_ai_relabelling() -> Non
         "A rain-darkened refuge where couriers trade sealed rumours while its owner "
         "struggles beneath syndicate debt."
     )
-
     mixed = attach_human_authorship(
         edited,
         event_id="humanedit:test",
@@ -171,7 +161,6 @@ def test_human_edit_preserves_llm_parent_lineage_without_ai_relabelling() -> Non
         row["path"]: row
         for row in mixed["provenance"]["authorship"]["origin_ledger"]
     }
-
     assert report["publishable"] is True
     assert origins["/entities/0/short_summary"]["authorship_class"] == "human_edited_llm"
     assert origins["/entities/0/short_summary"]["human_edit_event_id"] == "humanedit:test"
@@ -202,7 +191,6 @@ def test_targeted_regeneration_uses_a_second_artifact_only_for_changed_paths() -
         authored_paths=(path,),
         parent_artifact_ids=(old_artifact["generation_artifact_id"],),
     )
-
     merged = attach_partial_llm_authorship(
         regenerated,
         new_artifact,
@@ -214,7 +202,6 @@ def test_targeted_regeneration_uses_a_second_artifact_only_for_changed_paths() -
         row["path"]: row
         for row in merged["provenance"]["authorship"]["origin_ledger"]
     }
-
     assert report["publishable"] is True
     assert report["generation_artifact_count"] == 2
     assert origins[path]["generation_artifact_id"] == new_artifact["generation_artifact_id"]
@@ -245,7 +232,6 @@ def test_partial_regeneration_rejects_uncovered_application_text() -> None:
         authored_paths=(path,),
         parent_artifact_ids=(old_artifact["generation_artifact_id"],),
     )
-
     with pytest.raises(AuthorshipValidationError):
         attach_partial_llm_authorship(
             changed,
@@ -261,7 +247,6 @@ def test_structured_fact_value_is_machine_structured_not_lore_prose() -> None:
         row["path"]: row
         for row in authored["provenance"]["authorship"]["origin_ledger"]
     }
-
     assert origins["/facts/0/object"]["authorship_class"] == "machine_structured"
     assert origins["/facts/0/object"]["generation_artifact_id"] == ""
     assert validate_publishable_authorship(authored, server_artifact=artifact)["publishable"]
@@ -270,9 +255,7 @@ def test_structured_fact_value_is_machine_structured_not_lore_prose() -> None:
 def test_deterministic_marker_blocks_otherwise_valid_candidate() -> None:
     authored, artifact = _authored()
     authored["provenance"]["generator"] = "deterministic_world_forge_v1"
-
     report = validate_publishable_authorship(authored, server_artifact=artifact)
-
     assert report["publishable"] is False
     assert any(
         row["code"] == "deterministic_world_forge_v1"
@@ -282,12 +265,8 @@ def test_deterministic_marker_blocks_otherwise_valid_candidate() -> None:
 
 def test_structural_repair_proves_no_lore_strings_changed() -> None:
     candidate = _candidate()
-    proof = prove_structural_repair_non_authoring(
-        {"response": candidate},
-        candidate,
-    )
+    proof = prove_structural_repair_non_authoring({"response": candidate}, candidate)
     assert proof["non_authoring"] is True
-
     changed = deepcopy(candidate)
     changed["entities"][0]["dossier"]["sections"][0]["paragraphs"].append(
         "Application-authored filler is forbidden."
@@ -304,7 +283,6 @@ def test_profile_fields_publish_explicit_authorship_policy() -> None:
         "entity_ref",
         allowed_target_domains=("places",),
     )
-
     assert field_authorship_policy(description) == AUTHORED_REQUIRED
     assert field_authorship_policy(price) == MACHINE_ALLOWED
     assert field_authorship_policy(location) == STRUCTURAL_ONLY
@@ -319,12 +297,7 @@ def test_profile_fields_publish_explicit_authorship_policy() -> None:
 def test_audit_classifies_verified_and_missing_lore() -> None:
     authored, _artifact = _authored()
     verified = _topic_audit(
-        {
-            "topic_id": "places",
-            "source": "ai",
-            "status": "ready",
-            "content": authored,
-        }
+        {"topic_id": "places", "source": "ai", "status": "ready", "content": authored}
     )
     assert verified["classification"] == "verified_authored"
     assert verified["publishable"] is True
@@ -338,12 +311,7 @@ def test_audit_classifies_verified_and_missing_lore() -> None:
     }
     missing["provenance"] = {}
     audited = _topic_audit(
-        {
-            "topic_id": "places",
-            "source": "legacy",
-            "status": "ready",
-            "content": missing,
-        }
+        {"topic_id": "places", "source": "legacy", "status": "ready", "content": missing}
     )
     assert audited["classification"] == "missing_lore"
     assert audited["entities"][0]["generation_required"] is True
@@ -356,30 +324,26 @@ def test_manual_revision_gets_server_created_human_authorship() -> None:
         title="Manual World",
         canon={"summary": "A human-authored world where the old road remembers every traveller."},
     )
-
     prepared = prepare_direct_world_revision(
-        {"id": "world:manual", "source_mode": "manual"},
-        document,
+        {"id": "world:manual", "source_mode": "manual"}, document
     )
     report = require_revision_authorship(prepared)
-
     assert prepared.provenance["source"] == "manual_world_authoring"
     assert report["publishable"] is True
     assert prepared.content_hash.startswith("sha256:")
 
 
-def test_direct_ai_revision_is_rejected_in_favour_of_guarded_generation() -> None:
+def test_direct_ai_revision_is_rejected_in_favour_of_guarded_generation(monkeypatch) -> None:
+    monkeypatch.delenv("RPG_TEST_MODE", raising=False)
     document = WorldRevisionDocument(
         world_id="world:ai",
         revision=1,
         title="AI World",
         canon={"summary": "Client supplied text must not impersonate generated canon."},
     )
-
     with pytest.raises(ValueError, match="world_revision_requires_guarded_generation"):
         prepare_direct_world_revision(
-            {"id": "world:ai", "source_mode": "ai"},
-            document,
+            {"id": "world:ai", "source_mode": "ai"}, document
         )
 
 
@@ -406,9 +370,7 @@ def test_guarded_generation_revision_and_release_form_a_trusted_chain() -> None:
             "generation_run_id": "run:generated",
         },
     )
-
     receipt = require_release_authorship(revision, release)
-
     assert receipt["publishable"] is True
     assert receipt["release_authorship_source"] == "guarded_generation_compiler"
 
@@ -422,6 +384,5 @@ def test_unknown_revision_cannot_be_released() -> None:
         provenance={"source": "legacy_import"},
         content_hash="sha256:" + "e" * 64,
     )
-
     with pytest.raises(ValueError, match="world_revision_authorship_untrusted"):
         require_revision_authorship(revision)
