@@ -8,10 +8,7 @@ from typing import Any, Mapping
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
-from .generation_authorship_runtime import (
-    generation_artifact,
-    validate_publishable_authorship,
-)
+from .generation_authorship_signing import validate_signed_authorship
 from .generation_publication import publish_world_generation as _publish_legacy
 from .generation_test_mode import deterministic_world_forge_test_mode
 
@@ -66,23 +63,23 @@ def _review_decisions(run: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
 
 
 def _test_fixture_exempt(content: Mapping[str, Any]) -> bool:
+    if not deterministic_world_forge_test_mode():
+        return False
     provenance = content.get("provenance")
     provenance = dict(provenance) if isinstance(provenance, Mapping) else {}
-    return deterministic_world_forge_test_mode() and (
-        bool(provenance.get("deterministic_fixture_only"))
-        or bool(provenance.get("test_authorship_exemption"))
-        or str(provenance.get("generator") or "").startswith("deterministic_")
-    )
+    return bool(provenance.get("deterministic_fixture_only")) or str(
+        provenance.get("generator") or ""
+    ).startswith("deterministic_")
 
 
 def _authorship_reports(
-    graph_topic_ids: tuple[str, ...],
+    nodes: tuple[dict[str, Any], ...],
     *,
     authoring: Mapping[str, Mapping[str, Any]],
-    results: Mapping[str, Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     reports: list[dict[str, Any]] = []
-    for topic_id in graph_topic_ids:
+    for node in nodes:
+        topic_id = str(node.get("topic_id") or "")
         topic = authoring.get(topic_id)
         if topic is None or str(topic.get("status") or "") != "ready":
             continue
@@ -98,13 +95,11 @@ def _authorship_reports(
             continue
         if _test_fixture_exempt(content):
             continue
-        artifact: Mapping[str, Any] | None = None
-        if str(topic.get("source") or "") == "ai":
-            result = results.get(topic_id)
-            candidate = result.get("candidate") if isinstance(result, Mapping) else None
-            if isinstance(candidate, Mapping):
-                artifact = generation_artifact(candidate)
-        report = validate_publishable_authorship(content, server_artifact=artifact)
+        metadata = node.get("metadata")
+        metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
+        policy = metadata.get("authorship_policy")
+        policy = dict(policy) if isinstance(policy, Mapping) else {}
+        report = validate_signed_authorship(content, policy=policy)
         if not report["publishable"]:
             reports.append({"topic_id": topic_id, **report})
     return reports
@@ -240,11 +235,7 @@ def publication_review_report(
                     }
                 )
 
-    authorship_failures = _authorship_reports(
-        graph_topic_ids,
-        authoring=authoring,
-        results=by_topic,
-    )
+    authorship_failures = _authorship_reports(nodes, authoring=authoring)
     blockers = (
         set(missing)
         | set(flagged)
@@ -258,7 +249,7 @@ def publication_review_report(
         | {row["topic_id"] for row in authorship_failures}
     )
     return {
-        "schema_version": "rpg_world_generation_publication_review_v3",
+        "schema_version": "rpg_world_generation_publication_review_v4",
         "run_id": run_id,
         "world_id": str(run["world_id"]),
         "draft_revision": int(run["draft_revision"]),
