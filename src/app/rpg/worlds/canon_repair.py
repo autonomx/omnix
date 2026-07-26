@@ -18,7 +18,7 @@ from app.rpg.session.genesis.world_forge_integrity import (
     WorldForgeIntegrityError,
     WorldForgeIntegrityIssue,
 )
-from app.rpg.session.genesis.world_forge_presentation import (
+from app.rpg.session.genesis.world_forge_presentation_trusted import (
     render_fact_derived_presentations,
 )
 from app.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
