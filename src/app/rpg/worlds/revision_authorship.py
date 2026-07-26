@@ -4,7 +4,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-from .contracts import WorldRevisionDocument, canonical_content_hash
+from .contracts import (
+    WorldReleaseDocument,
+    WorldRevisionDocument,
+    canonical_content_hash,
+)
 from .generation_authorship_runtime import (
     attach_human_authorship,
     require_publishable_authorship,
@@ -84,4 +88,47 @@ def require_revision_authorship(document: WorldRevisionDocument) -> dict[str, An
     )
 
 
-__all__ = ["prepare_direct_world_revision", "require_revision_authorship"]
+def require_release_authorship(
+    revision: WorldRevisionDocument,
+    release: WorldReleaseDocument,
+) -> dict[str, Any]:
+    """Require either explicit certification or the guarded generation compiler chain."""
+
+    receipt = require_revision_authorship(revision)
+    certification = dict(release.certification)
+    if bool(certification.get("authorship_validated")):
+        return {
+            **receipt,
+            "release_authorship_validated": True,
+            "release_authorship_source": str(
+                certification.get("authorship_source") or receipt.get("source") or ""
+            ),
+        }
+
+    revision_provenance = dict(revision.provenance)
+    compiler = dict(release.compiler_provenance)
+    revision_run_id = str(revision_provenance.get("generation_run_id") or "")
+    release_run_id = str(compiler.get("generation_run_id") or "")
+    if (
+        str(revision_provenance.get("source") or "") == "durable_world_generation"
+        and str(compiler.get("compiler") or "")
+        == "rpg_world_generation_publication_v2"
+        and revision_run_id
+        and release_run_id == revision_run_id
+    ):
+        return {
+            **receipt,
+            "release_authorship_validated": True,
+            "release_authorship_source": "guarded_generation_compiler",
+        }
+    raise ValueError(
+        f"world_release_authorship_uncertified:{revision.world_id}:"
+        f"{revision.revision}:{release.release}"
+    )
+
+
+__all__ = [
+    "prepare_direct_world_revision",
+    "require_release_authorship",
+    "require_revision_authorship",
+]
