@@ -9,11 +9,12 @@ from typing import Any, Mapping
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
-from .generation_authorship_runtime import generation_artifact
-from .generation_authorship_signing import (
-    strict_lore_string_leaves,
-    validate_signed_authorship,
+from .generation_authorship_policy_signing import (
+    signed_authorship_policy,
+    validate_policy_bound_authorship,
 )
+from .generation_authorship_runtime import generation_artifact
+from .generation_authorship_signing import strict_lore_string_leaves
 
 _BLOCKED_DETERMINISTIC_CODES = {
     "deterministic_fallback",
@@ -77,7 +78,8 @@ def _entity_rows(
         for row in content.get("entities") or ()
         if isinstance(row, Mapping)
     ]
-    leaves = strict_lore_string_leaves(content)
+    policy = signed_authorship_policy(content)
+    leaves = strict_lore_string_leaves(content, policy=policy)
     rows: list[dict[str, Any]] = []
     for index, entity in enumerate(entities):
         prefix = f"/entities/{index}/"
@@ -130,7 +132,7 @@ def _topic_audit(topic: Mapping[str, Any]) -> dict[str, Any]:
         }
     payload = dict(content)
     artifact = generation_artifact(payload)
-    report = validate_signed_authorship(payload)
+    report = validate_policy_bound_authorship(payload)
     blocked_paths = [dict(row) for row in report.get("blocked_paths") or ()]
     entity_rows = _entity_rows(payload, blocked_paths)
     generation_required = any(
