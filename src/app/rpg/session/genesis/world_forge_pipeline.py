@@ -1,8 +1,11 @@
 """End-to-end profile-first World Forge pipeline used before campaign launch."""
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping
 
 from .canon_audit import CanonAuditReport, audit_generated_canon
@@ -58,6 +61,40 @@ class CampaignWorldForgeResult:
             "compilation": self.compilation.as_dict(),
             "runtime_bootstrap": dict(self.runtime_bootstrap),
         }
+
+
+def _canonical_hash(value: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def _attach_runtime_bootstrap(
+    compilation: CanonCompilationResult,
+    runtime_bootstrap: Mapping[str, Any],
+) -> CanonCompilationResult:
+    document = copy.deepcopy(dict(compilation.document))
+    document.pop("content_hash", None)
+    manifest = dict(document.get("manifest") or {})
+    manifest["causal_runtime_bootstrap"] = copy.deepcopy(dict(runtime_bootstrap))
+    document["manifest"] = manifest
+    document["content_hash"] = _canonical_hash(document)
+    return replace(
+        compilation,
+        document=document,
+        metadata={
+            **dict(compilation.metadata),
+            "content_hash": document["content_hash"],
+            "causal_runtime_schema_version": str(
+                runtime_bootstrap.get("schema_version") or ""
+            ),
+            "causal_runtime_hash": str(runtime_bootstrap.get("runtime_hash") or ""),
+        },
+    )
 
 
 def _graph_from_payload(value: Mapping[str, Any]) -> CampaignTopicGraph:
@@ -248,6 +285,7 @@ def run_campaign_world_forge(
         starting_location=contract.world_options.starting_location,
         canon_revision=canon_revision,
     )
+    compilation = _attach_runtime_bootstrap(compilation, runtime_bootstrap)
     return CampaignWorldForgeResult(
         graph=graph,
         generation=generation,
