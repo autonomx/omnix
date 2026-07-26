@@ -150,6 +150,9 @@ def build_profile_topic_graph(
     profile = augment_profile_with_causal_traceability(profile)
     domain_nodes = tuple(_domain_node(domain, depth=depth) for domain in profile.domains)
     domain_ids = tuple(domain.domain_id for domain in profile.domains)
+    base_profile_hash = str(
+        dict(profile.provenance).get("base_profile_hash") or profile.content_hash
+    )
     graph = CampaignTopicGraph(
         graph_version="rpg_profile_topic_graph_v2",
         campaign_template=str(campaign_template or profile.profile_id),
@@ -158,7 +161,8 @@ def build_profile_topic_graph(
         metadata={
             "genre_profile_id": profile.profile_id,
             "genre_profile_version": profile.version,
-            "resolved_profile_hash": profile.content_hash,
+            "resolved_profile_hash": base_profile_hash,
+            "compiled_profile_hash": profile.content_hash,
             "resolved_profile": profile.as_dict(),
             "genre_tags": list(profile.genre_tags),
             "tone": str(tone or ""),
