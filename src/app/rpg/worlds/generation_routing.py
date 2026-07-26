@@ -1,10 +1,4 @@
-"""Resolve and execute the durable provider route stored with a World Forge run.
-
-The browser may request the ``configured`` route, but a durable generation run must
-record the concrete provider and model that will execute it. Workers and editorial
-regeneration then use those stored values instead of re-resolving mutable global
-settings for every provider call.
-"""
+"""Resolve the concrete provider route stored with a durable World Forge run."""
 from __future__ import annotations
 
 import os
@@ -19,9 +13,7 @@ from app.rpg_world_forge_provider import (
     WorldForgeProviderConfig,
 )
 
-from .generation_recovering_provider import (
-    RecoveringFirstPassWorldForgeTopicGenerator,
-)
+from .generation_recovering_provider import RecoveringFirstPassWorldForgeTopicGenerator
 
 _CONFIGURED_VALUES = {"", "auto", "configured", "settings"}
 _DETERMINISTIC_VALUES = {"deterministic", "offline", "reference-safe", "test"}
@@ -38,6 +30,10 @@ class ResolvedWorldForgeRoute:
     @property
     def is_deterministic(self) -> bool:
         return self.provider == "deterministic"
+
+
+class WorldForgeRouteUnavailableError(ValueError):
+    pass
 
 
 def _provider_key(value: Any) -> str:
@@ -74,8 +70,9 @@ def resolve_world_forge_route(
     model: str = "configured",
     *,
     environ: Mapping[str, str] | None = None,
+    allow_deterministic: bool = False,
 ) -> ResolvedWorldForgeRoute:
-    """Resolve a concrete route once, before a durable generation run is created."""
+    """Resolve one concrete provider or fail before a durable run is created."""
 
     env = environ if environ is not None else os.environ
     requested_provider = _provider_key(provider_route)
@@ -84,10 +81,14 @@ def resolve_world_forge_route(
     explicit_model = requested_model.casefold() not in _CONFIGURED_VALUES
 
     if requested_provider in _DETERMINISTIC_VALUES:
+        if not allow_deterministic:
+            raise WorldForgeRouteUnavailableError(
+                "deterministic_world_forge_route_is_test_only"
+            )
         return ResolvedWorldForgeRoute(
             "deterministic",
             "reference-safe",
-            "explicit",
+            "explicit_test",
             requested_provider,
             requested_model,
         )
@@ -102,6 +103,10 @@ def resolve_world_forge_route(
             resolved_model = env_model
         if not resolved_model and settings_provider == requested_provider:
             resolved_model = settings_model
+        if not resolved_model:
+            raise WorldForgeRouteUnavailableError(
+                f"world_forge_model_required:{requested_provider}"
+            )
         return ResolvedWorldForgeRoute(
             requested_provider,
             resolved_model,
@@ -110,7 +115,7 @@ def resolve_world_forge_route(
             requested_model,
         )
 
-    if env_provider:
+    if env_provider and env_model:
         return ResolvedWorldForgeRoute(
             env_provider,
             requested_model if explicit_model else env_model,
@@ -119,7 +124,7 @@ def resolve_world_forge_route(
             requested_model,
         )
 
-    if settings_provider:
+    if settings_provider and settings_model:
         return ResolvedWorldForgeRoute(
             settings_provider,
             requested_model if explicit_model else settings_model,
@@ -128,29 +133,25 @@ def resolve_world_forge_route(
             requested_model,
         )
 
-    return ResolvedWorldForgeRoute(
-        "deterministic",
-        "reference-safe",
-        "deterministic_fallback",
-        requested_provider,
-        requested_model,
+    raise WorldForgeRouteUnavailableError(
+        "world_forge_provider_and_model_required:configure_rpg.world_forge.generate"
     )
 
 
 def build_world_forge_generator_from_settings(
     settings: Mapping[str, Any],
 ) -> WorldForgeTopicGenerator:
-    """Build the recorded model with bounded same-model structural recovery."""
+    """Build the recorded provider with bounded same-model structural recovery."""
 
     provider_id = _provider_key(settings.get("provider_route"))
     model_id = _model_key(settings.get("model"))
-    if provider_id in _CONFIGURED_VALUES:
+    if provider_id in _CONFIGURED_VALUES or not provider_id or not model_id:
         return UnavailableWorldForgeTopicGenerator(
-            "durable World Forge job contains an unresolved provider route"
+            "durable World Forge job has no concrete provider and model"
         )
     if provider_id in _DETERMINISTIC_VALUES or provider_id == "deterministic":
         return UnavailableWorldForgeTopicGenerator(
-            "deterministic World Forge lore is disabled; configure a provider and retry"
+            "deterministic World Forge lore is disabled in production"
         )
 
     config = replace(
@@ -196,13 +197,23 @@ def build_world_forge_generator_from_settings(
 def build_world_forge_generator_for_run(
     run: Mapping[str, Any] | None,
 ) -> WorldForgeTopicGenerator:
-    """Use durable settings when present, resolving legacy runs once for compatibility."""
-
     settings = dict((run or {}).get("settings") or {})
     provider_id = _provider_key(settings.get("provider_route"))
     if provider_id and provider_id not in _CONFIGURED_VALUES:
         return build_world_forge_generator_from_settings(settings)
-    route = resolve_world_forge_route()
+    try:
+        route = resolve_world_forge_route()
+    except WorldForgeRouteUnavailableError as exc:
+        return UnavailableWorldForgeTopicGenerator(str(exc))
     return build_world_forge_generator_from_settings(
         {"provider_route": route.provider, "model": route.model}
     )
+
+
+__all__ = [
+    "ResolvedWorldForgeRoute",
+    "WorldForgeRouteUnavailableError",
+    "build_world_forge_generator_for_run",
+    "build_world_forge_generator_from_settings",
+    "resolve_world_forge_route",
+]
