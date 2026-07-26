@@ -19,7 +19,10 @@ from .world_forge_domains import (
     normalize_structured_domain,
     validate_world_brief_grounding,
 )
-from .world_forge_fact_pipeline_trusted import compile_structured_entity_facts
+from .world_forge_fact_pipeline_fixture import compile_deterministic_fixture_facts
+from .world_forge_fact_pipeline_trusted import (
+    compile_structured_entity_facts as compile_trusted_structured_entity_facts,
+)
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_integrity import validate_and_normalize_provider_topic
 from .world_forge_lore_scoring import require_preferred_lore_quality
@@ -211,10 +214,19 @@ class ReferenceSafeWorldForgeGenerator:
                 topic,
                 dependency_topics,
             )
-        topic = compile_structured_entity_facts(
-            node,
-            topic,
-            dependency_topics,
+
+        topic = (
+            compile_trusted_structured_entity_facts(
+                node,
+                topic,
+                dependency_topics,
+            )
+            if provider_generated
+            else compile_deterministic_fixture_facts(
+                node,
+                topic,
+                dependency_topics,
+            )
         )
         if provider_generated:
             semantic_report = require_topic_semantic_quality(
