@@ -7,6 +7,7 @@ from typing import Any, Mapping
 
 from app.providers.registry import get_provider
 from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
 from app.rpg_world_forge_provider import (
     UnavailableWorldForgeTopicGenerator,
@@ -16,6 +17,7 @@ from app.rpg_world_forge_provider import (
 from .generation_recovery_evidence import (
     EvidenceBackedRecoveringWorldForgeTopicGenerator,
 )
+from .generation_test_mode import deterministic_world_forge_test_mode
 
 _CONFIGURED_VALUES = {"", "auto", "configured", "settings"}
 _DETERMINISTIC_VALUES = {"deterministic", "offline", "reference-safe", "test"}
@@ -77,13 +79,14 @@ def resolve_world_forge_route(
     """Resolve one concrete provider or fail before a durable run is created."""
 
     env = environ if environ is not None else os.environ
+    test_mode = deterministic_world_forge_test_mode(env)
     requested_provider = _provider_key(provider_route)
     requested_model = _model_key(model)
     explicit_provider = requested_provider not in _CONFIGURED_VALUES
     explicit_model = requested_model.casefold() not in _CONFIGURED_VALUES
 
     if requested_provider in _DETERMINISTIC_VALUES:
-        if not allow_deterministic:
+        if not (allow_deterministic or test_mode):
             raise WorldForgeRouteUnavailableError(
                 "deterministic_world_forge_route_is_test_only"
             )
@@ -135,6 +138,15 @@ def resolve_world_forge_route(
             requested_model,
         )
 
+    if test_mode:
+        return ResolvedWorldForgeRoute(
+            "deterministic",
+            "reference-safe",
+            "rpg_test_mode",
+            requested_provider,
+            requested_model,
+        )
+
     raise WorldForgeRouteUnavailableError(
         "world_forge_provider_and_model_required:configure_rpg.world_forge.generate"
     )
@@ -152,6 +164,8 @@ def build_world_forge_generator_from_settings(
             "durable World Forge job has no concrete provider and model"
         )
     if provider_id in _DETERMINISTIC_VALUES or provider_id == "deterministic":
+        if deterministic_world_forge_test_mode():
+            return ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator())
         return UnavailableWorldForgeTopicGenerator(
             "deterministic World Forge lore is disabled in production"
         )
