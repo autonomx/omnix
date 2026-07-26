@@ -111,7 +111,7 @@ def compile_cross_domain_relationships(
                         kind,
                         visibility=str(fact.get("visibility") or "game_master_canon"),
                         content=str(fact.get("content") or ""),
-                        source="profile_typed_relationship_compiler_v2",
+                        source="profile_typed_relationship_compiler_v1",
                     )
                 )
 
