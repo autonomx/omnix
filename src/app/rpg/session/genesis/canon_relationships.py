@@ -64,6 +64,18 @@ def _profile_relationship_kind(fact: Mapping[str, Any]) -> str:
     return field_id or "references"
 
 
+def _is_profile_structured_fact(fact: Mapping[str, Any]) -> bool:
+    """Recognise trusted profile facts without pinning one compiler revision."""
+
+    source = str(fact.get("source") or "")
+    return (
+        source.startswith("profile_structured_fact_compiler_v")
+        and bool(str(fact.get("subject") or "").strip())
+        and bool(str(fact.get("field_id") or fact.get("predicate") or "").strip())
+        and str(fact.get("value_type") or "") in {"entity_ref", "entity_ref_list"}
+    )
+
+
 def compile_cross_domain_relationships(
     topics: Iterable[GeneratedTopic],
 ) -> tuple[dict[str, Any], ...]:
@@ -81,7 +93,7 @@ def compile_cross_domain_relationships(
     typed_fields: set[tuple[str, str]] = set()
     for topic in topic_rows:
         for fact in topic.facts:
-            if str(fact.get("source") or "") != "profile_structured_fact_compiler_v1":
+            if not _is_profile_structured_fact(fact):
                 continue
             value_type = str(fact.get("value_type") or "")
             source_id = str(fact.get("subject") or "").strip()
@@ -99,7 +111,7 @@ def compile_cross_domain_relationships(
                         kind,
                         visibility=str(fact.get("visibility") or "game_master_canon"),
                         content=str(fact.get("content") or ""),
-                        source="profile_typed_relationship_compiler_v1",
+                        source="profile_typed_relationship_compiler_v2",
                     )
                 )
 
