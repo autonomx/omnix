@@ -23,6 +23,7 @@ from .world_forge_generation import (
 )
 from .world_forge_historical_planning import build_historical_planning_topics
 from .world_forge_plan_audit import attach_plan_reconciliation
+from .world_forge_plan_projection import PlanningConstrainedWorldForgeGenerator
 from .world_forge_pressure_planning import build_pressure_planning_topics
 from .world_forge_profile_generation import resolve_or_generate_genre_profile
 from .world_forge_profile_graph import (
@@ -61,12 +62,7 @@ class CampaignWorldForgeResult:
 
 
 def _canonical_hash(value: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
@@ -249,9 +245,12 @@ def run_campaign_world_forge(
         **social_topics,
         **pressure_topics,
     }
+    constrained_generator = PlanningConstrainedWorldForgeGenerator(
+        generator or _default_generator()
+    )
     generation = generate_campaign_topics(
         graph,
-        generator=generator or _default_generator(),
+        generator=constrained_generator,
         seed=seed,
         campaign_context={
             **world_context,
@@ -270,11 +269,7 @@ def run_campaign_world_forge(
     audit = apply_world_forge_quality_audit(generation.topics, audit)
     audit = attach_causal_evaluation(generation.topics, audit)
     audit = attach_plan_reconciliation(generation.topics, planning_topics, audit)
-    runtime_bootstrap = (
-        bootstrap_causal_runtime(planning_topics)
-        if generation.passed and audit.passed
-        else {}
-    )
+    runtime_bootstrap = bootstrap_causal_runtime(planning_topics) if generation.passed and audit.passed else {}
     compilation = compile_campaign_bible(
         generation,
         compiled_relationships=relationships,
