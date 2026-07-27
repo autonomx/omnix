@@ -226,6 +226,7 @@ def _walk_references(
     topic_id: str,
     path: str,
     field: str,
+    item_id: str,
     declared_fields: set[str],
     all_entity_ids: set[str],
     owned_entity_ids: set[str],
@@ -233,15 +234,17 @@ def _walk_references(
     issues: list[ManifestReferenceIssue],
 ) -> None:
     if isinstance(value, Mapping):
-        item_id = str(value.get("id") or value.get("document_id") or "")
+        current_item_id = str(
+            value.get("id") or value.get("document_id") or item_id
+        )
         for key, child in value.items():
             rendered_key = str(key)
-            child_path = f"{path}/{rendered_key}"
             _walk_references(
                 child,
                 topic_id=topic_id,
-                path=child_path,
+                path=f"{path}/{rendered_key}",
                 field=rendered_key,
+                item_id=current_item_id,
                 declared_fields=declared_fields,
                 all_entity_ids=all_entity_ids,
                 owned_entity_ids=owned_entity_ids,
@@ -256,6 +259,7 @@ def _walk_references(
                 topic_id=topic_id,
                 path=f"{path}/{index}",
                 field=field,
+                item_id=item_id,
                 declared_fields=declared_fields,
                 all_entity_ids=all_entity_ids,
                 owned_entity_ids=owned_entity_ids,
@@ -285,6 +289,7 @@ def _walk_references(
             topic_id=topic_id,
             path=path,
             target_id=value,
+            item_id=item_id,
             message=message,
         )
     )
@@ -319,6 +324,7 @@ def manifest_reference_issues(
                 topic_id=topic_id,
                 path=f"/{collection}",
                 field=collection,
+                item_id="",
                 declared_fields=declared_fields,
                 all_entity_ids=all_ids,
                 owned_entity_ids=owned_ids,
