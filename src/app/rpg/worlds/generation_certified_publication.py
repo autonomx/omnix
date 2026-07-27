@@ -83,6 +83,7 @@ def publish_certified_world_generation(
             context,
             run_id=run_id,
         )
+        compilation_run = {**dict(run), "_review_results": review_results}
         current_row = work.connection.execute(
             "SELECT COALESCE(MAX(revision), 0) FROM omnix_rpg_world_revisions "
             "WHERE workspace_id = %s AND world_id = %s",
@@ -92,10 +93,9 @@ def publish_certified_world_generation(
         asset_bindings = approved_world_asset_bindings(work, context, world_id)
 
         artifact = compile_world_generation_certified_artifact(
-            run=run,
+            run=compilation_run,
             world=world,
             topic_rows=topic_rows,
-            review_results=review_results,
             revision=current_revision + 1,
             asset_bindings=asset_bindings,
         )
