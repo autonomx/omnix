@@ -50,7 +50,7 @@ describe('ImageLatestResult', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Enlarged Night harbor' });
     expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByRole('img', { name: 'Night harbor' })).toHaveAttribute(
+    expect(within(dialog).getByTestId('image-preview-loader')).toHaveAttribute(
       'src',
       '/api/assets/image%3Anight/file',
     );
