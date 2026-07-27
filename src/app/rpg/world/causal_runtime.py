@@ -56,7 +56,8 @@ def _initial_pressure_statuses(planning_topics: Mapping[str, Any]) -> dict[str, 
 def bootstrap_causal_runtime(planning_topics: Mapping[str, Any]) -> dict[str, Any]:
     initial_state = build_mutable_world_state(planning_topics)
     runtime: dict[str, Any] = {
-        "schema_version": "rpg_causal_world_runtime_v2",
+        # Additive lifecycle fields remain compatible with the established runtime contract.
+        "schema_version": "rpg_causal_world_runtime_v1",
         "revision": 1,
         "initial_state": copy.deepcopy(initial_state),
         "state": copy.deepcopy(initial_state),
