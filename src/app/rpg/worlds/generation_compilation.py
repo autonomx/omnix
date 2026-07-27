@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from typing import Any, Literal, Mapping
 
 from .contracts import WorldRevisionDocument
+from .generation_profile_references import (
+    profile_reference_report,
+    require_valid_profile_references,
+)
 from .generation_publication import (
     WorldGenerationPublication,
     compile_world_generation_publication,
@@ -65,22 +69,26 @@ def _certification_with_integrity(
     *,
     mode: WorldGenerationCompilationMode,
     integrity: Mapping[str, Any],
+    profile_references: Mapping[str, Any],
 ) -> dict[str, Any]:
     payload = {
         **dict(certification),
         "compilation_mode": mode,
         "strict_integrity": dict(integrity),
+        "profile_reference_integrity": dict(profile_references),
     }
+    missing = [
+        str(value)
+        for value in payload.get("missing_requirements") or ()
+        if str(value)
+    ]
     if not bool(integrity.get("passed")):
         payload["launch_ready"] = False
-        missing = [
-            str(value)
-            for value in payload.get("missing_requirements") or ()
-            if str(value)
-        ]
-        payload["missing_requirements"] = list(
-            dict.fromkeys([*missing, "strict_integrity"])
-        )
+        missing.append("strict_integrity")
+    if not bool(profile_references.get("passed")):
+        payload["launch_ready"] = False
+        missing.append("profile_reference_integrity")
+    payload["missing_requirements"] = list(dict.fromkeys(missing))
     return payload
 
 
@@ -98,9 +106,12 @@ def compile_world_generation_artifact(
 
     if mode not in {"diagnostic_draft", "certified_release"}:
         raise ValueError(f"unsupported_world_generation_compilation_mode:{mode}")
+    topic_graph = dict(run.get("graph") or {})
     integrity = strict_integrity_report(topic_rows)
+    profile_references = profile_reference_report(topic_rows, topic_graph)
     if mode == "certified_release":
         require_unique_canon_identifiers(topic_rows)
+        require_valid_profile_references(topic_rows, topic_graph)
     publication = compile_world_generation_publication(
         run=run,
         world=world,
@@ -113,6 +124,7 @@ def compile_world_generation_artifact(
         publication.certification,
         mode=mode,
         integrity=integrity,
+        profile_references=profile_references,
     )
     if mode == "certified_release":
         return WorldGenerationCertifiedArtifact(
