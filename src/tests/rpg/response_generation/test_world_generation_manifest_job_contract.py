@@ -86,6 +86,18 @@ def test_every_ready_job_carries_one_shared_authoritative_manifest() -> None:
         for row in slots
     )
 
+    topic_payload_by_id = {
+        plan.topic_id: dict(plan.job_payload["input_payload"]["topic"])
+        for plan in plans
+    }
+    actor_node_metadata = dict(topic_payload_by_id["actors"]["metadata"])
+    assert actor_node_metadata["authoritative_entity_ids"] == [
+        "ent:actors:001",
+        "ent:actors:002",
+    ]
+    assert actor_node_metadata["entity_manifest_slots"] == slots_by_topic["actors"]
+    assert actor_node_metadata["entity_manifest_hash"] in manifest_hashes
+
     metadata_by_topic = {
         plan.topic_id: dict(plan.job_payload["metadata"])
         for plan in plans
