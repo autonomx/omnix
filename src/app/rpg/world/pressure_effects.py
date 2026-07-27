@@ -1,7 +1,7 @@
 """Deterministic runtime effects generated from World Forge pressure plans."""
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -10,6 +10,8 @@ from .causal_reducer import (
     WorldStateReductionReceipt,
     reduce_world_state,
 )
+
+_PRESSURE_STATUSES = frozenset({"active", "escalated", "contained", "resolved"})
 
 
 class PressureEffectRecord(BaseModel):
@@ -21,6 +23,9 @@ class PressureEffectRecord(BaseModel):
     severity_before: float
     severity_delta: float
     affected_delta_ids: tuple[str, ...]
+    status_before: str = "active"
+    status_after: str = "active"
+    transitioned: bool = False
     escalated: bool
     resolved: bool
 
@@ -28,7 +33,7 @@ class PressureEffectRecord(BaseModel):
 class PressureTickResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: str = "rpg_pressure_tick_result_v1"
+    schema_version: str = "rpg_pressure_tick_result_v2"
     tick: int = Field(ge=0)
     deltas: tuple[WorldStateDelta, ...]
     effects: tuple[PressureEffectRecord, ...]
@@ -55,11 +60,39 @@ def _region_change(trend: str, base_value: float, tick: int) -> float:
     return max(0.0, base_value)
 
 
+def _status_before(
+    pressure_id: str,
+    pressure_statuses: Mapping[str, str] | None,
+) -> str:
+    status = str(dict(pressure_statuses or {}).get(pressure_id) or "active")
+    return status if status in _PRESSURE_STATUSES else "active"
+
+
+def _status_after(
+    status_before: str,
+    *,
+    trend: str,
+    projected: float,
+    escalation_threshold: float,
+    resolution_threshold: float,
+) -> str:
+    if status_before == "resolved":
+        return "resolved"
+    if projected <= resolution_threshold:
+        return "resolved"
+    if projected >= escalation_threshold:
+        return "escalated"
+    if trend == "contained":
+        return "contained"
+    return "active"
+
+
 def pressure_deltas_for_tick(
     pressure_plan: Mapping[str, Any],
     state: Mapping[str, Any],
     *,
     tick: int,
+    pressure_statuses: Mapping[str, str] | None = None,
 ) -> tuple[tuple[WorldStateDelta, ...], tuple[PressureEffectRecord, ...]]:
     cells = dict(state.get("cells") or {})
     deltas: list[WorldStateDelta] = []
@@ -76,8 +109,29 @@ def pressure_deltas_for_tick(
         pressure_id = str(pressure["pressure_id"])
         pressure_cell = dict(cells.get(pressure_id) or {})
         values = dict(pressure_cell.get("values") or {})
-        severity_before = float(values.get("pressure_severity", pressure.get("severity", 0)))
+        severity_before = float(
+            values.get("pressure_severity", pressure.get("severity", 0))
+        )
         trend = str(pressure.get("trend") or "contained")
+        status_before = _status_before(pressure_id, pressure_statuses)
+        if status_before == "resolved":
+            effects.append(
+                PressureEffectRecord(
+                    pressure_id=pressure_id,
+                    tick=tick,
+                    trend=trend,
+                    severity_before=severity_before,
+                    severity_delta=0.0,
+                    affected_delta_ids=(),
+                    status_before="resolved",
+                    status_after="resolved",
+                    transitioned=False,
+                    escalated=False,
+                    resolved=False,
+                )
+            )
+            continue
+
         severity_delta = _severity_change(trend, tick)
         effect_delta_ids: list[str] = []
         severity_delta_id = f"delta:pressure:{tick}:{pressure_id}:severity"
@@ -97,7 +151,11 @@ def pressure_deltas_for_tick(
         effect_delta_ids.append(severity_delta_id)
 
         planned = pressure.get("next_tick_delta")
-        if isinstance(planned, Mapping) and planned.get("target_id") and planned.get("dimension"):
+        if (
+            isinstance(planned, Mapping)
+            and planned.get("target_id")
+            and planned.get("dimension")
+        ):
             region_delta_id = f"delta:pressure:{tick}:{pressure_id}:affected"
             base_value = float(planned.get("value") or 0)
             deltas.append(
@@ -116,6 +174,22 @@ def pressure_deltas_for_tick(
             effect_delta_ids.append(region_delta_id)
 
         projected = max(0.0, min(100.0, severity_before + severity_delta))
+        status_after = _status_after(
+            status_before,
+            trend=trend,
+            projected=projected,
+            escalation_threshold=float(
+                pressure.get("escalation_threshold")
+                if pressure.get("escalation_threshold") is not None
+                else 101
+            ),
+            resolution_threshold=float(
+                pressure.get("resolution_threshold")
+                if pressure.get("resolution_threshold") is not None
+                else -1
+            ),
+        )
+        transitioned = status_after != status_before
         effects.append(
             PressureEffectRecord(
                 pressure_id=pressure_id,
@@ -124,8 +198,11 @@ def pressure_deltas_for_tick(
                 severity_before=severity_before,
                 severity_delta=severity_delta,
                 affected_delta_ids=tuple(effect_delta_ids),
-                escalated=projected >= float(pressure.get("escalation_threshold") or 101),
-                resolved=projected <= float(pressure.get("resolution_threshold") or -1),
+                status_before=status_before,
+                status_after=status_after,
+                transitioned=transitioned,
+                escalated=transitioned and status_after == "escalated",
+                resolved=transitioned and status_after == "resolved",
             )
         )
     return tuple(deltas), tuple(effects)
@@ -136,11 +213,13 @@ def apply_pressure_tick(
     state: Mapping[str, Any],
     *,
     tick: int,
+    pressure_statuses: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, Any], PressureTickResult]:
     deltas, effects = pressure_deltas_for_tick(
         pressure_plan,
         state,
         tick=tick,
+        pressure_statuses=pressure_statuses,
     )
     next_state, receipt = reduce_world_state(state, deltas)
     return next_state, PressureTickResult(
