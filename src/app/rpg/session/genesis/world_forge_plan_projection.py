@@ -7,6 +7,7 @@ from typing import Any, Mapping
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_fact_pipeline_trusted import compile_structured_entity_facts
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
+from .world_forge_presentation_trusted import render_fact_derived_presentations
 
 
 def _entity_id(row: Mapping[str, Any]) -> str:
@@ -223,6 +224,15 @@ def _planned_causal_links(
     return tuple(rows)
 
 
+def _compile_and_render(
+    node: CampaignTopicNode,
+    topic: GeneratedTopic,
+    dependency_topics: Mapping[str, GeneratedTopic],
+) -> GeneratedTopic:
+    compiled = compile_structured_entity_facts(node, topic, dependency_topics)
+    return render_fact_derived_presentations(node, compiled)
+
+
 def project_planning_into_topic(
     node: CampaignTopicNode,
     topic: GeneratedTopic,
@@ -233,11 +243,7 @@ def project_planning_into_topic(
     planning = _planning_slice(campaign_context)
     topic, identity_changed = _materialize_authoritative_ids(node, topic)
     if not planning:
-        return (
-            compile_structured_entity_facts(node, topic, dependency_topics)
-            if identity_changed
-            else topic
-        )
+        return _compile_and_render(node, topic, dependency_topics) if identity_changed else topic
 
     entities: list[dict[str, Any]] = []
     changed_fields: dict[str, set[str]] = {}
@@ -265,11 +271,6 @@ def project_planning_into_topic(
         fact
         for fact in topic.facts
         if not str(fact.get("source") or "").startswith("profile_structured_fact_compiler_v")
-        and not (
-            str(fact.get("subject") or "") in changed_fields
-            and str(fact.get("field_id") or fact.get("predicate") or "")
-            in changed_fields[str(fact.get("subject") or "")]
-        )
     )
     projected = replace(
         topic,
@@ -282,7 +283,7 @@ def project_planning_into_topic(
             "planned_causal_link_count": len(supplemental),
         },
     )
-    return compile_structured_entity_facts(node, projected, dependency_topics)
+    return _compile_and_render(node, projected, dependency_topics)
 
 
 class PlanningConstrainedWorldForgeGenerator:
