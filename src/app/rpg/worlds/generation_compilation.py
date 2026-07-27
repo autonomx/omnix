@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, Sequence
 
 from .contracts import WorldRevisionDocument
 from .generation_audit_stages import two_stage_audit_report
@@ -70,6 +70,18 @@ class WorldGenerationCertifiedArtifact:
         return {"mode": self.mode, **self.publication.as_dict()}
 
 
+def _review_rows(
+    run: Mapping[str, Any],
+    explicit: Sequence[Mapping[str, Any]] | None,
+) -> list[Mapping[str, Any]]:
+    if explicit is not None:
+        return list(explicit)
+    embedded = run.get("_review_results")
+    if not isinstance(embedded, Sequence) or isinstance(embedded, (str, bytes)):
+        return []
+    return [row for row in embedded if isinstance(row, Mapping)]
+
+
 def _certification_with_integrity(
     certification: Mapping[str, Any],
     *,
@@ -117,7 +129,7 @@ def compile_world_generation_artifact(
     revision: int,
     starting_location_override: str = "",
     asset_bindings: Mapping[str, Any] | None = None,
-    review_results: list[Mapping[str, Any]] | None = None,
+    review_results: Sequence[Mapping[str, Any]] | None = None,
 ) -> WorldGenerationDiagnosticDraft | WorldGenerationCertifiedArtifact:
     """Compile one immutable snapshot while exposing only mode-appropriate output."""
 
@@ -127,7 +139,7 @@ def compile_world_generation_artifact(
     integrity = strict_integrity_report(topic_rows)
     profile_references = profile_reference_report(topic_rows, topic_graph)
     profile_dossiers = profile_dossier_report(topic_rows, topic_graph)
-    finding_policy = finding_waiver_policy_report(review_results or [])
+    finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
     if mode == "certified_release":
         require_unique_canon_identifiers(topic_rows)
         require_valid_profile_references(topic_rows, topic_graph)
