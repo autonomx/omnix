@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, Mapping
 
 from .contracts import WorldRevisionDocument
+from .generation_audit_stages import two_stage_audit_report
 from .generation_profile_dossiers import (
     profile_dossier_report,
     require_profile_dossier_quality,
@@ -75,6 +76,7 @@ def _certification_with_integrity(
     integrity: Mapping[str, Any],
     profile_references: Mapping[str, Any],
     profile_dossiers: Mapping[str, Any],
+    audit_stages: Mapping[str, Any],
 ) -> dict[str, Any]:
     payload = {
         **dict(certification),
@@ -82,6 +84,7 @@ def _certification_with_integrity(
         "strict_integrity": dict(integrity),
         "profile_reference_integrity": dict(profile_references),
         "profile_dossier_quality": dict(profile_dossiers),
+        "audit_stages": dict(audit_stages),
     }
     missing = [
         str(value)
@@ -92,6 +95,7 @@ def _certification_with_integrity(
         (integrity.get("passed"), "strict_integrity"),
         (profile_references.get("passed"), "profile_reference_integrity"),
         (profile_dossiers.get("passed"), "profile_dossier_quality"),
+        (audit_stages.get("passed"), "post_repair_audit"),
     ):
         if not bool(passed):
             payload["launch_ready"] = False
@@ -130,12 +134,19 @@ def compile_world_generation_artifact(
         starting_location_override=starting_location_override,
         asset_bindings=asset_bindings,
     )
+    consistency = publication.certification.get("consistency_report")
+    audit_stages = two_stage_audit_report(
+        topic_rows,
+        dict(consistency) if isinstance(consistency, Mapping) else None,
+        default_post_passed=bool(publication.certification.get("launch_ready")),
+    )
     certification = _certification_with_integrity(
         publication.certification,
         mode=mode,
         integrity=integrity,
         profile_references=profile_references,
         profile_dossiers=profile_dossiers,
+        audit_stages=audit_stages,
     )
     if mode == "certified_release":
         return WorldGenerationCertifiedArtifact(
