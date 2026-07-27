@@ -30,7 +30,7 @@ def _certification(*, launch_ready: bool = True) -> dict:
         "consistency_report": {"passed": launch_ready},
         "strict_integrity": {"passed": launch_ready},
         "profile_reference_integrity": {"passed": launch_ready},
-        "profile_dossier_policy": {"passed": launch_ready},
+        "profile_dossier_quality": {"passed": launch_ready},
     }
 
 
@@ -68,7 +68,7 @@ def test_transaction_rejects_any_failed_certification_report() -> None:
         "consistency_report",
         "strict_integrity",
         "profile_reference_integrity",
-        "profile_dossier_policy",
+        "profile_dossier_quality",
     }
 
 
