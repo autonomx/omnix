@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from typing import Any, Literal, Mapping
 
 from .contracts import WorldRevisionDocument
+from .generation_profile_dossiers import (
+    profile_dossier_report,
+    require_profile_dossier_quality,
+)
 from .generation_profile_references import (
     profile_reference_report,
     require_valid_profile_references,
@@ -70,24 +74,28 @@ def _certification_with_integrity(
     mode: WorldGenerationCompilationMode,
     integrity: Mapping[str, Any],
     profile_references: Mapping[str, Any],
+    profile_dossiers: Mapping[str, Any],
 ) -> dict[str, Any]:
     payload = {
         **dict(certification),
         "compilation_mode": mode,
         "strict_integrity": dict(integrity),
         "profile_reference_integrity": dict(profile_references),
+        "profile_dossier_quality": dict(profile_dossiers),
     }
     missing = [
         str(value)
         for value in payload.get("missing_requirements") or ()
         if str(value)
     ]
-    if not bool(integrity.get("passed")):
-        payload["launch_ready"] = False
-        missing.append("strict_integrity")
-    if not bool(profile_references.get("passed")):
-        payload["launch_ready"] = False
-        missing.append("profile_reference_integrity")
+    for passed, requirement in (
+        (integrity.get("passed"), "strict_integrity"),
+        (profile_references.get("passed"), "profile_reference_integrity"),
+        (profile_dossiers.get("passed"), "profile_dossier_quality"),
+    ):
+        if not bool(passed):
+            payload["launch_ready"] = False
+            missing.append(requirement)
     payload["missing_requirements"] = list(dict.fromkeys(missing))
     return payload
 
@@ -109,9 +117,11 @@ def compile_world_generation_artifact(
     topic_graph = dict(run.get("graph") or {})
     integrity = strict_integrity_report(topic_rows)
     profile_references = profile_reference_report(topic_rows, topic_graph)
+    profile_dossiers = profile_dossier_report(topic_rows, topic_graph)
     if mode == "certified_release":
         require_unique_canon_identifiers(topic_rows)
         require_valid_profile_references(topic_rows, topic_graph)
+        require_profile_dossier_quality(topic_rows, topic_graph)
     publication = compile_world_generation_publication(
         run=run,
         world=world,
@@ -125,6 +135,7 @@ def compile_world_generation_artifact(
         mode=mode,
         integrity=integrity,
         profile_references=profile_references,
+        profile_dossiers=profile_dossiers,
     )
     if mode == "certified_release":
         return WorldGenerationCertifiedArtifact(
