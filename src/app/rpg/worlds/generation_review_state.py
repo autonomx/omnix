@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .generation_attempt_history import preserve_attempt_history
+from .generation_attempt_history import preserve_attempt_history, with_validation_attempt
 
 _FAILED_VALIDATION_STATUSES = {"blocked", "failed", "needs_review", "rejected"}
 
@@ -107,8 +107,26 @@ def accepted_review_report(
     return preserve_attempt_history(report, previous)
 
 
+def _validation_with_projected_attempt(row: Mapping[str, Any]) -> dict[str, Any]:
+    validation = _mapping(row.get("validation"))
+    if validation.get("attempt_history"):
+        return validation
+    source_validation = _mapping(validation.get("previous_validation")) or validation
+    source_status = str(source_validation.get("status") or row.get("status") or "not_run")
+    return with_validation_attempt(
+        source_validation,
+        run_id=str(row.get("run_id") or ""),
+        topic_id=str(row.get("topic_id") or ""),
+        result_status=source_status,
+        candidate_hash=str(row.get("candidate_hash") or ""),
+        provider=_mapping(row.get("provider")),
+        job_id=str(row.get("job_id") or ""),
+        trigger="manual_retry" if row.get("previous_result") else "generation",
+    )
+
+
 def review_state(result: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Project independent review, validation and waiver state for API/UI consumers."""
+    """Project independent review, validation, waiver and attempt state."""
 
     row = _mapping(result)
     validation = _mapping(row.get("validation"))
@@ -123,11 +141,26 @@ def review_state(result: Mapping[str, Any] | None) -> dict[str, Any]:
             if review_decision == "accepted" and evidence["validation_status"] == "failed"
             else "none"
         )
-    attempt_history = [
-        dict(item)
-        for item in validation.get("attempt_history") or ()
-        if isinstance(item, Mapping)
-    ]
+
+    attempts = _validation_with_projected_attempt(row).get("attempt_history") or ()
+    current_history = [dict(item) for item in attempts if isinstance(item, Mapping)]
+    previous_result = row.get("previous_result")
+    previous_history: list[dict[str, Any]] = []
+    if isinstance(previous_result, Mapping):
+        previous_history = list(review_state(previous_result)["attempt_history"])
+    by_id: dict[str, dict[str, Any]] = {}
+    for attempt in (*previous_history, *current_history):
+        attempt_id = str(attempt.get("attempt_id") or "")
+        if attempt_id:
+            by_id.setdefault(attempt_id, attempt)
+    attempt_history = sorted(
+        by_id.values(),
+        key=lambda item: (
+            str(item.get("run_id") or ""),
+            int(item.get("attempt_number") or 0),
+            str(item.get("attempt_id") or ""),
+        ),
+    )
     return {
         "review_decision": review_decision or "pending",
         "validation_status": evidence["validation_status"],
