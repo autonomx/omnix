@@ -20,6 +20,7 @@ from app.rpg.worlds.generation_retry import (
 from app.rpg.worlds.generation_review_analytics import (
     world_generation_review_analytics,
 )
+from app.rpg.worlds.generation_review_state import review_state
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_generation_review_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_generation_review_hook_installed"
@@ -84,14 +85,16 @@ def _run_with_results(
         str(row.get("topic_id") or ""): row for row in parent_results
     }
     decisions = _decisions(run)
-    augmented = [
-        {
+    augmented = []
+    for row in results:
+        topic_id = str(row.get("topic_id") or "")
+        value = {
             **row,
-            "previous_result": parent_by_topic.get(str(row.get("topic_id") or "")),
-            "decision": decisions.get(str(row.get("topic_id") or "")),
+            "previous_result": parent_by_topic.get(topic_id),
+            "decision": decisions.get(topic_id),
         }
-        for row in results
-    ]
+        value["review_state"] = review_state(value)
+        augmented.append(value)
     return run, augmented, world_generation_review_analytics(augmented, run)
 
 
@@ -103,6 +106,22 @@ def _topic_ids(payload: Mapping[str, Any]) -> tuple[str, ...]:
             detail={"ok": False, "error": "topic_ids_must_be_array"},
         )
     return tuple(str(value) for value in values if str(value))
+
+
+def _waiver_reasons(payload: Mapping[str, Any]) -> dict[str, str]:
+    value = payload.get("waiver_reasons")
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise HTTPException(
+            status_code=422,
+            detail={"ok": False, "error": "waiver_reasons_must_be_object"},
+        )
+    return {
+        str(key): str(reason)
+        for key, reason in value.items()
+        if str(key) and str(reason).strip()
+    }
 
 
 def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
@@ -210,6 +229,7 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
                 topic_id,
                 candidate=candidate if isinstance(candidate, Mapping) else None,
                 expected_candidate_hash=str(payload.get("expected_candidate_hash") or ""),
+                waiver_reason=str(payload.get("waiver_reason") or ""),
             )
         except Exception as exc:
             raise _error(exc) from exc
@@ -227,6 +247,8 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
             return accept_world_generation_candidates(
                 run_id,
                 topic_ids=_topic_ids(payload),
+                waiver_reasons=_waiver_reasons(payload),
+                default_waiver_reason=str(payload.get("waiver_reason") or ""),
             )
         except Exception as exc:
             raise _error(exc) from exc
