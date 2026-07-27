@@ -50,9 +50,14 @@ def _integer(value: Any) -> int | None:
 
 def _topic_entities(
     topics: Iterable[GeneratedTopic],
-) -> tuple[dict[str, Mapping[str, Any]], dict[str, tuple[Mapping[str, Any], ...]]]:
+) -> tuple[
+    dict[str, Mapping[str, Any]],
+    dict[str, tuple[Mapping[str, Any], ...]],
+    dict[str, str],
+]:
     entities: dict[str, Mapping[str, Any]] = {}
     by_topic: dict[str, tuple[Mapping[str, Any], ...]] = {}
+    topic_by_entity: dict[str, str] = {}
     for topic in topics:
         rows = tuple(topic.entities)
         by_topic[topic.topic_id] = rows
@@ -60,7 +65,8 @@ def _topic_entities(
             entity_id = _entity_id(row)
             if entity_id:
                 entities[entity_id] = row
-    return entities, by_topic
+                topic_by_entity[entity_id] = topic.topic_id
+    return entities, by_topic, topic_by_entity
 
 
 def _event_year(row: Mapping[str, Any]) -> int | None:
@@ -99,7 +105,7 @@ def audit_causal_canon(
     topics: Iterable[GeneratedTopic],
 ) -> tuple[CausalAuditFinding, ...]:
     topic_rows = tuple(topics)
-    entities, by_topic = _topic_entities(topic_rows)
+    entities, by_topic, topic_by_entity = _topic_entities(topic_rows)
     history = {
         _entity_id(row): row
         for row in by_topic.get("history_timeline", ())
@@ -110,6 +116,7 @@ def audit_causal_canon(
     findings: list[CausalAuditFinding] = []
     event_edges: dict[str, set[str]] = {}
     linked_events: set[str] = set()
+    persistences_by_event: dict[str, set[str]] = {}
     link_signatures: set[tuple[str, str, str]] = set()
     formation_signatures: set[tuple[str, str]] = set()
 
@@ -161,6 +168,7 @@ def audit_causal_canon(
         causes = _strings(link.get("cause_event_ids"))
         effect_id = str(link.get("effect_id") or "").strip()
         effect_type = str(link.get("effect_type") or "").strip()
+        persistence = str(link.get("persistence") or "").strip()
         mechanism = str(link.get("mechanism") or "").strip()
         start_year = _integer(link.get("start_year"))
         end_year = _integer(link.get("end_year"))
@@ -181,7 +189,8 @@ def audit_causal_canon(
                     link_id,
                 )
             )
-        if not effect_id or effect_id not in entities:
+        effect = entities.get(effect_id)
+        if not effect_id or effect is None:
             findings.append(
                 CausalAuditFinding(
                     "unknown_causal_effect",
@@ -189,6 +198,11 @@ def audit_causal_canon(
                     link_id,
                 )
             )
+
+        effect_topic = topic_by_entity.get(effect_id, "")
+        origin_field = _FORMATION_FIELDS.get(effect_topic)
+        declared_origins = set(_strings(effect.get(origin_field))) if effect and origin_field else set()
+
         for cause_id in causes:
             if cause_id not in history:
                 findings.append(
@@ -200,6 +214,7 @@ def audit_causal_canon(
                 )
                 continue
             linked_events.add(cause_id)
+            persistences_by_event.setdefault(cause_id, set()).add(persistence)
             signature = (cause_id, effect_id, effect_type)
             if signature in link_signatures:
                 findings.append(
@@ -212,10 +227,21 @@ def audit_causal_canon(
             link_signatures.add(signature)
             if effect_type in _FORMATION_EFFECT_TYPES:
                 formation_signatures.add((cause_id, effect_id))
+                if origin_field and cause_id not in declared_origins:
+                    findings.append(
+                        CausalAuditFinding(
+                            "causal_link_conflicts_with_entity_origin",
+                            f"Formation link names {cause_id}, but {effect_topic}.{origin_field} does not.",
+                            link_id,
+                        )
+                    )
 
     for event_id, event in history.items():
         status = str(event.get("legacy_status") or "").strip()
         legacies = event.get("present_day_legacies")
+        persistences = persistences_by_event.get(event_id, set())
+        continuing = "continuing" in persistences
+        terminal = any(value and value != "continuing" for value in persistences)
         if (
             has_causal_links_topic
             and event_id not in linked_events
@@ -228,11 +254,37 @@ def audit_causal_canon(
                     event_id,
                 )
             )
-        if status == "continuing" and legacies in (None, "", [], (), {}):
+        if status == "continuing":
+            if legacies in (None, "", [], (), {}):
+                findings.append(
+                    CausalAuditFinding(
+                        "historical_event_without_legacy_resolution",
+                        "A continuing historical event requires present-day legacies.",
+                        event_id,
+                    )
+                )
+            if has_causal_links_topic and not continuing:
+                findings.append(
+                    CausalAuditFinding(
+                        "historical_legacy_persistence_mismatch",
+                        "A continuing historical event requires at least one continuing causal effect.",
+                        event_id,
+                    )
+                )
+        elif status == "mixed":
+            if legacies in (None, "", [], (), {}) or not continuing or not terminal:
+                findings.append(
+                    CausalAuditFinding(
+                        "historical_legacy_persistence_mismatch",
+                        "A mixed historical legacy requires continuing and resolved effects plus a present-day trace.",
+                        event_id,
+                    )
+                )
+        elif status in _TERMINAL_LEGACY_STATUSES and continuing:
             findings.append(
                 CausalAuditFinding(
-                    "historical_event_without_legacy_resolution",
-                    "A continuing historical event requires present-day legacies.",
+                    "historical_legacy_persistence_mismatch",
+                    f"Legacy status {status} conflicts with a continuing causal effect.",
                     event_id,
                 )
             )
