@@ -201,7 +201,12 @@ def audit_causal_canon(
 
         effect_topic = topic_by_entity.get(effect_id, "")
         origin_field = _FORMATION_FIELDS.get(effect_topic)
-        declared_origins = set(_strings(effect.get(origin_field))) if effect and origin_field else set()
+        origin_contract_present = bool(effect and origin_field and origin_field in effect)
+        declared_origins = (
+            set(_strings(effect.get(origin_field)))
+            if effect and origin_field and origin_contract_present
+            else set()
+        )
 
         for cause_id in causes:
             if cause_id not in history:
@@ -227,7 +232,7 @@ def audit_causal_canon(
             link_signatures.add(signature)
             if effect_type in _FORMATION_EFFECT_TYPES:
                 formation_signatures.add((cause_id, effect_id))
-                if origin_field and cause_id not in declared_origins:
+                if origin_contract_present and cause_id not in declared_origins:
                     findings.append(
                         CausalAuditFinding(
                             "causal_link_conflicts_with_entity_origin",
