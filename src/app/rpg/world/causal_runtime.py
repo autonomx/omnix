@@ -42,14 +42,28 @@ def _hash(value: Mapping[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
+def _initial_pressure_statuses(planning_topics: Mapping[str, Any]) -> dict[str, str]:
+    pressure_plan = planning_topics.get("pressure_plan")
+    if not isinstance(pressure_plan, Mapping):
+        return {}
+    return {
+        str(row.get("pressure_id") or ""): "active"
+        for row in pressure_plan.get("pressures") or ()
+        if isinstance(row, Mapping) and str(row.get("pressure_id") or "")
+    }
+
+
 def bootstrap_causal_runtime(planning_topics: Mapping[str, Any]) -> dict[str, Any]:
     initial_state = build_mutable_world_state(planning_topics)
     runtime: dict[str, Any] = {
-        "schema_version": "rpg_causal_world_runtime_v1",
+        "schema_version": "rpg_causal_world_runtime_v2",
         "revision": 1,
         "initial_state": copy.deepcopy(initial_state),
         "state": copy.deepcopy(initial_state),
-        "pressure_plan": copy.deepcopy(dict(planning_topics.get("pressure_plan") or {})),
+        "pressure_plan": copy.deepcopy(
+            dict(planning_topics.get("pressure_plan") or {})
+        ),
+        "pressure_statuses": _initial_pressure_statuses(planning_topics),
         "events": [],
         "last_tick": 0,
     }
@@ -95,11 +109,19 @@ def advance_causal_runtime(
     if issues:
         raise ValueError("invalid_causal_runtime_state:" + ",".join(issues))
     before_hash = str(state.get("state_hash") or causal_state_hash(state))
+    statuses = {
+        str(key): str(value)
+        for key, value in dict(current.get("pressure_statuses") or {}).items()
+    }
     next_state, pressure_result = apply_pressure_tick(
         dict(current.get("pressure_plan") or {}),
         state,
         tick=tick,
+        pressure_statuses=statuses,
     )
+    next_statuses = dict(statuses)
+    for effect in pressure_result.effects:
+        next_statuses[effect.pressure_id] = effect.status_after
     aggregate = CausalWorldEvent(
         event_id=aggregate_id,
         tick=tick,
@@ -109,23 +131,35 @@ def advance_causal_runtime(
         before_state_hash=before_hash,
         after_state_hash=next_state["state_hash"],
         payload={
-            "effects": [effect.model_dump(mode="python") for effect in pressure_result.effects],
+            "effects": [
+                effect.model_dump(mode="python") for effect in pressure_result.effects
+            ],
             "reduction": pressure_result.reduction.model_dump(mode="python"),
+            "pressure_statuses_before": statuses,
+            "pressure_statuses_after": next_statuses,
         },
     )
     emitted: list[CausalWorldEvent] = [aggregate]
     sequence = 1
     for effect in pressure_result.effects:
+        if not effect.transitioned:
+            continue
         event_type = ""
-        if effect.escalated:
+        if effect.status_after == "escalated":
             event_type = "pressure_escalated"
-        elif effect.resolved:
+        elif effect.status_after == "resolved":
             event_type = "pressure_resolved"
+        elif effect.status_after == "contained":
+            event_type = "pressure_contained"
+        elif effect.status_after == "active":
+            event_type = "pressure_reactivated"
         if not event_type:
             continue
         emitted.append(
             CausalWorldEvent(
-                event_id=f"world:event:causal:{tick}:{effect.pressure_id}:{event_type}",
+                event_id=(
+                    f"world:event:causal:{tick}:{effect.pressure_id}:{event_type}"
+                ),
                 tick=tick,
                 sequence=sequence,
                 event_type=event_type,
@@ -137,6 +171,8 @@ def advance_causal_runtime(
                     "severity_before": effect.severity_before,
                     "severity_delta": effect.severity_delta,
                     "affected_delta_ids": list(effect.affected_delta_ids),
+                    "status_before": effect.status_before,
+                    "status_after": effect.status_after,
                 },
             )
         )
@@ -146,6 +182,7 @@ def advance_causal_runtime(
         key=lambda event: (event.tick, event.sequence, event.event_id),
     )
     current["state"] = next_state
+    current["pressure_statuses"] = next_statuses
     current["events"] = [_event_dict(event) for event in all_events]
     current["last_tick"] = tick
     current["revision"] = int(current.get("revision") or 1) + 1
