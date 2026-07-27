@@ -22,6 +22,7 @@ from .generation_authorship_signing import (
 )
 from .generation_manifest_binding import (
     bind_generated_topic_to_manifest,
+    dependency_manifest_aliases,
     manifest_slots_from_node,
 )
 from .generation_test_mode import deterministic_world_forge_test_mode
@@ -115,6 +116,7 @@ class PublicationValidatedWorldForgeGenerator:
             validated.topic,
             manifest_slots_from_node(metadata),
             manifest_hash=str(metadata.get("entity_manifest_hash") or ""),
+            reference_aliases=dependency_manifest_aliases(dependency_topics),
         )
         receipt = validated.receipt.as_dict()
         sanitized = sanitize_untrusted_candidate(bound.as_dict())
