@@ -16,6 +16,7 @@ _CERTIFICATION_REPORT_FIELDS = (
     "strict_integrity",
     "profile_reference_integrity",
     "profile_dossier_quality",
+    "manifest_reference_closure",
     "audit_stages",
     "finding_waiver_policy",
 )
