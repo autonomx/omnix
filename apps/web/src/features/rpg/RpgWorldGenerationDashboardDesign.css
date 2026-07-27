@@ -154,6 +154,43 @@
   font-size: 0.68rem;
 }
 
+.rpg-dossier-repair-progress {
+  max-width: 420px;
+  margin: 0.2rem 0.05rem 0;
+  color: rgba(240, 210, 126, 0.9);
+  font-size: 0.68rem;
+}
+
+.rpg-dossier-repair-progress > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.rpg-dossier-repair-progress-meter {
+  height: 5px;
+  margin: 0.35rem 0 0.28rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.rpg-dossier-repair-progress-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #d8aa51, #f0d27e);
+  transition: width 180ms ease-out;
+}
+
+.rpg-dossier-repair-progress small {
+  display: block;
+  overflow: hidden;
+  color: rgba(203, 213, 225, 0.62);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .is-operational-dashboard .rpg-generation-dashboard-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 0.38fr);

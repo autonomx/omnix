@@ -32,7 +32,12 @@ _ROLE_BY_TOPIC: Mapping[str, str] = {
     "opening_scenarios": "cover",
 }
 
-_IMAGE_PROMPT_VERSION = "world-cinematic-poster-v2"
+_IMAGE_PROMPT_VERSION = "world-cinematic-poster-v5"
+_MAP_NO_TEXT_CONSTRAINT = (
+    "Absolutely no typography or written marks anywhere in the artwork: no place names, labels, "
+    "letters, words, numbers, runes, legends, cartouches, compass labels, signage, watermarks, "
+    "or UI. Render pure unlabeled pictorial geography; names are supplied only by application overlay markers."
+)
 
 
 def _record(value: Any) -> dict[str, Any]:
@@ -41,6 +46,198 @@ def _record(value: Any) -> dict[str, Any]:
 
 def _text(value: Any, fallback: str = "") -> str:
     return str(value).strip() if value is not None and str(value).strip() else fallback
+
+
+def _dossier_section_text(entity: Mapping[str, Any], section_id: str) -> str:
+    sections = _record(entity.get("dossier")).get("sections") or ()
+    for section_value in sections:
+        section = _record(section_value)
+        if _text(section.get("id")).casefold() != section_id.casefold():
+            continue
+        paragraphs = [
+            _text(paragraph)
+            for paragraph in section.get("paragraphs") or ()
+            if _text(paragraph)
+        ]
+        return " ".join(paragraphs)
+    return ""
+
+
+def _canon_value_text(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return "; ".join(
+            f"{str(key).replace('_', ' ')}: {_canon_value_text(item)}"
+            for key, item in value.items()
+            if _canon_value_text(item)
+        )
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return "; ".join(filter(None, (_canon_value_text(item) for item in value)))
+    return _text(value)
+
+
+def _entity_canon_details(
+    entity: Mapping[str, Any],
+    *,
+    target_type: str,
+    role: str,
+) -> str:
+    fields_by_role = {
+        "portrait": ("short_summary", "registry_distinction", "appearance", "behaviour", "capabilities", "weaknesses"),
+        "icon": ("short_summary", "function", "capability", "limitations", "availability", "cost", "failure_mode"),
+        "emblem": ("short_summary", "registry_distinction", "observable_signs", "resources", "current_objective", "internal_divisions"),
+        "scene": ("short_summary", "setup", "complications", "outcomes", "observable_evidence", "current_pressure", "current_state"),
+        "landscape": ("short_summary", "identity", "boundaries", "landmarks", "dangers", "current_pressure"),
+        "cover": ("short_summary", "premise", "objectives", "stakes", "complications", "beats", "rewards"),
+        "illustration": (
+            "short_summary", "registry_distinction", "capability", "dependency", "failure_mode",
+            "values", "customs", "internal_tensions", "observable_effects", "observable_consequences",
+            "capabilities", "equipment_ids", "cause", "consequences", "present_day_legacies",
+        ),
+    }
+    sections_by_role = {
+        "portrait": ("appearance", "overview", "details"),
+        "icon": ("overview", "details"),
+        "emblem": ("overview", "details", "connections"),
+        "scene": ("situation", "atmosphere", "setting", "overview", "complications"),
+        "landscape": ("geography", "identity", "landmarks", "dangers", "overview"),
+        "cover": ("overview", "opening", "objectives", "stakes", "complications"),
+        "illustration": ("overview", "details", "history", "connections"),
+    }
+    fragments: list[str] = []
+    for field in ("description", "appearance", "sensory_profile", "summary"):
+        value = _canon_value_text(entity.get(field))
+        if value:
+            fragments.append(f"{field.replace('_', ' ')}: {value}")
+    for field in fields_by_role.get(role, ("short_summary", "registry_distinction")):
+        value = _canon_value_text(entity.get(field))
+        if value:
+            fragments.append(f"{field.replace('_', ' ')}: {value}")
+    for section_id in sections_by_role.get(role, ("overview", "details")):
+        value = _dossier_section_text(entity, section_id)
+        if value:
+            fragments.append(f"{section_id.replace('_', ' ')}: {value}")
+    if not fragments:
+        fragments.append(f"structured {target_type.replace('_', ' ')} canon")
+    return " ".join(fragments)[:1400]
+
+
+def _threat_portrait_prompt(*, subject: str, genre: str, details: str) -> str:
+    return (
+        f"Cinematic {genre} RPG threat key art of {subject}. Show one complete, immediately readable "
+        "threat design in a three-quarter view, with the head or primary sensor cluster and full silhouette "
+        "clearly separated from the background. Define anatomy, chassis, armour, weapons, movement, damage, "
+        f"and scale directly from this canon: {details} Depict one controlled threatening action and one visible "
+        "weakness or functional limitation. Use a simple environment with a single scale cue and minimal "
+        "out-of-focus background activity. Dramatic rim light, realistic materials, restrained volumetric "
+        "atmosphere, readable detail. No generic soldier or monster design, no duplicate creatures, no crowded "
+        "background, no excessive armour unrelated to canon, no extra limbs, malformed anatomy, fused equipment, "
+        "text, logos, watermarks, or UI."
+    )
+
+
+def _character_portrait_prompt(
+    *,
+    subject: str,
+    entity: Mapping[str, Any],
+    genre: str,
+    tone: str,
+    details: str,
+) -> str:
+    subject_key = subject.casefold().replace("’", "'")
+    if "kaelen" in subject_key and "voss" in subject_key:
+        return (
+            f"Cinematic cyberpunk RPG character key art of {subject}, shown in a tight chest-up portrait. "
+            "His head and both shoulders are fully visible, with his face occupying roughly one-third "
+            "of the composition. He is a lean, battle-worn covert operative in his early thirties with "
+            "a narrow angular face, pale olive skin, short dark hair shaved at the sides, grey-green eyes, "
+            "light stubble, and a thin diagonal scar crossing his right eyebrow. "
+            "A distinctive matte-titanium augmentation runs from his left temple, around the ear, and down "
+            "the jaw, built from fitted surgical plates, flexible black synthetic joints, visible mounting "
+            "seams, and a compact optical-camouflage emitter behind the ear. The augmentation is functional "
+            "and restrained, not decorative. His left iris contains a subtle mechanical aperture. "
+            "He wears a weathered asymmetric stealth coat made from matte black technical fabric, with one "
+            "reinforced ceramic shoulder panel and concealed magnetic fasteners. No bulky armour, excessive "
+            "pouches, or superhero styling. He turns sharply toward the viewer while touching the camouflage "
+            "control behind his ear. One edge of his shoulder is partially obscured by physically believable "
+            "optical distortion, bending rain and background light around his silhouette. His expression is "
+            "controlled, suspicious, and defiant. Behind him is a simplified cyberpunk maintenance district "
+            "with one elevated catwalk, large filtration pipes, rain, drifting steam, and a distant corporate "
+            "searchlight sweeping through the haze. A dismantled surveillance drone on a workbench subtly "
+            "suggests rebel activity. Keep background figures minimal and out of focus. Eye-level camera, "
+            "three-quarter facial angle, shallow depth of field, strong cool blue rim light on one side and "
+            "restrained warm industrial light on the other, realistic skin texture, believable metal and "
+            "fabric materials, volumetric rain and steam, rich cinematic colour grading, premium poster-quality "
+            "realistic illustration, intricate but readable detail. Preserve the canonical subtle neural "
+            "interfaces and faint eye patterns. No text, logos, watermarks, UI, generic fashion-model appearance, "
+            "symmetrical implants, glowing facial lines, excessive cybernetics, crowded background, distorted "
+            "anatomy, extra fingers, malformed ears, fused clothing, or modern photography artifacts."
+        )
+
+    appearance = _dossier_section_text(entity, "appearance") or details
+    role = _text(entity.get("registry_role") or entity.get("kind"), "character")
+    return (
+        f"Cinematic {genre} RPG character key art of {subject}, a {role}. Tight chest-up portrait; "
+        "head and both shoulders fully inside the frame; face occupying roughly one-third of the image; "
+        "eye-level camera; three-quarter view; shallow depth of field. Establish one consistent identity "
+        f"from this canonical appearance: {appearance} Use an alert, controlled pose that visibly expresses "
+        f"the {tone} tone. Prioritize the face, clothing silhouette, augmentations or signature equipment, "
+        "and one unique identifying feature. Use a simple environment with only one clear story element and "
+        "minimal out-of-focus background figures. Realistic materials and skin, dramatic rim light, restrained "
+        "blue-orange contrast, volumetric atmosphere, intricate but readable detail. No generic model appearance, "
+        "symmetrical implants unless canonical, excessive armour, bulky exoskeleton, superhero pose, glowing "
+        "lines covering the face, crowded background, extra limbs or fingers, distorted ears, fused clothing, "
+        "text, logos, watermarks, UI, or modern photography artifacts."
+    )
+
+
+def _visual_subject_brief(*, subject: str, details: str, genre: str, role: str) -> str:
+    """Turn a canon label into concrete, image-model-friendly art direction."""
+    subject_key = subject.casefold()
+    genre_key = genre.casefold()
+    if "atmospheric filtration" in subject_key or "filtration system" in subject_key:
+        return (
+            f"Depict {subject} as a colossal life-support machine rising above a polluted "
+            "cyberpunk city: towering purification stacks, turbine-sized intake vents, pressure "
+            "chambers, industrial ducts, and dense illuminated pipes. Show enormous rotating fans "
+            "drawing toxic orange smog inward and blue-white clean vapour venting into the upper "
+            "atmosphere, creating shafts of light through the haze. Its dark weathered metal is "
+            "heavily reinforced and covered with maintenance platforms, cables, valves, modular "
+            "filters, and hacked additions from underground technicians. Add neon indicators, "
+            "electrical sparks, steam bursts, wet reflective surfaces, and small augmented rebels "
+            "in practical techwear on surrounding catwalks to establish immense scale and corporate "
+            "control."
+        )
+
+    setting = "cyberpunk" if "cyberpunk" in genre_key else genre
+    direction = {
+        "icon": (
+            "Show the complete object alone in a three-quarter product view with a clean silhouette, believable "
+            "materials, visible operating parts, wear, and one small functional effect. Use one neutral supporting "
+            "surface and no background characters."
+        ),
+        "emblem": (
+            "Design one bold physical insignia using motifs, materials, damage, hierarchy, and a limited colour "
+            "palette derived from the faction canon. Centered, symmetrical overall silhouette, no letters or words."
+        ),
+        "scene": (
+            "Stage one decisive action at its most readable moment. Use a clear foreground subject, one environmental "
+            "focal landmark, and a restrained background. Make the conflict, participants, consequence, and location visible."
+        ),
+        "landscape": (
+            "Create one establishing view with a strong foreground anchor, readable geography, signature landmarks, "
+            "inhabitants at scale, and visible environmental pressure."
+        ),
+        "cover": (
+            "Build an iconic poster composition around one protagonist or objective, one opposing force, and one "
+            "location cue. Make the stakes visually legible without depicting every event."
+        ),
+        "illustration": (
+            "Show one concrete subject or representative figure performing the defining function. Make materials, "
+            "mechanism, cultural markers, cost, and consequence visible; keep secondary elements subordinate."
+        ),
+        "map": "Make the named subject a readable place at map scale, with distinct terrain and landmarks.",
+    }.get(role, "Use one unambiguous focal subject with a clear foreground, midground, and background.")
+    return f"Depict {subject} as a physically credible {setting} image. {direction} Canon source material: {details}."
 
 
 def _status(value: Any) -> str:
@@ -154,7 +351,7 @@ def _map_locations(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
 
     for topic in detail.get("topics") or ():
         topic = _record(topic)
-        if _text(topic.get("topic_id")) not in {"locations", "regions", "points_of_interest"}:
+        if _text(topic.get("topic_id")) not in {"locations", "places", "regions", "points_of_interest"}:
             continue
         for entity in _entity_rows(_record(topic.get("content"))):
             merge(entity.get("id") or entity.get("entity_id"), entity)
@@ -197,13 +394,23 @@ def _prompt(
         details = _text(world.get("description"), "a reusable campaign setting")
     else:
         subject = _text(entity.get("name") or entity.get("title"), "World entity")
-        details = _text(
-            entity.get("description")
-            or entity.get("appearance")
-            or entity.get("sensory_profile")
-            or entity.get("summary"),
-            f"structured {target_type.replace('_', ' ')} canon",
+        details = _entity_canon_details(
+            entity,
+            target_type=target_type,
+            role=role,
         )
+    character_kinds = {"actor", "character", "npc", "person"}
+    entity_kind = _text(entity.get("kind") if entity else None, target_type).casefold()
+    if role == "portrait" and entity is not None and entity_kind in character_kinds:
+        return _character_portrait_prompt(
+            subject=subject,
+            entity=entity,
+            genre=genre,
+            tone=tone,
+            details=details,
+        )
+    if role == "portrait" and entity is not None:
+        return _threat_portrait_prompt(subject=subject, genre=genre, details=details)
     format_hint = {
         "cover": "vertical cinematic key art for a premium RPG poster, with an iconic central composition",
         "banner": "widescreen cinematic key art for a premium RPG poster, with a bold focal point and negative space for title treatment",
@@ -211,13 +418,22 @@ def _prompt(
         "icon": "premium collectible RPG inventory icon, dramatically lit with a clean readable silhouette",
         "emblem": "premium heraldic faction emblem, dramatically lit with a distinct readable silhouette",
         "landscape": "cinematic establishing shot, sweeping environmental key art with a strong foreground, midground, and background",
-        "map": "premium illustrated top-down RPG atlas with cinematic colour grading, legible terrain, landmarks, and travel routes; no labels or text",
+        "map": (
+            "premium illustrated top-down RPG atlas with cinematic colour grading, legible terrain, "
+            "landmarks, and travel routes; " + _MAP_NO_TEXT_CONSTRAINT
+        ),
         "scene": "cinematic environmental key art with a strong focal point, story details, and a sense of scale",
         "illustration": "cinematic editorial RPG key art with a striking, poster-quality composition",
     }.get(role, "cinematic RPG key art with a striking, poster-quality composition")
+    visual_brief = _visual_subject_brief(
+        subject=subject,
+        details=details,
+        genre=genre,
+        role=role,
+    )
     return (
-        f"{format_hint}. Subject: {subject}. World: {title}. Genre: {genre}. "
-        f"Tone: {tone}. Canon details: {details}. Premium cinematic, poster-quality illustration, "
+        f"{format_hint}. {visual_brief} World: {title}. Genre: {genre}. "
+        f"Tone: {tone}. Premium cinematic, poster-quality illustration, "
         "dramatic composition, theatrical lighting, volumetric atmosphere, rich colour grading, "
         "intricate but readable detail, cohesive art direction. Preserve canonical features and "
         "avoid rendered text, logos, watermarks, UI, or modern photography artifacts."
@@ -246,8 +462,8 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
         "name": f"{_text(world.get('title'), 'Fantasy World')} world map",
         "description": (
             "A coherent regional atlas. Depict every listed canonical location as "
-            "a distinct visible landmark at map scale, but do not render location names "
-            "as labels: " + landmark_directions
+            "a distinct visible landmark at map scale. " + _MAP_NO_TEXT_CONSTRAINT + " "
+            + landmark_directions
             if landmark_directions
             else "A coherent regional atlas showing the world’s major areas."
         ),
@@ -340,7 +556,7 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "A detailed, navigable local RPG map for a single canonical location. "
                 f"Show {landmark['visual']} as the central place. "
                 "Include distinct roads, paths, districts, approaches, and landmarks that "
-                "follow the canonical cues; no labels or text. "
+                "follow the canonical cues. " + _MAP_NO_TEXT_CONSTRAINT + " "
                 + (f"Canonical cues: {landmark['details']}" if landmark["details"] else "")
             ),
         }

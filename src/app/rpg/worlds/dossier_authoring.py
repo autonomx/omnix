@@ -17,6 +17,7 @@ from app.rpg.session.genesis.world_forge_dossier_quality import validate_dossier
 from app.rpg.session.genesis.world_forge_dossiers import (
     DOSSIER_SCHEMA_VERSION,
     compact_summary,
+    project_entity_dossier,
     validate_entity_dossier,
 )
 from app.rpg.session.genesis.world_forge_generation import (
@@ -112,8 +113,22 @@ def _store_editorial_replacement(
             editorial_state = "edited"
             provenance = _record(current.get("provenance"))
         existing_authoring = _authoring(current)
+        repair_usage = [
+            _record(item)
+            for item in existing_authoring.get("dossier_regeneration_usage", [])
+            if isinstance(item, Mapping)
+        ]
+        if generated is not None:
+            repair_usage.append(
+                {
+                    key: value
+                    for key, value in dict(generated.provenance).items()
+                    if key in {"usage", "token_estimate", "latency_ms"}
+                }
+            )
         provenance["authoring"] = {
             **existing_authoring,
+            "dossier_regeneration_usage": repair_usage,
             "editorial_state": editorial_state,
             "entity_dossier_schema": DOSSIER_SCHEMA_VERSION,
             "last_entity_edit": {
@@ -297,17 +312,28 @@ def regenerate_world_entity_dossier(
         dict(generated.entities[0]),
     )
     short_summary = compact_summary(candidate.get("short_summary"))
-    dossier = candidate.get("dossier")
+    raw_dossier = candidate.get("dossier")
+    raw_schema_issues = validate_entity_dossier(raw_dossier)
+    if not candidate.get("short_summary") or raw_schema_issues:
+        raise ValueError(
+            "world_entity_dossier_requires_llm_authored_prose:"
+            + ",".join((*raw_schema_issues,) or ("short_summary_required",))
+        )
+    _summary, dossier = project_entity_dossier(
+        {**before, "short_summary": short_summary, "dossier": raw_dossier},
+        card_type=topic_id,
+        entity_id=entity_id,
+    )
     schema_issues = validate_entity_dossier(dossier)
     quality_issues = (
         validate_dossier_quality(dossier, topic_id=topic_id)
         if isinstance(dossier, Mapping)
         else ()
     )
-    if not candidate.get("short_summary") or schema_issues or quality_issues:
+    if schema_issues or quality_issues:
         raise ValueError(
             "world_entity_dossier_requires_llm_authored_prose:"
-            + ",".join((*schema_issues, *quality_issues) or ("short_summary_required",))
+            + ",".join((*schema_issues, *quality_issues))
         )
     dossier = dict(dossier)
     dossier["generated_from_legacy"] = False

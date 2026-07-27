@@ -93,11 +93,22 @@ def _world_token_usage(
         "in_flight_topics": 0,
         "generation_duration_ms": 0,
         "timed_topics": 0,
+        "repair_count": 0,
+        "repair_tokens": 0,
+        "provider_reported_repairs": 0,
+        "estimated_repairs": 0,
     }
     generated_topic_count = 0
     accounted_topic_ids: set[str] = set()
 
-    def add_usage(provenance: Mapping[str, Any], fallback: Mapping[str, Any] = {}) -> None:
+    def add_usage(
+        provenance: Mapping[str, Any],
+        fallback: Mapping[str, Any] = {},
+        *,
+        is_repair: bool = False,
+    ) -> None:
+        if is_repair:
+            totals["repair_count"] += 1
         duration_ms = _token_count(provenance.get("latency_ms")) or _token_count(
             fallback.get("latency_ms")
         )
@@ -115,6 +126,9 @@ def _world_token_usage(
             totals["completion_tokens"] += completion_tokens
             totals["total_tokens"] += total_tokens
             totals["provider_reported_topics"] += 1
+            if is_repair:
+                totals["repair_tokens"] += total_tokens
+                totals["provider_reported_repairs"] += 1
             return
         estimate = _record(provenance.get("token_estimate"))
         if not estimate:
@@ -127,6 +141,9 @@ def _world_token_usage(
             )
             totals["total_tokens"] += estimated_total
             totals["estimated_topics"] += 1
+            if is_repair:
+                totals["repair_tokens"] += estimated_total
+                totals["estimated_repairs"] += 1
             return
         totals["unavailable_topics"] += 1
 
@@ -144,6 +161,14 @@ def _world_token_usage(
             continue
         generated_topic_count += 1
         add_usage(_record(topic.get("provenance")))
+    for topic in topics:
+        authoring = _record(_record(topic.get("provenance")).get("authoring"))
+        repair_usage = authoring.get("dossier_regeneration_usage")
+        if not isinstance(repair_usage, list):
+            continue
+        for usage in repair_usage:
+            if isinstance(usage, Mapping):
+                add_usage(usage, is_repair=True)
     totals["topic_count"] = generated_topic_count
     for progress in active_job_progresses:
         totals["in_flight_topics"] += 1

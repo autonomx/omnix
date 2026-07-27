@@ -377,6 +377,25 @@ def _normalize_sections(value: Any, *, card_type: str) -> list[dict[str, Any]]:
     return sections
 
 
+def placeholder_section_title_count(value: Any) -> int:
+    """Count blank or numbered placeholder titles in a stored raw dossier."""
+
+    if not isinstance(value, Mapping):
+        return 0
+    sections = value.get("sections")
+    if not isinstance(sections, Sequence) or isinstance(sections, (str, bytes)):
+        return 0
+    return sum(
+        1
+        for section in sections
+        if isinstance(section, Mapping)
+        and (
+            not text(section.get("title"))
+            or bool(_PLACEHOLDER_SECTION_TITLE.fullmatch(text(section.get("title"))))
+        )
+    )
+
+
 def _fallback_sections(
     row: Mapping[str, Any],
     *,

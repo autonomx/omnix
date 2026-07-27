@@ -11,6 +11,7 @@ from app.rpg.session.genesis.world_forge_dossier_quality import (
     validate_dossier_quality,
 )
 from app.rpg.session.genesis.world_forge_dossiers import (
+    placeholder_section_title_count,
     project_entity_dossier,
     validate_entity_dossier,
 )
@@ -49,6 +50,7 @@ def world_dossier_quality(
     rich = 0
     projected = 0
     invalid = 0
+    heading_repairs = 0
     words = 0
     unresolved: set[str] = set()
     candidates: list[dict[str, Any]] = []
@@ -80,6 +82,8 @@ def world_dossier_quality(
             )
             schema_issues = validate_entity_dossier(dossier)
             quality_issues = validate_dossier_quality(dossier, topic_id=topic_id)
+            placeholder_titles = placeholder_section_title_count(entity.get("dossier"))
+            heading_repairs += placeholder_titles
             entity_words = dossier_word_count(dossier)
             words += entity_words
             topic_metrics["words"] += entity_words
@@ -87,7 +91,7 @@ def world_dossier_quality(
             if generated_from_legacy:
                 projected += 1
                 topic_metrics["projected"] += 1
-            if schema_issues or quality_issues:
+            if schema_issues or quality_issues or placeholder_titles:
                 invalid += 1
                 topic_metrics["invalid"] += 1
                 candidates.append(
@@ -97,7 +101,15 @@ def world_dossier_quality(
                         "title": str(entity.get("name") or entity.get("title") or entity_id),
                         "word_count": entity_words,
                         "generated_from_legacy": generated_from_legacy,
-                        "issues": [*schema_issues, *quality_issues],
+                        "issues": [
+                            *schema_issues,
+                            *quality_issues,
+                            *(
+                                [f"dossier_placeholder_section_titles:{placeholder_titles}"]
+                                if placeholder_titles
+                                else []
+                            ),
+                        ],
                     }
                 )
             else:
@@ -134,6 +146,7 @@ def world_dossier_quality(
             "rich_dossiers": rich,
             "projected_legacy_dossiers": projected,
             "invalid_or_thin_dossiers": invalid,
+            "heading_repairs": heading_repairs,
             "coverage_percent": 100 if total == 0 else round(rich / total * 100),
             "average_words": 0 if total == 0 else round(words / total),
             "unresolved_related_entity_ids": len(unresolved),
@@ -151,6 +164,7 @@ def enrich_world_dossiers(
     all_candidates: bool = False,
     dry_run: bool = True,
     directives: Mapping[str, Any] | None = None,
+    requested_candidates: list[Mapping[str, Any]] | None = None,
     generator: WorldForgeTopicGenerator | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
@@ -163,6 +177,15 @@ def enrich_world_dossiers(
         if all_candidates
         else available_candidates[: max(1, min(int(limit), 25))]
     )
+    if requested_candidates is not None:
+        requested_ids = {
+            (str(candidate.get("topic_id") or ""), str(candidate.get("entity_id") or ""))
+            for candidate in requested_candidates
+        }
+        candidates = [
+            candidate for candidate in available_candidates
+            if (str(candidate["topic_id"]), str(candidate["entity_id"])) in requested_ids
+        ]
     if dry_run:
         return {
             "ok": True,

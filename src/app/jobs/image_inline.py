@@ -19,7 +19,8 @@ from .models import CompleteJobRequest, FailJobRequest, JobRecord
 
 IMAGE_JOB_TYPE = "image.generate"
 IMAGE_EXECUTOR_ENV = "OMNIX_INLINE_IMAGE_JOB_EXECUTOR"
-_IMAGE_GENERATION_LOCK = threading.Lock()
+IMAGE_GENERATION_CONCURRENCY = 2
+_IMAGE_GENERATION_SLOTS = threading.BoundedSemaphore(IMAGE_GENERATION_CONCURRENCY)
 
 
 def install_image_job_execution(sqlite_job_store_cls: Any) -> None:
@@ -81,7 +82,7 @@ def execute_image_job(
         generate_fn = generate_image
 
     _update_progress(job_store, job.id, 0, 100, "Waiting for image service", stage_id="generate-image")
-    with _IMAGE_GENERATION_LOCK:
+    with _IMAGE_GENERATION_SLOTS:
         _update_progress(job_store, job.id, 0, 100, "Generating image - 0%", stage_id="generate-image")
         progress_poller = _start_image_generation_progress_poll(job_store, job.id)
         try:

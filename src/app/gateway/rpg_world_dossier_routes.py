@@ -92,13 +92,26 @@ def register_rpg_world_dossier_routes(app: FastAPI) -> None:
                 status_code=422,
                 detail={"ok": False, "error": "entity_directives_must_be_object"},
             )
+        candidates = payload.get("candidates")
+        if candidates is not None and not isinstance(candidates, list):
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "dossier_candidates_must_be_array"},
+            )
         try:
+            enrichment_kwargs: dict[str, Any] = {
+                "limit": max(1, min(int(payload.get("limit") or 10), 25)),
+                "all_candidates": bool(payload.get("all_candidates", False)),
+                "dry_run": bool(payload.get("dry_run", True)),
+                "directives": dict(directives or {}),
+            }
+            if candidates is not None:
+                enrichment_kwargs["requested_candidates"] = [
+                    dict(candidate) for candidate in candidates if isinstance(candidate, Mapping)
+                ]
             return enrich_world_dossiers(
                 world_id,
-                limit=max(1, min(int(payload.get("limit") or 10), 25)),
-                all_candidates=bool(payload.get("all_candidates", False)),
-                dry_run=bool(payload.get("dry_run", True)),
-                directives=dict(directives or {}),
+                **enrichment_kwargs,
             )
         except Exception as exc:
             _raise_domain_error(exc)

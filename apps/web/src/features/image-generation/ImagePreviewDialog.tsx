@@ -1,5 +1,6 @@
 import { Button, Text } from '@mantine/core';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { imageAssetMetadata, imageAssetTitle, imageAssetUrl, type ImageAsset } from './imageWorkspaceModel';
 
 interface ImagePreviewDialogAssetProps {
@@ -19,6 +20,9 @@ type ImagePreviewDialogProps = ImagePreviewDialogAssetProps | ImagePreviewDialog
 
 export function ImagePreviewDialog(props: ImagePreviewDialogProps) {
   const [zoom, setZoom] = useState(1);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imagePainted, setImagePainted] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
   const title = 'asset' in props ? imageAssetTitle(props.asset) : props.title;
   const imageUrl = 'asset' in props ? imageAssetUrl(props.asset.id) : props.imageUrl;
   const downloadUrl = 'asset' in props ? imageAssetUrl(props.asset.id, true) : props.downloadUrl;
@@ -27,7 +31,7 @@ export function ImagePreviewDialog(props: ImagePreviewDialogProps) {
 
   const updateZoom = (nextZoom: number) => setZoom(Math.min(4, Math.max(1, Number(nextZoom.toFixed(2)))));
 
-  return (
+  const dialog = (
     <div className="image-preview-overlay" role="dialog" aria-modal="true" aria-label={`Enlarged ${title}`} onClick={onClose}>
       <div className="image-preview-dialog" onClick={(event) => event.stopPropagation()}>
         <header>
@@ -42,7 +46,38 @@ export function ImagePreviewDialog(props: ImagePreviewDialogProps) {
             updateZoom(zoom + (event.deltaY < 0 ? 0.25 : -0.25));
           }}
         >
-          <img src={imageUrl} alt={title} decoding="async" style={{ transform: `scale(${zoom})` }} />
+          <img
+            className={imageLoaded ? 'image-preview-rendered-image' : 'image-preview-preloader'}
+            src={imageUrl}
+            alt={imageLoaded ? title : ''}
+            aria-hidden={!imageLoaded}
+            data-testid="image-preview-loader"
+            decoding="async"
+            loading="eager"
+            onLoad={(event) => {
+              const image = event.currentTarget;
+              const revealDecodedImage = () => {
+                setImageLoaded(true);
+                window.setTimeout(() => setImagePainted(true), 250);
+              };
+              if (typeof image.decode !== 'function') {
+                revealDecodedImage();
+                return;
+              }
+              void image.decode()
+                .then(revealDecodedImage)
+                .catch(() => setImageFailed(true));
+            }}
+            onError={() => setImageFailed(true)}
+            style={{ transform: `scale(${zoom})` }}
+          />
+          {imageFailed ? (
+            <p className="image-preview-load-error" role="alert">
+              The image could not be displayed. Use Open to view the original file.
+            </p>
+          ) : !imagePainted ? (
+            <p className="image-preview-loading" role="status">Loading image...</p>
+          ) : null}
         </div>
         <footer>
           <Text size="xs">{metadata}</Text>
@@ -58,4 +93,9 @@ export function ImagePreviewDialog(props: ImagePreviewDialogProps) {
       </div>
     </div>
   );
+
+  // Theme surfaces use backdrop filters, which create containing blocks for
+  // fixed descendants. Rendering at the document root keeps the lightbox above
+  // those surfaces and prevents it from being clipped by a job-list scroller.
+  return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body);
 }

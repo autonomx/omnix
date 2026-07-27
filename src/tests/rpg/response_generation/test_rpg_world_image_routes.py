@@ -60,6 +60,10 @@ def test_world_image_routes_support_manifest_generation_and_review(monkeypatch) 
         "app.gateway.rpg_world_image_routes.update_world_image_target",
         fake_update,
     )
+    monkeypatch.setattr(
+        "app.gateway.rpg_world_image_routes.regenerate_world_image_prompts",
+        lambda world_id, **kwargs: {"ok": True, "world_id": world_id, "targets": kwargs["target_ids"]},
+    )
 
     app = FastAPI()
     register_rpg_world_image_routes(app)
@@ -89,12 +93,18 @@ def test_world_image_routes_support_manifest_generation_and_review(monkeypatch) 
         "/api/rpg/worlds/world:aurelia/image-targets/world%3Acover/regenerate",
         json={"prompt": "Try again", "provider_id": "image:flux-klein"},
     )
+    prompts_regenerated = client.post(
+        "/api/rpg/worlds/world:aurelia/image-prompts/regenerate",
+        json={"target_ids": ["world:cover"]},
+    )
 
     assert manifest.status_code == 200
     assert manifest.json()["targets"][0]["target_id"] == "world:cover"
     assert generated.status_code == 200
     assert reviewed.status_code == 200
     assert regenerated.status_code == 200
+    assert prompts_regenerated.status_code == 200
+    assert prompts_regenerated.json()["targets"] == ["world:cover"]
     assert calls[0] == (
         "generate",
         {
@@ -249,6 +259,92 @@ def test_desired_targets_include_realm_entities_for_document_card_art() -> None:
     assert "theatrical lighting" in realm_target["suggested_prompt"]
 
 
+def test_atmospheric_filtration_system_prompt_is_expanded_into_a_visible_scene() -> None:
+    prompt = world_images._prompt(
+        world={"title": "Neon Wastes", "genre": "cyberpunk", "tone": "rebellious"},
+        target_type="illustration",
+        role="illustration",
+        entity={"name": "Atmospheric Filtration System (AFS)"},
+    )
+
+    assert "colossal life-support machine" in prompt
+    assert "towering purification stacks" in prompt
+    assert "toxic orange smog" in prompt
+    assert "small augmented rebels" in prompt
+
+
+def test_character_portrait_prompt_uses_stable_identity_and_tight_framing() -> None:
+    prompt = world_images._prompt(
+        world={"title": "Neon Wastes", "genre": "cyberpunk", "tone": "rebellious"},
+        target_type="actor",
+        role="portrait",
+        entity={
+            "name": "Kaelen 'Ghost' Voss",
+            "dossier": {
+                "sections": [
+                    {
+                        "id": "appearance",
+                        "paragraphs": ["Subtle neural interfaces sit beneath his skin."],
+                    }
+                ]
+            },
+        },
+    )
+
+    assert "tight chest-up portrait" in prompt
+    assert "face occupying roughly one-third" in prompt
+    assert "matte-titanium augmentation" in prompt
+    assert "compact optical-camouflage emitter" in prompt
+    assert "Keep background figures minimal" in prompt
+    assert "No text, logos, watermarks" in prompt
+    assert "Show its scale, materials, construction" not in prompt
+
+
+def test_non_character_prompts_use_role_specific_canon_and_composition() -> None:
+    world = {"title": "Neon Wastes", "genre": "cyberpunk", "tone": "rebellious"}
+    threat = world_images._prompt(
+        world=world,
+        target_type="cyberpunk_threat",
+        role="portrait",
+        entity={
+            "name": "Praetorian Enforcer",
+            "kind": "cyberpunk_threat",
+            "behaviour": "Advances behind a ballistic shield.",
+            "weaknesses": ["Exposed coolant spine"],
+            "capabilities": ["Suppressive fire"],
+        },
+    )
+    item = world_images._prompt(
+        world=world,
+        target_type="equipment",
+        role="icon",
+        entity={
+            "name": "Signal Scrambler",
+            "function": "Disrupts corporate tracking signals.",
+            "limitations": "Overheats after one minute.",
+        },
+    )
+    encounter = world_images._prompt(
+        world=world,
+        target_type="encounter_seed",
+        role="scene",
+        entity={
+            "name": "Catwalk Ambush",
+            "setup": "Rebels cross a rain-soaked filtration catwalk.",
+            "complications": ["A corporate searchlight finds them"],
+            "outcomes": ["The catwalk collapses"],
+        },
+    )
+
+    assert "threat key art" in threat
+    assert "Exposed coolant spine" in threat
+    assert "tight chest-up portrait" not in threat
+    assert "three-quarter product view" in item
+    assert "Overheats after one minute" in item
+    assert "Stage one decisive action" in encounter
+    assert "corporate searchlight" in encounter
+
+
 def test_desired_targets_include_a_regenerable_world_map() -> None:
     targets = world_images._desired_targets(
         {
@@ -285,9 +381,39 @@ def test_desired_targets_include_a_regenerable_world_map() -> None:
     assert "compact settlement with streets, roofs, and a clear civic centre" in map_target["suggested_prompt"]
     assert "walled market town on the old trade road" in map_target["suggested_prompt"]
     assert "cinematic colour grading" in map_target["suggested_prompt"]
+    assert "Absolutely no typography or written marks" in map_target["suggested_prompt"]
+    assert "names are supplied only by application overlay markers" in map_target["suggested_prompt"]
     local_map_target = next(target for target in targets if target["target_id"] == "entity:location:moon_market:map")
     assert local_map_target["metadata"]["map_level"] == "location"
     assert "detailed, navigable local RPG map" in local_map_target["suggested_prompt"]
+    assert "Absolutely no typography or written marks" in local_map_target["suggested_prompt"]
+
+
+def test_map_prompt_uses_places_as_canonical_landmarks() -> None:
+    targets = world_images._desired_targets(
+        {
+            "world": {"id": "world:neon", "title": "Neon Wastes", "genre": "cyberpunk"},
+            "topics": [
+                {
+                    "topic_id": "places",
+                    "content": {
+                        "entities": [
+                            {
+                                "id": "ent:places:spire",
+                                "name": "OmniCorp Spire",
+                                "kind": "place",
+                                "description": "A corporate tower over a polluted city.",
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+    )
+
+    map_target = next(target for target in targets if target["target_id"] == "world:map")
+    assert "OmniCorp Spire" in map_target["suggested_prompt"]
+    assert "Absolutely no typography or written marks" in map_target["suggested_prompt"]
 
 
 def test_rpg_world_images_are_marked_for_the_rpg_asset_boundary(tmp_path) -> None:

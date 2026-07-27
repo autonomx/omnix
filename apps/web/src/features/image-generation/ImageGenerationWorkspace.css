@@ -331,6 +331,7 @@
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56);
   display: grid;
   gap: 0.75rem;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: calc(100vh - 2.5rem);
   padding: 0.85rem;
   width: min(72rem, calc(100vw - 2.5rem));
@@ -344,25 +345,53 @@
 }
 .image-preview-dialog header strong {
   color: var(--igw-text);
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .image-preview-viewport {
+  align-items: center;
   background: rgba(4, 9, 20, 0.92);
   border-radius: 0.7rem;
+  display: flex;
+  justify-content: center;
+  height: min(72vh, 46rem);
   max-height: min(72vh, 46rem);
+  min-height: 12rem;
   overflow: auto;
+  position: relative;
 }
-.image-preview-viewport img {
+.image-preview-preloader {
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+}
+.image-preview-rendered-image {
   display: block;
-  max-height: min(72vh, 46rem);
+  height: 100%;
   object-fit: contain;
   transform-origin: center;
   width: 100%;
 }
 .image-preview-dialog footer p { color: #8f9ab4; margin: 0; }
-.image-preview-controls { align-items: center; display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: flex-end; }
+.image-preview-dialog footer p { min-width: 0; }
+.image-preview-loading {
+  align-items: center;
+  background: rgba(4, 9, 20, 0.98);
+  color: #8f9ab4;
+  display: grid;
+  inset: 0;
+  justify-items: center;
+  margin: 0;
+  position: absolute;
+  text-align: center;
+  z-index: 2;
+}
+.image-preview-load-error { color: #fca5a5; margin: 2rem; text-align: center; }
+.image-preview-controls { align-items: center; display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 0.45rem; justify-content: flex-end; }
 .image-preview-controls span { color: #cfd6e8; font-size: 0.72rem; min-width: 3rem; text-align: center; }
 
 .image-empty-state { align-items: center; border: 1px dashed rgba(112, 130, 176, 0.23); border-radius: 0.65rem; color: #7f8aa4; display: grid; gap: 0.2rem; justify-items: center; min-height: 6rem; padding: 1rem; text-align: center; }

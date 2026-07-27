@@ -71,6 +71,78 @@ describe('RpgWorldVisualMapPanel', () => {
     expect(screen.getByText(/130%/)).toBeInTheDocument();
   });
 
+  it('maps generated place and region topics used by current world canon', async () => {
+    const currentCanonDetail = {
+      ...detail,
+      topics: [
+        {
+          ...detail.topics[0],
+          topic_id: 'places',
+          content: {
+            entities: [{
+              id: 'ent:places:001',
+              entity_id: 'ent:places:001',
+              kind: 'place',
+              name: 'OmniCorp Spire',
+              short_summary: 'A corporate citadel rising above the polluted city.',
+            }],
+          },
+        },
+        {
+          ...detail.topics[0],
+          topic_id: 'regions',
+          content: {
+            entities: [{
+              id: 'ent:region:001',
+              entity_id: 'ent:region:001',
+              kind: 'region',
+              name: 'Neo-Kyoto Arcology',
+            }],
+          },
+        },
+      ],
+    };
+    const currentCanonTargets = {
+      ...imageTargets,
+      targets: [
+        imageTargets.targets[0],
+        {
+          ...imageTargets.targets[1],
+          target_id: 'entity:ent:places:001:map',
+          target_type: 'map',
+          entity_id: 'ent:places:001',
+          role: 'map',
+          active_asset_id: 'image:spire-map',
+          metadata: { topic_id: 'map', map_level: 'location' },
+        },
+        {
+          ...imageTargets.targets[1],
+          target_id: 'entity:ent:region:001:map',
+          target_type: 'map',
+          entity_id: 'ent:region:001',
+          role: 'map',
+          active_asset_id: 'image:arcology-map',
+          metadata: { topic_id: 'map', map_level: 'location' },
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/image-targets')) return response(currentCanonTargets);
+      return response(currentCanonDetail);
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
+
+    expect(await screen.findByRole('button', { name: 'Open OmniCorp Spire (ent:places:001)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Neo-Kyoto Arcology (ent:region:001)' })).toBeInTheDocument();
+    expect(screen.getByText('Detailed maps ready (2)')).toBeInTheDocument();
+    expect(screen.queryByText('No mapped areas yet')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open OmniCorp Spire (ent:places:001)' }));
+    expect(screen.getByText('A corporate citadel rising above the polluted city.')).toBeInTheDocument();
+  });
+
   it('switches to a selected location map at deep zoom', async () => {
     const targetsWithDetailMap = {
       ...imageTargets,

@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from app.rpg.worlds.profile_aware_world_images import (
     generate_world_images,
     read_world_image_targets,
+    regenerate_world_image_prompts,
     update_world_image_target,
 )
 
@@ -83,6 +84,33 @@ def register_rpg_world_image_routes(app: FastAPI) -> None:
                 style=str(payload.get("style") or ""),
                 no_cache=bool(payload.get("no_cache", False)),
             )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/image-prompts/regenerate",
+        tags=["rpg-world"],
+        include_in_schema=False,
+    )
+    async def rpg_regenerate_world_image_prompts(
+        world_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        payload = dict(_body(await request.json()))
+        target_ids_value = payload.get("target_ids")
+        if target_ids_value is not None and not isinstance(target_ids_value, list):
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "target_ids_must_be_array"},
+            )
+        target_ids = (
+            [str(value) for value in target_ids_value if str(value).strip()]
+            if target_ids_value is not None
+            else None
+        )
+        try:
+            return regenerate_world_image_prompts(world_id, target_ids=target_ids)
         except Exception as exc:
             _raise_domain_error(exc)
             raise

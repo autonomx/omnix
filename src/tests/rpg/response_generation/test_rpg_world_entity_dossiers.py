@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.rpg.session.genesis.world_forge_dossiers import (
     DOSSIER_SCHEMA_VERSION,
     dossier_prompt_contract,
+    placeholder_section_title_count,
     project_entity_dossier,
     validate_entity_dossier,
 )
@@ -146,6 +147,12 @@ def test_legacy_actor_placeholders_use_npc_headings() -> None:
     )
 
     assert [section["title"] for section in dossier["sections"]] == ["Overview", "Appearance"]
+
+
+def test_placeholder_section_title_count_includes_blank_titles() -> None:
+    assert placeholder_section_title_count(
+        {"sections": [{"title": "Section 1"}, {"title": ""}, {"title": "History"}]}
+    ) == 2
 
 
 def test_authoring_card_keeps_compact_summary_and_exposes_full_dossier() -> None:

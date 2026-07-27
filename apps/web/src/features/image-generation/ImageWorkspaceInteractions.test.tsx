@@ -166,7 +166,14 @@ describe('ImageJobList interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View in Latest Result' }));
     expect(onSelectAsset).toHaveBeenCalledWith('asset-one');
     fireEvent.click(screen.getByRole('button', { name: 'Enlarge Completed image' }));
-    expect(screen.getByRole('dialog', { name: 'Enlarged Completed image' })).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: 'Enlarged Completed image' });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.parentElement).toBe(document.body);
+    const imageLoader = screen.getByTestId('image-preview-loader');
+    fireEvent.load(imageLoader);
+    expect(screen.getByRole('img', { name: 'Completed image' })).toHaveAttribute('src', '/api/assets/asset-one/file');
+    fireEvent.error(imageLoader);
+    expect(screen.getByRole('alert')).toHaveTextContent('The image could not be displayed.');
     expect(screen.getByRole('link', { name: 'Download Completed image' })).toHaveAttribute('href', '/api/assets/asset-one/file?download=true');
     fireEvent.click(screen.getByRole('button', { name: 'Close enlarged image' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));

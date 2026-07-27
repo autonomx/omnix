@@ -31,6 +31,10 @@ export interface RpgWorldTokenUsage {
   in_flight_topics?: number;
   generation_duration_ms?: number;
   timed_topics?: number;
+  repair_count?: number;
+  repair_tokens?: number;
+  provider_reported_repairs?: number;
+  estimated_repairs?: number;
 }
 
 export interface RpgAuthoringManifestResponse {
@@ -190,6 +194,7 @@ export interface RpgDossierQualityMetrics {
   rich_dossiers: number;
   projected_legacy_dossiers: number;
   invalid_or_thin_dossiers: number;
+  heading_repairs: number;
   coverage_percent: number;
   average_words: number;
   unresolved_related_entity_ids: number;
@@ -213,6 +218,14 @@ export interface RpgDossierEnrichmentCandidate {
   word_count: number;
   generated_from_legacy: boolean;
   issues: string[];
+}
+
+export interface RpgDossierEnrichmentRequest {
+  all_candidates?: boolean;
+  candidates?: Array<Pick<RpgDossierEnrichmentCandidate, 'topic_id' | 'entity_id'>>;
+  directives?: Record<string, unknown>;
+  dry_run?: boolean;
+  limit?: number;
 }
 
 export interface RpgWorldDossierQualityResponse {
@@ -266,7 +279,7 @@ function jsonPatch(body: Record<string, unknown>): RequestInit {
   };
 }
 
-function jsonPost(body: Record<string, unknown>): RequestInit {
+function jsonPost(body: object): RequestInit {
   return {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -295,7 +308,7 @@ export const rpgWorldAuthoringClient = {
 
   enrichDossiers(
     worldId: string,
-    body: Record<string, unknown>,
+    body: RpgDossierEnrichmentRequest,
   ): Promise<RpgWorldDossierEnrichmentResponse> {
     return request(
       `/api/rpg/worlds/${encodeURIComponent(worldId)}/enrich-dossiers`,

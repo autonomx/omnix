@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldAuthoringClient,
   type RpgAuthoringSection,
+  type RpgDossierEnrichmentCandidate,
   type RpgWorldTokenUsage,
 } from '../../api/rpgWorldAuthoringClient';
 import {
@@ -68,6 +69,13 @@ function tokenLabel(value: number): string {
   return new Intl.NumberFormat().format(Math.max(0, Math.round(value)));
 }
 
+interface DossierRepairProgress {
+  completed: number;
+  failed: number;
+  currentTitle: string;
+  total: number;
+}
+
 function durationLabel(value: number): string {
   const totalSeconds = Math.max(0, Math.round(value / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -128,6 +136,7 @@ export function RpgWorldGenerationDashboard({
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [acceptAllArmed, setAcceptAllArmed] = useState(false);
   const [acceptAllDossiersArmed, setAcceptAllDossiersArmed] = useState(false);
+  const [dossierRepairProgress, setDossierRepairProgress] = useState<DossierRepairProgress | null>(null);
   const [retryScope, setRetryScope] = useState<RetryScope>('topic');
   const [retryEntityIds, setRetryEntityIds] = useState('');
   const [retryFields, setRetryFields] = useState('');
@@ -244,19 +253,34 @@ export function RpgWorldGenerationDashboard({
   });
 
   const acceptAllDossiers = useMutation({
-    mutationFn: () => rpgWorldAuthoringClient.enrichDossiers(worldId, {
-      all_candidates: true,
-      dry_run: false,
-      directives: {
-        generation_dashboard_bulk_acceptance: true,
-        focus: 'Write complete, distinct long-form lore from accepted canon without changing structured facts, IDs, mechanics, or relationships.',
-      },
-    }),
+    mutationFn: async () => {
+      const candidates = dossierCandidates as RpgDossierEnrichmentCandidate[];
+      const completed: Array<{ topic_id: string; entity_id: string; content_hash: string }> = [];
+      const failed: Array<{ topic_id: string; entity_id: string; error: string }> = [];
+      for (const [index, candidate] of candidates.entries()) {
+        setDossierRepairProgress({ completed: completed.length, failed: failed.length, currentTitle: candidate.title, total: candidates.length });
+        const result = await rpgWorldAuthoringClient.enrichDossiers(worldId, {
+          candidates: [{ topic_id: candidate.topic_id, entity_id: candidate.entity_id }],
+          dry_run: false,
+          directives: {
+            generation_dashboard_bulk_acceptance: true,
+            focus: 'Write complete, distinct long-form lore from accepted canon without changing structured facts, IDs, mechanics, or relationships.',
+          },
+        });
+        completed.push(...(result.completed ?? []));
+        failed.push(...(result.failed ?? []));
+        await queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-authoring-manifest', worldId] });
+        setDossierRepairProgress({ completed: completed.length, failed: failed.length, currentTitle: index + 1 < candidates.length ? candidates[index + 1].title : candidate.title, total: candidates.length });
+      }
+      return { completed, failed };
+    },
     onMutate: () => {
-      setReviewFeedback(`Generating and accepting ${dossierCandidates.length} dossiers. This runs one at a time to preserve canon; keep Omnix open until it finishes.`);
+      setDossierRepairProgress({ completed: 0, failed: 0, currentTitle: dossierCandidates[0]?.title ?? '', total: dossierCandidates.length });
+      setReviewFeedback(`Repairing and accepting ${dossierCandidates.length} dossiers and headings. This runs one at a time to preserve canon; keep Omnix open until it finishes.`);
     },
     onSuccess: async (result) => {
       setAcceptAllDossiersArmed(false);
+      setDossierRepairProgress(null);
       const completed = result.completed?.length ?? 0;
       const failed = result.failed?.length ?? 0;
       setReviewFeedback(`Accepted ${completed} generated dossier${completed === 1 ? '' : 's'}${failed ? `; ${failed} could not be generated and remain available for individual regeneration.` : '.'}`);
@@ -264,6 +288,7 @@ export function RpgWorldGenerationDashboard({
     },
     onError: (cause) => {
       setAcceptAllDossiersArmed(false);
+      setDossierRepairProgress(null);
       setReviewFeedback(cause instanceof Error ? cause.message : 'Dossiers could not be generated and accepted.');
     },
   });
@@ -313,7 +338,7 @@ export function RpgWorldGenerationDashboard({
   const handleAcceptAllDossiers = () => {
     if (!acceptAllDossiersArmed) {
       setAcceptAllDossiersArmed(true);
-      setReviewFeedback(`Confirm generation and acceptance of ${dossierCandidates.length} dossier${dossierCandidates.length === 1 ? '' : 's'} by clicking Generate & Accept All Dossiers again.`);
+      setReviewFeedback(`Confirm repair and acceptance of ${dossierCandidates.length} dossier${dossierCandidates.length === 1 ? '' : 's'}, including placeholder headings, by clicking Repair All Dossiers & Headings again.`);
       return;
     }
     acceptAllDossiers.mutate();
@@ -370,14 +395,19 @@ export function RpgWorldGenerationDashboard({
         </button>
         <button type="button" disabled={!allTopicsAccepted || !dossierCandidates.length || acceptAllDossiers.isPending} onClick={handleAcceptAllDossiers}>
           {acceptAllDossiers.isPending
-            ? `Generating Dossiers (${dossierCandidates.length})…`
+            ? `Repairing Dossiers & Headings (${dossierCandidates.length})…`
             : acceptAllDossiersArmed
-              ? `Confirm Generate & Accept (${dossierCandidates.length})`
-              : `Repair Missing Dossiers (${dossierCandidates.length})`}
+              ? `Confirm Repair All (${dossierCandidates.length})`
+              : `Repair Dossiers & Headings (${dossierCandidates.length})`}
         </button>
         <button type="button" disabled={run?.status !== 'review' || publicationBlocked} onClick={() => panelRef.current?.publish()}>Publish World</button>
         {onOpenImages ? <button type="button" onClick={onOpenImages}>Generate Images</button> : null}
       </div>
+      {dossierRepairProgress ? <div className="rpg-dossier-repair-progress" aria-live="polite">
+        <div><strong>Repairing dossiers &amp; headings</strong><span>{dossierRepairProgress.completed + dossierRepairProgress.failed} of {dossierRepairProgress.total}</span></div>
+        <div className="rpg-dossier-repair-progress-meter" role="progressbar" aria-valuemin={0} aria-valuemax={dossierRepairProgress.total} aria-valuenow={dossierRepairProgress.completed + dossierRepairProgress.failed}><i style={{ width: `${dossierRepairProgress.total ? (dossierRepairProgress.completed + dossierRepairProgress.failed) / dossierRepairProgress.total * 100 : 0}%` }} /></div>
+        <small>{dossierRepairProgress.currentTitle || 'Preparing next dossier'}{dossierRepairProgress.failed ? ` · ${dossierRepairProgress.failed} failed` : ''}</small>
+      </div> : null}
       {reviewFeedback ? <p className="rpg-generation-primary-action-feedback" aria-live="polite">{reviewFeedback}</p> : null}
 
       <div className="rpg-generation-dashboard-layout">
@@ -405,7 +435,7 @@ export function RpgWorldGenerationDashboard({
 
         <aside className="rpg-generation-dashboard-side">
           <section className="rpg-generation-diagnostics-card"><header><h3>Validation analytics</h3><span>{results.length} attempted</span></header><AnalyticsGroup title="Reason code" values={analytics?.by_code ?? {}} /><AnalyticsGroup title="Field" values={analytics?.by_field ?? {}} /><AnalyticsGroup title="Domain" values={analytics?.by_domain ?? {}} /><AnalyticsGroup title="Model" values={analytics?.by_model ?? {}} /><AnalyticsGroup title="Prompt version" values={analytics?.by_prompt_version ?? {}} />{!Object.keys(analytics?.by_code ?? {}).length ? <p className="rpg-generation-no-error">No blocking validation issues recorded.</p> : null}</section>
-          <section className="rpg-generation-token-card" aria-label="World generation token usage"><header><h3>Token usage</h3><span>{tokenUsage?.topic_count ?? 0} generated</span></header><div className="rpg-generation-token-total"><strong>{tokenLabel(tokenUsage?.total_tokens ?? 0)}</strong><span>tokens accounted</span></div><div className="rpg-generation-token-breakdown"><span><small>Usage source</small><b>{tokenUsage?.provider_reported_topics ?? 0} reported · {tokenUsage?.estimated_topics ?? 0} estimated</b></span>{tokenUsage?.timed_topics ? <span><small>Provider time</small><b>{durationLabel(tokenUsage.generation_duration_ms ?? 0)}</b></span> : null}</div>{tokenUsage?.in_flight_topics ? <p>Live batch usage included.</p> : null}</section>
+          <section className="rpg-generation-token-card" aria-label="World generation token usage"><header><h3>Token usage</h3><span>{tokenUsage?.topic_count ?? 0} generated{tokenUsage?.repair_count ? ` · ${tokenUsage.repair_count} repairs` : ''}</span></header><div className="rpg-generation-token-total"><strong>{tokenLabel(tokenUsage?.total_tokens ?? 0)}</strong><span>tokens accounted</span></div><div className="rpg-generation-token-breakdown"><span><small>Usage source</small><b>{tokenUsage?.provider_reported_topics ?? 0} reported · {tokenUsage?.estimated_topics ?? 0} estimated</b></span>{tokenUsage?.repair_count ? <span><small>Repairs</small><b>{tokenLabel(tokenUsage.repair_tokens ?? 0)} tokens · {tokenUsage.provider_reported_repairs ?? 0} reported</b></span> : null}{tokenUsage?.timed_topics ? <span><small>Provider time</small><b>{durationLabel(tokenUsage.generation_duration_ms ?? 0)}</b></span> : null}</div>{tokenUsage?.in_flight_topics ? <p>Live batch usage included.</p> : null}</section>
           <section className="rpg-generation-image-card"><header><h3>Image Generation</h3></header><div><article><small>Targets</small><strong>{imageSections.length}</strong></article><article><small>Ready</small><strong>{imageReady}</strong></article></div></section>
         </aside>
       </div>

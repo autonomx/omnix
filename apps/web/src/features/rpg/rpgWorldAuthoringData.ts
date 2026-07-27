@@ -80,14 +80,14 @@ export function worldLocationOptions(
   for (const blueprint of detail.map_blueprints) {
     add(record(blueprint.document).location_id);
   }
-  for (const topicId of ['locations', 'regions']) {
+  for (const topicId of ['locations', 'places', 'regions']) {
     for (const topic of detail.topics.filter((candidate) => candidate.topic_id === topicId)) {
       const content = record(topic.content);
       for (const value of [...array(content.entities), ...array(content.locations)]) {
         const row = record(value);
         const locationId = text(
           row.location_id,
-          topicId === 'locations' ? text(row.id, text(row.entity_id)) : '',
+          text(row.id, text(row.entity_id, typeof value === 'string' ? value : '')),
         );
         add(locationId, text(row.name, text(row.title)));
       }

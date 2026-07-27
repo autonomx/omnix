@@ -127,6 +127,39 @@ def read_world_image_targets(
     return {"ok": True, "world": detail["world"], "targets": targets}
 
 
+def regenerate_world_image_prompts(
+    world_id: str,
+    *,
+    target_ids: list[str] | None = None,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    """Rebuild suggested prompts without creating image-generation jobs."""
+    detail = read_world_detail(world_id, database=database)
+    desired = _desired_targets(detail)
+    selected = (
+        _base._selected_targets(desired, target_ids)
+        if target_ids is not None
+        else desired
+    )
+    if not selected:
+        raise ValueError("world_image_prompt_targets_required")
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        require_world_writable(work, context, world_id)
+        _base._upsert_targets(work, context, world_id, selected)
+        _base._sync_jobs(work, context, world_id)
+        refreshed = {
+            target["target_id"]: target
+            for target in _base._list_targets(work, context, world_id)
+        }
+        work.commit()
+    return {
+        "ok": True,
+        "world_id": world_id,
+        "targets": [refreshed[str(target["target_id"])] for target in selected],
+    }
+
+
 # The legacy generator resolves read_world_image_targets from its module globals.
 # Install the profile-aware materializer once, then keep the proven generation and
 # review implementations unchanged.
@@ -140,5 +173,6 @@ __all__ = [
     "approved_world_asset_bindings",
     "generate_world_images",
     "read_world_image_targets",
+    "regenerate_world_image_prompts",
     "update_world_image_target",
 ]

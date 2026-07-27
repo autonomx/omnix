@@ -202,6 +202,10 @@ def test_world_token_usage_prefers_provider_usage_and_marks_estimates() -> None:
         "in_flight_topics": 0,
         "generation_duration_ms": 0,
         "timed_topics": 0,
+        "repair_count": 0,
+        "repair_tokens": 0,
+        "provider_reported_repairs": 0,
+        "estimated_repairs": 0,
     }
 
 
@@ -239,6 +243,10 @@ def test_world_token_usage_includes_active_entity_batch_checkpoints() -> None:
         "in_flight_topics": 2,
         "generation_duration_ms": 0,
         "timed_topics": 0,
+        "repair_count": 0,
+        "repair_tokens": 0,
+        "provider_reported_repairs": 0,
+        "estimated_repairs": 0,
     }
 
 
@@ -285,6 +293,28 @@ def test_world_token_usage_includes_rejected_generation_results() -> None:
     assert summary["topic_count"] == 2
     assert summary["generation_duration_ms"] == 20_000
     assert summary["timed_topics"] == 2
+
+
+def test_world_token_usage_includes_dossier_regeneration_usage() -> None:
+    summary = _world_token_usage((
+        {
+            "source": "ai",
+            "provenance": {
+                "authoring": {
+                    "dossier_regeneration_usage": [
+                        {"usage": {"prompt_tokens": 90, "completion_tokens": 30, "total_tokens": 120}},
+                        {"token_estimate": {"prompt_tokens": 60, "completion_tokens": 20, "total_tokens": 80}},
+                    ],
+                },
+            },
+        },
+    ))
+
+    assert summary["total_tokens"] == 200
+    assert summary["repair_count"] == 2
+    assert summary["repair_tokens"] == 200
+    assert summary["provider_reported_repairs"] == 1
+    assert summary["estimated_repairs"] == 1
 
 
 def test_world_token_usage_does_not_mark_an_unreported_live_call_unavailable() -> None:

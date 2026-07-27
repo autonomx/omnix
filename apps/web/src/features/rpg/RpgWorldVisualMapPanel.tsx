@@ -72,12 +72,12 @@ function locationEntities(detail: unknown): Map<string, Record<string, unknown>>
   const topics = Array.isArray(response.topics) ? response.topics : [];
   for (const rawTopic of topics) {
     const topic = record(rawTopic);
-    if (text(topic.topic_id) !== 'locations') continue;
+    if (!['locations', 'places', 'regions'].includes(text(topic.topic_id))) continue;
     const values = record(topic.content).entities;
     if (!Array.isArray(values)) continue;
     for (const rawEntity of values) {
       const entity = record(rawEntity);
-      merge(entity.id ?? entity.entity_id, entity);
+      merge(entity.location_id ?? entity.id ?? entity.entity_id, entity);
     }
   }
 
@@ -185,9 +185,13 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
   // A blueprint change makes the map target stale while the regenerated image
   // is queued. Keep the last approved artwork on the atlas during that gap.
   const mapAssetId = mapTarget?.review_state !== 'rejected' ? mapTarget?.active_asset_id : undefined;
+  const isLocationArtworkTarget = (target: { metadata: Record<string, unknown>; role: string }) => (
+    ['locations', 'places', 'regions'].includes(text(target.metadata.topic_id))
+    && target.role !== 'map'
+  );
   const locationArtwork = useMemo(() => new Map(
     (imagesQuery.data?.targets ?? [])
-      .filter((target) => target.metadata.topic_id === 'locations' && target.review_state === 'approved' && target.active_asset_id)
+      .filter((target) => isLocationArtworkTarget(target) && target.review_state === 'approved' && target.active_asset_id)
       .map((target) => [target.entity_id, String(target.active_asset_id)]),
   ), [imagesQuery.data?.targets]);
   const locationMapArtwork = useMemo(() => new Map(
@@ -196,7 +200,7 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
       .map((target) => [target.entity_id, String(target.active_asset_id)]),
   ), [imagesQuery.data?.targets]);
   const missingLocationArtwork = (imagesQuery.data?.targets ?? [])
-    .filter((target) => target.metadata.topic_id === 'locations' && !(
+    .filter((target) => isLocationArtworkTarget(target) && !(
       target.review_state === 'approved' && target.active_asset_id
     ));
   const missingLocationMaps = (imagesQuery.data?.targets ?? [])

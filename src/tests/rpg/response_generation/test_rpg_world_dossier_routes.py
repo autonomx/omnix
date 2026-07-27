@@ -284,6 +284,33 @@ def test_enrichment_route_can_explicitly_process_all_candidates(monkeypatch) -> 
     }]
 
 
+def test_enrichment_route_accepts_specific_candidates_for_incremental_progress(monkeypatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_enrich(world_id: str, **kwargs):
+        calls.append({"world_id": world_id, **kwargs})
+        return {"ok": True, "world_id": world_id, "dry_run": False}
+
+    monkeypatch.setattr(
+        "app.gateway.rpg_world_dossier_routes.enrich_world_dossiers",
+        fake_enrich,
+    )
+    app = FastAPI()
+    register_rpg_world_dossier_routes(app)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/rpg/worlds/world:aurelia/enrich-dossiers",
+        json={
+            "dry_run": False,
+            "candidates": [{"topic_id": "places", "entity_id": "harbor"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert calls[0]["requested_candidates"] == [{"topic_id": "places", "entity_id": "harbor"}]
+
+
 def test_dossier_routes_require_concurrency_tokens_and_structured_dossier() -> None:
     app = FastAPI()
     register_rpg_world_dossier_routes(app)

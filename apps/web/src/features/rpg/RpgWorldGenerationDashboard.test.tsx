@@ -276,10 +276,10 @@ describe('RpgWorldGenerationDashboard', () => {
     }));
 
     renderDashboard();
-    const action = await screen.findByRole('button', { name: 'Repair Missing Dossiers (1)' });
+    const action = await screen.findByRole('button', { name: 'Repair Dossiers & Headings (1)' });
     expect(action).toBeEnabled();
     fireEvent.click(action);
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm Generate & Accept (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Repair All (1)' }));
 
     await waitFor(() => expect(requests.some((request) => request.url.endsWith('/enrich-dossiers'))).toBe(true));
     const request = requests.find((entry) => entry.url.endsWith('/enrich-dossiers'));
