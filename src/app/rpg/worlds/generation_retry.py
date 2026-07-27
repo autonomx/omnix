@@ -15,6 +15,10 @@ from .generation_coordinator import (
     reconcile_world_generation,
     start_world_generation,
 )
+from .generation_dependency_invalidation import (
+    apply_stale_progress,
+    build_retry_invalidation_records,
+)
 from .generation_diagnostics import log_world_generation_event
 from .generation_jobs import (
     canonical_generation_directives,
@@ -43,6 +47,7 @@ def _execution_summary(run: Mapping[str, Any]) -> dict[str, Any]:
         "flagged_count": len(progress.get("flagged_topic_ids") or ()),
         "failed_count": len(progress.get("failed_topic_ids") or ()),
         "blocked_count": len(progress.get("blocked_topic_ids") or ()),
+        "stale_count": len(progress.get("stale_topic_ids") or ()),
     }
 
 
@@ -96,11 +101,9 @@ def _retry_closure(
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Return selected retry topics and only the dependencies they require.
 
-    A manual retry is an explicit editorial action.  It must not requeue every
-    downstream topic merely because it consumes the selected topic; those
-    topics can remain in review until the editor chooses to regenerate them.
-    Dependencies are retained in the target set so a missing prerequisite can
-    still be produced, while already-complete prerequisites are reused.
+    Downstream consumers are not silently regenerated. They are recorded as
+    potentially stale and must be revalidated, invalidated, or explicitly
+    regenerated according to the changed contract.
     """
 
     node_map = graph.node_map()
@@ -246,6 +249,28 @@ def _pin_parent_run(
         work.commit()
 
 
+def _record_stale_dependants(
+    child_run_id: str,
+    records: Mapping[str, Mapping[str, Any]],
+    *,
+    database: Any | None,
+) -> dict[str, Any]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        child = work.world_generation.get(context, child_run_id)
+        if child is None:
+            work.rollback()
+            raise KeyError(f"world_generation_run_not_found:{child_run_id}")
+        progress = apply_stale_progress(child.get("progress"), records)
+        work.world_generation.update(
+            context,
+            run_id=child_run_id,
+            progress=progress,
+        )
+        work.commit()
+    return progress
+
+
 def retry_failed_world_generation(
     run_id: str,
     *,
@@ -255,7 +280,7 @@ def retry_failed_world_generation(
     kick_worker: bool = True,
     diagnostic_id: str | None = None,
 ) -> dict[str, Any]:
-    """Retry selected review outcomes plus every transitive dependent."""
+    """Retry selected review outcomes plus required upstream dependencies."""
 
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
@@ -298,6 +323,16 @@ def retry_failed_world_generation(
         profile_approval,
     )
     affected, targets = _retry_closure(graph, selected)
+    resolved_scopes = {
+        str(key): dict(value)
+        for key, value in dict(retry_scopes or {}).items()
+        if isinstance(value, Mapping)
+    }
+    stale_dependants = build_retry_invalidation_records(
+        graph,
+        affected,
+        resolved_scopes,
+    )
     topic_map = {str(row.get("topic_id") or ""): row for row in topics}
     locked = sorted(topic_id for topic_id in affected if _authoring_locked(topic_map.get(topic_id, {})))
     if locked:
@@ -308,7 +343,9 @@ def retry_failed_world_generation(
         "affected_topic_ids": list(affected),
         "resolved_topic_ids": list(targets),
         "include_dependencies": True,
-        "include_dependents": True,
+        "include_dependents": False,
+        "stale_topic_ids": sorted(stale_dependants),
+        "stale_topics": stale_dependants,
         "replace_locked": False,
     }
     previous_results = _previous_result_rows(result_rows, topics)
@@ -322,7 +359,7 @@ def retry_failed_world_generation(
         selected_topic_ids=affected,
         requested_topic_ids=selected,
         previous_results=previous_results,
-        retry_scopes=dict(retry_scopes or {}),
+        retry_scopes=resolved_scopes,
         parent_run_id=run_id,
     )
     settings = _settings_from_payload(dict(parent_run.get("settings") or {}))
@@ -351,6 +388,7 @@ def retry_failed_world_generation(
             "selected_topic_ids": selected,
             "affected_topic_ids": affected,
             "resolved_topic_ids": targets,
+            "stale_topic_ids": tuple(sorted(stale_dependants)),
             "provider_route": settings.provider_route,
             "model": settings.model,
             "approved_profile_hash": profile_approval["approved_profile_hash"],
@@ -371,7 +409,14 @@ def retry_failed_world_generation(
         database=database,
         tenant_context=context,
     )
-    _pin_parent_run(str(child_run["run_id"]), parent_run, database=database)
+    child_run_id = str(child_run["run_id"])
+    _pin_parent_run(child_run_id, parent_run, database=database)
+    stale_progress = _record_stale_dependants(
+        child_run_id,
+        stale_dependants,
+        database=database,
+    )
+    child_run = {**dict(child_run), "progress": stale_progress}
     worker_started = (
         kick_world_generation_worker(database=database, provider_route=settings.provider_route)
         if kick_worker
@@ -523,6 +568,7 @@ def decide_world_generation_retry(
         progress["publication_blocked"] = bool(
             pending
             or kept
+            or progress.get("stale_topic_ids")
             or progress.get("failed_topic_ids")
             or progress.get("blocked_topic_ids")
             or [
