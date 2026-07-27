@@ -75,7 +75,8 @@ def causal_generation_contract(node: CampaignTopicNode) -> dict[str, Any]:
             ]
         )
     return {
-        "schema_version": "rpg_world_forge_causal_generation_v2",
+        # Preserve the established contract identifier; the additions are backwards-compatible rules.
+        "schema_version": "rpg_world_forge_causal_generation_v1",
         "topic_id": node.topic_id,
         "rules": rules,
         "authoritative_entity_ids": list(node.metadata.get("authoritative_entity_ids") or ()),
