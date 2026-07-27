@@ -294,6 +294,7 @@ export function RpgWorldGenerationDashboard({
       for (const [index, candidate] of candidates.entries()) {
         setDossierRepairProgress({ completed: completed.length, failed: failed.length, currentTitle: candidate.title, total: candidates.length });
         const result = await rpgWorldAuthoringClient.enrichDossiers(worldId, {
+          all_candidates: true,
           candidates: [{ topic_id: candidate.topic_id, entity_id: candidate.entity_id }],
           dry_run: false,
           directives: {
