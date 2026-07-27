@@ -15,14 +15,18 @@ class AnchorSlot:
     domain_id: str
     anchor_kind: str
     slot_index: int
+    anchor_role: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        row = {
             "id": self.id,
             "domain_id": self.domain_id,
             "anchor_kind": self.anchor_kind,
             "slot_index": self.slot_index,
         }
+        if self.anchor_role:
+            row["anchor_role"] = self.anchor_role
+        return row
 
 
 _ANCHOR_DOMAINS = {
@@ -45,36 +49,55 @@ def _registry_hash(payload: Mapping[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
+def _starting_place_id(value: str) -> str:
+    rendered = str(value or "").strip().casefold()
+    if not rendered:
+        return ""
+    if ":" in rendered:
+        prefix, local = rendered.split(":", 1)
+        if prefix in {"place", "location"}:
+            rendered = local
+    local = "_".join(
+        "".join(character if character.isalnum() else " " for character in rendered).split()
+    )
+    return f"place:{local}" if local else ""
+
+
 def allocate_global_anchor_registry(
     graph: CampaignTopicGraph,
     *,
     seed: int,
     world_key: str,
+    starting_location_id: str = "",
 ) -> dict[str, Any]:
     """Allocate stable IDs for major anchors without inventing names or lore."""
 
     node_map = graph.node_map()
     anchors: list[dict[str, Any]] = []
+    starting_place_id = _starting_place_id(starting_location_id)
     for domain_id, (anchor_kind, prefix, maximum) in _ANCHOR_DOMAINS.items():
         node = node_map.get(domain_id)
         if node is None:
             continue
         count = min(maximum, max(0, int(node.target_count)))
-        anchors.extend(
-            AnchorSlot(
-                id=f"ent:{prefix}:{index:03d}",
-                domain_id=domain_id,
-                anchor_kind=anchor_kind,
-                slot_index=index,
-            ).as_dict()
-            for index in range(1, count + 1)
-        )
+        for index in range(1, count + 1):
+            use_starting_place = domain_id == "places" and index == 1 and starting_place_id
+            anchors.append(
+                AnchorSlot(
+                    id=starting_place_id if use_starting_place else f"ent:{prefix}:{index:03d}",
+                    domain_id=domain_id,
+                    anchor_kind=anchor_kind,
+                    slot_index=index,
+                    anchor_role="starting_location" if use_starting_place else "",
+                ).as_dict()
+            )
     payload: dict[str, Any] = {
-        "schema_version": "rpg_world_forge_anchor_registry_v1",
-        "revision": 1,
+        "schema_version": "rpg_world_forge_anchor_registry_v2",
+        "revision": 2,
         "internal": True,
         "seed": int(seed),
         "world_key": str(world_key),
+        "starting_location_id": starting_place_id,
         "anchors": anchors,
     }
     payload["registry_hash"] = _registry_hash(payload)
@@ -100,8 +123,13 @@ def validate_global_anchor_registry(value: Mapping[str, Any]) -> tuple[str, ...]
         if definition is None:
             issues.append(f"unsupported_anchor_domain:{domain_id}")
             continue
+        is_starting_place = (
+            domain_id == "places"
+            and str(row.get("anchor_role") or "") == "starting_location"
+            and anchor_id.startswith("place:")
+        )
         expected_prefix = f"ent:{definition[1]}:"
-        if not anchor_id.startswith(expected_prefix):
+        if not is_starting_place and not anchor_id.startswith(expected_prefix):
             issues.append(f"anchor_prefix_mismatch:{anchor_id}:{domain_id}")
         if anchor_id in seen:
             issues.append(f"duplicate_anchor_id:{anchor_id}")
