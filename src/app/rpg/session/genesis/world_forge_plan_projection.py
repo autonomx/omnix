@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping
 
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_fact_pipeline_trusted import compile_structured_entity_facts
@@ -29,6 +29,47 @@ def _expected_ids(node: CampaignTopicNode) -> tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
         return ()
     return tuple(str(item) for item in value if str(item))
+
+
+def _remap_value(value: Any, mapping: Mapping[str, str]) -> Any:
+    if isinstance(value, str):
+        return mapping.get(value, value)
+    if isinstance(value, list):
+        return [_remap_value(item, mapping) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_remap_value(item, mapping) for item in value)
+    if isinstance(value, Mapping):
+        return {str(key): _remap_value(item, mapping) for key, item in value.items()}
+    return value
+
+
+def _materialize_authoritative_ids(
+    node: CampaignTopicNode,
+    topic: GeneratedTopic,
+) -> tuple[GeneratedTopic, bool]:
+    expected_ids = _expected_ids(node)
+    actual_ids = tuple(_entity_id(row) for row in topic.entities if _entity_id(row))
+    if not expected_ids or actual_ids == expected_ids:
+        return topic, False
+    if len(actual_ids) != len(expected_ids) or len(set(actual_ids)) != len(actual_ids):
+        raise ValueError(
+            f"authoritative_anchor_identity_mismatch:{node.topic_id}:{actual_ids}:{expected_ids}"
+        )
+    mapping = dict(zip(actual_ids, expected_ids))
+    payload = _remap_value(topic.as_dict(), mapping)
+    payload["facts"] = [
+        fact
+        for fact in payload.get("facts") or ()
+        if not str(fact.get("source") or "").startswith("profile_structured_fact_compiler_v")
+    ]
+    remapped = GeneratedTopic.from_dict(payload)
+    return replace(
+        remapped,
+        provenance={
+            **dict(remapped.provenance),
+            "authoritative_identity_mapping": mapping,
+        },
+    ), True
 
 
 def _apply_place_plan(entity: dict[str, Any], planning: Mapping[str, Any]) -> set[str]:
@@ -114,6 +155,74 @@ def _apply_group_plan(entity: dict[str, Any], planning: Mapping[str, Any]) -> se
     return {"inherited_claims"}
 
 
+def _planned_causal_links(
+    topic: GeneratedTopic,
+    planning: Mapping[str, Any],
+) -> tuple[dict[str, Any], ...]:
+    if topic.topic_id != "causal_links":
+        return ()
+    existing = {
+        (
+            cause_id,
+            str(entity.get("effect_id") or ""),
+            str(entity.get("effect_type") or ""),
+        )
+        for entity in topic.entities
+        for cause_id in entity.get("cause_event_ids") or ()
+        if str(cause_id)
+    }
+    rows: list[dict[str, Any]] = []
+    sequence = 1
+    for settlement in _rows(planning.get("settlement_origin_plan"), "settlements"):
+        event_id = str(settlement.get("founding_event_id") or "")
+        effect_id = str(settlement.get("place_id") or "")
+        signature = (event_id, effect_id, "founded")
+        if not event_id or not effect_id or signature in existing:
+            continue
+        purpose = str(settlement.get("founding_purpose") or "coordination centre").replace("_", " ")
+        resource = str(settlement.get("resource_dependency") or "local resources").replace("_", " ")
+        rows.append(
+            {
+                "id": f"ent:causal:planned:{sequence:03d}",
+                "kind": "causal_link",
+                "name": f"Founding of {effect_id}",
+                "cause_event_ids": [event_id],
+                "effect_id": effect_id,
+                "effect_type": "founded",
+                "mechanism": f"The historical event created a permanent {purpose} organised around access to {resource}.",
+                "persistence": "continuing",
+                "start_year": settlement.get("founded_year"),
+                "visibility": "game_master_canon",
+            }
+        )
+        existing.add(signature)
+        sequence += 1
+    for lineage in _rows(planning.get("culture_lineage_plan"), "lineages"):
+        event_id = str(lineage.get("origin_event_id") or "")
+        effect_id = str(lineage.get("culture_id") or "")
+        signature = (event_id, effect_id, "culturally_influenced")
+        if not event_id or not effect_id or signature in existing:
+            continue
+        lineage_type = str(lineage.get("lineage_type") or "local").replace("_", " ")
+        adaptation = str(lineage.get("environmental_adaptation") or "shared practice").replace("_", " ")
+        rows.append(
+            {
+                "id": f"ent:causal:planned:{sequence:03d}",
+                "kind": "causal_link",
+                "name": f"Origin of {effect_id}",
+                "cause_event_ids": [event_id],
+                "effect_id": effect_id,
+                "effect_type": "culturally_influenced",
+                "mechanism": f"The event consolidated a {lineage_type} community through the shared practice of {adaptation}.",
+                "persistence": "continuing",
+                "visibility": "game_master_canon",
+            }
+        )
+        existing.add(signature)
+        sequence += 1
+    return tuple(rows)
+
+
 def project_planning_into_topic(
     node: CampaignTopicNode,
     topic: GeneratedTopic,
@@ -122,14 +231,13 @@ def project_planning_into_topic(
     dependency_topics: Mapping[str, GeneratedTopic],
 ) -> GeneratedTopic:
     planning = _planning_slice(campaign_context)
-    expected_ids = _expected_ids(node)
-    actual_ids = tuple(_entity_id(row) for row in topic.entities if _entity_id(row))
-    if expected_ids and set(actual_ids) != set(expected_ids):
-        raise ValueError(
-            f"authoritative_anchor_identity_mismatch:{node.topic_id}:{actual_ids}:{expected_ids}"
-        )
+    topic, identity_changed = _materialize_authoritative_ids(node, topic)
     if not planning:
-        return topic
+        return (
+            compile_structured_entity_facts(node, topic, dependency_topics)
+            if identity_changed
+            else topic
+        )
 
     entities: list[dict[str, Any]] = []
     changed_fields: dict[str, set[str]] = {}
@@ -146,13 +254,18 @@ def project_planning_into_topic(
         if entity_id and changed:
             changed_fields[entity_id] = changed
         entities.append(entity)
-    if not changed_fields:
+    supplemental = _planned_causal_links(topic, planning)
+    if supplemental:
+        entities.extend(supplemental)
+        changed_fields.update({_entity_id(row): set() for row in supplemental})
+    if not changed_fields and not identity_changed:
         return topic
 
     facts = tuple(
         fact
         for fact in topic.facts
-        if not (
+        if not str(fact.get("source") or "").startswith("profile_structured_fact_compiler_v")
+        and not (
             str(fact.get("subject") or "") in changed_fields
             and str(fact.get("field_id") or fact.get("predicate") or "")
             in changed_fields[str(fact.get("subject") or "")]
@@ -164,8 +277,9 @@ def project_planning_into_topic(
         facts=facts,
         provenance={
             **dict(topic.provenance),
-            "planning_projection_schema": "rpg_world_forge_plan_projection_v1",
+            "planning_projection_schema": "rpg_world_forge_plan_projection_v2",
             "planning_projected_entity_ids": sorted(changed_fields),
+            "planned_causal_link_count": len(supplemental),
         },
     )
     return compile_structured_entity_facts(node, projected, dependency_topics)
