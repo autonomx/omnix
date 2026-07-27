@@ -69,13 +69,42 @@ def _graph() -> dict:
     }
 
 
+def _actor(entity_id: str, name: str, *, group_ids: list[str], mentor_id: str = "") -> dict:
+    return {
+        "id": entity_id,
+        "kind": "actor",
+        "name": name,
+        "appearance": "A weathered courier with a silver eye and patched field coat.",
+        "personality": "Careful, dryly funny, and protective of people who keep their word.",
+        "backstory": "A survivor of the harbour collapse who now carries messages between isolated districts.",
+        "speech_style": "Short practical sentences with understated humour.",
+        "goals": ["Reconnect the districts"],
+        "motives": ["Protect displaced families"],
+        "faction_ids": [],
+        "secrets": [],
+        "known_facts": [],
+        "dossier_status": "complete",
+        "mobility_status": "itinerant",
+        "group_ids": group_ids,
+        "mentor_id": mentor_id,
+    }
+
+
 def _rows(*, group_ids: list[str], mentor_id: str = "") -> list[dict]:
     return [
         {
             "topic_id": "groups",
             "candidate": {
                 "topic_id": "groups",
-                "entities": [{"id": "ent:group:001", "name": "The Guild"}],
+                "entities": [
+                    {
+                        "id": "ent:group:001",
+                        "kind": "group",
+                        "name": "The Guild",
+                        "values": ["Mutual aid"],
+                        "goals": ["Keep district routes open"],
+                    }
+                ],
             },
         },
         {
@@ -83,17 +112,13 @@ def _rows(*, group_ids: list[str], mentor_id: str = "") -> list[dict]:
             "candidate": {
                 "topic_id": "actors",
                 "entities": [
-                    {
-                        "id": "ent:actor:001",
-                        "name": "Ari",
-                        "group_ids": group_ids,
-                        "mentor_id": mentor_id,
-                    },
-                    {
-                        "id": "ent:actor:002",
-                        "name": "Bo",
-                        "group_ids": [],
-                    },
+                    _actor(
+                        "ent:actor:001",
+                        "Ari",
+                        group_ids=group_ids,
+                        mentor_id=mentor_id,
+                    ),
+                    _actor("ent:actor:002", "Bo", group_ids=[]),
                 ],
             },
         },
@@ -190,6 +215,7 @@ def test_diagnostic_compilation_retains_reference_report_without_release_claim(
 
     assert payload["certification"]["launch_ready"] is False
     assert payload["certification"]["profile_reference_integrity"]["passed"] is False
+    assert payload["certification"]["profile_dossier_quality"]["passed"] is True
     assert payload["certification"]["missing_requirements"] == [
         "profile_reference_integrity"
     ]
