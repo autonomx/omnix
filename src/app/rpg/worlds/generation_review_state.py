@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from .generation_attempt_history import preserve_attempt_history
+
 _FAILED_VALIDATION_STATUSES = {"blocked", "failed", "needs_review", "rejected"}
 
 
@@ -74,7 +76,7 @@ def accepted_review_report(
     if failed and not reason:
         reason = "Accepted by the Game Master after review with unresolved validation findings."
 
-    return {
+    report = {
         "schema_version": "rpg_world_generation_review_v2",
         "status": "accepted",
         "review_decision": "accepted",
@@ -102,6 +104,7 @@ def accepted_review_report(
         },
         "previous_validation": previous,
     }
+    return preserve_attempt_history(report, previous)
 
 
 def review_state(result: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -120,6 +123,11 @@ def review_state(result: Mapping[str, Any] | None) -> dict[str, Any]:
             if review_decision == "accepted" and evidence["validation_status"] == "failed"
             else "none"
         )
+    attempt_history = [
+        dict(item)
+        for item in validation.get("attempt_history") or ()
+        if isinstance(item, Mapping)
+    ]
     return {
         "review_decision": review_decision or "pending",
         "validation_status": evidence["validation_status"],
@@ -127,6 +135,8 @@ def review_state(result: Mapping[str, Any] | None) -> dict[str, Any]:
         "outstanding_finding_count": len(evidence["outstanding_findings"]),
         "outstanding_findings": evidence["outstanding_findings"],
         "outstanding_reason_codes": evidence["outstanding_reason_codes"],
+        "attempt_count": len(attempt_history),
+        "attempt_history": attempt_history,
     }
 
 
