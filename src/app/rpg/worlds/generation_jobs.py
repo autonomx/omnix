@@ -13,6 +13,8 @@ from app.rpg.session.genesis.world_forge_contract import (
     CampaignTopicNode,
 )
 
+from .generation_entity_manifest import build_entity_manifest, topic_manifest_slots
+
 WORLD_TOPIC_JOB_TYPE = "rpg.world.topic.generate"
 WORLD_TOPIC_RESOURCE_CLASS = ResourceClass.RPG_WORLD_GENERATION.value
 WORLD_TOPIC_JOB_CONTRACT = "rpg_world_topic_job_v2"
@@ -200,6 +202,8 @@ def plan_ready_topic_jobs(
         for topic_id, row in completed_topics.items()
         if str(row.get("status") or "") == "ready" and row.get("content_hash")
     }
+    authoritative_manifest = build_entity_manifest(graph)
+    authoritative_manifest_hash = str(authoritative_manifest["content_hash"])
     plans: list[WorldTopicJobPlan] = []
     for node in graph.topological_order():
         if node.category in _NON_GENERATION_CATEGORIES or node.topic_id not in targets:
@@ -243,6 +247,7 @@ def plan_ready_topic_jobs(
         )
         if job_id in existing:
             continue
+        topic_slots = list(topic_manifest_slots(authoritative_manifest, node.topic_id))
         input_payload = {
             "contract_version": WORLD_TOPIC_JOB_CONTRACT,
             "run_id": run_id,
@@ -257,7 +262,10 @@ def plan_ready_topic_jobs(
             "fingerprint": fingerprint,
             "input_hash": input_hash,
             "directive_hash": directive_hash,
-            "entity_manifest_hash": entity_manifest_hash,
+            "entity_manifest_hash": authoritative_manifest_hash,
+            "requested_entity_manifest_hash": entity_manifest_hash,
+            "entity_manifest": authoritative_manifest,
+            "entity_manifest_slots": topic_slots,
             "settings": settings.as_dict(),
             "recovery_pass": int(recovery_pass),
         }
@@ -278,6 +286,8 @@ def plan_ready_topic_jobs(
                 "fingerprint": fingerprint,
                 "dependency_ids": list(node.dependencies),
                 "dependency_trust": dependency_trust,
+                "entity_manifest_hash": authoritative_manifest_hash,
+                "entity_manifest_slot_count": len(topic_slots),
                 "recovery_pass": int(recovery_pass),
             },
         }
