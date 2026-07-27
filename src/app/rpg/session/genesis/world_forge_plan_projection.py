@@ -44,6 +44,17 @@ def _remap_value(value: Any, mapping: Mapping[str, str]) -> Any:
     return value
 
 
+def _display(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return "; ".join(
+            f"{str(key).replace('_', ' ')}: {_display(item)}"
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return ", ".join(_display(item) for item in value)
+    return " ".join(str(value or "").split())
+
+
 def _materialize_authoritative_ids(
     node: CampaignTopicNode,
     topic: GeneratedTopic,
@@ -230,7 +241,25 @@ def _compile_and_render(
     dependency_topics: Mapping[str, GeneratedTopic],
 ) -> GeneratedTopic:
     compiled = compile_structured_entity_facts(node, topic, dependency_topics)
-    return render_fact_derived_presentations(node, compiled)
+    rendered = render_fact_derived_presentations(node, compiled)
+    facts = tuple(
+        {
+            **dict(fact),
+            "content": str(fact.get("content") or "").strip()
+            or f"{str(fact.get('field_id') or fact.get('predicate') or 'Fact').replace('_', ' ').title()}: {_display(fact.get('object'))}.",
+            "expanded_description": str(fact.get("expanded_description") or "").strip()
+            or f"This statement is a direct presentation of the approved structured field {str(fact.get('field_id') or fact.get('predicate') or 'fact').replace('_', ' ')} for {fact.get('subject')}.",
+        }
+        for fact in rendered.facts
+    )
+    return replace(
+        rendered,
+        facts=facts,
+        provenance={
+            **dict(rendered.provenance),
+            "fact_summary_projection": "structured_object_display_v1",
+        },
+    )
 
 
 def project_planning_into_topic(
