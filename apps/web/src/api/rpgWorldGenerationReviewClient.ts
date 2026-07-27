@@ -10,14 +10,40 @@ export interface RpgWorldGenerationReviewIssue {
   supplied_value?: unknown;
 }
 
+export interface RpgWorldGenerationReviewWaiver {
+  status: 'active' | 'none' | string;
+  reason?: string;
+  accepted_by?: string;
+  accepted_at?: string;
+}
+
 export interface RpgWorldGenerationReviewReport {
   schema_version?: string;
   status: string;
   blocking: boolean;
+  validation_blocking?: boolean;
+  review_decision?: string;
+  validation_status?: 'passed' | 'failed' | 'not_run' | string;
+  waiver_status?: 'active' | 'none' | string;
+  waiver?: RpgWorldGenerationReviewWaiver;
   error_type?: string;
   reason_codes: string[];
   issues: RpgWorldGenerationReviewIssue[];
+  outstanding_reason_codes?: string[];
+  outstanding_findings?: RpgWorldGenerationReviewIssue[];
   summary?: string;
+  accepted_at?: string;
+  accepted_by?: string;
+  previous_validation?: RpgWorldGenerationReviewReport;
+}
+
+export interface RpgWorldGenerationReviewState {
+  review_decision: 'accepted' | 'pending' | string;
+  validation_status: 'passed' | 'failed' | 'not_run' | string;
+  waiver_status: 'active' | 'none' | string;
+  outstanding_finding_count: number;
+  outstanding_findings: RpgWorldGenerationReviewIssue[];
+  outstanding_reason_codes: string[];
 }
 
 export interface RpgWorldGenerationReviewDecision {
@@ -26,6 +52,10 @@ export interface RpgWorldGenerationReviewDecision {
   promoted_hash?: string;
   decided_at?: string;
   edited?: boolean;
+  review_decision?: string;
+  validation_status?: string;
+  waiver_status?: string;
+  outstanding_finding_count?: number;
 }
 
 export interface RpgWorldGenerationTopicResult {
@@ -37,6 +67,7 @@ export interface RpgWorldGenerationTopicResult {
   candidate: Record<string, unknown> | null;
   candidate_hash: string;
   validation: RpgWorldGenerationReviewReport;
+  review_state?: RpgWorldGenerationReviewState;
   provider: Record<string, unknown>;
   dependency_hashes: Record<string, string>;
   dependency_trust: Record<string, string>;
@@ -121,6 +152,7 @@ export const rpgWorldGenerationReviewClient = {
     body: {
       candidate?: Record<string, unknown>;
       expected_candidate_hash?: string;
+      waiver_reason?: string;
     } = {},
   ): Promise<Record<string, unknown>> {
     return request(
@@ -135,7 +167,11 @@ export const rpgWorldGenerationReviewClient = {
 
   acceptAll(
     runId: string,
-    body: { topic_ids?: string[] } = {},
+    body: {
+      topic_ids?: string[];
+      waiver_reason?: string;
+      waiver_reasons?: Record<string, string>;
+    } = {},
   ): Promise<Record<string, unknown>> {
     return request(
       `/api/rpg/world-generation/${encodeURIComponent(runId)}/accept-all`,
