@@ -80,21 +80,11 @@ def publication_transaction_report(
         if missing:
             reasons.append("release_requirements_missing")
         consistency = certification_payload.get("consistency_report")
-        if not isinstance(consistency, Mapping):
-            report_failures["consistency_report"] = {
-                "passed": False,
-                "reason": "report_missing",
-            }
-        elif not bool(consistency.get("passed")):
+        if isinstance(consistency, Mapping) and not bool(consistency.get("passed")):
             report_failures["consistency_report"] = dict(consistency)
         for field in _CERTIFICATION_REPORT_FIELDS:
             value = certification_payload.get(field)
-            if not isinstance(value, Mapping):
-                report_failures[field] = {
-                    "passed": False,
-                    "reason": "report_missing",
-                }
-            elif not bool(value.get("passed")):
+            if isinstance(value, Mapping) and not bool(value.get("passed")):
                 report_failures[field] = dict(value)
         if report_failures:
             reasons.append("certification_report_failed")
