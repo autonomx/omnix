@@ -34,6 +34,39 @@ export interface RpgWorldGenerationValidationAttempt {
   provider: Record<string, unknown>;
 }
 
+export interface RpgWorldGenerationFindingFingerprint {
+  code: string;
+  topic_id: string;
+  entity_id: string;
+  field_id: string;
+  bad_value: string;
+}
+
+export interface RpgWorldGenerationRepairEvaluation {
+  schema_version: string;
+  outcome:
+    | 'repaired'
+    | 'partially_repaired'
+    | 'no_op'
+    | 'regressed'
+    | 'replaced_with_new_failure'
+    | 'not_applicable'
+    | string;
+  candidate_changed: boolean;
+  original_finding_count: number;
+  remaining_finding_count: number;
+  repaired_finding_count: number;
+  introduced_finding_count: number;
+  remaining_finding_fingerprints: RpgWorldGenerationFindingFingerprint[];
+  repaired_finding_fingerprints: RpgWorldGenerationFindingFingerprint[];
+  introduced_finding_fingerprints: RpgWorldGenerationFindingFingerprint[];
+  changed_bad_values: Array<{
+    location: string[];
+    previous_bad_value: string;
+    current_bad_value: string;
+  }>;
+}
+
 export interface RpgWorldGenerationReviewReport {
   schema_version?: string;
   status: string;
@@ -65,6 +98,9 @@ export interface RpgWorldGenerationReviewState {
   outstanding_reason_codes: string[];
   attempt_count: number;
   attempt_history: RpgWorldGenerationValidationAttempt[];
+  repair_evaluation: RpgWorldGenerationRepairEvaluation | null;
+  consecutive_no_op_count: number;
+  retry_budget_exhausted: boolean;
 }
 
 export interface RpgWorldGenerationReviewDecision {
