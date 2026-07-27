@@ -28,7 +28,12 @@ class WorldGenerationCertificationError(ValueError):
         self.report = dict(report)
         super().__init__(
             "world_generation_certification_failed:"
-            + json.dumps(self.report, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            + json.dumps(
+                self.report,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
         )
 
 
@@ -75,11 +80,21 @@ def publication_transaction_report(
         if missing:
             reasons.append("release_requirements_missing")
         consistency = certification_payload.get("consistency_report")
-        if isinstance(consistency, Mapping) and not bool(consistency.get("passed")):
+        if not isinstance(consistency, Mapping):
+            report_failures["consistency_report"] = {
+                "passed": False,
+                "reason": "report_missing",
+            }
+        elif not bool(consistency.get("passed")):
             report_failures["consistency_report"] = dict(consistency)
         for field in _CERTIFICATION_REPORT_FIELDS:
             value = certification_payload.get(field)
-            if isinstance(value, Mapping) and not bool(value.get("passed")):
+            if not isinstance(value, Mapping):
+                report_failures[field] = {
+                    "passed": False,
+                    "reason": "report_missing",
+                }
+            elif not bool(value.get("passed")):
                 report_failures[field] = dict(value)
         if report_failures:
             reasons.append("certification_report_failed")
