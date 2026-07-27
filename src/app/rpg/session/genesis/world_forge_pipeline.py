@@ -22,6 +22,7 @@ from .world_forge_generation import (
     generate_campaign_topics,
 )
 from .world_forge_historical_planning import build_historical_planning_topics
+from .world_forge_plan_audit import attach_plan_reconciliation
 from .world_forge_pressure_planning import build_pressure_planning_topics
 from .world_forge_profile_generation import resolve_or_generate_genre_profile
 from .world_forge_profile_graph import (
@@ -45,11 +46,7 @@ class CampaignWorldForgeResult:
 
     @property
     def launch_ready(self) -> bool:
-        return (
-            self.generation.passed
-            and self.audit.passed
-            and self.compilation.launch_ready
-        )
+        return self.generation.passed and self.audit.passed and self.compilation.launch_ready
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -89,9 +86,7 @@ def _attach_runtime_bootstrap(
         metadata={
             **dict(compilation.metadata),
             "content_hash": document["content_hash"],
-            "causal_runtime_schema_version": str(
-                runtime_bootstrap.get("schema_version") or ""
-            ),
+            "causal_runtime_schema_version": str(runtime_bootstrap.get("schema_version") or ""),
             "causal_runtime_hash": str(runtime_bootstrap.get("runtime_hash") or ""),
         },
     )
@@ -150,7 +145,6 @@ def _default_generator() -> WorldForgeTopicGenerator:
         from .world_forge_deterministic import DeterministicWorldForgeGenerator
 
         return ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator())
-
     from app.rpg_world_forge_provider import build_production_world_forge_generator
 
     return build_production_world_forge_generator()
@@ -212,15 +206,28 @@ def run_campaign_world_forge(
     )
     max_parallel_jobs = max(1, min(max_parallel_jobs, 4))
     profile_payload = profile.as_dict()
-    anchor_registry = allocate_global_anchor_registry(
-        graph,
-        seed=seed,
-        world_key=campaign_id,
-    )
+    world_brief = {
+        "title": contract.campaign_template.replace("_", " ").title(),
+        "description": " ".join(contract.world_forge.custom_directives),
+        "genre": contract.genre or contract.campaign_template,
+        "tone": contract.tone,
+        "campaign_template": contract.campaign_template,
+    }
+    world_context = {
+        "campaign_id": campaign_id,
+        "campaign_template": contract.campaign_template,
+        "genre": contract.genre or contract.campaign_template,
+        "tone": contract.tone,
+        "world_brief": world_brief,
+        "resolved_genre_profile": profile_payload,
+        "resolved_profile_hash": profile.content_hash,
+    }
+    anchor_registry = allocate_global_anchor_registry(graph, seed=seed, world_key=campaign_id)
     historical_topics = build_historical_planning_topics(
         anchor_registry,
         seed=seed,
         world_key=campaign_id,
+        world_context=world_context,
     )
     social_topics = build_social_planning_topics(
         anchor_registry,
@@ -242,27 +249,14 @@ def run_campaign_world_forge(
         **social_topics,
         **pressure_topics,
     }
-    runtime_bootstrap = bootstrap_causal_runtime(planning_topics)
     generation = generate_campaign_topics(
         graph,
         generator=generator or _default_generator(),
         seed=seed,
         campaign_context={
-            "campaign_id": campaign_id,
-            "campaign_template": contract.campaign_template,
-            "genre": contract.genre or contract.campaign_template,
-            "tone": contract.tone,
+            **world_context,
             "starting_location": contract.world_options.starting_location,
             "custom_directives": list(contract.world_forge.custom_directives),
-            "world_brief": {
-                "title": contract.campaign_template.replace("_", " ").title(),
-                "description": " ".join(contract.world_forge.custom_directives),
-                "genre": contract.genre or contract.campaign_template,
-                "tone": contract.tone,
-                "campaign_template": contract.campaign_template,
-            },
-            "resolved_genre_profile": profile_payload,
-            "resolved_profile_hash": profile.content_hash,
             "planning_topics": planning_topics,
         },
         max_parallel_jobs=max_parallel_jobs,
@@ -275,6 +269,12 @@ def run_campaign_world_forge(
     )
     audit = apply_world_forge_quality_audit(generation.topics, audit)
     audit = attach_causal_evaluation(generation.topics, audit)
+    audit = attach_plan_reconciliation(generation.topics, planning_topics, audit)
+    runtime_bootstrap = (
+        bootstrap_causal_runtime(planning_topics)
+        if generation.passed and audit.passed
+        else {}
+    )
     compilation = compile_campaign_bible(
         generation,
         compiled_relationships=relationships,
@@ -285,7 +285,8 @@ def run_campaign_world_forge(
         starting_location=contract.world_options.starting_location,
         canon_revision=canon_revision,
     )
-    compilation = _attach_runtime_bootstrap(compilation, runtime_bootstrap)
+    if runtime_bootstrap:
+        compilation = _attach_runtime_bootstrap(compilation, runtime_bootstrap)
     return CampaignWorldForgeResult(
         graph=graph,
         generation=generation,
