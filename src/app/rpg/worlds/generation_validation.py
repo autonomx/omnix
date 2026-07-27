@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_generation import (
@@ -51,6 +51,19 @@ def _generator_context(generator: Any) -> dict[str, Any]:
             context.setdefault("model", getattr(config, "model", ""))
         current = getattr(current, "generator", None)
     return context
+
+
+def _reference_field_ids(metadata: Mapping[str, Any]) -> tuple[str, ...]:
+    definitions = metadata.get("field_definitions")
+    if not isinstance(definitions, Sequence) or isinstance(definitions, (str, bytes)):
+        return ()
+    return tuple(
+        str(row.get("field_id") or "")
+        for row in definitions
+        if isinstance(row, Mapping)
+        and str(row.get("value_type") or "") in {"entity_ref", "entity_ref_list"}
+        and str(row.get("field_id") or "")
+    )
 
 
 def _review_blocked(
@@ -117,6 +130,7 @@ class PublicationValidatedWorldForgeGenerator:
             manifest_slots_from_node(metadata),
             manifest_hash=str(metadata.get("entity_manifest_hash") or ""),
             reference_aliases=dependency_manifest_aliases(dependency_topics),
+            reference_field_ids=_reference_field_ids(metadata),
         )
         receipt = validated.receipt.as_dict()
         sanitized = sanitize_untrusted_candidate(bound.as_dict())
