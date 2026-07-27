@@ -8,6 +8,11 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 _MAX_CONSECUTIVE_NO_OPS = 2
+_REVIEWABLE_PROGRESS_KEYS = (
+    "flagged_topic_ids",
+    "failed_topic_ids",
+    "blocked_topic_ids",
+)
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -164,22 +169,47 @@ def consecutive_no_op_count(
     return count
 
 
+def _implicit_reviewable_topic_ids(
+    run_id: str,
+    *,
+    database: Any | None = None,
+) -> tuple[str, ...]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        run = work.world_generation.get(context, run_id)
+        if run is None:
+            work.rollback()
+            raise KeyError(f"world_generation_run_not_found:{run_id}")
+        progress = _mapping(run.get("progress"))
+        work.rollback()
+    return tuple(
+        dict.fromkeys(
+            str(topic_id)
+            for key in _REVIEWABLE_PROGRESS_KEYS
+            for topic_id in progress.get(key) or ()
+            if str(topic_id)
+        )
+    )
+
+
 def require_retry_budget(
     run_id: str,
-    topic_ids: Sequence[str],
+    topic_ids: Sequence[str] = (),
     *,
     database: Any | None = None,
 ) -> dict[str, int]:
-    """Reject a third consecutive no-op repair for any explicitly retried topic."""
+    """Reject a third consecutive no-op repair for explicit or bulk retries."""
 
+    selected = tuple(str(topic_id) for topic_id in topic_ids if str(topic_id))
+    if not selected:
+        selected = _implicit_reviewable_topic_ids(run_id, database=database)
     counts = {
-        str(topic_id): consecutive_no_op_count(
+        topic_id: consecutive_no_op_count(
             run_id,
-            str(topic_id),
+            topic_id,
             database=database,
         )
-        for topic_id in topic_ids
-        if str(topic_id)
+        for topic_id in selected
     }
     exhausted = sorted(
         topic_id
