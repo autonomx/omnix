@@ -15,7 +15,7 @@ _BLOCKING_PROGRESS_FIELDS = (
 _CERTIFICATION_REPORT_FIELDS = (
     "strict_integrity",
     "profile_reference_integrity",
-    "profile_dossier_policy",
+    "profile_dossier_quality",
 )
 
 
@@ -47,11 +47,11 @@ def publication_transaction_report(
     """Describe every condition that must hold before revision/release inserts."""
 
     progress = dict(run.get("progress") or {})
-    blockers = {
-        field: _values(progress, field)
-        for field in _BLOCKING_PROGRESS_FIELDS
-        if _values(progress, field)
-    }
+    blockers: dict[str, list[str]] = {}
+    for field in _BLOCKING_PROGRESS_FIELDS:
+        values = _values(progress, field)
+        if values:
+            blockers[field] = values
     reasons: list[str] = []
     if str(run.get("status") or "") != "review":
         reasons.append("run_not_in_review")
