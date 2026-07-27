@@ -79,6 +79,10 @@ def publish_certified_world_generation(
             world_id=world_id,
             draft_revision=int(run.get("draft_revision") or 1),
         )
+        review_results = work.world_generation.list_topic_results(
+            context,
+            run_id=run_id,
+        )
         current_row = work.connection.execute(
             "SELECT COALESCE(MAX(revision), 0) FROM omnix_rpg_world_revisions "
             "WHERE workspace_id = %s AND world_id = %s",
@@ -91,6 +95,7 @@ def publish_certified_world_generation(
             run=run,
             world=world,
             topic_rows=topic_rows,
+            review_results=review_results,
             revision=current_revision + 1,
             asset_bindings=asset_bindings,
         )
