@@ -17,6 +17,23 @@ export interface RpgWorldGenerationReviewWaiver {
   accepted_at?: string;
 }
 
+export interface RpgWorldGenerationValidationAttempt {
+  schema_version: string;
+  attempt_id: string;
+  attempt_number: number;
+  trigger: 'generation' | 'manual_retry' | string;
+  run_id: string;
+  topic_id: string;
+  job_id: string;
+  candidate_hash: string;
+  result_status: string;
+  validation_status: string;
+  reason_codes: string[];
+  issues: RpgWorldGenerationReviewIssue[];
+  validation_hash: string;
+  provider: Record<string, unknown>;
+}
+
 export interface RpgWorldGenerationReviewReport {
   schema_version?: string;
   status: string;
@@ -31,6 +48,8 @@ export interface RpgWorldGenerationReviewReport {
   issues: RpgWorldGenerationReviewIssue[];
   outstanding_reason_codes?: string[];
   outstanding_findings?: RpgWorldGenerationReviewIssue[];
+  attempt_history_schema?: string;
+  attempt_history?: RpgWorldGenerationValidationAttempt[];
   summary?: string;
   accepted_at?: string;
   accepted_by?: string;
@@ -44,6 +63,8 @@ export interface RpgWorldGenerationReviewState {
   outstanding_finding_count: number;
   outstanding_findings: RpgWorldGenerationReviewIssue[];
   outstanding_reason_codes: string[];
+  attempt_count: number;
+  attempt_history: RpgWorldGenerationValidationAttempt[];
 }
 
 export interface RpgWorldGenerationReviewDecision {
