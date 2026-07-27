@@ -68,6 +68,17 @@ function tokenLabel(value: number): string {
   return new Intl.NumberFormat().format(Math.max(0, Math.round(value)));
 }
 
+function durationLabel(value: number): string {
+  const totalSeconds = Math.max(0, Math.round(value / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingMinutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours) return `${hours}h ${remainingMinutes}m ${seconds}s`;
+  if (minutes) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
 function hasManualDecisionIssue(result: RpgWorldGenerationTopicResult): boolean {
   return result.validation.reason_codes.includes('manual_retry_decision_required');
 }
@@ -394,7 +405,7 @@ export function RpgWorldGenerationDashboard({
 
         <aside className="rpg-generation-dashboard-side">
           <section className="rpg-generation-diagnostics-card"><header><h3>Validation analytics</h3><span>{results.length} attempted</span></header><AnalyticsGroup title="Reason code" values={analytics?.by_code ?? {}} /><AnalyticsGroup title="Field" values={analytics?.by_field ?? {}} /><AnalyticsGroup title="Domain" values={analytics?.by_domain ?? {}} /><AnalyticsGroup title="Model" values={analytics?.by_model ?? {}} /><AnalyticsGroup title="Prompt version" values={analytics?.by_prompt_version ?? {}} />{!Object.keys(analytics?.by_code ?? {}).length ? <p className="rpg-generation-no-error">No blocking validation issues recorded.</p> : null}</section>
-          <section className="rpg-generation-token-card" aria-label="World generation token usage"><header><h3>Token usage</h3><span>{tokenUsage?.topic_count ?? 0} completed</span></header><div className="rpg-generation-token-total"><strong>{tokenLabel(tokenUsage?.total_tokens ?? 0)}</strong><span>tokens accounted</span></div><small>{tokenUsage?.provider_reported_topics ?? 0} provider-reported · {tokenUsage?.estimated_topics ?? 0} estimated{tokenUsage?.in_flight_topics ? ' · live batches included' : ''}</small></section>
+          <section className="rpg-generation-token-card" aria-label="World generation token usage"><header><h3>Token usage</h3><span>{tokenUsage?.topic_count ?? 0} generated</span></header><div className="rpg-generation-token-total"><strong>{tokenLabel(tokenUsage?.total_tokens ?? 0)}</strong><span>tokens accounted</span></div><div className="rpg-generation-token-breakdown"><span><small>Usage source</small><b>{tokenUsage?.provider_reported_topics ?? 0} reported · {tokenUsage?.estimated_topics ?? 0} estimated</b></span>{tokenUsage?.timed_topics ? <span><small>Provider time</small><b>{durationLabel(tokenUsage.generation_duration_ms ?? 0)}</b></span> : null}</div>{tokenUsage?.in_flight_topics ? <p>Live batch usage included.</p> : null}</section>
           <section className="rpg-generation-image-card"><header><h3>Image Generation</h3></header><div><article><small>Targets</small><strong>{imageSections.length}</strong></article><article><small>Ready</small><strong>{imageReady}</strong></article></div></section>
         </aside>
       </div>

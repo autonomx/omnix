@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import replace
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
@@ -89,6 +89,7 @@ class EvidenceBackedRecoveringWorldForgeTopicGenerator(
         expected_topic_id: str,
         allocated_entity_ids: tuple[str, ...],
         expected_entity_kind: str,
+        field_definitions: Sequence[Mapping[str, Any]],
         max_tokens: int,
         retain_invalid_kind: str,
     ):
@@ -111,6 +112,7 @@ class EvidenceBackedRecoveringWorldForgeTopicGenerator(
             expected_topic_id=expected_topic_id,
             allocated_entity_ids=allocated_entity_ids,
             expected_entity_kind=expected_entity_kind,
+            field_definitions=field_definitions,
             max_tokens=max_tokens,
             retain_invalid_kind=retain_invalid_kind,
         )

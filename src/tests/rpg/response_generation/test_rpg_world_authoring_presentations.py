@@ -200,6 +200,8 @@ def test_world_token_usage_prefers_provider_usage_and_marks_estimates() -> None:
         "unavailable_topics": 0,
         "topic_count": 2,
         "in_flight_topics": 0,
+        "generation_duration_ms": 0,
+        "timed_topics": 0,
     }
 
 
@@ -235,7 +237,54 @@ def test_world_token_usage_includes_active_entity_batch_checkpoints() -> None:
         "unavailable_topics": 0,
         "topic_count": 0,
         "in_flight_topics": 2,
+        "generation_duration_ms": 0,
+        "timed_topics": 0,
     }
+
+
+def test_world_token_usage_includes_rejected_generation_results() -> None:
+    summary = _world_token_usage(
+        (
+            {
+                "topic_id": "accepted",
+                "source": "ai",
+                "provenance": {"usage": {"total_tokens": 100}},
+            },
+        ),
+        topic_results=(
+            {
+                "topic_id": "accepted",
+                "status": "accepted",
+                "candidate": {
+                    "provenance": {
+                        "latency_ms": 15_000,
+                        "usage": {"total_tokens": 100},
+                    }
+                },
+            },
+            {
+                "topic_id": "rejected",
+                "status": "needs_review",
+                "candidate": {
+                    "provenance": {
+                        "token_estimate": {
+                            "prompt_tokens": 80,
+                            "completion_tokens": 20,
+                            "total_tokens": 100,
+                        },
+                        "latency_ms": 5_000,
+                    }
+                },
+            },
+        ),
+    )
+
+    assert summary["total_tokens"] == 200
+    assert summary["provider_reported_topics"] == 1
+    assert summary["estimated_topics"] == 1
+    assert summary["topic_count"] == 2
+    assert summary["generation_duration_ms"] == 20_000
+    assert summary["timed_topics"] == 2
 
 
 def test_world_token_usage_does_not_mark_an_unreported_live_call_unavailable() -> None:

@@ -15,6 +15,9 @@ from app.rpg.session.genesis.world_forge_review import result_status
 from app.rpg.worlds.generation_recovering_provider import (
     RecoveringFirstPassWorldForgeTopicGenerator,
 )
+from app.rpg.worlds.generation_recovery_evidence import (
+    EvidenceBackedRecoveringWorldForgeTopicGenerator,
+)
 from app.rpg_world_forge_provider import WorldForgeProviderConfig
 
 
@@ -186,6 +189,33 @@ def test_same_configured_model_extracts_malformed_fields_into_schema() -> None:
     record = topic.provenance["structured_recovery"]["records"][0]
     assert record["method"] == "same_model_extraction"
     assert topic.provenance["attempt_count"] == 2
+
+
+def test_evidence_backed_recovery_accepts_profile_field_definitions() -> None:
+    provider = _Provider([_malformed_alias_payload(), _topic_payload()])
+    generator = EvidenceBackedRecoveringWorldForgeTopicGenerator(
+        provider,
+        WorldForgeProviderConfig(
+            mode="live",
+            provider="lmstudio",
+            model="local-model",
+            max_retries=0,
+            lmstudio_schema_fallback=False,
+        ),
+    )
+
+    topic = generator.generate(
+        _history_node(),
+        seed=8,
+        campaign_context={},
+        dependency_topics={},
+    )
+
+    assert len(provider.calls) == 2
+    assert topic.entities[0]["name"] == "The Blackout Accords"
+    assert topic.provenance["structured_recovery"]["records"][0]["method"] == (
+        "same_model_extraction"
+    )
 
 
 def test_failed_extraction_retains_candidate_for_review_instead_of_raising() -> None:

@@ -171,6 +171,17 @@ _GENERIC_TEMPLATE: tuple[SectionSpec, ...] = (
     ("connections", "Connections", ("relationships", "related_entity_ids")),
 )
 
+# The profile-based forge uses these domain IDs while the authoring card variants
+# use the corresponding canonical dossier shapes.
+_SECTION_TEMPLATE_ALIASES: Mapping[str, str] = {
+    "actors": "npcs",
+    "groups": "factions",
+    "technology_augmentations": "items",
+    "equipment_vehicles": "items",
+    "roles_archetypes": "classes",
+    "threats": "monsters",
+}
+
 _QUICK_FACT_FIELDS: tuple[tuple[str, str], ...] = (
     ("Lifespan", "lifespan"),
     ("Homeland", "homeland"),
@@ -189,6 +200,10 @@ _QUICK_FACT_FIELDS: tuple[tuple[str, str], ...] = (
 
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 _NON_ID = re.compile(r"[^a-z0-9]+")
+_PLACEHOLDER_SECTION_TITLE = re.compile(
+    r"^(?:section|part)(?:[\s._:-]*(?:\d+|[ivxlcdm]+))?$",
+    re.IGNORECASE,
+)
 
 
 def text(value: Any, fallback: str = "") -> str:
@@ -320,7 +335,26 @@ def _normalize_quick_facts(value: Any, row: Mapping[str, Any]) -> list[dict[str,
     return facts[:8]
 
 
-def _normalize_sections(value: Any) -> list[dict[str, Any]]:
+def _section_title(value: Any, *, index: int, card_type: str) -> str:
+    """Return a readable heading when a provider supplies a numbered placeholder."""
+
+    title = text(value)
+    if title and not _PLACEHOLDER_SECTION_TITLE.fullmatch(title):
+        return title
+    template = _section_template(card_type)
+    if index < len(template):
+        return template[index][1]
+    return f"Additional Details {index - len(template) + 1}"
+
+
+def _section_template(card_type: str) -> tuple[SectionSpec, ...]:
+    return _SECTION_TEMPLATES.get(
+        _SECTION_TEMPLATE_ALIASES.get(card_type, card_type),
+        _GENERIC_TEMPLATE,
+    )
+
+
+def _normalize_sections(value: Any, *, card_type: str) -> list[dict[str, Any]]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return []
     sections: list[dict[str, Any]] = []
@@ -328,7 +362,7 @@ def _normalize_sections(value: Any) -> list[dict[str, Any]]:
     for index, item in enumerate(value):
         if not isinstance(item, Mapping):
             continue
-        title = text(item.get("title"), f"Section {index + 1}")
+        title = _section_title(item.get("title"), index=index, card_type=card_type)
         section_id = _section_id(item.get("id") or title, f"section-{index + 1}")
         base_id = section_id
         collision = 2
@@ -424,7 +458,7 @@ def project_entity_dossier(
     short_summary = _source_summary(source, canon, resolved_id)
     raw_dossier = source.get("dossier")
     raw = dict(raw_dossier) if isinstance(raw_dossier, Mapping) else {}
-    sections = _normalize_sections(raw.get("sections"))
+    sections = _normalize_sections(raw.get("sections"), card_type=card_type)
     generated_from_legacy = not bool(sections)
     if not sections:
         sections = _fallback_sections(
@@ -480,7 +514,7 @@ def validate_entity_dossier(value: Any) -> tuple[str, ...]:
 
 
 def dossier_prompt_contract(topic_id: str) -> dict[str, Any]:
-    template = _SECTION_TEMPLATES.get(topic_id, _GENERIC_TEMPLATE)
+    template = _section_template(topic_id)
     importance = "minor" if topic_id in {"feats", "items", "spells"} else "standard"
     return {
         "schema_version": DOSSIER_SCHEMA_VERSION,
@@ -514,5 +548,6 @@ def dossier_prompt_contract(topic_id: str) -> dict[str, Any]:
             "Do not change or invent unresolved canonical IDs.",
             "Avoid repeating the same paragraph across sections.",
             "Use readable prose rather than field-label fragments.",
+            "Use the supplied section titles; never substitute numbered labels such as 'Section 1'.",
         ],
     }

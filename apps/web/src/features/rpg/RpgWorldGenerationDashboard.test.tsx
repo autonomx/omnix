@@ -308,6 +308,8 @@ describe('RpgWorldGenerationDashboard', () => {
             unavailable_topics: 0,
             topic_count: 4,
             in_flight_topics: 1,
+            generation_duration_ms: 83_000,
+            timed_topics: 4,
           }}
           worldId="world:aurelia"
         />
@@ -315,9 +317,10 @@ describe('RpgWorldGenerationDashboard', () => {
     );
 
     expect(screen.getByRole('region', { name: 'World generation token usage' })).toHaveTextContent('15,000');
-    expect(screen.getByText(/4 completed/)).toBeInTheDocument();
-    expect(screen.getByText(/live batches included/i)).toBeInTheDocument();
-    expect(screen.getByText(/3 provider-reported · 1 estimated/)).toBeInTheDocument();
+    expect(screen.getByText(/4 generated/)).toBeInTheDocument();
+    expect(screen.getByText(/live batch usage included/i)).toBeInTheDocument();
+    expect(screen.getByText('3 reported · 1 estimated')).toBeInTheDocument();
+    expect(screen.getByText('1m 23s')).toBeInTheDocument();
     await screen.findByText('Profile Approved');
   });
 });

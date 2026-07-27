@@ -71,13 +71,16 @@ def _usage_value(usage: Mapping[str, Any], *keys: str) -> int:
 def _world_token_usage(
     topics: Sequence[Mapping[str, Any]],
     *,
+    topic_results: Sequence[Mapping[str, Any]] = (),
     active_job_progresses: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
-    """Project durable per-topic usage into a clear world-generation total.
+    """Project all recorded world-generation usage into a clear total.
 
-    Provider usage is preferred.  The generator records a labelled character
-    based estimate when a local provider omits token usage, so the UI can still
-    show the scale of a world build without calling it billed usage.
+    Generation-result records are authoritative for the current run because
+    they are retained for candidates that were rejected during review as well
+    as candidates accepted into durable world topics. Provider usage is
+    preferred; the generator records a labelled character-based estimate when
+    a local provider omits token usage.
     """
 
     totals = {
@@ -88,14 +91,22 @@ def _world_token_usage(
         "estimated_topics": 0,
         "unavailable_topics": 0,
         "in_flight_topics": 0,
+        "generation_duration_ms": 0,
+        "timed_topics": 0,
     }
     generated_topic_count = 0
-    for topic in topics:
-        if _text(topic.get("source")) != "ai":
-            continue
-        generated_topic_count += 1
-        provenance = _record(topic.get("provenance"))
+    accounted_topic_ids: set[str] = set()
+
+    def add_usage(provenance: Mapping[str, Any], fallback: Mapping[str, Any] = {}) -> None:
+        duration_ms = _token_count(provenance.get("latency_ms")) or _token_count(
+            fallback.get("latency_ms")
+        )
+        if duration_ms:
+            totals["generation_duration_ms"] += duration_ms
+            totals["timed_topics"] += 1
         usage = _record(provenance.get("usage"))
+        if not usage:
+            usage = _record(fallback.get("usage"))
         prompt_tokens = _usage_value(usage, "prompt_tokens", "input_tokens")
         completion_tokens = _usage_value(usage, "completion_tokens", "output_tokens")
         total_tokens = _usage_value(usage, "total_tokens", "total")
@@ -104,8 +115,10 @@ def _world_token_usage(
             totals["completion_tokens"] += completion_tokens
             totals["total_tokens"] += total_tokens
             totals["provider_reported_topics"] += 1
-            continue
+            return
         estimate = _record(provenance.get("token_estimate"))
+        if not estimate:
+            estimate = _record(fallback.get("token_estimate"))
         estimated_total = _token_count(estimate.get("total_tokens"))
         if estimated_total:
             totals["prompt_tokens"] += _token_count(estimate.get("prompt_tokens"))
@@ -114,8 +127,23 @@ def _world_token_usage(
             )
             totals["total_tokens"] += estimated_total
             totals["estimated_topics"] += 1
-            continue
+            return
         totals["unavailable_topics"] += 1
+
+    for result in topic_results:
+        candidate = _record(result.get("candidate"))
+        provenance = _record(candidate.get("provenance"))
+        if not provenance:
+            continue
+        generated_topic_count += 1
+        accounted_topic_ids.add(_text(result.get("topic_id") or candidate.get("topic_id")))
+        add_usage(provenance, _record(result.get("provider")))
+
+    for topic in topics:
+        if _text(topic.get("source")) != "ai" or _text(topic.get("topic_id")) in accounted_topic_ids:
+            continue
+        generated_topic_count += 1
+        add_usage(_record(topic.get("provenance")))
     totals["topic_count"] = generated_topic_count
     for progress in active_job_progresses:
         totals["in_flight_topics"] += 1
@@ -397,6 +425,10 @@ def read_authoring_manifest(
         "generation": latest_run,
         "token_usage": _world_token_usage(
             detail["topics"],
+            topic_results=_record(detail.get("generation_topic_results")).get(
+                _text(latest_run.get("run_id")),
+                [],
+            ),
             active_job_progresses=_active_world_topic_progresses(
                 _text(latest_run.get("run_id")),
                 database=database,

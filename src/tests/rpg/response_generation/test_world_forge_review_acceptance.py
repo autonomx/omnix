@@ -330,3 +330,28 @@ def test_accept_rejects_candidate_without_reviewable_dossiers(
         )
 
     assert work.world_scenarios.promotions == []
+
+
+def test_accept_allows_dossiers_with_repairable_blank_section_titles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    work = _Work()
+    _install(monkeypatch, work)
+    original = work.world_generation.results["rules"]
+    candidate = dict(original["candidate"])
+    entity = dict(candidate["entities"][0])
+    dossier = dict(entity["dossier"])
+    section = dict(dossier["sections"][0])
+    section["title"] = ""
+    dossier["sections"] = [section]
+    entity["dossier"] = dossier
+    candidate["entities"] = [entity]
+
+    result = generation_acceptance.accept_world_generation_candidate(
+        "run:review",
+        "rules",
+        candidate=candidate,
+        expected_candidate_hash=original["candidate_hash"],
+    )
+
+    assert result["accepted_topic_ids"] == ["rules"]

@@ -52,6 +52,12 @@ def _require_reviewable_entity_dossiers(
         if not str(value.get("short_summary") or "").strip():
             issues.append(f"{entity_id}:short_summary_required")
         for issue in validate_entity_dossier(value.get("dossier")):
+            # The dossier projection supplies a stable fallback title (for
+            # example, "Section 1") when a provider leaves a section title
+            # blank. This is presentation metadata, unlike a missing section
+            # or prose, and should not block accepting otherwise usable canon.
+            if issue.startswith("section_title_required:"):
+                continue
             issues.append(f"{entity_id}:{issue}")
     if issues:
         raise ValueError(

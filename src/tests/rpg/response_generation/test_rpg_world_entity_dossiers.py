@@ -99,6 +99,55 @@ def test_explicit_dossier_preserves_editorial_sections_and_quote() -> None:
     assert validate_entity_dossier(dossier) == ()
 
 
+def test_numbered_placeholder_sections_use_topic_specific_headings() -> None:
+    row = {
+        "id": "npc:sentinel",
+        "name": "Cygnus Sentinel",
+        "description": "A former corporate operative working with the resistance.",
+        "dossier": {
+            "schema_version": DOSSIER_SCHEMA_VERSION,
+            "sections": [
+                {
+                    "id": f"section-{index}",
+                    "title": f"Section {index}",
+                    "paragraphs": [f"Substantial authored lore paragraph {index}."],
+                }
+                for index in range(1, 4)
+            ],
+        },
+    }
+
+    _summary, dossier = project_entity_dossier(row, card_type="npcs", entity_id="npc:sentinel")
+
+    assert [section["title"] for section in dossier["sections"]] == [
+        "Overview",
+        "Appearance",
+        "Personality",
+    ]
+    assert [section["id"] for section in dossier["sections"]] == [
+        "section-1",
+        "section-2",
+        "section-3",
+    ]
+
+
+def test_legacy_actor_placeholders_use_npc_headings() -> None:
+    _summary, dossier = project_entity_dossier(
+        {
+            "id": "actor:sentinel",
+            "dossier": {
+                "sections": [
+                    {"title": "Section 1", "paragraphs": ["A substantial overview paragraph."]},
+                    {"title": "Section 2", "paragraphs": ["A substantial appearance paragraph."]},
+                ],
+            },
+        },
+        card_type="actors",
+    )
+
+    assert [section["title"] for section in dossier["sections"]] == ["Overview", "Appearance"]
+
+
 def test_authoring_card_keeps_compact_summary_and_exposes_full_dossier() -> None:
     card = entity_card(
         {

@@ -29,6 +29,8 @@ export interface RpgWorldTokenUsage {
   unavailable_topics: number;
   topic_count: number;
   in_flight_topics?: number;
+  generation_duration_ms?: number;
+  timed_topics?: number;
 }
 
 export interface RpgAuthoringManifestResponse {
