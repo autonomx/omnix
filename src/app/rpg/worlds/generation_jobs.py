@@ -248,12 +248,21 @@ def plan_ready_topic_jobs(
         if job_id in existing:
             continue
         topic_slots = list(topic_manifest_slots(authoritative_manifest, node.topic_id))
+        topic_payload = node.as_dict()
+        topic_payload["metadata"] = {
+            **dict(node.metadata),
+            "authoritative_entity_ids": [
+                str(slot["entity_id"]) for slot in topic_slots
+            ],
+            "entity_manifest_slots": topic_slots,
+            "entity_manifest_hash": authoritative_manifest_hash,
+        }
         input_payload = {
             "contract_version": WORLD_TOPIC_JOB_CONTRACT,
             "run_id": run_id,
             "world_id": world_id,
             "draft_revision": int(draft_revision),
-            "topic": node.as_dict(),
+            "topic": topic_payload,
             "generation_context": dict(generation_context),
             "directives": directives,
             "canonical_directives": canonical_directives,
