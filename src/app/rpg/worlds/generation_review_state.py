@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .generation_attempt_history import preserve_attempt_history, with_validation_attempt
+from .generation_repair_evaluation import evaluate_retry_repair
 
 _FAILED_VALIDATION_STATUSES = {"blocked", "failed", "needs_review", "rejected"}
 
@@ -126,7 +127,7 @@ def _validation_with_projected_attempt(row: Mapping[str, Any]) -> dict[str, Any]
 
 
 def review_state(result: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Project independent review, validation, waiver and attempt state."""
+    """Project independent review, validation, waiver, attempt and repair state."""
 
     row = _mapping(result)
     validation = _mapping(row.get("validation"))
@@ -146,8 +147,17 @@ def review_state(result: Mapping[str, Any] | None) -> dict[str, Any]:
     current_history = [dict(item) for item in attempts if isinstance(item, Mapping)]
     previous_result = row.get("previous_result")
     previous_history: list[dict[str, Any]] = []
+    repair_evaluation: dict[str, Any] | None = None
+    consecutive_no_ops = 0
     if isinstance(previous_result, Mapping):
-        previous_history = list(review_state(previous_result)["attempt_history"])
+        previous_state = review_state(previous_result)
+        previous_history = list(previous_state["attempt_history"])
+        repair_evaluation = evaluate_retry_repair(previous_result, row)
+        consecutive_no_ops = (
+            int(previous_state.get("consecutive_no_op_count") or 0) + 1
+            if repair_evaluation["outcome"] == "no_op"
+            else 0
+        )
     by_id: dict[str, dict[str, Any]] = {}
     for attempt in (*previous_history, *current_history):
         attempt_id = str(attempt.get("attempt_id") or "")
@@ -170,6 +180,9 @@ def review_state(result: Mapping[str, Any] | None) -> dict[str, Any]:
         "outstanding_reason_codes": evidence["outstanding_reason_codes"],
         "attempt_count": len(attempt_history),
         "attempt_history": attempt_history,
+        "repair_evaluation": repair_evaluation,
+        "consecutive_no_op_count": consecutive_no_ops,
+        "retry_budget_exhausted": consecutive_no_ops >= 2,
     }
 
 
