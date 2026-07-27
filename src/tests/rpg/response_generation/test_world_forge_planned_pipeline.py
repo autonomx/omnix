@@ -22,6 +22,11 @@ def test_planned_pipeline_is_launch_ready_with_compact_diagnostics() -> None:
 
     diagnostics = {
         "failed_topics": result.generation.failed_topic_ids,
+        "jobs": [
+            (job.topic_id, job.status, job.error)
+            for job in result.generation.jobs
+            if job.status != "completed"
+        ],
         "audit": [
             (issue.code, issue.item_id, issue.message)
             for issue in result.audit.issues
