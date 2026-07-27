@@ -6,6 +6,7 @@ from typing import Any, Literal, Mapping
 
 from .contracts import WorldRevisionDocument
 from .generation_audit_stages import two_stage_audit_report
+from .generation_finding_policy import finding_waiver_policy_report
 from .generation_profile_dossiers import (
     profile_dossier_report,
     require_profile_dossier_quality,
@@ -77,6 +78,7 @@ def _certification_with_integrity(
     profile_references: Mapping[str, Any],
     profile_dossiers: Mapping[str, Any],
     audit_stages: Mapping[str, Any],
+    finding_policy: Mapping[str, Any],
 ) -> dict[str, Any]:
     payload = {
         **dict(certification),
@@ -85,6 +87,7 @@ def _certification_with_integrity(
         "profile_reference_integrity": dict(profile_references),
         "profile_dossier_quality": dict(profile_dossiers),
         "audit_stages": dict(audit_stages),
+        "finding_waiver_policy": dict(finding_policy),
     }
     missing = [
         str(value)
@@ -96,6 +99,7 @@ def _certification_with_integrity(
         (profile_references.get("passed"), "profile_reference_integrity"),
         (profile_dossiers.get("passed"), "profile_dossier_quality"),
         (audit_stages.get("passed"), "post_repair_audit"),
+        (finding_policy.get("passed"), "finding_waiver_policy"),
     ):
         if not bool(passed):
             payload["launch_ready"] = False
@@ -113,6 +117,7 @@ def compile_world_generation_artifact(
     revision: int,
     starting_location_override: str = "",
     asset_bindings: Mapping[str, Any] | None = None,
+    review_results: list[Mapping[str, Any]] | None = None,
 ) -> WorldGenerationDiagnosticDraft | WorldGenerationCertifiedArtifact:
     """Compile one immutable snapshot while exposing only mode-appropriate output."""
 
@@ -122,6 +127,7 @@ def compile_world_generation_artifact(
     integrity = strict_integrity_report(topic_rows)
     profile_references = profile_reference_report(topic_rows, topic_graph)
     profile_dossiers = profile_dossier_report(topic_rows, topic_graph)
+    finding_policy = finding_waiver_policy_report(review_results or [])
     if mode == "certified_release":
         require_unique_canon_identifiers(topic_rows)
         require_valid_profile_references(topic_rows, topic_graph)
@@ -147,6 +153,7 @@ def compile_world_generation_artifact(
         profile_references=profile_references,
         profile_dossiers=profile_dossiers,
         audit_stages=audit_stages,
+        finding_policy=finding_policy,
     )
     if mode == "certified_release":
         return WorldGenerationCertifiedArtifact(
