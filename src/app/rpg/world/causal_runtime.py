@@ -53,10 +53,23 @@ def _initial_pressure_statuses(planning_topics: Mapping[str, Any]) -> dict[str, 
     }
 
 
+def _projection_plan(planning_topics: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: copy.deepcopy(dict(value))
+        for key in (
+            "political_claim_graph",
+            "settlement_origin_plan",
+            "culture_lineage_plan",
+            "opening_scope_plan",
+        )
+        if isinstance((value := planning_topics.get(key)), Mapping)
+    }
+
+
 def bootstrap_causal_runtime(planning_topics: Mapping[str, Any]) -> dict[str, Any]:
     initial_state = build_mutable_world_state(planning_topics)
     runtime: dict[str, Any] = {
-        # Additive lifecycle fields remain compatible with the established runtime contract.
+        # Additive lifecycle and projection fields remain compatible with v1 readers.
         "schema_version": "rpg_causal_world_runtime_v1",
         "revision": 1,
         "initial_state": copy.deepcopy(initial_state),
@@ -64,6 +77,7 @@ def bootstrap_causal_runtime(planning_topics: Mapping[str, Any]) -> dict[str, An
         "pressure_plan": copy.deepcopy(
             dict(planning_topics.get("pressure_plan") or {})
         ),
+        "projection_plan": _projection_plan(planning_topics),
         "pressure_statuses": _initial_pressure_statuses(planning_topics),
         "events": [],
         "last_tick": 0,
