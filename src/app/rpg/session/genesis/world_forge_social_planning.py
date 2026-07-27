@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 _CLAIM_TYPES = ("sovereignty", "stewardship", "ancestral", "resource", "security")
 _SOCIAL_VOCABULARIES = {
@@ -63,8 +63,8 @@ def _event_ids(historical_plan: Mapping[str, Any]) -> tuple[str, ...]:
     )
 
 
-def _family(geography_plan: Mapping[str, Any]) -> str:
-    candidate = str(geography_plan.get("planning_family") or "generic")
+def _family(source: Mapping[str, Any] | None) -> str:
+    candidate = str(dict(source or {}).get("planning_family") or "generic")
     return candidate if candidate in _SOCIAL_VOCABULARIES else "generic"
 
 
@@ -82,8 +82,7 @@ def build_political_claim_graph(
         if not regions:
             break
         region = regions[(seed + index) % len(regions)]
-        region_state = dict(state.get(region["id"]) or {})
-        stability = int(region_state.get("political_stability") or 0)
+        stability = int(dict(state.get(region["id"]) or {}).get("political_stability") or 0)
         claims.append(
             {
                 "claim_id": f"claim:{index + 1:03d}",
@@ -165,17 +164,19 @@ def build_settlement_origin_plan(
 
 def build_culture_lineage_plan(
     anchor_registry: Mapping[str, Any],
-    geography_plan: Mapping[str, Any],
     historical_plan: Mapping[str, Any],
     present_day_state: Mapping[str, Any],
     *,
     seed: int,
+    geography_plan: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Build lineages while preserving the established positional call contract."""
+
     cultures = _rows(anchor_registry, "cultures")
     regions = _rows(anchor_registry, "regions")
     events = _event_ids(historical_plan)
     state = dict(present_day_state.get("state") or {})
-    family = _family(geography_plan)
+    family = _family(geography_plan or historical_plan)
     vocabulary = _SOCIAL_VOCABULARIES[family]
     lineages = []
     for index, culture in enumerate(cultures):
@@ -191,7 +192,10 @@ def build_culture_lineage_plan(
                 "origin_event_id": events[index % len(events)] if events else "",
                 "lineage_type": vocabulary["lineage"][(seed * 2 + index) % len(vocabulary["lineage"])],
                 "environmental_adaptation": vocabulary["adaptation"][(seed + index) % len(vocabulary["adaptation"])],
-                "cohesion_index": max(0, min(100, int(region_state.get("political_stability") or 50) + (index % 9) - 4)),
+                "cohesion_index": max(
+                    0,
+                    min(100, int(region_state.get("political_stability") or 50) + (index % 9) - 4),
+                ),
             }
         )
     payload: dict[str, Any] = {
@@ -215,7 +219,9 @@ def build_social_planning_topics(
     seed: int,
 ) -> dict[str, Any]:
     return {
-        "political_claim_graph": build_political_claim_graph(anchor_registry, present_day_state, seed=seed),
+        "political_claim_graph": build_political_claim_graph(
+            anchor_registry, present_day_state, seed=seed
+        ),
         "settlement_origin_plan": build_settlement_origin_plan(
             anchor_registry,
             geography_plan,
@@ -224,10 +230,10 @@ def build_social_planning_topics(
         ),
         "culture_lineage_plan": build_culture_lineage_plan(
             anchor_registry,
-            geography_plan,
             historical_plan,
             present_day_state,
             seed=seed,
+            geography_plan=geography_plan,
         ),
     }
 
