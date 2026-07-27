@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping
 
+from .world_forge_causal_presentation import project_causal_link_presentations
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_generation import GeneratedTopic
 from .world_forge_presentation import (
@@ -49,7 +50,7 @@ def render_fact_derived_presentations(
             for row in topic.facts
         ),
     )
-    rendered = _render(node, aliased)
+    rendered = project_causal_link_presentations(_render(node, aliased))
     restored = tuple(
         {
             **dict(row),

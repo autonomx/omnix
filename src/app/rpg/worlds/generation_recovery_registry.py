@@ -81,6 +81,7 @@ class StructuredRegistryRecoveryMixin:
                 expected_topic_id=node.topic_id,
                 allocated_entity_ids=ids,
                 expected_entity_kind="",
+                field_definitions=(),
                 max_tokens=max_tokens,
                 retain_invalid_kind="registry",
             )

@@ -7,7 +7,12 @@ from app.rpg.session.response_builder import (
     build_apply_turn_response as _PHASE8_PART40_BASE_BUILD_APPLY_TURN_RESPONSE,
 )
 
-from .runtime_part19 import apply_turn as _PHASE8_PART40_BASE_APPLY_TURN
+from .causal_turn_runtime import advance_causal_runtime_for_turn
+from .runtime_part19 import (
+    apply_turn as _PHASE8_PART40_BASE_APPLY_TURN,
+    load_runtime_session,
+    save_runtime_session,
+)
 from .runtime_part39 import _canonicalize_publication, _persist_soft_truth
 
 
@@ -122,6 +127,29 @@ def _restore_queued_narration(
     return result
 
 
+def _advance_causal_turn(payload: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+    try:
+        return advance_causal_runtime_for_turn(
+            session_id,
+            payload,
+            loader=load_runtime_session,
+            saver=save_runtime_session,
+        )
+    except Exception as exc:
+        result = deepcopy(_safe_dict(payload))
+        receipt = {
+            "applied": False,
+            "reason": "causal_runtime_error",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        result["causal_world_runtime"] = receipt
+        nested = dict(_safe_dict(result.get("result")))
+        if nested:
+            nested["causal_world_runtime"] = deepcopy(receipt)
+            result["result"] = nested
+        return result
+
+
 def apply_turn(
     session_id: str,
     player_input: str,
@@ -139,7 +167,8 @@ def apply_turn(
     queued = _queued_narration_snapshot(payload)
     canonical = _canonicalize_publication(payload, player_input=player_input)
     canonical = _restore_queued_narration(canonical, queued)
-    return _persist_soft_truth(canonical, session_id)
+    canonical = _persist_soft_truth(canonical, session_id)
+    return _advance_causal_turn(canonical, session_id)
 
 
 __all__ = ["apply_turn", "build_apply_turn_response"]

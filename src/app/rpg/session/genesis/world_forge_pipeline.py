@@ -1,14 +1,19 @@
 """End-to-end profile-first World Forge pipeline used before campaign launch."""
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping
 
 from .canon_audit import CanonAuditReport, audit_generated_canon
 from .canon_compiler import CanonCompilationResult, compile_campaign_bible
 from .canon_relationships import compile_cross_domain_relationships
 from .contract import CampaignGenesisContract
+from .world_forge_anchor_registry import allocate_global_anchor_registry
+from .world_forge_causal_evaluation import attach_causal_evaluation
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_generation import (
     GeneratedTopic,
@@ -16,6 +21,10 @@ from .world_forge_generation import (
     WorldForgeTopicGenerator,
     generate_campaign_topics,
 )
+from .world_forge_historical_planning import build_historical_planning_topics
+from .world_forge_plan_audit import attach_plan_reconciliation
+from .world_forge_plan_projection import PlanningConstrainedWorldForgeGenerator
+from .world_forge_pressure_planning import build_pressure_planning_topics
 from .world_forge_profile_generation import resolve_or_generate_genre_profile
 from .world_forge_profile_graph import (
     build_profile_launch_topic_graph,
@@ -23,6 +32,8 @@ from .world_forge_profile_graph import (
 )
 from .world_forge_profiles import GenreProfile, genre_profile_from_dict
 from .world_forge_quality import apply_world_forge_quality_audit
+from .world_forge_social_planning import build_social_planning_topics
+from app.rpg.world.causal_runtime import bootstrap_causal_runtime
 
 
 @dataclass(frozen=True)
@@ -32,14 +43,11 @@ class CampaignWorldForgeResult:
     relationships: tuple[Mapping[str, Any], ...]
     audit: CanonAuditReport
     compilation: CanonCompilationResult
+    runtime_bootstrap: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def launch_ready(self) -> bool:
-        return (
-            self.generation.passed
-            and self.audit.passed
-            and self.compilation.launch_ready
-        )
+        return self.generation.passed and self.audit.passed and self.compilation.launch_ready
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -49,7 +57,35 @@ class CampaignWorldForgeResult:
             "relationships": [dict(row) for row in self.relationships],
             "audit": self.audit.as_dict(),
             "compilation": self.compilation.as_dict(),
+            "runtime_bootstrap": dict(self.runtime_bootstrap),
         }
+
+
+def _canonical_hash(value: Mapping[str, Any]) -> str:
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def _attach_runtime_bootstrap(
+    compilation: CanonCompilationResult,
+    runtime_bootstrap: Mapping[str, Any],
+) -> CanonCompilationResult:
+    document = copy.deepcopy(dict(compilation.document))
+    document.pop("content_hash", None)
+    manifest = dict(document.get("manifest") or {})
+    manifest["causal_runtime_bootstrap"] = copy.deepcopy(dict(runtime_bootstrap))
+    document["manifest"] = manifest
+    document["content_hash"] = _canonical_hash(document)
+    return replace(
+        compilation,
+        document=document,
+        metadata={
+            **dict(compilation.metadata),
+            "content_hash": document["content_hash"],
+            "causal_runtime_schema_version": str(runtime_bootstrap.get("schema_version") or ""),
+            "causal_runtime_hash": str(runtime_bootstrap.get("runtime_hash") or ""),
+        },
+    )
 
 
 def _graph_from_payload(value: Mapping[str, Any]) -> CampaignTopicGraph:
@@ -105,7 +141,6 @@ def _default_generator() -> WorldForgeTopicGenerator:
         from .world_forge_deterministic import DeterministicWorldForgeGenerator
 
         return ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator())
-
     from app.rpg_world_forge_provider import build_production_world_forge_generator
 
     return build_production_world_forge_generator()
@@ -149,6 +184,7 @@ def run_campaign_world_forge(
             starting_location=contract.world_options.starting_location,
             background_expansion=contract.world_forge.background_expansion,
         )
+        profile = _profile_from_graph_or_compiled(graph, world_forge) or profile
     if profile is None:
         raise ValueError("campaign_world_forge_profile_missing")
     if launch_only:
@@ -166,26 +202,61 @@ def run_campaign_world_forge(
     )
     max_parallel_jobs = max(1, min(max_parallel_jobs, 4))
     profile_payload = profile.as_dict()
+    world_brief = {
+        "title": contract.campaign_template.replace("_", " ").title(),
+        "description": " ".join(contract.world_forge.custom_directives),
+        "genre": contract.genre or contract.campaign_template,
+        "tone": contract.tone,
+        "campaign_template": contract.campaign_template,
+    }
+    world_context = {
+        "campaign_id": campaign_id,
+        "campaign_template": contract.campaign_template,
+        "genre": contract.genre or contract.campaign_template,
+        "tone": contract.tone,
+        "world_brief": world_brief,
+        "resolved_genre_profile": profile_payload,
+        "resolved_profile_hash": profile.content_hash,
+    }
+    anchor_registry = allocate_global_anchor_registry(graph, seed=seed, world_key=campaign_id)
+    historical_topics = build_historical_planning_topics(
+        anchor_registry,
+        seed=seed,
+        world_key=campaign_id,
+        world_context=world_context,
+    )
+    social_topics = build_social_planning_topics(
+        anchor_registry,
+        historical_topics["geography_resource_plan"],
+        historical_topics["historical_epoch_plan"],
+        historical_topics["present_day_state"],
+        seed=seed,
+    )
+    pressure_topics = build_pressure_planning_topics(
+        anchor_registry,
+        historical_topics["present_day_state"],
+        social_topics["political_claim_graph"],
+        social_topics["settlement_origin_plan"],
+        seed=seed,
+    )
+    planning_topics = {
+        "anchor_registry": anchor_registry,
+        **historical_topics,
+        **social_topics,
+        **pressure_topics,
+    }
+    constrained_generator = PlanningConstrainedWorldForgeGenerator(
+        generator or _default_generator()
+    )
     generation = generate_campaign_topics(
         graph,
-        generator=generator or _default_generator(),
+        generator=constrained_generator,
         seed=seed,
         campaign_context={
-            "campaign_id": campaign_id,
-            "campaign_template": contract.campaign_template,
-            "genre": contract.genre or contract.campaign_template,
-            "tone": contract.tone,
+            **world_context,
             "starting_location": contract.world_options.starting_location,
             "custom_directives": list(contract.world_forge.custom_directives),
-            "world_brief": {
-                "title": contract.campaign_template.replace("_", " ").title(),
-                "description": " ".join(contract.world_forge.custom_directives),
-                "genre": contract.genre or contract.campaign_template,
-                "tone": contract.tone,
-                "campaign_template": contract.campaign_template,
-            },
-            "resolved_genre_profile": profile_payload,
-            "resolved_profile_hash": profile.content_hash,
+            "planning_topics": planning_topics,
         },
         max_parallel_jobs=max_parallel_jobs,
         existing_topics=existing_topics,
@@ -196,6 +267,9 @@ def run_campaign_world_forge(
         compiled_relationships=relationships,
     )
     audit = apply_world_forge_quality_audit(generation.topics, audit)
+    audit = attach_causal_evaluation(generation.topics, audit)
+    audit = attach_plan_reconciliation(generation.topics, planning_topics, audit)
+    runtime_bootstrap = bootstrap_causal_runtime(planning_topics) if generation.passed and audit.passed else {}
     compilation = compile_campaign_bible(
         generation,
         compiled_relationships=relationships,
@@ -206,10 +280,13 @@ def run_campaign_world_forge(
         starting_location=contract.world_options.starting_location,
         canon_revision=canon_revision,
     )
+    if runtime_bootstrap:
+        compilation = _attach_runtime_bootstrap(compilation, runtime_bootstrap)
     return CampaignWorldForgeResult(
         graph=graph,
         generation=generation,
         relationships=relationships,
         audit=audit,
         compilation=compilation,
+        runtime_bootstrap=runtime_bootstrap,
     )

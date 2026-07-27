@@ -1,4 +1,4 @@
-"""Compile legacy and profile-typed cross-domain canon relationships."""
+"""Compile legacy, profile-typed, and causal canon relationships."""
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, Sequence
@@ -20,8 +20,9 @@ def _relationship(
     visibility: str = "game_master_canon",
     content: str = "",
     source: str = "relationship_compiler",
+    metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    row = {
         "id": f"relationship:{_slug(source_id)}:{_slug(kind)}:{_slug(target_id)}",
         "source_id": source_id,
         "target_id": target_id,
@@ -33,6 +34,23 @@ def _relationship(
         "entity_refs": [source_id, target_id],
         "compiled_by": source,
     }
+    if metadata:
+        extra_refs = tuple(
+            str(value)
+            for value in metadata.get("entity_refs") or ()
+            if str(value)
+        )
+        row.update(
+            {
+                key: value
+                for key, value in metadata.items()
+                if key != "entity_refs"
+            }
+        )
+        row["entity_refs"] = list(
+            dict.fromkeys([source_id, target_id, *extra_refs])
+        )
+    return row
 
 
 def _strings(value: Any) -> tuple[str, ...]:
@@ -64,10 +82,59 @@ def _profile_relationship_kind(fact: Mapping[str, Any]) -> str:
     return field_id or "references"
 
 
+def _is_profile_structured_fact(fact: Mapping[str, Any]) -> bool:
+    """Recognise trusted profile facts without pinning one compiler revision."""
+
+    source = str(fact.get("source") or "")
+    return (
+        source.startswith("profile_structured_fact_compiler_v")
+        and bool(str(fact.get("subject") or "").strip())
+        and bool(str(fact.get("field_id") or fact.get("predicate") or "").strip())
+        and str(fact.get("value_type") or "") in {"entity_ref", "entity_ref_list"}
+    )
+
+
+def _causal_relationships(topic: GeneratedTopic) -> tuple[dict[str, Any], ...]:
+    if topic.topic_id != "causal_links":
+        return ()
+    relationships: list[dict[str, Any]] = []
+    for entity in topic.entities:
+        causal_link_id = str(entity.get("id") or entity.get("entity_id") or "").strip()
+        effect_id = str(entity.get("effect_id") or "").strip()
+        effect_type = str(entity.get("effect_type") or "historically_affected").strip()
+        causes = _strings(entity.get("cause_event_ids"))
+        if not causal_link_id or not effect_id or not causes:
+            continue
+        mechanism = str(entity.get("mechanism") or "").strip()
+        persistence = str(entity.get("persistence") or "").strip()
+        start_year = entity.get("start_year")
+        end_year = entity.get("end_year")
+        for cause_id in causes:
+            relationships.append(
+                _relationship(
+                    cause_id,
+                    effect_id,
+                    effect_type,
+                    visibility=str(entity.get("visibility") or "game_master_canon"),
+                    content=mechanism,
+                    source="causal_relationship_compiler_v1",
+                    metadata={
+                        "causal_link_id": causal_link_id,
+                        "mechanism": mechanism,
+                        "persistence": persistence,
+                        "start_year": start_year,
+                        "end_year": end_year,
+                        "entity_refs": [causal_link_id],
+                    },
+                )
+            )
+    return tuple(relationships)
+
+
 def compile_cross_domain_relationships(
     topics: Iterable[GeneratedTopic],
 ) -> tuple[dict[str, Any], ...]:
-    """Derive relationships from typed profile facts and legacy entity fields."""
+    """Derive relationships from causal entities, typed facts, and legacy fields."""
 
     topic_rows = tuple(topics)
     entities: dict[str, Mapping[str, Any]] = {}
@@ -80,8 +147,9 @@ def compile_cross_domain_relationships(
     derived: list[dict[str, Any]] = []
     typed_fields: set[tuple[str, str]] = set()
     for topic in topic_rows:
+        derived.extend(_causal_relationships(topic))
         for fact in topic.facts:
-            if str(fact.get("source") or "") != "profile_structured_fact_compiler_v1":
+            if not _is_profile_structured_fact(fact):
                 continue
             value_type = str(fact.get("value_type") or "")
             source_id = str(fact.get("subject") or "").strip()

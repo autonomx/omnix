@@ -91,6 +91,10 @@ def normalize_merchant_state(value: Any, *, merchant_id: str = DEFAULT_MERCHANT_
         "stock": stock,
         "currency": normalize_currency(state.get("currency")),
         "transaction_log": list(_safe_list(state.get("transaction_log")))[-50:],
+        "causal_price_multiplier_bps": max(
+            8000,
+            min(15000, _safe_int(state.get("causal_price_multiplier_bps"), 10000)),
+        ),
         "source": SOURCE,
     }
 
@@ -104,7 +108,12 @@ def ensure_merchant_state(
     economy_state = _safe_dict(state.get("economy_state"))
     merchants = _safe_dict(economy_state.get("merchants"))
     key = _safe_str(merchant_id or DEFAULT_MERCHANT_ID)
-    merchants[key] = normalize_merchant_state(merchants.get(key), merchant_id=key)
+    raw = _safe_dict(merchants.get(key))
+    raw.setdefault(
+        "causal_price_multiplier_bps",
+        _safe_int(economy_state.get("causal_price_multiplier_bps"), 10000),
+    )
+    merchants[key] = normalize_merchant_state(raw, merchant_id=key)
     economy_state["merchants"] = merchants
     state["economy_state"] = economy_state
     return state
@@ -114,7 +123,12 @@ def get_merchant_state(simulation_state: Dict[str, Any], *, merchant_id: str = D
     state = ensure_merchant_state(simulation_state, merchant_id=merchant_id)
     economy_state = _safe_dict(state.get("economy_state"))
     merchants = _safe_dict(economy_state.get("merchants"))
-    return normalize_merchant_state(merchants.get(_safe_str(merchant_id or DEFAULT_MERCHANT_ID)), merchant_id=merchant_id)
+    raw = _safe_dict(merchants.get(_safe_str(merchant_id or DEFAULT_MERCHANT_ID)))
+    raw.setdefault(
+        "causal_price_multiplier_bps",
+        _safe_int(economy_state.get("causal_price_multiplier_bps"), 10000),
+    )
+    return normalize_merchant_state(raw, merchant_id=merchant_id)
 
 
 def _find_stock_entry(merchant_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:

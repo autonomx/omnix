@@ -5,7 +5,7 @@ import json
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_generation import GeneratedTopic
@@ -89,6 +89,20 @@ _OBSERVABLE_FIELD_MARKERS = (
     "rumour",
     "rumor",
     "access_route",
+)
+_REFERENCE_CONCENTRATION_EXEMPT_ROLES = frozenset(
+    {
+        "caused_by",
+        "formed_by",
+        "founded_by",
+        "originated_in",
+        "origin_region",
+        "descended_from",
+        "shaped_by",
+        "cultural_affiliation",
+        "cause",
+        "effect",
+    }
 )
 
 
@@ -231,6 +245,10 @@ def _has_marker(field_id: str, markers: tuple[str, ...]) -> bool:
     return any(marker in field_id for marker in markers)
 
 
+def _has_substantive_value(value: Any) -> bool:
+    return value not in (None, "", [], (), {})
+
+
 def audit_topic_semantic_quality(
     node: CampaignTopicNode,
     topic: GeneratedTopic,
@@ -349,7 +367,8 @@ def audit_topic_semantic_quality(
             weak = tuple(
                 field_id
                 for field_id in field_group
-                if len(set(_meaningful_tokens(entity.get(field_id)))) < 3
+                if _has_substantive_value(entity.get(field_id))
+                and len(set(_meaningful_tokens(entity.get(field_id)))) < 3
             )
             if weak:
                 issues.append(
@@ -384,6 +403,11 @@ def audit_topic_semantic_quality(
     if entity_count >= 4:
         threshold = max(3, int(entity_count * 0.8 + 0.999))
         for field_id, counts in reference_counts.items():
+            semantic_role = str(
+                definition_map[field_id].get("semantic_role") or ""
+            ).strip()
+            if semantic_role in _REFERENCE_CONCENTRATION_EXEMPT_ROLES:
+                continue
             for referenced_id, count in counts.items():
                 declaration = (node.topic_id, field_id, referenced_id)
                 if count >= threshold and declaration not in declarations:
@@ -400,10 +424,7 @@ def audit_topic_semantic_quality(
                                 if referenced_id
                                 in _reference_values(
                                     entity.get(field_id),
-                                    str(
-                                        definition_map[field_id].get("value_type")
-                                        or ""
-                                    ),
+                                    str(definition_map[field_id].get("value_type") or ""),
                                 )
                             ),
                             (field_id,),
@@ -412,9 +433,17 @@ def audit_topic_semantic_quality(
                         )
                     )
         for reference_tuple, entity_ids in reference_tuples.items():
+            non_exempt_tuple = tuple(
+                (field_id, referenced_ids)
+                for field_id, referenced_ids in reference_tuple
+                if str(definition_map[field_id].get("semantic_role") or "").strip()
+                not in _REFERENCE_CONCENTRATION_EXEMPT_ROLES
+            )
+            if not non_exempt_tuple:
+                continue
             if len(entity_ids) >= threshold and not _reference_tuple_declared(
                 node.topic_id,
-                reference_tuple,
+                non_exempt_tuple,
                 declarations,
             ):
                 issues.append(
@@ -422,7 +451,7 @@ def audit_topic_semantic_quality(
                         "repeated_reference_tuple",
                         node.topic_id,
                         tuple(sorted(entity_ids)),
-                        tuple(field for field, _ in reference_tuple),
+                        tuple(field for field, _ in non_exempt_tuple),
                         "Most entities share the same cross-domain reference tuple.",
                         regeneration_scope="topic",
                     )

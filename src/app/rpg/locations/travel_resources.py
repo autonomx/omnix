@@ -8,7 +8,7 @@ from app.rpg.items.inventory_state import normalize_inventory_state
 from app.rpg.locations.discovery import validate_route_access
 from app.rpg.locations.graph import OLD_MILL, OLD_ROAD, RUSTY_FLAGON
 from app.rpg.locations.runtime_travel import apply_runtime_travel
-from app.rpg.locations.travel import calculate_route_travel_cost
+from app.rpg.locations.travel import apply_causal_travel_projection, calculate_route_travel_cost
 
 SOURCE = "deterministic_phase4_travel_resource_consumption"
 
@@ -172,7 +172,10 @@ def apply_runtime_travel_with_resource_consumption(
     )
     if access.get("ok") is not True:
         return {"ok": False, "reason": access.get("reason") or "route_access_denied", "access_result": access, "source": SOURCE}
-    cost = calculate_route_travel_cost(start_location_id, end_location_id)
+    cost = apply_causal_travel_projection(
+        calculate_route_travel_cost(start_location_id, end_location_id),
+        _safe_dict(simulation_state.get("travel_state")),
+    )
     totals = _safe_dict(cost.get("totals"))
     availability = validate_travel_resources_available(
         simulation_state,
@@ -205,6 +208,17 @@ def apply_runtime_travel_with_resource_consumption(
             "resource_consumption_result": None,
             "source": SOURCE,
         }
+    runtime_entry = _safe_dict(runtime.get("travel_log_entry"))
+    runtime_entry.update(
+        {
+            "ration_units": _safe_int(totals.get("ration_units"), 0),
+            "water_units": _safe_int(totals.get("water_units"), 0),
+            "causal_cost_multiplier_bps": _safe_int(cost.get("causal_cost_multiplier_bps"), 10000),
+            "causal_safety_index": _safe_int(cost.get("causal_safety_index"), 100),
+        }
+    )
+    runtime["travel_log_entry"] = runtime_entry
+    runtime["causal_cost"] = cost
     consumption = apply_travel_resource_consumption(simulation_state, runtime, tick=turn_index)
     return {
         "ok": consumption.get("ok") is True,

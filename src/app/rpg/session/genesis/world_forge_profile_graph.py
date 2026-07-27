@@ -4,8 +4,11 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 from .world_forge_authorship_policy import field_policy_row, topic_authorship_policy
+from .world_forge_causal_generation import causal_generation_contract
+from .world_forge_causal_profile import augment_profile_with_causal_traceability
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_lore_quality import lore_quality_contract
+from .world_forge_planning import planning_contract_metadata
 from .world_forge_profiles import DomainDefinition, GenreProfile
 
 _PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
@@ -81,6 +84,9 @@ def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
         _record(domain.generation_guidance).get("lore_quality")
     )
     metadata["lore_quality"] = configured_lore_quality or lore_quality_contract(probe)
+    causal_contract = causal_generation_contract(probe)
+    if causal_contract:
+        metadata["causal_generation_contract"] = causal_contract
     return CampaignTopicNode(
         topic_id=probe.topic_id,
         title=probe.title,
@@ -146,9 +152,12 @@ def build_profile_topic_graph(
 ) -> CampaignTopicGraph:
     """Build a deterministic graph from the exact validated profile revision."""
 
-    profile.require_valid()
+    profile = augment_profile_with_causal_traceability(profile)
     domain_nodes = tuple(_domain_node(domain, depth=depth) for domain in profile.domains)
     domain_ids = tuple(domain.domain_id for domain in profile.domains)
+    base_profile_hash = str(
+        dict(profile.provenance).get("base_profile_hash") or profile.content_hash
+    )
     graph = CampaignTopicGraph(
         graph_version="rpg_profile_topic_graph_v2",
         campaign_template=str(campaign_template or profile.profile_id),
@@ -157,7 +166,8 @@ def build_profile_topic_graph(
         metadata={
             "genre_profile_id": profile.profile_id,
             "genre_profile_version": profile.version,
-            "resolved_profile_hash": profile.content_hash,
+            "resolved_profile_hash": base_profile_hash,
+            "compiled_profile_hash": profile.content_hash,
             "resolved_profile": profile.as_dict(),
             "genre_tags": list(profile.genre_tags),
             "tone": str(tone or ""),
@@ -168,6 +178,7 @@ def build_profile_topic_graph(
                 **dict(runtime_capabilities or {}),
             },
             "launch_requirements": profile.launch_requirements.as_dict(),
+            "planning_contract": planning_contract_metadata(),
         },
     )
     issues = graph.validate()
@@ -201,7 +212,7 @@ def build_profile_launch_topic_graph(
 ) -> CampaignTopicGraph:
     """Project the first-turn graph from profile launch requirements."""
 
-    profile.require_valid()
+    profile = augment_profile_with_causal_traceability(profile)
     selected = set(profile.launch_requirements.required_domain_ids)
     selected.update(
         domain.domain_id

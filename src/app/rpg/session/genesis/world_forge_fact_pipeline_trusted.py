@@ -28,6 +28,7 @@ def compile_structured_entity_facts(
     The compiler may create IDs, references, authority, and machine values. It must not
     synthesize ``content``, ``display_text``, or ``expanded_description``. Provider- or
     human-authored presentation already attached to an identical fact is retained.
+    Empty optional containers are omitted rather than promoted into meaningless canon.
     """
 
     definitions = _field_definitions(node)
@@ -41,7 +42,7 @@ def compile_structured_entity_facts(
         visibility = str(entity.get("visibility") or node.visibility)
         for definition in definitions:
             field_id = str(definition.get("field_id") or "")
-            if field_id not in entity or entity.get(field_id) in (None, ""):
+            if field_id not in entity or entity.get(field_id) in (None, "", [], (), {}):
                 continue
             value = entity[field_id]
             fact_id = _fact_id(entity_id, field_id)
@@ -69,7 +70,6 @@ def compile_structured_entity_facts(
             if current is not None:
                 current_signature = _canonical_fact_signature(current)
                 expected_signature = _canonical_fact_signature(row)
-                # The compiler version and authorship marker are not canon values.
                 current_signature["source"] = expected_signature["source"]
                 if current_signature != expected_signature:
                     raise StructuredFactValidationError(
@@ -87,8 +87,10 @@ def compile_structured_entity_facts(
                 authored = {
                     key: current[key]
                     for key in ("content", "display_text", "expanded_description")
-                    if isinstance(current.get(key), str) and str(current.get(key)).strip()
-                    and str(current.get("source") or "") != "profile_structured_fact_compiler_v1"
+                    if isinstance(current.get(key), str)
+                    and str(current.get(key)).strip()
+                    and str(current.get("source") or "")
+                    != "profile_structured_fact_compiler_v1"
                 }
                 row.update(authored)
                 for key in ("lookup", "lookup_schema"):
