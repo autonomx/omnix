@@ -1,7 +1,8 @@
 """Bind generated entities to planner-owned canonical manifest slots."""
 from __future__ import annotations
 
-from dataclasses import replace
+import re
+from collections import defaultdict
 from typing import Any, Mapping, Sequence
 
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
@@ -15,6 +16,11 @@ def _slots(value: Any) -> tuple[dict[str, Any], ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return ()
     return tuple(dict(row) for row in value if isinstance(row, Mapping))
+
+
+def _alias(value: Any) -> str:
+    text = str(value or "").strip().casefold()
+    return "_".join(part for part in re.split(r"[^a-z0-9]+", text) if part)
 
 
 def _rewrite(value: Any, replacements: Mapping[str, str]) -> Any:
@@ -70,11 +76,73 @@ def _ordered_entities(
     return rows, "ordinal"
 
 
+def _unique_aliases(candidates: Mapping[str, set[str]]) -> dict[str, str]:
+    return {
+        alias: next(iter(entity_ids))
+        for alias, entity_ids in candidates.items()
+        if alias and len(entity_ids) == 1
+    }
+
+
+def dependency_manifest_aliases(
+    dependency_topics: Mapping[str, GeneratedTopic],
+) -> dict[str, str]:
+    """Recover provider and human-readable aliases retained by bound dependencies."""
+
+    candidates: dict[str, set[str]] = defaultdict(set)
+    for topic in dependency_topics.values():
+        binding = dict(topic.provenance.get("entity_manifest_binding") or {})
+        for old_id, canonical_id in dict(
+            binding.get("rewritten_provider_ids") or {}
+        ).items():
+            if str(old_id) and str(canonical_id):
+                candidates[str(old_id)].add(str(canonical_id))
+        for entity in topic.entities:
+            canonical_id = str(entity.get("id") or "")
+            if not canonical_id:
+                continue
+            for raw_alias in (
+                entity.get("name"),
+                entity.get("title"),
+                entity.get("slug"),
+                entity.get("short_name"),
+            ):
+                rendered = str(raw_alias or "").strip()
+                if rendered:
+                    candidates[rendered].add(canonical_id)
+                    candidates[_alias(rendered)].add(canonical_id)
+    return _unique_aliases(candidates)
+
+
+def _local_aliases(
+    entities: Sequence[Mapping[str, Any]],
+    slots: Sequence[Mapping[str, Any]],
+) -> dict[str, str]:
+    candidates: dict[str, set[str]] = defaultdict(set)
+    for row, slot in zip(entities, slots, strict=True):
+        canonical_id = str(slot.get("entity_id") or "")
+        old_id = str(row.get("id") or "").strip()
+        if old_id:
+            candidates[old_id].add(canonical_id)
+        for raw_alias in (
+            row.get("name"),
+            row.get("title"),
+            row.get("slug"),
+            row.get("short_name"),
+        ):
+            rendered = str(raw_alias or "").strip()
+            if rendered:
+                candidates[rendered].add(canonical_id)
+                candidates[_alias(rendered)].add(canonical_id)
+    return _unique_aliases(candidates)
+
+
 def bind_generated_topic_to_manifest(
     topic: GeneratedTopic,
     manifest_slots: Sequence[Mapping[str, Any]] | None,
     *,
     manifest_hash: str = "",
+    reference_aliases: Mapping[str, str] | None = None,
 ) -> GeneratedTopic:
     """Inject canonical IDs and rewrite exact provider references deterministically."""
 
@@ -102,10 +170,17 @@ def bind_generated_topic_to_manifest(
         )
 
     replacements = {
-        old_id: str(slot["entity_id"])
-        for old_id, slot in zip(old_ids, slots, strict=True)
-        if old_id and old_id != str(slot["entity_id"])
+        str(alias): str(entity_id)
+        for alias, entity_id in dict(reference_aliases or {}).items()
+        if str(alias) and str(entity_id)
     }
+    replacements.update(_local_aliases(ordered, slots))
+    replacements = {
+        alias: entity_id
+        for alias, entity_id in replacements.items()
+        if alias != entity_id
+    }
+
     bound_entities = []
     for row, slot in zip(ordered, slots, strict=True):
         rewritten = dict(_rewrite(row, replacements))
@@ -145,5 +220,6 @@ def manifest_slots_from_node(node_metadata: Mapping[str, Any] | None) -> tuple[d
 __all__ = [
     "EntityManifestBindingError",
     "bind_generated_topic_to_manifest",
+    "dependency_manifest_aliases",
     "manifest_slots_from_node",
 ]
