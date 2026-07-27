@@ -90,6 +90,15 @@ def _scarcity_value(merchant_state: Dict[str, Any], item_id: str) -> int:
     return 0
 
 
+def _causal_price_delta(merchant_state: Dict[str, Any]) -> tuple[int, int]:
+    multiplier = _clamp(
+        _safe_int(merchant_state.get("causal_price_multiplier_bps"), 10000),
+        8000,
+        15000,
+    )
+    return multiplier, multiplier - 10000
+
+
 def _modifier_rows(
     *,
     player_state: Dict[str, Any],
@@ -102,6 +111,7 @@ def _modifier_rows(
     relationship = _relationship_value(player_state, merchant_id)
     reputation = _reputation_value(player_state, merchant_id)
     scarcity = _scarcity_value(merchant_state, item_id)
+    causal_multiplier, causal_delta = _causal_price_delta(merchant_state)
 
     charisma_delta = _clamp(charisma - 10, -10, 15) * -100
     relationship_delta = _clamp(relationship, -100, 100) * -8
@@ -113,6 +123,12 @@ def _modifier_rows(
         {"modifier": "relationship", "value": relationship, "basis_points_delta": relationship_delta},
         {"modifier": "reputation", "value": reputation, "basis_points_delta": reputation_delta},
         {"modifier": "scarcity", "value": scarcity, "basis_points_delta": scarcity_delta},
+        {
+            "modifier": "causal_world_economy",
+            "value": causal_multiplier,
+            "basis_points_delta": causal_delta,
+            "source": "deterministic_causal_runtime",
+        },
     ]
 
     if kind == "sell":
