@@ -25,6 +25,7 @@ from app.rpg.worlds.generation_review_state import review_state
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_generation_review_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_generation_review_hook_installed"
+_MAX_RETRY_LINEAGE = 6
 
 
 def _body(value: object) -> Mapping[str, Any]:
@@ -65,10 +66,23 @@ def _decisions(run: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     }
 
 
+def _previous_result_chain(
+    topic_id: str,
+    parent_results: list[dict[str, dict[str, Any]]],
+) -> dict[str, Any] | None:
+    chain: dict[str, Any] | None = None
+    for by_topic in reversed(parent_results):
+        row = by_topic.get(topic_id)
+        if row is not None:
+            chain = {**row, "previous_result": chain}
+    return chain
+
+
 def _run_with_results(
     run_id: str,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
     context = bootstrap_local_tenant(None)
+    parent_result_maps: list[dict[str, dict[str, Any]]] = []
     with unit_of_work(None) as work:
         run = work.world_generation.get(context, run_id)
         if run is None:
@@ -76,22 +90,34 @@ def _run_with_results(
             raise KeyError(f"world_generation_run_not_found:{run_id}")
         results = work.world_generation.list_topic_results(context, run_id=run_id)
         parent_run_id = str(run.get("parent_run_id") or "")
-        parent_results = (
-            work.world_generation.list_topic_results(context, run_id=parent_run_id)
-            if parent_run_id
-            else []
-        )
+        visited = {run_id}
+        while parent_run_id and len(parent_result_maps) < _MAX_RETRY_LINEAGE:
+            if parent_run_id in visited:
+                break
+            visited.add(parent_run_id)
+            parent_run = work.world_generation.get(context, parent_run_id)
+            if parent_run is None:
+                break
+            parent_rows = work.world_generation.list_topic_results(
+                context,
+                run_id=parent_run_id,
+            )
+            parent_result_maps.append(
+                {
+                    str(row.get("topic_id") or ""): dict(row)
+                    for row in parent_rows
+                    if str(row.get("topic_id") or "")
+                }
+            )
+            parent_run_id = str(parent_run.get("parent_run_id") or "")
         work.rollback()
-    parent_by_topic = {
-        str(row.get("topic_id") or ""): row for row in parent_results
-    }
     decisions = _decisions(run)
     augmented = []
     for row in results:
         topic_id = str(row.get("topic_id") or "")
         value = {
             **row,
-            "previous_result": parent_by_topic.get(topic_id),
+            "previous_result": _previous_result_chain(topic_id, parent_result_maps),
             "decision": decisions.get(topic_id),
         }
         value["review_state"] = review_state(value)
