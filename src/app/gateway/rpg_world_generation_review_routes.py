@@ -13,6 +13,7 @@ from app.rpg.worlds.generation_acceptance import (
     accept_world_generation_candidate,
     accept_world_generation_candidates,
 )
+from app.rpg.worlds.generation_repair_evaluation import require_retry_budget
 from app.rpg.worlds.generation_retry import (
     decide_world_generation_retry,
     retry_failed_world_generation,
@@ -196,6 +197,8 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
             )
         diagnostic_id = new_rpg_trace_id("world-generation-manual-retry")
         try:
+            if topic_ids:
+                require_retry_budget(run_id, topic_ids)
             return retry_failed_world_generation(
                 run_id,
                 selected_topic_ids=topic_ids,
