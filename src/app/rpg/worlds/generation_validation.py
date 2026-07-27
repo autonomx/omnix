@@ -20,6 +20,10 @@ from .generation_authorship_signing import (
     harden_and_sign_generation_artifact,
     sanitize_untrusted_candidate,
 )
+from .generation_manifest_binding import (
+    bind_generated_topic_to_manifest,
+    manifest_slots_from_node,
+)
 from .generation_test_mode import deterministic_world_forge_test_mode
 
 
@@ -106,8 +110,14 @@ class PublicationValidatedWorldForgeGenerator:
             generated,
             expected_topic_id=node.topic_id,
         )
+        metadata = dict(node.metadata) if isinstance(node.metadata, Mapping) else {}
+        bound = bind_generated_topic_to_manifest(
+            validated.topic,
+            manifest_slots_from_node(metadata),
+            manifest_hash=str(metadata.get("entity_manifest_hash") or ""),
+        )
         receipt = validated.receipt.as_dict()
-        sanitized = sanitize_untrusted_candidate(validated.topic.as_dict())
+        sanitized = sanitize_untrusted_candidate(bound.as_dict())
         sanitized_provenance = dict(sanitized.get("provenance") or {})
         sanitized_provenance["validation_receipt"] = receipt
         sanitized["provenance"] = sanitized_provenance
