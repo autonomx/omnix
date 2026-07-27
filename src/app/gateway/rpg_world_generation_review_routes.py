@@ -223,8 +223,7 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
             )
         diagnostic_id = new_rpg_trace_id("world-generation-manual-retry")
         try:
-            if topic_ids:
-                require_retry_budget(run_id, topic_ids)
+            require_retry_budget(run_id, topic_ids)
             return retry_failed_world_generation(
                 run_id,
                 selected_topic_ids=topic_ids,
