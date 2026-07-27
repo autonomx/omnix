@@ -12,6 +12,17 @@ class EntityManifestBindingError(ValueError):
     """Raised when provider output cannot be mapped one-to-one to manifest slots."""
 
 
+_REFERENCE_FIELDS = {
+    "entities",
+    "entity_refs",
+    "known_by",
+    "source",
+    "target",
+    "subject_id",
+    "object_id",
+}
+
+
 def _slots(value: Any) -> tuple[dict[str, Any], ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return ()
@@ -23,15 +34,55 @@ def _alias(value: Any) -> str:
     return "_".join(part for part in re.split(r"[^a-z0-9]+", text) if part)
 
 
-def _rewrite(value: Any, replacements: Mapping[str, str]) -> Any:
+def _is_reference_field(key: str, declared: set[str]) -> bool:
+    return (
+        key in declared
+        or key in _REFERENCE_FIELDS
+        or key.endswith("_id")
+        or key.endswith("_ids")
+    )
+
+
+def _rewrite(
+    value: Any,
+    replacements: Mapping[str, str],
+    *,
+    field: str = "",
+    reference_fields: set[str] | None = None,
+) -> Any:
+    declared = reference_fields or set()
     if isinstance(value, str):
-        return replacements.get(value, value)
+        return replacements.get(value, value) if _is_reference_field(field, declared) else value
     if isinstance(value, Mapping):
-        return {str(key): _rewrite(item, replacements) for key, item in value.items()}
+        return {
+            str(key): _rewrite(
+                item,
+                replacements,
+                field=str(key),
+                reference_fields=declared,
+            )
+            for key, item in value.items()
+        }
     if isinstance(value, tuple):
-        return tuple(_rewrite(item, replacements) for item in value)
+        return tuple(
+            _rewrite(
+                item,
+                replacements,
+                field=field,
+                reference_fields=declared,
+            )
+            for item in value
+        )
     if isinstance(value, list):
-        return [_rewrite(item, replacements) for item in value]
+        return [
+            _rewrite(
+                item,
+                replacements,
+                field=field,
+                reference_fields=declared,
+            )
+            for item in value
+        ]
     return value
 
 
@@ -143,6 +194,7 @@ def bind_generated_topic_to_manifest(
     *,
     manifest_hash: str = "",
     reference_aliases: Mapping[str, str] | None = None,
+    reference_field_ids: Sequence[str] | None = None,
 ) -> GeneratedTopic:
     """Inject canonical IDs and rewrite exact provider references deterministically."""
 
@@ -180,10 +232,19 @@ def bind_generated_topic_to_manifest(
         for alias, entity_id in replacements.items()
         if alias != entity_id
     }
+    reference_fields = {
+        str(value) for value in reference_field_ids or () if str(value)
+    }
 
     bound_entities = []
     for row, slot in zip(ordered, slots, strict=True):
-        rewritten = dict(_rewrite(row, replacements))
+        rewritten = dict(
+            _rewrite(
+                row,
+                replacements,
+                reference_fields=reference_fields,
+            )
+        )
         rewritten["id"] = str(slot["entity_id"])
         rewritten["manifest_slot_id"] = str(slot["slot_id"])
         bound_entities.append(rewritten)
@@ -197,7 +258,11 @@ def bind_generated_topic_to_manifest(
         "knowledge_rules",
         "story_threads",
     ):
-        payload[field] = _rewrite(payload[field], replacements)
+        payload[field] = _rewrite(
+            payload[field],
+            replacements,
+            reference_fields=reference_fields,
+        )
     provenance = dict(payload.get("provenance") or {})
     provenance["entity_manifest_binding"] = {
         "schema_version": "rpg_world_entity_manifest_binding_v1",
@@ -206,6 +271,7 @@ def bind_generated_topic_to_manifest(
         "slot_count": len(slots),
         "slot_ids": [str(slot["slot_id"]) for slot in slots],
         "entity_ids": [str(slot["entity_id"]) for slot in slots],
+        "reference_field_ids": sorted(reference_fields),
         "rewritten_provider_ids": dict(sorted(replacements.items())),
     }
     payload["provenance"] = provenance
