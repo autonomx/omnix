@@ -1,6 +1,8 @@
 from copy import deepcopy
 
 from app.rpg.economy.price_modifiers import calculate_price_modifier
+from app.rpg.interactions.currency import currency_to_copper
+from app.rpg.interactions.merchant_runtime import apply_merchant_interaction
 from app.rpg.locations.travel import apply_causal_travel_projection
 from app.rpg.session.causal_turn_runtime import advance_causal_runtime_for_turn
 from app.rpg.world.causal_runtime import bootstrap_causal_runtime
@@ -137,15 +139,23 @@ def test_legacy_session_without_bootstrap_is_unchanged() -> None:
 
 
 def test_causal_economy_and_travel_projections_are_consumed() -> None:
+    merchant_state = {
+        "causal_price_multiplier_bps": 12000,
+        "stock": [{"item_id": "ration", "qty": 4}],
+    }
     buy = calculate_price_modifier(
         player_state={},
-        merchant_state={
-            "causal_price_multiplier_bps": 12000,
-            "stock": [{"item_id": "ration", "qty": 4}],
-        },
+        merchant_state=merchant_state,
         merchant_id="merchant:test",
         item_id="ration",
         kind="buy",
+    )
+    sell = calculate_price_modifier(
+        player_state={},
+        merchant_state=merchant_state,
+        merchant_id="merchant:test",
+        item_id="ration",
+        kind="sell",
     )
     assert any(
         row.get("modifier") == "causal_world_economy"
@@ -153,6 +163,29 @@ def test_causal_economy_and_travel_projections_are_consumed() -> None:
         for row in buy["modifiers"]
     )
     assert buy["multiplier_bps"] == 12000
+    assert sell["multiplier_bps"] == 12000
+
+    interaction_state = {
+        "economy_state": {"causal_price_multiplier_bps": 12000},
+        "merchant_state": {"causal_price_multiplier_bps": 12000},
+        "player_state": {
+            "currency": {"gold": 0, "silver": 1, "copper": 0},
+            "inventory": {"items": [], "equipment": {}},
+        },
+    }
+    purchased = apply_merchant_interaction(
+        interaction_state,
+        semantic_action_v2={
+            "kind": "buy",
+            "merchant_id": "npc:Elara",
+            "target_ref": "water",
+            "quantity": 1,
+        },
+        tick=1,
+    )
+    assert purchased["resolved"] is True
+    assert purchased["causal_price_multiplier_bps"] == 12000
+    assert currency_to_copper(purchased["price"]) == 4
 
     travel = apply_causal_travel_projection(
         {
