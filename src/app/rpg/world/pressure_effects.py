@@ -33,7 +33,7 @@ class PressureEffectRecord(BaseModel):
 class PressureTickResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: str = "rpg_pressure_tick_result_v2"
+    schema_version: str = "rpg_pressure_tick_result_v1"
     tick: int = Field(ge=0)
     deltas: tuple[WorldStateDelta, ...]
     effects: tuple[PressureEffectRecord, ...]
