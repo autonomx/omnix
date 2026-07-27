@@ -27,6 +27,7 @@ from .generation_jobs import (
     canonical_hash,
     topic_generation_fingerprint,
 )
+from .generation_review_state import accepted_review_report
 from .lifecycle_service import require_world_writable
 
 _ACCEPTED_DECISIONS = {"accept", "replace"}
@@ -191,18 +192,13 @@ def _mark_result_accepted(
     candidate_hash: str,
     previous_validation: Mapping[str, Any],
     accepted_at: str,
-) -> None:
-    validation = {
-        "schema_version": "rpg_world_generation_review_v1",
-        "status": "accepted",
-        "blocking": False,
-        "error_type": "",
-        "reason_codes": [],
-        "issues": [],
-        "summary": "Candidate accepted by the Game Master with authorship preserved.",
-        "accepted_at": accepted_at,
-        "previous_validation": dict(previous_validation),
-    }
+    waiver_reason: str = "",
+) -> dict[str, Any]:
+    validation = accepted_review_report(
+        previous_validation,
+        accepted_at=accepted_at,
+        waiver_reason=waiver_reason,
+    )
     cursor = work.connection.execute(
         "UPDATE omnix_rpg_world_generation_topic_results "
         "SET status = 'accepted', candidate_jsonb = %s::jsonb, candidate_hash = %s, "
@@ -219,6 +215,7 @@ def _mark_result_accepted(
     )
     if int(getattr(cursor, "rowcount", 0) or 0) != 1:
         raise KeyError(f"world_generation_topic_result_not_found:{run_id}:{topic_id}")
+    return validation
 
 
 def _promote(
@@ -231,6 +228,7 @@ def _promote(
     candidate_override: Mapping[str, Any] | None,
     expected_candidate_hash: str,
     accepted_at: str,
+    waiver_reason: str = "",
 ) -> dict[str, Any]:
     if str(result.get("status") or "") != "needs_review":
         raise ValueError(f"world_generation_candidate_not_reviewable:{topic_id}")
@@ -272,7 +270,7 @@ def _promote(
         content_hash=promoted_hash,
         provenance=_mapping(candidate.get("provenance")),
     )
-    _mark_result_accepted(
+    validation = _mark_result_accepted(
         work,
         context,
         run_id=str(run["run_id"]),
@@ -281,6 +279,7 @@ def _promote(
         candidate_hash=promoted_hash,
         previous_validation=_mapping(result.get("validation")),
         accepted_at=accepted_at,
+        waiver_reason=waiver_reason,
     )
     return {
         "decision": "accept",
@@ -289,6 +288,10 @@ def _promote(
         "decided_at": accepted_at,
         "edited": edited,
         "source": source,
+        "review_decision": validation["review_decision"],
+        "validation_status": validation["validation_status"],
+        "waiver_status": validation["waiver_status"],
+        "outstanding_finding_count": len(validation["outstanding_findings"]),
     }
 
 
@@ -298,13 +301,16 @@ def accept_world_generation_candidates(
     topic_ids: Sequence[str] = (),
     candidate_overrides: Mapping[str, Mapping[str, Any]] | None = None,
     expected_candidate_hashes: Mapping[str, str] | None = None,
+    waiver_reasons: Mapping[str, str] | None = None,
+    default_waiver_reason: str = "",
     database: Any | None = None,
 ) -> dict[str, Any]:
-    """Accept selected retained candidates, preserving or explicitly changing origin."""
+    """Accept candidates while keeping review decisions separate from validation evidence."""
 
     context = bootstrap_local_tenant(database)
     overrides = dict(candidate_overrides or {})
     expected_hashes = dict(expected_candidate_hashes or {})
+    reasons = {str(key): str(value) for key, value in dict(waiver_reasons or {}).items()}
     accepted_at = datetime.now(timezone.utc).isoformat()
     with unit_of_work(database) as work:
         run = work.world_generation.get(context, run_id)
@@ -373,6 +379,7 @@ def accept_world_generation_candidates(
                     candidate_override=overrides.get(topic_id),
                     expected_candidate_hash=str(expected_hashes.get(topic_id) or ""),
                     accepted_at=accepted_at,
+                    waiver_reason=reasons.get(topic_id, default_waiver_reason),
                 )
         except Exception:
             work.rollback()
@@ -397,6 +404,7 @@ def accept_world_generation_candidate(
     *,
     candidate: Mapping[str, Any] | None = None,
     expected_candidate_hash: str = "",
+    waiver_reason: str = "",
     database: Any | None = None,
 ) -> dict[str, Any]:
     return accept_world_generation_candidates(
@@ -404,6 +412,7 @@ def accept_world_generation_candidate(
         topic_ids=(topic_id,),
         candidate_overrides={topic_id: candidate} if candidate is not None else {},
         expected_candidate_hashes={topic_id: expected_candidate_hash},
+        waiver_reasons={topic_id: waiver_reason},
         database=database,
     )
 
