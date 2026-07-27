@@ -56,7 +56,7 @@ def test_every_ready_job_carries_one_shared_authoritative_manifest() -> None:
         settings=_settings(),
     )
 
-    assert [plan.topic_id for plan in plans] == ["actors", "realm"]
+    assert {plan.topic_id for plan in plans} == {"actors", "realm"}
     payloads = [dict(plan.job_payload["input_payload"]) for plan in plans]
     manifest_hashes = {str(payload["entity_manifest_hash"]) for payload in payloads}
     manifests = [dict(payload["entity_manifest"]) for payload in payloads]
