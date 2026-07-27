@@ -17,7 +17,7 @@ from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeG
 from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
 from app.rpg.worlds.generation_coordinator import start_world_generation
 from app.rpg.worlds.generation_jobs import WorldTopicGenerationSettings
-from app.rpg.worlds.generation_publication import publish_world_generation
+from app.rpg.worlds.generation_publication_guard import publish_world_generation
 from app.rpg.worlds.generation_worker import run_world_generation_worker_once
 
 pytestmark = pytest.mark.skipif(
@@ -154,6 +154,8 @@ def test_completed_generation_publishes_one_immutable_revision_and_release() -> 
         assert published["publication"]["world_release"] == 1
         assert published["publication"]["world_revision_hash"].startswith("sha256:")
         assert published["publication"]["world_release_hash"].startswith("sha256:")
+        assert published["publication"]["certification"]["launch_ready"] is True
+        assert published["publication"]["certification"]["compilation_mode"] == "certified_release"
         assert repeated["reused"] is True
         assert repeated["publication"] == published["publication"]
 
@@ -177,5 +179,6 @@ def test_completed_generation_publishes_one_immutable_revision_and_release() -> 
         assert run is not None and run["status"] == "ready"
         assert revision["content_hash"] == published["publication"]["world_revision_hash"]
         assert release["release_hash"] == published["publication"]["world_release_hash"]
+        assert release["document"]["certification"] == published["publication"]["certification"]
     finally:
         database.close()
