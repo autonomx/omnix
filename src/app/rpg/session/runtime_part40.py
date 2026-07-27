@@ -8,7 +8,11 @@ from app.rpg.session.response_builder import (
 )
 
 from .causal_turn_runtime import advance_causal_runtime_for_turn
-from .runtime_part19 import apply_turn as _PHASE8_PART40_BASE_APPLY_TURN
+from .runtime_part19 import (
+    apply_turn as _PHASE8_PART40_BASE_APPLY_TURN,
+    load_runtime_session,
+    save_runtime_session,
+)
 from .runtime_part39 import _canonicalize_publication, _persist_soft_truth
 
 
