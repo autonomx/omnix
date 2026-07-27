@@ -32,6 +32,7 @@ def _certification(*, launch_ready: bool = True) -> dict:
         "profile_reference_integrity": {"passed": launch_ready},
         "profile_dossier_quality": {"passed": launch_ready},
         "audit_stages": {"passed": launch_ready},
+        "finding_waiver_policy": {"passed": launch_ready},
     }
 
 
@@ -71,6 +72,7 @@ def test_transaction_rejects_any_failed_certification_report() -> None:
         "profile_reference_integrity",
         "profile_dossier_quality",
         "audit_stages",
+        "finding_waiver_policy",
     }
 
 
@@ -94,6 +96,15 @@ class _GenerationRepository:
         draft_revision: int,
     ) -> list[dict]:
         del world_id, draft_revision
+        return []
+
+    def list_topic_results(
+        self,
+        _context: object,
+        *,
+        run_id: str,
+    ) -> list[dict]:
+        del run_id
         return []
 
     def update(self, *_args: object, **_kwargs: object) -> dict:
