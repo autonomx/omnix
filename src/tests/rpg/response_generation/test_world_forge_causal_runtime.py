@@ -12,7 +12,7 @@ from app.rpg.world.causal_runtime import (
 from app.rpg.world.world_event_log import get_world_event_state
 
 
-def _planning_topics():
+def _planning_topics(trend: str = "escalating"):
     return {
         "present_day_state": {
             "state": {
@@ -32,7 +32,7 @@ def _planning_topics():
                 {
                     "pressure_id": "pressure:001",
                     "severity": 30,
-                    "trend": "escalating",
+                    "trend": trend,
                     "next_tick_delta": {
                         "target_id": "ent:regions:001",
                         "dimension": "political_stability",
@@ -53,6 +53,7 @@ def test_runtime_bootstrap_is_deterministic_and_separates_initial_state() -> Non
 
     assert first == second
     assert first["schema_version"] == "rpg_causal_world_runtime_v1"
+    assert first["pressure_statuses"] == {"pressure:001": "active"}
     assert first["events"] == []
     assert first["state"] == first["initial_state"]
     assert first["state"] is not first["initial_state"]
@@ -69,8 +70,40 @@ def test_runtime_tick_emits_aggregate_and_propagated_status_event() -> None:
     ]
     assert emitted[1].parent_event_id == emitted[0].event_id
     assert advanced["last_tick"] == 1
+    assert advanced["pressure_statuses"] == {"pressure:001": "escalated"}
     assert advanced["state"]["cells"]["pressure:001"]["values"]["pressure_severity"] == 33
     assert advanced["state"]["cells"]["ent:regions:001"]["values"]["political_stability"] == 56
+
+
+def test_escalation_event_is_not_repeated_on_later_ticks() -> None:
+    runtime = bootstrap_causal_runtime(_planning_topics())
+    first, emitted = advance_causal_runtime(runtime, tick=1)
+    second, later = advance_causal_runtime(first, tick=2)
+
+    assert [event.event_type for event in emitted] == [
+        "pressure_tick",
+        "pressure_escalated",
+    ]
+    assert [event.event_type for event in later] == ["pressure_tick"]
+    assert second["pressure_statuses"]["pressure:001"] == "escalated"
+
+
+def test_resolved_pressure_stops_runtime_mutation() -> None:
+    runtime = bootstrap_causal_runtime(_planning_topics("contained"))
+    runtime["state"]["cells"]["pressure:001"]["values"]["pressure_severity"] = 19
+    runtime["state"]["state_hash"] = ""
+
+    first, emitted = advance_causal_runtime(runtime, tick=1)
+    before_second = copy.deepcopy(first["state"])
+    second, later = advance_causal_runtime(first, tick=2)
+
+    assert [event.event_type for event in emitted] == [
+        "pressure_tick",
+        "pressure_resolved",
+    ]
+    assert [event.event_type for event in later] == ["pressure_tick"]
+    assert second["pressure_statuses"]["pressure:001"] == "resolved"
+    assert second["state"] == before_second
 
 
 def test_runtime_tick_is_idempotent_and_replay_exact() -> None:
