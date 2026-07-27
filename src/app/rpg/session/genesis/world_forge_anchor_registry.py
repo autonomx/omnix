@@ -74,7 +74,9 @@ def allocate_global_anchor_registry(
 
     node_map = graph.node_map()
     anchors: list[dict[str, Any]] = []
-    starting_place_id = _starting_place_id(starting_location_id)
+    starting_place_id = _starting_place_id(
+        starting_location_id or str(graph.metadata.get("starting_location") or "")
+    )
     for domain_id, (anchor_kind, prefix, maximum) in _ANCHOR_DOMAINS.items():
         node = node_map.get(domain_id)
         if node is None:
