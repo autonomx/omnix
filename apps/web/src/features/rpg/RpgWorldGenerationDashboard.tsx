@@ -57,6 +57,7 @@ function label(value: string): string {
 
 function statusIcon(status: string): string {
   if (['complete', 'accepted', 'accept', 'replaced'].includes(status)) return '✓';
+  if (status === 'accepted_with_override') return '⚠';
   if (status === 'pending_decision' || status === 'needs_review') return '⚑';
   if (status === 'kept') return '↶';
   if (status === 'failed') return '!';
@@ -97,13 +98,37 @@ function isPromoted(result: RpgWorldGenerationTopicResult): boolean {
     || result.decision?.decision === 'replace';
 }
 
+function isOverridden(result: RpgWorldGenerationTopicResult): boolean {
+  return isPromoted(result) && (
+    result.review_state?.waiver_status === 'active'
+    || result.validation.waiver_status === 'active'
+  );
+}
+
+function findingCount(result: RpgWorldGenerationTopicResult): number {
+  return result.review_state?.outstanding_finding_count
+    ?? result.validation.outstanding_findings?.length
+    ?? result.validation.issues.length;
+}
+
 function resultStatus(result: RpgWorldGenerationTopicResult | undefined): string | undefined {
   if (!result) return undefined;
-  if (result.decision?.decision === 'accept') return 'complete';
-  if (result.decision?.decision === 'replace') return 'replaced';
   if (result.decision?.decision === 'keep') return 'kept';
   if (hasManualDecisionIssue(result)) return 'pending_decision';
+  if (isOverridden(result)) return 'accepted_with_override';
+  if (result.decision?.decision === 'accept') return 'complete';
+  if (result.decision?.decision === 'replace') return 'replaced';
   return result.status === 'accepted' ? 'complete' : result.status;
+}
+
+function resultDetails(result: RpgWorldGenerationTopicResult | undefined, entityCount: number): string {
+  if (!result) return `${entityCount || 0} entries`;
+  if (isOverridden(result)) {
+    const count = findingCount(result);
+    return `Accepted with ${count} unresolved finding${count === 1 ? '' : 's'}`;
+  }
+  if (result.decision) return `Decision: ${label(result.decision.decision)}`;
+  return result.validation.reason_codes.map(label).join(', ') || `${entityCount || 0} entries`;
 }
 
 function AnalyticsGroup({ title, values }: { title: string; values: Record<string, number> }) {
@@ -134,6 +159,7 @@ export function RpgWorldGenerationDashboard({
   const [selectedReviewTopics, setSelectedReviewTopics] = useState<string[]>([]);
   const [inspectedTopicId, setInspectedTopicId] = useState('');
   const [reviewFeedback, setReviewFeedback] = useState('');
+  const [waiverReason, setWaiverReason] = useState('');
   const [acceptAllArmed, setAcceptAllArmed] = useState(false);
   const [acceptAllDossiersArmed, setAcceptAllDossiersArmed] = useState(false);
   const [dossierRepairProgress, setDossierRepairProgress] = useState<DossierRepairProgress | null>(null);
@@ -173,6 +199,12 @@ export function RpgWorldGenerationDashboard({
   const inspectedResult = resultByTopic.get(inspectedTopicId);
   const inspectedSection = sections.find((section) => section.id === inspectedTopicId);
   const accepted = new Set(results.filter(isPromoted).map((result) => result.topic_id));
+  const overridden = new Set(results.filter(isOverridden).map((result) => result.topic_id));
+  const validated = new Set(results
+    .filter((result) => isPromoted(result) && !isOverridden(result)
+      && (result.review_state?.validation_status ?? result.validation.validation_status ?? 'passed') === 'passed')
+    .map((result) => result.topic_id));
+  const unresolvedFindings = results.reduce((total, result) => total + findingCount(result), 0);
   const pendingDecision = new Set(results
     .filter((result) => hasManualDecisionIssue(result) && !result.decision)
     .map((result) => result.topic_id));
@@ -213,7 +245,7 @@ export function RpgWorldGenerationDashboard({
       });
     },
     onSuccess: async () => {
-      setReviewFeedback('Manual retry child run started. Affected dependents are included and no candidate is promoted before review.');
+      setReviewFeedback('Manual retry child run started. Selected topics and required prerequisites are included; downstream topics will be revalidated separately.');
       setSelectedReviewTopics([]);
       await invalidateReview();
     },
@@ -223,12 +255,14 @@ export function RpgWorldGenerationDashboard({
   const acceptAllReview = useMutation({
     mutationFn: () => {
       if (!run) throw new Error('No completed generation run is available.');
-      return rpgWorldGenerationReviewClient.acceptAll(run.run_id);
+      return rpgWorldGenerationReviewClient.acceptAll(run.run_id, {
+        waiver_reason: waiverReason.trim(),
+      });
     },
     onSuccess: async () => {
       setAcceptAllArmed(false);
       setInspectedTopicId('');
-      setReviewFeedback('All reviewed canon and its generated dossiers were accepted together and promoted to editable world authoring.');
+      setReviewFeedback('All reviewed candidates were accepted. Validation failures remain visible as active waivers.');
       await invalidateReview();
     },
     onError: (cause) => {
@@ -282,8 +316,8 @@ export function RpgWorldGenerationDashboard({
       setAcceptAllDossiersArmed(false);
       setDossierRepairProgress(null);
       const completed = result.completed?.length ?? 0;
-      const failed = result.failed?.length ?? 0;
-      setReviewFeedback(`Accepted ${completed} generated dossier${completed === 1 ? '' : 's'}${failed ? `; ${failed} could not be generated and remain available for individual regeneration.` : '.'}`);
+      const failedCount = result.failed?.length ?? 0;
+      setReviewFeedback(`Accepted ${completed} generated dossier${completed === 1 ? '' : 's'}${failedCount ? `; ${failedCount} could not be generated and remain available for individual regeneration.` : '.'}`);
       await invalidateReview();
     },
     onError: (cause) => {
@@ -329,7 +363,7 @@ export function RpgWorldGenerationDashboard({
   const handleAcceptAll = () => {
     if (!acceptAllArmed) {
       setAcceptAllArmed(true);
-      setReviewFeedback(`Confirm acceptance of ${acceptAllEligible.length} generated canon-and-dossier candidate${acceptAllEligible.length === 1 ? '' : 's'} by clicking Accept All again.`);
+      setReviewFeedback(`Confirm acceptance of ${acceptAllEligible.length} candidate${acceptAllEligible.length === 1 ? '' : 's'}. Failed findings will remain visible as waivers.`);
       return;
     }
     acceptAllReview.mutate();
@@ -353,10 +387,16 @@ export function RpgWorldGenerationDashboard({
             <button type="button" disabled={decideReview.isPending} onClick={() => decideReview.mutate({ topicId: inspectedResult.topic_id, decision: 'keep' })}>Keep Previous</button>
           </div>
         ) : null}
+        {isOverridden(inspectedResult) ? (
+          <div className="rpg-generation-review-retry-controls">
+            <strong>Accepted with {findingCount(inspectedResult)} unresolved finding{findingCount(inspectedResult) === 1 ? '' : 's'}.</strong>
+            <span>{inspectedResult.validation.waiver?.reason || 'The validation evidence remains active.'}</span>
+          </div>
+        ) : null}
         <RpgWorldGenerationCandidateReview
           onAccepted={async () => {
             setInspectedTopicId('');
-            setReviewFeedback('Candidate accepted and promoted to editable authoring canon.');
+            setReviewFeedback('Candidate accepted. Any unresolved validation findings remain visible as a waiver.');
             await invalidateReview();
           }}
           onClose={() => setInspectedTopicId('')}
@@ -377,7 +417,7 @@ export function RpgWorldGenerationDashboard({
     <div className="rpg-generation-dashboard is-operational-dashboard">
       <RpgWorldProfilePreview onApprovalChange={setProfileApproved} worldId={worldId} />
       <section className="rpg-generation-dashboard-header" aria-label="Generation status dashboard">
-        <div className="rpg-generation-dashboard-title"><span className="rpg-generation-dashboard-emblem" aria-hidden="true">✥</span><div><p className="eyebrow">World forge</p><h2>World Generation</h2><div className="rpg-generation-dashboard-live-status"><strong>{run ? label(run.status) : 'Ready'}</strong><span>·</span><span>{accepted.size} accepted · {pendingDecision.size} decisions · {flagged.size} flagged · {failed.size} failed · {blocked.size} blocked</span><div aria-label={`${percent} percent complete`}><i style={{ width: `${percent}%` }} /></div><b>{percent}%</b></div></div></div>
+        <div className="rpg-generation-dashboard-title"><span className="rpg-generation-dashboard-emblem" aria-hidden="true">✥</span><div><p className="eyebrow">World forge</p><h2>World Generation</h2><div className="rpg-generation-dashboard-live-status"><strong>{run ? label(run.status) : 'Ready'}</strong><span>·</span><span>{accepted.size} reviewed · {validated.size} validated · {overridden.size} accepted with overrides · {unresolvedFindings} unresolved findings</span><div aria-label={`${percent} percent complete`}><i style={{ width: `${percent}%` }} /></div><b>{percent}%</b></div></div></div>
         <aside className="rpg-generation-provider-card"><span>Provider</span><strong>{label(provider)}</strong><span>Model</span><strong>{model || 'Provider default'}</strong><small>{run?.run_id ?? 'No active run'}</small></aside>
       </section>
 
@@ -386,6 +426,7 @@ export function RpgWorldGenerationDashboard({
         <button type="button" disabled={!profileApproved} onClick={() => setControlsOpen(true)}>Generate Selected</button>
         <button type="button" disabled={!profileApproved} onClick={() => panelRef.current?.regenerateStale()}>Regenerate Stale</button>
         <button type="button" disabled={!retryable.size || retryReview.isPending} onClick={() => retryReview.mutate({ topicIds: [] })}>Retry Review ({retryable.size})</button>
+        <label>Acceptance reason<input type="text" value={waiverReason} onChange={(event) => setWaiverReason(event.currentTarget.value)} placeholder="Optional reason for unresolved findings" /></label>
         <button type="button" disabled={!acceptAllEligible.length || acceptAllReview.isPending} onClick={handleAcceptAll}>
           {acceptAllReview.isPending
             ? 'Accepting All…'
@@ -412,7 +453,7 @@ export function RpgWorldGenerationDashboard({
 
       <div className="rpg-generation-dashboard-layout">
         <section className="rpg-generation-topic-board">
-          <header><h3>Topic Generation Progress</h3><div className="rpg-generation-status-chips"><span>Total <b>{topicRows.length}</b></span><span className="is-complete">Accepted <b>{accepted.size}</b></span><span className="is-review">Decision <b>{pendingDecision.size}</b></span><span className="is-review">Flagged <b>{flagged.size}</b></span><span className="is-generating">Active <b>{active.size}</b></span><span className="is-failed">Failed <b>{failed.size}</b></span><span className="is-blocked">Blocked <b>{blocked.size}</b></span></div><div className="rpg-generation-view-toggle"><button className={view === 'board' ? 'is-active' : ''} type="button" onClick={() => setView('board')}>Board</button><button className={view === 'timeline' ? 'is-active' : ''} type="button" onClick={() => setView('timeline')}>Timeline</button></div></header>
+          <header><h3>Topic Generation Progress</h3><div className="rpg-generation-status-chips"><span>Total <b>{topicRows.length}</b></span><span className="is-complete">Reviewed <b>{accepted.size}</b></span><span className="is-complete">Validated <b>{validated.size}</b></span><span className="is-review">Overrides <b>{overridden.size}</b></span><span className="is-review">Decision <b>{pendingDecision.size}</b></span><span className="is-review">Flagged <b>{flagged.size}</b></span><span className="is-generating">Active <b>{active.size}</b></span><span className="is-failed">Failed <b>{failed.size}</b></span><span className="is-blocked">Blocked <b>{blocked.size}</b></span></div><div className="rpg-generation-view-toggle"><button className={view === 'board' ? 'is-active' : ''} type="button" onClick={() => setView('board')}>Board</button><button className={view === 'timeline' ? 'is-active' : ''} type="button" onClick={() => setView('timeline')}>Timeline</button></div></header>
           {selectedReviewTopics.length ? <div className="rpg-generation-review-selection"><strong>{selectedReviewTopics.length} selected</strong><button type="button" onClick={() => retryReview.mutate({ topicIds: selectedReviewTopics })}>Retry selected</button><button type="button" onClick={() => setSelectedReviewTopics([])}>Clear</button></div> : null}
           {view === 'board' ? (
             <div className="rpg-generation-topic-table" role="table">
@@ -424,7 +465,7 @@ export function RpgWorldGenerationDashboard({
                   <div className={`rpg-generation-topic-table-row is-${section.displayStatus}`} role="row" key={section.id}>
                     <div>{selectable ? <input aria-label={`Select ${section.label} for retry`} type="checkbox" checked={selectedReviewTopics.includes(section.id)} onChange={(event) => { const isChecked = event.currentTarget.checked; setSelectedReviewTopics((current) => isChecked ? [...new Set([...current, section.id])] : current.filter((value) => value !== section.id)); }} /> : null}<span className="rpg-generation-topic-icon">{statusIcon(section.displayStatus)}</span><strong>{section.label}</strong></div>
                     <span className="rpg-generation-topic-status">{label(section.displayStatus)}</span>
-                    <span>{result?.decision ? `Decision: ${label(result.decision.decision)}` : result?.validation.reason_codes.map(label).join(', ') || `${section.entity_count || 0} entries`}</span>
+                    <span>{resultDetails(result, section.entity_count || 0)}</span>
                     <div>{result ? <button type="button" onClick={() => setInspectedTopicId(section.id)}>{result.candidate ? 'Review' : 'Inspect'}</button> : null}<button type="button" onClick={() => onOpenSection?.(section.id)}>Open Canon</button></div>
                   </div>
                 );
@@ -434,7 +475,7 @@ export function RpgWorldGenerationDashboard({
         </section>
 
         <aside className="rpg-generation-dashboard-side">
-          <section className="rpg-generation-diagnostics-card"><header><h3>Validation analytics</h3><span>{results.length} attempted</span></header><AnalyticsGroup title="Reason code" values={analytics?.by_code ?? {}} /><AnalyticsGroup title="Field" values={analytics?.by_field ?? {}} /><AnalyticsGroup title="Domain" values={analytics?.by_domain ?? {}} /><AnalyticsGroup title="Model" values={analytics?.by_model ?? {}} /><AnalyticsGroup title="Prompt version" values={analytics?.by_prompt_version ?? {}} />{!Object.keys(analytics?.by_code ?? {}).length ? <p className="rpg-generation-no-error">No blocking validation issues recorded.</p> : null}</section>
+          <section className="rpg-generation-diagnostics-card"><header><h3>Validation analytics</h3><span>{results.length} attempted · {unresolvedFindings} unresolved</span></header><AnalyticsGroup title="Reason code" values={analytics?.by_code ?? {}} /><AnalyticsGroup title="Field" values={analytics?.by_field ?? {}} /><AnalyticsGroup title="Domain" values={analytics?.by_domain ?? {}} /><AnalyticsGroup title="Model" values={analytics?.by_model ?? {}} /><AnalyticsGroup title="Prompt version" values={analytics?.by_prompt_version ?? {}} />{!unresolvedFindings ? <p className="rpg-generation-no-error">No unresolved validation findings recorded.</p> : <p>{overridden.size} reviewed topic{overridden.size === 1 ? '' : 's'} retain active validation waivers.</p>}</section>
           <section className="rpg-generation-token-card" aria-label="World generation token usage"><header><h3>Token usage</h3><span>{tokenUsage?.topic_count ?? 0} generated{tokenUsage?.repair_count ? ` · ${tokenUsage.repair_count} repairs` : ''}</span></header><div className="rpg-generation-token-total"><strong>{tokenLabel(tokenUsage?.total_tokens ?? 0)}</strong><span>tokens accounted</span></div><div className="rpg-generation-token-breakdown"><span><small>Usage source</small><b>{tokenUsage?.provider_reported_topics ?? 0} reported · {tokenUsage?.estimated_topics ?? 0} estimated</b></span>{tokenUsage?.repair_count ? <span><small>Repairs</small><b>{tokenLabel(tokenUsage.repair_tokens ?? 0)} tokens · {tokenUsage.provider_reported_repairs ?? 0} reported</b></span> : null}{tokenUsage?.timed_topics ? <span><small>Provider time</small><b>{durationLabel(tokenUsage.generation_duration_ms ?? 0)}</b></span> : null}</div>{tokenUsage?.in_flight_topics ? <p>Live batch usage included.</p> : null}</section>
           <section className="rpg-generation-image-card"><header><h3>Image Generation</h3></header><div><article><small>Targets</small><strong>{imageSections.length}</strong></article><article><small>Ready</small><strong>{imageReady}</strong></article></div></section>
         </aside>
@@ -443,7 +484,7 @@ export function RpgWorldGenerationDashboard({
       {inspectedResult ? (
         <section className="rpg-generation-review-inspector" aria-label="Generation candidate review">
           <header><div><p className="eyebrow">Generation result</p><h3>{label(inspectedResult.topic_id)}</h3><span className={`is-${resultStatus(inspectedResult)}`}>{label(resultStatus(inspectedResult) ?? inspectedResult.status)}</span></div><button type="button" onClick={() => setInspectedTopicId('')}>Close</button></header>
-          <div className="rpg-generation-review-inspector-grid"><article><h4>Validation issues</h4>{inspectedResult.validation.issues.length ? inspectedResult.validation.issues.map((issue, index) => <div className="rpg-generation-review-issue" key={`${issue.code}-${index}`}><strong>{label(issue.code)}</strong><span>{[issue.entity_id, issue.field_id].filter(Boolean).join(' · ') || inspectedResult.topic_id}</span><p>{issue.message || inspectedResult.validation.summary}</p></div>) : <p>No blocking issues.</p>}</article></div>
+          <div className="rpg-generation-review-inspector-grid"><article><h4>Validation evidence</h4>{inspectedResult.validation.issues.length ? inspectedResult.validation.issues.map((issue, index) => <div className="rpg-generation-review-issue" key={`${issue.code}-${index}`}><strong>{label(issue.code)}</strong><span>{[issue.entity_id, issue.field_id].filter(Boolean).join(' · ') || inspectedResult.topic_id}</span><p>{issue.message || inspectedResult.validation.summary}</p></div>) : <p>Validation passed with no outstanding findings.</p>}{isOverridden(inspectedResult) ? <p><strong>Waiver:</strong> {inspectedResult.validation.waiver?.reason || 'Accepted with unresolved findings.'}</p> : null}</article></div>
           {retryable.has(inspectedResult.topic_id) ? <div className="rpg-generation-review-retry-controls"><label>Retry scope<select value={retryScope} onChange={(event) => setRetryScope(event.currentTarget.value as RetryScope)}><option value="topic">Whole topic</option><option value="entities">Selected entities</option><option value="entity_fields">Selected fields</option></select></label>{retryScope !== 'topic' ? <label>Entity IDs<textarea value={retryEntityIds} onChange={(event) => setRetryEntityIds(event.currentTarget.value)} /></label> : null}{retryScope === 'entity_fields' ? <label>Fields<textarea value={retryFields} onChange={(event) => setRetryFields(event.currentTarget.value)} /></label> : null}<label>Instructions<textarea value={retryInstructions} onChange={(event) => setRetryInstructions(event.currentTarget.value)} /></label><button type="button" onClick={retryInspectedTopic}>Retry this scope</button></div> : null}
         </section>
       ) : null}
