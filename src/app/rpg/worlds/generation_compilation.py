@@ -7,6 +7,10 @@ from typing import Any, Literal, Mapping, Sequence
 from .contracts import WorldRevisionDocument
 from .generation_audit_stages import two_stage_audit_report
 from .generation_finding_policy import finding_waiver_policy_report
+from .generation_manifest_references import (
+    manifest_reference_report,
+    require_manifest_reference_closure,
+)
 from .generation_profile_dossiers import (
     profile_dossier_report,
     require_profile_dossier_quality,
@@ -89,6 +93,7 @@ def _certification_with_integrity(
     integrity: Mapping[str, Any],
     profile_references: Mapping[str, Any],
     profile_dossiers: Mapping[str, Any],
+    manifest_references: Mapping[str, Any],
     audit_stages: Mapping[str, Any],
     finding_policy: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -98,6 +103,7 @@ def _certification_with_integrity(
         "strict_integrity": dict(integrity),
         "profile_reference_integrity": dict(profile_references),
         "profile_dossier_quality": dict(profile_dossiers),
+        "manifest_reference_closure": dict(manifest_references),
         "audit_stages": dict(audit_stages),
         "finding_waiver_policy": dict(finding_policy),
     }
@@ -110,6 +116,7 @@ def _certification_with_integrity(
         (integrity.get("passed"), "strict_integrity"),
         (profile_references.get("passed"), "profile_reference_integrity"),
         (profile_dossiers.get("passed"), "profile_dossier_quality"),
+        (manifest_references.get("passed"), "manifest_reference_closure"),
         (audit_stages.get("passed"), "post_repair_audit"),
         (finding_policy.get("passed"), "finding_waiver_policy"),
     ):
@@ -139,11 +146,13 @@ def compile_world_generation_artifact(
     integrity = strict_integrity_report(topic_rows)
     profile_references = profile_reference_report(topic_rows, topic_graph)
     profile_dossiers = profile_dossier_report(topic_rows, topic_graph)
+    manifest_references = manifest_reference_report(topic_rows, topic_graph)
     finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
     if mode == "certified_release":
         require_unique_canon_identifiers(topic_rows)
         require_valid_profile_references(topic_rows, topic_graph)
         require_profile_dossier_quality(topic_rows, topic_graph)
+        require_manifest_reference_closure(topic_rows, topic_graph)
     publication = compile_world_generation_publication(
         run=run,
         world=world,
@@ -164,6 +173,7 @@ def compile_world_generation_artifact(
         integrity=integrity,
         profile_references=profile_references,
         profile_dossiers=profile_dossiers,
+        manifest_references=manifest_references,
         audit_stages=audit_stages,
         finding_policy=finding_policy,
     )
