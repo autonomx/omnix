@@ -1,4 +1,4 @@
-"""Political, settlement-origin, and culture-lineage planning for World Forge."""
+"""Profile-aware political, settlement-origin, and culture-lineage planning."""
 from __future__ import annotations
 
 import hashlib
@@ -6,9 +6,38 @@ import json
 from typing import Any, Mapping, Sequence
 
 _CLAIM_TYPES = ("sovereignty", "stewardship", "ancestral", "resource", "security")
-_FOUNDING_PURPOSES = ("trade_hub", "fortress", "resource_camp", "refuge", "ritual_centre")
-_LINEAGE_TYPES = ("indigenous", "diaspora", "syncretic", "colonial", "schismatic")
-_ADAPTATIONS = ("river_trade", "highland_defence", "coastal_navigation", "forest_stewardship", "dryland_conservation")
+_SOCIAL_VOCABULARIES = {
+    "cyberpunk": {
+        "founding": ("data_exchange", "security_hub", "industrial_platform", "displaced_enclave", "infrastructure_node"),
+        "lineage": ("local_network", "migrant_collective", "hybrid_subculture", "corporate_shaped", "splinter_movement"),
+        "adaptation": ("network_access", "vertical_security", "flood_control", "supply_brokering", "surveillance_evasion"),
+    },
+    "space": {
+        "founding": ("trade_station", "defence_outpost", "extraction_base", "refuge_habitat", "navigation_node"),
+        "lineage": ("planetary_native", "diaspora", "hybrid_colony", "institutional", "splinter_fleet"),
+        "adaptation": ("vacuum_operations", "orbital_navigation", "radiation_shelter", "closed_loop_ecology", "long_range_trade"),
+    },
+    "post_apocalyptic": {
+        "founding": ("salvage_market", "fortified_shelter", "resource_camp", "refuge", "water_node"),
+        "lineage": ("survivor_local", "displaced", "hybrid_enclave", "institutional_remnant", "splinter_band"),
+        "adaptation": ("salvage_craft", "contamination_avoidance", "water_conservation", "convoy_defence", "scarcity_barter"),
+    },
+    "fantasy": {
+        "founding": ("trade_hub", "fortress", "resource_camp", "refuge", "ritual_centre"),
+        "lineage": ("indigenous", "diaspora", "syncretic", "court_shaped", "schismatic"),
+        "adaptation": ("river_trade", "highland_defence", "coastal_navigation", "forest_stewardship", "dryland_conservation"),
+    },
+    "modern": {
+        "founding": ("commercial_centre", "security_hub", "industrial_zone", "resettlement_district", "transport_node"),
+        "lineage": ("local", "diaspora", "hybrid", "institutional", "splinter_movement"),
+        "adaptation": ("public_transit", "urban_security", "coastal_resilience", "supply_logistics", "information_networks"),
+    },
+    "generic": {
+        "founding": ("exchange_node", "defence_node", "production_site", "refuge", "coordination_centre"),
+        "lineage": ("local", "migrant", "hybrid", "institutional", "splinter"),
+        "adaptation": ("trade_coordination", "collective_defence", "resource_stewardship", "mobility", "information_sharing"),
+    },
+}
 
 
 def _rows(registry: Mapping[str, Any], domain_id: str) -> tuple[dict[str, Any], ...]:
@@ -20,12 +49,7 @@ def _rows(registry: Mapping[str, Any], domain_id: str) -> tuple[dict[str, Any], 
 
 
 def _digest(value: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
@@ -37,6 +61,11 @@ def _event_ids(historical_plan: Mapping[str, Any]) -> tuple[str, ...]:
         for event in epoch.get("events") or ()
         if isinstance(event, Mapping) and str(event.get("event_id") or "")
     )
+
+
+def _family(geography_plan: Mapping[str, Any]) -> str:
+    candidate = str(geography_plan.get("planning_family") or "generic")
+    return candidate if candidate in _SOCIAL_VOCABULARIES else "generic"
 
 
 def build_political_claim_graph(
@@ -82,8 +111,8 @@ def build_political_claim_graph(
                 }
             )
     payload: dict[str, Any] = {
-        "schema_version": "rpg_political_claim_graph_v1",
-        "revision": 1,
+        "schema_version": "rpg_political_claim_graph_v2",
+        "revision": 2,
         "present_day_state_hash": str(present_day_state.get("content_hash") or ""),
         "claims": claims,
         "rivalries": rivalries,
@@ -100,12 +129,10 @@ def build_settlement_origin_plan(
     seed: int,
 ) -> dict[str, Any]:
     places = _rows(anchor_registry, "places")
-    geography = tuple(
-        dict(row)
-        for row in geography_plan.get("regions") or ()
-        if isinstance(row, Mapping)
-    )
+    geography = tuple(dict(row) for row in geography_plan.get("regions") or () if isinstance(row, Mapping))
     events = _event_ids(historical_plan)
+    family = _family(geography_plan)
+    purposes = _SOCIAL_VOCABULARIES[family]["founding"]
     settlements = []
     for index, place in enumerate(places):
         if not geography:
@@ -117,7 +144,7 @@ def build_settlement_origin_plan(
                 "place_id": place["id"],
                 "region_id": region["region_id"],
                 "founding_event_id": event_id,
-                "founding_purpose": _FOUNDING_PURPOSES[(seed + index) % len(_FOUNDING_PURPOSES)],
+                "founding_purpose": purposes[(seed + index) % len(purposes)],
                 "founded_year": 120 + index * 35,
                 "resource_dependency": region["primary_resource"],
                 "route_dependency": int(region["route_capacity"]),
@@ -125,8 +152,9 @@ def build_settlement_origin_plan(
             }
         )
     payload: dict[str, Any] = {
-        "schema_version": "rpg_settlement_origin_plan_v1",
-        "revision": 1,
+        "schema_version": "rpg_settlement_origin_plan_v2",
+        "revision": 2,
+        "planning_family": family,
         "geography_plan_hash": str(geography_plan.get("content_hash") or ""),
         "historical_plan_hash": str(historical_plan.get("content_hash") or ""),
         "settlements": settlements,
@@ -137,6 +165,7 @@ def build_settlement_origin_plan(
 
 def build_culture_lineage_plan(
     anchor_registry: Mapping[str, Any],
+    geography_plan: Mapping[str, Any],
     historical_plan: Mapping[str, Any],
     present_day_state: Mapping[str, Any],
     *,
@@ -146,6 +175,8 @@ def build_culture_lineage_plan(
     regions = _rows(anchor_registry, "regions")
     events = _event_ids(historical_plan)
     state = dict(present_day_state.get("state") or {})
+    family = _family(geography_plan)
+    vocabulary = _SOCIAL_VOCABULARIES[family]
     lineages = []
     for index, culture in enumerate(cultures):
         region = regions[(seed + index) % len(regions)] if regions else None
@@ -158,17 +189,15 @@ def build_culture_lineage_plan(
                 "parent_culture_id": parent_id,
                 "homeland_region_ids": [region_id] if region_id else [],
                 "origin_event_id": events[index % len(events)] if events else "",
-                "lineage_type": _LINEAGE_TYPES[(seed * 2 + index) % len(_LINEAGE_TYPES)],
-                "environmental_adaptation": _ADAPTATIONS[(seed + index) % len(_ADAPTATIONS)],
-                "cohesion_index": max(
-                    0,
-                    min(100, int(region_state.get("political_stability") or 50) + (index % 9) - 4),
-                ),
+                "lineage_type": vocabulary["lineage"][(seed * 2 + index) % len(vocabulary["lineage"])],
+                "environmental_adaptation": vocabulary["adaptation"][(seed + index) % len(vocabulary["adaptation"])],
+                "cohesion_index": max(0, min(100, int(region_state.get("political_stability") or 50) + (index % 9) - 4)),
             }
         )
     payload: dict[str, Any] = {
-        "schema_version": "rpg_culture_lineage_plan_v1",
-        "revision": 1,
+        "schema_version": "rpg_culture_lineage_plan_v2",
+        "revision": 2,
+        "planning_family": family,
         "historical_plan_hash": str(historical_plan.get("content_hash") or ""),
         "present_day_state_hash": str(present_day_state.get("content_hash") or ""),
         "lineages": lineages,
@@ -186,11 +215,7 @@ def build_social_planning_topics(
     seed: int,
 ) -> dict[str, Any]:
     return {
-        "political_claim_graph": build_political_claim_graph(
-            anchor_registry,
-            present_day_state,
-            seed=seed,
-        ),
+        "political_claim_graph": build_political_claim_graph(anchor_registry, present_day_state, seed=seed),
         "settlement_origin_plan": build_settlement_origin_plan(
             anchor_registry,
             geography_plan,
@@ -199,6 +224,7 @@ def build_social_planning_topics(
         ),
         "culture_lineage_plan": build_culture_lineage_plan(
             anchor_registry,
+            geography_plan,
             historical_plan,
             present_day_state,
             seed=seed,
