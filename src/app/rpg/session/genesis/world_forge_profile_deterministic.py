@@ -8,37 +8,19 @@ from .world_forge_contract import CampaignTopicNode
 from .world_forge_generation import GeneratedTopic
 
 _DISTINCTIONS = (
-    "Ember",
-    "Tide",
-    "Glass",
-    "Copper",
-    "Ash",
-    "Lantern",
-    "Harbor",
-    "Thorn",
-    "Mirror",
-    "Stone",
-    "Violet",
-    "North",
+    "Ember", "Tide", "Glass", "Copper", "Ash", "Lantern",
+    "Harbor", "Thorn", "Mirror", "Stone", "Violet", "North",
 )
 _OPTIONAL_CAUSAL_REFERENCE_ROLES = frozenset(
     {
-        "caused_by",
-        "formed_by",
-        "founded_by",
-        "originated_in",
-        "origin_region",
-        "descended_from",
-        "shaped_by",
-        "cultural_affiliation",
+        "caused_by", "formed_by", "founded_by", "originated_in",
+        "origin_region", "descended_from", "shaped_by", "cultural_affiliation",
     }
 )
 
 
 def _slug(value: str) -> str:
-    return "_".join(
-        "".join(ch.casefold() if ch.isalnum() else " " for ch in value).split()
-    ) or "entry"
+    return "_".join("".join(ch.casefold() if ch.isalnum() else " " for ch in value).split()) or "entry"
 
 
 def _definitions(node: CampaignTopicNode) -> tuple[dict[str, Any], ...]:
@@ -52,14 +34,8 @@ def _brief_anchor(context: Mapping[str, Any]) -> str:
     brief = context.get("world_brief")
     values: list[str] = []
     if isinstance(brief, Mapping):
-        values.extend(
-            str(brief.get(field) or "")
-            for field in ("title", "description", "genre")
-        )
-    values.extend(
-        str(context.get(field) or "")
-        for field in ("campaign_template", "genre", "tone")
-    )
+        values.extend(str(brief.get(field) or "") for field in ("title", "description", "genre"))
+    values.extend(str(context.get(field) or "") for field in ("campaign_template", "genre", "tone"))
     tokens: list[str] = []
     for token in re.findall(r"[A-Za-z0-9]{4,}", " ".join(values)):
         lowered = token.casefold()
@@ -68,9 +44,7 @@ def _brief_anchor(context: Mapping[str, Any]) -> str:
     return " ".join(tokens[:6]) or "Deterministic Campaign"
 
 
-def _known_by_domain(
-    dependencies: Mapping[str, GeneratedTopic],
-) -> dict[str, tuple[str, ...]]:
+def _known_by_domain(dependencies: Mapping[str, GeneratedTopic]) -> dict[str, tuple[str, ...]]:
     known: dict[str, tuple[str, ...]] = {}
     for domain_id, topic in dependencies.items():
         known[str(domain_id)] = tuple(
@@ -92,96 +66,32 @@ def _reference_candidates(
     )
 
 
-def _string_value(
-    field_id: str,
-    *,
-    name: str,
-    anchor: str,
-    index: int,
-) -> str:
+def _string_value(field_id: str, *, name: str, anchor: str, index: int) -> str:
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
     templates = {
-        "rule": (
-            f"Within {anchor}, {name} follows the {distinction} constraint: every "
-            "advantage consumes a visible resource or creates a traceable obligation."
-        ),
-        "current_pressure": (
-            f"{name} faces a {distinction.lower()} shortage that will disrupt a named "
-            f"route in {anchor} during the next operational cycle."
-        ),
-        "current_objective": (
-            f"{name} intends to secure the {distinction} junction before a rival group "
-            f"can redirect its benefits across {anchor}."
-        ),
-        "goal": (
-            f"{name} seeks to restore the {distinction} network before the next public "
-            f"assembly in {anchor}."
-        ),
-        "dependency": (
-            f"{name} depends on calibrated {distinction.lower()} components controlled "
-            f"by another institution in {anchor}."
-        ),
-        "next_action": (
-            f"At the next tick, {name} dispatches a two-person team to inspect the "
-            f"{distinction} marker and record who interferes."
-        ),
-        "next_tick_change": (
-            f"During the next tick, the {distinction} condition advances and changes "
-            f"access, prices, or patrol patterns around {name}."
-        ),
-        "failure_response": (
-            f"If blocked, {name} closes the {distinction} route, shifts supplies, and "
-            "publicly blames the faction that benefits from the delay."
-        ),
-        "escalation_condition": (
-            f"The pressure escalates when the {distinction} reserve falls below one "
-            "day of local demand or a second route is lost."
-        ),
-        "function_in_setting": (
-            f"{name} gives {anchor} a distinct {distinction.lower()} institution whose "
-            "rules affect travel, bargaining, and public trust."
-        ),
-        "former_purpose": (
-            f"Before the present crisis, {name} served as the {distinction} exchange "
-            f"for freight, records, and civic announcements in {anchor}."
-        ),
-        "current_hazard": (
-            f"A damaged {distinction.lower()} regulator releases intermittent heat, "
-            "noise, and contaminated runoff whenever the old machinery cycles."
-        ),
-        "scarcity": (
-            f"Only three days of the {distinction.lower()} reserve remain available to "
-            "ordinary residents at current demand."
-        ),
-        "failure_effect": (
-            f"If the reserve fails, the {distinction} district loses transport, clean "
-            "water, and reliable night lighting."
-        ),
-        "cause": (
-            f"The condition began when the {distinction} containment system fractured "
-            f"during a recorded emergency in {anchor}."
-        ),
-        "capability": (
-            f"The {distinction} system grants precise environmental sensing within a "
-            "limited operational radius."
-        ),
-        "cost": (
-            f"Each use consumes a replaceable {distinction.lower()} cell and causes a "
-            "temporary sensory penalty."
-        ),
-        "failure_mode": (
-            f"Under overload, the {distinction} system emits false readings and locks "
-            "until manually recalibrated."
-        ),
-        "source": (
-            f"The {distinction} effect originates in a documented material, ritual, or "
-            f"technical process unique to {anchor}."
-        ),
+        "rule": f"Within {anchor}, {name} follows the {distinction} constraint: every advantage consumes a visible resource or creates a traceable obligation.",
+        "current_pressure": f"{name} faces a {distinction.lower()} shortage that will disrupt a named route in {anchor} during the next operational cycle.",
+        "current_objective": f"{name} intends to secure the {distinction} junction before a rival group can redirect its benefits across {anchor}.",
+        "goal": f"{name} seeks to restore the {distinction} network before the next public assembly in {anchor}.",
+        "dependency": f"{name} depends on calibrated {distinction.lower()} components controlled by another institution in {anchor}.",
+        "next_action": f"At the next tick, {name} dispatches a two-person team to inspect the {distinction} marker and record who interferes.",
+        "next_tick_change": f"During the next tick, the {distinction} condition advances and changes access, prices, or patrol patterns around {name}.",
+        "failure_response": f"If blocked, {name} closes the {distinction} route, shifts supplies, and publicly blames the faction that benefits from the delay.",
+        "escalation_condition": f"The pressure escalates when the {distinction} reserve falls below one day of local demand or a second route is lost.",
+        "function_in_setting": f"{name} gives {anchor} a distinct {distinction.lower()} institution whose rules affect travel, bargaining, and public trust.",
+        "former_purpose": f"Before the present crisis, {name} served as the {distinction} exchange for freight, records, and civic announcements in {anchor}.",
+        "current_hazard": f"A damaged {distinction.lower()} regulator releases intermittent heat, noise, and contaminated runoff whenever the old machinery cycles.",
+        "scarcity": f"Only three days of the {distinction.lower()} reserve remain available to ordinary residents at current demand.",
+        "failure_effect": f"If the reserve fails, the {distinction} district loses transport, clean water, and reliable night lighting.",
+        "cause": f"The condition began when the {distinction} containment system fractured during a recorded emergency in {anchor}.",
+        "capability": f"The {distinction} system grants precise environmental sensing within a limited operational radius.",
+        "cost": f"Each use consumes a replaceable {distinction.lower()} cell and causes a temporary sensory penalty.",
+        "failure_mode": f"Under overload, the {distinction} system emits false readings and locks until manually recalibrated.",
+        "source": f"The {distinction} effect originates in a documented material, social, or technical process unique to {anchor}.",
     }
     return templates.get(
         field_id,
-        f"{name} defines {field_id.replace('_', ' ')} through the {distinction} practice, "
-        f"a specific institution, material, and consequence grounded in {anchor}.",
+        f"{name} defines {field_id.replace('_', ' ')} through the {distinction} practice, a specific institution, material, and consequence grounded in {anchor}.",
     )
 
 
@@ -215,14 +125,8 @@ def _structured_value(
     }
     label = labels.get(field_id, field_id.replace("_", " "))
     return {
-        "detail": (
-            f"{name}'s {label} is marked by the {distinction} signal, logged by a named "
-            f"local witness in {anchor}."
-        ),
-        "consequence": (
-            f"Ignoring this {label} changes access, trust, or material supply during the "
-            "next deterministic world tick."
-        ),
+        "detail": f"{name}'s {label} is marked by the {distinction} signal, logged by a named local witness in {anchor}.",
+        "consequence": f"Ignoring this {label} changes access, trust, or material supply during the next deterministic world tick.",
     }
 
 
@@ -240,19 +144,9 @@ def _value_for_field(
     if field_id == "name":
         return name
     if value_type == "string":
-        return _string_value(
-            field_id,
-            name=name,
-            anchor=anchor,
-            index=index,
-        )
+        return _string_value(field_id, name=name, anchor=anchor, index=index)
     if value_type == "structured_object":
-        return _structured_value(
-            field_id,
-            name=name,
-            anchor=anchor,
-            index=index,
-        )
+        return _structured_value(field_id, name=name, anchor=anchor, index=index)
     if value_type == "entity_ref":
         return candidates[index % len(candidates)] if candidates else ""
     if value_type == "entity_ref_list":
@@ -272,6 +166,13 @@ def _value_for_field(
     return _string_value(field_id, name=name, anchor=anchor, index=index)
 
 
+def _authoritative_ids(node: CampaignTopicNode) -> tuple[str, ...]:
+    value = node.metadata.get("authoritative_entity_ids")
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return ()
+    return tuple(str(item) for item in value if str(item))
+
+
 def _fixture_identity(
     node: CampaignTopicNode,
     *,
@@ -285,13 +186,15 @@ def _fixture_identity(
         node.topic_id in {"places", "locations", "settlements"}
         or entity_kind in {"place", "location", "settlement"}
     )
+    authoritative_ids = _authoritative_ids(node)
+    authoritative_id = authoritative_ids[index] if index < len(authoritative_ids) else ""
     if index == 0 and starting_location and is_place_domain:
         local_id = starting_location.split(":", 1)[-1]
         name = local_id.replace("_", " ").replace("-", " ").title()
-        return f"{_slug(entity_kind)}:{_slug(local_id)}", name
+        return authoritative_id or f"{_slug(entity_kind)}:{_slug(local_id)}", name
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
     name = f"{anchor} {distinction} {entity_kind.replace('_', ' ').title()}"
-    entity_id = f"{_slug(entity_kind)}:{_slug(distinction)}_{index + 1}"
+    entity_id = authoritative_id or f"{_slug(entity_kind)}:{_slug(distinction)}_{index + 1}"
     return entity_id, name
 
 
@@ -370,8 +273,9 @@ def generate_deterministic_profile_topic(
         documents=tuple(documents),
         entities=tuple(entities),
         provenance={
-            "generator": "deterministic_profile_fixture_v1",
+            "generator": "deterministic_profile_fixture_v2",
             "profile_schema": node.metadata.get("schema_version"),
             "world_brief_anchor": anchor,
+            "anchor_registry_hash": node.metadata.get("anchor_registry_hash"),
         },
     )
