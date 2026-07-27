@@ -44,6 +44,9 @@ def test_escalating_pressure_changes_severity_and_affected_region() -> None:
 
     assert next_state["cells"]["pressure:001"]["values"]["pressure_severity"] == 33
     assert next_state["cells"]["ent:regions:001"]["values"]["political_stability"] == 56
+    assert result.effects[0].status_before == "active"
+    assert result.effects[0].status_after == "escalated"
+    assert result.effects[0].transitioned is True
     assert result.effects[0].escalated is True
     assert result.effects[0].resolved is False
     assert result.effects[0].affected_delta_ids == (
@@ -59,6 +62,7 @@ def test_contained_pressure_reduces_severity_and_softens_region_effect() -> None
     assert next_state["cells"]["pressure:001"]["values"]["pressure_severity"] == 28
     assert next_state["cells"]["ent:regions:001"]["values"]["political_stability"] == 58
     assert result.effects[0].severity_delta == -2
+    assert result.effects[0].status_after == "contained"
 
 
 def test_volatile_pressure_is_tick_deterministic() -> None:
@@ -71,6 +75,48 @@ def test_volatile_pressure_is_tick_deterministic() -> None:
     assert even_effects[0].severity_delta == -1
     assert odd_deltas[1].value == 5
     assert even_deltas[1].value == 4
+
+
+def test_resolved_pressure_stops_emitting_deltas() -> None:
+    plan, state = _fixture("contained")
+    state["cells"]["pressure:001"]["values"]["pressure_severity"] = 19
+
+    resolved_state, first = apply_pressure_tick(
+        plan,
+        state,
+        tick=1,
+        pressure_statuses={"pressure:001": "active"},
+    )
+    repeated_state, second = apply_pressure_tick(
+        plan,
+        resolved_state,
+        tick=2,
+        pressure_statuses={"pressure:001": "resolved"},
+    )
+
+    assert first.effects[0].status_after == "resolved"
+    assert first.effects[0].resolved is True
+    assert second.deltas == ()
+    assert second.effects[0].status_before == "resolved"
+    assert second.effects[0].status_after == "resolved"
+    assert second.effects[0].transitioned is False
+    assert repeated_state["state_hash"] == resolved_state["state_hash"]
+
+
+def test_already_escalated_pressure_does_not_repeat_transition() -> None:
+    plan, state = _fixture("escalating")
+    state["cells"]["pressure:001"]["values"]["pressure_severity"] = 40
+
+    _, result = apply_pressure_tick(
+        plan,
+        state,
+        tick=2,
+        pressure_statuses={"pressure:001": "escalated"},
+    )
+
+    assert result.effects[0].status_after == "escalated"
+    assert result.effects[0].transitioned is False
+    assert result.effects[0].escalated is False
 
 
 def test_pressure_tick_result_carries_reduction_receipt() -> None:
