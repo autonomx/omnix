@@ -9,6 +9,10 @@ from .generation_publication import (
     WorldGenerationPublication,
     compile_world_generation_publication,
 )
+from .generation_strict_integrity import (
+    require_unique_canon_identifiers,
+    strict_integrity_report,
+)
 
 WorldGenerationCompilationMode = Literal["diagnostic_draft", "certified_release"]
 
@@ -56,6 +60,30 @@ class WorldGenerationCertifiedArtifact:
         return {"mode": self.mode, **self.publication.as_dict()}
 
 
+def _certification_with_integrity(
+    certification: Mapping[str, Any],
+    *,
+    mode: WorldGenerationCompilationMode,
+    integrity: Mapping[str, Any],
+) -> dict[str, Any]:
+    payload = {
+        **dict(certification),
+        "compilation_mode": mode,
+        "strict_integrity": dict(integrity),
+    }
+    if not bool(integrity.get("passed")):
+        payload["launch_ready"] = False
+        missing = [
+            str(value)
+            for value in payload.get("missing_requirements") or ()
+            if str(value)
+        ]
+        payload["missing_requirements"] = list(
+            dict.fromkeys([*missing, "strict_integrity"])
+        )
+    return payload
+
+
 def compile_world_generation_artifact(
     *,
     mode: WorldGenerationCompilationMode,
@@ -70,6 +98,9 @@ def compile_world_generation_artifact(
 
     if mode not in {"diagnostic_draft", "certified_release"}:
         raise ValueError(f"unsupported_world_generation_compilation_mode:{mode}")
+    integrity = strict_integrity_report(topic_rows)
+    if mode == "certified_release":
+        require_unique_canon_identifiers(topic_rows)
     publication = compile_world_generation_publication(
         run=run,
         world=world,
@@ -78,10 +109,11 @@ def compile_world_generation_artifact(
         starting_location_override=starting_location_override,
         asset_bindings=asset_bindings,
     )
-    certification = {
-        **dict(publication.certification),
-        "compilation_mode": mode,
-    }
+    certification = _certification_with_integrity(
+        publication.certification,
+        mode=mode,
+        integrity=integrity,
+    )
     if mode == "certified_release":
         return WorldGenerationCertifiedArtifact(
             publication=WorldGenerationPublication(
