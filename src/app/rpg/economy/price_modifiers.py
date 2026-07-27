@@ -133,7 +133,8 @@ def _modifier_rows(
 
     if kind == "sell":
         for row in rows:
-            row["basis_points_delta"] = -int(row["basis_points_delta"])
+            if row.get("modifier") != "causal_world_economy":
+                row["basis_points_delta"] = -int(row["basis_points_delta"])
 
     return rows
 
