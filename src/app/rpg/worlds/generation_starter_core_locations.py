@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
+from app.rpg.map_grid_contracts import with_grid_definition_hashes
+
 from .generation_starter_bubble_support import derive_starter_bubble
 from .starter_bubble import StarterBubblePlan, build_starter_map_definitions
 
@@ -131,7 +133,12 @@ def _core_materialization(
         str(definition.metadata.get("location_id") or ""): definition
         for definition in definitions
     }
-    core_ids = {slot.location_id for slot in (settlement, interior) if slot is not None}
+    expected_slots = {
+        slot.location_id: slot
+        for slot in (settlement, interior)
+        if slot is not None
+    }
+    core_ids = set(expected_slots)
     missing = sorted(core_ids - set(by_location))
     if missing:
         issues.append(StarterCoreLocationIssue(
@@ -147,11 +154,39 @@ def _core_materialization(
             "Settlement and interior map IDs must be unique.", {"map_ids": map_ids},
         ))
     for definition in core_definitions:
-        if not definition.definition_hash.startswith("sha256:") or not definition.semantic_interface_hash.startswith("sha256:"):
+        location_id = str(definition.metadata.get("location_id") or "")
+        slot = expected_slots[location_id]
+        role = str(definition.metadata.get("starter_role") or "")
+        if definition.map_id != slot.map_id or definition.level != slot.map_level or role != slot.role:
             issues.append(StarterCoreLocationIssue(
-                "starter_core_map_hash_missing", f"/starter_core/map_definitions/{definition.map_id}",
-                "Starter map definitions require stable content and semantic-interface hashes.",
-                {"definition_hash": definition.definition_hash, "semantic_interface_hash": definition.semantic_interface_hash},
+                "starter_core_map_binding_invalid",
+                f"/starter_core/map_definitions/{definition.map_id}",
+                "Each emitted map must preserve its slot map ID, level, role, and canonical location binding.",
+                {
+                    "location_id": location_id,
+                    "expected_map_id": slot.map_id,
+                    "actual_map_id": definition.map_id,
+                    "expected_level": slot.map_level,
+                    "actual_level": definition.level,
+                    "expected_role": slot.role,
+                    "actual_role": role,
+                },
+            ))
+        rehashed = with_grid_definition_hashes(definition)
+        if (
+            definition.definition_hash != rehashed.definition_hash
+            or definition.semantic_interface_hash != rehashed.semantic_interface_hash
+        ):
+            issues.append(StarterCoreLocationIssue(
+                "starter_core_map_hash_invalid",
+                f"/starter_core/map_definitions/{definition.map_id}",
+                "Starter map hashes must exactly match their deterministic map content and semantic interface.",
+                {
+                    "definition_hash": definition.definition_hash,
+                    "expected_definition_hash": rehashed.definition_hash,
+                    "semantic_interface_hash": definition.semantic_interface_hash,
+                    "expected_semantic_interface_hash": rehashed.semantic_interface_hash,
+                },
             ))
         if not _has_arrival_spawn(definition):
             issues.append(StarterCoreLocationIssue(
