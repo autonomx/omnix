@@ -16,8 +16,7 @@ _REFERENCE_FIELDS = {
     "entities",
     "entity_refs",
     "known_by",
-    "source",
-    "target",
+    "subject",
     "subject_id",
     "object_id",
 }
