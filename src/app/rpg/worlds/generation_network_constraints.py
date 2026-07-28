@@ -110,11 +110,17 @@ def _network_domains(topic_graph: Mapping[str, Any] | None) -> set[str]:
     domains: set[str] = set()
     for node in _rows(graph.get("nodes")):
         topic_id = str(node.get("topic_id") or "")
-        contract = _mapping(_mapping(node.get("metadata")).get("network_constraint_contract"))
+        contract = _mapping(
+            _mapping(node.get("metadata")).get("network_constraint_contract")
+        )
         if topic_id and bool(contract.get("required")):
             domains.add(topic_id)
-    contract = _mapping(_mapping(graph.get("metadata")).get("network_constraint_contract"))
-    domains.update(str(value) for value in contract.get("domain_ids") or () if str(value))
+    contract = _mapping(
+        _mapping(graph.get("metadata")).get("network_constraint_contract")
+    )
+    domains.update(
+        str(value) for value in contract.get("domain_ids") or () if str(value)
+    )
     return domains
 
 
@@ -153,7 +159,13 @@ def _fingerprint(value: Mapping[str, Any]) -> str:
 def _id_list(value: Any) -> tuple[str, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return ()
-    return tuple(dict.fromkeys(str(item).strip() for item in value if str(item).strip()))
+    return tuple(
+        dict.fromkeys(str(item).strip() for item in value if str(item).strip())
+    )
+
+
+def _network_id(topic_id: str, index: int, network: Mapping[str, Any]) -> str:
+    return str(network.get("id") or f"{topic_id}:network:{index + 1}")
 
 
 def _network_rows(
@@ -184,12 +196,14 @@ def network_constraint_issues(
     issues: list[NetworkConstraintIssue] = []
     payloads: dict[str, dict[str, str]] = {}
     paths: dict[str, str] = {}
+    topics: dict[str, str] = {}
     controllers: dict[str, tuple[str, ...]] = {}
     covered_places: dict[str, tuple[str, ...]] = {}
     for topic_id, index, network in rows:
-        network_id = str(network.get("id") or f"{topic_id}:network:{index + 1}")
+        network_id = _network_id(topic_id, index, network)
         path = f"/{topic_id}/entities/{index}"
         paths[network_id] = path
+        topics[network_id] = topic_id
         controllers[network_id] = _id_list(network.get("controller_group_ids"))
         covered_places[network_id] = _id_list(network.get("covered_place_ids"))
         if not controllers[network_id]:
@@ -199,7 +213,10 @@ def network_constraint_issues(
                     topic_id=topic_id,
                     network_id=network_id,
                     path=f"{path}/controller_group_ids",
-                    message="Capability-constrained networks require at least one canonical controller group.",
+                    message=(
+                        "Capability-constrained networks require at least one "
+                        "canonical controller group."
+                    ),
                     evidence={"controller_group_ids": []},
                 )
             )
@@ -210,7 +227,10 @@ def network_constraint_issues(
                     topic_id=topic_id,
                     network_id=network_id,
                     path=f"{path}/covered_place_ids",
-                    message="Capability-constrained networks require explicit canonical place coverage.",
+                    message=(
+                        "Capability-constrained networks require explicit canonical "
+                        "place coverage."
+                    ),
                     evidence={"covered_place_ids": []},
                 )
             )
@@ -222,7 +242,10 @@ def network_constraint_issues(
                     topic_id=topic_id,
                     network_id=network_id,
                     path=f"{path}/network_constraint_signature",
-                    message="The active digital-spaces capability requires a bounded network signature.",
+                    message=(
+                        "The active digital-spaces capability requires a bounded "
+                        "network signature."
+                    ),
                     evidence={},
                 )
             )
@@ -235,11 +258,16 @@ def network_constraint_issues(
                     topic_id=topic_id,
                     network_id=network_id,
                     path=f"{path}/network_constraint_signature",
-                    message="Network constraint signature does not satisfy the categorical contract.",
+                    message=(
+                        "Network constraint signature does not satisfy the "
+                        "categorical contract."
+                    ),
                     evidence={
-                        "signature": dict(signature)
-                        if isinstance(signature, Mapping)
-                        else signature
+                        "signature": (
+                            dict(signature)
+                            if isinstance(signature, Mapping)
+                            else signature
+                        )
                     },
                 )
             )
@@ -254,8 +282,13 @@ def network_constraint_issues(
                         code="unbounded_network_constraint",
                         topic_id=topic_id,
                         network_id=network_id,
-                        path=f"{path}/network_constraint_signature/{component}",
-                        message="Networks must expose bounded coverage, latency, blind spots, traceability, and failure modes.",
+                        path=(
+                            f"{path}/network_constraint_signature/{component}"
+                        ),
+                        message=(
+                            "Networks must expose bounded coverage, latency, blind "
+                            "spots, traceability, and failure modes."
+                        ),
                         evidence={"component": component, "value": value},
                     )
                 )
@@ -268,18 +301,16 @@ def network_constraint_issues(
             if len(network_ids) < 2:
                 continue
             first_id = sorted(network_ids)[0]
-            first_topic = next(
-                topic_id
-                for topic_id, _index, entity in rows
-                if str(entity.get("id") or "") == first_id
-            )
             issues.append(
                 NetworkConstraintIssue(
                     code="duplicate_network_constraint_signature",
-                    topic_id=first_topic,
+                    topic_id=topics.get(first_id, ""),
                     network_id=first_id,
                     path=f"{paths[first_id]}/network_constraint_signature",
-                    message="Multiple networks share the same complete operational constraint signature.",
+                    message=(
+                        "Multiple networks share the same complete operational "
+                        "constraint signature."
+                    ),
                     evidence={
                         "fingerprint": fingerprint,
                         "network_ids": sorted(network_ids),
@@ -301,7 +332,10 @@ def network_constraint_issues(
                         topic_id="",
                         network_id="",
                         path=f"/network_constraint_portfolio/{component}",
-                        message="Network portfolios require more than one blind spot and failure mode.",
+                        message=(
+                            "Network portfolios require more than one blind spot "
+                            "and failure mode."
+                        ),
                         evidence={"component": component, "values": values},
                     )
                 )
@@ -319,7 +353,10 @@ def network_constraint_issues(
                     topic_id="",
                     network_id="",
                     path="/network_constraint_portfolio/covered_place_ids",
-                    message="A multi-network world must identify coverage across at least two canonical places.",
+                    message=(
+                        "A multi-network world must identify coverage across at "
+                        "least two canonical places."
+                    ),
                     evidence={"covered_place_ids": distinct_places},
                 )
             )
@@ -338,10 +375,12 @@ def network_constraint_report(
     rows = _network_rows(topic_rows, required_domains)
     payloads = {
         network_id: payload
-        for _topic_id, index, network in rows
-        if (network_id := str(network.get("id") or f"network:{index + 1}"))
+        for topic_id, index, network in rows
+        if (network_id := _network_id(topic_id, index, network))
         and (
-            payload := _signature_payload(network.get("network_constraint_signature"))[0]
+            payload := _signature_payload(
+                network.get("network_constraint_signature")
+            )[0]
         )
         is not None
     }
