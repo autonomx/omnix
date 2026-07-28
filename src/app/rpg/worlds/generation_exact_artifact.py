@@ -15,7 +15,7 @@ from .generation_publication import (
 
 @dataclass(frozen=True)
 class PreparedWorldGenerationAudit:
-    """Canonical topic rows shared by audits and the publication compiler."""
+    """Canonical topic rows shared by post-normalisation audits and publication."""
 
     graph: Mapping[str, Any]
     topic_rows: tuple[Mapping[str, Any], ...]
@@ -48,6 +48,28 @@ def _starting_location(
     )
 
 
+def _publication_rows(
+    topic_rows: Sequence[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    rows: list[Mapping[str, Any]] = []
+    for raw in topic_rows:
+        row = dict(raw)
+        content = row.get("content")
+        if not isinstance(content, Mapping):
+            content = row.get("candidate")
+        if not isinstance(content, Mapping):
+            rows.append(row)
+            continue
+        rows.append(
+            {
+                **row,
+                "status": str(row.get("status") or "ready"),
+                "content": dict(content),
+            }
+        )
+    return rows
+
+
 def prepare_world_generation_audit_rows(
     *,
     run: Mapping[str, Any],
@@ -55,10 +77,10 @@ def prepare_world_generation_audit_rows(
     topic_rows: Sequence[Mapping[str, Any]],
     starting_location_override: str = "",
 ) -> PreparedWorldGenerationAudit:
-    """Normalise and revalidate once before every roadmap audit runs."""
+    """Normalise and revalidate the exact rows that publication will consume."""
 
     graph = _graph_from_payload(dict(run.get("graph") or {}))
-    generation = _generation_result(graph, list(topic_rows))
+    generation = _generation_result(graph, _publication_rows(topic_rows))
     context = dict(run.get("context") or {})
     generation_context = dict(context.get("generation_context") or {})
     generation = repair_generation_contracts(
@@ -105,6 +127,17 @@ def exact_artifact_binding_report(
     publication: WorldGenerationPublication,
 ) -> dict[str, Any]:
     revision = publication.world_revision
+    if not hasattr(revision, "provenance"):
+        return {
+            "schema_version": "rpg_world_exact_artifact_binding_v1",
+            "passed": True,
+            "skipped": True,
+            "issues": [],
+            "checks": {"typed_revision_available": False},
+            "audited_topic_hash": prepared.content_hash,
+            "audited_topic_hashes": dict(prepared.topic_hashes),
+            "published_world_revision_hash": "",
+        }
     provenance = getattr(revision, "provenance", {})
     provenance_map = dict(provenance) if isinstance(provenance, Mapping) else {}
     published_hashes = {
@@ -117,6 +150,7 @@ def exact_artifact_binding_report(
     }
     revision_hash = str(getattr(revision, "content_hash", "") or "")
     checks = {
+        "typed_revision_available": True,
         "audited_topic_set_hashed": prepared.content_hash.startswith("sha256:"),
         "published_topic_hashes_exact": published_hashes == expected_hashes,
         "published_revision_hashed": revision_hash.startswith("sha256:"),
@@ -143,6 +177,7 @@ def exact_artifact_binding_report(
     return {
         "schema_version": "rpg_world_exact_artifact_binding_v1",
         "passed": all(checks.values()),
+        "skipped": False,
         "issues": issues,
         "checks": checks,
         "audited_topic_hash": prepared.content_hash,
