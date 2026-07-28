@@ -9,6 +9,7 @@ from .world_forge_contract import CampaignTopicNode
 from .world_forge_countervailing_powers import deterministic_countervailing_power_signature
 from .world_forge_economic_scale import deterministic_economic_scale_signature
 from .world_forge_generation import GeneratedTopic
+from .world_forge_local_markets import deterministic_local_market_signature
 from .world_forge_network_constraints import deterministic_network_constraint_signature
 from .world_forge_ordinary_life import deterministic_ordinary_life_signature
 from .world_forge_resource_dependencies import deterministic_resource_dependency_signature
@@ -129,6 +130,8 @@ def _structured_value(field_id: str, *, name: str, anchor: str, index: int, enti
         return deterministic_economic_scale_signature(index + sum(map(ord, entity_kind)), scope=entity_kind)
     if field_id == "ordinary_life_signature":
         return deterministic_ordinary_life_signature(index)
+    if field_id == "local_market_signature":
+        return deterministic_local_market_signature(index)
     if field_id == "countervailing_power_signature":
         return deterministic_countervailing_power_signature(index)
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
