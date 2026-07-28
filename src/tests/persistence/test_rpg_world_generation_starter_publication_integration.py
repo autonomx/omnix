@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
@@ -19,6 +20,11 @@ from tests.persistence.test_rpg_world_generation_publication_integration import 
     _completed_generation,
     _database,
     _forced_launch_ready_artifact,
+)
+
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("OMNIX_TEST_DATABASE_URL"),
+    reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
 )
 
 
