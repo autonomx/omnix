@@ -13,6 +13,7 @@ from .generation_countervailing_powers import countervailing_power_report, requi
 from .generation_economic_scale import economic_scale_report, require_valid_economic_scale
 from .generation_entity_contamination import entity_identity_contamination_report, require_no_entity_identity_contamination
 from .generation_finding_policy import finding_waiver_policy_report
+from .generation_local_markets import local_market_report, require_valid_local_markets
 from .generation_manifest_references import manifest_reference_report, require_manifest_reference_closure
 from .generation_mission_portfolio import mission_portfolio_report, require_valid_mission_portfolio
 from .generation_named_claims import objective_named_claim_report, require_resolved_objective_named_claims
@@ -99,6 +100,7 @@ def _graph_audits() -> tuple[tuple[str, ReportFn, RequireFn], ...]:
         ("economic_scale", economic_scale_report, require_valid_economic_scale),
         ("ordinary_life", ordinary_life_report, require_valid_ordinary_life),
         ("countervailing_powers", countervailing_power_report, require_valid_countervailing_powers),
+        ("local_markets", local_market_report, require_valid_local_markets),
     )
 
 
