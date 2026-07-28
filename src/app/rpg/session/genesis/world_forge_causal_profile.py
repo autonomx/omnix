@@ -135,6 +135,21 @@ def _causal_fields(domain_id: str) -> tuple[FieldDefinition, ...]:
             ),
             _field("inherited_claims", "structured_object", required=True),
             _field("historical_grievances", "structured_object", required=True),
+            _field(
+                "constrained_by_group_ids",
+                "entity_ref_list",
+                required=True,
+                targets=("groups",),
+                semantic_role="countervailing_constraint",
+                description="Canonical groups that can materially constrain this group's power.",
+            ),
+            _field(
+                "countervailing_power_signature",
+                "structured_object",
+                required=True,
+                semantic_role="countervailing_power_signature",
+                description="Bounded authority, leverage, accountability, reach, vulnerability, and failure profile.",
+            ),
         )
     if domain_id == "cultures":
         return (
