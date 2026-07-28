@@ -30,7 +30,7 @@ def information_locality_components() -> tuple[str, ...]:
 def deterministic_information_locality_signature(index: int) -> dict[str, Any]:
     return {
         "channel_type": _CHANNEL[index % len(_CHANNEL)],
-        "latency_band": _LATENCY[(index * 5 + 1) % len(_LATENCY)],
+        "latency_band": _LATENCY[(index * 5 + 5) % len(_LATENCY)],
         "verification_method": _VERIFICATION[(index * 3 + 2) % len(_VERIFICATION)],
         "distortion_risk": _DISTORTION[(index * 5 + 3) % len(_DISTORTION)],
         "interception_risk": _INTERCEPTION[(index * 3 + 4) % len(_INTERCEPTION)],
