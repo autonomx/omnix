@@ -23,6 +23,7 @@ _MISSION_DOMAIN_IDS = {
 _ACTOR_DOMAIN_IDS = {"actors"}
 _NETWORK_DOMAIN_IDS = {"networks"}
 _SPATIAL_DOMAIN_IDS = {"places"}
+_ECONOMIC_SCALE_DOMAIN_IDS = {"places", "economy_law"}
 _RESOURCE_DOMAIN_IDS = {
     "groups",
     "technology_augmentations",
@@ -143,6 +144,21 @@ _SPATIAL_FIELDS = (
         ),
     ),
 )
+_ECONOMIC_SCALE_FIELDS = (
+    FieldDefinition(
+        field_id="economic_scale_signature",
+        value_type="structured_object",
+        required=True,
+        semantic_role="economic_scale_signature",
+        description=(
+            "Structured representative scale with scale_scope, "
+            "served_population_band, workforce_band, service_reach_band, "
+            "throughput_band, price_basis, scarcity_level, reserve_horizon, and "
+            "demand_pressure. Use bounded categorical bands, not invented precise "
+            "statistics or universal claims."
+        ),
+    ),
+)
 
 
 def _record(value: Any) -> dict[str, Any]:
@@ -160,6 +176,10 @@ def _network_contract_enabled(
 
 def _spatial_contract_enabled(domain: DomainDefinition) -> bool:
     return domain.domain_id in _SPATIAL_DOMAIN_IDS and domain.target_range.epic[1] > 1
+
+
+def _economic_scale_contract_enabled(domain: DomainDefinition) -> bool:
+    return domain.domain_id in _ECONOMIC_SCALE_DOMAIN_IDS
 
 
 def _resource_contract_enabled(domain: DomainDefinition) -> bool:
@@ -212,9 +232,17 @@ def _domain_fields(
     capability_flags: Mapping[str, bool],
 ) -> tuple[FieldDefinition, ...]:
     network_enabled = _network_contract_enabled(domain, capability_flags)
+    economic_scale_enabled = _economic_scale_contract_enabled(domain)
     fields = [
         replace(field, required=True)
-        if network_enabled and field.field_id == "controller_group_ids"
+        if (
+            network_enabled and field.field_id == "controller_group_ids"
+        )
+        or (
+            economic_scale_enabled
+            and domain.domain_id == "economy_law"
+            and field.field_id == "affected_place_ids"
+        )
         else field
         for field in domain.fields
     ]
@@ -228,6 +256,8 @@ def _domain_fields(
         additions = (*additions, *_NETWORK_FIELDS)
     if _spatial_contract_enabled(domain):
         additions = (*additions, *_SPATIAL_FIELDS)
+    if economic_scale_enabled:
+        additions = (*additions, *_ECONOMIC_SCALE_FIELDS)
     if _resource_contract_enabled(domain):
         additions = (*additions, *_resource_fields(domain))
     fields.extend(field for field in additions if field.field_id not in existing)
@@ -254,12 +284,14 @@ def _field_metadata(
     presentation = _record(guidance.get("presentation"))
     network_enabled = _network_contract_enabled(domain, capability_flags)
     spatial_enabled = _spatial_contract_enabled(domain)
+    economic_scale_enabled = _economic_scale_contract_enabled(domain)
     resource_enabled = _resource_contract_enabled(domain)
     upgraded = (
         domain.domain_id in _MISSION_DOMAIN_IDS
         or domain.domain_id in _ACTOR_DOMAIN_IDS
         or network_enabled
         or spatial_enabled
+        or economic_scale_enabled
         or resource_enabled
     )
     metadata = {
@@ -347,6 +379,33 @@ def _field_metadata(
             "place_count": place_count,
             "minimum_route_count": minimum_route_count(place_count, depth),
             "depth": str(depth or "standard"),
+        }
+    if economic_scale_enabled:
+        metadata["economic_scale_contract"] = {
+            "schema_version": "rpg_world_economic_scale_contract_v1",
+            "required": True,
+            "signature_field": "economic_scale_signature",
+            "coverage_field": (
+                "affected_place_ids"
+                if domain.domain_id == "economy_law"
+                else ""
+            ),
+            "expected_scope": (
+                "service_system"
+                if domain.domain_id == "economy_law"
+                else "place_population"
+            ),
+            "signature_components": [
+                "scale_scope",
+                "served_population_band",
+                "workforce_band",
+                "service_reach_band",
+                "throughput_band",
+                "price_basis",
+                "scarcity_level",
+                "reserve_horizon",
+                "demand_pressure",
+            ],
         }
     if resource_enabled:
         metadata["resource_dependency_contract"] = {
@@ -502,6 +561,9 @@ def build_profile_topic_graph(
         else set()
     )
     enabled_spatial_domains = sorted(_SPATIAL_DOMAIN_IDS.intersection(domain_ids))
+    enabled_economic_scale_domains = sorted(
+        _ECONOMIC_SCALE_DOMAIN_IDS.intersection(domain_ids)
+    )
     enabled_resource_domains = sorted(_RESOURCE_DOMAIN_IDS.intersection(domain_ids))
     base_profile_hash = str(
         dict(profile.provenance).get("base_profile_hash") or profile.content_hash
@@ -549,6 +611,13 @@ def build_profile_topic_graph(
                 place_node.target_count,
                 depth,
             ),
+        }
+    if enabled_economic_scale_domains:
+        metadata["economic_scale_contract"] = {
+            "schema_version": "rpg_world_economic_scale_contract_v1",
+            "domain_ids": enabled_economic_scale_domains,
+            "required_before_launch": True,
+            "minimum_band_diversity": 2,
         }
     if enabled_resource_domains:
         metadata["resource_dependency_contract"] = {
@@ -609,6 +678,7 @@ def build_profile_launch_topic_graph(
     for contract_name in (
         "network_constraint_contract",
         "spatial_route_contract",
+        "economic_scale_contract",
         "resource_dependency_contract",
     ):
         contract = _record(graph.metadata.get(contract_name))
