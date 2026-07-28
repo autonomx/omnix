@@ -127,9 +127,15 @@ def _compile_certificate(
             },
         )
     else:
+        definition_revision = max(1, int(plan.source_world_revision))
         definitions = build_starter_map_definitions(
             plan,
-            target_world_revision=max(1, int(plan.source_world_revision)),
+            target_world_revision=definition_revision,
+            definition_revisions={
+                slot.map_id: definition_revision
+                for slot in plan.map_slots()
+                if slot.map_id
+            },
         )
         native = starter_bubble_certification(plan, definitions)
         if not bool(native.get("simulation_certified")):
