@@ -7,6 +7,9 @@ from typing import Any, Mapping, Sequence
 from .world_forge_actor_incentives import deterministic_actor_incentive_signature
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_generation import GeneratedTopic
+from .world_forge_network_constraints import (
+    deterministic_network_constraint_signature,
+)
 
 _DISTINCTIONS = (
     "Ember", "Tide", "Glass", "Copper", "Ash", "Lantern",
@@ -196,6 +199,8 @@ def _structured_value(
         return _mission_signature(entity_kind, index)
     if field_id == "incentive_signature":
         return deterministic_actor_incentive_signature(index)
+    if field_id == "network_constraint_signature":
+        return deterministic_network_constraint_signature(index)
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
     labels = {
         "observable_consequences": "visible consequence",
