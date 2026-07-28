@@ -216,7 +216,9 @@ def test_diagnostic_compilation_retains_reference_report_without_release_claim(
     assert payload["certification"]["launch_ready"] is False
     assert payload["certification"]["profile_reference_integrity"]["passed"] is False
     assert payload["certification"]["profile_dossier_quality"]["passed"] is True
+    assert payload["certification"]["manifest_reference_closure"]["passed"] is False
     assert payload["certification"]["missing_requirements"] == [
-        "profile_reference_integrity"
+        "profile_reference_integrity",
+        "manifest_reference_closure",
     ]
     assert "world_release" not in payload
