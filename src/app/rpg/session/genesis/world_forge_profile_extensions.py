@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from .world_forge_profiles import FieldDefinition
 
+_LOCAL_NARRATIVE_DOMAINS = frozenset({"quests", "encounter_seeds", "opening_threads"})
+
 
 def _field(
     field_id: str,
@@ -20,6 +22,61 @@ def _field(
         allowed_target_domains=targets,
         semantic_role=role,
         description=description,
+    )
+
+
+def _local_narrative_fields() -> tuple[FieldDefinition, ...]:
+    return (
+        _field(
+            "local_place_ids",
+            "entity_ref_list",
+            required=True,
+            targets=("places",),
+            role="local_narrative_place",
+            description="Canonical places where the opportunity can be discovered or acted upon.",
+        ),
+        _field(
+            "local_pressure_ids",
+            "entity_ref_list",
+            required=True,
+            targets=("pressures",),
+            role="local_narrative_pressure",
+            description="Canonical pressures that create the opportunity and receive its consequences.",
+        ),
+        _field(
+            "local_actor_ids",
+            "entity_ref_list",
+            required=True,
+            targets=("actors",),
+            role="local_narrative_actor",
+            description="Canonical local actors who expose, contest, or are affected by the opportunity.",
+        ),
+        _field(
+            "local_group_ids",
+            "entity_ref_list",
+            required=True,
+            targets=("groups",),
+            role="local_narrative_group",
+            description="Canonical groups whose information reach and response constrain discovery.",
+        ),
+        _field(
+            "local_evidence_source_ids",
+            "entity_ref_list",
+            required=True,
+            targets=("places", "actors", "pressures", "groups"),
+            role="local_narrative_evidence",
+            description="Canonical local entities that physically or socially expose the opportunity.",
+        ),
+        _field(
+            "local_narrative_signature",
+            "structured_object",
+            required=True,
+            role="local_narrative_signature",
+            description=(
+                "Bounded discovery channel, evidence, urgency, expiry, consequence scope, "
+                "entry mode, information scope, and failure visibility."
+            ),
+        ),
     )
 
 
@@ -50,6 +107,8 @@ def extension_fields(domain_id: str) -> tuple[FieldDefinition, ...]:
                 description="Bounded channel, latency, verification, distortion, interception, blackout, cadence, and confidence-decay profile.",
             ),
         )
+    if domain_id in _LOCAL_NARRATIVE_DOMAINS:
+        return _local_narrative_fields()
     return ()
 
 
