@@ -10,6 +10,7 @@ from .world_forge_generation import GeneratedTopic
 from .world_forge_network_constraints import (
     deterministic_network_constraint_signature,
 )
+from .world_forge_spatial_routes import deterministic_spatial_route_signature
 
 _DISTINCTIONS = (
     "Ember", "Tide", "Glass", "Copper", "Ash", "Lantern",
@@ -201,6 +202,8 @@ def _structured_value(
         return deterministic_actor_incentive_signature(index)
     if field_id == "network_constraint_signature":
         return deterministic_network_constraint_signature(index)
+    if field_id == "travel_route_signature":
+        return deterministic_spatial_route_signature(index)
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
     labels = {
         "observable_consequences": "visible consequence",
@@ -237,12 +240,21 @@ def _value_for_field(
     index: int,
     known: Mapping[str, tuple[str, ...]],
     entity_kind: str,
+    current_entity_id: str,
+    same_domain_ids: tuple[str, ...],
 ) -> Any:
     field_id = str(definition.get("field_id") or "")
     value_type = str(definition.get("value_type") or "string")
     if field_id in _OPTIONAL_ARC_FIELDS:
         return None
-    candidates = _reference_candidates(definition, known)
+    if field_id == "connected_place_ids":
+        candidates = tuple(
+            entity_id
+            for entity_id in same_domain_ids
+            if entity_id != current_entity_id
+        )
+    else:
+        candidates = _reference_candidates(definition, known)
     if field_id == "name":
         return name
     if value_type == "string":
@@ -320,16 +332,20 @@ def generate_deterministic_profile_topic(
     anchor = _brief_anchor(campaign_context)
     known = _known_by_domain(dependency_topics)
     entity_kind = str(node.metadata.get("entity_kind") or node.topic_id.rstrip("s"))
-    entities: list[dict[str, Any]] = []
-    documents: list[dict[str, Any]] = []
-    for index in range(node.target_count):
-        entity_id, name = _fixture_identity(
+    identities = tuple(
+        _fixture_identity(
             node,
             campaign_context=campaign_context,
             entity_kind=entity_kind,
             anchor=anchor,
             index=index,
         )
+        for index in range(node.target_count)
+    )
+    same_domain_ids = tuple(entity_id for entity_id, _name in identities)
+    entities: list[dict[str, Any]] = []
+    documents: list[dict[str, Any]] = []
+    for index, (entity_id, name) in enumerate(identities):
         entity: dict[str, Any] = {
             "id": entity_id,
             "kind": entity_kind,
@@ -347,6 +363,8 @@ def generate_deterministic_profile_topic(
                 index=index,
                 known=known,
                 entity_kind=entity_kind,
+                current_entity_id=entity_id,
+                same_domain_ids=same_domain_ids,
             )
             if value in (None, "", [], (), {}) and not required:
                 continue
