@@ -6,6 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from .world_forge_actor_incentives import deterministic_actor_incentive_signature
 from .world_forge_contract import CampaignTopicNode
+from .world_forge_countervailing_powers import deterministic_countervailing_power_signature
 from .world_forge_economic_scale import deterministic_economic_scale_signature
 from .world_forge_generation import GeneratedTopic
 from .world_forge_network_constraints import deterministic_network_constraint_signature
@@ -128,6 +129,8 @@ def _structured_value(field_id: str, *, name: str, anchor: str, index: int, enti
         return deterministic_economic_scale_signature(index + sum(map(ord, entity_kind)), scope=entity_kind)
     if field_id == "ordinary_life_signature":
         return deterministic_ordinary_life_signature(index)
+    if field_id == "countervailing_power_signature":
+        return deterministic_countervailing_power_signature(index)
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
     label = {
         "observable_consequences": "visible consequence", "access_routes": "access route",
@@ -155,7 +158,7 @@ def _value_for_field(
         return None
     candidates = (
         tuple(value for value in same_domain_ids if value != current_entity_id)
-        if field_id == "connected_place_ids"
+        if field_id in {"connected_place_ids", "constrained_by_group_ids"}
         else _reference_candidates(definition, known)
     )
     if field_id == "resource_consumer_ids" and len(candidates) > 1:
