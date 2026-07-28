@@ -7,6 +7,10 @@ from .generation_information_locality import (
     information_locality_report,
     require_valid_information_locality,
 )
+from .generation_local_narrative import (
+    local_narrative_report,
+    require_valid_local_narrative,
+)
 from .generation_route_effects import require_valid_route_effects, route_effect_report
 
 ReportFn = Callable[[Sequence[Mapping[str, Any]], Mapping[str, Any] | None], dict[str, Any]]
@@ -20,6 +24,11 @@ def extension_audits() -> tuple[tuple[str, ReportFn, RequireFn], ...]:
             "information_locality",
             information_locality_report,
             require_valid_information_locality,
+        ),
+        (
+            "local_narrative",
+            local_narrative_report,
+            require_valid_local_narrative,
         ),
     )
 
