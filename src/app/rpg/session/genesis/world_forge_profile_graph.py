@@ -23,6 +23,21 @@ _MISSION_DOMAIN_IDS = {
 _ACTOR_DOMAIN_IDS = {"actors"}
 _NETWORK_DOMAIN_IDS = {"networks"}
 _SPATIAL_DOMAIN_IDS = {"places"}
+_RESOURCE_DOMAIN_IDS = {
+    "groups",
+    "technology_augmentations",
+    "economy_law",
+}
+_RESOURCE_PROVIDER_TARGETS = {
+    "groups": ("places",),
+    "technology_augmentations": ("groups",),
+    "economy_law": ("groups",),
+}
+_RESOURCE_CONSUMER_TARGETS = {
+    "groups": ("places",),
+    "technology_augmentations": ("groups",),
+    "economy_law": ("places",),
+}
 _NETWORK_CAPABILITY = "digital_spaces"
 _MISSION_FIELDS = (
     FieldDefinition(
@@ -147,6 +162,51 @@ def _spatial_contract_enabled(domain: DomainDefinition) -> bool:
     return domain.domain_id in _SPATIAL_DOMAIN_IDS and domain.target_range.epic[1] > 1
 
 
+def _resource_contract_enabled(domain: DomainDefinition) -> bool:
+    return domain.domain_id in _RESOURCE_DOMAIN_IDS
+
+
+def _resource_fields(domain: DomainDefinition) -> tuple[FieldDefinition, ...]:
+    if not _resource_contract_enabled(domain):
+        return ()
+    return (
+        FieldDefinition(
+            field_id="resource_provider_ids",
+            value_type="entity_ref_list",
+            required=True,
+            allowed_target_domains=_RESOURCE_PROVIDER_TARGETS[domain.domain_id],
+            semantic_role="resource_provider",
+            description=(
+                "Canonical places or groups that supply a required input to this "
+                "institution, technology, or system."
+            ),
+        ),
+        FieldDefinition(
+            field_id="resource_consumer_ids",
+            value_type="entity_ref_list",
+            required=True,
+            allowed_target_domains=_RESOURCE_CONSUMER_TARGETS[domain.domain_id],
+            semantic_role="resource_consumer",
+            description=(
+                "Canonical places or groups that depend on this entity's output; "
+                "provider and consumer sets must not be identical."
+            ),
+        ),
+        FieldDefinition(
+            field_id="resource_dependency_signature",
+            value_type="structured_object",
+            required=True,
+            semantic_role="resource_dependency_signature",
+            description=(
+                "Structured resource model with resource_class, supply_mode, "
+                "dependency_strength, substitute_class, bottleneck_type, "
+                "depletion_horizon, failure_consequence, and recovery_mode. Use "
+                "concise categorical values, not prose."
+            ),
+        ),
+    )
+
+
 def _domain_fields(
     domain: DomainDefinition,
     capability_flags: Mapping[str, bool],
@@ -168,6 +228,8 @@ def _domain_fields(
         additions = (*additions, *_NETWORK_FIELDS)
     if _spatial_contract_enabled(domain):
         additions = (*additions, *_SPATIAL_FIELDS)
+    if _resource_contract_enabled(domain):
+        additions = (*additions, *_resource_fields(domain))
     fields.extend(field for field in additions if field.field_id not in existing)
     return tuple(fields)
 
@@ -192,11 +254,13 @@ def _field_metadata(
     presentation = _record(guidance.get("presentation"))
     network_enabled = _network_contract_enabled(domain, capability_flags)
     spatial_enabled = _spatial_contract_enabled(domain)
+    resource_enabled = _resource_contract_enabled(domain)
     upgraded = (
         domain.domain_id in _MISSION_DOMAIN_IDS
         or domain.domain_id in _ACTOR_DOMAIN_IDS
         or network_enabled
         or spatial_enabled
+        or resource_enabled
     )
     metadata = {
         "entity_kind": domain.entity_kind,
@@ -283,6 +347,24 @@ def _field_metadata(
             "place_count": place_count,
             "minimum_route_count": minimum_route_count(place_count, depth),
             "depth": str(depth or "standard"),
+        }
+    if resource_enabled:
+        metadata["resource_dependency_contract"] = {
+            "schema_version": "rpg_world_resource_dependency_contract_v1",
+            "required": True,
+            "provider_field": "resource_provider_ids",
+            "consumer_field": "resource_consumer_ids",
+            "signature_field": "resource_dependency_signature",
+            "signature_components": [
+                "resource_class",
+                "supply_mode",
+                "dependency_strength",
+                "substitute_class",
+                "bottleneck_type",
+                "depletion_horizon",
+                "failure_consequence",
+                "recovery_mode",
+            ],
         }
     return metadata
 
@@ -420,6 +502,7 @@ def build_profile_topic_graph(
         else set()
     )
     enabled_spatial_domains = sorted(_SPATIAL_DOMAIN_IDS.intersection(domain_ids))
+    enabled_resource_domains = sorted(_RESOURCE_DOMAIN_IDS.intersection(domain_ids))
     base_profile_hash = str(
         dict(profile.provenance).get("base_profile_hash") or profile.content_hash
     )
@@ -466,6 +549,15 @@ def build_profile_topic_graph(
                 place_node.target_count,
                 depth,
             ),
+        }
+    if enabled_resource_domains:
+        metadata["resource_dependency_contract"] = {
+            "schema_version": "rpg_world_resource_dependency_contract_v1",
+            "domain_ids": enabled_resource_domains,
+            "required_before_launch": True,
+            "minimum_resource_class_count": 2,
+            "requires_chokepoint": True,
+            "requires_substitute": True,
         }
     graph = CampaignTopicGraph(
         graph_version="rpg_profile_topic_graph_v2",
@@ -517,6 +609,7 @@ def build_profile_launch_topic_graph(
     for contract_name in (
         "network_constraint_contract",
         "spatial_route_contract",
+        "resource_dependency_contract",
     ):
         contract = _record(graph.metadata.get(contract_name))
         if bool(contract.get("required_before_launch")):
