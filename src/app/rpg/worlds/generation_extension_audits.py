@@ -12,6 +12,10 @@ from .generation_local_narrative import (
     require_valid_local_narrative,
 )
 from .generation_route_effects import require_valid_route_effects, route_effect_report
+from .generation_starting_market import (
+    require_valid_starting_market,
+    starting_market_report,
+)
 
 ReportFn = Callable[[Sequence[Mapping[str, Any]], Mapping[str, Any] | None], dict[str, Any]]
 RequireFn = Callable[[Sequence[Mapping[str, Any]], Mapping[str, Any] | None], Any]
@@ -29,6 +33,11 @@ def extension_audits() -> tuple[tuple[str, ReportFn, RequireFn], ...]:
             "local_narrative",
             local_narrative_report,
             require_valid_local_narrative,
+        ),
+        (
+            "starting_market",
+            starting_market_report,
+            require_valid_starting_market,
         ),
     )
 
