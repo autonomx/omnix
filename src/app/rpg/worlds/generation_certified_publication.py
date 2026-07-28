@@ -1,16 +1,24 @@
 """Atomic certified publication for durable World Forge runs."""
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .generation_compilation import compile_world_generation_certified_artifact
+from .generation_exact_artifact import (
+    rebind_exact_artifact_report,
+    require_exact_artifact_binding,
+)
 from .generation_publication import WorldGenerationPublication
 from .generation_publication_transaction import (
     require_certified_publication,
     require_publication_run_ready,
+)
+from .generation_starter_bubble_publication import (
+    apply_certified_starter_bubble,
+    persist_certified_starter_maps,
 )
 from .lifecycle_service import require_world_writable
 from .map_blueprint_authoring import (
@@ -48,12 +56,68 @@ def _release_with_certification(
     )
 
 
+def _compilation_run(
+    run: Mapping[str, Any],
+    review_results: Sequence[Mapping[str, Any]],
+    *,
+    world_id: str,
+    target_revision: int,
+) -> dict[str, Any]:
+    graph = dict(run.get("graph") or {})
+    metadata = dict(graph.get("metadata") or {})
+    graph["metadata"] = {
+        **metadata,
+        "world_id": world_id,
+        "world_revision": int(target_revision),
+    }
+    return {
+        **dict(run),
+        "graph": graph,
+        "_review_results": list(review_results),
+    }
+
+
+def _starter_certificate(certification: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    report = certification.get("starter_bubble_release")
+    if not isinstance(report, Mapping):
+        return None
+    materialization = report.get("materialization")
+    return dict(materialization) if isinstance(materialization, Mapping) else None
+
+
+def _final_certification(
+    publication: WorldGenerationPublication,
+    *,
+    authored_map_blueprint_count: int,
+    starter_map_definition_count: int,
+) -> dict[str, Any]:
+    certification = dict(publication.certification)
+    prior_binding = certification.get("exact_artifact_binding")
+    if isinstance(prior_binding, Mapping):
+        exact_binding = rebind_exact_artifact_report(
+            prior_binding,
+            publication.world_revision,
+        )
+        certification["exact_artifact_binding"] = exact_binding
+        require_exact_artifact_binding(exact_binding)
+    certification["authored_map_blueprint_count"] = int(
+        authored_map_blueprint_count
+    )
+    certification["starter_map_definition_count"] = int(
+        starter_map_definition_count
+    )
+    certification["starter_map_binding_count"] = len(
+        publication.world_release.map_bindings
+    )
+    return certification
+
+
 def publish_certified_world_generation(
     run_id: str,
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    """Persist a revision and release only after final certification passes."""
+    """Persist a revision, starter maps and release in one certified transaction."""
 
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
@@ -83,20 +147,26 @@ def publish_certified_world_generation(
             context,
             run_id=run_id,
         )
-        compilation_run = {**dict(run), "_review_results": review_results}
         current_row = work.connection.execute(
             "SELECT COALESCE(MAX(revision), 0) FROM omnix_rpg_world_revisions "
             "WHERE workspace_id = %s AND world_id = %s",
             (context.workspace_id, world_id),
         ).fetchone()
         current_revision = int(current_row[0])
+        target_revision = current_revision + 1
+        compilation_run = _compilation_run(
+            run,
+            review_results,
+            world_id=world_id,
+            target_revision=target_revision,
+        )
         asset_bindings = approved_world_asset_bindings(work, context, world_id)
 
         artifact = compile_world_generation_certified_artifact(
             run=compilation_run,
             world=world,
             topic_rows=topic_rows,
-            revision=current_revision + 1,
+            revision=target_revision,
             asset_bindings=asset_bindings,
         )
         compiled = artifact.publication
@@ -127,7 +197,7 @@ def publish_certified_world_generation(
             compiled.world_release,
             requirements,
         )
-        final_certification = {
+        assembled_certification = {
             **dict(artifact.certification),
             "authored_map_blueprint_count": len(requirements),
         }
@@ -135,8 +205,22 @@ def publish_certified_world_generation(
             WorldGenerationPublication(
                 world_revision=revision_document,
                 world_release=release_document,
-                certification=final_certification,
+                certification=assembled_certification,
             ),
+            certification=assembled_certification,
+        )
+        starter_bundle = apply_certified_starter_bubble(
+            compiled,
+            _starter_certificate(artifact.certification),
+        )
+        compiled = starter_bundle.publication
+        final_certification = _final_certification(
+            compiled,
+            authored_map_blueprint_count=len(requirements),
+            starter_map_definition_count=len(starter_bundle.map_definitions),
+        )
+        compiled = _release_with_certification(
+            compiled,
             certification=final_certification,
         )
         require_certified_publication(run, compiled.certification)
@@ -147,6 +231,11 @@ def publish_certified_world_generation(
             document=compiled.world_revision.model_dump(mode="json"),
             content_hash=compiled.world_revision.content_hash,
             expected_revision=current_revision,
+        )
+        stored_starter_maps = persist_certified_starter_maps(
+            work,
+            context,
+            starter_bundle,
         )
         stored_release = work.world_scenarios.publish_world_release(
             context,
@@ -165,6 +254,8 @@ def publish_certified_world_generation(
             "certification": dict(compiled.certification),
             "authored_map_blueprint_count": len(requirements),
             "approved_image_binding_count": len(asset_bindings),
+            "starter_map_definition_count": len(stored_starter_maps),
+            "starter_map_binding_count": len(compiled.world_release.map_bindings),
         }
         plan = {**dict(run.get("plan") or {}), "publication": publication_payload}
         progress = {
