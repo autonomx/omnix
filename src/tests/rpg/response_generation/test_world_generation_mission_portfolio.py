@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.rpg.session.genesis.world_forge_profile_deterministic import (
@@ -180,7 +182,11 @@ def test_deterministic_mission_entities_receive_unique_signatures_without_fake_a
 
     signatures = [dict(entity["mission_signature"]) for entity in topic.entities]
     assert len(signatures) == node.target_count
-    assert len({tuple(sorted(row.items(), key=lambda item: item[0])) for row in signatures}) == len(signatures)
+    encoded = {
+        json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        for row in signatures
+    }
+    assert len(encoded) == len(signatures)
     assert all(set(row) == {
         "activity",
         "target",
