@@ -12,6 +12,11 @@ from .generation_cross_topic_duplicates import cross_topic_duplicate_field_repor
 from .generation_countervailing_powers import countervailing_power_report, require_valid_countervailing_powers
 from .generation_economic_scale import economic_scale_report, require_valid_economic_scale
 from .generation_entity_contamination import entity_identity_contamination_report, require_no_entity_identity_contamination
+from .generation_exact_artifact import (
+    exact_artifact_binding_report,
+    prepare_world_generation_audit_rows,
+    require_exact_artifact_binding,
+)
 from .generation_extension_audits import extension_audits
 from .generation_finding_policy import finding_waiver_policy_report
 from .generation_local_markets import local_market_report, require_valid_local_markets
@@ -158,19 +163,30 @@ def compile_world_generation_artifact(
 ) -> WorldGenerationDiagnosticDraft | WorldGenerationCertifiedArtifact:
     if mode not in {"diagnostic_draft", "certified_release"}:
         raise ValueError(f"unsupported_world_generation_compilation_mode:{mode}")
-    graph = dict(run.get("graph") or {})
-    reports = _reports(topic_rows, graph)
-    finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
-    if mode == "certified_release":
-        _require_certified(topic_rows, graph)
-    publication = compile_world_generation_publication(
+    prepared = prepare_world_generation_audit_rows(
         run=run,
         world=world,
         topic_rows=topic_rows,
+        starting_location_override=starting_location_override,
+    )
+    prepared_rows = list(prepared.topic_rows)
+    graph = dict(prepared.graph)
+    reports = _reports(prepared_rows, graph)
+    finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
+    if mode == "certified_release":
+        _require_certified(prepared_rows, graph)
+    publication = compile_world_generation_publication(
+        run=run,
+        world=world,
+        topic_rows=prepared_rows,
         revision=revision,
         starting_location_override=starting_location_override,
         asset_bindings=asset_bindings,
     )
+    binding = exact_artifact_binding_report(prepared, publication)
+    reports["exact_artifact_binding"] = binding
+    if mode == "certified_release":
+        require_exact_artifact_binding(binding)
     consistency = publication.certification.get("consistency_report")
     audit_stages = two_stage_audit_report(
         topic_rows,
